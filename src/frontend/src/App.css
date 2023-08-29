@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.App {
+	text-align: center;
+}
+
+.App-logo {
+	height: 40vmin;
+	pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.App-logo {
+		animation: App-logo-spin infinite 20s linear;
+	}
+}
+
+.App-header {
+	background-color: #282c34;
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	font-size: calc(10px + 2vmin);
+	color: white;
+}
+
+.App-link {
+	color: #61dafb;
+}
+
+.custom-card-btn {
+	opacity: 0;
+}
+
+.custom-card:hover .custom-card-btn,
+.custom-card:hover .card-component-delete-icon {
+	opacity: 1;
+}
+
+.l2Param .l2Param-edit {
+	opacity: 0;
+}
+
+.l2Param:hover .l2Param-edit {
+	opacity: 1;
+}
+
+.stroke-connection.selected path {
+	stroke-width: 2;
+	stroke-dasharray: 0;
+}
+
+.animate-cursor {
+	animation: pulse2 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.markdown h1 {
+	margin: 0;
+	font-size: 26px;
+}
+
+.markdown h2 {
+	margin: 0;
+	font-size: 24px;
+}
+
+.markdown h3 {
+	margin: 0;
+	font-size: 20px;
+}
+
+.markdown h4 {
+	margin: 0;
+	font-size: 20px;
+}
+
+.markdown h5 {
+	font-size: 20px;
+}
+
+.markdown h6 {
+	font-size: 18px;
+}
+
+.markdown ol,
+.markdown ul {
+	white-space: normal !important;
+}
+
+@keyframes pulse2 {
+
+	0%,
+	20% {
+		opacity: 1;
+		transform: scale(1);
+	}
+
+	100% {
+		opacity: 0;
+		transform: scale(.6);
+	}
+
+	/* 0%, 20%, 80%, 100% {
+	  opacity: 1;
+	  transform: scale(1);
+	}
+	50% {
+	  opacity: 0;
+	  transform: scale(1.6);
+	} */
+}
+
+@keyframes App-logo-spin {
+	from {
+		transform: rotate(0deg);
+	}
+
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@font-face {
+	font-family: text-security-disc;
+	src: url("assets/text-security-disc.woff") format("woff");
+}
