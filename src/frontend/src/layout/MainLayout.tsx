@@ -28,9 +28,9 @@ export default function MainLayout() {
                     <NavLink to='/filelib' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
                         <HardDrive /><span className="mx-3">知 识</span>
                     </NavLink>
-                    <NavLink to='/model' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
+                    <a className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full text-gray-200 dark:text-gray-700">
                         <Puzzle /><span className="mx-3">模 型</span>
-                    </NavLink>
+                    </a>
                     <a className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full text-gray-200 dark:text-gray-700">
                         <Settings /><span className="mx-3">系 统</span>
                     </a>
