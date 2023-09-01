@@ -8,7 +8,6 @@ from bisheng.interface.custom_lists import CUSTOM_NODES
 from bisheng.interface.importing.utils import get_function, import_by_type
 from bisheng.interface.initialize.llm import initialize_vertexai
 from bisheng.interface.initialize.vector_store import vecstore_initializer
-from bisheng.interface.inputoutput.base import input_output_creator
 from bisheng.interface.output_parsers.base import output_parser_creator
 from bisheng.interface.retrievers.base import retriever_creator
 from bisheng.interface.toolkits.base import toolkits_creator
@@ -38,7 +37,9 @@ def instantiate_class(node_type: str, base_type: str, params: Dict) -> Any:
             return custom_node(**params)
 
     class_object = import_by_type(_type=base_type, name=node_type)
-    return instantiate_based_on_type(class_object, base_type, node_type, params)
+    return instantiate_based_on_type(
+        class_object, base_type, node_type, params
+    )
 
 
 def convert_params_to_sets(params):
@@ -55,7 +56,9 @@ def convert_params_to_sets(params):
 def convert_kwargs(params):
     # if *kwargs are passed as a string, convert to dict
     # first find any key that has kwargs or config in it
-    kwargs_keys = [key for key in params.keys() if 'kwargs' in key or 'config' in key]
+    kwargs_keys = [
+        key for key in params.keys() if 'kwargs' in key or 'config' in key
+    ]
     for key in kwargs_keys:
         if isinstance(params[key], str):
             params[key] = json.loads(params[key])
@@ -102,8 +105,10 @@ def instantiate_based_on_type(class_object, base_type, node_type, params):
     else:
         return class_object(**params)
 
+
 def instantiate_input_output(node_type, class_object, params):
     return class_object(**params).text()
+
 
 def instantiate_wrapper(node_type, class_object, params):
     if node_type in wrapper_creator.from_method_nodes:
@@ -131,7 +136,8 @@ def instantiate_llm(node_type, class_object, params: Dict):
         return initialize_vertexai(class_object=class_object, params=params)
     # max_tokens sometimes is a string and should be an int
     if 'max_tokens' in params:
-        if isinstance(params['max_tokens'], str) and params['max_tokens'].isdigit():
+        if isinstance(params['max_tokens'],
+                      str) and params['max_tokens'].isdigit():
             params['max_tokens'] = int(params['max_tokens'])
         elif not isinstance(params.get('max_tokens'), int):
             params.pop('max_tokens', None)
@@ -149,7 +155,9 @@ def instantiate_memory(node_type, class_object, params):
             params.pop(key)
 
     try:
-        if 'retriever' in params and hasattr(params['retriever'], 'as_retriever'):
+        if 'retriever' in params and hasattr(
+            params['retriever'], 'as_retriever'
+        ):
             params['retriever'] = params['retriever'].as_retriever()
         return class_object(**params)
     # I want to catch a specific attribute error that happens
@@ -158,12 +166,10 @@ def instantiate_memory(node_type, class_object, params):
         if "object has no attribute 'cursor'" in str(
             exc
         ) or 'object has no field "conn"' in str(exc):
-            raise AttributeError(
-                (
-                    'Failed to build connection to database.'
-                    f' Please check your connection string and try again. Error: {exc}'
-                )
-            ) from exc
+            raise AttributeError((
+                'Failed to build connection to database.'
+                f' Please check your connection string and try again. Error: {exc}'
+            )) from exc
         raise exc
 
 
@@ -190,7 +196,9 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict):
     return class_object(**params)
 
 
-def instantiate_agent(node_type, class_object: Type[agent_module.Agent], params: Dict):
+def instantiate_agent(
+    node_type, class_object: Type[agent_module.Agent], params: Dict
+):
     if node_type in agent_creator.from_method_nodes:
         method = agent_creator.from_method_nodes[node_type]
         if class_method := getattr(class_object, method, None):
@@ -231,16 +239,18 @@ def instantiate_prompt(node_type, class_object, params: Dict):
             elif isinstance(variable, BaseOutputParser) and hasattr(
                 variable, 'get_format_instructions'
             ):
-                format_kwargs[input_variable] = variable.get_format_instructions()
+                format_kwargs[input_variable
+                              ] = variable.get_format_instructions()
             elif isinstance(variable, List) and all(
                 isinstance(item, Document) for item in variable
             ):
                 # Format document to contain page_content and metadata
                 # as one string separated by a newline
                 if len(variable) > 1:
-                    content = '\n'.join(
-                        [item.page_content for item in variable if item.page_content]
-                    )
+                    content = '\n'.join([
+                        item.page_content for item in variable
+                        if item.page_content
+                    ])
                 else:
                     if not variable:
                         format_kwargs[input_variable] = ''
@@ -291,7 +301,9 @@ def instantiate_tool(node_type, class_object: Type[BaseTool], params: Dict):
     return class_object(**params)
 
 
-def instantiate_toolkit(node_type, class_object: Type[BaseToolkit], params: Dict):
+def instantiate_toolkit(
+    node_type, class_object: Type[BaseToolkit], params: Dict
+):
     loaded_toolkit = class_object(**params)
     # Commenting this out for now to use toolkits as normal tools
     # if toolkits_creator.has_create_function(node_type):
@@ -302,15 +314,13 @@ def instantiate_toolkit(node_type, class_object: Type[BaseToolkit], params: Dict
 
 
 def instantiate_embedding(class_object, params: Dict):
-    params.pop('model', None)
-    params.pop('headers', None)
+    # params.pop('model', None)
     try:
         return class_object(**params)
     except ValidationError:
         params = {
             key: value
-            for key, value in params.items()
-            if key in class_object.__fields__
+            for key, value in params.items() if key in class_object.__fields__
         }
         return class_object(**params)
 
@@ -354,7 +364,7 @@ def instantiate_documentloader(class_object: Type[BaseLoader], params: Dict):
             raise ValueError(
                 'The metadata you provided is not a valid JSON string.'
             ) from exc
-    #make it success when file not present
+    # make it success when file not present
     if 'file_path' in params and not params['file_path']:
         return []
     docs = class_object(**params).load()
@@ -418,31 +428,34 @@ def replace_zero_shot_prompt_with_prompt_template(nodes):
         if node['data']['type'] == 'ZeroShotPrompt':
             # Build Prompt Template
             tools = [
-                tool
-                for tool in nodes
-                if tool['type'] != 'chatOutputNode'
+                tool for tool in nodes if tool['type'] != 'chatOutputNode'
                 and 'Tool' in tool['data']['node']['base_classes']
             ]
-            node['data'] = build_prompt_template(prompt=node['data'], tools=tools)
+            node['data'] = build_prompt_template(
+                prompt=node['data'], tools=tools
+            )
             break
     return nodes
 
 
-def load_agent_executor(agent_class: type[agent_module.Agent], params, **kwargs):
+def load_agent_executor(
+    agent_class: type[agent_module.Agent], params, **kwargs
+):
     """Load agent executor from agent class, tools and chain"""
     allowed_tools: Sequence[BaseTool] = params.get('allowed_tools', [])
     llm_chain = params['llm_chain']
     # agent has hidden args for memory. might need to be support
     # memory = params["memory"]
     # if allowed_tools is not a list or set, make it a list
-    if not isinstance(allowed_tools, (list, set)) and isinstance(
-        allowed_tools, BaseTool
-    ):
+    if not isinstance(allowed_tools,
+                      (list, set)) and isinstance(allowed_tools, BaseTool):
         allowed_tools = [allowed_tools]
     tool_names = [tool.name for tool in allowed_tools]
     # Agent class requires an output_parser but Agent classes
     # have a default output_parser.
-    agent = agent_class(allowed_tools=tool_names, llm_chain=llm_chain)  # type: ignore
+    agent = agent_class(
+        allowed_tools=tool_names, llm_chain=llm_chain
+    )  # type: ignore
     return AgentExecutor.from_agent_and_tools(
         agent=agent,
         tools=allowed_tools,
@@ -462,14 +475,13 @@ def build_prompt_template(prompt, tools):
     """Build PromptTemplate from ZeroShotPrompt"""
     prefix = prompt['node']['template']['prefix']['value']
     suffix = prompt['node']['template']['suffix']['value']
-    format_instructions = prompt['node']['template']['format_instructions']['value']
+    format_instructions = prompt['node']['template']['format_instructions'][
+        'value']
 
-    tool_strings = '\n'.join(
-        [
-            f"{tool['data']['node']['name']}: {tool['data']['node']['description']}"
-            for tool in tools
-        ]
-    )
+    tool_strings = '\n'.join([
+        f"{tool['data']['node']['name']}: {tool['data']['node']['description']}"
+        for tool in tools
+    ])
     tool_names = ', '.join([tool['data']['node']['name'] for tool in tools])
     format_instructions = format_instructions.format(tool_names=tool_names)
     value = '\n\n'.join([prefix, tool_strings, format_instructions, suffix])

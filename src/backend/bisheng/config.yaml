@@ -145,7 +145,7 @@ llms:
     documentation: ""
   ChatGLM2Host:
     documentation: ""
-  BaichuangChat:
+  BaichuanChat:
     documentation: ""
   QwenChat:
     documentation: ""
