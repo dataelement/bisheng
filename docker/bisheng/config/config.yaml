@@ -1,3 +1,11 @@
+# 数据库配置
+database_url:
+  "mysql+pymysql://username:password@192.168.106.106:3306/langflow"
+redis_url:
+  "192.168.106.116:6379"
+
+
+
 agents:
   ZeroShotAgent:
     documentation: "https://python.langchain.com/docs/modules/agents/how_to/custom_mrkl_agent"
@@ -329,7 +337,4 @@ input_output:
   InputFile:
     documentation: ""
 
-database_url:
-  "mysql+pymysql://root:E1SkG0PaDMEPTAxY@192.168.106.106:3306/langflow"
-redis_url:
-  "192.168.106.116:6379"
+
