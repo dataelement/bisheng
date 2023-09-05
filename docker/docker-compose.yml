@@ -32,7 +32,7 @@ services:
     restart: on-failure
 
   nginx:
-    image: bisheng-frontend:0.0.1
+    image: dataelement/bisheng-frontend:0.0.1
     ports:
       - 3001:3001
     volumes:
