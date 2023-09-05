@@ -1,0 +1,3 @@
+[submodule "src/bisheng-unstructured"]
+	path = src/bisheng-unstructured
+	url = https://github.com/dataelement/bisheng-unstructured.git
