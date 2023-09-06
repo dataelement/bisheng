@@ -31,7 +31,7 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
     }, [open])
 
     const onDrop = (acceptedFiles) => {
-        const size = 4990000
+        const size = 49900000
         const errorFile = []
         acceptedFiles.forEach(file => {
             file.size > size && errorFile.push(file.name)

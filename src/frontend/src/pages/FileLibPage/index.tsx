@@ -40,7 +40,6 @@ function CreateModal({ datalist, open, setOpen }) {
             setModal(models[0] || '')
         })
     }, [])
-    console.log('modal :>> ', modal);
 
     const { setErrorData } = useContext(alertContext);
 
@@ -51,6 +50,7 @@ function CreateModal({ datalist, open, setOpen }) {
         const errorlist = []
         if (!name) errorlist.push('请填写知识库名称')
         if (name.length > 30) errorlist.push('知识库名称字数不得超过30字')
+        if (!modal) errorlist.push('请选择一个模型')
         // 重名校验
         if (datalist.find(data => data.name === name)) errorlist.push('该名称已存在')
         const nameErrors = errorlist.length
@@ -97,14 +97,14 @@ function CreateModal({ datalist, open, setOpen }) {
                         <Label htmlFor="desc" className="text-right">描述</Label>
                         <Textarea id="desc" ref={descRef} placeholder="描述" className={`col-span-3 ${error.desc && 'border-red-400'}`} />
                     </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
+                    {options.length && <div className="grid grid-cols-4 items-center gap-4">
                         <Label className="text-right">模型</Label>
-                        {options.length && <Dropdown
+                        <Dropdown
                             options={options}
                             onSelect={(val) => setModal(val)}
                             value={modal}
-                        ></Dropdown>}
-                    </div>
+                        ></Dropdown>
+                    </div>}
                     <Button type="submit" className="mt-6 h-8 rounded-full" onClick={handleCreate}>创建</Button>
                 </div>
             </div>
