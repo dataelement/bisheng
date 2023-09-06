@@ -1,5 +1,5 @@
 import { Info } from "lucide-react";
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Handle, Position, useUpdateNodeInternals } from "reactflow";
 import ShadTooltip from "../../../../components/ShadTooltipComponent";
 import CodeAreaComponent from "../../../../components/codeAreaComponent";
@@ -27,6 +27,7 @@ import {
   nodeIconsLucide,
   nodeNames,
 } from "../../../../utils";
+import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
 
 export default function ParameterComponent({
   left,
@@ -64,18 +65,20 @@ export default function ParameterComponent({
   useEffect(() => { }, [closePopUp, data.node.template]);
 
   const { reactFlowInstance } = useContext(typesContext);
-  let disabled =
-    reactFlowInstance?.getEdges().some((e) => e.targetHandle === id) ?? false;
-  // 特殊处理milvus组件的 disabled
-  if (data.type === "Milvus"
-    && name === 'collection_name'
-    && reactFlowInstance?.getEdges().some((e) => e.targetHandle.indexOf('documents') !== -1
-      && e.targetHandle.indexOf(data.id) !== -1)) {
-    disabled = true
-  }
+  let disabled = useMemo(() => {
+    let dis = reactFlowInstance?.getEdges().some((e) => e.targetHandle === id) ?? false;
+    // 特殊处理milvus组件的 disabled
+    if (data.type === "Milvus"
+      && name === 'collection_name'
+      && reactFlowInstance?.getEdges().some((e) => e.targetHandle.indexOf('documents') !== -1
+        && e.targetHandle.indexOf(data.id) !== -1)) {
+      dis = true
+    }
+    return dis
+  }, [id, data, reactFlowInstance])
   const [myData, setMyData] = useState(useContext(typesContext).data);
 
-  const handleOnNewValue = (newValue: any) => {
+  const handleOnNewValue = useCallback((newValue: any) => {
     data.node.template[name].value = ['float', 'int'].includes(type) ? Number(newValue) : newValue;
     // Set state to pending
     setTabsState((prev) => {
@@ -87,7 +90,7 @@ export default function ParameterComponent({
         },
       };
     });
-  };
+  }, [data, tabId]);
 
   useEffect(() => {
     infoHtml.current = (
@@ -241,8 +244,19 @@ export default function ParameterComponent({
                 value={data.node.template[name].value ?? ""}
                 onChange={handleOnNewValue}
               />
+            ) : name === 'collection_name' ? (
+              // 知识库选择
+              <CollectionNameComponent
+                setNodeClass={(nodeClass) => {
+                  data.node = nodeClass;
+                }}
+                nodeClass={data.node}
+                disabled={disabled}
+                value={data.node.template[name].value ?? ""}
+                onChange={handleOnNewValue}
+              />
             ) : (
-              // 导航输入
+              // 单行输入
               <InputComponent
                 disabled={disabled}
                 disableCopyPaste={true}

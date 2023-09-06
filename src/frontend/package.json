@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "0.1.2",
+  "version": "0.0.2",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.10.5",
@@ -71,8 +71,9 @@
     "build": "vite build",
     "serve": "vite preview",
     "format": "npx prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
-    "test": "scp -r ./src/* root@192.168.106.120:/data/langflow/frontend/src",
-    "test120": "scp -r ./src/* root@192.168.106.120:/data/langflow/frontend120/src"
+    "demo": "scp -r ./build/* root@192.168.106.120:/data/webroot/bisheng",
+    "dev": "scp -r ./build/* root@192.168.106.120:/data/webroot/bisheng-dev",
+    "test": "scp -r ./build/* root@192.168.106.120:/data/webroot/bisheng-test"
   },
   "eslintConfig": {
     "extends": [
@@ -115,6 +116,7 @@
     "prettier-plugin-tailwindcss": "^0.3.0",
     "tailwindcss": "^3.3.2",
     "typescript": "^5.0.2",
+    "vite-plugin-static-copy": "^0.17.0",
     "vite": "^4.3.9"
   }
 }

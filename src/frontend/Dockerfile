@@ -1,8 +1,8 @@
-FROM node:14-alpine as frontend_build
+FROM node:16-alpine as frontend_build
 ARG BACKEND
 WORKDIR /app
 COPY . /app
-RUN npm install
+RUN npm install --force
 RUN npm run build
 
 FROM nginx

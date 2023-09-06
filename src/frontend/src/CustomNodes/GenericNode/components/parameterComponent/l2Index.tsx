@@ -12,6 +12,7 @@ import ToggleShadComponent from "../../../../components/toggleShadComponent";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
 import { cleanEdges } from "../../../../util/reactflowUtils";
+import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
 
 export default function L2ParameterComponent({
     // id,
@@ -54,6 +55,17 @@ export default function L2ParameterComponent({
                     />
                 ) : data.node.template[name].multiline ? (
                     <TextAreaComponent
+                        disabled={disabled}
+                        value={data.node.template[name].value ?? ""}
+                        onChange={handleOnNewValue}
+                    />
+                ) : name === 'collection_name' ? (
+                    // 知识库选择
+                    <CollectionNameComponent
+                        setNodeClass={(nodeClass) => {
+                            data.node = nodeClass;
+                        }}
+                        nodeClass={data.node}
                         disabled={disabled}
                         value={data.node.template[name].value ?? ""}
                         onChange={handleOnNewValue}

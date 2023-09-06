@@ -9,7 +9,7 @@ import { alertContext } from "../../../contexts/alertContext";
 import { CodeBlock } from "../../../modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "../../../types/chat";
 
-export const ChatMessage = ({ chat }: { chat: ChatMessageType }) => {
+export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce: () => void }) => {
     const textRef = useRef(null)
     const [cursor, setCursor] = useState({ x: 0, y: 0 })
     useEffect(() => {
@@ -147,5 +147,6 @@ export const ChatMessage = ({ chat }: { chat: ChatMessageType }) => {
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
         </div>
+        {/* <div className="chat-footer py-1"><button className="btn btn-outline btn-info btn-xs" onClick={onSouce}>参考来源</button></div> */}
     </div>
 };

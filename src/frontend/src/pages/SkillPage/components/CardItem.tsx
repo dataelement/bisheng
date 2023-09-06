@@ -50,6 +50,7 @@ export default function CardItem({ data, edit = false, onDelete }: { data: FlowT
             </div>}
             <CardTitle className="pl-[40px] box-content w-[180px]">{data.name}</CardTitle>
             <CardDescription className="pl-[50px]">{data.description}</CardDescription>
+            {data.user_name && <p className="absolute left-4 bottom-2 pl-[50px] text-xs text-gray-400">创建用户： {data.user_name}</p>}
             {edit ? <div className="absolute right-4 bottom-2 flex gap-2 items-center">
                 {!open && <Link to={"/skill/" + data.id}><Button type="submit" className="custom-card-btn h-5 text-xs transition-all bg-gray-500" >编辑</Button></Link>}
                 <button className="" onClick={onDelete}> <Trash2 className="card-component-delete-icon" /> </button>

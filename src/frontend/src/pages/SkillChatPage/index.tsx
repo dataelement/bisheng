@@ -4,7 +4,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
-import { getChatHistory, getFlowFromDatabase, postBuildInit, postValidatePrompt, readOnlineFlows } from "../../controllers/API";
+import { getChatHistory, getChatsApi, getFlowFromDatabase, postBuildInit, postValidatePrompt, readOnlineFlows } from "../../controllers/API";
 import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
 import { sendAllProps } from "../../types/api";
 import { ChatMessageType } from "../../types/chat";
@@ -12,6 +12,7 @@ import { FlowType, NodeType } from "../../types/flow";
 import { generateUUID, validateNode } from "../../utils";
 import SkillTemps from "../SkillPage/components/SkillTemps";
 import { ChatMessage } from "./components/ChatMessage";
+// import ResouceModal from "./components/ResouceModal";
 
 export default function SkillChatPage(params) {
     const [open, setOpen] = useState(false)
@@ -37,10 +38,12 @@ export default function SkillChatPage(params) {
         setFace(false)
         // add list
         addChat({
-            id: chatId.current,
-            flowId: node.id,
-            name: node.name,
-            desc: node.description
+            "flow_name": node.name,
+            "flow_description": node.description,
+            "flow_id": node.id,
+            "chat_id": chatId.current,
+            "create_time": "-",
+            "update_time": "-"
         })
 
         inputRef.current.value = ''
@@ -52,8 +55,8 @@ export default function SkillChatPage(params) {
         if (i === chatIndex) return
         closeWs()
         setChatIndex(i)
-        chatId.current = chat.id
-        let flow = flows.find(flow => flow.id === chat.flowId) || await getFlowFromDatabase(chat.flowId)
+        chatId.current = chat.chat_id
+        let flow = flows.find(flow => flow.id === chat.flow_id) || await getFlowFromDatabase(chat.flow_id)
         if (!flow) {
             setInputState({ lock: true, error: '该技能已被删除' })
             clearHistory()
@@ -62,7 +65,7 @@ export default function SkillChatPage(params) {
         await initChat(flow)
         setFace(false)
 
-        inputRef.current.value = ''
+        if (inputRef.current) inputRef.current.value = ''
         setInputEmpty(true)
         changeHistoryByScroll.current = false
     }
@@ -110,6 +113,9 @@ export default function SkillChatPage(params) {
         return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
     }, [messagesRef.current]);
 
+    // 溯源
+    const [souceOpen, setSouceOpen] = useState(false)
+
     return <div className="flex">
         <div className="h-screen w-[200px] relative border-r">
             <div className="absolute flex pt-2 ml-[20px] bg-[#fff] dark:bg-gray-950">
@@ -118,9 +124,9 @@ export default function SkillChatPage(params) {
             <div className="scroll p-4 h-full overflow-y-scroll no-scrollbar pt-12">
                 {
                     chatList.map((chat, i) => (
-                        <div key={chat.id} className={`item rounded-xl mt-2 p-2 hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatIndex === i && 'bg-gray-100 dark:bg-gray-800'}`} onClick={() => handleSelectChat(i, chat)}>
-                            <p className="">{chat.name}</p>
-                            <span className="text-xs text-gray-500">{chat.desc}</span>
+                        <div key={chat.chat_id} className={`item rounded-xl mt-2 p-2 hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatIndex === i && 'bg-gray-100 dark:bg-gray-800'}`} onClick={() => handleSelectChat(i, chat)}>
+                            <p className="">{chat.flow_name}</p>
+                            <span className="text-xs text-gray-500">{chat.flow_description}</span>
                         </div>
                     ))
                 }
@@ -135,7 +141,7 @@ export default function SkillChatPage(params) {
                 <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
                     <div ref={messagesRef} className="chat-panne h-full overflow-y-scroll no-scrollbar px-4 pb-20">
                         {
-                            chatHistory.map((c, i) => <ChatMessage key={i} chat={c}></ChatMessage>)
+                            chatHistory.map((c, i) => <ChatMessage key={i} chat={c} onSouce={() => setSouceOpen(true)}></ChatMessage>)
                         }
                         {/* <div className="chat chat-start">
                         <div className="chat-bubble chat-bubble-info bg-gray-300">It's over Anakin, <br />I have the high ground.</div>
@@ -181,6 +187,8 @@ export default function SkillChatPage(params) {
             desc='选择一个您想使用的线上技能'
             open={open} setOpen={setOpen}
             onSelect={(e) => handlerSelectFlow(e)}></SkillTemps>
+        {/* 源文件类型 */}
+        {/* <ResouceModal open={souceOpen} setOpen={setSouceOpen}></ResouceModal> */}
     </div>
 };
 /**
@@ -238,8 +246,13 @@ const useWebsocketChat = (chatId) => {
         if (currentIdRef.current === lastIdRef.current) return // 最后一个相同表示聊天记录已到顶
         loadLock.current = true
         currentIdRef.current = lastIdRef.current
+        changeHistoryByScroll.current = true
         await loadHistory(currentIdRef.current)
         loadLock.current = false
+        // 滚动 hack  TODO 滚动翻页设计
+        setTimeout(() => {
+            changeHistoryByScroll.current = false
+        }, 500);
     }
 
     function getWebSocketUrl(_chatId, isDevelopment = false) {
@@ -781,11 +794,14 @@ const useBuild = () => {
 const useChatList = () => {
     const [chatIndex, setChatIndex] = useState(-1)
     const [chatList, setChatList] = useState([])
-    const ITEM_KEY = 'chattabs'
+    // const ITEM_KEY = 'chattabs'
 
     useEffect(() => {
-        const listStr = localStorage.getItem(ITEM_KEY)
-        listStr && setChatList(JSON.parse(listStr))
+        getChatsApi().then(res => {
+            setChatList(res.data)
+        })
+        // const listStr = localStorage.getItem(ITEM_KEY)
+        // listStr && setChatList(JSON.parse(listStr))
     }, [])
 
     return {
@@ -794,7 +810,7 @@ const useChatList = () => {
         setChatIndex,
         addChat: (chat) => {
             const newList = [chat, ...chatList]
-            localStorage.setItem(ITEM_KEY, JSON.stringify(newList))
+            // localStorage.setItem(ITEM_KEY, JSON.stringify(newList))
             setChatList(newList)
             setChatIndex(0)
         }

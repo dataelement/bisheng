@@ -1,4 +1,5 @@
 import AceEditor from "react-ace";
+
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
 import {
@@ -170,15 +171,15 @@ export default function FileLibPage() {
         ))
     }
 
-    // 10s刷新一次
+    // 5s刷新一次
     useEffect(() => {
         const timer = setTimeout(() => {
             const hasAwait = datalist.find(item => [STATUS.WAIT_OFFLINE, STATUS.WAIT_ONLINE].includes(item.status))
-            hasAwait && loadData()
-        }, 1000 * 10);
+            hasAwait && !open && loadData()
+        }, 1000 * 5);
 
         return () => clearTimeout(timer)
-    }, [datalist])
+    }, [open, datalist])
 
     const [showCpu, setShowCpu] = useState(false)
     return <div className="w-full h-screen p-6 overflow-y-auto" data-theme="light">

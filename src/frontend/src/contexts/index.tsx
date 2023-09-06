@@ -9,6 +9,7 @@ import PopUpProvider from "./popUpContext";
 import { TabsProvider } from "./tabsContext";
 import { TypesProvider } from "./typesContext";
 import { UndoRedoProvider } from "./undoRedoContext";
+import { UserProvider } from "./userContext";
 
 export default function ContextWrapper({ children }: { children: ReactNode }) {
   //element to wrap all context
@@ -23,7 +24,9 @@ export default function ContextWrapper({ children }: { children: ReactNode }) {
                   <SSEProvider>
                     <TabsProvider>
                       <UndoRedoProvider>
-                        <PopUpProvider>{children}</PopUpProvider>
+                        <UserProvider>
+                          <PopUpProvider>{children}</PopUpProvider>
+                        </UserProvider>
                       </UndoRedoProvider>
                     </TabsProvider>
                   </SSEProvider>

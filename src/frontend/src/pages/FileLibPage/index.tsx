@@ -22,7 +22,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import Dropdown from "../../components/dropdownComponent";
 import { Textarea } from "../../components/ui/textarea";
 import { alertContext } from "../../contexts/alertContext";
-import { createFileLib, deleteFileLib, readFileLibDatabase } from "../../controllers/API";
+import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "../../controllers/API";
 
 function CreateModal({ datalist, open, setOpen }) {
 
@@ -30,7 +30,17 @@ function CreateModal({ datalist, open, setOpen }) {
 
     const nameRef = useRef(null)
     const descRef = useRef(null)
-    const [modal, setModal] = useState('text-embedding-ada-002')
+    const [modal, setModal] = useState('')
+    const [options, setOptions] = useState([])
+    // 模型 s
+    useEffect(() => {
+        getEmbeddingModel().then(res => {
+            const models = res.data.data.models || []
+            setOptions(models)
+            setModal(models[0] || '')
+        })
+    }, [])
+    console.log('modal :>> ', modal);
 
     const { setErrorData } = useContext(alertContext);
 
@@ -89,11 +99,11 @@ function CreateModal({ datalist, open, setOpen }) {
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label className="text-right">模型</Label>
-                        <Dropdown
-                            options={['text-embedding-ada-002']}
+                        {options.length && <Dropdown
+                            options={options}
                             onSelect={(val) => setModal(val)}
                             value={modal}
-                        ></Dropdown>
+                        ></Dropdown>}
                     </div>
                     <Button type="submit" className="mt-6 h-8 rounded-full" onClick={handleCreate}>创建</Button>
                 </div>
@@ -142,7 +152,8 @@ export default function FileLibPage() {
                             <TableHead>collection</TableHead>
                             <TableHead>创建时间</TableHead>
                             <TableHead>更新时间</TableHead>
-                            <TableHead className="text-right"> </TableHead>
+                            <TableHead>创建用户</TableHead>
+                            <TableHead className="text-right"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -153,6 +164,7 @@ export default function FileLibPage() {
                                 <TableCell>{el.collection_name}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                                <TableCell>{el.user_name || '--'}</TableCell>
                                 <TableCell className="text-right" onClick={() => {
                                     // @ts-ignore
                                     window.libname = el.name

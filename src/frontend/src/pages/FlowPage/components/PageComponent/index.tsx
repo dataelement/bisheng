@@ -45,16 +45,17 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   }, [])
 
   let {
+    tabId,
     disableCopyPaste,
+    lastCopiedSelection,
     saveFlow,
     uploadFlow,
     getNodeId,
     paste,
-    lastCopiedSelection,
     setLastCopiedSelection,
     setTabsState,
-    tabId,
   } = useContext(TabsContext);
+
   const { types, reactFlowInstance, setReactFlowInstance, templates } = useContext(typesContext);
   const reactFlowWrapper = useRef(null);
 
@@ -384,7 +385,6 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     blocker.proceed?.()
   }
 
-  // TODO 性能优化
   return (
     <div className="flex h-full overflow-hidden">
       <ExtraSidebar flow={flow} />

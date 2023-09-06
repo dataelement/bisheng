@@ -14,6 +14,7 @@ import { locationContext } from "./contexts/locationContext";
 import { TabsContext } from "./contexts/tabsContext";
 import { LoginPage } from "./pages/login";
 import router from "./routes";
+import { userContext } from "./contexts/userContext";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -121,34 +122,14 @@ export default function App() {
     );
   };
 
-  const localUserStr = localStorage.getItem('auth')
-  const localUser = localUserStr ? JSON.parse(atob(localUserStr)) : { name: '', role: '', time: Date.now() }
-  // if (Date.now() - localUser.time > 10 * 1000) localUser.name = ''
-  if (Date.now() - localUser.time > 24 * 60 * 60 * 1000) localUser.name = ''
-  const [user, setUser] = useState(localUser)
-  const handleLogin = (name, pwd) => {
-    if (name === 'bisheng@dataelem.com' && pwd === 'admin') {
-      const data = { name: 'bisheng', role: 'admin', time: Date.now() }
-      setUser(data)
-      localStorage.setItem('auth', btoa(JSON.stringify(data)))
-    } else if (name === 'test@dataelem.com' && pwd === 'test') {
-      const data = { name: 'test', role: 'user', time: Date.now() }
-      setUser(data)
-      localStorage.setItem('auth', btoa(JSON.stringify(data)))
-    } else {
-      setErrorData({
-        title: "账号密码不正确: ",
-        list: [],
-      });
-    }
-  }
+  const { user, setUser } = useContext(userContext);
 
   // 退出
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.ctrlKey && event.keyCode === 81) {
-        setUser({ name: '', role: '', time: Date.now() })
-        localStorage.setItem('auth', '')
+        setUser(null)
+        localStorage.setItem('UUR_INFO', '')
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -171,7 +152,7 @@ export default function App() {
         FallbackComponent={CrashErrorComponent}
       >
         {/* <Header /> */}
-        {!user.name ? <LoginPage onLogin={handleLogin}></LoginPage> : <RouterProvider router={router} />}
+        {user ? <RouterProvider router={router} /> : <LoginPage></LoginPage>}
       </ErrorBoundary>
       <div></div>
       <div className="app-div" style={{ zIndex: 999 }}>
