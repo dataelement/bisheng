@@ -100,8 +100,10 @@ Todo: 待补充
 
 ## 社区
 
-欢迎加入 [Slack](https://www.dataelem.com/) 频道分享你的建议与问题。
-你也可以通过 [FAQ](https://m7a7tqsztt.feishu.cn/wiki/XdGCwkDJviC0Z8klbdbcF790n9b) 页面，查看常见问题及解答。
+- 欢迎加入 [Slack](https://www.dataelem.com/) 频道分享你的建议与问题。
+- 你也可以通过 [FAQ](https://m7a7tqsztt.feishu.cn/wiki/XdGCwkDJviC0Z8klbdbcF790n9b) 页面，查看常见问题及解答。
+- 你也可以加入 [讨论组](https://github.com/dataelement/bisheng/discussions) 发起问题和讨论。
+
 
 <!-- 订阅 Bisheng 邮件：
 
