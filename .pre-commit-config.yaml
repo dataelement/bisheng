@@ -1,9 +1,10 @@
 exclude: ^scripts|docs|docker|requirements|README.md
 repos:
-#  - repo: https://github.com/PyCQA/flake8.git
-#    rev: 3.8.3
-#    hooks:
-#      - id: flake8
+  - repo: https://github.com/PyCQA/flake8.git
+    rev: 3.8.3
+    hooks:
+      - id: flake8
+        args: ["--max-line-length=240"]
   - repo: https://github.com/asottile/seed-isort-config
     rev: v2.2.0
     hooks:

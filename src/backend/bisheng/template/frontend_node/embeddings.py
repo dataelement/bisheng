@@ -6,6 +6,7 @@ from bisheng.template.template.base import Template
 
 
 class EmbeddingFrontendNode(FrontendNode):
+
     @staticmethod
     def format_jina_fields(field: TemplateField):
         if 'jina' in field.name:
@@ -23,7 +24,6 @@ class EmbeddingFrontendNode(FrontendNode):
             field.display_name = 'Jina API URL'
             field.password = False
 
-
     @staticmethod
     def format_openai_fields(field: TemplateField):
         if 'openai' in field.name:
@@ -31,9 +31,8 @@ class EmbeddingFrontendNode(FrontendNode):
             field.advanced = True
             split_name = field.name.split('_')
             title_name = ' '.join([s.capitalize() for s in split_name])
-            field.display_name = title_name.replace('Openai', 'OpenAI').replace(
-                'Api', 'API'
-            )
+            field.display_name = title_name.replace('Openai', 'OpenAI'
+                                                    ).replace('Api', 'API')
 
         if 'api_key' in field.name:
             field.password = True
@@ -47,6 +46,7 @@ class EmbeddingFrontendNode(FrontendNode):
         field.show = True
         if field.name == 'headers':
             field.show = False
+            field.value = ''
 
         # Format Jina fields
         EmbeddingFrontendNode.format_jina_fields(field)
@@ -62,7 +62,7 @@ class OpenAIProxyEmbedding(FrontendNode):
         fields=[
             TemplateField(
                 field_type='str',
-                required= False,
+                required=False,
                 placeholder='http://43.133.35.137:8080',
                 is_list=False,
                 show=True,

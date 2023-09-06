@@ -1,0 +1,41 @@
+version: '3.4'
+
+services:
+  redis:
+    container_name: redis
+    image: redis:7.0.4
+    ports:
+      - "6379:6379"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/data:/data
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/redis.conf:/etc/redis.conf
+    command: redis-server /etc/redis.conf
+
+  mysql:
+    image: mysql:5.7.40
+    environment:
+      - "MYSQL_ROOT_PASSWORD=E1SkG0PaDMEPTAxY"
+      - "MYSQL_DATABASE=bisheng"
+      - "TZ=Asia/Shanghai"
+    ports:
+      - "3306:3306"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
+
+  backend:
+    image: dataelement/bisheng-backend:0.0.1
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
+    ports:
+      - "7861:7860"
+    restart: on-failure
+
+  nginx:
+    image: dataelement/bisheng-frontend:0.0.1
+    ports:
+      - 3001:3001
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/conf.d:/etc/nginx/conf.d
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/html:/usr/share/nginx/html

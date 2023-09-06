@@ -16,6 +16,7 @@ qdrant_storage
 .vscode/settings.json
 .chroma
 .ruff_cache
+.isort.cfg
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json

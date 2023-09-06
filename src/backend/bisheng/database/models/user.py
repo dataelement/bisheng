@@ -6,11 +6,14 @@ from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field
 
 
-class ServerBase(SQLModelSerializable):
-    endpoint: str = Field(index=False, unique=True)
-    server: str = Field(index=True)
+class UserBase(SQLModelSerializable):
+    user_name: str = Field(index=True, unique=True)
+    password: str = Field(index=False)
+    email: Optional[str] = Field(index=True)
+    phone_number: Optional[str] = Field(index=True)
     remark: Optional[str] = Field(index=False)
-    gpu: Optional[str] = Field(index=False)
+    role: str = Field(index=False, default='user')
+    delete: int = Field(index=False, default=0)
     create_time: Optional[datetime] = Field(
         sa_column=Column(
             DateTime,
@@ -29,18 +32,23 @@ class ServerBase(SQLModelSerializable):
     )
 
 
-class Server(ServerBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+class User(UserBase, table=True):
+    user_id: Optional[int] = Field(default=None, primary_key=True)
 
 
-class ServerRead(ServerBase):
-    id: Optional[int]
+class UserRead(UserBase):
+    user_id: Optional[int]
 
 
-class ServerQuery(ServerBase):
-    id: Optional[int]
-    server: Optional[str]
+class UserQuery(UserBase):
+    user_id: Optional[int]
+    user_name: Optional[str]
 
 
-class ServerCreate(ServerBase):
+class UserLogin(UserBase):
+    password: str
+    user_name: str
+
+
+class UserCreate(UserBase):
     pass

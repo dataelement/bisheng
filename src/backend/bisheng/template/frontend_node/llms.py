@@ -5,10 +5,10 @@ from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
 from bisheng.template.frontend_node.constants import (
     CTRANSFORMERS_DEFAULT_CONFIG, OPENAI_API_BASE_INFO)
-from bisheng.template.template.base import Template
 
 
 class LLMFrontendNode(FrontendNode):
+
     def add_extra_fields(self) -> None:
         if 'VertexAI' in self.template.type_name:
             # Add credentials field which should of type file.
@@ -56,10 +56,12 @@ class LLMFrontendNode(FrontendNode):
     def format_openai_field(field: TemplateField):
         if 'openai' in field.name.lower():
             field.display_name = (
-                field.name.title().replace('Openai', 'OpenAI').replace('_', ' ')
+                field.name.title().replace('Openai',
+                                           'OpenAI').replace('_', ' ')
             ).replace('Api', 'API')
 
-        if 'key' not in field.name.lower() and 'token' not in field.name.lower():
+        if 'key' not in field.name.lower() and 'token' not in field.name.lower(
+        ):
             field.password = False
 
         if field.name == 'openai_api_base':
@@ -109,6 +111,7 @@ class LLMFrontendNode(FrontendNode):
             field.advanced = True
         if field.name == 'headers':
             field.show = False
+            field.value = ''
 
         show_fields = [
             'model_name',
@@ -120,10 +123,10 @@ class LLMFrontendNode(FrontendNode):
         if field.name in show_fields:
             field.show = True
 
-        if 'api' in field.name.lower() or 'id' in field.name.lower() or 'key' in field.name.lower() or 'base' in field.name.lower():
+        if 'api' in field.name.lower() or 'id' in field.name.lower(
+        ) or 'key' in field.name.lower() or 'base' in field.name.lower():
             field.show = True
             field.advanced = False
-
 
     @staticmethod
     def format_llama_field(field: TemplateField):
@@ -156,8 +159,8 @@ class LLMFrontendNode(FrontendNode):
             field.show = True
 
         if 'api' in field.name and (
-            'key' in field.name
-            or ('token' in field.name and 'tokens' not in field.name)
+            'key' in field.name or
+            ('token' in field.name and 'tokens' not in field.name)
         ):
             field.password = True
             field.show = True
@@ -170,7 +173,9 @@ class LLMFrontendNode(FrontendNode):
             field.required = True
             field.show = True
             field.is_list = True
-            field.options = ['text-generation', 'text2text-generation', 'summarization']
+            field.options = [
+                'text-generation', 'text2text-generation', 'summarization'
+            ]
             field.value = field.options[0]
             field.advanced = True
 

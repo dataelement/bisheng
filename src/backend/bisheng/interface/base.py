@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Type, Union
 
-from bisheng.custom.customs import CUSTOM_NODES
 from bisheng.settings import settings
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
@@ -48,7 +47,9 @@ class LangChainTypeCreator(BaseModel, ABC):
         return self.type_dict
 
     @abstractmethod
-    def get_signature(self, name: str) -> Union[Optional[Dict[Any, Any]], FrontendNode]:
+    def get_signature(
+        self, name: str
+    ) -> Union[Optional[Dict[Any, Any]], FrontendNode]:
         pass
 
     @abstractmethod
@@ -88,8 +89,7 @@ class LangChainTypeCreator(BaseModel, ABC):
                     suffixes=value.get('suffixes', []),
                     file_types=value.get('fileTypes', []),
                     file_path=value.get('file_path', None),
-                )
-                for key, value in signature['template'].items()
+                ) for key, value in signature['template'].items()
                 if key != '_type'
             ]
             template = Template(type_name=name, fields=fields)
@@ -100,25 +100,27 @@ class LangChainTypeCreator(BaseModel, ABC):
                 name=name,
             )
 
-        ##判断是否包含inputKeys
+        # #判断是否包含inputKeys
         if name in self.type_to_loader_dict:
             class_tmp = self.type_to_loader_dict[name]
         else:
             for _, cls_ in self.type_to_loader_dict.items():
-                if hasattr(cls_, 'function_name') and cls_.function_name() == name:
+                if hasattr(cls_,
+                           'function_name') and cls_.function_name() == name:
                     class_tmp = cls_
                 elif cls_.__name__ == name:
                     class_tmp = cls_
 
         if class_tmp and hasattr(class_tmp, 'input_keys'):
-                signature.template.add_field(
-                    TemplateField(
-                        field_type='input',
-                        required=False,
-                        show=True,
-                        name='input_node',
-                        display_name='Preset Question',
-                    ))
+            signature.template.add_field(
+                TemplateField(
+                    field_type='input',
+                    required=False,
+                    show=True,
+                    name='input_node',
+                    display_name='Preset Question',
+                )
+            )
 
         signature.add_extra_fields()
         signature.add_extra_base_classes()
