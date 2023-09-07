@@ -47,8 +47,8 @@ jobs:
             APP_VERSION=${{ env.APP_VERSION }}
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
-            "${{ env.DOCKERHUB_REPO }}bisheng-backend":latest
-            "${{ env.DOCKERHUB_REPO }}bisheng-backend":${{ env.APP_VERSION }}
+            ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
+            ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ env.APP_VERSION }}
       # 构建 Docker 并推送到 Docker hub
       - name: Build and push
         id: docker_build
