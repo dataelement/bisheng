@@ -301,6 +301,7 @@ const useWebsocketChat = (chatId) => {
                     }
                 };
                 ws.current = newWs;
+                console.log('newWs :>> ', newWs);
             } catch (error) {
                 if (flow.current.id === "") {
                     // connectWS();

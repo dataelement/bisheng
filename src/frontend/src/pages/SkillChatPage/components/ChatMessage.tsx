@@ -116,7 +116,7 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
             <Card className="my-2 w-[200px] relative">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><File />文件</CardTitle>
-                    <CardDescription>{chat.files[0].file_name}</CardDescription>
+                    <CardDescription>{chat.files[0]?.file_name}</CardDescription>
                 </CardHeader>
                 {chat.files[0].data === 'progress' && <div className=" absolute top-0 left-0 w-full h-full bg-[rgba(255,255,255,0.8)]"><span className="loading loading-spinner loading-xs mr-4 align-middle absolute left-[-24px] bottom-0"></span></div>}
                 {chat.files[0].data === 'error' && <div className="flex w-4 h-4 justify-center items-center absolute left-[-24px] bottom-0 bg-red-500 text-gray-50 rounded-full">!</div>}

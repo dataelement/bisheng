@@ -137,6 +137,7 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
             'image/*': ['.jpeg', '.png', '.jpg', '.tiff'],
             'text/*': ['.csv', '.html', '.json', '.md', '.msg', '.txt', '.xml'],
         },
+        useFsAccessApi: false,
         onDrop
     });
 
@@ -168,7 +169,7 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
                     {/* <Tabs defaultValue="smart" className="w-full" onValueChange={(val) => chunkType.current = val}>
                         <TabsList className="">
                             <TabsTrigger value="smart" className="roundedrounded-xl">智能语义切分</TabsTrigger>
-                            <TabsTrigger value="chunk">手动切分</TabsTrigger>
+                            <TabsTrigger value="chunk">手动设置切分</TabsTrigger>
                         </TabsList>
                         <TabsContent value="smart">
                             <div className="grid gap-4 py-4">
@@ -181,10 +182,10 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
                         <TabsContent value="chunk">
                             <div className="grid gap-4 py-4">
                                 <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="name" className="text-right">文件切分大小</Label>
-                                    <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder="切分大小" className="col-span-3" />
-                                    <Label htmlFor="name" className="text-right">切分符号</Label>
+                                    <Label htmlFor="name" className="text-right">切分符</Label>
                                     <Input id="name" value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="切分符号" className="col-span-3" />
+                                    <Label htmlFor="name" className="text-right">切分文本长度</Label>
+                                    <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder="切分大小" className="col-span-3" />
                                 </div>
                             </div>
                         </TabsContent>

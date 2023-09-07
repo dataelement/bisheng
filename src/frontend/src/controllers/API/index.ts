@@ -11,6 +11,19 @@ import {
   errorsTypeAPI,
 } from "./../../types/api/index";
 
+
+axios.interceptors.response.use(function (response) {
+  return response;
+}, function (error) {
+  if (error.response.status === 401) {
+    // cookie expires
+    console.error('登录过期 :>> ');
+    const infoStr = localStorage.getItem('UUR_INFO')
+    localStorage.removeItem('UUR_INFO')
+    infoStr && location.reload()
+  }
+  return Promise.reject(error);
+})
 /**
  * Fetches all objects from the API endpoint.
  *

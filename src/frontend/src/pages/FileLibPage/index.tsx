@@ -149,7 +149,6 @@ export default function FileLibPage() {
                         <TableRow>
                             <TableHead className="w-[200px]">知识库名称</TableHead>
                             <TableHead>模型</TableHead>
-                            <TableHead>collection</TableHead>
                             <TableHead>创建时间</TableHead>
                             <TableHead>更新时间</TableHead>
                             <TableHead>创建用户</TableHead>
@@ -161,7 +160,6 @@ export default function FileLibPage() {
                             <TableRow key={el.id}>
                                 <TableCell className="font-medium">{el.name}</TableCell>
                                 <TableCell>{el.model || '--'}</TableCell>
-                                <TableCell>{el.collection_name}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.user_name || '--'}</TableCell>
