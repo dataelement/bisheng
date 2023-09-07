@@ -9537,11 +9537,6 @@ cffi = {version = ">=1.11", markers = "platform_python_implementation == \"PyPy\
 [package.extras]
 cffi = ["cffi (>=1.11)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [extras]
 deploy = ["langchain-serve"]
 
