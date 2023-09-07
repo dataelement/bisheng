@@ -1,7 +1,10 @@
+import { BookOpen, Github } from "lucide-react";
 import { useContext, useRef, useState } from "react";
 import Logo from "../assets/logo.jpeg";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Separator } from "../components/ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { alertContext } from "../contexts/alertContext";
 import { userContext } from "../contexts/userContext";
 import { loginApi, registerApi } from "../controllers/API";
@@ -71,7 +74,7 @@ export const LoginPage = () => {
         <div className="fixed z-10 w-[1200px] h-[800px] translate-x-[-50%] left-[50%] top-[15%] border rounded-lg shadow-xl overflow-hidden">
             <div className="w-[800px] h-full bg-gray-950"><StarBg /></div>
             <div className=" absolute w-full h-full z-10 flex justify-end top-0">
-                <div className="w-[760px] px-[200px] py-[200px] bg-[rgba(255,255,255,1)]">
+                <div className="w-[760px] px-[200px] py-[200px] bg-[rgba(255,255,255,1)] relative">
                     <div className="flex gap-4 items-center bg-[#347ef9]">
                         <img src={Logo} className="w-9 h-9" alt="" />
                         <span className="text-[#fff] text-sm">便捷、灵活、可靠的企业级大模型应用开发平台</span>
@@ -116,6 +119,30 @@ export const LoginPage = () => {
                         </div>
                     </div>
                     <Button variant="outline" type="button" className="mt-4" disabled>Github</Button>
+                    {/* link */}
+                    <div className=" absolute right-8 bottom-4 flex h-[28px]">
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger className="flex-1 py-1 px-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                                    <a href={"https://github.com/dataelement/bisheng"} target="_blank">
+                                        <Github className="side-bar-button-size mx-auto" />
+                                    </a>
+                                </TooltipTrigger>
+                                <TooltipContent className="z-10"><p>github</p></TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                        <Separator className="mx-1" orientation="vertical" />
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger className="flex-1 py-1 px-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                                    <a href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
+                                        <BookOpen className="side-bar-button-size mx-auto" />
+                                    </a>
+                                </TooltipTrigger>
+                                <TooltipContent className="z-10"><p>文档</p></TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
                 </div>
             </div>
         </div>
