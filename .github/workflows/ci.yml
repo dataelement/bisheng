@@ -5,7 +5,8 @@ on:
     # Sequence of patterns matched against refs/tags
     tags:
       - "v*"
-
+    branches:
+      - "patch*"
 env:
   DOCKERHUB_REPO: dataelement/
   
