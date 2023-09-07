@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any, Callable, Dict, Type
 
-from langchain.vectorstores import (FAISS, Chroma, ElasticVectorSearch, Milvus,
+from langchain.vectorstores import (FAISS, Chroma, Milvus,
                                     MongoDBAtlasVectorSearch, Pinecone, Qdrant,
                                     SupabaseVectorStore, Weaviate)
 from langchain_contrib.vectorstores import ElasticKeywordsSearch
@@ -206,14 +206,15 @@ def initialize_qdrant(class_object: Type[Qdrant], params: dict):
 
     return class_object.from_documents(**params)
 
+
 def initial_milvus(class_object: Type[Milvus], params: dict):
     if 'connection_args' not in params:
         connection_args = {
-            'host':'192.168.106.12',
-            'port':'19530',
-            'user':'',
+            'host': '192.168.106.12',
+            'port': '19530',
+            'user': '',
             'secure': False,
-            'password':''
+            'password': ''
         }
         params['connection_args'] = connection_args
     elif isinstance(params.get('connection_args'), str):
@@ -222,15 +223,17 @@ def initial_milvus(class_object: Type[Milvus], params: dict):
 
     return class_object.from_documents(**params)
 
+
 def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict):
     if 'elasticsearch_url' not in params:
         elasticsearch_url = 'https://192.168.106.14:9200'
         params['elasticsearch_url'] = elasticsearch_url
 
     if 'ssl_verify' not in params:
-        params['ssl_verify'] = {'ca_certs': False,
-                              'basic_auth':('elastic', 'F94h5JtdQn6EQB-G9Hjv'),
-                              'verify_certs':False}
+        params['ssl_verify'] = {'ca_certs': False, 'basic_auth': ('elastic', 'F94h5JtdQn6EQB-G9Hjv'),
+                                'verify_certs': False}
+
+    params['embedding'] = ''
     return class_object.from_documents(**params)
 
 

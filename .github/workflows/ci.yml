@@ -49,18 +49,20 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
             ${{ env.DOCKERHUB_REPO }}bisheng-backend:0.1.1
-      # 构建 Docker 并推送到 Docker hub
-      - name: Build and push
-        id: docker_build
+      # 构建 Docker frontend 并推送到 Docker hub
+      - name: Build frontend and push
+        id: docker_build_frontend
         uses: docker/build-push-action@v2
         with:
+          # frontend 的context目录
+          context: "./src/frontend/"
           # 是否 docker push
           push: true
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
-            APP_NAME=${{ env.APP_NAME }}
-            APP_VERSION=${{ env.APP_VERSION }}
+            APP_NAME="bisheng-frontend"
+            APP_VERSION=0.1.1
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
-            ${{ env.DOCKERHUB_REPO }}:latest
-            ${{ env.DOCKERHUB_REPO }}:${{ env.APP_VERSION }}
+            ${{ env.DOCKERHUB_REPO }}/bisheng-frontend:latest
+            ${{ env.DOCKERHUB_REPO }}/bisheng-frontend:0.1.1
