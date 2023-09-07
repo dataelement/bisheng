@@ -6,6 +6,7 @@ import FilesPage from "./pages/FileLibPage/files";
 import FlowPage from "./pages/FlowPage";
 import HomePage from "./pages/MainPage";
 import ModelPage from "./pages/ModelPage";
+import SystemPage from "./pages/SystemPage";
 import Doc from "./pages/ModelPage/doc";
 import SkillChatPage from "./pages/SkillChatPage";
 import SkillPage from "./pages/SkillPage";
@@ -31,6 +32,7 @@ const router = createBrowserRouter([
       { path: "files/:id", element: <FilesPage /> },
       { path: "skills", element: <SkillPage /> },
       { path: "model", element: <ModelPage /> },
+      { path: "sys", element: <SystemPage /> },
     ],
   },
   { path: "model/doc", element: <Doc /> },

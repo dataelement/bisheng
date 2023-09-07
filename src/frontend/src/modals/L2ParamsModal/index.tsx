@@ -28,6 +28,12 @@ const Item = ({ name, data }: { name: string, data: TemplateVariableType }) => {
         data.l2_name = e.target.value
     }
 
+    const [_, forceupdate] = useState(1) // refrensh
+    const handleSwitch = () => {
+        data.l2 = !data.l2
+        forceupdate(Math.random)
+    }
+
     return <div className={`l2Param flex justify-between rounded-xl px-2 py-1 mb-2 ${data.l2 ? 'bg-gray-400 dark:bg-gray-100' : 'bg-gray-100 dark:bg-gray-500'}`}>
         {
             edit ? <div className="">
@@ -39,7 +45,7 @@ const Item = ({ name, data }: { name: string, data: TemplateVariableType }) => {
                     <button className="l2Param-edit transition-all" title="修改别名" onClick={() => setEdit(true)}><PenLine size={18} className="ml-2 cursor-pointer" /></button>
                 </div>
         }
-        <Switch id="airplane-mode" checked={data.l2} onCheckedChange={(e) => data.l2 = !data.l2} />
+        <Switch id="airplane-mode" checked={data.l2} onCheckedChange={handleSwitch} />
     </div>
 }
 

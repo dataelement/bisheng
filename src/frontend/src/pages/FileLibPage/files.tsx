@@ -19,8 +19,6 @@ import {
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ShadTooltip from "../../components/ShadTooltipComponent";
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
 import { deleteFile, readFileByLibDatabase } from "../../controllers/API";
 import UploadModal from "../../modals/UploadModal";
 export default function FilesPage() {
@@ -54,9 +52,6 @@ export default function FilesPage() {
         loadPage(page)
     }
 
-    // size
-    const [size, setSize] = useState('1000')
-
     // 删除
     const { delShow, idRef, close, delConfim } = useDelete()
 
@@ -83,7 +78,7 @@ export default function FilesPage() {
             <TabsContent value="account">
                 <div className="flex justify-between items-center">
                     <span className=" text-gray-800">{title}</span>
-                    <Button className="h-8 rounded-full" onClick={() => { setSize('1000'); setOpen(true) }}>上传</Button>
+                    <Button className="h-8 rounded-full" onClick={() => { setOpen(true) }}>上传</Button>
                 </div>
                 <Table>
                     <TableCaption>
@@ -117,14 +112,7 @@ export default function FilesPage() {
             </TabsContent>
             <TabsContent value="password"></TabsContent>
         </Tabs>
-        <UploadModal id={id} size={size} open={open} setOpen={handleOpen}>
-            <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="name" className="text-right">文件切分大小</Label>
-                    <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder="切分大小" className="col-span-3" />
-                </div>
-            </div>
-        </UploadModal>
+        <UploadModal id={id} open={open} setOpen={handleOpen}></UploadModal>
         {/* 删除确认 */}
         <dialog className={`modal ${delShow && 'modal-open'}`}>
             <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">

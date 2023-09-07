@@ -8,6 +8,7 @@ export type FlowType = {
   description: string;
   status: number;
   style?: FlowStyleType;
+  user_name?: string;
 };
 export type NodeType = {
   id: string;

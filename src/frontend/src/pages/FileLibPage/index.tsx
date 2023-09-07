@@ -22,7 +22,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import Dropdown from "../../components/dropdownComponent";
 import { Textarea } from "../../components/ui/textarea";
 import { alertContext } from "../../contexts/alertContext";
-import { createFileLib, deleteFileLib, readFileLibDatabase } from "../../controllers/API";
+import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "../../controllers/API";
 
 function CreateModal({ datalist, open, setOpen }) {
 
@@ -30,7 +30,16 @@ function CreateModal({ datalist, open, setOpen }) {
 
     const nameRef = useRef(null)
     const descRef = useRef(null)
-    const [modal, setModal] = useState('text-embedding-ada-002')
+    const [modal, setModal] = useState('')
+    const [options, setOptions] = useState([])
+    // 模型 s
+    useEffect(() => {
+        getEmbeddingModel().then(res => {
+            const models = res.data.data.models || []
+            setOptions(models)
+            setModal(models[0] || '')
+        })
+    }, [])
 
     const { setErrorData } = useContext(alertContext);
 
@@ -41,6 +50,7 @@ function CreateModal({ datalist, open, setOpen }) {
         const errorlist = []
         if (!name) errorlist.push('请填写知识库名称')
         if (name.length > 30) errorlist.push('知识库名称字数不得超过30字')
+        if (!modal) errorlist.push('请选择一个模型')
         // 重名校验
         if (datalist.find(data => data.name === name)) errorlist.push('该名称已存在')
         const nameErrors = errorlist.length
@@ -87,14 +97,14 @@ function CreateModal({ datalist, open, setOpen }) {
                         <Label htmlFor="desc" className="text-right">描述</Label>
                         <Textarea id="desc" ref={descRef} placeholder="描述" className={`col-span-3 ${error.desc && 'border-red-400'}`} />
                     </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
+                    {options.length && <div className="grid grid-cols-4 items-center gap-4">
                         <Label className="text-right">模型</Label>
                         <Dropdown
-                            options={['text-embedding-ada-002']}
+                            options={options}
                             onSelect={(val) => setModal(val)}
                             value={modal}
                         ></Dropdown>
-                    </div>
+                    </div>}
                     <Button type="submit" className="mt-6 h-8 rounded-full" onClick={handleCreate}>创建</Button>
                 </div>
             </div>
@@ -142,7 +152,8 @@ export default function FileLibPage() {
                             <TableHead>collection</TableHead>
                             <TableHead>创建时间</TableHead>
                             <TableHead>更新时间</TableHead>
-                            <TableHead className="text-right"> </TableHead>
+                            <TableHead>创建用户</TableHead>
+                            <TableHead className="text-right"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -153,6 +164,7 @@ export default function FileLibPage() {
                                 <TableCell>{el.collection_name}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                                <TableCell>{el.user_name || '--'}</TableCell>
                                 <TableCell className="text-right" onClick={() => {
                                     // @ts-ignore
                                     window.libname = el.name

@@ -38,7 +38,7 @@ export const CpuDetail = () => {
                     <TableCell>{el.gpu_id}</TableCell>
                     <TableCell>{el.gpu_total_mem}</TableCell>
                     <TableCell>{el.gpu_used_mem}</TableCell>
-                    <TableCell>{el.gpu_utility}</TableCell>
+                    <TableCell>{el.gpu_utility * 100}%</TableCell>
                 </TableRow>
             ))}
         </TableBody>

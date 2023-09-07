@@ -114,6 +114,11 @@
 	} */
 }
 
+.anwser-souce span{
+	color: #347ef9;
+	cursor: pointer;
+}
+
 @keyframes App-logo-spin {
 	from {
 		transform: rotate(0deg);

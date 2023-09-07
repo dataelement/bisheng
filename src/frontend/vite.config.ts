@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import svgr from "vite-plugin-svgr";
+import { viteStaticCopy } from 'vite-plugin-static-copy'
 const apiRoutes = ["^/api/v1/", "/health"];
 
 // Use environment variable to determine the target.
@@ -21,7 +22,21 @@ export default defineConfig(() => {
     build: {
       outDir: "build",
     },
-    plugins: [react(), svgr()],
+    plugins: [
+      react(),
+      svgr(),
+      viteStaticCopy({
+        targets: [
+          {
+            src: [
+              'node_modules/ace-builds/src-min-noconflict/ace.js',
+              'node_modules/ace-builds/src-min-noconflict/mode-json.js',
+              'node_modules/ace-builds/src-min-noconflict/worker-json.js'
+            ],
+            dest: 'node_modules/ace-builds/src-min-noconflict/'
+          }
+        ]
+      })],
     server: {
       host: '0.0.0.0',
       port: 3001,
