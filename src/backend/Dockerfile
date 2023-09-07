@@ -13,9 +13,6 @@ COPY poetry.lock pyproject.toml ./
 # Copy the rest of the application codes
 COPY ./ ./
 
-RUN pip config set global.index-url http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple
-RUN pip config set global.trusted-host 192.168.106.8
-
 RUN python -m pip install --upgrade pip && \
     pip install gunicorn && \
     pip install shapely==2.0.1 && \
