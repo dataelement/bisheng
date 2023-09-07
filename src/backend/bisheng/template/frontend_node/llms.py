@@ -86,15 +86,12 @@ class LLMFrontendNode(FrontendNode):
             field.show = True
             field.advanced = True
             field.password = False
-            field.value = '2023-05-15'
         elif field.name == 'openai_api_base':
             field.show = True
             field.advanced = True
-            field.value = 'https://dataelem.openai.azure.com/'
         elif field.name == 'openai_api_key':
             field.show = True
             field.advanced = True
-            field.value = '047b4f44588f47c8a72bf44c7a21e532'
         elif field.name == 'deployment_name':
             field.show = True
             field.advanced = True

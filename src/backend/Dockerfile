@@ -13,9 +13,6 @@ COPY poetry.lock pyproject.toml ./
 # Copy the rest of the application codes
 COPY ./ ./
 
-RUN pip config set global.index-url http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple
-RUN pip config set global.trusted-host 192.168.106.8
-
 RUN python -m pip install --upgrade pip && \
     pip install gunicorn && \
     pip install shapely==2.0.1 && \
@@ -23,6 +20,6 @@ RUN python -m pip install --upgrade pip && \
 
 # Install dependencies
 RUN poetry config virtualenvs.create false
-RUN poetry install --no-interaction --no-ansi
+RUN poetry install --no-interaction --no-ansi --without dev
 
 CMD ["uvicorn", "bisheng.main:app", "--workers", "20",  "--host", "0.0.0.0", "--port", "7860"]

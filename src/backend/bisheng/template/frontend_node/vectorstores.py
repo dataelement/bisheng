@@ -269,6 +269,9 @@ class VectorStoreFrontendNode(FrontendNode):
             field.advanced = False
             field.display_name = 'Embedding'
             field.field_type = 'Embeddings'
+            if name == 'ElasticKeywordsSearch':
+                field.show = False
+                field.required = False
 
         elif field.name in basic_fields:
             field.show = True
@@ -292,11 +295,4 @@ class VectorStoreFrontendNode(FrontendNode):
         elif field.name == 'connection_args':
             field.show = True
             field.advanced = True
-            field.value = {'host':'192.168.106.116', 'port':'19530','user':'','password':'','secure': False}
-
-        elif field.name == 'ssl_verify':
-            field.show = True
-            field.advanced = True
-            field.value = {'ca_certs':'/home/public/liuqingjie/Elasticsearch/http_ca.crt',
-                              'basic_auth':('elastic', 'F94h5JtdQn6EQB-G9Hjv'),
-                              'verify_certs':'False'}
+            field.value = {'host': '192.168.106.116', 'port': '19530', 'user': '', 'password': '', 'secure': False}
