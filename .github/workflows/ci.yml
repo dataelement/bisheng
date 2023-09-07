@@ -5,8 +5,7 @@ on:
     # Sequence of patterns matched against refs/tags
     tags:
       - "v*"
-    branches:
-      - "patch*"
+
 env:
   DOCKERHUB_REPO: dataelement/
   
@@ -32,6 +31,11 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Bash echo
+        shell: bash
+        run: |
+          echo "${{ github.ref }}"
+          echo ""
       # 构建 backend 并推送到 Docker hub
       - name: Build backend and push
         id: docker_build_backend
@@ -64,5 +68,5 @@ jobs:
             APP_VERSION=0.1.1
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
-            ${{ env.DOCKERHUB_REPO }}/bisheng-frontend:latest
-            ${{ env.DOCKERHUB_REPO }}/bisheng-frontend:0.1.1
+            ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
+            ${{ env.DOCKERHUB_REPO }}bisheng-frontend:0.1.1
