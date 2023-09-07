@@ -20,6 +20,6 @@ RUN python -m pip install --upgrade pip && \
 
 # Install dependencies
 RUN poetry config virtualenvs.create false
-RUN poetry install --no-interaction --no-ansi --without dev-dependencies
+RUN poetry install --no-interaction --no-ansi --without dev
 
 CMD ["uvicorn", "bisheng.main:app", "--workers", "20",  "--host", "0.0.0.0", "--port", "7860"]
