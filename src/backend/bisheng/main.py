@@ -73,6 +73,7 @@ def setup_app(static_files_dir: Optional[Path] = None) -> FastAPI:
     setup_static_files(app, static_files_dir)
     return app
 
+
 configure(log_level='DEBUG')
 app = create_app()
 

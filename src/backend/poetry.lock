@@ -11,11 +11,6 @@ files = [
     {file = "aiofiles-23.2.1.tar.gz", hash = "sha256:84ec2218d8419404abcb9f0c02df3f34c6e0a68ed41072acfb1cef5cbc29051a"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "aiohttp"
 version = "3.8.5"
@@ -124,11 +119,6 @@ yarl = ">=1.0,<2.0"
 [package.extras]
 speedups = ["Brotli", "aiodns", "cchardet"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "aiosignal"
 version = "1.3.1"
@@ -143,11 +133,6 @@ files = [
 [package.dependencies]
 frozenlist = ">=1.1.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "aiostream"
 version = "0.4.5"
@@ -158,11 +143,6 @@ files = [
     {file = "aiostream-0.4.5-py3-none-any.whl", hash = "sha256:25b7c2d9c83570d78c0ef5a20e949b7d0b8ea3b0b0a4f22c49d3f721105a6057"},
     {file = "aiostream-0.4.5.tar.gz", hash = "sha256:3ecbf87085230fbcd9605c32ca20c4fb41af02c71d076eab246ea22e35947d88"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "anthropic"
@@ -182,11 +162,6 @@ httpx = ">=0.23.0,<1"
 pydantic = ">=1.9.0,<3"
 tokenizers = ">=0.13.0"
 typing-extensions = ">=4.5,<5"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "anyio"
@@ -209,11 +184,6 @@ doc = ["Sphinx", "packaging", "sphinx-autodoc-typehints (>=1.2.0)", "sphinx-rtd-
 test = ["anyio[trio]", "coverage[toml] (>=4.5)", "hypothesis (>=4.0)", "mock (>=4)", "psutil (>=5.9)", "pytest (>=7.0)", "pytest-mock (>=3.6.1)", "trustme", "uvloop (>=0.17)"]
 trio = ["trio (<0.22)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "appdirs"
 version = "1.4.4"
@@ -224,11 +194,6 @@ files = [
     {file = "appdirs-1.4.4-py2.py3-none-any.whl", hash = "sha256:a841dacd6b99318a741b166adb07e19ee71a274450e68237b4650ca1055ab128"},
     {file = "appdirs-1.4.4.tar.gz", hash = "sha256:7d5d0167b2b1ba821647616af46a749d1c653740dd0d2415100fe26e27afdf41"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "appnope"
@@ -241,11 +206,6 @@ files = [
     {file = "appnope-0.1.3.tar.gz", hash = "sha256:02bd91c4de869fbb1e1c50aafc4098827a7a54ab2f39d9dcba6c9547ed920e24"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "argilla"
 version = "0.0.1"
@@ -256,11 +216,6 @@ files = [
     {file = "argilla-0.0.1-py3-none-any.whl", hash = "sha256:8bdc3c505bcfb47ba4b91f5658034eae53bf7d4f9317980397605c0c55817396"},
     {file = "argilla-0.0.1.tar.gz", hash = "sha256:5017854754e89f573b31af25b25b803f51cea9ca1fa0bcf00505dee1f45cf7c9"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "asgiref"
@@ -279,11 +234,6 @@ typing-extensions = {version = ">=4", markers = "python_version < \"3.11\""}
 [package.extras]
 tests = ["mypy (>=0.800)", "pytest", "pytest-asyncio"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "asttokens"
 version = "2.4.0"
@@ -301,11 +251,6 @@ six = ">=1.12.0"
 [package.extras]
 test = ["astroid", "pytest"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "async-timeout"
 version = "4.0.3"
@@ -316,11 +261,6 @@ files = [
     {file = "async-timeout-4.0.3.tar.gz", hash = "sha256:4640d96be84d82d02ed59ea2b7105a0f7b33abe8703703cd0ab0bf87c427522f"},
     {file = "async_timeout-4.0.3-py3-none-any.whl", hash = "sha256:7405140ff1230c310e51dc27b3145b9092d659ce68ff733fb0cefe3ee42be028"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "attrs"
@@ -340,11 +280,6 @@ docs = ["furo", "myst-parser", "sphinx", "sphinx-notfound-page", "sphinxcontrib-
 tests = ["attrs[tests-no-zope]", "zope-interface"]
 tests-no-zope = ["cloudpickle", "hypothesis", "mypy (>=1.1.1)", "pympler", "pytest (>=4.3.0)", "pytest-mypy-plugins", "pytest-xdist[psutil]"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "authlib"
 version = "1.2.1"
@@ -359,11 +294,6 @@ files = [
 [package.dependencies]
 cryptography = ">=3.2"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "backcall"
 version = "0.2.0"
@@ -375,11 +305,6 @@ files = [
     {file = "backcall-0.2.0.tar.gz", hash = "sha256:5cbdbf27be5e7cfadb448baf0aa95508f91f2bbc6c6437cd9cd06e2a4c215e1e"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "backoff"
 version = "2.2.1"
@@ -390,11 +315,6 @@ files = [
     {file = "backoff-2.2.1-py3-none-any.whl", hash = "sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8"},
     {file = "backoff-2.2.1.tar.gz", hash = "sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "beautifulsoup4"
@@ -413,11 +333,6 @@ soupsieve = ">1.2"
 [package.extras]
 html5lib = ["html5lib"]
 lxml = ["lxml"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "black"
@@ -465,11 +380,6 @@ d = ["aiohttp (>=3.7.4)"]
 jupyter = ["ipython (>=7.8.0)", "tokenize-rt (>=3.2.0)"]
 uvloop = ["uvloop (>=0.15.2)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "bleach"
 version = "6.0.0"
@@ -488,11 +398,6 @@ webencodings = "*"
 [package.extras]
 css = ["tinycss2 (>=1.1.0,<1.2)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "cachetools"
 version = "5.3.1"
@@ -504,11 +409,6 @@ files = [
     {file = "cachetools-5.3.1.tar.gz", hash = "sha256:dce83f2d9b4e1f732a8cd44af8e8fab2dbe46201467fc98b3ef8f269092bf62b"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "certifi"
 version = "2023.7.22"
@@ -519,11 +419,6 @@ files = [
     {file = "certifi-2023.7.22-py3-none-any.whl", hash = "sha256:92d6037539857d8206b8f6ae472e8b77db8058fec5937a1ef3f54304089edbb9"},
     {file = "certifi-2023.7.22.tar.gz", hash = "sha256:539cc1d13202e33ca466e88b2807e29f4c13049d6d87031a3c110744495cb082"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "cffi"
@@ -601,11 +496,6 @@ files = [
 [package.dependencies]
 pycparser = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "chardet"
 version = "5.2.0"
@@ -616,11 +506,6 @@ files = [
     {file = "chardet-5.2.0-py3-none-any.whl", hash = "sha256:e1cf59446890a00105fe7b7912492ea04b6e6f06d4b742b2c788469e34c82970"},
     {file = "chardet-5.2.0.tar.gz", hash = "sha256:1b3b6ff479a8c414bc3fa2c0852995695c4a026dcd6d0633b2dd092ca39c1cf7"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "charset-normalizer"
@@ -706,11 +591,6 @@ files = [
     {file = "charset_normalizer-3.2.0-py3-none-any.whl", hash = "sha256:8e098148dd37b4ce3baca71fb394c81dc5d9c7728c95df695d2dca218edf40e6"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "chromadb"
 version = "0.3.26"
@@ -740,11 +620,6 @@ tqdm = ">=4.65.0"
 typing-extensions = ">=4.5.0"
 uvicorn = {version = ">=0.18.3", extras = ["standard"]}
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "click"
 version = "8.1.7"
@@ -759,11 +634,6 @@ files = [
 [package.dependencies]
 colorama = {version = "*", markers = "platform_system == \"Windows\""}
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "click-log"
 version = "0.4.0"
@@ -777,11 +647,6 @@ files = [
 
 [package.dependencies]
 click = "*"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "clickhouse-connect"
@@ -871,11 +736,6 @@ orjson = ["orjson"]
 pandas = ["pandas"]
 sqlalchemy = ["sqlalchemy (>1.3.21,<2.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "cmake"
 version = "3.27.4.1"
@@ -898,11 +758,6 @@ files = [
 [package.extras]
 test = ["coverage (>=4.2)", "flake8 (>=3.0.4)", "path.py (>=11.5.0)", "pytest (>=3.0.3)", "pytest-cov (>=2.4.0)", "pytest-runner (>=2.9)", "pytest-virtualenv (>=1.7.0)", "scikit-build (>=0.10.0)", "setuptools (>=28.0.0)", "virtualenv (>=15.0.3)", "wheel"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "cohere"
 version = "4.22"
@@ -922,11 +777,6 @@ importlib_metadata = ">=6.0,<7.0"
 requests = ">=2.25.0,<3.0.0"
 urllib3 = ">=1.26,<3"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "colorama"
 version = "0.4.6"
@@ -937,11 +787,6 @@ files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "coloredlogs"
@@ -959,11 +804,6 @@ humanfriendly = ">=9.1"
 
 [package.extras]
 cron = ["capturer (>=2.4)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "comm"
@@ -983,11 +823,6 @@ traitlets = ">=4"
 lint = ["black (>=22.6.0)", "mdformat (>0.7)", "mdformat-gfm (>=0.3.5)", "ruff (>=0.0.156)"]
 test = ["pytest"]
 typing = ["mypy (>=0.990)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "coverage"
@@ -1056,11 +891,6 @@ tomli = {version = "*", optional = true, markers = "python_full_version <= \"3.1
 [package.extras]
 toml = ["tomli"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "cryptography"
 version = "41.0.3"
@@ -1106,11 +936,6 @@ ssh = ["bcrypt (>=3.1.5)"]
 test = ["pretend", "pytest (>=6.2.0)", "pytest-benchmark", "pytest-cov", "pytest-xdist"]
 test-randomorder = ["pytest-randomly"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "ctransformers"
 version = "0.2.26"
@@ -1131,11 +956,6 @@ cuda = ["nvidia-cublas-cu12", "nvidia-cuda-runtime-cu12"]
 gptq = ["exllama (==0.1.0)"]
 tests = ["pytest"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "dataclasses-json"
 version = "0.5.14"
@@ -1150,11 +970,6 @@ files = [
 [package.dependencies]
 marshmallow = ">=3.18.0,<4.0.0"
 typing-inspect = ">=0.4.0,<1"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "debugpy"
@@ -1183,11 +998,6 @@ files = [
     {file = "debugpy-1.6.7.post1.zip", hash = "sha256:fe87ec0182ef624855d05e6ed7e0b7cb1359d2ffa2a925f8ec2d22e98b75d0ca"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "decorator"
 version = "5.1.1"
@@ -1198,11 +1008,6 @@ files = [
     {file = "decorator-5.1.1-py3-none-any.whl", hash = "sha256:b8c3f85900b9dc423225913c5aace94729fe1fa9763b38939a95226f02d37186"},
     {file = "decorator-5.1.1.tar.gz", hash = "sha256:637996211036b6385ef91435e4fae22989472f9d571faba8927ba8253acbc330"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "deprecated"
@@ -1221,11 +1026,6 @@ wrapt = ">=1.10,<2"
 [package.extras]
 dev = ["PyTest", "PyTest-Cov", "bump2version (<1)", "sphinx (<2)", "tox"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "deprecation"
 version = "2.1.0"
@@ -1239,11 +1039,6 @@ files = [
 
 [package.dependencies]
 packaging = "*"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "dill"
@@ -1259,11 +1054,6 @@ files = [
 [package.extras]
 graph = ["objgraph (>=1.7.2)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "diskcache"
 version = "5.6.3"
@@ -1275,11 +1065,6 @@ files = [
     {file = "diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "distro"
 version = "1.8.0"
@@ -1290,11 +1075,6 @@ files = [
     {file = "distro-1.8.0-py3-none-any.whl", hash = "sha256:99522ca3e365cac527b44bde033f64c6945d90eb9f769703caaec52b09bbd3ff"},
     {file = "distro-1.8.0.tar.gz", hash = "sha256:02e111d1dc6a50abb8eed6bf31c3e48ed8b0830d1ea2a1b78c61765c2513fdd8"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "dnspython"
@@ -1314,11 +1094,6 @@ doq = ["aioquic (>=0.9.20)"]
 idna = ["idna (>=2.1,<4.0)"]
 trio = ["trio (>=0.14,<0.23)"]
 wmi = ["wmi (>=1.5.1,<2.0.0)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "docarray"
@@ -1348,11 +1123,6 @@ redis = ["redis (>=4.3.0)"]
 test = ["annlite", "black (==22.3.0)", "datasets", "elasticsearch (>=8.2.0)", "jina", "jupyterlab", "mock", "onnx", "onnxruntime", "opensearch-py (==2.0.1)", "paddlepaddle", "protobuf (>=3.13.0,<=3.20.0)", "pymilvus (==2.1.3)", "pytest", "pytest-cov (==3.0.0)", "pytest-custom_exit_code", "pytest-mock", "pytest-mock", "pytest-repeat", "pytest-reraise", "pytest-timeout", "redis (>=4.3.0)", "tensorflow (==2.7.0)", "torch (==1.9.0)", "torchvision (==0.10.0)", "transformers (>=4.16.2)", "weaviate-client (>=3.9.0,<3.10.0)"]
 weaviate = ["weaviate-client (>=3.9.0,<3.10.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "docker"
 version = "6.1.3"
@@ -1374,11 +1144,6 @@ websocket-client = ">=0.32.0"
 [package.extras]
 ssh = ["paramiko (>=2.4.3)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "docstring-parser"
 version = "0.15"
@@ -1389,11 +1154,6 @@ files = [
     {file = "docstring_parser-0.15-py3-none-any.whl", hash = "sha256:d1679b86250d269d06a99670924d6bce45adc00b08069dae8c47d98e89b667a9"},
     {file = "docstring_parser-0.15.tar.gz", hash = "sha256:48ddc093e8b1865899956fcc03b03e66bb7240c310fac5af81814580c55bf682"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "docutils"
@@ -1406,11 +1166,6 @@ files = [
     {file = "docutils-0.20.1.tar.gz", hash = "sha256:f08a4e276c3a1583a86dce3e34aba3fe04d02bba2dd51ed16106244e8a923e3b"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "dotty-dict"
 version = "1.3.1"
@@ -1421,11 +1176,6 @@ files = [
     {file = "dotty_dict-1.3.1-py3-none-any.whl", hash = "sha256:5022d234d9922f13aa711b4950372a06a6d64cb6d6db9ba43d0ba133ebfce31f"},
     {file = "dotty_dict-1.3.1.tar.gz", hash = "sha256:4b016e03b8ae265539757a53eba24b9bfda506fb94fbce0bee843c6f05541a15"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "duckdb"
@@ -1488,11 +1238,6 @@ files = [
     {file = "duckdb-0.8.1.tar.gz", hash = "sha256:a54d37f4abc2afc4f92314aaa56ecf215a411f40af4bffe1e86bd25e62aceee9"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "ecdsa"
 version = "0.18.0"
@@ -1510,11 +1255,6 @@ six = ">=1.9.0"
 [package.extras]
 gmpy = ["gmpy"]
 gmpy2 = ["gmpy2"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "elastic-transport"
@@ -1534,11 +1274,6 @@ urllib3 = ">=1.26.2,<2"
 [package.extras]
 develop = ["aiohttp", "mock", "pytest", "pytest-asyncio", "pytest-cov", "pytest-httpserver", "pytest-mock", "requests", "trustme"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "elasticsearch"
 version = "8.9.0"
@@ -1557,11 +1292,6 @@ elastic-transport = ">=8,<9"
 async = ["aiohttp (>=3,<4)"]
 requests = ["requests (>=2.4.0,<3.0.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "et-xmlfile"
 version = "1.1.0"
@@ -1572,11 +1302,6 @@ files = [
     {file = "et_xmlfile-1.1.0-py3-none-any.whl", hash = "sha256:a2ba85d1d6a74ef63837eed693bcb89c3f752169b0e3e7ae5b16ca5e1b3deada"},
     {file = "et_xmlfile-1.1.0.tar.gz", hash = "sha256:8eb9e2bc2f8c97e37a2dc85a09ecdcdec9d8a396530a6d5a33b30b9a92da0c5c"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "exceptiongroup"
@@ -1592,11 +1317,6 @@ files = [
 [package.extras]
 test = ["pytest (>=6)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "executing"
 version = "1.2.0"
@@ -1610,11 +1330,6 @@ files = [
 
 [package.extras]
 tests = ["asttokens", "littleutils", "pytest", "rich"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "faiss-cpu"
@@ -1650,11 +1365,6 @@ files = [
     {file = "faiss_cpu-1.7.4-cp39-cp39-win_amd64.whl", hash = "sha256:98459ceeeb735b9df1a5b94572106ffe0a6ce740eb7e4626715dd218657bb4dc"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "fake-useragent"
 version = "1.2.1"
@@ -1668,11 +1378,6 @@ files = [
 
 [package.dependencies]
 importlib-resources = {version = ">=5.0", markers = "python_version < \"3.10\""}
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "fastapi"
@@ -1692,11 +1397,6 @@ typing-extensions = ">=4.5.0"
 
 [package.extras]
 all = ["email-validator (>=2.0.0)", "httpx (>=0.23.0)", "itsdangerous (>=1.1.0)", "jinja2 (>=2.11.2)", "orjson (>=3.2.1)", "pydantic-extra-types (>=2.0.0)", "pydantic-settings (>=2.0.0)", "python-multipart (>=0.0.5)", "pyyaml (>=5.3.1)", "ujson (>=4.0.1,!=4.0.2,!=4.1.0,!=4.2.0,!=4.3.0,!=5.0.0,!=5.1.0)", "uvicorn[standard] (>=0.12.0)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "fastapi-jwt-auth"
@@ -1718,11 +1418,6 @@ asymmetric = ["cryptography (>=2.6,<4.0.0)"]
 dev = ["cryptography (>=2.6,<4.0.0)", "uvicorn (>=0.11.5,<0.12.0)"]
 doc = ["markdown-include (>=0.5.1,<0.6.0)", "mkdocs (>=1.1.2,<2.0.0)", "mkdocs-material (>=5.5.0,<6.0.0)"]
 test = ["coveralls (==2.1.2)", "pytest (==6.0.1)", "pytest-cov (==2.10.0)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "fastavro"
@@ -1764,11 +1459,6 @@ lz4 = ["lz4"]
 snappy = ["python-snappy"]
 zstandard = ["zstandard"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "filelock"
 version = "3.12.3"
@@ -1787,11 +1477,6 @@ typing-extensions = {version = ">=4.7.1", markers = "python_version < \"3.11\""}
 docs = ["furo (>=2023.7.26)", "sphinx (>=7.1.2)", "sphinx-autodoc-typehints (>=1.24)"]
 testing = ["covdefaults (>=2.3)", "coverage (>=7.3)", "diff-cover (>=7.7)", "pytest (>=7.4)", "pytest-cov (>=4.1)", "pytest-mock (>=3.11.1)", "pytest-timeout (>=2.1)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "filetype"
 version = "1.2.0"
@@ -1803,11 +1488,6 @@ files = [
     {file = "filetype-1.2.0.tar.gz", hash = "sha256:66b56cd6474bf41d8c54660347d37afcc3f7d1970648de365c102ef77548aadb"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "flatbuffers"
 version = "23.5.26"
@@ -1818,11 +1498,6 @@ files = [
     {file = "flatbuffers-23.5.26-py2.py3-none-any.whl", hash = "sha256:c0ff356da363087b915fde4b8b45bdda73432fc17cddb3c8157472eab1422ad1"},
     {file = "flatbuffers-23.5.26.tar.gz", hash = "sha256:9ea1144cac05ce5d86e2859f431c6cd5e66cd9c78c558317c7955fb8d4c78d89"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "frozenlist"
@@ -1894,11 +1569,6 @@ files = [
     {file = "frozenlist-1.4.0.tar.gz", hash = "sha256:09163bdf0b2907454042edb19f887c6d33806adc71fbd54afc14908bfdc22251"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "fsspec"
 version = "2023.9.0"
@@ -1934,11 +1604,6 @@ smb = ["smbprotocol"]
 ssh = ["paramiko"]
 tqdm = ["tqdm"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "gitdb"
 version = "4.0.10"
@@ -1953,11 +1618,6 @@ files = [
 [package.dependencies]
 smmap = ">=3.0.1,<6"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "gitpython"
 version = "3.1.34"
@@ -1971,11 +1631,6 @@ files = [
 
 [package.dependencies]
 gitdb = ">=4.0.1,<5"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "google-api-core"
@@ -1999,11 +1654,6 @@ grpc = ["grpcio (>=1.33.2,<2.0dev)", "grpcio (>=1.49.1,<2.0dev)", "grpcio-status
 grpcgcp = ["grpcio-gcp (>=0.2.2,<1.0.dev0)"]
 grpcio-gcp = ["grpcio-gcp (>=0.2.2,<1.0.dev0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "google-api-python-client"
 version = "2.97.0"
@@ -2021,11 +1671,6 @@ google-auth = ">=1.19.0,<3.0.0.dev0"
 google-auth-httplib2 = ">=0.1.0"
 httplib2 = ">=0.15.0,<1.dev0"
 uritemplate = ">=3.0.1,<5"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "google-auth"
@@ -2052,11 +1697,6 @@ pyopenssl = ["cryptography (>=38.0.3)", "pyopenssl (>=20.0.0)"]
 reauth = ["pyu2f (>=0.1.5)"]
 requests = ["requests (>=2.20.0,<3.0.0.dev0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "google-auth-httplib2"
 version = "0.1.0"
@@ -2073,11 +1713,6 @@ google-auth = "*"
 httplib2 = ">=0.15.0"
 six = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "google-search-results"
 version = "2.4.2"
@@ -2090,11 +1725,6 @@ files = [
 
 [package.dependencies]
 requests = "*"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "googleapis-common-protos"
@@ -2113,11 +1743,6 @@ protobuf = ">=3.19.5,<3.20.0 || >3.20.0,<3.20.1 || >3.20.1,<4.21.1 || >4.21.1,<4
 [package.extras]
 grpc = ["grpcio (>=1.44.0,<2.0.0.dev0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "gotrue"
 version = "1.0.4"
@@ -2132,11 +1757,6 @@ files = [
 [package.dependencies]
 httpx = ">=0.23,<0.25"
 pydantic = ">=1.10,<3"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "greenlet"
@@ -2215,11 +1835,6 @@ files = [
 docs = ["Sphinx", "docutils (<0.18)"]
 test = ["objgraph", "psutil"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "grpcio"
 version = "1.48.0"
@@ -2281,11 +1896,6 @@ six = ">=1.5.2"
 [package.extras]
 protobuf = ["grpcio-tools (>=1.48.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "grpcio-health-checking"
 version = "1.48.0"
@@ -2301,11 +1911,6 @@ files = [
 grpcio = ">=1.48.0"
 protobuf = ">=3.12.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "grpcio-reflection"
 version = "1.48.0"
@@ -2320,11 +1925,6 @@ files = [
 [package.dependencies]
 grpcio = ">=1.48.0"
 protobuf = ">=3.12.0"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "grpcio-tools"
@@ -2386,11 +1986,6 @@ grpcio = ">=1.48.0"
 protobuf = ">=3.12.0,<4.0dev"
 setuptools = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "gunicorn"
 version = "20.1.0"
@@ -2411,11 +2006,6 @@ gevent = ["gevent (>=1.4.0)"]
 setproctitle = ["setproctitle"]
 tornado = ["tornado (>=0.2)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "h11"
 version = "0.14.0"
@@ -2426,11 +2016,6 @@ files = [
     {file = "h11-0.14.0-py3-none-any.whl", hash = "sha256:e3fe4ac4b851c468cc8363d500db52c2ead036020723024a109d37346efaa761"},
     {file = "h11-0.14.0.tar.gz", hash = "sha256:8f19fbbe99e72420ff35c00b27a34cb9937e902a8b810e2c88300c6f0a3b699d"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "h2"
@@ -2447,11 +2032,6 @@ files = [
 hpack = ">=4.0,<5"
 hyperframe = ">=6.0,<7"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "hnswlib"
 version = "0.7.0"
@@ -2465,11 +2045,6 @@ files = [
 [package.dependencies]
 numpy = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "hpack"
 version = "4.0.0"
@@ -2480,11 +2055,6 @@ files = [
     {file = "hpack-4.0.0-py3-none-any.whl", hash = "sha256:84a076fad3dc9a9f8063ccb8041ef100867b1878b25ef0ee63847a5d53818a6c"},
     {file = "hpack-4.0.0.tar.gz", hash = "sha256:fc41de0c63e687ebffde81187a948221294896f6bdc0ae2312708df339430095"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "httpcore"
@@ -2507,11 +2077,6 @@ sniffio = "==1.*"
 http2 = ["h2 (>=3,<5)"]
 socks = ["socksio (==1.*)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "httplib2"
 version = "0.22.0"
@@ -2525,11 +2090,6 @@ files = [
 
 [package.dependencies]
 pyparsing = {version = ">=2.4.2,<3.0.0 || >3.0.0,<3.0.1 || >3.0.1,<3.0.2 || >3.0.2,<3.0.3 || >3.0.3,<4", markers = "python_version > \"3.0\""}
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "httptools"
@@ -2578,11 +2138,6 @@ files = [
 [package.extras]
 test = ["Cython (>=0.29.24,<0.30.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "httpx"
 version = "0.23.3"
@@ -2606,11 +2161,6 @@ brotli = ["brotli", "brotlicffi"]
 cli = ["click (==8.*)", "pygments (==2.*)", "rich (>=10,<13)"]
 http2 = ["h2 (>=3,<5)"]
 socks = ["socksio (==1.*)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "huggingface-hub"
@@ -2643,11 +2193,6 @@ testing = ["InquirerPy (==0.3.4)", "Jinja2", "Pillow", "gradio", "jedi", "numpy"
 torch = ["torch"]
 typing = ["types-PyYAML", "types-requests", "types-simplejson", "types-toml", "types-tqdm", "types-urllib3"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "humanfriendly"
 version = "10.0"
@@ -2662,11 +2207,6 @@ files = [
 [package.dependencies]
 pyreadline3 = {version = "*", markers = "sys_platform == \"win32\" and python_version >= \"3.8\""}
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "hyperframe"
 version = "6.0.1"
@@ -2678,11 +2218,6 @@ files = [
     {file = "hyperframe-6.0.1.tar.gz", hash = "sha256:ae510046231dc8e9ecb1a6586f63d2347bf4c8905914aa84ba585ae85f28a914"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "idna"
 version = "3.4"
@@ -2693,11 +2228,6 @@ files = [
     {file = "idna-3.4-py3-none-any.whl", hash = "sha256:90b77e79eaa3eba6de819a0c442c0b4ceefc341a7a2ab77d7562bf49f425c5c2"},
     {file = "idna-3.4.tar.gz", hash = "sha256:814f528e8dead7d329833b91c5faa87d60bf71824cd12a7530b5526063d02cb4"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "importlib-metadata"
@@ -2718,11 +2248,6 @@ docs = ["furo", "jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "rst.linker
 perf = ["ipython"]
 testing = ["flufl.flake8", "importlib-resources (>=1.3)", "packaging", "pyfakefs", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-mypy (>=0.9.1)", "pytest-perf (>=0.9.2)", "pytest-ruff"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "importlib-resources"
 version = "6.0.1"
@@ -2741,11 +2266,6 @@ zipp = {version = ">=3.1.0", markers = "python_version < \"3.10\""}
 docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-lint"]
 testing = ["pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-mypy (>=0.9.1)", "pytest-ruff"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "iniconfig"
 version = "2.0.0"
@@ -2757,11 +2277,6 @@ files = [
     {file = "iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "invoke"
 version = "1.7.3"
@@ -2772,11 +2287,6 @@ files = [
     {file = "invoke-1.7.3-py3-none-any.whl", hash = "sha256:d9694a865764dd3fd91f25f7e9a97fb41666e822bbb00e670091e3f43933574d"},
     {file = "invoke-1.7.3.tar.gz", hash = "sha256:41b428342d466a82135d5ab37119685a989713742be46e42a3a399d685579314"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "ipykernel"
@@ -2810,11 +2320,6 @@ docs = ["myst-parser", "pydata-sphinx-theme", "sphinx", "sphinx-autodoc-typehint
 pyqt5 = ["pyqt5"]
 pyside6 = ["pyside6"]
 test = ["flaky", "ipyparallel", "pre-commit", "pytest (>=7.0)", "pytest-asyncio", "pytest-cov", "pytest-timeout"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "ipython"
@@ -2856,11 +2361,6 @@ qtconsole = ["qtconsole"]
 test = ["pytest (<7.1)", "pytest-asyncio", "testpath"]
 test-extra = ["curio", "matplotlib (!=3.2.0)", "nbformat", "numpy (>=1.21)", "pandas", "pytest (<7.1)", "pytest-asyncio", "testpath", "trio"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "jaraco-classes"
 version = "3.3.0"
@@ -2878,11 +2378,6 @@ more-itertools = "*"
 [package.extras]
 docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-lint"]
 testing = ["pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-mypy (>=0.9.1)", "pytest-ruff"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "jcloud"
@@ -2906,11 +2401,6 @@ rich = ">=12.0.0"
 [package.extras]
 test = ["black (==22.3.0)", "jina (>=3.7.0)", "mock", "pytest", "pytest-asyncio", "pytest-cov", "pytest-custom_exit_code", "pytest-env", "pytest-mock", "pytest-repeat", "pytest-reraise", "pytest-timeout"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "jedi"
 version = "0.19.0"
@@ -2930,11 +2420,6 @@ docs = ["Jinja2 (==2.11.3)", "MarkupSafe (==1.1.1)", "Pygments (==2.8.1)", "alab
 qa = ["flake8 (==5.0.4)", "mypy (==0.971)", "types-setuptools (==67.2.0.1)"]
 testing = ["Django (<3.1)", "attrs", "colorama", "docopt", "pytest (<7.0.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "jeepney"
 version = "0.8.0"
@@ -2950,11 +2435,6 @@ files = [
 test = ["async-timeout", "pytest", "pytest-asyncio (>=0.17)", "pytest-trio", "testpath", "trio"]
 trio = ["async_generator", "trio"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "jieba"
 version = "0.42.1"
@@ -2964,11 +2444,6 @@ python-versions = "*"
 files = [
     {file = "jieba-0.42.1.tar.gz", hash = "sha256:055ca12f62674fafed09427f176506079bc135638a14e23e25be909131928db2"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "jina"
@@ -3087,11 +2562,6 @@ uvloop = ["uvloop"]
 watchfiles = ["watchfiles (>=0.18.0)"]
 websockets = ["websockets"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "jina-hubble-sdk"
 version = "0.39.0"
@@ -3117,11 +2587,6 @@ rich = "*"
 [package.extras]
 full = ["aiohttp", "black (==22.3.0)", "docker", "filelock", "flake8 (==4.0.1)", "importlib-metadata", "isort (==5.10.1)", "mock (==4.0.3)", "pathspec", "pytest (==7.0.0)", "pytest-asyncio (==0.19.0)", "pytest-cov (==3.0.0)", "pytest-mock (==3.7.0)", "python-jose", "pyyaml", "requests", "rich"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "jinja2"
 version = "3.1.2"
@@ -3139,11 +2604,6 @@ MarkupSafe = ">=2.0"
 [package.extras]
 i18n = ["Babel (>=2.7)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "joblib"
 version = "1.3.2"
@@ -3154,11 +2614,6 @@ files = [
     {file = "joblib-1.3.2-py3-none-any.whl", hash = "sha256:ef4331c65f239985f3f2220ecc87db222f08fd22097a3dd5698f693875f8cbb9"},
     {file = "joblib-1.3.2.tar.gz", hash = "sha256:92f865e621e17784e7955080b6d042489e3b8e294949cc44c6eac304f59772b1"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "jupyter-client"
@@ -3183,11 +2638,6 @@ traitlets = ">=5.3"
 docs = ["ipykernel", "myst-parser", "pydata-sphinx-theme", "sphinx (>=4)", "sphinx-autodoc-typehints", "sphinxcontrib-github-alt", "sphinxcontrib-spelling"]
 test = ["coverage", "ipykernel (>=6.14)", "mypy", "paramiko", "pre-commit", "pytest", "pytest-cov", "pytest-jupyter[client] (>=0.4.1)", "pytest-timeout"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "jupyter-core"
 version = "5.3.1"
@@ -3207,11 +2657,6 @@ traitlets = ">=5.3"
 [package.extras]
 docs = ["myst-parser", "sphinx-autodoc-typehints", "sphinxcontrib-github-alt", "sphinxcontrib-spelling", "traitlets"]
 test = ["ipykernel", "pre-commit", "pytest", "pytest-cov", "pytest-timeout"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "keyring"
@@ -3235,11 +2680,6 @@ SecretStorage = {version = ">=3.2", markers = "sys_platform == \"linux\""}
 completion = ["shtab"]
 docs = ["furo", "jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-lint"]
 testing = ["pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-mypy (>=0.9.1)", "pytest-ruff"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "langchain"
@@ -3280,11 +2720,6 @@ openai = ["openai (>=0,<1)", "tiktoken (>=0.3.2,<0.4.0)"]
 qdrant = ["qdrant-client (>=1.1.2,<2.0.0)"]
 text-helpers = ["chardet (>=5.1.0,<6.0.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "langchain-serve"
 version = "0.0.61"
@@ -3310,11 +2745,6 @@ toml = "*"
 [package.extras]
 test = ["psutil", "pytest", "pytest-asyncio"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "langsmith"
 version = "0.0.5"
@@ -3329,11 +2759,6 @@ files = [
 [package.dependencies]
 pydantic = ">=1,<2"
 requests = ">=2,<3"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "linkify-it-py"
@@ -3355,11 +2780,6 @@ dev = ["black", "flake8", "isort", "pre-commit", "pyproject-flake8"]
 doc = ["myst-parser", "sphinx", "sphinx-book-theme"]
 test = ["coverage", "pytest", "pytest-cov"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "lit"
 version = "16.0.6"
@@ -3369,11 +2789,6 @@ python-versions = "*"
 files = [
     {file = "lit-16.0.6.tar.gz", hash = "sha256:84623c9c23b6b14763d637f4e63e6b721b3446ada40bf7001d8fee70b8e77a9a"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "llama-cpp-python"
@@ -3393,11 +2808,6 @@ typing-extensions = ">=4.7.1,<5.0.0"
 [package.extras]
 server = ["fastapi (>=0.100.0)", "pydantic-settings (>=2.0.1)", "sse-starlette (>=1.6.1)", "uvicorn (>=0.23.2,<0.24.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "loguru"
 version = "0.7.1"
@@ -3415,11 +2825,6 @@ win32-setctime = {version = ">=1.0.0", markers = "sys_platform == \"win32\""}
 
 [package.extras]
 dev = ["Sphinx (==7.2.5)", "colorama (==0.4.5)", "colorama (==0.4.6)", "freezegun (==1.1.0)", "freezegun (==1.2.2)", "mypy (==v0.910)", "mypy (==v0.971)", "mypy (==v1.4.1)", "pre-commit (==3.3.1)", "pytest (==6.1.2)", "pytest (==7.4.0)", "pytest-cov (==2.12.1)", "pytest-cov (==4.1.0)", "pytest-mypy-plugins (==1.9.3)", "pytest-mypy-plugins (==3.0.0)", "sphinx-autobuild (==2021.3.14)", "sphinx-rtd-theme (==1.3.0)", "tox (==3.27.1)", "tox (==4.11.0)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "lxml"
@@ -3528,11 +2933,6 @@ html5 = ["html5lib"]
 htmlsoup = ["BeautifulSoup4"]
 source = ["Cython (>=0.29.35)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "lz4"
 version = "4.3.2"
@@ -3582,11 +2982,6 @@ docs = ["sphinx (>=1.6.0)", "sphinx-bootstrap-theme"]
 flake8 = ["flake8"]
 tests = ["psutil", "pytest (!=3.3.0)", "pytest-cov"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "markdown"
 version = "3.4.4"
@@ -3604,11 +2999,6 @@ importlib-metadata = {version = ">=4.4", markers = "python_version < \"3.10\""}
 [package.extras]
 docs = ["mdx-gh-links (>=0.2)", "mkdocs (>=1.0)", "mkdocs-nature (>=0.4)"]
 testing = ["coverage", "pyyaml"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "markdown-it-py"
@@ -3635,11 +3025,6 @@ plugins = ["mdit-py-plugins"]
 profiling = ["gprof2dot"]
 rtd = ["jupyter_sphinx", "mdit-py-plugins", "myst-parser", "pyyaml", "sphinx", "sphinx-copybutton", "sphinx-design", "sphinx_book_theme"]
 testing = ["coverage", "pytest", "pytest-cov", "pytest-regressions"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "markupsafe"
@@ -3700,11 +3085,6 @@ files = [
     {file = "MarkupSafe-2.1.3.tar.gz", hash = "sha256:af598ed32d6ae86f1b747b82783958b1a4ab8f617b06fe68795c7f026abbdcad"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "marshmallow"
 version = "3.20.1"
@@ -3725,11 +3105,6 @@ docs = ["alabaster (==0.7.13)", "autodocsumm (==0.2.11)", "sphinx (==7.0.1)", "s
 lint = ["flake8 (==6.0.0)", "flake8-bugbear (==23.7.10)", "mypy (==1.4.1)", "pre-commit (>=2.4,<4.0)"]
 tests = ["pytest", "pytz", "simplejson"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "matplotlib-inline"
 version = "0.1.6"
@@ -3743,11 +3118,6 @@ files = [
 
 [package.dependencies]
 traitlets = "*"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "mdit-py-plugins"
@@ -3768,11 +3138,6 @@ code-style = ["pre-commit"]
 rtd = ["myst-parser", "sphinx-book-theme"]
 testing = ["coverage", "pytest", "pytest-cov", "pytest-regressions"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "mdurl"
 version = "0.1.2"
@@ -3783,11 +3148,6 @@ files = [
     {file = "mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"},
     {file = "mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "mmh3"
@@ -3824,11 +3184,6 @@ files = [
     {file = "mmh3-3.0.0.tar.gz", hash = "sha256:d1ec578c09a07d3518ec9be540b87546397fa3455de73c166fcce51eaa5c41c5"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "monotonic"
 version = "1.6"
@@ -3840,11 +3195,6 @@ files = [
     {file = "monotonic-1.6.tar.gz", hash = "sha256:3a55207bcfed53ddd5c5bae174524062935efed17792e9de2ad0205ce9ad63f7"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "more-itertools"
 version = "10.1.0"
@@ -3855,11 +3205,6 @@ files = [
     {file = "more-itertools-10.1.0.tar.gz", hash = "sha256:626c369fa0eb37bac0291bce8259b332fd59ac792fa5497b59837309cd5b114a"},
     {file = "more_itertools-10.1.0-py3-none-any.whl", hash = "sha256:64e0735fcfdc6f3464ea133afe8ea4483b1c5fe3a3d69852e6503b43a0b222e6"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "mpmath"
@@ -3878,11 +3223,6 @@ docs = ["sphinx"]
 gmpy = ["gmpy2 (>=2.1.0a4)"]
 tests = ["pytest (>=4.6)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "msg-parser"
 version = "1.2.0"
@@ -3899,11 +3239,6 @@ olefile = ">=0.46"
 
 [package.extras]
 rtf = ["compressed-rtf (>=1.0.5)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "multidict"
@@ -3988,11 +3323,6 @@ files = [
     {file = "multidict-6.0.4.tar.gz", hash = "sha256:3666906492efb76453c0e7b97f2cf459b0682e7402c0489a95484965dbc1da49"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "multiprocess"
 version = "0.70.15"
@@ -4020,11 +3350,6 @@ files = [
 
 [package.dependencies]
 dill = ">=0.3.7"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "mypy"
@@ -4072,11 +3397,6 @@ dmypy = ["psutil (>=4.0)"]
 install-types = ["pip"]
 reports = ["lxml"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "mypy-extensions"
 version = "1.0.0"
@@ -4088,11 +3408,6 @@ files = [
     {file = "mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "nest-asyncio"
 version = "1.5.7"
@@ -4103,11 +3418,6 @@ files = [
     {file = "nest_asyncio-1.5.7-py3-none-any.whl", hash = "sha256:5301c82941b550b3123a1ea772ba9a1c80bad3a182be8c1a5ae6ad3be57a9657"},
     {file = "nest_asyncio-1.5.7.tar.gz", hash = "sha256:6a80f7b98f24d9083ed24608977c09dd608d83f91cccc24c9d2cba6d10e01c10"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "networkx"
@@ -4126,11 +3436,6 @@ developer = ["mypy (>=1.1)", "pre-commit (>=3.2)"]
 doc = ["nb2plots (>=0.6)", "numpydoc (>=1.5)", "pillow (>=9.4)", "pydata-sphinx-theme (>=0.13)", "sphinx (>=6.1)", "sphinx-gallery (>=0.12)", "texext (>=0.6.7)"]
 extra = ["lxml (>=4.6)", "pydot (>=1.4.2)", "pygraphviz (>=1.10)", "sympy (>=1.10)"]
 test = ["codecov (>=2.1)", "pytest (>=7.2)", "pytest-cov (>=4.0)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "nltk"
@@ -4156,11 +3461,6 @@ machine-learning = ["numpy", "python-crfsuite", "scikit-learn", "scipy"]
 plot = ["matplotlib"]
 tgrep = ["pyparsing"]
 twitter = ["twython"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "numexpr"
@@ -4204,11 +3504,6 @@ files = [
 [package.dependencies]
 numpy = ">=1.13.3"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "numpy"
 version = "1.25.2"
@@ -4243,11 +3538,6 @@ files = [
     {file = "numpy-1.25.2.tar.gz", hash = "sha256:fd608e19c8d7c55021dffd43bfe5492fab8cc105cc8986f813f8c3c048b38760"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "nvidia-cublas-cu11"
 version = "11.10.3.66"
@@ -4262,11 +3552,6 @@ files = [
 [package.dependencies]
 setuptools = "*"
 wheel = "*"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "nvidia-cuda-cupti-cu11"
@@ -4283,11 +3568,6 @@ files = [
 setuptools = "*"
 wheel = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "nvidia-cuda-nvrtc-cu11"
 version = "11.7.99"
@@ -4299,11 +3579,6 @@ files = [
     {file = "nvidia_cuda_nvrtc_cu11-11.7.99-py3-none-manylinux1_x86_64.whl", hash = "sha256:f7d9610d9b7c331fa0da2d1b2858a4a8315e6d49765091d28711c8946e7425e7"},
     {file = "nvidia_cuda_nvrtc_cu11-11.7.99-py3-none-win_amd64.whl", hash = "sha256:f2effeb1309bdd1b3854fc9b17eaf997808f8b25968ce0c7070945c4265d64a3"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "nvidia-cuda-runtime-cu11"
@@ -4320,11 +3595,6 @@ files = [
 setuptools = "*"
 wheel = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "nvidia-cudnn-cu11"
 version = "8.5.0.96"
@@ -4339,11 +3609,6 @@ files = [
 [package.dependencies]
 nvidia-cublas-cu11 = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "nvidia-cufft-cu11"
 version = "10.9.0.58"
@@ -4354,11 +3619,6 @@ files = [
     {file = "nvidia_cufft_cu11-10.9.0.58-py3-none-manylinux1_x86_64.whl", hash = "sha256:222f9da70c80384632fd6035e4c3f16762d64ea7a843829cb278f98b3cb7dd81"},
     {file = "nvidia_cufft_cu11-10.9.0.58-py3-none-win_amd64.whl", hash = "sha256:c4d316f17c745ec9c728e30409612eaf77a8404c3733cdf6c9c1569634d1ca03"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "nvidia-curand-cu11"
@@ -4375,11 +3635,6 @@ files = [
 setuptools = "*"
 wheel = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "nvidia-cusolver-cu11"
 version = "11.4.0.1"
@@ -4394,11 +3649,6 @@ files = [
 
 [package.dependencies]
 nvidia-cublas-cu11 = "*"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "nvidia-cusparse-cu11"
@@ -4415,11 +3665,6 @@ files = [
 setuptools = "*"
 wheel = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "nvidia-nccl-cu11"
 version = "2.14.3"
@@ -4429,11 +3674,6 @@ python-versions = ">=3"
 files = [
     {file = "nvidia_nccl_cu11-2.14.3-py3-none-manylinux1_x86_64.whl", hash = "sha256:5e5534257d1284b8e825bc3a182c6f06acd6eb405e9f89d49340e98cd8f136eb"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "nvidia-nvtx-cu11"
@@ -4450,11 +3690,6 @@ files = [
 setuptools = "*"
 wheel = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "olefile"
 version = "0.46"
@@ -4464,11 +3699,6 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 files = [
     {file = "olefile-0.46.zip", hash = "sha256:133b031eaf8fd2c9399b78b8bc5b8fcbe4c31e85295749bb17a87cba8f3c3964"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "onnxruntime"
@@ -4511,11 +3741,6 @@ packaging = "*"
 protobuf = "*"
 sympy = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "openai"
 version = "0.27.10"
@@ -4538,11 +3763,6 @@ dev = ["black (>=21.6b0,<22.0)", "pytest (==6.*)", "pytest-asyncio", "pytest-moc
 embeddings = ["matplotlib", "numpy", "openpyxl (>=3.0.7)", "pandas (>=1.2.3)", "pandas-stubs (>=1.1.0.11)", "plotly", "scikit-learn (>=1.0.2)", "scipy", "tenacity (>=8.0.1)"]
 wandb = ["numpy", "openpyxl (>=3.0.7)", "pandas (>=1.2.3)", "pandas-stubs (>=1.1.0.11)", "wandb"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "openapi-schema-pydantic"
 version = "1.2.4"
@@ -4557,11 +3777,6 @@ files = [
 [package.dependencies]
 pydantic = ">=1.8.2"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "openpyxl"
 version = "3.1.2"
@@ -4575,11 +3790,6 @@ files = [
 
 [package.dependencies]
 et-xmlfile = "*"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "opentelemetry-api"
@@ -4596,11 +3806,6 @@ files = [
 deprecated = ">=1.2.6"
 importlib-metadata = ">=6.0,<7.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "opentelemetry-exporter-otlp"
 version = "1.19.0"
@@ -4616,11 +3821,6 @@ files = [
 opentelemetry-exporter-otlp-proto-grpc = "1.19.0"
 opentelemetry-exporter-otlp-proto-http = "1.19.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "opentelemetry-exporter-otlp-proto-common"
 version = "1.19.0"
@@ -4634,11 +3834,6 @@ files = [
 
 [package.dependencies]
 opentelemetry-proto = "1.19.0"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "opentelemetry-exporter-otlp-proto-grpc"
@@ -4664,11 +3859,6 @@ opentelemetry-sdk = ">=1.19.0,<1.20.0"
 [package.extras]
 test = ["pytest-grpc"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "opentelemetry-exporter-otlp-proto-http"
 version = "1.19.0"
@@ -4693,11 +3883,6 @@ requests = ">=2.7,<3.0"
 [package.extras]
 test = ["responses (==0.22.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "opentelemetry-exporter-prometheus"
 version = "1.12.0rc1"
@@ -4714,11 +3899,6 @@ opentelemetry-api = ">=1.10.0"
 opentelemetry-sdk = ">=1.10.0"
 prometheus-client = ">=0.5.0,<1.0.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "opentelemetry-instrumentation"
 version = "0.40b0"
@@ -4734,11 +3914,6 @@ files = [
 opentelemetry-api = ">=1.4,<2.0"
 setuptools = ">=16.0"
 wrapt = ">=1.0.0,<2.0.0"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "opentelemetry-instrumentation-aiohttp-client"
@@ -4762,11 +3937,6 @@ wrapt = ">=1.0.0,<2.0.0"
 instruments = ["aiohttp (>=3.0,<4.0)"]
 test = ["http-server-mock", "opentelemetry-instrumentation-aiohttp-client[instruments]"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "opentelemetry-instrumentation-asgi"
 version = "0.40b0"
@@ -4788,11 +3958,6 @@ opentelemetry-util-http = "0.40b0"
 [package.extras]
 instruments = ["asgiref (>=3.0,<4.0)"]
 test = ["opentelemetry-instrumentation-asgi[instruments]", "opentelemetry-test-utils (==0.40b0)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "opentelemetry-instrumentation-fastapi"
@@ -4816,11 +3981,6 @@ opentelemetry-util-http = "0.40b0"
 instruments = ["fastapi (>=0.58,<1.0)"]
 test = ["httpx (>=0.22,<1.0)", "opentelemetry-instrumentation-fastapi[instruments]", "opentelemetry-test-utils (==0.40b0)", "requests (>=2.23,<3.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "opentelemetry-instrumentation-grpc"
 version = "0.40b0"
@@ -4843,11 +4003,6 @@ wrapt = ">=1.0.0,<2.0.0"
 instruments = ["grpcio (>=1.27,<2.0)"]
 test = ["opentelemetry-instrumentation-grpc[instruments]", "opentelemetry-sdk (>=1.12,<2.0)", "opentelemetry-test-utils (==0.40b0)", "protobuf (>=3.13,<4.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "opentelemetry-proto"
 version = "1.19.0"
@@ -4861,11 +4016,6 @@ files = [
 
 [package.dependencies]
 protobuf = ">=3.19,<5.0"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "opentelemetry-sdk"
@@ -4883,11 +4033,6 @@ opentelemetry-api = "1.19.0"
 opentelemetry-semantic-conventions = "0.40b0"
 typing-extensions = ">=3.7.4"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "opentelemetry-semantic-conventions"
 version = "0.40b0"
@@ -4899,11 +4044,6 @@ files = [
     {file = "opentelemetry_semantic_conventions-0.40b0.tar.gz", hash = "sha256:5a7a491873b15ab7c4907bbfd8737645cc87ca55a0a326c1755d1b928d8a0fae"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "opentelemetry-util-http"
 version = "0.40b0"
@@ -4914,11 +4054,6 @@ files = [
     {file = "opentelemetry_util_http-0.40b0-py3-none-any.whl", hash = "sha256:7e071110b724a24d70de7441aeb4541bf8495ba5f5c33927e6b806d597379d0f"},
     {file = "opentelemetry_util_http-0.40b0.tar.gz", hash = "sha256:47d93efa1bb6c71954a5c6ae29a9546efae77f6875dc6c807a76898e0d478b80"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "orjson"
@@ -4989,11 +4124,6 @@ files = [
     {file = "orjson-3.9.5.tar.gz", hash = "sha256:6daf5ee0b3cf530b9978cdbf71024f1c16ed4a67d05f6ec435c6e7fe7a52724c"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "overrides"
 version = "7.4.0"
@@ -5005,11 +4135,6 @@ files = [
     {file = "overrides-7.4.0.tar.gz", hash = "sha256:9502a3cca51f4fac40b5feca985b6703a5c1f6ad815588a7ca9e285b9dca6757"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "packaging"
 version = "23.1"
@@ -5020,11 +4145,6 @@ files = [
     {file = "packaging-23.1-py3-none-any.whl", hash = "sha256:994793af429502c4ea2ebf6bf664629d07c1a9fe974af92966e4b8d2df7edc61"},
     {file = "packaging-23.1.tar.gz", hash = "sha256:a392980d2b6cffa644431898be54b0045151319d1e7ec34f0cfed48767dd334f"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pandas"
@@ -5084,11 +4204,6 @@ sql-other = ["SQLAlchemy (>=1.4.36)"]
 test = ["hypothesis (>=6.46.1)", "pytest (>=7.3.2)", "pytest-asyncio (>=0.17.0)", "pytest-xdist (>=2.2.0)"]
 xml = ["lxml (>=4.8.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pandas-stubs"
 version = "2.0.3.230814"
@@ -5103,11 +4218,6 @@ files = [
 [package.dependencies]
 numpy = {version = ">=1.25.0", markers = "python_version >= \"3.9\""}
 types-pytz = ">=2022.1.1"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "parso"
@@ -5124,11 +4234,6 @@ files = [
 qa = ["flake8 (==3.8.3)", "mypy (==0.782)"]
 testing = ["docopt", "pytest (<6.0.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pathspec"
 version = "0.11.2"
@@ -5139,11 +4244,6 @@ files = [
     {file = "pathspec-0.11.2-py3-none-any.whl", hash = "sha256:1d6ed233af05e679efb96b1851550ea95bbb64b7c490b0f5aa52996c11e92a20"},
     {file = "pathspec-0.11.2.tar.gz", hash = "sha256:e0d8d0ac2f12da61956eb2306b69f9469b42f4deb0f3cb6ed47b9cce9996ced3"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pdf2image"
@@ -5158,11 +4258,6 @@ files = [
 
 [package.dependencies]
 pillow = "*"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pdfminer-six"
@@ -5184,11 +4279,6 @@ dev = ["black", "mypy (==0.931)", "nox", "pytest"]
 docs = ["sphinx", "sphinx-argparse"]
 image = ["Pillow"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pexpect"
 version = "4.8.0"
@@ -5203,11 +4293,6 @@ files = [
 [package.dependencies]
 ptyprocess = ">=0.5"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pickleshare"
 version = "0.7.5"
@@ -5218,11 +4303,6 @@ files = [
     {file = "pickleshare-0.7.5-py2.py3-none-any.whl", hash = "sha256:9649af414d74d4df115d5d718f82acb59c9d418196b7b4290ed47a12ce62df56"},
     {file = "pickleshare-0.7.5.tar.gz", hash = "sha256:87683d47965c1da65cdacaf31c8441d12b8044cdec9aca500cd78fc2c683afca"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pillow"
@@ -5293,11 +4373,6 @@ files = [
 docs = ["furo", "olefile", "sphinx (>=2.4)", "sphinx-copybutton", "sphinx-inline-tabs", "sphinx-removed-in", "sphinxext-opengraph"]
 tests = ["check-manifest", "coverage", "defusedxml", "markdown2", "olefile", "packaging", "pyroma", "pytest", "pytest-cov", "pytest-timeout"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pinecone-client"
 version = "2.2.2"
@@ -5323,11 +4398,6 @@ urllib3 = ">=1.21.1"
 [package.extras]
 grpc = ["googleapis-common-protos (>=1.53.0)", "grpc-gateway-protoc-gen-openapiv2 (==0.1.0)", "grpcio (>=1.44.0)", "lz4 (>=3.1.3)", "protobuf (>=3.19.5,<3.20.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pkginfo"
 version = "1.9.6"
@@ -5341,11 +4411,6 @@ files = [
 
 [package.extras]
 testing = ["pytest", "pytest-cov"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "platformdirs"
@@ -5362,11 +4427,6 @@ files = [
 docs = ["furo (>=2023.7.26)", "proselint (>=0.13)", "sphinx (>=7.1.1)", "sphinx-autodoc-typehints (>=1.24)"]
 test = ["appdirs (==1.4.4)", "covdefaults (>=2.3)", "pytest (>=7.4)", "pytest-cov (>=4.1)", "pytest-mock (>=3.11.1)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pluggy"
 version = "1.3.0"
@@ -5381,11 +4441,6 @@ files = [
 [package.extras]
 dev = ["pre-commit", "tox"]
 testing = ["pytest", "pytest-benchmark"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "portalocker"
@@ -5406,11 +4461,6 @@ docs = ["sphinx (>=1.7.1)"]
 redis = ["redis"]
 tests = ["pytest (>=5.4.1)", "pytest-cov (>=2.8.1)", "pytest-mypy (>=0.8.0)", "pytest-timeout (>=2.1.0)", "redis", "sphinx (>=6.0.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "postgrest"
 version = "0.10.6"
@@ -5427,11 +4477,6 @@ deprecation = ">=2.1.0,<3.0.0"
 httpx = ">=0.23.0,<0.24.0"
 pydantic = ">=1.9.0,<2.0.0"
 strenum = ">=0.4.9,<0.5.0"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "posthog"
@@ -5456,11 +4501,6 @@ dev = ["black", "flake8", "flake8-print", "isort", "pre-commit"]
 sentry = ["django", "sentry-sdk"]
 test = ["coverage", "flake8", "freezegun (==0.3.15)", "mock (>=2.0.0)", "pylint", "pytest"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "prometheus-client"
 version = "0.17.1"
@@ -5475,11 +4515,6 @@ files = [
 [package.extras]
 twisted = ["twisted"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "prompt-toolkit"
 version = "3.0.39"
@@ -5493,11 +4528,6 @@ files = [
 
 [package.dependencies]
 wcwidth = "*"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "protobuf"
@@ -5530,11 +4560,6 @@ files = [
     {file = "protobuf-3.20.3.tar.gz", hash = "sha256:2e3427429c9cffebf259491be0af70189607f365c2f41c7c3764af6f337105f2"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "psutil"
 version = "5.9.5"
@@ -5561,11 +4586,6 @@ files = [
 [package.extras]
 test = ["enum34", "ipaddress", "mock", "pywin32", "wmi"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "psycopg"
 version = "3.1.10"
@@ -5588,11 +4608,6 @@ dev = ["black (>=23.1.0)", "dnspython (>=2.1)", "flake8 (>=4.0)", "mypy (>=1.4.1
 docs = ["Sphinx (>=5.0)", "furo (==2022.6.21)", "sphinx-autobuild (>=2021.3.14)", "sphinx-autodoc-typehints (>=1.12)"]
 pool = ["psycopg-pool"]
 test = ["anyio (>=3.6.2)", "mypy (>=1.4.1)", "pproxy (>=2.7)", "pytest (>=6.2.5)", "pytest-cov (>=3.0)", "pytest-randomly (>=3.5)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "psycopg-binary"
@@ -5656,11 +4671,6 @@ files = [
     {file = "psycopg_binary-3.1.10-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:caa771569da01fc0389ca34920c331a284425a68f92d1ba0a80cc08935f8356e"},
     {file = "psycopg_binary-3.1.10-cp39-cp39-win_amd64.whl", hash = "sha256:b30887e631fd67affaed98f6cd2135b44f2d1a6d9bca353a69c3889c78bd7aa8"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "psycopg2-binary"
@@ -5731,11 +4741,6 @@ files = [
     {file = "psycopg2_binary-2.9.7-cp39-cp39-win_amd64.whl", hash = "sha256:eb3b8d55924a6058a26db69fb1d3e7e32695ff8b491835ba9f479537e14dcf9f"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "ptyprocess"
 version = "0.7.0"
@@ -5746,11 +4751,6 @@ files = [
     {file = "ptyprocess-0.7.0-py2.py3-none-any.whl", hash = "sha256:4b41f3967fce3af57cc7e94b888626c18bf37a083e3651ca8feeb66d492fef35"},
     {file = "ptyprocess-0.7.0.tar.gz", hash = "sha256:5c5d0a3b48ceee0b48485e0c26037c0acd7d29765ca3fbb5cb3831d347423220"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pulsar-client"
@@ -5799,11 +4799,6 @@ all = ["apache-bookkeeper-client (>=4.16.1)", "fastavro (==1.7.3)", "grpcio (>=1
 avro = ["fastavro (==1.7.3)"]
 functions = ["apache-bookkeeper-client (>=4.16.1)", "grpcio (>=1.8.2)", "prometheus-client", "protobuf (>=3.6.1,<=3.20.3)", "ratelimit"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pure-eval"
 version = "0.2.2"
@@ -5818,11 +4813,6 @@ files = [
 [package.extras]
 tests = ["pytest"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "py-cpuinfo"
 version = "9.0.0"
@@ -5833,11 +4823,6 @@ files = [
     {file = "py-cpuinfo-9.0.0.tar.gz", hash = "sha256:3cdbbf3fac90dc6f118bfd64384f309edeadd902d7c8fb17f02ffa1fc3f49690"},
     {file = "py_cpuinfo-9.0.0-py3-none-any.whl", hash = "sha256:859625bc251f64e21f077d099d4162689c762b5d6a4c3c97553d56241c9674d5"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pyarrow"
@@ -5876,11 +4861,6 @@ files = [
 [package.dependencies]
 numpy = ">=1.16.6"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pyasn1"
 version = "0.5.0"
@@ -5891,11 +4871,6 @@ files = [
     {file = "pyasn1-0.5.0-py2.py3-none-any.whl", hash = "sha256:87a2121042a1ac9358cabcaf1d07680ff97ee6404333bacca15f76aa8ad01a57"},
     {file = "pyasn1-0.5.0.tar.gz", hash = "sha256:97b7290ca68e62a832558ec3976f15cbf911bf5d7c7039d8b861c2a0ece69fde"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pyasn1-modules"
@@ -5911,11 +4886,6 @@ files = [
 [package.dependencies]
 pyasn1 = ">=0.4.6,<0.6.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pycparser"
 version = "2.21"
@@ -5926,11 +4896,6 @@ files = [
     {file = "pycparser-2.21-py2.py3-none-any.whl", hash = "sha256:8ee45429555515e1f6b185e78100aea234072576aa43ab53aefcae078162fca9"},
     {file = "pycparser-2.21.tar.gz", hash = "sha256:e644fdec12f7872f86c58ff790da456218b10f863970249516d60a5eaca77206"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pydantic"
@@ -5984,11 +4949,6 @@ typing-extensions = ">=4.2.0"
 dotenv = ["python-dotenv (>=0.10.4)"]
 email = ["email-validator (>=1.0.3)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pygments"
 version = "2.16.1"
@@ -6002,11 +4962,6 @@ files = [
 
 [package.extras]
 plugins = ["importlib-metadata"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pyjwt"
@@ -6023,11 +4978,6 @@ files = [
 crypto = ["cryptography (>=1.4)"]
 flake8 = ["flake8", "flake8-import-order", "pep8-naming"]
 test = ["pytest (>=4.0.1,<5.0.0)", "pytest-cov (>=2.6.0,<3.0.0)", "pytest-runner (>=4.2,<5.0.0)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pymilvus"
@@ -6046,11 +4996,6 @@ grpcio-tools = ">=1.47.0,<=1.48.0"
 mmh3 = ">=2.0,<=3.0.0"
 pandas = {version = ">=1.2.4", markers = "python_version > \"3.6\""}
 ujson = ">=2.0.0,<=5.4.0"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pymongo"
@@ -6153,11 +5098,6 @@ ocsp = ["certifi", "cryptography (>=2.5)", "pyopenssl (>=17.2.0)", "requests (<3
 snappy = ["python-snappy"]
 zstd = ["zstandard"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pymupdf"
 version = "1.23.3"
@@ -6195,11 +5135,6 @@ files = [
 [package.dependencies]
 PyMuPDFb = "1.23.3"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pymupdfb"
 version = "1.23.3"
@@ -6214,11 +5149,6 @@ files = [
     {file = "PyMuPDFb-1.23.3-py3-none-win32.whl", hash = "sha256:8703e3a8efebd83814e124d0fc3a082de2d2def329b63fca1065001e6a2deb49"},
     {file = "PyMuPDFb-1.23.3-py3-none-win_amd64.whl", hash = "sha256:89d88069cb8deb100ddcf56e1feefc7cff93ff791260325ed84551f96d3abd9f"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pymysql"
@@ -6235,11 +5165,6 @@ files = [
 ed25519 = ["PyNaCl (>=1.4.0)"]
 rsa = ["cryptography"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pypandoc"
 version = "1.11"
@@ -6250,11 +5175,6 @@ files = [
     {file = "pypandoc-1.11-py3-none-any.whl", hash = "sha256:b260596934e9cfc6513056110a7c8600171d414f90558bf4407e68b209be8007"},
     {file = "pypandoc-1.11.tar.gz", hash = "sha256:7f6d68db0e57e0f6961bec2190897118c4d305fc2d31c22cd16037f22ee084a5"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pyparsing"
@@ -6269,11 +5189,6 @@ files = [
 
 [package.extras]
 diagrams = ["jinja2", "railroad-diagrams"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pypdf"
@@ -6296,11 +5211,6 @@ docs = ["myst_parser", "sphinx", "sphinx_rtd_theme"]
 full = ["Pillow (>=8.0.0)", "PyCryptodome", "cryptography"]
 image = ["Pillow (>=8.0.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pypdfium2"
 version = "4.19.0"
@@ -6322,11 +5232,6 @@ files = [
     {file = "pypdfium2-4.19.0.tar.gz", hash = "sha256:1ca3a2ed080c263229af3fbff35ad7f751361861f10893d9908d4d852fe6eb28"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pyreadline3"
 version = "3.4.1"
@@ -6337,11 +5242,6 @@ files = [
     {file = "pyreadline3-3.4.1-py3-none-any.whl", hash = "sha256:b0efb6516fd4fb07b45949053826a62fa4cb353db5be2bbb4a7aa1fdd1e345fb"},
     {file = "pyreadline3-3.4.1.tar.gz", hash = "sha256:6f3d1f7b8a31ba32b73917cefc1f28cc660562f39aea8646d30bd6eff21f7bae"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pysrt"
@@ -6355,11 +5255,6 @@ files = [
 
 [package.dependencies]
 chardet = "*"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pytest"
@@ -6383,11 +5278,6 @@ tomli = {version = ">=1.0.0", markers = "python_version < \"3.11\""}
 [package.extras]
 testing = ["argcomplete", "attrs (>=19.2.0)", "hypothesis (>=3.56)", "mock", "nose", "pygments (>=2.7.2)", "requests", "setuptools", "xmlschema"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pytest-cov"
 version = "4.1.0"
@@ -6406,11 +5296,6 @@ pytest = ">=4.6"
 [package.extras]
 testing = ["fields", "hunter", "process-tests", "pytest-xdist", "six", "virtualenv"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "python-dateutil"
 version = "2.8.2"
@@ -6425,11 +5310,6 @@ files = [
 [package.dependencies]
 six = ">=1.5"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "python-docx"
 version = "0.8.11"
@@ -6442,11 +5322,6 @@ files = [
 
 [package.dependencies]
 lxml = ">=2.3.2"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "python-dotenv"
@@ -6461,11 +5336,6 @@ files = [
 
 [package.extras]
 cli = ["click (>=5.0)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "python-gitlab"
@@ -6485,11 +5355,6 @@ requests-toolbelt = ">=0.10.1"
 [package.extras]
 autocompletion = ["argcomplete (>=1.10.0,<3)"]
 yaml = ["PyYaml (>=5.2)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "python-jose"
@@ -6512,11 +5377,6 @@ cryptography = ["cryptography (>=3.4.0)"]
 pycrypto = ["pyasn1", "pycrypto (>=2.6.0,<2.7.0)"]
 pycryptodome = ["pyasn1", "pycryptodome (>=3.3.1,<4.0.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "python-magic"
 version = "0.4.27"
@@ -6527,11 +5387,6 @@ files = [
     {file = "python-magic-0.4.27.tar.gz", hash = "sha256:c1ba14b08e4a5f5c31a302b7721239695b2f0f058d125bd5ce1ee36b9d9d3c3b"},
     {file = "python_magic-0.4.27-py2.py3-none-any.whl", hash = "sha256:c212960ad306f700aa0d01e5d7a325d20548ff97eb9920dcd29513174f0294d3"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "python-multipart"
@@ -6547,11 +5402,6 @@ files = [
 [package.extras]
 dev = ["atomicwrites (==1.2.1)", "attrs (==19.2.0)", "coverage (==6.5.0)", "hatch", "invoke (==1.7.3)", "more-itertools (==4.3.0)", "pbr (==4.3.0)", "pluggy (==1.0.0)", "py (==1.11.0)", "pytest (==7.2.0)", "pytest-cov (==4.0.0)", "pytest-timeout (==2.1.0)", "pyyaml (==5.1)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "python-pptx"
 version = "0.6.21"
@@ -6566,11 +5416,6 @@ files = [
 lxml = ">=3.1.0"
 Pillow = ">=3.3.2"
 XlsxWriter = ">=0.5.7"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "python-semantic-release"
@@ -6603,11 +5448,6 @@ docs = ["Jinja2 (==3.0.3)", "Sphinx (==1.3.6)"]
 mypy = ["mypy", "types-requests"]
 test = ["coverage (>=5,<6)", "mock (==1.3.0)", "pytest (>=7,<8)", "pytest-mock (>=2,<3)", "pytest-xdist (>=1,<2)", "responses (==0.13.3)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pytz"
 version = "2023.3.post1"
@@ -6618,11 +5458,6 @@ files = [
     {file = "pytz-2023.3.post1-py2.py3-none-any.whl", hash = "sha256:ce42d816b81b68506614c11e8937d3aa9e41007ceb50bfdcb0749b921bf646c7"},
     {file = "pytz-2023.3.post1.tar.gz", hash = "sha256:7b4fddbeb94a1eba4b557da24f19fdf9db575192544270a9101d8509f9f43d7b"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pywin32"
@@ -6647,11 +5482,6 @@ files = [
     {file = "pywin32-306-cp39-cp39-win_amd64.whl", hash = "sha256:39b61c15272833b5c329a2989999dcae836b1eed650252ab1b7bfbe1d59f30f4"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "pywin32-ctypes"
 version = "0.2.2"
@@ -6662,11 +5492,6 @@ files = [
     {file = "pywin32-ctypes-0.2.2.tar.gz", hash = "sha256:3426e063bdd5fd4df74a14fa3cf80a0b42845a87e1d1e81f6549f9daec593a60"},
     {file = "pywin32_ctypes-0.2.2-py3-none-any.whl", hash = "sha256:bf490a1a709baf35d688fe0ecf980ed4de11d2b3e37b51e5442587a75d9957e7"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pyyaml"
@@ -6726,11 +5551,6 @@ files = [
     {file = "PyYAML-6.0.1-cp39-cp39-win_amd64.whl", hash = "sha256:510c9deebc5c0225e8c96813043e62b680ba2f9c50a08d3724c7f28a747d1486"},
     {file = "PyYAML-6.0.1.tar.gz", hash = "sha256:bfdf460b1736c775f2ba9f6a92bca30bc2095067b8a9d77876d1fad6cc3b4a43"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "pyzmq"
@@ -6837,11 +5657,6 @@ files = [
 [package.dependencies]
 cffi = {version = "*", markers = "implementation_name == \"pypy\""}
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "qdrant-client"
 version = "1.4.0"
@@ -6862,11 +5677,6 @@ portalocker = ">=2.7.0,<3.0.0"
 pydantic = ">=1.10.8"
 urllib3 = ">=1.26.14,<2.0.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "readme-renderer"
 version = "41.0"
@@ -6886,11 +5696,6 @@ Pygments = ">=2.5.1"
 [package.extras]
 md = ["cmarkgfm (>=0.8.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "realtime"
 version = "1.0.0"
@@ -6906,11 +5711,6 @@ files = [
 python-dateutil = ">=2.8.1,<3.0.0"
 typing-extensions = ">=4.2.0,<5.0.0"
 websockets = ">=10.3,<11.0"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "redis"
@@ -6929,11 +5729,6 @@ async-timeout = {version = ">=4.0.2", markers = "python_full_version <= \"3.11.2
 [package.extras]
 hiredis = ["hiredis (>=1.0.0)"]
 ocsp = ["cryptography (>=36.0.1)", "pyopenssl (==20.0.1)", "requests (>=2.26.0)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "regex"
@@ -7032,11 +5827,6 @@ files = [
     {file = "regex-2023.8.8.tar.gz", hash = "sha256:fcbdc5f2b0f1cd0f6a56cdb46fe41d2cce1e644e3b68832f3eeebc5fb0f7712e"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "requests"
 version = "2.31.0"
@@ -7058,11 +5848,6 @@ urllib3 = ">=1.21.1,<3"
 socks = ["PySocks (>=1.5.6,!=1.5.7)"]
 use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "requests-toolbelt"
 version = "1.0.0"
@@ -7076,11 +5861,6 @@ files = [
 
 [package.dependencies]
 requests = ">=2.0.1,<3.0.0"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "rfc3986"
@@ -7098,11 +5878,6 @@ idna = {version = "*", optional = true, markers = "extra == \"idna2008\""}
 
 [package.extras]
 idna2008 = ["idna"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "rich"
@@ -7122,11 +5897,6 @@ pygments = ">=2.13.0,<3.0.0"
 [package.extras]
 jupyter = ["ipywidgets (>=7.5.1,<9)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "rsa"
 version = "4.9"
@@ -7140,11 +5910,6 @@ files = [
 
 [package.dependencies]
 pyasn1 = ">=0.1.3"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "ruff"
@@ -7171,11 +5936,6 @@ files = [
     {file = "ruff-0.0.254-py3-none-win_arm64.whl", hash = "sha256:b435afc4d65591399eaf4b2af86e441a71563a2091c386cadf33eaa11064dc09"},
     {file = "ruff-0.0.254.tar.gz", hash = "sha256:0eb66c9520151d3bd950ea43b3a088618a8e4e10a5014a72687881e6f3606312"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "safetensors"
@@ -7296,11 +6056,6 @@ tensorflow = ["safetensors[numpy]", "tensorflow (>=2.11.0)"]
 testing = ["h5py (>=3.7.0)", "huggingface_hub (>=0.12.1)", "hypothesis (>=6.70.2)", "pytest (>=7.2.0)", "pytest-benchmark (>=4.0.0)", "safetensors[numpy]", "setuptools_rust (>=1.5.2)"]
 torch = ["safetensors[numpy]", "torch (>=1.10)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "scikit-learn"
 version = "1.3.0"
@@ -7342,11 +6097,6 @@ benchmark = ["matplotlib (>=3.1.3)", "memory-profiler (>=0.57.0)", "pandas (>=1.
 docs = ["Pillow (>=7.1.2)", "matplotlib (>=3.1.3)", "memory-profiler (>=0.57.0)", "numpydoc (>=1.2.0)", "pandas (>=1.0.5)", "plotly (>=5.14.0)", "pooch (>=1.6.0)", "scikit-image (>=0.16.2)", "seaborn (>=0.9.0)", "sphinx (>=6.0.0)", "sphinx-copybutton (>=0.5.2)", "sphinx-gallery (>=0.10.1)", "sphinx-prompt (>=1.3.0)", "sphinxext-opengraph (>=0.4.2)"]
 examples = ["matplotlib (>=3.1.3)", "pandas (>=1.0.5)", "plotly (>=5.14.0)", "pooch (>=1.6.0)", "scikit-image (>=0.16.2)", "seaborn (>=0.9.0)"]
 tests = ["black (>=23.3.0)", "matplotlib (>=3.1.3)", "mypy (>=1.3)", "numpydoc (>=1.2.0)", "pandas (>=1.0.5)", "pooch (>=1.6.0)", "pyamg (>=4.0.0)", "pytest (>=7.1.2)", "pytest-cov (>=2.9.0)", "ruff (>=0.0.272)", "scikit-image (>=0.16.2)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "scipy"
@@ -7390,11 +6140,6 @@ dev = ["click", "cython-lint (>=0.12.2)", "doit (>=0.36.0)", "mypy", "pycodestyl
 doc = ["jupytext", "matplotlib (>2)", "myst-nb", "numpydoc", "pooch", "pydata-sphinx-theme (==0.9.0)", "sphinx (!=4.1.0)", "sphinx-design (>=0.2.0)"]
 test = ["asv", "gmpy2", "mpmath", "pooch", "pytest", "pytest-cov", "pytest-timeout", "pytest-xdist", "scikit-umfpack", "threadpoolctl"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "secretstorage"
 version = "3.3.3"
@@ -7410,11 +6155,6 @@ files = [
 cryptography = ">=2.0"
 jeepney = ">=0.6"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "semver"
 version = "2.13.0"
@@ -7425,11 +6165,6 @@ files = [
     {file = "semver-2.13.0-py2.py3-none-any.whl", hash = "sha256:ced8b23dceb22134307c1b8abfa523da14198793d9787ac838e70e29e77458d4"},
     {file = "semver-2.13.0.tar.gz", hash = "sha256:fa0fe2722ee1c3f57eac478820c3a5ae2f624af8264cbdf9000c980ff7f75e3f"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "sentence-transformers"
@@ -7452,11 +6187,6 @@ torch = ">=1.6.0"
 torchvision = "*"
 tqdm = "*"
 transformers = ">=4.6.0,<5.0.0"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "sentencepiece"
@@ -7512,11 +6242,6 @@ files = [
     {file = "sentencepiece-0.1.99.tar.gz", hash = "sha256:189c48f5cb2949288f97ccdb97f0473098d9c3dcf5a3d99d4eabe719ec27297f"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "setuptools"
 version = "68.1.2"
@@ -7532,11 +6257,6 @@ files = [
 docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "pygments-github-lexers (==0.0.5)", "rst.linker (>=1.9)", "sphinx (>=3.5,<=7.1.2)", "sphinx-favicon", "sphinx-hoverxref (<2)", "sphinx-inline-tabs", "sphinx-lint", "sphinx-notfound-page (==0.8.3)", "sphinx-reredirects", "sphinxcontrib-towncrier"]
 testing = ["build[virtualenv]", "filelock (>=3.4.0)", "flake8-2020", "ini2toml[lite] (>=0.9)", "jaraco.develop (>=7.21)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "pip (>=19.1)", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-mypy (>=0.9.1)", "pytest-perf", "pytest-ruff", "pytest-timeout", "pytest-xdist", "tomli-w (>=1.0.0)", "virtualenv (>=13.0.0)", "wheel"]
 testing-integration = ["build[virtualenv]", "filelock (>=3.4.0)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "pytest", "pytest-enabler", "pytest-xdist", "tomli", "virtualenv (>=13.0.0)", "wheel"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "shapely"
@@ -7592,11 +6312,6 @@ numpy = ">=1.14"
 docs = ["matplotlib", "numpydoc (==1.1.*)", "sphinx", "sphinx-book-theme", "sphinx-remove-toctrees"]
 test = ["pytest", "pytest-cov"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "six"
 version = "1.16.0"
@@ -7607,11 +6322,6 @@ files = [
     {file = "six-1.16.0-py2.py3-none-any.whl", hash = "sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254"},
     {file = "six-1.16.0.tar.gz", hash = "sha256:1e61c37477a1626458e36f7b1d82aa5c9b094fa4802892072e49de9c60c4c926"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "slack-bolt"
@@ -7634,11 +6344,6 @@ async = ["aiohttp (>=3,<4)", "websockets (>=10,<11)"]
 testing = ["Flask-Sockets (>=0.2,<1)", "Jinja2 (==3.0.3)", "Werkzeug (>=1,<2)", "aiohttp (>=3,<4)", "black (==22.8.0)", "click (<=8.0.4)", "itsdangerous (==2.0.1)", "pytest (>=6.2.5,<7)", "pytest-asyncio (>=0.18.2,<1)", "pytest-cov (>=3,<4)"]
 testing-without-asyncio = ["Flask-Sockets (>=0.2,<1)", "Jinja2 (==3.0.3)", "Werkzeug (>=1,<2)", "black (==22.8.0)", "click (<=8.0.4)", "itsdangerous (==2.0.1)", "pytest (>=6.2.5,<7)", "pytest-cov (>=3,<4)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "slack-sdk"
 version = "3.21.3"
@@ -7654,11 +6359,6 @@ files = [
 optional = ["SQLAlchemy (>=1.4,<3)", "aiodns (>1.0)", "aiohttp (>=3.7.3,<4)", "boto3 (<=2)", "websocket-client (>=1,<2)", "websockets (>=10,<11)"]
 testing = ["Flask (>=1,<2)", "Flask-Sockets (>=0.2,<1)", "Jinja2 (==3.0.3)", "Werkzeug (<2)", "black (==22.8.0)", "boto3 (<=2)", "click (==8.0.4)", "databases (>=0.5)", "flake8 (>=5,<6)", "itsdangerous (==1.1.0)", "moto (>=3,<4)", "psutil (>=5,<6)", "pytest (>=6.2.5,<7)", "pytest-asyncio (<1)", "pytest-cov (>=2,<3)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "smmap"
 version = "5.0.0"
@@ -7669,11 +6369,6 @@ files = [
     {file = "smmap-5.0.0-py3-none-any.whl", hash = "sha256:2aba19d6a040e78d8b09de5c57e96207b09ed71d8e55ce0959eeee6c8e190d94"},
     {file = "smmap-5.0.0.tar.gz", hash = "sha256:c840e62059cd3be204b0c9c9f74be2c09d5648eddd4580d9314c3ecde0b30936"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "sniffio"
@@ -7686,11 +6381,6 @@ files = [
     {file = "sniffio-1.3.0.tar.gz", hash = "sha256:e60305c5e5d314f5389259b7f22aaa33d8f7dee49763119234af3755c55b9101"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "soupsieve"
 version = "2.5"
@@ -7701,11 +6391,6 @@ files = [
     {file = "soupsieve-2.5-py3-none-any.whl", hash = "sha256:eaa337ff55a1579b6549dc679565eac1e3d000563bcb1c8ab0d0fefbc0c2cdc7"},
     {file = "soupsieve-2.5.tar.gz", hash = "sha256:5663d5a7b3bfaeee0bc4372e7fc48f9cff4940b3eec54a6451cc5299f1097690"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "sqlalchemy"
@@ -7781,11 +6466,6 @@ postgresql-psycopg2cffi = ["psycopg2cffi"]
 pymysql = ["pymysql", "pymysql (<1)"]
 sqlcipher = ["sqlcipher3-binary"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "sqlalchemy2-stubs"
 version = "0.0.2a35"
@@ -7799,11 +6479,6 @@ files = [
 
 [package.dependencies]
 typing-extensions = ">=3.7.4"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "sqlmodel"
@@ -7820,11 +6495,6 @@ files = [
 pydantic = ">=1.8.2,<2.0.0"
 SQLAlchemy = ">=1.4.17,<=1.4.41"
 sqlalchemy2-stubs = "*"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "stack-data"
@@ -7845,11 +6515,6 @@ pure-eval = "*"
 [package.extras]
 tests = ["cython", "littleutils", "pygments", "pytest", "typeguard"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "starlette"
 version = "0.27.0"
@@ -7868,11 +6533,6 @@ typing-extensions = {version = ">=3.10.0", markers = "python_version < \"3.10\""
 [package.extras]
 full = ["httpx (>=0.22.0)", "itsdangerous", "jinja2", "python-multipart", "pyyaml"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "storage3"
 version = "0.5.3"
@@ -7889,11 +6549,6 @@ httpx = ">=0.23,<0.25"
 python-dateutil = ">=2.8.2,<3.0.0"
 typing-extensions = ">=4.2.0,<5.0.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "strenum"
 version = "0.4.15"
@@ -7909,11 +6564,6 @@ files = [
 docs = ["myst-parser[linkify]", "sphinx", "sphinx-rtd-theme"]
 release = ["twine"]
 test = ["pylint", "pytest", "pytest-black", "pytest-cov", "pytest-pylint"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "supabase"
@@ -7935,11 +6585,6 @@ realtime = ">=1.0.0,<2.0.0"
 storage3 = ">=0.5.2,<0.6.0"
 supafunc = ">=0.2.2,<0.3.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "supafunc"
 version = "0.2.2"
@@ -7953,11 +6598,6 @@ files = [
 
 [package.dependencies]
 httpx = ">=0.23.0,<0.24.0"
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "sympy"
@@ -7973,11 +6613,6 @@ files = [
 [package.dependencies]
 mpmath = ">=0.19"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "tabulate"
 version = "0.9.0"
@@ -7992,11 +6627,6 @@ files = [
 [package.extras]
 widechars = ["wcwidth"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "tenacity"
 version = "8.2.3"
@@ -8010,11 +6640,6 @@ files = [
 
 [package.extras]
 doc = ["reno", "sphinx", "tornado (>=4.5)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "textual"
@@ -8033,11 +6658,6 @@ markdown-it-py = {version = ">=2.1.0", extras = ["linkify", "plugins"]}
 rich = ">=13.3.3"
 typing-extensions = ">=4.4.0,<5.0.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "threadpoolctl"
 version = "3.2.0"
@@ -8048,11 +6668,6 @@ files = [
     {file = "threadpoolctl-3.2.0-py3-none-any.whl", hash = "sha256:2b7818516e423bdaebb97c723f86a7c6b0a83d3f3b0970328d66f4d9104dc032"},
     {file = "threadpoolctl-3.2.0.tar.gz", hash = "sha256:c96a0ba3bdddeaca37dc4cc7344aafad41cdb8c313f74fdfe387a867bba93355"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "tiktoken"
@@ -8098,11 +6713,6 @@ requests = ">=2.26.0"
 
 [package.extras]
 blobfile = ["blobfile (>=2)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "tokenizers"
@@ -8158,11 +6768,6 @@ dev = ["black (==22.3)", "datasets", "numpy", "pytest", "requests"]
 docs = ["setuptools-rust", "sphinx", "sphinx-rtd-theme"]
 testing = ["black (==22.3)", "datasets", "numpy", "pytest", "requests"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "toml"
 version = "0.10.2"
@@ -8173,11 +6778,6 @@ files = [
     {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
     {file = "toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "tomli"
@@ -8190,11 +6790,6 @@ files = [
     {file = "tomli-2.0.1.tar.gz", hash = "sha256:de526c12914f0c550d15924c62d72abc48d6fe7364aa87328337a31007fe8a4f"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "tomlkit"
 version = "0.12.1"
@@ -8205,11 +6800,6 @@ files = [
     {file = "tomlkit-0.12.1-py3-none-any.whl", hash = "sha256:712cbd236609acc6a3e2e97253dfc52d4c2082982a88f61b640ecf0817eab899"},
     {file = "tomlkit-0.12.1.tar.gz", hash = "sha256:38e1ff8edb991273ec9f6181244a6a391ac30e9f5098e7535640ea6be97a7c86"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "torch"
@@ -8262,11 +6852,6 @@ typing-extensions = "*"
 [package.extras]
 opt-einsum = ["opt-einsum (>=3.3)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "torchvision"
 version = "0.15.2"
@@ -8305,11 +6890,6 @@ torch = "2.0.1"
 [package.extras]
 scipy = ["scipy"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "tornado"
 version = "6.3.3"
@@ -8329,11 +6909,6 @@ files = [
     {file = "tornado-6.3.3-cp38-abi3-win_amd64.whl", hash = "sha256:22d3c2fa10b5793da13c807e6fc38ff49a4f6e1e3868b0a6f4164768bb8e20f5"},
     {file = "tornado-6.3.3.tar.gz", hash = "sha256:e7d8db41c0181c80d76c982aacc442c0783a2c54d6400fe028954201a2e032fe"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "tqdm"
@@ -8355,11 +6930,6 @@ notebook = ["ipywidgets (>=6)"]
 slack = ["slack-sdk"]
 telegram = ["requests"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "traitlets"
 version = "5.9.0"
@@ -8374,11 +6944,6 @@ files = [
 [package.extras]
 docs = ["myst-parser", "pydata-sphinx-theme", "sphinx"]
 test = ["argcomplete (>=2.0)", "pre-commit", "pytest", "pytest-mock"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "transformers"
@@ -8449,11 +7014,6 @@ torchhub = ["filelock", "huggingface-hub (>=0.15.1,<1.0)", "importlib-metadata",
 video = ["av (==9.2.0)", "decord (==0.6.0)"]
 vision = ["Pillow (<10.0.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "triton"
 version = "2.0.0"
@@ -8491,11 +7051,6 @@ torch = "*"
 tests = ["autopep8", "flake8", "isort", "numpy", "pytest", "scipy (>=1.7.1)"]
 tutorials = ["matplotlib", "pandas", "tabulate"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "twine"
 version = "3.8.0"
@@ -8519,11 +7074,6 @@ rfc3986 = ">=1.4.0"
 tqdm = ">=4.14"
 urllib3 = ">=1.26.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "typer"
 version = "0.9.0"
@@ -8545,11 +7095,6 @@ dev = ["autoflake (>=1.3.1,<2.0.0)", "flake8 (>=3.8.3,<4.0.0)", "pre-commit (>=2
 doc = ["cairosvg (>=2.5.2,<3.0.0)", "mdx-include (>=1.4.1,<2.0.0)", "mkdocs (>=1.1.2,<2.0.0)", "mkdocs-material (>=8.1.4,<9.0.0)", "pillow (>=9.3.0,<10.0.0)"]
 test = ["black (>=22.3.0,<23.0.0)", "coverage (>=6.2,<7.0)", "isort (>=5.0.6,<6.0.0)", "mypy (==0.910)", "pytest (>=4.4.0,<8.0.0)", "pytest-cov (>=2.10.0,<5.0.0)", "pytest-sugar (>=0.9.4,<0.10.0)", "pytest-xdist (>=1.32.0,<4.0.0)", "rich (>=10.11.0,<14.0.0)", "shellingham (>=1.3.0,<2.0.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "types-appdirs"
 version = "1.4.3.5"
@@ -8560,11 +7105,6 @@ files = [
     {file = "types-appdirs-1.4.3.5.tar.gz", hash = "sha256:83268da64585361bfa291f8f506a209276212a0497bd37f0512a939b3d69ff14"},
     {file = "types_appdirs-1.4.3.5-py3-none-any.whl", hash = "sha256:337c750e423c40911d389359b4edabe5bbc2cdd5cd0bd0518b71d2839646273b"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "types-cachetools"
@@ -8577,11 +7117,6 @@ files = [
     {file = "types_cachetools-5.3.0.6-py3-none-any.whl", hash = "sha256:f7f8a25bfe306f2e6bc2ad0a2f949d9e72f2d91036d509c36d3810bf728bc6e1"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "types-pillow"
 version = "9.5.0.6"
@@ -8592,11 +7127,6 @@ files = [
     {file = "types-Pillow-9.5.0.6.tar.gz", hash = "sha256:6a0cad40686e5c35fe7ada70f52bd3970395d31ece33486609e5420e820a9e4e"},
     {file = "types_Pillow-9.5.0.6-py3-none-any.whl", hash = "sha256:1d238abaa9d529b04941d805b7f4d3f7df30702bb14521ec507617f117406fb4"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "types-pytz"
@@ -8609,11 +7139,6 @@ files = [
     {file = "types_pytz-2023.3.0.1-py3-none-any.whl", hash = "sha256:65152e872137926bb67a8fe6cc9cfd794365df86650c5d5fdc7b167b0f38892e"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "types-pyyaml"
 version = "6.0.12.11"
@@ -8624,11 +7149,6 @@ files = [
     {file = "types-PyYAML-6.0.12.11.tar.gz", hash = "sha256:7d340b19ca28cddfdba438ee638cd4084bde213e501a3978738543e27094775b"},
     {file = "types_PyYAML-6.0.12.11-py3-none-any.whl", hash = "sha256:a461508f3096d1d5810ec5ab95d7eeecb651f3a15b71959999988942063bf01d"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "types-requests"
@@ -8644,11 +7164,6 @@ files = [
 [package.dependencies]
 types-urllib3 = "*"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "types-urllib3"
 version = "1.26.25.14"
@@ -8660,11 +7175,6 @@ files = [
     {file = "types_urllib3-1.26.25.14-py3-none-any.whl", hash = "sha256:9683bbb7fb72e32bfe9d2be6e04875fbe1b3eeec3cbb4ea231435aa7fd6b4f0e"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "typing-extensions"
 version = "4.7.1"
@@ -8675,11 +7185,6 @@ files = [
     {file = "typing_extensions-4.7.1-py3-none-any.whl", hash = "sha256:440d5dd3af93b060174bf433bccd69b0babc3b15b1a8dca43789fd7f61514b36"},
     {file = "typing_extensions-4.7.1.tar.gz", hash = "sha256:b75ddc264f0ba5615db7ba217daeb99701ad295353c45f9e95963337ceeeffb2"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "typing-inspect"
@@ -8696,11 +7201,6 @@ files = [
 mypy-extensions = ">=0.3.0"
 typing-extensions = ">=3.7.4"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "tzdata"
 version = "2023.3"
@@ -8711,11 +7211,6 @@ files = [
     {file = "tzdata-2023.3-py2.py3-none-any.whl", hash = "sha256:7e65763eef3120314099b6939b5546db7adce1e7d6f2e179e3df563c70511eda"},
     {file = "tzdata-2023.3.tar.gz", hash = "sha256:11ef1e08e54acb0d4f95bdb1be05da659673de4acbd21bf9c69e94cc5e907a3a"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "uc-micro-py"
@@ -8730,11 +7225,6 @@ files = [
 
 [package.extras]
 test = ["coverage", "pytest", "pytest-cov"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "ujson"
@@ -8795,11 +7285,6 @@ files = [
     {file = "ujson-5.4.0.tar.gz", hash = "sha256:6b953e09441e307504130755e5bd6b15850178d591f66292bba4608c4f7f9b00"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "unstructured"
 version = "0.7.12"
@@ -8847,11 +7332,6 @@ s3 = ["fsspec", "s3fs"]
 slack = ["slack-sdk"]
 wikipedia = ["wikipedia"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "uritemplate"
 version = "4.1.1"
@@ -8862,11 +7342,6 @@ files = [
     {file = "uritemplate-4.1.1-py2.py3-none-any.whl", hash = "sha256:830c08b8d99bdd312ea4ead05994a38e8936266f84b9a7878232db50b044e02e"},
     {file = "uritemplate-4.1.1.tar.gz", hash = "sha256:4346edfc5c3b79f694bccd6d6099a322bbeb628dbf2cd86eea55a456ce5124f0"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "urllib3"
@@ -8883,11 +7358,6 @@ files = [
 brotli = ["brotli (>=1.0.9)", "brotlicffi (>=0.8.0)", "brotlipy (>=0.6.0)"]
 secure = ["certifi", "cryptography (>=1.3.4)", "idna (>=2.0.0)", "ipaddress", "pyOpenSSL (>=0.14)", "urllib3-secure-extra"]
 socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "uvicorn"
@@ -8913,11 +7383,6 @@ websockets = {version = ">=10.4", optional = true, markers = "extra == \"standar
 
 [package.extras]
 standard = ["colorama (>=0.4)", "httptools (>=0.5.0)", "python-dotenv (>=0.13)", "pyyaml (>=5.1)", "uvloop (>=0.14.0,!=0.15.0,!=0.15.1)", "watchfiles (>=0.13)", "websockets (>=10.4)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "uvloop"
@@ -8963,11 +7428,6 @@ dev = ["Cython (>=0.29.32,<0.30.0)", "Sphinx (>=4.1.2,<4.2.0)", "aiohttp", "flak
 docs = ["Sphinx (>=4.1.2,<4.2.0)", "sphinx-rtd-theme (>=0.5.2,<0.6.0)", "sphinxcontrib-asyncio (>=0.3.0,<0.4.0)"]
 test = ["Cython (>=0.29.32,<0.30.0)", "aiohttp", "flake8 (>=3.9.2,<3.10.0)", "mypy (>=0.800)", "psutil", "pyOpenSSL (>=22.0.0,<22.1.0)", "pycodestyle (>=2.7.0,<2.8.0)"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "validators"
 version = "0.21.0"
@@ -8978,11 +7438,6 @@ files = [
     {file = "validators-0.21.0-py3-none-any.whl", hash = "sha256:3470db6f2384c49727ee319afa2e97aec3f8fad736faa6067e0fd7f9eaf2c551"},
     {file = "validators-0.21.0.tar.gz", hash = "sha256:245b98ab778ed9352a7269c6a8f6c2a839bed5b2a7e3e60273ce399d247dd4b3"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "watchfiles"
@@ -9018,11 +7473,6 @@ files = [
 [package.dependencies]
 anyio = ">=3.0.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "wcwidth"
 version = "0.2.6"
@@ -9033,11 +7483,6 @@ files = [
     {file = "wcwidth-0.2.6-py2.py3-none-any.whl", hash = "sha256:795b138f6875577cd91bba52baf9e445cd5118fd32723b460e30a0af30ea230e"},
     {file = "wcwidth-0.2.6.tar.gz", hash = "sha256:a5220780a404dbe3353789870978e472cfe477761f06ee55077256e509b156d0"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "weaviate-client"
@@ -9059,11 +7504,6 @@ validators = ">=0.18.2,<=0.21.0"
 [package.extras]
 grpc = ["grpcio", "grpcio-tools"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "webencodings"
 version = "0.5.1"
@@ -9074,11 +7514,6 @@ files = [
     {file = "webencodings-0.5.1-py2.py3-none-any.whl", hash = "sha256:a0af1213f3c2226497a97e2b3aa01a7e4bee4f403f95be16fc9acd2947514a78"},
     {file = "webencodings-0.5.1.tar.gz", hash = "sha256:b36a1c245f2d304965eb4e0a82848379241dc04b865afcc4aab16748587e1923"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "websocket-client"
@@ -9095,11 +7530,6 @@ files = [
 docs = ["Sphinx (>=6.0)", "sphinx-rtd-theme (>=1.1.0)"]
 optional = ["python-socks", "wsaccel"]
 test = ["websockets"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "websockets"
@@ -9179,11 +7609,6 @@ files = [
     {file = "websockets-10.4.tar.gz", hash = "sha256:eef610b23933c54d5d921c92578ae5f89813438fded840c2e9809d378dc765d3"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "wheel"
 version = "0.41.2"
@@ -9197,11 +7622,6 @@ files = [
 
 [package.extras]
 test = ["pytest (>=6.0.0)", "setuptools (>=65)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "wikipedia"
@@ -9217,11 +7637,6 @@ files = [
 beautifulsoup4 = "*"
 requests = ">=2.0.0,<3.0.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "win32-setctime"
 version = "1.1.0"
@@ -9235,11 +7650,6 @@ files = [
 
 [package.extras]
 dev = ["black (>=19.3b0)", "pytest (>=4.6.2)"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "wrapt"
@@ -9325,11 +7735,6 @@ files = [
     {file = "wrapt-1.15.0.tar.gz", hash = "sha256:d06730c6aed78cee4126234cf2d071e01b44b915e725a6cb439a879ec9754a3a"},
 ]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "xlrd"
 version = "2.0.1"
@@ -9346,11 +7751,6 @@ build = ["twine", "wheel"]
 docs = ["sphinx"]
 test = ["pytest", "pytest-cov"]
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "xlsxwriter"
 version = "3.1.2"
@@ -9361,11 +7761,6 @@ files = [
     {file = "XlsxWriter-3.1.2-py3-none-any.whl", hash = "sha256:331508ff39d610ecdaf979e458840bc1eab6e6a02cfd5d08f044f0f73636236f"},
     {file = "XlsxWriter-3.1.2.tar.gz", hash = "sha256:78751099a770273f1c98b8d6643351f68f98ae8e6acf9d09d37dc6798f8cd3de"},
 ]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "yarl"
@@ -9454,11 +7849,6 @@ files = [
 idna = ">=2.0"
 multidict = ">=4.0"
 
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
-
 [[package]]
 name = "zipp"
 version = "3.16.2"
@@ -9473,11 +7863,6 @@ files = [
 [package.extras]
 docs = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-lint"]
 testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=2.2)", "pytest-ignore-flaky", "pytest-mypy (>=0.9.1)", "pytest-ruff"]
-
-[package.source]
-type = "legacy"
-url = "http://public:26rS9HRxDqaVy5T@192.168.106.8:6081/repository/pypi-group/simple"
-reference = "local"
 
 [[package]]
 name = "zstandard"
