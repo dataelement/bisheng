@@ -157,7 +157,7 @@ class ProxyChatLLM(BaseChatModel):
     """Whether to stream the results or not."""
     n: Optional[int] = 1
     """Number of chat completions to generate for each prompt."""
-    max_tokens: Optional[int] = None
+    max_tokens: Optional[int] = 2048
     """Maximum number of tokens to generate."""
     tiktoken_model_name: Optional[str] = None
     """The model name to pass to tiktoken when using this class. 
