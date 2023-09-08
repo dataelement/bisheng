@@ -38,7 +38,7 @@ def get_root_node(graph):
     if not incoming_edges and len(graph.nodes) == 1:
         return graph.nodes[0]
 
-    node =  {node for node in graph.nodes if node not in incoming_edges}
+    node = {node for node in graph.nodes if node not in incoming_edges}
     if input_node:
         if node:
             input_node = input_node.union(node)

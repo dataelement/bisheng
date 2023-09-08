@@ -329,6 +329,14 @@ input_output:
   InputFile:
     documentation: ""
 
+embedding_config:
+  text-embedding-ada-002:
+    base_url:
+      ""
+  multilingual-e5-large:
+    base_url:
+      ""
+
 database_url:
   "mysql+pymysql://root:E1SkG0PaDMEPTAxY@192.168.106.106:3306/langflow"
 redis_url:

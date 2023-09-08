@@ -14,13 +14,13 @@ from sqlmodel import JSON, Field, Relationship
 
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
+    user_id: Optional[int] = Field(index=True)
     description: Optional[str] = Field(index=False)
     data: Optional[Dict] = Field(default=None)
     logo: Optional[str] = Field(index=False)
     status: Optional[int] = Field(index=False, default=1)
-    update_time: Optional[datetime] = Field(sa_column=Column(DateTime, nullable=False,
-                                            server_default=text('CURRENT_TIMESTAMP'),
-                                            onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
     create_time: Optional[datetime] = Field(default=(datetime.now()).strftime('%Y-%m-%d %H:%M:%S'), index=True)
 
     @validator('data')
@@ -56,6 +56,7 @@ class FlowCreate(FlowBase):
 
 class FlowRead(FlowBase):
     id: UUID
+    user_name: Optional[str]
 
 
 class FlowReadWithStyle(FlowRead):

@@ -11,6 +11,7 @@ from langchain.chains.base import Chain
 from pydantic import BaseModel
 
 # Assuming necessary imports for Field, Template, and FrontendNode classes
+skip_llm = {'CombineDocsChain'}
 
 
 class LangChainTypeCreator(BaseModel, ABC):
@@ -101,27 +102,26 @@ class LangChainTypeCreator(BaseModel, ABC):
             )
 
         # #判断是否包含inputKeys
-        if name in self.type_to_loader_dict:
-            class_tmp = self.type_to_loader_dict[name]
-        else:
-            for _, cls_ in self.type_to_loader_dict.items():
-                if hasattr(cls_,
-                           'function_name') and cls_.function_name() == name:
-                    class_tmp = cls_
-                elif cls_.__name__ == name:
-                    class_tmp = cls_
+        if signature.name not in skip_llm:
+            if name in self.type_to_loader_dict:
+                class_tmp = self.type_to_loader_dict[name]
+            else:
+                for _, cls_ in self.type_to_loader_dict.items():
+                    if hasattr(cls_, 'function_name') and cls_.function_name() == name:
+                        class_tmp = cls_
+                    elif cls_.__name__ == name:
+                        class_tmp = cls_
 
-        if class_tmp and hasattr(class_tmp, 'input_keys'):
-            signature.template.add_field(
-                TemplateField(
-                    field_type='input',
-                    required=False,
-                    show=True,
-                    name='input_node',
-                    display_name='Preset Question',
+            if class_tmp and hasattr(class_tmp, 'input_keys'):
+                signature.template.add_field(
+                    TemplateField(
+                        field_type='input',
+                        required=False,
+                        show=True,
+                        name='input_node',
+                        display_name='Preset Question',
+                    )
                 )
-            )
-
         signature.add_extra_fields()
         signature.add_extra_base_classes()
         signature.set_documentation(self.docs_map.get(name, ''))

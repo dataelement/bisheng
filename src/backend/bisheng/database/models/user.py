@@ -8,7 +8,7 @@ from sqlmodel import Field
 
 class UserBase(SQLModelSerializable):
     user_name: str = Field(index=True, unique=True)
-    password: str = Field(index=False)
+
     email: Optional[str] = Field(index=True)
     phone_number: Optional[str] = Field(index=True)
     remark: Optional[str] = Field(index=False)
@@ -34,6 +34,7 @@ class UserBase(SQLModelSerializable):
 
 class User(UserBase, table=True):
     user_id: Optional[int] = Field(default=None, primary_key=True)
+    password: str = Field(index=False)
 
 
 class UserRead(UserBase):
@@ -51,4 +52,9 @@ class UserLogin(UserBase):
 
 
 class UserCreate(UserBase):
-    pass
+    password: str
+
+
+class UserUpdate(SQLModelSerializable):
+    user_id: int
+    delete: Optional[int] = 0

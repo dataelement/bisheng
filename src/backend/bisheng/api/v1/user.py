@@ -1,17 +1,19 @@
 import hashlib
+import json
+from typing import List
 
 from bisheng.database.base import get_session
-from bisheng.database.models.user import User, UserCreate, UserLogin, UserRead
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from bisheng.database.models.user import (User, UserCreate, UserLogin,
+                                          UserRead, UserUpdate)
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
-from jwt import PyJWT
+from fastapi_jwt_auth import AuthJWT
 from sqlmodel import Session, select
 
 # build router
 router = APIRouter(prefix='/user', tags=['User'])
 
-SECRET_KEY = 'xI$xO.oN$sC}tC^oQ(fF^nK~dB&uT('
-ALGORITHM = 'HS256'
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
 
 
@@ -22,7 +24,7 @@ async def regist(*, session: Session = Depends(get_session), user: UserCreate):
         select(User).where(User.user_name == user.user_name)
     ).all()
     if db_user:
-        raise HTTPException(status_code=404, detail='用户名已存在')
+        raise HTTPException(status_code=500, detail='账号已存在')
     else:
         user.password = md5_hash(user.password)
         db_user = User.from_orm(user)
@@ -37,33 +39,72 @@ async def login(
     *,
     session: Session = Depends(get_session),
     user: UserLogin,
-    request: Request,
-    response: Response
+    Authorize: AuthJWT = Depends()
 ):
     # check if user already exist
     password = md5_hash(user.password)
     db_user = session.exec(
-        select(User).where(
-            User.user_name == user.user_name, User.password == password
-        )
+        select(User).where(User.user_name == user.user_name, User.password == password)
     ).first()
     if db_user:
+        if 1 == db_user.delete:
+            raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
         # 生成JWT令牌
-        token = PyJWT().encode(
-            payload={
-                'user_name': user.user_name,
-                'user_id': db_user.user_id
-            },
-            key=SECRET_KEY,
-            algorithm=ALGORITHM
+        payload = {
+            'user_name': user.user_name,
+            'user_id': db_user.user_id,
+            'role': db_user.role
+        }
+        # Create the tokens and passing to set_access_cookies or set_refresh_cookies
+        access_token = Authorize.create_access_token(
+            subject=json.dumps(payload), expires_time=86400
         )
-        host = request.client.host
-        response.set_cookie(
-            'access_token_cookie', token, max_age=30 * 86400, domain=host
-        )
+        refresh_token = Authorize.create_refresh_token(subject=user.user_name)
+
+        # Set the JWT cookies in the response
+        Authorize.set_access_cookies(access_token)
+        Authorize.set_refresh_cookies(refresh_token)
         return db_user
     else:
         raise HTTPException(status_code=500, detail='密码不正确')
+
+
+@router.post('/logout', status_code=201)
+async def logout(Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    Authorize.unset_jwt_cookies()
+    return {'msg': 'Successfully logout'}
+
+
+@router.get('/list', response_model=List[UserRead], status_code=201)
+async def list(*, name: str, page_size: int, page_num: int, session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
+        raise HTTPException(status_code=500, detail='无查看权限')
+    sql = select(User)
+    if name:
+        sql = sql.where(User.user_name.like(f'%{name}%'))
+    if page_size:
+        sql = sql.offset((page_num-1) * page_size).limit(page_size)
+    users = session.exec(sql).all()
+    return [jsonable_encoder(user) for user in users]
+
+
+@router.post('/update', status_code=201)
+async def update(*, user: UserUpdate, session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
+        raise HTTPException(status_code=500, detail='无查看权限')
+
+    db_user = session.get(User, user.user_id)
+    if db_user and user.delete is not None:
+        if db_user.role == 'admin':
+            raise HTTPException(status_code=500, detail='不能操作管理员')
+        db_user.delete = user.delete
+
+    session.add(db_user)
+    session.commit()
+    return {'msg': 'success'}
 
 
 def md5_hash(string):

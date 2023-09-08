@@ -28,7 +28,9 @@ def build_sorted_vertices_with_caching(data_graph):
         vertex.build()
         if vertex.artifacts:
             artifacts.update(vertex.artifacts)
-    return graph.build(), artifacts
+    root = graph.build()
+    langchain_object = next((node for node in root if node.base_type != 'inputOutput'), None)
+    return langchain_object.build(), artifacts
 
 
 def build_langchain_object(data_graph):

@@ -1,10 +1,17 @@
 # 数据库配置
 database_url:
-  "mysql+pymysql://username:password@192.168.106.106:3306/langflow"
+  "mysql+pymysql://username:password@192.168.106.106:3306/bisheng"
 redis_url:
   "192.168.106.116:6379"
 
-
+# 为知识库的embedding进行模型撇脂
+embedding_config:
+  text-embedding-ada-002:
+    base_url:
+      ""
+  multilingual-e5-large:
+    base_url:
+      ""
 
 agents:
   ZeroShotAgent:

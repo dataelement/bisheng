@@ -55,11 +55,12 @@ class ProcessResponse(BaseModel):
 class ChatList(BaseModel):
     """Chat message list."""
 
-    flow_name: str = None,
-    flow_description: str = None,
-    flow_id: UUID = None,
-    create_time: datetime = None,
-    update_time: datetime = None,
+    flow_name: str = None
+    flow_description: str = None
+    flow_id: UUID = None
+    chat_id: str = None
+    create_time: datetime = None
+    update_time: datetime = None
 
 
 class ChatMessage(BaseModel):
@@ -71,6 +72,7 @@ class ChatMessage(BaseModel):
     category: str = 'processing'
     intermediate_steps: str = None
     files: list = []
+    user_id: int = None
 
 
 class ChatResponse(ChatMessage):
@@ -84,12 +86,8 @@ class ChatResponse(ChatMessage):
 
     @validator('type')
     def validate_message_type(cls, v):
-        if v not in [
-            'start', 'stream', 'end', 'error', 'info', 'file', 'begin', 'close'
-        ]:
-            raise ValueError(
-                'type must be start, stream, end, error, info, or file'
-            )
+        if v not in ['start', 'stream', 'end', 'error', 'info', 'file', 'begin', 'close']:
+            raise ValueError('type must be start, stream, end, error, info, or file')
         return v
 
 

@@ -62,7 +62,8 @@ def build_input_keys_response(langchain_object, artifacts):
 
     return input_keys_response
 
-def build_flow(graph_data:dict, artifacts, process_file=False, flow_id=None, chat_id=None):
+
+def build_flow(graph_data: dict, artifacts, process_file=False, flow_id=None, chat_id=None):
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
@@ -92,12 +93,12 @@ def build_flow(graph_data:dict, artifacts, process_file=False, flow_id=None, cha
                         # 过滤掉文件
                         vertex.params[key] = ''
 
-            #vectore store 引入自动建库逻辑
+            # vectore store 引入自动建库逻辑
             # 聊天窗口等flow 主动生成的vector 需要新建临时collection
             # tmp_{chat_id}
             if vertex.base_type == 'vectorstores':
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
-                    vertex.params['collection_name']=f'tmp_{flow_id}_{chat_id}'
+                    vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id}'
 
             vertex.build()
             params = vertex._built_object_repr()
@@ -131,7 +132,8 @@ def build_flow(graph_data:dict, artifacts, process_file=False, flow_id=None, cha
         yield str(StreamData(event='message', data=response))
     return graph
 
-def build_flow_no_yield(graph_data:dict, artifacts, process_file=False, flow_id=None, chat_id=None):
+
+def build_flow_no_yield(graph_data: dict, artifacts, process_file=False, flow_id=None, chat_id=None):
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
@@ -153,12 +155,12 @@ def build_flow_no_yield(graph_data:dict, artifacts, process_file=False, flow_id=
                         # 过滤掉文件
                         vertex.params[key] = ''
 
-            #vectore store 引入自动建库逻辑
+            # vectore store 引入自动建库逻辑
             # 聊天窗口等flow 主动生成的vector 需要新建临时collection
             # tmp_{chat_id}
             if vertex.base_type == 'vectorstores':
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
-                    vertex.params['collection_name']=f'tmp_{flow_id}_{chat_id}'
+                    vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id}'
 
             vertex.build()
             params = vertex._built_object_repr()
