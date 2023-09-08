@@ -20,7 +20,7 @@ class ChainCreator(LangChainTypeCreator):
     def frontend_node_class(self) -> Type[ChainFrontendNode]:
         return ChainFrontendNode
 
-    #! We need to find a better solution for this
+    # ! We need to find a better solution for this
     from_method_nodes = {
         'ConversationalRetrievalChain': 'from_llm',
         'LLMCheckerChain': 'from_llm',
@@ -31,18 +31,13 @@ class ChainCreator(LangChainTypeCreator):
     def type_to_loader_dict(self) -> Dict:
         if self.type_dict is None:
             self.type_dict: dict[str, Any] = {
-                chain_name: import_class(f'langchain.chains.{chain_name}')
-                for chain_name in chains.__all__
+                chain_name: import_class(f'langchain.chains.{chain_name}') for chain_name in chains.__all__
             }
             from bisheng.interface.chains.custom import CUSTOM_CHAINS
 
             self.type_dict.update(CUSTOM_CHAINS)
             # Filter according to settings.chains
-            self.type_dict = {
-                name: chain
-                for name, chain in self.type_dict.items()
-                if name in settings.chains or settings.dev
-            }
+            self.type_dict = {name: chain for name, chain in self.type_dict.items() if name in settings.chains or settings.dev}
         return self.type_dict
 
     def get_signature(self, name: str) -> Optional[Dict]:
@@ -56,9 +51,7 @@ class ChainCreator(LangChainTypeCreator):
                     method_name=self.from_method_nodes[name],
                     add_function=True,
                 )
-            return build_template_from_class(
-                name, self.type_to_loader_dict, add_function=True
-            )
+            return build_template_from_class(name, self.type_to_loader_dict, add_function=True)
         except ValueError as exc:
             raise ValueError(f'Chain {name} not found: {exc}') from exc
         except AttributeError as exc:
@@ -68,11 +61,7 @@ class ChainCreator(LangChainTypeCreator):
     def to_list(self) -> List[str]:
         names = []
         for _, chain in self.type_to_loader_dict.items():
-            chain_name = (
-                chain.function_name()
-                if hasattr(chain, 'function_name')
-                else chain.__name__
-            )
+            chain_name = (chain.function_name() if hasattr(chain, 'function_name') else chain.__name__)
             names.append(chain_name)
         return names
 

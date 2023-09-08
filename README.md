@@ -17,7 +17,7 @@ Bisheng是一款领先的开源<b>大模型应用开发平台</b>，赋能和加
 
 “毕昇”是活字印刷术的发明人，活字印刷术为人类知识的传递起到了巨大的推动作用。我们希望“毕昇”同样能够为智能应用的广泛落地提供有力的支撑。欢迎大家一道参与。
 
-Bisheng 基于 [Apache 2.0 License](https://github.com/dataelement/bisheng/main/LICENSE) 协议发布，于 2023 年 8 月底正式开源。
+Bisheng 基于 [Apache 2.0 License](https://github.com/dataelement/bisheng/blob/main/LICENSE) 协议发布，于 2023 年 8 月底正式开源。
 
 
 ## 产品亮点

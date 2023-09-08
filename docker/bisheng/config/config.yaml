@@ -4,7 +4,14 @@ database_url:
 redis_url:
   "192.168.106.116:6379"
 
-
+# 为知识库的embedding进行模型撇脂
+embedding_config:
+  text-embedding-ada-002:
+    base_url:
+      ""
+  multilingual-e5-large:
+    base_url:
+      ""
 
 agents:
   ZeroShotAgent:
