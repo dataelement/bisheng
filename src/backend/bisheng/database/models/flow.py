@@ -14,6 +14,7 @@ from sqlmodel import JSON, Field, Relationship
 
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
+    user_id: Optional[int] = Field(index=True)
     description: Optional[str] = Field(index=False)
     data: Optional[Dict] = Field(default=None)
     logo: Optional[str] = Field(index=False)
@@ -55,6 +56,7 @@ class FlowCreate(FlowBase):
 
 class FlowRead(FlowBase):
     id: UUID
+    user_name: Optional[str]
 
 
 class FlowReadWithStyle(FlowRead):

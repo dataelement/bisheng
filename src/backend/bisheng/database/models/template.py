@@ -7,8 +7,6 @@ from pydantic import validator
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import JSON, Field
 
-# Path: src/backend/bisheng/database/models/template.py
-
 
 class TemplateSkillBase(SQLModelSerializable):
     name: str = Field(index=True)

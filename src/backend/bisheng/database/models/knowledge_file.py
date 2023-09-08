@@ -7,18 +7,25 @@ from sqlmodel import Field
 
 
 class KnowledgeFileBase(SQLModelSerializable):
+    user_id: Optional[int] = Field(index=True)
     knowledge_id: int = Field(index=True)
     file_name: str = Field(index=True)
     md5: Optional[str] = Field(index=False)
     status: Optional[int] = Field(index=False)
     object_name: Optional[str] = Field(index=False)
-    create_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(
+        sa_column=Column(
+            DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')
+        )
+    )
     update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+        sa_column=Column(
+            DateTime,
+            nullable=False,
+            server_default=text('CURRENT_TIMESTAMP'),
+            onupdate=text('CURRENT_TIMESTAMP')
+        )
+    )
 
 
 class KnowledgeFile(KnowledgeFileBase, table=True):

@@ -1,6 +1,6 @@
 # 数据库配置
 database_url:
-  "mysql+pymysql://username:password@192.168.106.106:3306/langflow"
+  "mysql+pymysql://username:password@192.168.106.106:3306/bisheng"
 redis_url:
   "192.168.106.116:6379"
 

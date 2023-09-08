@@ -7,6 +7,7 @@ from sqlmodel import Field
 
 
 class KnowledgeBase(SQLModelSerializable):
+    user_id: Optional[int] = Field(index=True)
     name: str = Field(index=True)
     description: Optional[str] = Field(index=True)
     model: Optional[str] = Field(index=False)
@@ -23,6 +24,7 @@ class Knowledge(KnowledgeBase, table=True):
 
 class KnowledgeRead(KnowledgeBase):
     id: int
+    user_name: Optional[str]
 
 
 class KnowledgeCreate(KnowledgeBase):

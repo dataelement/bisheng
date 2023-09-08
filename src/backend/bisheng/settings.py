@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     tools: dict = {}
     memories: dict = {}
     embeddings: dict = {}
+    embedding_config: dict = {}
     vectorstores: dict = {}
     documentloaders: dict = {}
     wrappers: dict = {}
@@ -66,6 +67,7 @@ class Settings(BaseSettings):
         self.textsplitters = new_settings.textsplitters or {}
         self.utilities = new_settings.utilities or {}
         self.embeddings = new_settings.embeddings or {}
+        self.embedding_config = new_settings.embedding_config or {}
         self.vectorstores = new_settings.vectorstores or {}
         self.documentloaders = new_settings.documentloaders or {}
         self.retrievers = new_settings.retrievers or {}

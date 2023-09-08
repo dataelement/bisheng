@@ -18,6 +18,8 @@ from fastapi import (APIRouter, HTTPException, WebSocket, WebSocketException,
 from fastapi.encoders import jsonable_encoder
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
+from fastapi_jwt_auth import AuthJWT
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 router = APIRouter(tags=['Chat'])
@@ -32,10 +34,14 @@ def get_chatmessage(*,
                     chat_id: str,
                     flow_id: str,
                     id: Optional[str] = None,
-                    page_size: Optional[int] = 20):
+                    page_size: Optional[int] = 20,
+                    Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
     if not chat_id or not flow_id:
         return {'code': 500, 'message': 'chat_id 和 flow_id 必传参数'}
-    where = select(ChatMessage).where(ChatMessage.flow_id == flow_id, ChatMessage.chat_id == chat_id)
+    where = select(ChatMessage).where(ChatMessage.flow_id == flow_id, ChatMessage.chat_id == chat_id,
+                                      ChatMessage.user_id == payload.get('user_id'))
     if id:
         where = where.where(ChatMessage.id < id)
     db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
@@ -43,30 +49,45 @@ def get_chatmessage(*,
 
 
 @router.get('/chat/list', response_model=List[ChatList], status_code=200)
-def get_chatmessage_list(
-        *,
-        session: Session = Depends(get_session),
-):
-    db_message = session.exec(select(ChatMessage).group_by(ChatMessage.flow_id)).all()
+def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+
+    smt = (select(
+        ChatMessage.flow_id, ChatMessage.chat_id, ChatMessage.chat_id,
+        func.max(ChatMessage.create_time).label('create_time'),
+        func.max(ChatMessage.update_time).label('update_time')).where(ChatMessage.user_id == payload.get('user_id')).group_by(
+            ChatMessage.flow_id).order_by(func.max(ChatMessage.create_time).desc()))
+    db_message = session.exec(smt).all()
     flow_ids = [message.flow_id for message in db_message]
     db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
     # set object
     chat_list = []
     flow_dict = {flow.id: flow for flow in db_flow}
     for i, message in enumerate(db_message):
+        if message.flow_id not in flow_dict:
+            # flow 被删除
+            continue
         chat_list.append(
             ChatList(flow_name=flow_dict[message.flow_id].name,
                      flow_description=flow_dict[message.flow_id].description,
                      flow_id=message.flow_id,
+                     chat_id=message.chat_id,
                      create_time=message.create_time,
                      update_time=message.update_time))
     return [jsonable_encoder(chat) for chat in chat_list]
 
 
 @router.websocket('/chat/{client_id}')
-async def chat(client_id: str, websocket: WebSocket, chat_id: Optional[str] = None, type: Optional[str] = None):
+async def chat(client_id: str,
+               websocket: WebSocket,
+               chat_id: Optional[str] = None,
+               type: Optional[str] = None,
+               Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required(auth_from='websocket', websocket=websocket)
+    payload = json.loads(Authorize.get_jwt_subject())
+    user_id = payload.get('user_id')
     """Websocket endpoint for chat."""
-
     if type and type == 'L1':
         with next(get_session()) as session:
             db_flow = session.get(Flow, client_id)
@@ -98,7 +119,7 @@ async def chat(client_id: str, websocket: WebSocket, chat_id: Optional[str] = No
             key_node = get_cache_key(client_id, chat_id, node.id)
             chat_manager.set_cache(key_node, node._built_object)
             chat_manager.set_cache(get_cache_key(client_id, chat_id), node._built_object)
-        await chat_manager.handle_websocket(client_id, chat_id, websocket)
+        await chat_manager.handle_websocket(client_id, chat_id, websocket, user_id)
     except WebSocketException as exc:
         logger.error(exc)
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))

@@ -36,6 +36,7 @@ class ChatHistory(Subject):
                 files = json.dumps(msg.files) if msg.files else ''
                 msg.__dict__.pop('files')
                 db_message = ChatMessage(flow_id=client_id, chat_id=chat_id, files=files, **msg.__dict__)
+                logger.info(f'chat={db_message}')
                 seesion.add(db_message)
                 seesion.commit()
 
@@ -129,7 +130,7 @@ class ChatManager:
                 if 'after sending' in str(exc):
                     logger.error(exc)
 
-    async def process_file(self, client_id: str, chat_id: str, file_path: str, id: str):
+    async def process_file(self, client_id: str, chat_id: str, user_id: int, file_path: str, id: str):
         """upload file to make flow work"""
         db_flow = next(get_session()).get(Flow, client_id)
         graph_data = db_flow.data
@@ -141,12 +142,19 @@ class ChatManager:
                         logger.info(f'key={key} set_filepath={file_path}')
                         value['file_path'] = file_path
 
-        file = ChatMessage(is_bot=False, files=[{'file_name': file_name}], message='', intermediate_steps='', type='end')
+        file = ChatMessage(is_bot=False,
+                           files=[{
+                               'file_name': file_name
+                           }],
+                           message='',
+                           intermediate_steps='',
+                           type='end',
+                           user_id=user_id)
         self.chat_history.add_message(client_id, chat_id, file)
         # graph_data = payload
-        start_resp = ChatResponse(message=None, type='begin', intermediate_steps='', category='system')
+        start_resp = ChatResponse(message=None, type='begin', intermediate_steps='', category='system', user_id=user_id)
         await self.send_json(client_id, chat_id, start_resp)
-        start_resp = ChatResponse(message=None, type='start', intermediate_steps='', category='system')
+        start_resp.type = 'start'
         await self.send_json(client_id, chat_id, start_resp)
 
         # build to activate node
@@ -155,7 +163,7 @@ class ChatManager:
             graph = build_flow_no_yield(graph_data, artifacts, True, UUID(client_id).hex, chat_id)
         except Exception as e:
             logger.exception(e)
-            step_resp = ChatResponse(message='', type='end', intermediate_steps='文件解析失败', category='system')
+            step_resp = ChatResponse(message='', type='end', intermediate_steps='文件解析失败', category='system', user_id=user_id)
             await self.send_json(client_id, chat_id, step_resp)
             start_resp.type = 'close'
             await self.send_json(client_id, chat_id, start_resp)
@@ -170,13 +178,13 @@ class ChatManager:
         # 查找nodeid关联的questions
         input = next((node for node in graph.nodes if node.vertex_type == 'InputNode'), None)
         if not input:
-            step_resp = ChatResponse(message='', type='end', intermediate_steps='文件解析完成', category='system')
+            step_resp = ChatResponse(message='', type='end', intermediate_steps='文件解析完成', category='system', user_id=user_id)
             await self.send_json(client_id, chat_id, step_resp)
             start_resp.type = 'close'
             await self.send_json(client_id, chat_id, start_resp)
             return
         questions = input._built_object
-        step_resp = ChatResponse(message='', type='end', intermediate_steps='文件解析完成，分析开始', category='system')
+        step_resp = ChatResponse(message='', type='end', intermediate_steps='文件解析完成，分析开始', category='system', user_id=user_id)
         await self.send_json(client_id, chat_id, step_resp)
 
         edge = input.edges[0]
@@ -189,24 +197,25 @@ class ChatManager:
             payload = {'inputs': {input_key: question, 'id': edge.target.id}}
             start_resp.category == 'question'
             await self.send_json(client_id, chat_id, start_resp)
-            step_resp = ChatResponse(message='', type='end', intermediate_steps=question, category='question')
+            step_resp = ChatResponse(message='', type='end', intermediate_steps=question, category='question', user_id=user_id)
             await self.send_json(client_id, chat_id, step_resp)
-            result = await self.process_message(client_id, chat_id, payload, None, True)
+            result = await self.process_message(client_id, chat_id, payload, None, True, user_id)
             report = f"""{report}### {question} \n {result} \n """
 
         start_resp.category = 'report'
         await self.send_json(client_id, chat_id, start_resp)
-        response = ChatResponse(
-            message='',
-            type='end',
-            intermediate_steps=report,
-            category='report',
-        )
+        response = ChatResponse(message='', type='end', intermediate_steps=report, category='report', user_id=user_id)
         await self.send_json(client_id, chat_id, response)
-        close_resp = ChatResponse(message=None, type='close', intermediate_steps='', category='system')
+        close_resp = ChatResponse(message=None, type='close', intermediate_steps='', category='system', user_id=user_id)
         await self.send_json(client_id, chat_id, close_resp)
 
-    async def process_message(self, client_id: str, chat_id: str, payload: Dict, langchain_object: Any, is_bot=False):
+    async def process_message(self,
+                              client_id: str,
+                              chat_id: str,
+                              payload: Dict,
+                              langchain_object: Any,
+                              is_bot=False,
+                              user_id=None):
         # Process the graph data and chat message
         chat_inputs = payload.pop('inputs', '')
         node_id = chat_inputs.pop('id') if 'id' in chat_inputs else ''
@@ -216,20 +225,25 @@ class ChatManager:
             for k, value in artifacts.items():
                 if k in chat_inputs:
                     chat_inputs[k] = value
-        chat_inputs = ChatMessage(message=chat_inputs, category='question', is_bot=is_bot, type='bot')
+        chat_inputs = ChatMessage(
+            message=chat_inputs,
+            category='question',
+            is_bot=is_bot,
+            type='bot',
+            user_id=user_id,
+        )
         if not is_bot:
             self.chat_history.add_message(client_id, chat_id, chat_inputs)
         # graph_data = payload
         if not is_bot:
-            start_resp = ChatResponse(message=None, type='begin', intermediate_steps='')
+            start_resp = ChatResponse(message=None, type='begin', intermediate_steps='', user_id=user_id)
             await self.send_json(client_id, chat_id, start_resp)
-        start_resp = ChatResponse(message=None, type='start', intermediate_steps='')
+        start_resp = ChatResponse(message=None, type='start', intermediate_steps='', user_id=user_id)
         await self.send_json(client_id, chat_id, start_resp)
 
         # is_first_message = len(self.chat_history.get_history(client_id=client_id)) <= 1
         # Generate result and thought
         try:
-
             logger.debug(f'Generating result and thought key={key}')
             langchain_object = self.in_memory_cache.get(key)
             result, intermediate_steps = await process_graph(
@@ -240,9 +254,13 @@ class ChatManager:
         except Exception as e:
             # Log stack trace
             logger.exception(e)
-            end_resp = ChatResponse(message=None, type='end', intermediate_steps=f'分析出错，{str(e)}', category='processing')
+            end_resp = ChatResponse(message=None,
+                                    type='end',
+                                    intermediate_steps=f'分析出错，{str(e)}',
+                                    category='processing',
+                                    user_id=user_id)
             await self.send_json(client_id, chat_id, end_resp)
-            close_resp = ChatResponse(message=None, type='close', intermediate_steps='')
+            close_resp = ChatResponse(message=None, type='close', intermediate_steps='', user_id=user_id)
             await self.send_json(client_id, chat_id, close_resp)
             return
 
@@ -280,7 +298,8 @@ class ChatManager:
                                         intermediate_steps=step,
                                         type='end',
                                         files=file_responses,
-                                        category='processing')
+                                        category='processing',
+                                        user_id=user_id)
                 self.chat_history.add_message(client_id, chat_id, response)
 
         if not chat_id and intermediate_steps:
@@ -289,10 +308,11 @@ class ChatManager:
                                     intermediate_steps=intermediate_steps.strip(),
                                     type='end',
                                     files=file_responses,
-                                    category='processing')
+                                    category='processing',
+                                    user_id=user_id)
             await self.send_json(client_id, chat_id, response, add=False)
         else:
-            end_resp = ChatResponse(message=None, type='end', intermediate_steps='', category='processing')
+            end_resp = ChatResponse(message=None, type='end', intermediate_steps='', category='processing', user_id=user_id)
             await self.send_json(client_id, chat_id, end_resp)
 
         # 最终结果
@@ -301,10 +321,11 @@ class ChatManager:
         response = ChatResponse(message=result if not is_bot else '',
                                 type='end',
                                 intermediate_steps=result if is_bot else '',
-                                category='answer')
+                                category='answer',
+                                user_id=user_id)
         await self.send_json(client_id, chat_id, response)
         # 循环结束
-        close_resp = ChatResponse(message=None, type='close', intermediate_steps='')
+        close_resp = ChatResponse(message=None, type='close', intermediate_steps='', user_id=user_id)
         await self.send_json(client_id, chat_id, close_resp)
         return result
 
@@ -316,7 +337,7 @@ class ChatManager:
         self.in_memory_cache.set(client_id, langchain_object)
         return client_id in self.in_memory_cache
 
-    async def handle_websocket(self, client_id: str, chat_id: str, websocket: WebSocket):
+    async def handle_websocket(self, client_id: str, chat_id: str, websocket: WebSocket, user_id: int):
         await self.connect(client_id, chat_id, websocket)
 
         try:
@@ -344,12 +365,16 @@ class ChatManager:
                     node_id = payload.get('id')
                     with self.cache_manager.set_client_id(client_id, chat_id):
                         logger.info(f'client_id={client_id} act=process_message user_id={chat_id}')
-                        await self.process_file(file_path=file_path, chat_id=chat_id, client_id=client_id, id=node_id)
+                        await self.process_file(file_path=file_path,
+                                                chat_id=chat_id,
+                                                client_id=client_id,
+                                                id=node_id,
+                                                user_id=user_id)
                     continue
 
                 with self.cache_manager.set_client_id(client_id, chat_id):
                     logger.info(f'client_id={client_id} act=process_message user_id={chat_id}')
-                    await self.process_message(client_id, chat_id, payload, None)
+                    await self.process_message(client_id, chat_id, payload, None, False, user_id)
 
         except Exception as e:
             # Handle any exceptions that might occur
