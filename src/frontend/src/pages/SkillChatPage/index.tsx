@@ -27,10 +27,9 @@ export default function SkillChatPage(params) {
     const { chatList, chatIndex, setChatIndex, addChat } = useChatList()
 
     const chatId = useRef('')
-    const { inputState, fileInputs, uploadFile, setInputState, changeHistoryByScroll, chatHistory, clearHistory, initChat, sendMsg, closeWs, loadNextPage } = useWebsocketChat(chatId) // talk
+    const { inputState, fileInputs, uploadFile, setInputState, changeHistoryByScroll, chatHistory, clearHistory, initChat, sendMsg, loadNextPage } = useWebsocketChat(chatId) // talk
     // select flow
     const handlerSelectFlow = async (node: FlowType) => {
-        closeWs()
         // 会话ID
         chatId.current = generateUUID(32)
         setOpen(false)
@@ -53,7 +52,6 @@ export default function SkillChatPage(params) {
     // select chat
     const handleSelectChat = async (i, chat) => {
         if (i === chatIndex) return
-        closeWs()
         setChatIndex(i)
         chatId.current = chat.chat_id
         let flow = flows.find(flow => flow.id === chat.flow_id) || await getFlowFromDatabase(chat.flow_id)
@@ -293,8 +291,8 @@ const useWebsocketChat = (chatId) => {
                         setErrorData({
                             title: "网络连接出现错误,请尝试以下方法: ",
                             list: [
+                                "操作不要过快",
                                 "刷新页面",
-                                "使用新的流程选项卡",
                                 "检查后台是否启动"
                             ],
                         });
@@ -605,9 +603,18 @@ const useWebsocketChat = (chatId) => {
     }
 
     const closeWs = () => {
+        // close prev connection
         if (ws.current) {
-            ws.current.close()
-            ws.current = null
+            switch (ws.current.readyState) {
+                case WebSocket.OPEN:
+                    ws.current.close()
+                    ws.current = null
+                        ; break;
+                case WebSocket.CONNECTING:
+                    ws.current.onopen = () => {
+                        ws.current.close()
+                    };
+            }
         }
     }
 
@@ -659,6 +666,7 @@ const useWebsocketChat = (chatId) => {
         uploadFile,
         setInputState,
         async initChat(_flow) {
+            closeWs()
             await checkPrompt(_flow)
             await build(_flow, chatId)
             setChatHistory([])
@@ -668,7 +676,6 @@ const useWebsocketChat = (chatId) => {
         },
         sendMsg,
         loadNextPage,
-        closeWs,
         changeHistoryByScroll,
         clearHistory() {
             setChatHistory([])

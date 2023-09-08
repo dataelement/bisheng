@@ -78,7 +78,7 @@ export const LoginPage = () => {
     }, [])
 
     return <div className="w-full h-full bg-gray-200">
-        <div className="fixed z-10 w-[1200px] h-[800px] translate-x-[-50%] left-[50%] top-[15%] border rounded-lg shadow-xl overflow-hidden">
+        <div className="fixed z-10 w-[1200px] h-[750px] translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden">
             <div className="w-[800px] h-full bg-gray-950"><StarBg /></div>
             <div className=" absolute w-full h-full z-10 flex justify-end top-0">
                 <div className="w-[760px] px-[200px] py-[200px] bg-[rgba(255,255,255,1)] relative">
