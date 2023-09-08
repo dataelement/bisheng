@@ -182,7 +182,7 @@ export default function FileLibPage() {
     }, [open, datalist])
 
     const [showCpu, setShowCpu] = useState(false)
-    return <div className="w-full h-screen p-6 overflow-y-auto" data-theme="light">
+    return <div className="w-full h-screen p-6 overflow-y-auto">
         <Tabs defaultValue="account" className="w-full">
             <TabsList className="">
                 <TabsTrigger value="account" className="roundedrounded-xl">模型管理</TabsTrigger>

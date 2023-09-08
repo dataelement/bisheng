@@ -66,7 +66,7 @@ function CreateModal({ datalist, open, setOpen }) {
         }).then(res => {
             // @ts-ignore
             window.libname = name
-            navigate("/files/" + res.data.id);
+            navigate("/filelib/" + res.data.id);
             setOpen(false)
         }).catch(e => {
             handleError(e.response.data.detail);
@@ -166,7 +166,7 @@ export default function FileLibPage() {
                                 <TableCell className="text-right" onClick={() => {
                                     // @ts-ignore
                                     window.libname = el.name
-                                }}><Link to={`/files/${el.id}`} className="underline">详情</Link>
+                                }}><Link to={`/filelib/${el.id}`} className="underline">详情</Link>
                                     <a href="javascript:;" onClick={() => delConfim(el)} className="underline ml-4">删除</a></TableCell>
                             </TableRow>
                         ))}
