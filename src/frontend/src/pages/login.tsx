@@ -71,17 +71,17 @@ export const LoginPage = () => {
 
     useEffect(() => {
         console.log(
-			"%cBiSheng 0.2.0",
-			"font-size: 38px;" +
-			"background-color: #0949f4 ; color: white ; font-weight: bold;padding: 8px 20px; border-radius: 24px;"
-		);
+            "%cBiSheng 0.2.0",
+            "font-size: 38px;" +
+            "background-color: #0949f4 ; color: white ; font-weight: bold;padding: 8px 20px; border-radius: 24px;"
+        );
     }, [])
 
-    return <div className="w-full h-full bg-gray-200">
+    return <div className="w-full h-full bg-gray-200 dark:bg-gray-700">
         <div className="fixed z-10 w-[1200px] h-[750px] translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden">
             <div className="w-[800px] h-full bg-gray-950"><StarBg /></div>
             <div className=" absolute w-full h-full z-10 flex justify-end top-0">
-                <div className="w-[760px] px-[200px] py-[200px] bg-[rgba(255,255,255,1)] relative">
+                <div className="w-[760px] px-[200px] py-[200px] bg-[rgba(255,255,255,1)] dark:bg-gray-950 relative">
                     <div className="flex gap-4 items-center bg-[#347ef9]">
                         <img src={Logo} className="w-9 h-9" alt="" />
                         <span className="text-[#fff] text-sm">便捷、灵活、可靠的企业级大模型应用开发平台</span>

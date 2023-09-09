@@ -155,7 +155,7 @@ export default function SkillChatPage(params) {
                     </div> */}
                     </div>
                     <div className="absolute w-full bottom-0 bg-gradient-to-t from-[#fff] to-[rgba(255,255,255,0.8)] px-8 dark:bg-gradient-to-t dark:from-[#000] dark:to-[rgba(0,0,0,0.8)]">
-                        <div className={`w-full text-area-box border border-gray-600 rounded-lg my-6 overflow-hidden pr-2 py-2 relative ${(inputState.lock || (fileInputs?.length && chatHistory.length === 0)) && 'bg-gray-200'}`}>
+                        <div className={`w-full text-area-box border border-gray-600 rounded-lg my-6 overflow-hidden pr-2 py-2 relative ${(inputState.lock || (fileInputs?.length && chatHistory.length === 0)) && 'bg-gray-200 dark:bg-gray-600'}`}>
                             <textarea ref={inputRef}
                                 disabled={inputState.lock || (fileInputs?.length && chatHistory.length === 0)} style={{ height: 36 }} rows={1}
                                 className={`w-full resize-none border-none bg-transparent outline-none px-4 pt-1 text-xl max-h-[200px]`}
@@ -166,7 +166,7 @@ export default function SkillChatPage(params) {
                                 }}></textarea>
                             <div className="absolute right-6 bottom-4 flex gap-2">
                                 <ShadTooltip content={'上传文件'}>
-                                    <button disabled={inputState.lock || !fileInputs?.length} className=" disabled:text-gray-400" onClick={uploadFile}><FileUp /></button>
+                                    <button disabled={inputState.lock || !fileInputs?.length} className="disabled:text-gray-400" onClick={uploadFile}><FileUp /></button>
                                 </ShadTooltip>
                                 <ShadTooltip content={'发送'}>
                                     {/* 内容为空 or 输入框禁用 or 文件分析类未上传文件 */}
