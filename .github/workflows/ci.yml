@@ -70,18 +70,18 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
-      # 构建 langchain_contrib
+      # 构建 bisheng_langchain
       - name: Set python version 3.8
         uses: actions/setup-python@v1
         with:
           python-version: 3.8
 
-      - name: Build PyPi langchain_contrib and push
-        id: pypi_build_langchain_contrib
+      - name: Build PyPi bisheng-langchain and push
+        id: pypi_build_bisheng_langchain
         run: |
           pip install Cython
           pip install wheel
           pip install twine
-          cd ./src/langchain_contrib
+          cd ./src/bisheng_langchain
           python setup.py bdist_wheel
           twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi

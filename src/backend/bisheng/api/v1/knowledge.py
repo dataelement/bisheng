@@ -7,15 +7,14 @@ from uuid import uuid4
 from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.base import get_session
-from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate,
-                                               KnowledgeRead)
-from bisheng.database.models.knowledge_file import (KnowledgeFile,
-                                                    KnowledgeFileRead)
+from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
+from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
 from bisheng.database.models.user import User
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
+from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
@@ -23,8 +22,6 @@ from langchain.embeddings.base import Embeddings
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Milvus
 from langchain.vectorstores.base import VectorStore
-from langchain_contrib.langchain_contrib.embeddings.host_embedding import \
-    HostEmbeddings
 from sqlmodel import Session, select
 
 # build router

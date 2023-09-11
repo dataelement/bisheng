@@ -14,9 +14,7 @@ COPY poetry.lock pyproject.toml ./
 COPY ./ ./
 
 RUN python -m pip install --upgrade pip && \
-    pip install gunicorn && \
     pip install shapely==2.0.1 && \
-    pip install langchain_contrib==0.0.1
 
 # Install dependencies
 RUN poetry config virtualenvs.create false
