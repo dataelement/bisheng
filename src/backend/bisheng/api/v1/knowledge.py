@@ -44,7 +44,7 @@ async def upload_file(*, file: UploadFile = File(...)):
 async def get_embedding():
     try:
         # 获取本地配置的名字
-        model_list = settings.embedding_config
+        model_list = settings.knowledges.get('embeddings')
         models = list(model_list.keys())
         return {'data': {'models': models}}
     except Exception as exc:

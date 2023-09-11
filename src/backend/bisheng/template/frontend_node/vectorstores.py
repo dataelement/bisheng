@@ -5,6 +5,7 @@ from bisheng.template.frontend_node.base import FrontendNode
 
 
 class VectorStoreFrontendNode(FrontendNode):
+
     def add_extra_fields(self) -> None:
         extra_fields: List[TemplateField] = []
         # Add search_kwargs field
@@ -295,4 +296,3 @@ class VectorStoreFrontendNode(FrontendNode):
         elif field.name == 'connection_args':
             field.show = True
             field.advanced = True
-            field.value = {'host': '192.168.106.116', 'port': '19530', 'user': '', 'password': '', 'secure': False}
