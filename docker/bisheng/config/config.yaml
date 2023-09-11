@@ -1,17 +1,21 @@
 # 数据库配置
 database_url:
-  "mysql+pymysql://username:password@192.168.106.106:3306/bisheng"
+  "mysql+pymysql://username:password@mysql:3306/bisheng"
 redis_url:
-  "192.168.106.116:6379"
+  "redis:6379"
 
 # 为知识库的embedding进行模型撇脂
-embedding_config:
-  text-embedding-ada-002:
-    base_url:
-      ""
-  multilingual-e5-large:
-    base_url:
-      ""
+knowledges:
+  embeddings:
+    text-embedding-ada-002:
+      base_url: ""
+      openai_proxy: ""
+      openai_api_key: ""
+  vectorstores:
+    Chroma:
+      persist_directory: "/app/data/chroma_persist"  # In-memory chroma with saving/loading to disk
+    # Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
+    #   connection_args = {'host': '127.0.0.1', 'port': '19530', 'user': '', 'password': '', 'secure': False}
 
 agents:
   ZeroShotAgent:

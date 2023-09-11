@@ -4,7 +4,7 @@ repos:
     rev: 3.8.3
     hooks:
       - id: flake8
-        args: ["--max-line-length=240"]
+        args: ["--max-line-length=120"]
   - repo: https://github.com/asottile/seed-isort-config
     rev: v2.2.0
     hooks:
@@ -18,6 +18,7 @@ repos:
 #    rev: v0.32.0
 #    hooks:
 #      - id: yapf
+#       #  args: ["--style", "{based_on_style: google, COLUMN_LIMIT: 120}"]
 #        files: \.(py|pyd)$
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.1.0

@@ -19,8 +19,8 @@ class EmbeddingCreator(LangChainTypeCreator):
         if self.type_dict is None:
             self.type_dict = embedding_type_to_cls_dict
             for name, embed in CUSTOM_EMBEDDING.items():
-                    # TODO: validate AgentType
-                    self.type_dict[name] = embed  # type: ignore
+                # TODO: validate AgentType
+                self.type_dict[name] = embed  # type: ignore
         return self.type_dict
 
     @property
@@ -44,18 +44,10 @@ class EmbeddingCreator(LangChainTypeCreator):
     def to_list(self) -> List[str]:
         names = []
         for _, embed in self.type_to_loader_dict.items():
-            embed_name = (
-                embed.function_name()
-                if hasattr(embed, 'function_name')
-                else embed.__name__
-            )
+            embed_name = (embed.function_name() if hasattr(embed, 'function_name') else embed.__name__)
             if embed_name in settings.embeddings or settings.dev:
                 names.append(embed_name)
-            if embed_name in CUSTOM_EMBEDDING:
-                names.append(embed_name)
         return names
-
-
 
 
 embedding_creator = EmbeddingCreator()

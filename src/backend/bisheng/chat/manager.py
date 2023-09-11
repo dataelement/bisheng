@@ -134,7 +134,7 @@ class ChatManager:
         """upload file to make flow work"""
         db_flow = next(get_session()).get(Flow, client_id)
         graph_data = db_flow.data
-        file_path, file_name = file_path.split('_')
+        file_path, file_name = file_path.split('_', 1)
         for node in graph_data['nodes']:
             if node.get('id') == id:
                 for key, value in node['data']['node']['template'].items():
@@ -163,7 +163,11 @@ class ChatManager:
             graph = build_flow_no_yield(graph_data, artifacts, True, UUID(client_id).hex, chat_id)
         except Exception as e:
             logger.exception(e)
-            step_resp = ChatResponse(message='', type='end', intermediate_steps='文件解析失败', category='system', user_id=user_id)
+            step_resp = ChatResponse(message='',
+                                     type='end',
+                                     intermediate_steps='文件解析失败',
+                                     category='system',
+                                     user_id=user_id)
             await self.send_json(client_id, chat_id, step_resp)
             start_resp.type = 'close'
             await self.send_json(client_id, chat_id, start_resp)
@@ -178,13 +182,21 @@ class ChatManager:
         # 查找nodeid关联的questions
         input = next((node for node in graph.nodes if node.vertex_type == 'InputNode'), None)
         if not input:
-            step_resp = ChatResponse(message='', type='end', intermediate_steps='文件解析完成', category='system', user_id=user_id)
+            step_resp = ChatResponse(message='',
+                                     type='end',
+                                     intermediate_steps='文件解析完成',
+                                     category='system',
+                                     user_id=user_id)
             await self.send_json(client_id, chat_id, step_resp)
             start_resp.type = 'close'
             await self.send_json(client_id, chat_id, start_resp)
             return
         questions = input._built_object
-        step_resp = ChatResponse(message='', type='end', intermediate_steps='文件解析完成，分析开始', category='system', user_id=user_id)
+        step_resp = ChatResponse(message='',
+                                 type='end',
+                                 intermediate_steps='文件解析完成，分析开始',
+                                 category='system',
+                                 user_id=user_id)
         await self.send_json(client_id, chat_id, step_resp)
 
         edge = input.edges[0]
@@ -197,7 +209,11 @@ class ChatManager:
             payload = {'inputs': {input_key: question, 'id': edge.target.id}}
             start_resp.category == 'question'
             await self.send_json(client_id, chat_id, start_resp)
-            step_resp = ChatResponse(message='', type='end', intermediate_steps=question, category='question', user_id=user_id)
+            step_resp = ChatResponse(message='',
+                                     type='end',
+                                     intermediate_steps=question,
+                                     category='question',
+                                     user_id=user_id)
             await self.send_json(client_id, chat_id, step_resp)
             result = await self.process_message(client_id, chat_id, payload, None, True, user_id)
             report = f"""{report}### {question} \n {result} \n """
@@ -312,7 +328,11 @@ class ChatManager:
                                     user_id=user_id)
             await self.send_json(client_id, chat_id, response, add=False)
         else:
-            end_resp = ChatResponse(message=None, type='end', intermediate_steps='', category='processing', user_id=user_id)
+            end_resp = ChatResponse(message=None,
+                                    type='end',
+                                    intermediate_steps='',
+                                    category='processing',
+                                    user_id=user_id)
             await self.send_json(client_id, chat_id, end_resp)
 
         # 最终结果

@@ -1,10 +1,11 @@
-name: CI
+
+name: release
 
 on:
   push:
     # Sequence of patterns matched against refs/tags
-    tags:
-      - "v*"
+    branches:
+      - "release"
 
 env:
   DOCKERHUB_REPO: dataelement/
@@ -21,16 +22,6 @@ jobs:
       - name: checkout
         uses: actions/checkout@v2
         
-      # 登录 docker hub
-      - name: Login to DockerHub
-        uses: docker/login-action@v1
-        with:
-          # GitHub Repo => Settings => Secrets 增加 docker hub 登录密钥信息
-          # DOCKERHUB_USERNAME 是 docker hub 账号名.
-          # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Get version
         id: get_version
         run: |
@@ -44,7 +35,7 @@ jobs:
           # backend 的context目录
           context: "./src/backend/"
           # 是否 docker push
-          push: true
+          push: false
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-backend"
@@ -61,7 +52,7 @@ jobs:
           # frontend 的context目录
           context: "./src/frontend/"
           # 是否 docker push
-          push: true
+          push: false
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-frontend"
@@ -70,6 +61,7 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+
       # 构建 langchain_contrib
       - name: Set python version 3.8
         uses: actions/setup-python@v1
@@ -84,4 +76,4 @@ jobs:
           pip install twine
           cd ./src/langchain_contrib
           python setup.py bdist_wheel
-          twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
+          
