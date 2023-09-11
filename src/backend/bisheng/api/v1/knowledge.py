@@ -7,19 +7,21 @@ from uuid import uuid4
 from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.base import get_session
-from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate,
-                                               KnowledgeRead)
-from bisheng.database.models.knowledge_file import (KnowledgeFile,
-                                                    KnowledgeFileRead)
+from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
+from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
 from bisheng.database.models.user import User
-from bisheng.interface.embeddings.custom import OpenAIProxyEmbedding
+from bisheng.interface.importing.utils import import_vectorstore
+from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
+from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
+from langchain.embeddings.base import Embeddings
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Milvus
+from langchain.vectorstores.base import VectorStore
 from sqlmodel import Session, select
 
 # build router
@@ -83,7 +85,10 @@ async def process_knowledge(*, session: Session = Depends(get_session), data: di
         file_paths.append(filepath)
         logger.info(f'fileName={file_name} col={collection_name}')
     asyncio.create_task(
-        addEmbedding(collection_name=collection_name, chunk_size=chunck_size, file_paths=file_paths, knowledge_files=files))
+        addEmbedding(collection_name=collection_name,
+                     chunk_size=chunck_size,
+                     file_paths=file_paths,
+                     knowledge_files=files))
 
     knowledge.update_time = db_file.create_time
     session.add(knowledge)
@@ -92,7 +97,10 @@ async def process_knowledge(*, session: Session = Depends(get_session), data: di
 
 
 @router.post('/create', response_model=KnowledgeRead, status_code=201)
-def create_knowledge(*, session: Session = Depends(get_session), knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends()):
+def create_knowledge(*,
+                     session: Session = Depends(get_session),
+                     knowledge: KnowledgeCreate,
+                     Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """创建知识库."""
@@ -175,32 +183,48 @@ def delete_knowledge_file(*, session: Session = Depends(get_session), file_id: i
         raise HTTPException(status_code=404, detail='没有权限执行操作')
     knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
     # 处理vectordb
+
     collection_name = knowledge.collection_name
-    embeddings = OpenAIEmbeddings()
-    milvus = Milvus(embedding_function=embeddings, collection_name=collection_name, connection_args=connection_args)
-    pk = milvus.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])
-    res = milvus.col.delete(f"pk in {[p['pk'] for p in pk]}")
+    embeddings = decide_embeddings(knowledge.model)
+    vectore_client = decide_vectorstores(collection_name, embeddings)
+    if isinstance(vectore_client, Milvus):
+        pk = vectore_client.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])
+        res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
+
     logger.info(f'act=delete_vector file_id={file_id} res={res}')
     session.delete(knowledge_file)
     session.commit()
     return {'message': 'knowledge file deleted successfully'}
 
 
-connection_args = {'host': '192.168.106.116', 'port': '19530', 'user': '', 'password': '', 'secure': False}
+def decide_embeddings(model: str) -> Embeddings:
+    model_list = settings.knowledges.get('embeddings')
+    if model == 'text-embedding-ada-002':
+        return OpenAIEmbeddings(**model_list.get('model'))
+    else:
+        return HostEmbeddings(**model_list.get('model'))
 
 
-async def addEmbedding(collection_name, chunk_size: int, file_paths: List[str], knowledge_files: List[KnowledgeFile]):
-    embeddings = OpenAIProxyEmbedding()
+def decide_vectorstores(collection_name: str, embedding: Embeddings) -> VectorStore:
+    param = {'collection_name': collection_name, 'embedding_function': embedding}
+    vector_store = list(settings.knowledges.get('vectorstores').keys())[0]
+    vector_config = settings.knowledges.get('vectorstores').get(vector_store)
+    param.update(vector_config)
+    class_obj = import_vectorstore(vector_store)
+    return instantiate_vectorstore(class_object=class_obj, params=param)
+
+
+async def addEmbedding(collection_name, model: str, chunk_size: int, file_paths: List[str],
+                       knowledge_files: List[KnowledgeFile]):
+
+    embeddings = decide_embeddings(model)
+    vectore_client = decide_vectorstores(collection_name, embeddings)
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
         try:
             texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size)
             [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]
-            Milvus.from_texts(texts=texts,
-                              embedding=embeddings,
-                              metadatas=metadatas,
-                              collection_name=collection_name,
-                              connection_args=connection_args)
+            vectore_client.add_texts(texts=texts, metadatas=metadatas)
 
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)

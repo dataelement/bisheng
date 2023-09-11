@@ -41,9 +41,7 @@ def create_app():
 
     @app.exception_handler(AuthJWTException)
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):
-        return JSONResponse(
-            status_code=exc.status_code, content={'detail': exc.message}
-        )
+        return JSONResponse(status_code=401, content={'detail': exc.message})
 
     app.include_router(router)
     app.on_event('startup')(create_db_and_tables)
