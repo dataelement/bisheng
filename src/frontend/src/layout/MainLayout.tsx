@@ -99,5 +99,19 @@ export default function MainLayout() {
         <div className="flex-1">
             <Outlet />
         </div>
+        {/* // mobile */}
+        <div className="fixed w-full h-full top-0 left-0 bg-[rgba(0,0,0,0.4)] sm:hidden text-sm">
+            <div className="w-10/12 bg-gray-50 mx-auto mt-[30%] rounded-xl px-4 py-10">
+                <p className=" text-sm text-center">为了您的良好体验，请在 PC 端访问该网站</p>
+                <div className="flex mt-8 justify-center gap-4">
+                    <a href={"https://github.com/dataelement/bisheng"} target="_blank">
+                        <Github className="side-bar-button-size mx-auto" />Github
+                    </a>
+                    <a href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
+                        <BookOpen className="side-bar-button-size mx-auto" /> 在线文档
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
 };
