@@ -76,4 +76,5 @@ jobs:
           pip install twine
           cd ./src/bisheng-langchain
           python setup.py bdist_wheel
-          twine upload --verbose -u deploy -p kDNubrlaK6n6RtzN --repository-url $repo  dist/*.whl
+          repo="http://110.16.193.170:50083/repository/pypi-hosted/"
+          twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl

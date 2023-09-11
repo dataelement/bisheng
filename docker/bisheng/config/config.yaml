@@ -1,6 +1,6 @@
 # 数据库配置
 database_url:
-  "mysql+pymysql://username:password@mysql:3306/bisheng"
+  "mysql+pymysql://root:1234@mysql:3306/bisheng"
 redis_url:
   "redis:6379"
 

@@ -28,15 +28,18 @@ def import_module(module_path: str) -> Any:
 
 
 def import_by_type(_type: str, name: str) -> Any:
-    from langchain_contrib import chat_models
-
+    from bisheng_langchain import chat_models
     """Import class by type and name"""
     if _type is None:
         raise ValueError(f'Type cannot be None. Check if {name} is in the config file.')
     func_dict = {
         'agents': import_agent,
         'prompts': import_prompt,
-        'llms': {'llm': import_llm, 'chat': import_chat_llm, 'contribute': import_chain_contribute_llm},
+        'llms': {
+            'llm': import_llm,
+            'chat': import_chat_llm,
+            'contribute': import_chain_contribute_llm
+        },
         'tools': import_tool,
         'chains': import_chain,
         'toolkits': import_toolkit,
@@ -68,9 +71,11 @@ def import_chat_llm(llm: str) -> BaseChatModel:
     """Import chat llm from llm name"""
     return import_class(f'langchain.chat_models.{llm}')
 
-def import_chain_contribute_llm(llm:str) -> BaseChatModel:
+
+def import_chain_contribute_llm(llm: str) -> BaseChatModel:
     """Import chat llm from llm name"""
-    return import_class(f'langchain_contrib.chat_models.{llm}')
+    return import_class(f'bisheng_langchain.chat_models.{llm}')
+
 
 def import_retriever(retriever: str) -> Any:
     """Import retriever from retriever name"""
@@ -102,10 +107,7 @@ def import_prompt(prompt: str) -> Type[PromptTemplate]:
 
 def import_wrapper(wrapper: str) -> Any:
     """Import wrapper from wrapper name"""
-    if (
-        isinstance(wrapper_creator.type_dict, dict)
-        and wrapper in wrapper_creator.type_dict
-    ):
+    if (isinstance(wrapper_creator.type_dict, dict) and wrapper in wrapper_creator.type_dict):
         return wrapper_creator.type_dict.get(wrapper)
 
 
@@ -147,26 +149,26 @@ def import_chain(chain: str) -> Type[Chain]:
 
 def import_embedding(embedding: str) -> Any:
     """Import embedding from embedding name"""
-    from langchain_contrib import embeddings
+    from bisheng_langchain import embeddings
     if embedding in embeddings.__all__:
-        return import_class(f'langchain_contrib.embeddings.{embedding}')
+        return import_class(f'bisheng_langchain.embeddings.{embedding}')
     return import_class(f'langchain.embeddings.{embedding}')
 
 
 def import_vectorstore(vectorstore: str) -> Any:
     """Import vectorstore from vectorstore name"""
-    from langchain_contrib import vectorstores
+    from bisheng_langchain import vectorstores
     if vectorstore in vectorstores.__all__:
-        return import_class(f'langchain_contrib.vectorstores.{vectorstore}')
+        return import_class(f'bisheng_langchain.vectorstores.{vectorstore}')
     return import_class(f'langchain.vectorstores.{vectorstore}')
 
 
 def import_documentloader(documentloader: str) -> Any:
     """Import documentloader from documentloader name"""
-    from langchain_contrib import document_loaders
+    from bisheng_langchain import document_loaders
 
     if documentloader in document_loaders.__all__:
-        return import_class(f'langchain_contrib.document_loaders.{documentloader}')
+        return import_class(f'bisheng_langchain.document_loaders.{documentloader}')
     return import_class(f'langchain.document_loaders.{documentloader}')
 
 
