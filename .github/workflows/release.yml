@@ -39,11 +39,11 @@ jobs:
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-backend"
-            APP_VERSION=${{ steps.get_version.outputs.VERSION }}
+            APP_VERSION=0.1
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
-            ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
+            ${{ env.DOCKERHUB_REPO }}bisheng-backend:0.1
       # 构建 Docker frontend 并推送到 Docker hub
       - name: Build frontend and push
         id: docker_build_frontend
@@ -56,11 +56,11 @@ jobs:
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-frontend"
-            APP_VERSION=${{ steps.get_version.outputs.VERSION }}
+            APP_VERSION=0.1
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
-            ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+            ${{ env.DOCKERHUB_REPO }}bisheng-frontend:0.1
 
       # 构建 bisheng-langchain
       - name: Set python version 3.8
