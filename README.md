@@ -1,5 +1,10 @@
 <img src="https://www.dataelem.com/nstatic/bisheng.png" alt="Bisheng banner">
 
+<p align="center">
+  <a href="./README.md">简体中文</a> |
+  <a href="./README_ENG.md">English</a> |
+</p>
+
 
 <div class="column" align="middle">
   <!-- <a href="https://bisheng.slack.com/join/shared_invite/"> -->
