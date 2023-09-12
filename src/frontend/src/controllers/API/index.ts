@@ -1,0 +1,547 @@
+import axios, { AxiosResponse } from "axios";
+import { ReactFlowJsonObject } from "reactflow";
+import { APIObjectType, sendAllProps } from "../../types/api/index";
+import { FlowStyleType, FlowType } from "../../types/flow";
+import {
+  APIClassType,
+  BuildStatusTypeAPI,
+  InitTypeAPI,
+  PromptTypeAPI,
+  UploadFileTypeAPI,
+  errorsTypeAPI,
+} from "./../../types/api/index";
+
+/**
+ * Fetches all objects from the API endpoint.
+ *
+ * @returns {Promise<AxiosResponse<APIObjectType>>} A promise that resolves to an AxiosResponse containing all the objects.
+ */
+export async function getAll(): Promise<AxiosResponse<APIObjectType>> {
+  return await axios.get(`/api/v1/all`);
+}
+
+const GITHUB_API_URL = "https://api.github.com";
+
+export async function getRepoStars(owner, repo) {
+  try {
+    const response = await axios.get(
+      `${GITHUB_API_URL}/repos/${owner}/${repo}`
+    );
+    return response.data.stargazers_count;
+  } catch (error) {
+    console.error("Error fetching repository data:", error);
+    return null;
+  }
+}
+
+/**
+ * Reads all templates from the database.
+ *
+ * @returns {Promise<any>} The flows data.
+ * @throws Will throw an error if reading fails.
+ */
+export async function readTempsDatabase() {
+  try {
+    const response = await axios.get("/api/v1/skill/template/");
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+/**
+ * 获取知识库列表
+ *
+ */
+export async function readFileLibDatabase() {
+  try {
+    const response = await axios.get("/api/v1/knowledge/");
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+/**
+ * 获取知识库下文件列表
+ *
+ */
+export async function readFileByLibDatabase(id, page) {
+  const response = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=10&page_num=${page}`);
+  return response.data
+}
+
+/**
+ * 上传文件
+ */
+export async function uploadLibFile(data, config) {
+  return await axios.post(`/api/v1/knowledge/upload`, data, config);
+}
+
+/**
+ * 确定上传文件
+ * file_path knowledge_id chunck_size
+ */
+export async function subUploadLibFile(data) {
+  return await axios.post(`/api/v1/knowledge/process`, data);
+}
+
+/**
+ * 创建支持库
+ *
+ */
+export async function createFileLib(data) {
+  return await axios.post(`/api/v1/knowledge/create`, data);
+}
+
+/**
+ * 删除支持库
+ *
+ */
+export async function deleteFileLib(id) {
+  return await axios.delete(`/api/v1/knowledge/${id}`);
+}
+
+/**
+ * 删除知识库下文件
+ *
+ */
+export async function deleteFile(id) {
+  return await axios.delete(`/api/v1/knowledge/file/${id}`);
+}
+
+/**
+ * 获取模型列表
+ */
+export async function getEmbeddingModel() {
+  return await axios.get(`/api/v1/knowledge/embedding_param`);
+}
+
+/**
+ * Sends data to the API for prediction.
+ *
+ * @param {sendAllProps} data - The data to be sent to the API.
+ * @returns {AxiosResponse<any>} The API response.
+ */
+export async function sendAll(data: sendAllProps) {
+  return await axios.post(`/api/v1/predict`, data);
+}
+
+export async function postValidateCode(
+  code: string
+): Promise<AxiosResponse<errorsTypeAPI>> {
+  return await axios.post("/api/v1/validate/code", { code });
+}
+
+/**
+ * Checks the prompt for the code block by sending it to an API endpoint.
+ * @param {string} name - The name of the field to check.
+ * @param {string} template - The template string of the prompt to check.
+ * @param {APIClassType} frontend_node - The frontend node to check.
+ * @returns {Promise<AxiosResponse<PromptTypeAPI>>} A promise that resolves to an AxiosResponse containing the validation results.
+ */
+export async function postValidatePrompt(
+  name: string,
+  template: string,
+  frontend_node: APIClassType
+): Promise<AxiosResponse<PromptTypeAPI>> {
+  return await axios.post("/api/v1/validate/prompt", {
+    name: name,
+    template: template,
+    frontend_node: frontend_node,
+  });
+}
+
+/**
+ * Fetches a list of JSON files from a GitHub repository and returns their contents as an array of FlowType objects.
+ *
+ * @returns {Promise<FlowType[]>} A promise that resolves to an array of FlowType objects.
+ */
+export async function getExamples(): Promise<FlowType[]> {
+  return Promise.resolve([])
+}
+
+/**
+ * Saves a new flow to the database.
+ *
+ * @param {FlowType} newFlow - The flow data to save.
+ * @returns {Promise<any>} The saved flow data.
+ * @throws Will throw an error if saving fails.
+ */
+export async function saveFlowToDatabase(newFlow: {
+  name: string;
+  id: string;
+  data: ReactFlowJsonObject;
+  description: string;
+  style?: FlowStyleType;
+}): Promise<FlowType> {
+  try {
+    const id = newFlow.id ? { flow_id: newFlow.id } : {}
+    const response = await axios.post("/api/v1/flows/", {
+      ...id,
+      name: newFlow.name,
+      data: newFlow.data,
+      description: newFlow.description,
+    });
+    if (response.status !== 201) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+/**
+ * Updates an existing flow in the database.
+ *
+ * @param {FlowType} updatedFlow - The updated flow data.
+ * @returns {Promise<any>} The updated flow data.
+ * @throws Will throw an error if the update fails.
+ */
+export async function updateFlowInDatabase(
+  updatedFlow: FlowType
+): Promise<FlowType> {
+  try {
+    const response = await axios.patch(`/api/v1/flows/${updatedFlow.id}`, {
+      name: updatedFlow.name,
+      data: updatedFlow.data,
+      description: updatedFlow.description,
+    });
+
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+/**
+ * 上下线
+ *
+ */
+export async function updataOnlineState(id, updatedFlow, open) {
+  try {
+    const response = await axios.patch(`/api/v1/flows/${id}`, {
+      name: updatedFlow.name,
+      data: updatedFlow.data,
+      description: updatedFlow.description,
+      status: open ? 2 : 1
+    });
+
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+/**
+ * Reads all flows from the database.
+ *
+ * @returns {Promise<any>} The flows data.
+ * @throws Will throw an error if reading fails.
+ */
+export async function readFlowsFromDatabase(page: number = 1, search: string) {
+  try {
+    const response = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${20}&name=${search}`);
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+/**
+ * 获取在线技能列表.
+ *
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function readOnlineFlows(page: number = 1) {
+  try {
+    const response = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${100}&status=2`);
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+export async function downloadFlowsFromDatabase() {
+  try {
+    const response = await axios.get("/api/v1/flows/download/");
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+export async function uploadFlowsToDatabase(flows) {
+  try {
+    const response = await axios.post(`/api/v1/flows/upload/`, flows);
+
+    if (response.status !== 201) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+/**
+ * Deletes a flow from the database.
+ *
+ * @param {string} flowId - The ID of the flow to delete.
+ * @returns {Promise<any>} The deleted flow data.
+ * @throws Will throw an error if deletion fails.
+ */
+export async function deleteFlowFromDatabase(flowId: string) {
+  try {
+    const response = await axios.delete(`/api/v1/flows/${flowId}`);
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+/**
+ * 获取会话列表
+ */
+export const getChatsApi = () => {
+  return axios.get(`/api/v1/chat/list`)
+};
+
+
+/**
+ * 获取会话消息记录
+ *
+ * @param id flow_id chat_id - .
+ * @returns {Promise<any>} his data.
+ */
+export async function getChatHistory(flowId: string, chatId: string, pageSize: number, id?: number) {
+  try {
+    const response = await axios.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=${pageSize}&id=${id || ''}`);
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
+}
+
+/**
+ * Fetches a flow from the database by ID.
+ *
+ * @param {number} flowId - The ID of the flow to fetch.
+ * @returns {Promise<any>} The flow data.
+ * @throws Will throw an error if fetching fails.
+ */
+export async function getFlowFromDatabase(flowId: string) {
+  try {
+    const response = await axios.get(`/api/v1/flows/${flowId}`);
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    return null
+  }
+}
+
+/**
+ * Fetches flow styles from the database.
+ *
+ * @returns {Promise<any>} The flow styles data.
+ * @throws Will throw an error if fetching fails.
+ */
+export async function getFlowStylesFromDatabase() {
+  try {
+    const response = await axios.get("/api/v1/flow_styles/");
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+/**
+ * Saves a new flow style to the database.
+ *
+ * @param {FlowStyleType} flowStyle - The flow style data to save.
+ * @returns {Promise<any>} The saved flow style data.
+ * @throws Will throw an error if saving fails.
+ */
+export async function saveFlowStyleToDatabase(flowStyle: FlowStyleType) {
+  try {
+    const response = await axios.post("/api/v1/flow_styles/", flowStyle, {
+      headers: {
+        accept: "application/json",
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (response.status !== 201) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+/**
+ * Fetches the version of the API.
+ *
+ * @returns {Promise<AxiosResponse<any>>} A promise that resolves to an AxiosResponse containing the version information.
+ */
+export async function getVersion() {
+  const respnose = await axios.get("/api/v1/version");
+  return respnose.data;
+}
+
+/**
+ * Fetches the health status of the API.
+ *
+ * @returns {Promise<AxiosResponse<any>>} A promise that resolves to an AxiosResponse containing the health status.
+ */
+export async function getHealth() {
+  return await axios.get("/health"); // Health is the only endpoint that doesn't require /api/v1
+}
+
+/**
+ * Fetches the build status of a flow.
+ * @param {string} flowId - The ID of the flow to fetch the build status for.
+ * @returns {Promise<BuildStatusTypeAPI>} A promise that resolves to an AxiosResponse containing the build status.
+ *
+ */
+export async function getBuildStatus(
+  flowId: string
+): Promise<BuildStatusTypeAPI> {
+  return await axios.get(`/api/v1/build/${flowId}/status`);
+}
+
+//docs for postbuildinit
+/**
+ * Posts the build init of a flow.
+ * @param {string} flowId - The ID of the flow to fetch the build status for.
+ * @returns {Promise<InitTypeAPI>} A promise that resolves to an AxiosResponse containing the build status.
+ *
+ */
+export async function postBuildInit(
+  flow: FlowType,
+  chatId: string
+): Promise<AxiosResponse<InitTypeAPI>> {
+  return await axios.post(`/api/v1/build/init/${flow.id}`, { ...flow, chat_id: chatId });
+}
+
+// fetch(`/upload/${id}`, {
+//   method: "POST",
+//   body: formData,
+// });
+/**
+ * Uploads a file to the server.
+ * @param {File} file - The file to upload.
+ * @param {string} id - The ID of the flow to upload the file to.
+ */
+export async function uploadFile(
+  file: File,
+  id: string
+): Promise<AxiosResponse<UploadFileTypeAPI>> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return await axios.post(`/api/v1/upload/${id}`, formData);
+}
+
+/**
+ * ************************ model
+ */
+
+/**
+ * 获取知识库下文件列表
+ *
+ */
+export async function serverListApi() {
+  const response = await axios.get(`/api/v1/server/list`);
+  return response.data
+}
+
+/**
+ * 上下线
+ */
+export async function switchOnLineApi(id, on) {
+  return await axios.post(`/api/v1/server/${on ? 'load' : 'unload'}`, { deploy_id: id });
+}
+
+/**
+ * 修改配置
+ */
+export async function updateConfigApi(id, config) {
+  return await axios.post(`/api/v1/server/update`, { id, config });
+}
+
+/**
+ * 获取gpu
+ *
+ */
+export async function GPUlistApi() {
+  const response = await axios.get(`/api/v1/server/GPU`);
+  return response.data
+}
+
+
+/**
+ * ************************ user
+ */
+
+// 登录
+export async function loginApi(name, pwd) {
+  return await axios.post(`/api/v1/user/login`, { user_name: name, password: pwd });
+}
+// 注册
+export async function registerApi(name, pwd) {
+  return await axios.post(`/api/v1/user/regist`, { user_name: name, password: pwd });
+}
+// 用户列表
+export async function getUsersApi(name: string, page: number, pageSize: number) {
+  return await axios.get(`/api/v1/user/list?page_num=${page}&page_size=${pageSize}&name=${name || ''}`)
+}
+// 修改用户状态（启\禁用）
+export async function disableUserApi(userid, status) {
+  return await axios.post(`/api/v1/user/update`, { user_id: userid, delete: status });
+}
