@@ -48,7 +48,7 @@ jobs:
           pip install Cython
           pip install wheel
           pip install twine
-          cd ./src/bisheng_langchain
+          cd ./src/bisheng-langchain
           python setup.py bdist_wheel
           twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
           
