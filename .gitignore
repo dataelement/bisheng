@@ -131,10 +131,7 @@ build/
 ./third_party
 output/
 develop-eggs/
-<<<<<<< HEAD
 config.dev.yaml
-=======
->>>>>>> origin/release
 dist/
 downloads/
 eggs/
