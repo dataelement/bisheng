@@ -2,6 +2,7 @@ import json
 import os
 from typing import Any, Callable, Dict, Type
 
+from bisheng.settings import settings
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from langchain.vectorstores import (FAISS, Chroma, Milvus, MongoDBAtlasVectorSearch, Pinecone,
                                     Qdrant, SupabaseVectorStore, Weaviate)
@@ -202,7 +203,7 @@ def initialize_qdrant(class_object: Type[Qdrant], params: dict):
 
 def initial_milvus(class_object: Type[Milvus], params: dict):
     if 'connection_args' not in params:
-        connection_args = {'host': '192.168.106.12', 'port': '19530', 'user': '', 'secure': False, 'password': ''}
+        connection_args = settings.knowledges.get('vectorstores').get('Milvus')
         params['connection_args'] = connection_args
     elif isinstance(params.get('connection_args'), str):
         print(f"milvus before params={params} type={type(params['connection_args'])}")

@@ -8,14 +8,13 @@ redis_url:
 knowledges:
   embeddings:
     text-embedding-ada-002:
-      base_url: ""
+      openai_api_base: "https://api.openai.com/v1/"
       openai_proxy: ""
       openai_api_key: ""
   vectorstores:
-    Chroma:
-      persist_directory: "/app/data/chroma_persist"  # In-memory chroma with saving/loading to disk
-    # Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
-    #   connection_args = {'host': '127.0.0.1', 'port': '19530', 'user': '', 'password': '', 'secure': False}
+    # Milvus 最低要求cpu 4C 8G 推荐4C 16G
+    Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
+      connection_args = {'host': '110.16.193.170', 'port': '50032', 'user': '', 'password': '', 'secure': False}
 
 agents:
   ZeroShotAgent:

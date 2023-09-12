@@ -44,7 +44,7 @@ async def upload_file(*, file: UploadFile = File(...)):
 async def get_embedding():
     try:
         # 获取本地配置的名字
-        model_list = settings.embedding_config
+        model_list = settings.knowledges.get('embeddings')
         models = list(model_list.keys())
         return {'data': {'models': models}}
     except Exception as exc:
@@ -86,6 +86,7 @@ async def process_knowledge(*, session: Session = Depends(get_session), data: di
         logger.info(f'fileName={file_name} col={collection_name}')
     asyncio.create_task(
         addEmbedding(collection_name=collection_name,
+                     model=knowledge.model,
                      chunk_size=chunck_size,
                      file_paths=file_paths,
                      knowledge_files=files))
@@ -105,9 +106,10 @@ def create_knowledge(*,
     payload = json.loads(Authorize.get_jwt_subject())
     """创建知识库."""
     db_knowldge = Knowledge.from_orm(knowledge)
-    know = session.exec(select(Knowledge).where(Knowledge.name == knowledge.name)).all()
+    know = session.exec(
+        select(Knowledge).where(Knowledge.name == knowledge.name, knowledge.user_id == payload.get('user_id'))).all()
     if know:
-        raise HTTPException(status_code=500, detail='name 重复')
+        raise HTTPException(status_code=500, detail='知识库名称重复')
     if not db_knowldge.collection_name:
         # 默认collectionName
         db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
@@ -200,13 +202,13 @@ def delete_knowledge_file(*, session: Session = Depends(get_session), file_id: i
 def decide_embeddings(model: str) -> Embeddings:
     model_list = settings.knowledges.get('embeddings')
     if model == 'text-embedding-ada-002':
-        return OpenAIEmbeddings(**model_list.get('model'))
+        return OpenAIEmbeddings(**model_list.get(model))
     else:
-        return HostEmbeddings(**model_list.get('model'))
+        return HostEmbeddings(**model_list.get(model))
 
 
 def decide_vectorstores(collection_name: str, embedding: Embeddings) -> VectorStore:
-    param = {'collection_name': collection_name, 'embedding_function': embedding}
+    param = {'collection_name': collection_name, 'embedding': embedding}
     vector_store = list(settings.knowledges.get('vectorstores').keys())[0]
     vector_config = settings.knowledges.get('vectorstores').get(vector_store)
     param.update(vector_config)

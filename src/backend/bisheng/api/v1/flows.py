@@ -5,8 +5,7 @@ from uuid import UUID
 from bisheng.api.utils import build_flow_no_yield, remove_api_keys
 from bisheng.api.v1.schemas import FlowListCreate, FlowListRead
 from bisheng.database.base import get_session
-from bisheng.database.models.flow import (Flow, FlowCreate, FlowRead,
-                                          FlowReadWithStyle, FlowUpdate)
+from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate
 from bisheng.database.models.template import Template
 from bisheng.database.models.user import User
 from bisheng.settings import settings
@@ -57,11 +56,12 @@ def read_flows(*,
             sql = sql.where(Flow.name.like(f'%{name}%'))
         if status:
             sql = sql.where(Flow.status == status)
+        # count = session.exec(sql.count())
+        # total = count.scalar()
 
         sql = sql.order_by(Flow.update_time.desc())
         if page_num and page_size:
             sql = sql.offset((page_num - 1) * page_size).limit(page_size)
-
         flows = session.exec(sql).all()
 
         res = [jsonable_encoder(flow) for flow in flows]
@@ -88,7 +88,11 @@ def read_flow(*, session: Session = Depends(get_session), flow_id: UUID):
 
 
 @router.patch('/{flow_id}', response_model=FlowRead, status_code=200)
-def update_flow(*, session: Session = Depends(get_session), flow_id: UUID, flow: FlowUpdate, Authorize: AuthJWT = Depends()):
+def update_flow(*,
+                session: Session = Depends(get_session),
+                flow_id: UUID,
+                flow: FlowUpdate,
+                Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """Update a flow."""
@@ -159,7 +163,10 @@ def create_flows(*, session: Session = Depends(get_session), flow_list: FlowList
 
 
 @router.post('/upload/', response_model=List[FlowRead], status_code=201)
-async def upload_file(*, session: Session = Depends(get_session), file: UploadFile = File(...), Authorize: AuthJWT = Depends()):
+async def upload_file(*,
+                      session: Session = Depends(get_session),
+                      file: UploadFile = File(...),
+                      Authorize: AuthJWT = Depends()):
     """Upload flows from a file."""
     contents = await file.read()
     data = json.loads(contents)
