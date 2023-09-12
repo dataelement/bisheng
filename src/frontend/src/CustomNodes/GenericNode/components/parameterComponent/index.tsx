@@ -16,6 +16,7 @@ import { MAX_LENGTH_TO_SCROLL_TOOLTIP } from "../../../../constants";
 import { PopUpContext } from "../../../../contexts/popUpContext";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
+import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
 import { ParameterComponentType } from "../../../../types/components";
 import { cleanEdges } from "../../../../util/reactflowUtils";
 import {
@@ -27,7 +28,6 @@ import {
   nodeIconsLucide,
   nodeNames,
 } from "../../../../utils";
-import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
 
 export default function ParameterComponent({
   left,
@@ -41,6 +41,7 @@ export default function ParameterComponent({
   required = false,
   optionalHandle = null,
   info = "",
+  onChange
 }: ParameterComponentType) {
   const ref = useRef(null);
   const refHtml = useRef(null);
@@ -76,6 +77,18 @@ export default function ParameterComponent({
     }
     return dis
   }, [id, data, reactFlowInstance])
+  // milvus 组件，知识库不为空是 embbeding取消必填限制
+  useEffect(() => {
+    if (data.type === "Milvus" && data.node.template.embedding) {
+      data.node.template.embedding.required = !data.node.template.collection_name.value
+      data.node.template.embedding.show = !data.node.template.collection_name.value
+      onChange?.()
+    }
+  }, [data])
+  const handleRemoveMilvusEmbeddingEdge = () => {
+    const edges = reactFlowInstance.getEdges().filter(edge => edge.targetHandle.indexOf('Embeddings|embedding|Milvus') === -1)
+    reactFlowInstance.setEdges(edges)
+  }
   const [myData, setMyData] = useState(useContext(typesContext).data);
 
   const handleOnNewValue = useCallback((newValue: any) => {
@@ -253,7 +266,7 @@ export default function ParameterComponent({
                 nodeClass={data.node}
                 disabled={disabled}
                 value={data.node.template[name].value ?? ""}
-                onChange={handleOnNewValue}
+                onChange={(val) => { handleOnNewValue(val); val && handleRemoveMilvusEmbeddingEdge() }}
               />
             ) : (
               // 单行输入

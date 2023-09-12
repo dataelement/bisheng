@@ -13,6 +13,7 @@ import CardItem from "./components/CardItem";
 import SkillTemps from "./components/SkillTemps";
 import { userContext } from "../../contexts/userContext";
 import Templates from "./temps";
+import CreateTemp from "./components/CreateTemp";
 
 
 export default function SkillPage() {
@@ -21,11 +22,7 @@ export default function SkillPage() {
 
     const [open, setOpen] = useState(false)
     const navigate = useNavigate()
-    const { flows, turnPage, search, removeFlow, setFlows } = useContext(TabsContext);
-    const handleCreate = () => {
-        navigate("/files");
-        setOpen(false)
-    }
+    const { flows, pages, turnPage, search, removeFlow, setFlows } = useContext(TabsContext);
 
     const [temps, setTemps] = useState([])
     useEffect(() => {
@@ -34,6 +31,7 @@ export default function SkillPage() {
         })
     }, [])
 
+    const { open: tempOpen, flowRef, toggleTempModal } = useCreateTemp()
     const { delShow, idRef, close, delConfim } = useDelete()
     // 分页
     const [page, setPage] = useState(1)
@@ -102,27 +100,23 @@ export default function SkillPage() {
                             isAdmin={user.role === 'admin'}
                             edit
                             onDelete={() => delConfim(flow.id)}
+                            onCreate={toggleTempModal}
                         ></CardItem>
                     ))}
                 </div>
                 {/* 分页 */}
                 {/* <Pagination count={10}></Pagination> */}
-                <div className="join grid grid-cols-2 w-[200px] mx-auto">
+                <div className="join grid grid-cols-2 w-[200px] mx-auto my-4">
                     <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>上一页</button>
-                    <button disabled={pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>下一页</button>
+                    <button disabled={page >= pages || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>下一页</button>
                 </div>
             </TabsContent>
-            <TabsContent value="temp">
-                {/* <div className="w-full flex flex-wrap mt-11">
-                    {[1, 2, 3, 4].map((item, i) => (
-                        <CardItem key={item} index={i}></CardItem>
-                    ))}
-                </div> */}
-                {/* 分页 */}
-            </TabsContent>
+            <TabsContent value="temp"> </TabsContent>
         </Tabs>
         {/* 添加模型 */}
         <SkillTemps flows={temps} isTemp open={open} setOpen={setOpen} onSelect={handldSelectTemp}></SkillTemps>
+        {/* 添加模板 */}
+        <CreateTemp flow={flowRef.current} open={tempOpen} setOpen={() => toggleTempModal()} ></CreateTemp>
         {/* Open the modal using ID.showModal() method */}
         <dialog className={`modal ${delShow && 'modal-open'}`}>
             <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
@@ -151,6 +145,20 @@ const useDelete = () => {
         delConfim: (id) => {
             idRef.current = id
             setDelShow(true)
+        }
+    }
+}
+
+const useCreateTemp = () => {
+    const [open, setOpen] = useState(false)
+    const flowRef = useRef(null)
+
+    return {
+        open,
+        flowRef,
+        toggleTempModal(flow?) {
+            flowRef.current = flow || null
+            setOpen(!open)
         }
     }
 }

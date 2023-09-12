@@ -114,7 +114,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     };
   }, [position, lastCopiedSelection, lastSelection]);
 
-  const [selectionMenuVisible, setSelectionMenuVisible] = useState(false);
+  // const [selectionMenuVisible, setSelectionMenuVisible] = useState(false);
 
   const { setExtraComponent, setExtraNavigation } = useContext(locationContext);
   const { setErrorData } = useContext(alertContext);
@@ -344,13 +344,13 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   }, []);
 
   // Workaround to show the menu only after the selection has ended.
-  useEffect(() => {
-    if (selectionEnded && lastSelection && lastSelection.nodes.length > 1) {
-      setSelectionMenuVisible(true);
-    } else {
-      setSelectionMenuVisible(false);
-    }
-  }, [selectionEnded, lastSelection]);
+  // useEffect(() => {
+  //   if (selectionEnded && lastSelection && lastSelection.nodes.length > 1) {
+  //     setSelectionMenuVisible(true);
+  //   } else {
+  //     setSelectionMenuVisible(false);
+  //   }
+  // }, [selectionEnded, lastSelection]);
 
   const onSelectionChange = useCallback((flow) => {
     setLastSelection(flow);

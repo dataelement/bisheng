@@ -2,6 +2,7 @@ import { Dispatch, SetStateAction } from "react";
 import { FlowType, TweaksType } from "../flow";
 
 export type TabsContextType = {
+  pages: number;
   saveFlow: (flow: FlowType) => Promise<void>;
   save: () => void;
   tabId: string;

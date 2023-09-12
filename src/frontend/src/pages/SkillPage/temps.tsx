@@ -9,7 +9,7 @@ import {
     TableHeader,
     TableRow
 } from "../../components/ui/table";
-import { readTempsDatabase } from "../../controllers/API";
+import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
 
 export default function Templates({ onBack }) {
 
@@ -31,21 +31,25 @@ export default function Templates({ onBack }) {
         // 65535 sort
         let sort = 0
         if (destination.index === 0) {
-            sort = updatedList[1].sort / 2
+            sort = updatedList[1].order_num + 65535
         } else if (destination.index === updatedList.length - 1) {
-            sort = destination.at(-1).sort + 65535
+            sort = updatedList.at(-2).order_num - 65535
         } else {
-            const startSort = updatedList[destination.index - 1].sort
-            const endSort = updatedList[destination.index + 1]
+            const startSort = updatedList[destination.index - 1].order_num
+            const endSort = updatedList[destination.index + 1].order_num
             sort = startSort + (endSort - startSort) / 2
         }
-        // api
+
+        const currentItem = updatedList[destination.index]
+        currentItem.order_num = sort
+        const { name, description, order_num } = currentItem
+        updateTempApi(currentItem.id, { name, description, order_num })
         console.log('sort :>> ', sort);
     }
 
-    const handleDelTemp = (index: number) => {
+    const handleDelTemp = (index: number, id: number) => {
+        deleteTempApi(id)
         setTemps(temps.filter((temp, i) => index !== i));
-        // TODO 删除模板
     }
 
     return <div className="p-6">
@@ -67,7 +71,7 @@ export default function Templates({ onBack }) {
                     {(provided) => (
                         <TableBody  {...provided.droppableProps} ref={provided.innerRef}>
                             {temps.map((temp, index) =>
-                                <Draggable key={'drag' + temp.flow_id} draggableId={'drag' + temp.flow_id} index={index}>
+                                <Draggable key={'drag' + temp.id} draggableId={'drag' + temp.id} index={index}>
                                     {(provided) => (
                                         <tr
                                             className='drag-li border-b'
@@ -78,7 +82,7 @@ export default function Templates({ onBack }) {
                                             <TableCell className="font-medium min-w-[400px]">{temp.name}</TableCell>
                                             <TableCell>{temp.description}</TableCell>
                                             <TableCell className="">
-                                                <a href="javascript:;" onClick={() => handleDelTemp(index)} className="underline">删除</a>
+                                                <a href="javascript:;" onClick={() => handleDelTemp(index, temp.id)} className="underline">删除</a>
                                             </TableCell>
                                         </tr>
                                     )}

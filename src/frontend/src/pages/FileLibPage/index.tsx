@@ -114,15 +114,27 @@ function CreateModal({ datalist, open, setOpen }) {
 
 export default function FileLibPage() {
     const [open, setOpen] = useState(false)
+    const [loading, setLoading] = useState(false)
 
+    const [page, setPage] = useState(1)
     const [datalist, setDataList] = useState([])
-    const loadData = () => {
-        readFileLibDatabase().then(res => {
-            setDataList(res)
+    const [pageEnd, setPageEnd] = useState(false)
+    const pages = useRef(1)
+
+    const loadPage = (_page) => {
+        setLoading(true)
+        readFileLibDatabase(_page).then(res => {
+            const { data, pages: ps } = res
+            pages.current = ps
+            setDataList(data)
+            setPage(_page)
+            setPageEnd(!data.length)
+            setLoading(false)
         })
     }
+
     useEffect(() => {
-        loadData()
+        loadPage(1)
     }, [])
 
     // 删除
@@ -130,12 +142,15 @@ export default function FileLibPage() {
 
     const handleDelete = () => {
         deleteFileLib(idRef.current.id).then(res => {
-            loadData()
+            loadPage(page)
             close()
         })
     }
 
     return <div className="w-full h-screen p-6 overflow-y-auto">
+        {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+            <span className="loading loading-infinity loading-lg"></span>
+        </div>}
         <Tabs defaultValue="account" className="w-full">
             <TabsList className="">
                 <TabsTrigger value="account" className="roundedrounded-xl">文件数据</TabsTrigger>
@@ -144,7 +159,13 @@ export default function FileLibPage() {
             <TabsContent value="account">
                 <div className="flex justify-end"><Button className="h-8 rounded-full" onClick={() => setOpen(true)}>创建</Button></div>
                 <Table>
-                    <TableCaption>知识库集合.</TableCaption>
+                    <TableCaption>
+                        <p>知识库集合.</p>
+                        <div className="join grid grid-cols-2 w-[200px]">
+                            <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>上一页</button>
+                            <button disabled={page >= pages.current || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>下一页</button>
+                        </div>
+                    </TableCaption>
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-[200px]">知识库名称</TableHead>
