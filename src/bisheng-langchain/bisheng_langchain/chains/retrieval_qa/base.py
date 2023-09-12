@@ -2,7 +2,7 @@ from typing import List
 
 from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
 from langchain.chains.retrieval_qa.base import BaseRetrievalQA
-from langchain.pydantic_v1 import Field
+from pydantic import Field
 from langchain.schema import BaseRetriever, Document
 
 

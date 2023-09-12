@@ -6,10 +6,9 @@ from bisheng.interface.importing.utils import import_class
 from bisheng.settings import settings
 from bisheng.template.frontend_node.chains import ChainFrontendNode
 from bisheng.utils.logger import logger
-from bisheng.utils.util import (build_template_from_class,
-                                build_template_from_method)
+from bisheng.utils.util import (build_template_from_class, build_template_from_method)
 from langchain import chains
-
+from bisheng_langchain import chains as bisheng_chains
 # Assuming necessary imports for Field, Template, and FrontendNode classes
 
 
@@ -25,19 +24,30 @@ class ChainCreator(LangChainTypeCreator):
         'ConversationalRetrievalChain': 'from_llm',
         'LLMCheckerChain': 'from_llm',
         'SQLDatabaseChain': 'from_llm',
+        'MultiRetrievalQA': 'from_chain_type',
     }
 
     @property
     def type_to_loader_dict(self) -> Dict:
         if self.type_dict is None:
+            # langchain
             self.type_dict: dict[str, Any] = {
                 chain_name: import_class(f'langchain.chains.{chain_name}') for chain_name in chains.__all__
             }
+            # bisheng-langchain
+            bisheng = {
+                chain_name: import_class(f'bisheng_langchain.chains.{chain_name}')
+                for chain_name in bisheng_chains.__all__
+            }
+            self.type_dict.update(bisheng)
+
             from bisheng.interface.chains.custom import CUSTOM_CHAINS
 
             self.type_dict.update(CUSTOM_CHAINS)
             # Filter according to settings.chains
-            self.type_dict = {name: chain for name, chain in self.type_dict.items() if name in settings.chains or settings.dev}
+            self.type_dict = {
+                name: chain for name, chain in self.type_dict.items() if name in settings.chains or settings.dev
+            }
         return self.type_dict
 
     def get_signature(self, name: str) -> Optional[Dict]:
