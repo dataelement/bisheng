@@ -1,10 +1,11 @@
-name: CI
+
+name: release
 
 on:
   push:
     # Sequence of patterns matched against refs/tags
-    tags:
-      - "v*"
+    branches:
+      - "release"
 
 env:
   DOCKERHUB_REPO: dataelement/
@@ -21,22 +22,12 @@ jobs:
       - name: checkout
         uses: actions/checkout@v2
         
-      # 登录 docker hub
-      - name: Login to DockerHub
-        uses: docker/login-action@v1
-        with:
-          # GitHub Repo => Settings => Secrets 增加 docker hub 登录密钥信息
-          # DOCKERHUB_USERNAME 是 docker hub 账号名.
-          # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Get version
         id: get_version
         run: |
           echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
 
-      # 构建 bisheng_langchain
+      # 构建 bisheng-langchain
       - name: Set python version 3.8
         uses: actions/setup-python@v1
         with:
@@ -48,10 +39,20 @@ jobs:
           pip install Cython
           pip install wheel
           pip install twine
-          cd ./src/bisheng_langchain
+          cd ./src/bisheng-langchain
           python setup.py bdist_wheel
-          twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
-          
+          repo="http://110.16.193.170:50083/repository/pypi-hosted/"
+          twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl
+
+      # 发布到
+      - name: Login
+        uses: docker/login-action@v2
+        with:
+          # GitHub Repo => Settings => Secrets 增加 docker hub 登录密钥信息
+          # DOCKERHUB_USERNAME 是 docker hub 账号名.
+          # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       # 构建 backend 并推送到 Docker hub
       - name: Build backend and push
         id: docker_build_backend
@@ -64,11 +65,10 @@ jobs:
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-backend"
-            APP_VERSION=${{ steps.get_version.outputs.VERSION }}
+            APP_VERSION="release"
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
-            ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
-            ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
+            ${{ env.DOCKERHUB_REPO }}bisheng-backend:release
       # 构建 Docker frontend 并推送到 Docker hub
       - name: Build frontend and push
         id: docker_build_frontend
@@ -81,9 +81,9 @@ jobs:
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-frontend"
-            APP_VERSION=${{ steps.get_version.outputs.VERSION }}
+            APP_VERSION="release"
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
-            ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
-            ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
-      
+            ${{ env.DOCKERHUB_REPO }}bisheng-frontend:release
+
+     

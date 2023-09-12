@@ -1,17 +1,20 @@
 # 数据库配置
 database_url:
-  "mysql+pymysql://username:password@192.168.106.106:3306/bisheng"
+  "mysql+pymysql://root:1234@mysql:3306/bisheng"
 redis_url:
-  "192.168.106.116:6379"
+  "redis:6379"
 
 # 为知识库的embedding进行模型撇脂
-embedding_config:
-  text-embedding-ada-002:
-    base_url:
-      ""
-  multilingual-e5-large:
-    base_url:
-      ""
+knowledges:
+  embeddings:
+    text-embedding-ada-002:
+      openai_api_base: "https://api.openai.com/v1/"
+      openai_proxy: ""
+      openai_api_key: ""
+  vectorstores:
+    # Milvus 最低要求cpu 4C 8G 推荐4C 16G
+    Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
+      connection_args = {'host': '110.16.193.170', 'port': '50032', 'user': '', 'password': '', 'secure': False}
 
 agents:
   ZeroShotAgent:

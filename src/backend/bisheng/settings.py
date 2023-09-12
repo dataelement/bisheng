@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     tools: dict = {}
     memories: dict = {}
     embeddings: dict = {}
-    embedding_config: dict = {}
+    knowledges: dict = {}
     vectorstores: dict = {}
     documentloaders: dict = {}
     wrappers: dict = {}
@@ -33,9 +33,7 @@ class Settings(BaseSettings):
     @root_validator(pre=True)
     def set_database_url(cls, values):
         if 'database_url' not in values:
-            logger.debug(
-                'No database_url provided, trying bisheng_DATABASE_URL env variable'
-            )
+            logger.debug('No database_url provided, trying bisheng_DATABASE_URL env variable')
             if bisheng_database_url := os.getenv('bisheng_DATABASE_URL'):
                 values['database_url'] = bisheng_database_url
             else:
@@ -67,7 +65,7 @@ class Settings(BaseSettings):
         self.textsplitters = new_settings.textsplitters or {}
         self.utilities = new_settings.utilities or {}
         self.embeddings = new_settings.embeddings or {}
-        self.embedding_config = new_settings.embedding_config or {}
+        self.knowledges = new_settings.knowledges or {}
         self.vectorstores = new_settings.vectorstores or {}
         self.documentloaders = new_settings.documentloaders or {}
         self.retrievers = new_settings.retrievers or {}
@@ -101,4 +99,5 @@ def load_settings_from_yaml(file_path: str) -> Settings:
     return Settings(**settings_dict)
 
 
-settings = load_settings_from_yaml('config.yaml')
+config_file = os.getenv('config', 'config.yaml')
+settings = load_settings_from_yaml(config_file)

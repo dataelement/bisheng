@@ -2,11 +2,11 @@ from typing import Dict, Optional, Type, Union
 
 from bisheng.interface.base import CustomChain
 from bisheng.interface.utils import extract_input_variables_from_prompt
+from bisheng_langchain.chains.question_answering import load_qa_chain
 from langchain.base_language import BaseLanguageModel
 from langchain.chains import ConversationChain
 from langchain.memory.buffer import ConversationBufferMemory
 from langchain.schema import BaseMemory
-from langchain_contrib.chains.question_answering import load_qa_chain
 from pydantic import Field, root_validator
 
 DEFAULT_SUFFIX = """"
