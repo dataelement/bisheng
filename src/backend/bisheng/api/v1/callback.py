@@ -60,7 +60,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
-        from langchain.docstore.document import Document
+        from langchain.docstore.document import Document # noqa
         result = eval(output).get('result')
 
         # Create a formatted message.
@@ -72,7 +72,6 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
             type='stream',
             intermediate_steps=intermediate_steps,
         )
-
 
         try:
             # This is to emulate the stream of tokens
@@ -138,8 +137,6 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
                 loop = asyncio.get_event_loop()
                 coroutine = self.websocket.send_json(resp.dict())
                 asyncio.run_coroutine_threadsafe(coroutine, loop)
-
-
         else:
             resp = ChatResponse(message='', type='stream', intermediate_steps=log)
             loop = asyncio.get_event_loop()
@@ -174,10 +171,8 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         """Run when tool ends running."""
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
 
-        from langchain.docstore.document import Document
+        from langchain.docstore.document import Document # noqa
         result = eval(output).get('result')
-
-
         # Create a formatted message.
         intermediate_steps = f'{observation_prefix}{result}'
 

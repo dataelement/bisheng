@@ -2,13 +2,16 @@ from pathlib import Path
 from typing import Optional
 
 from bisheng.api import router
+from bisheng.api.JWT import Settings
 from bisheng.database.base import create_db_and_tables
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.utils.logger import configure
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi_jwt_auth import AuthJWT
+from fastapi_jwt_auth.exceptions import AuthJWTException
 
 
 def create_app():
@@ -31,6 +34,14 @@ def create_app():
         allow_methods=['*'],
         allow_headers=['*'],
     )
+
+    @AuthJWT.load_config
+    def get_config():
+        return Settings()
+
+    @app.exception_handler(AuthJWTException)
+    def authjwt_exception_handler(request: Request, exc: AuthJWTException):
+        return JSONResponse(status_code=401, content={'detail': exc.message})
 
     app.include_router(router)
     app.on_event('startup')(create_db_and_tables)

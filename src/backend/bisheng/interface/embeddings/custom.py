@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List, Type, Union
+from typing import List
 
 import requests
 from bisheng.utils.logger import logger
@@ -26,6 +26,7 @@ class OpenAIProxyEmbedding(Embeddings):
         resp = requests.post('http://43.133.35.137:8080/query_embed', json=data)
         logger.info(f'texts={data}')
         return json.loads(resp.text).get('data')[0]
+
 
 CUSTOM_EMBEDDING = {
     'OpenAIProxyEmbedding': OpenAIProxyEmbedding,

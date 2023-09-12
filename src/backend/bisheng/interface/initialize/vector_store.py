@@ -2,18 +2,16 @@ import json
 import os
 from typing import Any, Callable, Dict, Type
 
-from langchain.vectorstores import (FAISS, Chroma, ElasticVectorSearch, Milvus,
-                                    MongoDBAtlasVectorSearch, Pinecone, Qdrant,
-                                    SupabaseVectorStore, Weaviate)
-from langchain_contrib.vectorstores import ElasticKeywordsSearch
+from bisheng.settings import settings
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch
+from langchain.vectorstores import (FAISS, Chroma, Milvus, MongoDBAtlasVectorSearch, Pinecone,
+                                    Qdrant, SupabaseVectorStore, Weaviate)
 
 
 def docs_in_params(params: dict) -> bool:
     """Check if params has documents OR texts and one of them is not an empty list,
     If any of them is not an empty list, return True, else return False"""
-    return ('documents' in params and params['documents']) or (
-        'texts' in params and params['texts']
-    )
+    return ('documents' in params and params['documents']) or ('texts' in params and params['texts'])
 
 
 def initialize_mongodb(class_object: Type[MongoDBAtlasVectorSearch], params: dict):
@@ -25,9 +23,7 @@ def initialize_mongodb(class_object: Type[MongoDBAtlasVectorSearch], params: dic
     from pymongo import MongoClient
     import certifi
 
-    client: MongoClient = MongoClient(
-        MONGODB_ATLAS_CLUSTER_URI, tlsCAFile=certifi.where()
-    )
+    client: MongoClient = MongoClient(MONGODB_ATLAS_CLUSTER_URI, tlsCAFile=certifi.where())
     db_name = params.pop('db_name', None)
     collection_name = params.pop('collection_name', None)
     if not db_name or not collection_name:
@@ -135,9 +131,7 @@ def initialize_pinecone(class_object: Type[Pinecone], params: dict):
             pinecone_env = os.getenv('PINECONE_ENV')
 
     if pinecone_api_key is None or pinecone_env is None:
-        raise ValueError(
-            'Pinecone API key and environment must be provided in the params'
-        )
+        raise ValueError('Pinecone API key and environment must be provided in the params')
 
     # initialize pinecone
     pinecone.init(
@@ -206,15 +200,10 @@ def initialize_qdrant(class_object: Type[Qdrant], params: dict):
 
     return class_object.from_documents(**params)
 
+
 def initial_milvus(class_object: Type[Milvus], params: dict):
     if 'connection_args' not in params:
-        connection_args = {
-            'host':'192.168.106.12',
-            'port':'19530',
-            'user':'',
-            'secure': False,
-            'password':''
-        }
+        connection_args = settings.knowledges.get('vectorstores').get('Milvus')
         params['connection_args'] = connection_args
     elif isinstance(params.get('connection_args'), str):
         print(f"milvus before params={params} type={type(params['connection_args'])}")
@@ -222,15 +211,20 @@ def initial_milvus(class_object: Type[Milvus], params: dict):
 
     return class_object.from_documents(**params)
 
+
 def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict):
     if 'elasticsearch_url' not in params:
         elasticsearch_url = 'https://192.168.106.14:9200'
         params['elasticsearch_url'] = elasticsearch_url
 
     if 'ssl_verify' not in params:
-        params['ssl_verify'] = {'ca_certs': False,
-                              'basic_auth':('elastic', 'F94h5JtdQn6EQB-G9Hjv'),
-                              'verify_certs':False}
+        params['ssl_verify'] = {
+            'ca_certs': False,
+            'basic_auth': ('elastic', 'F94h5JtdQn6EQB-G9Hjv'),
+            'verify_certs': False
+        }
+
+    params['embedding'] = ''
     return class_object.from_documents(**params)
 
 

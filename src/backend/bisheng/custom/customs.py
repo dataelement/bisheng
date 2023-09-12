@@ -31,10 +31,10 @@ CUSTOM_NODES = {
         'MidJourneyPromptChain': frontend_node.chains.MidJourneyPromptChainNode(),
         'load_qa_chain': frontend_node.chains.CombineDocsChainNode(),
     },
-    'embeddings':{
+    'embeddings': {
        'OpenAIProxyEmbedding': frontend_node.embeddings.OpenAIProxyEmbedding(),
     },
-    'input_output':{
+    'input_output': {
         'InputNode': frontend_node.input_output.InputNode(),
         'OutputNode': frontend_node.input_output.OutputNode(),
         'InputFileNode': frontend_node.input_output.InputFileNode(),

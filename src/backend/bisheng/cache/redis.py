@@ -23,9 +23,9 @@ class RedisClient:
         finally:
             self.close()
 
-    def hset(self, name, map:dict, expiration=None):
+    def hset(self, name, map: dict, expiration=None):
         try:
-            r=self.connection.hset(name, mapping=map)
+            r = self.connection.hset(name, mapping=map)
             if expiration:
                 self.connection.expire(name, expiration)
             return r
@@ -58,6 +58,7 @@ class RedisClient:
 
     def close(self):
         self.connection.close()
+
 
 # 示例用法
 host, port = settings.redis_url.split(':')
