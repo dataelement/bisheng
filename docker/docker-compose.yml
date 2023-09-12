@@ -29,7 +29,7 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/data/:/app/data/
     ports:
-      - "7861:7860"
+      - "7860:7860"
     command: bash -c "uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --workers 2" # --workers 表示使用几个进程，提高并发度
     restart: on-failure
 
