@@ -46,6 +46,7 @@ def create_app():
     app.include_router(router)
     app.on_event('startup')(create_db_and_tables)
     app.on_event('startup')(setup_llm_caching)
+
     return app
 
 
@@ -84,9 +85,9 @@ def setup_app(static_files_dir: Optional[Path] = None) -> FastAPI:
     setup_static_files(app, static_files_dir)
     return app
 
+
 configure(log_level='DEBUG')
 app = create_app()
-
 
 if __name__ == '__main__':
     import uvicorn

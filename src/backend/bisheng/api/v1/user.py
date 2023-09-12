@@ -82,7 +82,7 @@ async def list(*,
     if page_size and page_num:
         sql = sql.offset((page_num - 1) * page_size).limit(page_size)
     users = session.exec(sql).all()
-    return {"data": [jsonable_encoder(user) for user in users], "total": total_count}
+    return {"data": [jsonable_encoder(UserRead.from_orm(user)) for user in users], "total": total_count}
 
 
 @router.post('/update', status_code=201)
