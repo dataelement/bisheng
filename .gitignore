@@ -131,6 +131,7 @@ build/
 ./third_party
 output/
 develop-eggs/
+config.dev.yaml
 dist/
 downloads/
 eggs/

@@ -99,4 +99,5 @@ def load_settings_from_yaml(file_path: str) -> Settings:
     return Settings(**settings_dict)
 
 
-settings = load_settings_from_yaml('config.yaml')
+config_file = os.getenv('config', 'config.yaml')
+settings = load_settings_from_yaml(config_file)
