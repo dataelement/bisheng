@@ -48,6 +48,8 @@ chains:
     documentation: ""
   SQLDatabaseChain:
     documentation: ""
+  MultiRetrievalQA:
+    documentation: ""
   RetrievalQA:
     documentation: "https://python.langchain.com/docs/modules/chains/popular/vector_db_qa"
   RetrievalQAWithSourcesChain:
