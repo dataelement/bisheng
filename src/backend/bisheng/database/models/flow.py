@@ -61,6 +61,7 @@ class FlowRead(FlowBase):
 
 class FlowReadWithStyle(FlowRead):
     style: Optional['FlowStyleRead'] = None
+    total: Optional[int] = None
 
 
 class FlowUpdate(SQLModelSerializable):

@@ -45,6 +45,13 @@ jobs:
           twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl
           twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
 
+      # 发布到私服
+      - name: Login
+        uses: docker/login-action@v1
+        with:
+          registry: "http://110.16.193.170:50083/repository/docker-hosted/"
+          username: ${{ secrets.NEXUS_USER }}
+          password: ${{ secrets.NEXUS_PASSWORD }} 
       # 构建 backend 并推送到 Docker hub
       - name: Build backend and push
         id: docker_build_backend
@@ -53,7 +60,7 @@ jobs:
           # backend 的context目录
           context: "./src/backend/"
           # 是否 docker push
-          push: false
+          push: true
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-backend"
@@ -70,7 +77,7 @@ jobs:
           # frontend 的context目录
           context: "./src/frontend/"
           # 是否 docker push
-          push: false
+          push: true
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-frontend"
