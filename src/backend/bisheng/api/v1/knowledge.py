@@ -1,7 +1,8 @@
 import asyncio
+from ctypes import Union
 import json
 import time
-from typing import List
+from typing import List, Optional
 from uuid import uuid4
 
 from sqlalchemy import func
@@ -10,7 +11,7 @@ from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.base import get_session
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
-from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
+from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.user import User
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -125,8 +126,8 @@ def create_knowledge(*,
 @router.get('/', status_code=200)
 def get_knowledge(*,
                   session: Session = Depends(get_session),
-                  page_size: int,
-                  page_num: int,
+                  page_size: Optional[int],
+                  page_num: Optional[str],
                   Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
@@ -140,7 +141,8 @@ def get_knowledge(*,
             count_sql = count_sql.where(Knowledge.user_id == payload.get('user_id'))
         total_count = session.scalar(count_sql)
 
-        if page_num and page_size:
+        if page_num and page_size and page_num != 'undefined':
+            page_num = int(page_num)
             sql = sql.offset((page_num - 1) * page_size).limit(page_size)
 
         knowledges = session.exec(sql).all()

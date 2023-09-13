@@ -32,6 +32,8 @@ agents:
   SQLAgent:
     documentation: ""
 chains:
+  SequentialChain:
+    documentation: ""
   LLMChain:
     documentation: "https://python.langchain.com/docs/modules/chains/foundational/llm_chain"
   LLMMathChain:
