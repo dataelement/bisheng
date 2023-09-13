@@ -11,6 +11,19 @@ import {
   errorsTypeAPI,
 } from "./../../types/api/index";
 
+
+axios.interceptors.response.use(function (response) {
+  return response;
+}, function (error) {
+  if (error.response.status === 401) {
+    // cookie expires
+    console.error('登录过期 :>> ');
+    const infoStr = localStorage.getItem('UUR_INFO')
+    localStorage.removeItem('UUR_INFO')
+    infoStr && location.reload()
+  }
+  return Promise.reject(error);
+})
 /**
  * Fetches all objects from the API endpoint.
  *
@@ -52,18 +65,47 @@ export async function readTempsDatabase() {
     throw error;
   }
 }
+/**
+ * 创建模板.
+ *
+ * @param data {flow_id name description}
+ * @returns  null.
+ */
+export function createTempApi(params) {
+  return axios.post(`/api/v1/skill/template/create`, params);
+}
+/**
+ * 删除模板.
+ *
+ * @param data {flow_id name description}
+ * @returns  null.
+ */
+export function deleteTempApi(temp_id) {
+  return axios.delete(`/api/v1/skill/template/${temp_id}`);
+}
+/**
+ * 修改模板.
+ *
+ * @param data {flow_id name description}
+ * @returns  null.
+ */
+export function updateTempApi(temp_id, data) {
+  return axios.post(`/api/v1/skill/template/${temp_id}`, data);
+}
 
 /**
  * 获取知识库列表
  *
  */
-export async function readFileLibDatabase() {
+export async function readFileLibDatabase(page) {
   try {
-    const response = await axios.get("/api/v1/knowledge/");
+    const pageSize = 40
+    const response = await axios.get(`/api/v1/knowledge/?page_num=${page}&page_size=${pageSize}`);
     if (response.status !== 200) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.data;
+    const { data, total } = response.data
+    return { data, pages: Math.ceil(total / pageSize) };
   } catch (error) {
     console.error(error);
     throw error;
@@ -74,8 +116,10 @@ export async function readFileLibDatabase() {
  *
  */
 export async function readFileByLibDatabase(id, page) {
-  const response = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=10&page_num=${page}`);
-  return response.data
+  const pageSize = 20
+  const response = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}`);
+  const { data, total } = response.data
+  return { data, pages: Math.ceil(total / pageSize) }
 }
 
 /**
@@ -261,7 +305,8 @@ export async function readFlowsFromDatabase(page: number = 1, search: string) {
     if (response.status !== 200) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.data;
+    const { data, total } = response.data
+    return { data, pages: Math.ceil(total / 20) };
   } catch (error) {
     console.error(error);
     throw error;
@@ -279,7 +324,8 @@ export async function readOnlineFlows(page: number = 1) {
     if (response.status !== 200) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.data;
+    const { data, total } = response.data
+    return data;
   } catch (error) {
     console.error(error);
     throw error;

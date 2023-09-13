@@ -11,8 +11,6 @@ const initialValue = {
     setUser: () => { }
 }
 
-console.log('initialValue :>> ', initialValue);
-
 export const userContext = createContext<userContextType>(initialValue);
 
 export function UserProvider({ children }: { children: ReactNode }) {

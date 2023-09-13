@@ -23,6 +23,7 @@ import { Link } from "react-router-dom";
 import { alertContext } from "../../contexts/alertContext";
 import { serverListApi, switchOnLineApi, updateConfigApi } from "../../controllers/API";
 import { CpuDetail } from "./cpuInfo";
+import { userContext } from "../../contexts/userContext";
 
 enum STATUS {
     ONLINE,
@@ -129,8 +130,8 @@ export default function FileLibPage() {
             <div className="badge badge-accent"><span>已上线</span></div>,
             <div className="badge"><span>未上线</span></div>,
             <div>
-                <span className="badge bg-warning">异常</span>
-                <div className="tooltip tooltip-warning" data-tip={reason || '处理异常'}><span className="badge cursor-pointer">?</span></div>
+                <span className="badge bg-warning" data-theme="light">异常</span>
+                <div className="tooltip tooltip-warning" data-tip={reason || '处理异常'}><span data-theme="light" className="badge cursor-pointer">?</span></div>
             </div>,
             <div className="badge badge-ghost"><span>上线中</span></div>,
             <div className="badge badge-ghost"><span>下线中</span></div>,
@@ -181,15 +182,20 @@ export default function FileLibPage() {
         return () => clearTimeout(timer)
     }, [open, datalist])
 
+    const { user } = useContext(userContext);
+
     const [showCpu, setShowCpu] = useState(false)
-    return <div className="w-full h-screen p-6 overflow-y-auto" data-theme="light">
+    return <div className="w-full h-screen p-6 overflow-y-auto">
         <Tabs defaultValue="account" className="w-full">
             <TabsList className="">
                 <TabsTrigger value="account" className="roundedrounded-xl">模型管理</TabsTrigger>
                 <TabsTrigger disabled value="password">模型Finetune</TabsTrigger>
             </TabsList>
             <TabsContent value="account">
-                <div className="flex justify-end"><Button className="h-8 rounded-full" onClick={() => setShowCpu(true)}>GPU资源使用情况</Button></div>
+                <div className="flex justify-end gap-4">
+                    <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>刷新</Button>
+                    {user.role === 'admin' && <Button className="h-8 rounded-full" onClick={() => setShowCpu(true)}>GPU资源使用情况</Button>}
+                </div>
                 <Table>
                     <TableCaption>模型集合.</TableCaption>
                     <TableHeader>
@@ -210,10 +216,11 @@ export default function FileLibPage() {
                                 <TableCell>
                                     {statusComponets(el.status, el.remark)}
                                 </TableCell>
-                                <TableCell className="">
+                                {user.role === 'admin' ? <TableCell className="">
                                     <a href="javascript:;" className={`link ${[STATUS.WAIT_ONLINE, STATUS.WAIT_OFFLINE].includes(el.status) && 'text-gray-400 cursor-default'}`}
                                         onClick={() => handleSwitchOnline(el)}>{[STATUS.ERROR, STATUS.OFFLINE, STATUS.WAIT_ONLINE].includes(el.status) ? '上线' : '下线'}</a>
-                                    <a href="javascript:;" className={`link ml-4`} onClick={() => handleOpenConfig(el)} >模型配置</a> </TableCell>
+                                    <a href="javascript:;" className={`link ml-4`} onClick={() => handleOpenConfig(el)} >模型配置</a> </TableCell> :
+                                    <TableCell className="">--</TableCell>}
                             </TableRow>
                         ))}
                     </TableBody>

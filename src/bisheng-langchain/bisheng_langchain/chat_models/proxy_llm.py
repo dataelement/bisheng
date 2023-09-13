@@ -191,7 +191,10 @@ class ProxyChatLLM(BaseChatModel):
                 'model': self.model_name,
                 'top_p': top_p,
                 'temperature': temperature,
-                'max_tokens': max_tokens
+                'max_tokens': max_tokens,
+                'stop': kwargs.get('stop', None),
+                'function_call': kwargs.get('function_call', None),
+                'functions': kwargs.get('functions', [])
             }
             return self.client(self.elemai_base_url,
                                headers=self.headers,

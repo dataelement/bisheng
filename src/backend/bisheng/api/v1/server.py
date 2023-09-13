@@ -6,10 +6,7 @@ from typing import List
 
 import requests
 from bisheng.database.base import get_session
-from bisheng.database.models.model_deploy import (ModelDeploy,
-                                                  ModelDeployQuery,
-                                                  ModelDeployRead,
-                                                  ModelDeployUpdate)
+from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployQuery, ModelDeployRead, ModelDeployUpdate)
 from bisheng.database.models.server import Server, ServerCreate, ServerRead
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, HTTPException
@@ -40,9 +37,7 @@ async def add_server(*, session=Depends(get_session), server: ServerCreate):
 
 
 @router.get('/list', response_model=List[ModelDeployRead], status_code=201)
-async def list(
-    *, session=Depends(get_session), query: ModelDeployQuery = None
-):
+async def list(*, session=Depends(get_session), query: ModelDeployQuery = None):
     try:
         # 更新模型
         servers = session.exec(select(Server)).all()
@@ -60,9 +55,7 @@ async def list(
 
 
 @router.post('/update', response_model=ModelDeployRead, status_code=201)
-async def update_deploy(
-    *, session=Depends(get_session), deploy: ModelDeployUpdate
-):
+async def update_deploy(*, session=Depends(get_session), deploy: ModelDeployUpdate):
     try:
 
         db_deploy = session.get(ModelDeploy, deploy.id)
@@ -93,8 +86,7 @@ async def load(*, session=Depends(get_session), deploy_id: dict):
         # #validator config
         config = json.loads(data)
         for key in required_param:
-            if key not in config.get('parameters').keys(
-            ) or not config.get('parameters')[key]:
+            if key not in config.get('parameters').keys() or not config.get('parameters')[key]:
                 # 不OK
                 raise Exception(f'必传参数{key}未传')
         # 先设置为上线中
@@ -104,9 +96,7 @@ async def load(*, session=Depends(get_session), deploy_id: dict):
         session.commit()
         session.refresh(db_deploy)
         # 真正开始执行load
-        asyncio.get_event_loop().run_in_executor(
-            thread_pool, load_model, url, data, deploy_id.get('deploy_id')
-        )
+        asyncio.get_event_loop().run_in_executor(thread_pool, load_model, url, data, deploy_id.get('deploy_id'))
         return {'message': 'load success'}
     except Exception as exc:
         logger.error(f'Error load model: {exc}')
@@ -172,9 +162,7 @@ def load_model(url: str, data: str, deploy_id: int):
     if response.status_code == 200:
         logger.info(f'load_model={url} result=success')
     else:
-        logger.error(
-            f'load_model=fail code={response.status_code}, return={response.text}'
-        )
+        logger.error(f'load_model=fail code={response.status_code}, return={response.text}')
         session = next(get_session())
         db_deploy = session.get(ModelDeploy, deploy_id)
         db_deploy.status = '异常'
@@ -217,16 +205,12 @@ async def queryGPU(query_url: str):
         if 'nv_gpu_memory_total_bytes' in line:
             match = re.search(pattern, line)
             gpu_uuid = match.group(1) if match else None
-            total_mem[gpu_uuid] = int(
-                line.split(' ')[1].strip()
-            ) / 1024 / 1024 / 1024
+            total_mem[gpu_uuid] = int(line.split(' ')[1].strip()) / 1024 / 1024 / 1024
 
         if 'nv_gpu_memory_used_bytes' in line:
             match = re.search(pattern, line)
             gpu_uuid = match.group(1) if match else None
-            used_mem[gpu_uuid] = int(
-                line.split(' ')[1].strip()
-            ) / 1024 / 1024 / 1024
+            used_mem[gpu_uuid] = int(line.split(' ')[1].strip()) / 1024 / 1024 / 1024
     # 整理最终对象
     for uuid, deviceid in device_dict.items():
         gpu_res = {}
@@ -252,9 +236,7 @@ async def update_model(endpoint: str, server: str):
         return
 
     session = next(get_session())
-    db_deploy = session.exec(
-        select(ModelDeploy).where(ModelDeploy.server == server)
-    ).all()
+    db_deploy = session.exec(select(ModelDeploy).where(ModelDeploy.server == server)).all()
     model_dict = {deploy.model: deploy for deploy in db_deploy}
     for model in json.loads(content):
         model_name = model['name']
@@ -263,11 +245,7 @@ async def update_model(endpoint: str, server: str):
         if model_name in model_dict:
             db_model = model_dict.get(model_name)
         else:
-            db_model = ModelDeploy(
-                server=server,
-                endpoint=f'http://{endpoint}v2.1/models',
-                model=model_name
-            )
+            db_model = ModelDeploy(server=server, endpoint=f'http://{endpoint}/v2.1/models', model=model_name)
 
         # 当前是上下线中，需要判断
         origin_status = db_model.status
@@ -280,8 +258,7 @@ async def update_model(endpoint: str, server: str):
                 db_model.status = '异常'
                 db_model.remark = error_translate(reason)
         logger.debug(
-            f'update_status={model_name} rt_status={status} db_status={origin_status} now_status={db_model.status}'
-        )
+            f'update_status={model_name} rt_status={status} db_status={origin_status} now_status={db_model.status}')
         if not db_model.config:
             # 初始化config
             config_url = f'http://{endpoint}/v2/repository/models/{model_name}/config'

@@ -2,9 +2,10 @@ import hashlib
 import json
 from typing import List
 
+from sqlalchemy import func
+
 from bisheng.database.base import get_session
-from bisheng.database.models.user import (User, UserCreate, UserLogin,
-                                          UserRead, UserUpdate)
+from bisheng.database.models.user import (User, UserCreate, UserLogin, UserRead, UserUpdate)
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
@@ -20,9 +21,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
 @router.post('/regist', response_model=UserRead, status_code=201)
 async def regist(*, session: Session = Depends(get_session), user: UserCreate):
     # check if user already exist
-    db_user = session.exec(
-        select(User).where(User.user_name == user.user_name)
-    ).all()
+    db_user = session.exec(select(User).where(User.user_name == user.user_name)).all()
     if db_user:
         raise HTTPException(status_code=500, detail='账号已存在')
     else:
@@ -35,30 +34,17 @@ async def regist(*, session: Session = Depends(get_session), user: UserCreate):
 
 
 @router.post('/login', response_model=UserRead, status_code=201)
-async def login(
-    *,
-    session: Session = Depends(get_session),
-    user: UserLogin,
-    Authorize: AuthJWT = Depends()
-):
+async def login(*, session: Session = Depends(get_session), user: UserLogin, Authorize: AuthJWT = Depends()):
     # check if user already exist
     password = md5_hash(user.password)
-    db_user = session.exec(
-        select(User).where(User.user_name == user.user_name, User.password == password)
-    ).first()
+    db_user = session.exec(select(User).where(User.user_name == user.user_name, User.password == password)).first()
     if db_user:
         if 1 == db_user.delete:
             raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
         # 生成JWT令牌
-        payload = {
-            'user_name': user.user_name,
-            'user_id': db_user.user_id,
-            'role': db_user.role
-        }
+        payload = {'user_name': user.user_name, 'user_id': db_user.user_id, 'role': db_user.role}
         # Create the tokens and passing to set_access_cookies or set_refresh_cookies
-        access_token = Authorize.create_access_token(
-            subject=json.dumps(payload), expires_time=86400
-        )
+        access_token = Authorize.create_access_token(subject=json.dumps(payload), expires_time=86400)
         refresh_token = Authorize.create_refresh_token(subject=user.user_name)
 
         # Set the JWT cookies in the response
@@ -76,18 +62,27 @@ async def logout(Authorize: AuthJWT = Depends()):
     return {'msg': 'Successfully logout'}
 
 
-@router.get('/list', response_model=List[UserRead], status_code=201)
-async def list(*, name: str, page_size: int, page_num: int, session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
+@router.get('/list', status_code=201)
+async def list(*,
+               name: str,
+               page_size: int,
+               page_num: int,
+               session: Session = Depends(get_session),
+               Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无查看权限')
     sql = select(User)
+    count_sql = select(func.count(User.user_id))
     if name:
         sql = sql.where(User.user_name.like(f'%{name}%'))
-    if page_size:
-        sql = sql.offset((page_num-1) * page_size).limit(page_size)
+        count_sql = count_sql.where(User.user_name.like(f'%{name}%'))
+    total_count = session.scalar(count_sql)
+
+    if page_size and page_num:
+        sql = sql.offset((page_num - 1) * page_size).limit(page_size)
     users = session.exec(sql).all()
-    return [jsonable_encoder(user) for user in users]
+    return {"data": [jsonable_encoder(UserRead.from_orm(user)) for user in users], "total": total_count}
 
 
 @router.post('/update', status_code=201)

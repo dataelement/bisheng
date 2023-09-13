@@ -14,7 +14,7 @@ knowledges:
   vectorstores:
     # Milvus 最低要求cpu 4C 8G 推荐4C 16G
     Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
-      connection_args = {'host': '110.16.193.170', 'port': '50032', 'user': '', 'password': '', 'secure': False}
+      connection_args: {'host': '110.16.193.170', 'port': '50032', 'user': '', 'password': '', 'secure': False}
 
 agents:
   ZeroShotAgent:
@@ -32,6 +32,10 @@ agents:
   SQLAgent:
     documentation: ""
 chains:
+  MultiRetrievalQA:
+    documentation: ""
+  SequentialChain:
+    documentation: ""
   LLMChain:
     documentation: "https://python.langchain.com/docs/modules/chains/foundational/llm_chain"
   LLMMathChain:

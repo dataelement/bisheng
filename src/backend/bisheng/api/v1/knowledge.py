@@ -1,14 +1,17 @@
 import asyncio
+from ctypes import Union
 import json
 import time
-from typing import List
+from typing import List, Optional
 from uuid import uuid4
+
+from sqlalchemy import func
 
 from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.base import get_session
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
-from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
+from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.user import User
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -120,18 +123,29 @@ def create_knowledge(*,
     return db_knowldge
 
 
-@router.get('/', response_model=List[KnowledgeRead], status_code=200)
-def get_knowledge(*, session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
+@router.get('/', status_code=200)
+def get_knowledge(*,
+                  session: Session = Depends(get_session),
+                  page_size: Optional[int],
+                  page_num: Optional[str],
+                  Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """ 读取所有知识库信息. """
+
     try:
+        sql = select(Knowledge)
+        count_sql = select(func.count(Knowledge.id))
         if 'admin' != payload.get('role'):
-            knowledges = session.exec(
-                select(Knowledge).where(Knowledge.user_id == payload.get('user_id')).order_by(
-                    Knowledge.update_time.desc())).all()
-        else:
-            knowledges = session.exec(select(Knowledge).order_by(Knowledge.update_time.desc())).all()
+            sql = sql.where(Knowledge.user_id == payload.get('user_id'))
+            count_sql = count_sql.where(Knowledge.user_id == payload.get('user_id'))
+        total_count = session.scalar(count_sql)
+
+        if page_num and page_size and page_num != 'undefined':
+            page_num = int(page_num)
+            sql = sql.offset((page_num - 1) * page_size).limit(page_size)
+
+        knowledges = session.exec(sql).all()
         res = [jsonable_encoder(flow) for flow in knowledges]
         if knowledges:
             db_user_ids = {flow.user_id for flow in knowledges}
@@ -139,23 +153,21 @@ def get_knowledge(*, session: Session = Depends(get_session), Authorize: AuthJWT
             userMap = {user.user_id: user.user_name for user in db_user}
             for r in res:
                 r['user_name'] = userMap[r['user_id']]
-        return res
+        return {'data': res, 'total': total_count}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get('/file_list/{knowledge_id}', response_model=List[KnowledgeFileRead], status_code=200)
+@router.get('/file_list/{knowledge_id}', status_code=200)
 def get_filelist(*, session: Session = Depends(get_session), knowledge_id: int, page_size: int = 10, page_num: int = 1):
-    """ 删除知识库信息. """
-    knowledge = session.get(Knowledge, knowledge_id)
-    if not knowledge:
-        raise HTTPException(status_code=404, detail='knowledge not found')
+    """ 获取知识库文件信息. """
     # 查找上传的文件信息
+    total_count = session.scalar(select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
     files = session.exec(
         select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id).order_by(
             KnowledgeFile.update_time.desc()).offset(page_size * (page_num - 1)).limit(page_size)).all()
-    return [jsonable_encoder(knowledgefile) for knowledgefile in files]
+    return {"data": [jsonable_encoder(knowledgefile) for knowledgefile in files], "total": total_count}
 
 
 @router.delete('/{knowledge_id}', status_code=200)

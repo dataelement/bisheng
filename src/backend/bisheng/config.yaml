@@ -1,6 +1,6 @@
 # 数据库配置
 database_url:
-  "mysql+pymysql://root:1234@mysql/bisheng"
+  "mysql+pymysql://root:1234@mysql:3306/bisheng"
 redis_url:
   "redis:6379"
 
@@ -8,7 +8,7 @@ redis_url:
 knowledges:
   embeddings:
     text-embedding-ada-002:
-      openai_api_base: "https://api.openai.com"
+      openai_api_base: "https://api.openai.com/v1"
       openai_proxy: ""
       openai_api_key: ""
   vectorstores:
@@ -32,6 +32,8 @@ agents:
   SQLAgent:
     documentation: ""
 chains:
+  SequentialChain:
+    documentation: ""
   LLMChain:
     documentation: "https://python.langchain.com/docs/modules/chains/foundational/llm_chain"
   LLMMathChain:
@@ -118,6 +120,8 @@ documentloaders:
   PDFWithSemanticLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/git"
 embeddings:
+  OpenAIProxyEmbedding:
+    documentation: ""
   OpenAIEmbeddings:
     documentation: "https://python.langchain.com/docs/modules/data_connection/text_embedding/integrations/openai"
   HuggingFaceEmbeddings:
