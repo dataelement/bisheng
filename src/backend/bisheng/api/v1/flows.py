@@ -135,11 +135,6 @@ def delete_flow(*, session: Session = Depends(get_session), flow_id: UUID, Autho
     if 'admin' != payload.get('role') and flow.user_id != payload.get('user_id'):
         raise HTTPException(status_code=500, detail='没有权限删除此技能')
 
-    # 判断是否属于模板
-    db_template = session.exec(select(Template).where(Template.flow_id == flow_id)).first()
-    if db_template:
-        session.delete(db_template)
-
     session.delete(flow)
     session.commit()
     return {'message': 'Flow deleted successfully'}
