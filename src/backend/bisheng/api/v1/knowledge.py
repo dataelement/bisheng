@@ -1,11 +1,8 @@
 import asyncio
-from ctypes import Union
 import json
 import time
 from typing import List, Optional
 from uuid import uuid4
-
-from sqlalchemy import func
 
 from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.cache.utils import save_uploaded_file
@@ -25,6 +22,7 @@ from langchain.embeddings.base import Embeddings
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Milvus
 from langchain.vectorstores.base import VectorStore
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 # build router
@@ -167,7 +165,7 @@ def get_filelist(*, session: Session = Depends(get_session), knowledge_id: int, 
     files = session.exec(
         select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id).order_by(
             KnowledgeFile.update_time.desc()).offset(page_size * (page_num - 1)).limit(page_size)).all()
-    return {"data": [jsonable_encoder(knowledgefile) for knowledgefile in files], "total": total_count}
+    return {'data': [jsonable_encoder(knowledgefile) for knowledgefile in files], 'total': total_count}
 
 
 @router.delete('/{knowledge_id}', status_code=200)

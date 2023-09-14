@@ -1,9 +1,9 @@
 import hashlib
-import string
-from backend.bisheng.database.models.user import User
+
+from bisheng.database.models.user import User
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 if settings.database_url and settings.database_url.startswith('sqlite'):
     connect_args = {'check_same_thread': False}
@@ -36,11 +36,11 @@ def create_db_and_tables():
 
     # 写入默认数据
     with Session(engine) as session:
-        user = session.get(User).all()
+        user = session.exec(select(User).limit(1)).all()
         if not user:
             md5 = hashlib.md5()
-            md5.update(settings.admin.get("password").encode('utf-8'))
-            user = User(user_name=settings.admin.get("user_name"), password=md5.hexdigest(), role="admin")
+            md5.update(settings.admin.get('password').encode('utf-8'))
+            user = User(user_name=settings.admin.get('user_name'), password=md5.hexdigest(), role='admin')
             session.add(user)
             session.commit()
 
