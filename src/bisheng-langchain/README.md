@@ -1,7 +1,7 @@
 ## What is bisheng-langchain?
 
 bisheng-langchain is an open-source langchain extending library built to power building LLM application.
-bisheng-langchain provides more components to support Chinese LLMs and and Chinese based token enviroments for prompt engineering and ICL template.
+bisheng-langchain provides more components to support Chinese LLMs and and Chinese based token environments for prompt engineering and ICL template.
 
 
 The project is a sub-module of [bisheng](https://github.com/dataelement/bisheng).
