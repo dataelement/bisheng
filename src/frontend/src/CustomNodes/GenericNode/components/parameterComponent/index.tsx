@@ -66,7 +66,7 @@ export default function ParameterComponent({
   useEffect(() => { }, [closePopUp, data.node.template]);
 
   const { reactFlowInstance } = useContext(typesContext);
-  let disabled = useMemo(() => {
+  const disabled = useMemo(() => {
     let dis = reactFlowInstance?.getEdges().some((e) => e.targetHandle === id) ?? false;
     // 特殊处理milvus组件的 disabled
     if (data.type === "Milvus"
@@ -80,11 +80,12 @@ export default function ParameterComponent({
   // milvus 组件，知识库不为空是 embbeding取消必填限制
   useEffect(() => {
     if (data.type === "Milvus" && data.node.template.embedding) {
-      data.node.template.embedding.required = !data.node.template.collection_name.value
-      data.node.template.embedding.show = !data.node.template.collection_name.value
+      const hidden = disabled ? false : !!data.node.template.collection_name.value
+      data.node.template.embedding.required = !hidden
+      data.node.template.embedding.show = !hidden
       onChange?.()
     }
-  }, [data])
+  }, [data, disabled])
   const handleRemoveMilvusEmbeddingEdge = () => {
     const edges = reactFlowInstance.getEdges().filter(edge => edge.targetHandle.indexOf('Embeddings|embedding|Milvus') === -1)
     reactFlowInstance.setEdges(edges)

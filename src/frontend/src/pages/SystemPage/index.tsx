@@ -1,14 +1,12 @@
-import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import {
     Table,
     TableBody,
-    TableCaption,
     TableCell,
     TableHead,
     TableHeader,
-    TableRow,
+    TableRow
 } from "../../components/ui/table";
 import {
     Tabs,
@@ -17,7 +15,7 @@ import {
     TabsTrigger,
 } from "../../components/ui/tabs";
 
-import { deleteFileLib, disableUserApi, getUsersApi, readFileLibDatabase } from "../../controllers/API";
+import { disableUserApi, getUsersApi } from "../../controllers/API";
 
 export default function FileLibPage() {
     const [datalist, setDataList] = useState([])
