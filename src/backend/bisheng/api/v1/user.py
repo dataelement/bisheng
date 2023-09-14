@@ -1,6 +1,5 @@
 import hashlib
 import json
-from typing import List
 
 from sqlalchemy import func
 

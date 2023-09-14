@@ -1,3 +1,6 @@
+import hashlib
+import string
+from backend.bisheng.database.models.user import User
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from sqlmodel import Session, SQLModel, create_engine
@@ -30,6 +33,16 @@ def create_db_and_tables():
         raise RuntimeError('Something went wrong creating the database and tables.')
     else:
         logger.debug('Database and tables created successfully')
+
+    # 写入默认数据
+    with Session(engine) as session:
+        user = session.get(User).all()
+        if not user:
+            md5 = hashlib.md5()
+            md5.update(settings.admin.get("password").encode('utf-8'))
+            user = User(user_name=settings.admin.get("user_name"), password=md5.hexdigest(), role="admin")
+            session.add(user)
+            session.commit()
 
 
 def get_session():

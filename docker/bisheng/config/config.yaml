@@ -4,6 +4,11 @@ database_url:
 redis_url:
   "redis:6379"
 
+# admin 用户配置
+admin:
+  user_name: "admin"
+  password: "1234"
+
 # 为知识库的embedding进行模型撇脂
 knowledges:
   embeddings:
