@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     dev: bool = False
     database_url: Optional[str] = None
     redis_url: Optional[str] = None
+    admin: dict = {}
     cache: str = 'InMemoryCache'
     remove_api_keys: bool = False
 
@@ -71,6 +72,7 @@ class Settings(BaseSettings):
         self.retrievers = new_settings.retrievers or {}
         self.output_parsers = new_settings.output_parsers or {}
         self.input_output = new_settings.input_output or {}
+        self.admin = new_settings.admin or {}
         self.dev = dev
 
     def update_settings(self, **kwargs):

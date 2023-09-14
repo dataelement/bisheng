@@ -257,6 +257,8 @@ async def update_model(endpoint: str, server: str):
             elif reason != 'unloaded':
                 db_model.status = '异常'
                 db_model.remark = error_translate(reason)
+        if not db_model.status:
+            db_model.status = '未上线'
         logger.debug(
             f'update_status={model_name} rt_status={status} db_status={origin_status} now_status={db_model.status}')
         if not db_model.config:

@@ -97,9 +97,8 @@ export function updateTempApi(temp_id, data) {
  * 获取知识库列表
  *
  */
-export async function readFileLibDatabase(page) {
+export async function readFileLibDatabase(page = 1, pageSize = 40) {
   try {
-    const pageSize = 40
     const response = await axios.get(`/api/v1/knowledge/?page_num=${page}&page_size=${pageSize}`);
     if (response.status !== 200) {
       throw new Error(`HTTP error! status: ${response.status}`);

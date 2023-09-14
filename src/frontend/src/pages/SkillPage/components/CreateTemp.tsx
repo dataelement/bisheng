@@ -9,7 +9,7 @@ import { alertContext } from "../../../contexts/alertContext";
 import { createTempApi } from "../../../controllers/API";
 
 export default function CreateTemp({ flow, open, setOpen }: { flow: FlowType, open: boolean, setOpen: any }) {
-    const { setErrorData } = useContext(alertContext);
+    const { setErrorData, setSuccessData } = useContext(alertContext);
 
     const [data, setData] = useState({
         name: '',
@@ -36,7 +36,8 @@ export default function CreateTemp({ flow, open, setOpen }: { flow: FlowType, op
         });
         // rq
         createTempApi({ ...data, flow_id: flow.id }).then(res => {
-            console.log('res :>> ', res)
+            setOpen(false)
+            setSuccessData({ title: '技能创建成功' });
         })
     }
 

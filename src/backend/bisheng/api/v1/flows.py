@@ -8,7 +8,6 @@ from bisheng.api.utils import build_flow_no_yield, remove_api_keys
 from bisheng.api.v1.schemas import FlowListCreate, FlowListRead
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate
-from bisheng.database.models.template import Template
 from bisheng.database.models.user import User
 from bisheng.settings import settings
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
