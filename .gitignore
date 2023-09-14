@@ -258,3 +258,4 @@ dmypy.json
 .docusaurus/
 
 /tmp/*
+sftp-config.json
