@@ -25,6 +25,12 @@ services:
 
   backend:
     image: dataelement/bisheng-backend:latest
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/data/:/app/data/

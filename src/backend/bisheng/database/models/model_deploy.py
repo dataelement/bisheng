@@ -12,7 +12,7 @@ class ModelDeployBase(SQLModelSerializable):
     model: str = Field(index=False)
     config: Optional[str] = Field(index=False, sa_column=(String(length=1024)))
     status: Optional[str] = Field(index=False)
-    remark: Optional[str] = Field(index=False)
+    remark: Optional[str] = Field(index=False, sa_column=(String(length=4096)))
 
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
