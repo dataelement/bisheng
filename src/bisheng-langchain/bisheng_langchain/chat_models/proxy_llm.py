@@ -230,7 +230,7 @@ class ProxyChatLLM(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return self._generate(messages, stop, run_manager, kwargs)
+        return self._generate(messages, stop, run_manager, **kwargs)
 
     def _create_message_dicts(
             self, messages: List[BaseMessage],
@@ -247,6 +247,8 @@ class ProxyChatLLM(BaseChatModel):
 
     def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
         generations = []
+        if 'choices' not in response:
+            raise Exception(f'LLM return error {response}')
         for res in response['choices']:
             message = _convert_dict_to_message(res['message'])
             gen = ChatGeneration(message=message)
