@@ -16,7 +16,8 @@ from sqlmodel import select
 def docs_in_params(params: dict) -> bool:
     """Check if params has documents OR texts and one of them is not an empty list,
     If any of them is not an empty list, return True, else return False"""
-    return ('documents' in params and params['documents']) or ('texts' in params and params['texts'])
+    return ('documents' in params and params['documents']) or ('texts' in params and
+                                                               params['texts'])
 
 
 def initialize_mongodb(class_object: Type[MongoDBAtlasVectorSearch], params: dict):
@@ -207,21 +208,22 @@ def initialize_qdrant(class_object: Type[Qdrant], params: dict):
 
 
 def initial_milvus(class_object: Type[Milvus], params: dict):
-    if 'connection_args' not in params:
-        params['connection_args'] = settings.knowledges.get('vectorstores').get('Milvus')
+    if not params['connection_args']:
+        params['connection_args'] = settings.knowledges.get('vectorstores').get('Milvus').get(
+            'connection_args')
     if 'embedding' not in params:
         # 匹配知识库的embedding
         col = params['collection_name']
-        with get_session() as session:
-            knowledge = session.exec(select(Knowledge).where(Knowledge.collection_name == col)).first()
-            if not knowledge:
-                raise Exception(f'不能找到知识库collection={col}')
-            model_param = settings.knowledges.get('embeddings').get(knowledge.model)
-            if Knowledge.model == 'text-embedding-ada-002':
-                embedding = OpenAIEmbeddings(**model_param)
-            else:
-                embedding = HostEmbeddings(**model_param)
-            params['embedding'] = embedding
+        session = next(get_session())
+        knowledge = session.exec(select(Knowledge).where(Knowledge.collection_name == col)).first()
+        if not knowledge:
+            raise Exception(f'不能找到知识库collection={col}')
+        model_param = settings.knowledges.get('embeddings').get(knowledge.model)
+        if knowledge.model == 'text-embedding-ada-002':
+            embedding = OpenAIEmbeddings(**model_param)
+        else:
+            embedding = HostEmbeddings(**model_param)
+        params['embedding'] = embedding
 
     elif isinstance(params.get('connection_args'), str):
         print(f"milvus before params={params} type={type(params['connection_args'])}")
