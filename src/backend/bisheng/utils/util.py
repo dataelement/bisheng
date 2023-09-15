@@ -189,7 +189,8 @@ def get_default_factory(module: str, function: str):
 
 def type_to_string(tp):
     if getattr(tp, '__args__', None):
-        args_str = ','.join(type_to_string(arg) for arg in tp.__args__ if not isinstance(arg, None))
+        args_str = ','.join(
+            type_to_string(arg) for arg in tp.__args__ if arg is not type(None))  # noqa
         return f'{tp.__name__}[{args_str}]'
     else:
         return tp.__name__
