@@ -4,8 +4,9 @@ import json
 import os
 
 import numpy as np
+import jieba.analyse
 from bisheng_langchain.chat_models import QwenChat
-from langchain import LLMChain, OpenAI, PromptTemplate
+from langchain import LLMChain, PromptTemplate
 
 model_name = 'Qwen-7B-Chat'
 host_base_url = 'http://192.168.106.12:9001/v2.1/models'
@@ -28,12 +29,15 @@ llm_chain = LLMChain(llm=llm,
                      prompt=PromptTemplate.from_template(prompt_template))
 
 
-def extract_keys(answer):
+def extract_keys(answer, method='jiaba_kv'):
     """
     提取answer中的关键词
     """
-    keywords_str = llm_chain.run(answer)
-    keywords = eval(keywords_str[9:])
+    if method == 'jiaba_kv':
+        keywords = jieba.analyse.extract_tags(answer, topK=100, withWeight=False)
+    elif method == 'llm_kv':
+        keywords_str = llm_chain.run(answer)
+        keywords = eval(keywords_str[9:])
     return keywords
 
 
