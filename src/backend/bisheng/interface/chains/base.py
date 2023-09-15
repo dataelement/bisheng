@@ -6,9 +6,10 @@ from bisheng.interface.importing.utils import import_class
 from bisheng.settings import settings
 from bisheng.template.frontend_node.chains import ChainFrontendNode
 from bisheng.utils.logger import logger
-from bisheng.utils.util import (build_template_from_class, build_template_from_method)
-from langchain import chains
+from bisheng.utils.util import build_template_from_class, build_template_from_method
 from bisheng_langchain import chains as bisheng_chains
+from langchain import chains
+
 # Assuming necessary imports for Field, Template, and FrontendNode classes
 
 
@@ -32,7 +33,8 @@ class ChainCreator(LangChainTypeCreator):
         if self.type_dict is None:
             # langchain
             self.type_dict: dict[str, Any] = {
-                chain_name: import_class(f'langchain.chains.{chain_name}') for chain_name in chains.__all__
+                chain_name: import_class(f'langchain.chains.{chain_name}')
+                for chain_name in chains.__all__
             }
             # bisheng-langchain
             bisheng = {
@@ -46,7 +48,9 @@ class ChainCreator(LangChainTypeCreator):
             self.type_dict.update(CUSTOM_CHAINS)
             # Filter according to settings.chains
             self.type_dict = {
-                name: chain for name, chain in self.type_dict.items() if name in settings.chains or settings.dev
+                name: chain
+                for name, chain in self.type_dict.items()
+                if name in settings.chains or settings.dev
             }
         return self.type_dict
 
@@ -71,7 +75,8 @@ class ChainCreator(LangChainTypeCreator):
     def to_list(self) -> List[str]:
         names = []
         for _, chain in self.type_to_loader_dict.items():
-            chain_name = (chain.function_name() if hasattr(chain, 'function_name') else chain.__name__)
+            chain_name = (chain.function_name()
+                          if hasattr(chain, 'function_name') else chain.__name__)
             names.append(chain_name)
         return names
 

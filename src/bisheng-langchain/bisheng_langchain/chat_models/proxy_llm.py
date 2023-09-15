@@ -147,10 +147,14 @@ class ProxyChatLLM(BaseChatModel):
         """Validate that api key and python package exists in environment."""
         values['elemai_api_key'] = get_from_dict_or_env(values, 'elemai_api_key', 'ELEMAI_API_KEY')
 
-        values['elemai_base_url'] = get_from_dict_or_env(values, 'elemai_base_url', 'ELEMAI_BASE_URL')
+        values['elemai_base_url'] = get_from_dict_or_env(values, 'elemai_base_url',
+                                                         'ELEMAI_BASE_URL')
 
         elemai_api_key = values['elemai_api_key']
-        values['headers'] = {'Authorization': f'Bearer {elemai_api_key}', 'Content-Type': 'application/json'}
+        values['headers'] = {
+            'Authorization': f'Bearer {elemai_api_key}',
+            'Content-Type': 'application/json'
+        }
 
         try:
             values['client'] = requests.post
@@ -226,10 +230,11 @@ class ProxyChatLLM(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return self._generate(messages, stop, run_manager, **kwargs)
+        return self._generate(messages, stop, run_manager, kwargs)
 
-    def _create_message_dicts(self, messages: List[BaseMessage],
-                              stop: Optional[List[str]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    def _create_message_dicts(
+            self, messages: List[BaseMessage],
+            stop: Optional[List[str]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         params = dict(self._client_params)
         if stop is not None:
             if 'stop' in params:
@@ -265,7 +270,9 @@ class ProxyChatLLM(BaseChatModel):
         }
         return {**elemai_creds, **self._default_params}
 
-    def _get_invocation_params(self, stop: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Any]:
+    def _get_invocation_params(self,
+                               stop: Optional[List[str]] = None,
+                               **kwargs: Any) -> Dict[str, Any]:
         """Get the parameters used to invoke the model FOR THE CALLBACKS."""
         return {
             **super()._get_invocation_params(stop=stop, **kwargs),
@@ -318,10 +325,11 @@ class ProxyChatLLM(BaseChatModel):
             # if there's a name, the role is omitted
             tokens_per_name = -1
         else:
-            raise NotImplementedError(f'get_num_tokens_from_messages() is not presently implemented '
-                                      f'for model {model}.'
-                                      'See https://github.com/openai/openai-python/blob/main/chatml.md for '
-                                      'information on how messages are converted to tokens.')
+            raise NotImplementedError(
+                f'get_num_tokens_from_messages() is not presently implemented '
+                f'for model {model}.'
+                'See https://github.com/openai/openai-python/blob/main/chatml.md for '
+                'information on how messages are converted to tokens.')
         num_tokens = 0
         messages_dict = [_convert_message_to_dict(m) for m in messages]
         for message in messages_dict:
