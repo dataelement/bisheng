@@ -6,7 +6,8 @@ from typing import List
 
 import requests
 from bisheng.database.base import get_session
-from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployQuery, ModelDeployRead, ModelDeployUpdate)
+from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployQuery, ModelDeployRead,
+                                                  ModelDeployUpdate)
 from bisheng.database.models.server import Server, ServerCreate, ServerRead
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, HTTPException
@@ -96,7 +97,8 @@ async def load(*, session=Depends(get_session), deploy_id: dict):
         session.commit()
         session.refresh(db_deploy)
         # 真正开始执行load
-        asyncio.get_event_loop().run_in_executor(thread_pool, load_model, url, data, deploy_id.get('deploy_id'))
+        asyncio.get_event_loop().run_in_executor(thread_pool, load_model, url, data,
+                                                 deploy_id.get('deploy_id'))
         return {'message': 'load success'}
     except Exception as exc:
         logger.error(f'Error load model: {exc}')
@@ -233,7 +235,7 @@ async def update_model(endpoint: str, server: str):
         content = resp.text
     except Exception as e:
         logger.error(str(e))
-        return
+        return []
 
     session = next(get_session())
     db_deploy = session.exec(select(ModelDeploy).where(ModelDeploy.server == server)).all()
@@ -245,7 +247,9 @@ async def update_model(endpoint: str, server: str):
         if model_name in model_dict:
             db_model = model_dict.get(model_name)
         else:
-            db_model = ModelDeploy(server=server, endpoint=f'http://{endpoint}/v2.1/models', model=model_name)
+            db_model = ModelDeploy(server=server,
+                                   endpoint=f'http://{endpoint}/v2.1/models',
+                                   model=model_name)
 
         # 当前是上下线中，需要判断
         origin_status = db_model.status
@@ -260,7 +264,8 @@ async def update_model(endpoint: str, server: str):
         if not db_model.status:
             db_model.status = '未上线'
         logger.debug(
-            f'update_status={model_name} rt_status={status} db_status={origin_status} now_status={db_model.status}')
+            f'update_status={model_name} rt_status={status} db_status={origin_status} now_status={db_model.status}'
+        )
         if not db_model.config:
             # 初始化config
             config_url = f'http://{endpoint}/v2/repository/models/{model_name}/config'

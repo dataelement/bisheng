@@ -9,6 +9,11 @@ admin:
   user_name: "admin"
   password: "1234"
 
+# bisheng-rt服务地址
+bisheng-rt: 
+  name: "RT-Server"
+  server: "127.0.0.1:9001"
+
 # 为知识库的embedding进行模型撇脂
 knowledges:
   embeddings:
