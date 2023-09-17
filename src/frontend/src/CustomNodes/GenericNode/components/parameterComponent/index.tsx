@@ -83,6 +83,7 @@ export default function ParameterComponent({
       const hidden = disabled ? false : !!data.node.template.collection_name.value
       data.node.template.embedding.required = !hidden
       data.node.template.embedding.show = !hidden
+      if (hidden) data.node.template.connection_args.value = ''
       onChange?.()
     }
   }, [data, disabled])

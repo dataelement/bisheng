@@ -119,5 +119,8 @@
     "typescript": "^5.0.2",
     "vite": "^4.3.9",
     "vite-plugin-static-copy": "^0.17.0"
+  },
+  "engines": {
+    "node": ">= 16"
   }
 }

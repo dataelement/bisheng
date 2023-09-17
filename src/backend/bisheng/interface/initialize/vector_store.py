@@ -211,6 +211,9 @@ def initial_milvus(class_object: Type[Milvus], params: dict):
     if not params['connection_args']:
         params['connection_args'] = settings.knowledges.get('vectorstores').get('Milvus').get(
             'connection_args')
+    elif isinstance(params.get('connection_args'), str):
+        print(f"milvus before params={params} type={type(params['connection_args'])}")
+        params['connection_args'] = json.loads(params.pop('connection_args'))
     if 'embedding' not in params:
         # 匹配知识库的embedding
         col = params['collection_name']
@@ -224,10 +227,6 @@ def initial_milvus(class_object: Type[Milvus], params: dict):
         else:
             embedding = HostEmbeddings(**model_param)
         params['embedding'] = embedding
-
-    elif isinstance(params.get('connection_args'), str):
-        print(f"milvus before params={params} type={type(params['connection_args'])}")
-        params['connection_args'] = json.loads(params.pop('connection_args'))
 
     return class_object.from_documents(**params)
 

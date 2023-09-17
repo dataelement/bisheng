@@ -1,5 +1,6 @@
 import hashlib
 
+from bisheng.database.models.server import Server
 from bisheng.database.models.user import User
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
@@ -40,8 +41,18 @@ def create_db_and_tables():
         if not user:
             md5 = hashlib.md5()
             md5.update(settings.admin.get('password').encode('utf-8'))
-            user = User(user_name=settings.admin.get('user_name'), password=md5.hexdigest(), role='admin')
+            user = User(user_name=settings.admin.get('user_name'),
+                        password=md5.hexdigest(),
+                        role='admin')
             session.add(user)
+            session.commit()
+
+        rts = session.exec(
+            select(Server).where(Server.endpoint == settings.bisheng_rt['server'])).all()
+        if not rts:
+            db_rt = Server(endpoint=settings.bisheng_rt['server'],
+                           server=settings.bisheng_rt['name'])
+            session.add(db_rt)
             session.commit()
 
 
