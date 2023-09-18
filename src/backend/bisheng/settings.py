@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     admin: dict = {}
     cache: str = 'InMemoryCache'
     remove_api_keys: bool = False
-    bisheng_rt: Optional[dict] = {}
+    bisheng_rt: dict = {}
 
     @root_validator(pre=True)
     def set_database_url(cls, values):
@@ -74,6 +74,7 @@ class Settings(BaseSettings):
         self.output_parsers = new_settings.output_parsers or {}
         self.input_output = new_settings.input_output or {}
         self.admin = new_settings.admin or {}
+        self.bisheng_rt = new_settings.bisheng_rt or {}
         self.dev = dev
 
     def update_settings(self, **kwargs):

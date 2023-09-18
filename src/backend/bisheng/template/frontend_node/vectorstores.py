@@ -295,4 +295,4 @@ class VectorStoreFrontendNode(FrontendNode):
 
         elif field.name == 'connection_args':
             field.show = True
-            field.advanced = True
+            field.advanced = False
