@@ -54,7 +54,10 @@ async def get_embedding():
 
 
 @router.post('/process', status_code=201)
-async def process_knowledge(*, session: Session = Depends(get_session), data: dict, Authorize: AuthJWT = Depends()):
+async def process_knowledge(*,
+                            session: Session = Depends(get_session),
+                            data: dict,
+                            Authorize: AuthJWT = Depends()):
     """上传文件到知识库.
     使用flowchain来处理embeding的流程
         """
@@ -108,7 +111,8 @@ def create_knowledge(*,
     """创建知识库."""
     db_knowldge = Knowledge.from_orm(knowledge)
     know = session.exec(
-        select(Knowledge).where(Knowledge.name == knowledge.name, knowledge.user_id == payload.get('user_id'))).all()
+        select(Knowledge).where(Knowledge.name == knowledge.name,
+                                knowledge.user_id == payload.get('user_id'))).all()
     if know:
         raise HTTPException(status_code=500, detail='知识库名称重复')
     if not db_knowldge.collection_name:
@@ -158,18 +162,30 @@ def get_knowledge(*,
 
 
 @router.get('/file_list/{knowledge_id}', status_code=200)
-def get_filelist(*, session: Session = Depends(get_session), knowledge_id: int, page_size: int = 10, page_num: int = 1):
+def get_filelist(*,
+                 session: Session = Depends(get_session),
+                 knowledge_id: int,
+                 page_size: int = 10,
+                 page_num: int = 1):
     """ 获取知识库文件信息. """
     # 查找上传的文件信息
-    total_count = session.scalar(select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
+    total_count = session.scalar(
+        select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
     files = session.exec(
         select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id).order_by(
-            KnowledgeFile.update_time.desc()).offset(page_size * (page_num - 1)).limit(page_size)).all()
-    return {'data': [jsonable_encoder(knowledgefile) for knowledgefile in files], 'total': total_count}
+            KnowledgeFile.update_time.desc()).offset(page_size *
+                                                     (page_num - 1)).limit(page_size)).all()
+    return {
+        'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
+        'total': total_count
+    }
 
 
 @router.delete('/{knowledge_id}', status_code=200)
-def delete_knowledge(*, session: Session = Depends(get_session), knowledge_id: int, Authorize: AuthJWT = Depends()):
+def delete_knowledge(*,
+                     session: Session = Depends(get_session),
+                     knowledge_id: int,
+                     Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """ 删除知识库信息. """
@@ -184,7 +200,10 @@ def delete_knowledge(*, session: Session = Depends(get_session), knowledge_id: i
 
 
 @router.delete('/file/{file_id}', status_code=200)
-def delete_knowledge_file(*, session: Session = Depends(get_session), file_id: int, Authorize: AuthJWT = Depends()):
+def delete_knowledge_file(*,
+                          session: Session = Depends(get_session),
+                          file_id: int,
+                          Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """ 删除知识文件信息 """
@@ -231,6 +250,8 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, file_paths:
 
     embeddings = decide_embeddings(model)
     vectore_client = decide_vectorstores(collection_name, embeddings)
+    # es_param = {'index_name': }
+    # es_client = import_vectorstore("ElasticKeywordsSearch")
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
         try:
@@ -253,9 +274,15 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, file_paths:
 
 
 def _read_chunk_text(input_file, file_name, size):
-    from langchain.document_loaders import (PyPDFLoader, BSHTMLLoader, TextLoader, UnstructuredMarkdownLoader)
+    from langchain.document_loaders import (PyPDFLoader, BSHTMLLoader, TextLoader,
+                                            UnstructuredMarkdownLoader)
     from langchain.text_splitter import CharacterTextSplitter
-    filetype_load_map = {'txt': TextLoader, 'pdf': PyPDFLoader, 'html': BSHTMLLoader, 'md': UnstructuredMarkdownLoader}
+    filetype_load_map = {
+        'txt': TextLoader,
+        'pdf': PyPDFLoader,
+        'html': BSHTMLLoader,
+        'md': UnstructuredMarkdownLoader
+    }
 
     file_type = file_name.split('.')[-1]
     if file_type not in filetype_load_map:
