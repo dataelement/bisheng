@@ -47,13 +47,14 @@ def create_db_and_tables():
             session.add(user)
             session.commit()
 
-        rts = session.exec(
-            select(Server).where(Server.endpoint == settings.bisheng_rt['server'])).all()
-        if not rts:
-            db_rt = Server(endpoint=settings.bisheng_rt['server'],
-                           server=settings.bisheng_rt['name'])
-            session.add(db_rt)
-            session.commit()
+        if settings.bisheng_rt:
+            rts = session.exec(
+                select(Server).where(Server.endpoint == settings.bisheng_rt['server'])).all()
+            if not rts:
+                db_rt = Server(endpoint=settings.bisheng_rt['server'],
+                               server=settings.bisheng_rt['name'])
+                session.add(db_rt)
+                session.commit()
 
 
 def get_session():

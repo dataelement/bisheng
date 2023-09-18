@@ -141,6 +141,7 @@ def get_knowledge(*,
         if 'admin' != payload.get('role'):
             sql = sql.where(Knowledge.user_id == payload.get('user_id'))
             count_sql = count_sql.where(Knowledge.user_id == payload.get('user_id'))
+        sql = sql.order_by(Knowledge.update_time.desc())
         total_count = session.scalar(count_sql)
 
         if page_num and page_size and page_num != 'undefined':

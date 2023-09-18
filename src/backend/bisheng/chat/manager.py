@@ -147,6 +147,8 @@ class ChatManager:
                         logger.info(f'key={key} set_filepath={file_path}')
                         value['file_path'] = file_path
 
+        # 如果L3
+
         file = ChatMessage(is_bot=False,
                            files=[{
                                'file_name': file_name
