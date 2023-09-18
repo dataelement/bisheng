@@ -9,6 +9,8 @@ on:
 
 env:
   DOCKERHUB_REPO: dataelement/
+  PY_NEXUS: http://110.16.193.170:50083
+  DOCKER_NEXUS: http://110.16.193.170:50080
   
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -41,13 +43,13 @@ jobs:
           pip install twine
           cd ./src/bisheng-langchain
           python setup.py bdist_wheel
-          repo="http://110.16.193.170:50083/repository/pypi-hosted/"
+          repo="${{ env.PY_NEXUS }}/repository/pypi-hosted/"
           twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl    
       
       # 发布到 私有仓库
       - name: set insecure registry
         run: |
-          echo "{ \"insecure-registries\": [\"http://110.16.193.170:50083\"] }" | sudo tee /etc/docker/daemon.json
+          echo "{ \"insecure-registries\": [\"${{ env.DOCKER_NEXUS }}\"] }" | sudo tee /etc/docker/daemon.json
           sudo service docker restart
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -62,9 +64,9 @@ jobs:
       - name: Login Nexus Container Registry
         uses: docker/login-action@v2
         with:
-          registry: http://110.16.193.170:50083
-          username: ${{ secrets.NEXUS_PUBLIC }}
-          password: ${{ secrets.NEXUS_PUBLIC_PASSWORD }}
+          registry: ${{ env.DOCKER_NEXUS }}
+          username: ${{ secrets.NEXUS_USER }}
+          password: ${{ secrets.NEXUS_PASSWORD }}
       # 构建 backend 并推送到 Docker hub
       - name: Build backend and push
         id: docker_build_backend
