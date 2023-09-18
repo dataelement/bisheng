@@ -21,8 +21,10 @@ llm_type_to_cls_dict['openai-chat'] = ChatOpenAI  # type: ignore
 llm_type_to_cls_dict['vertexai-chat'] = ChatVertexAI  # type: ignore
 
 # llm contribute
-llm_type_to_cls_dict.update(
-    {llm_name: import_class(f'bisheng_langchain.chat_models.{llm_name}') for llm_name in chat_models.__all__})
+llm_type_to_cls_dict.update({
+    llm_name: import_class(f'bisheng_langchain.chat_models.{llm_name}')
+    for llm_name in chat_models.__all__
+})
 
 # Toolkits
 toolkit_type_to_loader_dict: dict[str, Any] = {
@@ -45,11 +47,14 @@ memory_type_to_cls_dict: dict[str, Any] = {
 }
 
 # Wrappers
-wrapper_type_to_cls_dict: dict[str, Any] = {wrapper.__name__: wrapper for wrapper in [requests.RequestsWrapper]}
+wrapper_type_to_cls_dict: dict[str, Any] = {
+    wrapper.__name__: wrapper for wrapper in [requests.RequestsWrapper]
+}
 
 # Embeddings
 embedding_type_to_cls_dict: dict[str, Any] = {
-    embedding_name: import_class(f'langchain.embeddings.{embedding_name}') for embedding_name in embeddings.__all__
+    embedding_name: import_class(f'langchain.embeddings.{embedding_name}')
+    for embedding_name in embeddings.__all__
 }
 
 embedding_type_to_cls_dict.update({
@@ -64,11 +69,19 @@ documentloaders_type_to_cls_dict: dict[str, Any] = {
 }
 
 # contribute
-documentloaders_type_to_cls_dict.update(
-    {loader: import_class(f'bisheng_langchain.document_loaders.{loader}') for loader in contribute_loader.__all__})
+documentloaders_type_to_cls_dict.update({
+    loader: import_class(f'bisheng_langchain.document_loaders.{loader}')
+    for loader in contribute_loader.__all__
+})
 
 # Text Splitters
-textsplitter_type_to_cls_dict: dict[str, Any] = dict(inspect.getmembers(text_splitter, inspect.isclass))
+textsplitter_type_to_cls_dict: dict[str,
+                                    Any] = dict(inspect.getmembers(text_splitter, inspect.isclass))
 
 # merge CUSTOM_AGENTS and CUSTOM_CHAINS
-CUSTOM_NODES = {**CUSTOM_AGENTS, **CUSTOM_CHAINS, **CUSTOM_EMBEDDING, **CUSTOM_INPUTOUTPUT}  # type: ignore
+CUSTOM_NODES = {
+    **CUSTOM_AGENTS,
+    **CUSTOM_CHAINS,
+    **CUSTOM_EMBEDDING,
+    **CUSTOM_INPUTOUTPUT
+}  # type: ignore
