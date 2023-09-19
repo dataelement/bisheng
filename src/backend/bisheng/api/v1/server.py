@@ -161,7 +161,8 @@ async def get_gpu(*, session=Depends(get_session)):
         session.commit()
 
         return {'data': {'list': resp}}
-
+    except HTTPException as http_exc:
+        raise http_exc
     except Exception as exc:
         logger.error(f'Error add server: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
