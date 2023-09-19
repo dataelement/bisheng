@@ -314,6 +314,8 @@ utilities:
   WolframAlphaAPIWrapper:
     documentation: ""
 retrievers:
+  MultiVectorRetriever:
+    documentation: ""
   MultiQueryRetriever:
     documentation: "https://python.langchain.com/docs/modules/data_connection/retrievers/how_to/MultiQueryRetriever"
   # https://github.com/supabase-community/supabase-py/issues/482
