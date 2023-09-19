@@ -331,7 +331,8 @@ class ChatManager:
             steps = []
             for s in intermediate_steps.split('\n'):
                 if s.startswith("Answer: {'"):
-                    # s = 'Answer: ' + eval(s.split('Answer:')[1]).get('result')
+                    if 'result' in s:
+                        s = 'Answer: ' + eval(s.split('Answer:')[1]).get('result')
                     pass
                 step.append(s)
                 if not s:
