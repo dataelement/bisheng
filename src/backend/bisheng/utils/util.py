@@ -241,7 +241,8 @@ def format_dict(d, name: Optional[str] = None):
         value['type'] = 'int' if key in ['max_value_length'] else value['type']
 
         # Show or not field
-        value['show'] = bool((value['required'] and key not in ['input_variables']) or
+        value['show'] = bool((value['required'] and
+                              (key not in ['input_variables'] or name == 'SequentialChain')) or
                              key in FORCE_SHOW_FIELDS or 'api_key' in key)
 
         # Add password field

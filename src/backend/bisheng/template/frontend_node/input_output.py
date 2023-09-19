@@ -1,5 +1,3 @@
-from typing import Optional
-
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
 from bisheng.template.template.base import Template
@@ -27,6 +25,7 @@ class InputNode(FrontendNode):
     def to_dict(self):
         return super().to_dict()
 
+
 class InputFileNode(FrontendNode):
     name: str = 'InputFileNode'
     template: Template = Template(
@@ -45,7 +44,6 @@ class InputFileNode(FrontendNode):
     )
     description: str = """输入节点，用来自动对接输入"""
     base_classes: list[str] = ['fileNode']
-
 
     def to_dict(self):
         return super().to_dict()

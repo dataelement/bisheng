@@ -9,9 +9,9 @@ admin:
   user_name: "admin"
   password: "1234"
 
-bisheng-rt: 
-  name: "RT-Server"
-  server: "127.0.0.1:9001"
+# bisheng-rt: 
+#   name: "RT-Server"
+#   server: "127.0.0.1:9001"
 
 # 为知识库的embedding进行模型撇脂
 knowledges:
@@ -20,6 +20,11 @@ knowledges:
       openai_api_base: "https://api.openai.com/v1"
       openai_proxy: ""
       openai_api_key: ""
+    embedding-host:
+      deployment:
+      embedding_ctx_length:
+      host_base_url:
+      model: 
   vectorstores:
     # Milvus 最低要求cpu 4C 8G 推荐4C 16G
     Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
@@ -129,8 +134,6 @@ documentloaders:
   PDFWithSemanticLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/git"
 embeddings:
-  OpenAIProxyEmbedding:
-    documentation: ""
   OpenAIEmbeddings:
     documentation: "https://python.langchain.com/docs/modules/data_connection/text_embedding/integrations/openai"
   HuggingFaceEmbeddings:
@@ -314,6 +317,8 @@ utilities:
   WolframAlphaAPIWrapper:
     documentation: ""
 retrievers:
+  MultiVectorRetriever:
+    documentation: ""
   MultiQueryRetriever:
     documentation: "https://python.langchain.com/docs/modules/data_connection/retrievers/how_to/MultiQueryRetriever"
   # https://github.com/supabase-community/supabase-py/issues/482

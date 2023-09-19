@@ -296,3 +296,6 @@ class VectorStoreFrontendNode(FrontendNode):
         elif field.name == 'connection_args':
             field.show = True
             field.advanced = False
+
+        elif field.name == 'collection_name' and name == 'Milvus':
+            field.value = ''
