@@ -59,18 +59,16 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
         self,
         separators: Optional[List[str]] = None,
         keep_separator: bool = True,
-        is_separator_regex: bool = False,
         **kwargs: Any,
     ) -> None:
         """Create a new TextSplitter."""
         super().__init__(
             separators=separators,
             keep_separator=keep_separator,
-            is_separator_regex=is_separator_regex,
             **kwargs
         )
         self._separators = separators or ["\n\n", "\n", " ", ""]
-        self._is_separator_regex = is_separator_regex
+        self._is_separator_regex = False
 
     def split_documents(self, documents: Iterable[Document]) -> List[Document]:
         texts, metadatas = [], []
@@ -151,6 +149,4 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
                 new_doc = Document(page_content=chunk, metadata=new_metadata)
                 documents.append(new_doc)
         return documents
-
-
 
