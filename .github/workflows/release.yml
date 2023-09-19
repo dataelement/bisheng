@@ -11,6 +11,7 @@ env:
   DOCKERHUB_REPO: dataelement/
   PY_NEXUS: 110.16.193.170:50083
   DOCKER_NEXUS: 110.16.193.170:50080
+  RELEASE_VERSION: 0.1.1 # bisheng-langchain nexus 始终替换版本
   
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
