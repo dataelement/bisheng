@@ -10,7 +10,7 @@ class ModelDeployBase(SQLModelSerializable):
     endpoint: str = Field(index=False, unique=False)
     server: str = Field(index=True)
     model: str = Field(index=False)
-    config: Optional[str] = Field(index=False, sa_column=Column(String(length=1024)))
+    config: Optional[str] = Field(index=False, sa_column=Column(String(length=512)))
     status: Optional[str] = Field(index=False)
     remark: Optional[str] = Field(index=False, sa_column=Column(String(length=4096)))
 

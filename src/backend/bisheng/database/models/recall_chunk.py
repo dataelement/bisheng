@@ -2,15 +2,17 @@ from datetime import datetime
 from typing import Optional
 
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, String, text
+from sqlalchemy import Column, DateTime, String, Text, text
 from sqlmodel import Field
 
 
-class ServerBase(SQLModelSerializable):
-    endpoint: str = Field(index=False, unique=True)
-    server: str = Field(index=True)
-    remark: Optional[str] = Field(index=False)
-    gpu: Optional[str] = Field(index=False, sa_column=Column(String(length=1024)))
+class RecallBase(SQLModelSerializable):
+    message_id: int = Field(index=False, unique=False)
+    chat_id: str = Field(index=False)
+    query: Optional[str] = Field(index=False, sa_column=Column(String(length=1024)))
+    answer: Optional[str] = Field(index=False)
+    chunk: Optional[str] = Field(index=False, sa_column=Column(Text))
+
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
@@ -20,18 +22,19 @@ class ServerBase(SQLModelSerializable):
                          onupdate=text('CURRENT_TIMESTAMP')))
 
 
-class Server(ServerBase, table=True):
+class RecallChunk(RecallBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
-class ServerRead(ServerBase):
+class RecallChunkRead(RecallBase):
     id: Optional[int]
+    score: Optional[int]
 
 
-class ServerQuery(ServerBase):
+class RecallChunkQuery(SQLModelSerializable):
     id: Optional[int]
     server: Optional[str]
 
 
-class ServerCreate(ServerBase):
+class RecallChunkCreate(RecallBase):
     pass

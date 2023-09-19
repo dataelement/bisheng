@@ -10,7 +10,11 @@ admin:
   password: "1234"
 
 # bisheng-rt服务地址
+<<<<<<< HEAD
 # bisheng_rt: 
+=======
+# bisheng-rt: 
+>>>>>>> 57fb6c8 (0.2 溯源)
 #   name: "RT-Server"
 #   server: "192.168.0.1:9001"
 
@@ -28,6 +32,13 @@ knowledges:
     ElasticKeywordsSearch:
       elasticsearch_url: 'https://192.168.106.14:9200'
       ssl_verify: {'ca_certs': False, 'basic_auth': "('elastic', 'F94h5JtdQn6EQB-G9Hjv')", 'verify_certs': False}
+  minio:
+    MINIO_ENDPOINT: "192.168.106.116:9000"
+    MINIO_SHAREPOIN: "110.16.193.170:50061"
+    MINIO_ACCESS_KEY: "minioadmin"
+    MINIO_SECRET_KEY: "minioadmin"
+    # MINIO_PREVIEW_PDF = "http://morsegpt.com/fileView?url="
+
       
 agents:
   ZeroShotAgent:

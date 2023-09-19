@@ -1,7 +1,7 @@
 from bisheng.api.utils import remove_api_keys
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
-from bisheng.database.models.template import (Template, TemplateCreate, TemplateRead, TemplateUpdate)
+from bisheng.database.models.template import Template, TemplateCreate, TemplateRead, TemplateUpdate
 from bisheng.settings import settings
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
