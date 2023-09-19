@@ -25,6 +25,12 @@ services:
 
   backend:
     image: dataelement/bisheng-backend:latest
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/data/:/app/data/
@@ -34,6 +40,9 @@ services:
       - seccomp:unconfined
     command: bash -c "uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --workers 2" # --workers 表示使用几个进程，提高并发度
     restart: on-failure
+    depends_on:
+      - "mysql"
+      - "redis"
 
   nginx:
     image: dataelement/bisheng-frontend:latest

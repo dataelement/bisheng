@@ -32,6 +32,7 @@ import { typesContext } from "./typesContext";
 const uid = new ShortUniqueId({ length: 5 });
 
 const TabsContextInitialValue: TabsContextType = {
+  pages: 1,
   save: () => { },
   tabId: "",
   setTabId: (index: string) => { },
@@ -156,10 +157,13 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   //   }
   // }
 
+  const pagesRef = useRef(0)
   function refreshFlows() {
-    return getTabsDataFromDB(page.current, searchKey.current).then((DbData) => {
+    return getTabsDataFromDB(page.current, searchKey.current).then((res) => {
+      const {data: DbData, pages} = res
       if (DbData && Object.keys(templates).length > 0) {
         try {
+          pagesRef.current = pages;
           processDBData(DbData);
           updateStateWithDbData(DbData);
         } catch (e) {
@@ -655,6 +659,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   return (
     <TabsContext.Provider
       value={{
+        pages: pagesRef.current,
         saveFlow,
         lastCopiedSelection,
         setLastCopiedSelection,

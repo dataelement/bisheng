@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Optional
 
 from bisheng.api import router
-from bisheng.api.JWT import Settings
 from bisheng.database.base import create_db_and_tables
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.utils.logger import configure
@@ -37,6 +36,7 @@ def create_app():
 
     @AuthJWT.load_config
     def get_config():
+        from bisheng.api.JWT import Settings
         return Settings()
 
     @app.exception_handler(AuthJWTException)

@@ -2,10 +2,8 @@ import json
 from typing import List, Optional
 from uuid import UUID
 
-from bisheng.api.utils import (build_flow, build_flow_no_yield,
-                               build_input_keys_response)
-from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatList,
-                                    InitResponse, StreamData)
+from bisheng.api.utils import build_flow, build_flow_no_yield, build_input_keys_response
+from bisheng.api.v1.schemas import BuildStatus, BuiltResponse, ChatList, InitResponse, StreamData
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import get_session
@@ -13,8 +11,7 @@ from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageRead
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
-from fastapi import (APIRouter, HTTPException, WebSocket, WebSocketException,
-                     status)
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketException, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
@@ -40,7 +37,8 @@ def get_chatmessage(*,
     payload = json.loads(Authorize.get_jwt_subject())
     if not chat_id or not flow_id:
         return {'code': 500, 'message': 'chat_id 和 flow_id 必传参数'}
-    where = select(ChatMessage).where(ChatMessage.flow_id == flow_id, ChatMessage.chat_id == chat_id,
+    where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
+                                      ChatMessage.chat_id == chat_id,
                                       ChatMessage.user_id == payload.get('user_id'))
     if id:
         where = where.where(ChatMessage.id < id)
@@ -53,11 +51,11 @@ def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: Aut
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
 
-    smt = (select(
-        ChatMessage.flow_id, ChatMessage.chat_id, ChatMessage.chat_id,
-        func.max(ChatMessage.create_time).label('create_time'),
-        func.max(ChatMessage.update_time).label('update_time')).where(ChatMessage.user_id == payload.get('user_id')).group_by(
-            ChatMessage.flow_id).order_by(func.max(ChatMessage.create_time).desc()))
+    smt = (select(ChatMessage.flow_id, ChatMessage.chat_id, ChatMessage.chat_id,
+                  func.max(ChatMessage.create_time).label('create_time'),
+                  func.max(ChatMessage.update_time).label('update_time')).where(
+                      ChatMessage.user_id == payload.get('user_id')).group_by(
+                          ChatMessage.flow_id).order_by(func.max(ChatMessage.create_time).desc()))
     db_message = session.exec(smt).all()
     flow_ids = [message.flow_id for message in db_message]
     db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
@@ -212,7 +210,10 @@ async def stream_build(flow_id: str, chat_id: Optional[str] = None):
             except StopIteration as e:
                 graph = e.value
             except Exception as e:
-                flow_data_store.hsetkey(flow_data_key, 'status', BuildStatus.FAILURE.value, expiration=expire)
+                flow_data_store.hsetkey(flow_data_key,
+                                        'status',
+                                        BuildStatus.FAILURE.value,
+                                        expiration=expire)
                 yield str(StreamData(event='error', data={'error': str(e)}))
                 return
 
@@ -231,7 +232,11 @@ async def stream_build(flow_id: str, chat_id: Optional[str] = None):
                     input_keys_response['memory_keys'].extend(input_keys.get('memory_keys'))
                     input_keys_response['handle_keys'].extend(input_keys.get('handle_keys'))
                 elif ('fileNode' in node.output):
-                    input_keys_response['input_keys'].append({'file_path': '', 'type': 'file', 'id': node.id})
+                    input_keys_response['input_keys'].append({
+                        'file_path': '',
+                        'type': 'file',
+                        'id': node.id
+                    })
 
             yield str(StreamData(event='message', data=input_keys_response))
             # We need to reset the chat history

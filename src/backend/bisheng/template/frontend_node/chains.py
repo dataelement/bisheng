@@ -7,6 +7,7 @@ from bisheng.template.template.base import Template
 
 
 class ChainFrontendNode(FrontendNode):
+
     def add_extra_fields(self) -> None:
         if self.template.type_name == 'ConversationalRetrievalChain':
             # add memory
@@ -17,8 +18,7 @@ class ChainFrontendNode(FrontendNode):
                     show=True,
                     name='memory',
                     advanced=False,
-                )
-            )
+                ))
             # add return_source_documents
             self.template.add_field(
                 TemplateField(
@@ -29,8 +29,7 @@ class ChainFrontendNode(FrontendNode):
                     advanced=False,
                     value=True,
                     display_name='Return source documents',
-                )
-            )
+                ))
             self.template.add_field(
                 TemplateField(
                     field_type='str',
@@ -42,8 +41,32 @@ class ChainFrontendNode(FrontendNode):
                     value=QA_CHAIN_TYPES[0],
                     name='chain_type',
                     advanced=False,
-                )
-            )
+                ))
+        elif self.template.type_name == "MultiRetrievalQA":
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='combine_strategy',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='BaseRetriever',
+                    required=True,
+                    show=True,
+                    name='vector_retriever',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='BaseRetriever',
+                    required=True,
+                    show=True,
+                    name='Keyword_retriever',
+                    advanced=False,
+                ))
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
@@ -246,7 +269,7 @@ class CombineDocsChainNode(FrontendNode):
                 display_name='token_max',
                 advanced=False,
                 info='当前只对stuff 生效',
-                value= -1,
+                value=-1,
             ),
         ],
     )

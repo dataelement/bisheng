@@ -4,8 +4,7 @@ from typing import Optional
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.constants import FORCE_SHOW_FIELDS
 from bisheng.template.frontend_node.formatter.base import FieldFormatter
-from bisheng.utils.constants import (ANTHROPIC_MODELS, CHAT_OPENAI_MODELS,
-                                     OPENAI_MODELS)
+from bisheng.utils.constants import ANTHROPIC_MODELS, CHAT_OPENAI_MODELS, OPENAI_MODELS
 
 
 class OpenAIAPIKeyFormatter(FieldFormatter):
@@ -97,12 +96,10 @@ class ShowFieldFormatter(FieldFormatter):
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         key = field.name
         required = field.required
-        field.show = (
-            (required and key not in ['input_variables'])
-            or key in FORCE_SHOW_FIELDS
-            or 'api' in key
-            or ('key' in key and 'input' not in key and 'output' not in key)
-        )
+        field.show = ((required and
+                       (key not in ['input_variables'] or name == 'SequentialChain')) or
+                      key in FORCE_SHOW_FIELDS or 'api' in key or
+                      ('key' in key and 'input' not in key and 'output' not in key))
 
 
 class PasswordFieldFormatter(FieldFormatter):

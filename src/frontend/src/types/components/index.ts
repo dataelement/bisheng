@@ -39,6 +39,7 @@ export type ParameterComponentType = {
   dataContext?: typesContextType;
   optionalHandle?: Array<String>;
   info?: string;
+  onChange?: () => void;
 };
 export type InputListComponentType = {
   value: string[];

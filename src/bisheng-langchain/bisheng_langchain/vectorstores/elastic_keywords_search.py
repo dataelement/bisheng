@@ -95,18 +95,14 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         try:
             import elasticsearch
         except ImportError:
-            raise ImportError(
-                'Could not import elasticsearch python package. '
-                'Please install it with `pip install elasticsearch`.')
+            raise ImportError('Could not import elasticsearch python package. '
+                              'Please install it with `pip install elasticsearch`.')
         self.index_name = index_name
         _ssl_verify = ssl_verify or {}
         try:
-            self.client = elasticsearch.Elasticsearch(elasticsearch_url,
-                                                      **_ssl_verify)
+            self.client = elasticsearch.Elasticsearch(elasticsearch_url, **_ssl_verify)
         except ValueError as e:
-            raise ValueError(
-                f'Your elasticsearch client string is mis-formatted. Got error: {e} '
-            )
+            raise ValueError(f'Your elasticsearch client string is mis-formatted. Got error: {e} ')
 
     def add_texts(
         self,
@@ -131,9 +127,8 @@ class ElasticKeywordsSearch(VectorStore, ABC):
             from elasticsearch.exceptions import NotFoundError
             from elasticsearch.helpers import bulk
         except ImportError:
-            raise ImportError(
-                'Could not import elasticsearch python package. '
-                'Please install it with `pip install elasticsearch`.')
+            raise ImportError('Could not import elasticsearch python package. '
+                              'Please install it with `pip install elasticsearch`.')
         requests = []
         ids = ids or [str(uuid.uuid4()) for _ in texts]
         mapping = _default_text_mapping()
@@ -168,28 +163,17 @@ class ElasticKeywordsSearch(VectorStore, ABC):
                           query_strategy: str = 'match_phrase',
                           must_or_should: str = 'should',
                           **kwargs: Any) -> List[Document]:
-        assert must_or_should in ['must',
-                                  'should'], 'only support must and should.'
+        assert must_or_should in ['must', 'should'], 'only support must and should.'
         keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
         match_query = {'bool': {must_or_should: []}}
         for key in keywords:
-            match_query['bool'][must_or_should].append(
-                {query_strategy: {
-                    'text': key
-                }})
+            match_query['bool'][must_or_should].append({query_strategy: {'text': key}})
         docs_and_scores = self.similarity_search_with_score(match_query, k)
         documents = [d[0] for d in docs_and_scores]
         return documents
 
-    def similarity_search_with_score(
-            self,
-            query: str,
-            k: int = 4,
-            **kwargs: Any) -> List[Tuple[Document, float]]:
-        response = self.client_search(self.client,
-                                      self.index_name,
-                                      query,
-                                      size=k)
+    def similarity_search_with_score(self, query: str, k: int = 4, **kwargs: Any) -> List[Tuple[Document, float]]:
+        response = self.client_search(self.client, self.index_name, query, size=k)
         hits = [hit for hit in response['hits']['hits']]
         docs_and_scores = [(
             Document(
@@ -204,7 +188,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
     def from_texts(
         cls,
         texts: List[str],
-        _: Embeddings,
+        embedding: Embeddings,
         metadatas: Optional[List[dict]] = None,
         ids: Optional[List[str]] = None,
         index_name: Optional[str] = None,
@@ -232,20 +216,15 @@ class ElasticKeywordsSearch(VectorStore, ABC):
                     elasticsearch_url="http://localhost:9200"
                 )
         """
-        elasticsearch_url = get_from_dict_or_env(kwargs, 'elasticsearch_url',
-                                                 'ELASTICSEARCH_URL')
+        elasticsearch_url = get_from_dict_or_env(kwargs, 'elasticsearch_url', 'ELASTICSEARCH_URL')
         if 'elasticsearch_url' in kwargs:
             del kwargs['elasticsearch_url']
         index_name = index_name or uuid.uuid4().hex
         vectorsearch = cls(elasticsearch_url, index_name, **kwargs)
-        vectorsearch.add_texts(texts,
-                               metadatas=metadatas,
-                               ids=ids,
-                               refresh_indices=refresh_indices)
+        vectorsearch.add_texts(texts, metadatas=metadatas, ids=ids, refresh_indices=refresh_indices)
         return vectorsearch
 
-    def create_index(self, client: Any, index_name: str,
-                     mapping: Dict) -> None:
+    def create_index(self, client: Any, index_name: str, mapping: Dict) -> None:
         version_num = client.info()['version']['number'][0]
         version_num = int(version_num)
         if version_num >= 8:
@@ -253,20 +232,13 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         else:
             client.indices.create(index=index_name, body={'mappings': mapping})
 
-    def client_search(self, client: Any, index_name: str, script_query: Dict,
-                      size: int) -> Any:
+    def client_search(self, client: Any, index_name: str, script_query: Dict, size: int) -> Any:
         version_num = client.info()['version']['number'][0]
         version_num = int(version_num)
         if version_num >= 8:
-            response = client.search(index=index_name,
-                                     query=script_query,
-                                     size=size)
+            response = client.search(index=index_name, query=script_query, size=size)
         else:
-            response = client.search(index=index_name,
-                                     body={
-                                         'query': script_query,
-                                         'size': size
-                                     })
+            response = client.search(index=index_name, body={'query': script_query, 'size': size})
         return response
 
     def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> None:

@@ -17,7 +17,8 @@
             "jinja": true,
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceRoot}/src/backend/"
+                "PYTHONPATH": "${workspaceRoot}/src/backend/",
+                "config": "/Users/huangly/Code/bisheng/src/backend/bisheng/config.dev.yaml"
             },
             "cwd": "${workspaceFolder}/src/backend/",
         }

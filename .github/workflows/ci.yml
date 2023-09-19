@@ -53,6 +53,11 @@ jobs:
           twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
           
       # 构建 backend 并推送到 Docker hub
+      - name: build lock
+        run: | 
+          cd ./src/backend
+          poetry lock
+          cd ../../
       - name: Build backend and push
         id: docker_build_backend
         uses: docker/build-push-action@v2

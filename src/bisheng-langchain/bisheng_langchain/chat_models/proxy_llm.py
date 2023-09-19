@@ -52,8 +52,7 @@ def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
     if role == 'user':
         return HumanMessage(content=_dict['content'])
     elif role == 'assistant':
-        content = _dict[
-            'content'] or ''  # OpenAI returns None for tool invocations
+        content = _dict['content'] or ''  # OpenAI returns None for tool invocations
         if _dict.get('function_call'):
             additional_kwargs = {'function_call': dict(_dict['function_call'])}
         else:
@@ -75,8 +74,7 @@ def _convert_message_to_dict(message: BaseMessage) -> dict:
     elif isinstance(message, AIMessage):
         message_dict = {'role': 'assistant', 'content': message.content}
         if 'function_call' in message.additional_kwargs:
-            message_dict['function_call'] = message.additional_kwargs[
-                'function_call']
+            message_dict['function_call'] = message.additional_kwargs['function_call']
     elif isinstance(message, SystemMessage):
         message_dict = {'role': 'system', 'content': message.content}
     elif isinstance(message, FunctionMessage):
@@ -147,11 +145,10 @@ class ProxyChatLLM(BaseChatModel):
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
-        values['elemai_api_key'] = get_from_dict_or_env(
-            values, 'elemai_api_key', 'ELEMAI_API_KEY')
+        values['elemai_api_key'] = get_from_dict_or_env(values, 'elemai_api_key', 'ELEMAI_API_KEY')
 
-        values['elemai_base_url'] = get_from_dict_or_env(
-            values, 'elemai_base_url', 'ELEMAI_BASE_URL')
+        values['elemai_base_url'] = get_from_dict_or_env(values, 'elemai_base_url',
+                                                         'ELEMAI_BASE_URL')
 
         elemai_api_key = values['elemai_api_key']
         values['headers'] = {
@@ -162,8 +159,7 @@ class ProxyChatLLM(BaseChatModel):
         try:
             values['client'] = requests.post
         except AttributeError:
-            raise ValueError(
-                'Try upgrading it with `pip install --upgrade requests`.')
+            raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
         return values
 
     @property
@@ -196,9 +192,7 @@ class ProxyChatLLM(BaseChatModel):
                 'function_call': kwargs.get('function_call', None),
                 'functions': kwargs.get('functions', [])
             }
-            return self.client(self.elemai_base_url,
-                               headers=self.headers,
-                               json=params).json()
+            return self.client(self.elemai_base_url, headers=self.headers, json=params).json()
 
         return _completion_with_retry(**kwargs)
 
@@ -214,10 +208,7 @@ class ProxyChatLLM(BaseChatModel):
                     overall_token_usage[k] += v
                 else:
                     overall_token_usage[k] = v
-        return {
-            'token_usage': overall_token_usage,
-            'model_name': self.model_name
-        }
+        return {'token_usage': overall_token_usage, 'model_name': self.model_name}
 
     def _generate(
         self,
@@ -239,16 +230,15 @@ class ProxyChatLLM(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return self._generate(messages, stop, run_manager, kwargs)
+        return self._generate(messages, stop, run_manager, **kwargs)
 
     def _create_message_dicts(
-        self, messages: List[BaseMessage], stop: Optional[List[str]]
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+            self, messages: List[BaseMessage],
+            stop: Optional[List[str]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         params = dict(self._client_params)
         if stop is not None:
             if 'stop' in params:
-                raise ValueError(
-                    '`stop` found in both the input and default params.')
+                raise ValueError('`stop` found in both the input and default params.')
             params['stop'] = stop
 
         message_dicts = [_convert_message_to_dict(m) for m in messages]
@@ -257,15 +247,14 @@ class ProxyChatLLM(BaseChatModel):
 
     def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
         generations = []
+        if 'choices' not in response:
+            raise Exception(f'LLM return error {response}')
         for res in response['choices']:
             message = _convert_dict_to_message(res['message'])
             gen = ChatGeneration(message=message)
             generations.append(gen)
 
-        llm_output = {
-            'token_usage': response['usage'],
-            'model_name': self.model_name
-        }
+        llm_output = {'token_usage': response['usage'], 'model_name': self.model_name}
         return ChatResult(generations=generations, llm_output=llm_output)
 
     @property
@@ -310,8 +299,7 @@ class ProxyChatLLM(BaseChatModel):
         try:
             encoding = tiktoken_.encoding_for_model(model)
         except KeyError:
-            logger.warning(
-                'Warning: model not found. Using cl100k_base encoding.')
+            logger.warning('Warning: model not found. Using cl100k_base encoding.')
             model = 'cl100k_base'
             encoding = tiktoken_.get_encoding(model)
         return model, encoding

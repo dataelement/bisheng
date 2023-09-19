@@ -2,11 +2,12 @@ import json
 from typing import List
 from uuid import UUID
 
+from sqlalchemy import func
+
 from bisheng.api.utils import build_flow_no_yield, remove_api_keys
 from bisheng.api.v1.schemas import FlowListCreate, FlowListRead
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate
-from bisheng.database.models.template import Template
 from bisheng.database.models.user import User
 from bisheng.settings import settings
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -24,10 +25,6 @@ def create_flow(*, session: Session = Depends(get_session), flow: FlowCreate, Au
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
 
-    if flow.flow_id:
-        # copy from template
-        temp_flow = session.get(Flow, flow.flow_id)
-        flow.data = temp_flow.data
     flow.user_id = payload.get('user_id')
     db_flow = Flow.from_orm(flow)
     session.add(db_flow)
@@ -36,7 +33,7 @@ def create_flow(*, session: Session = Depends(get_session), flow: FlowCreate, Au
     return db_flow
 
 
-@router.get('/', response_model=list[FlowReadWithStyle], status_code=200)
+@router.get('/', status_code=200)
 def read_flows(*,
                session: Session = Depends(get_session),
                name: str = Query(default=None, description='根据name查找数据库'),
@@ -50,14 +47,17 @@ def read_flows(*,
 
     try:
         sql = select(Flow)
+        count_sql = select(func.count(Flow.id))
         if 'admin' != payload.get('role'):
             sql = sql.where(Flow.user_id == payload.get('user_id'))
+            count_sql = count_sql.where(Flow.user_id == payload.get('user_id'))
         if name:
             sql = sql.where(Flow.name.like(f'%{name}%'))
+            count_sql = count_sql.where(Flow.name.like(f'%{name}%'))
         if status:
             sql = sql.where(Flow.status == status)
-        # count = session.exec(sql.count())
-        # total = count.scalar()
+            count_sql = count_sql.where(Flow.status == status)
+        total_count = session.scalar(count_sql)
 
         sql = sql.order_by(Flow.update_time.desc())
         if page_num and page_size:
@@ -72,7 +72,7 @@ def read_flows(*,
             for r in res:
                 r['user_name'] = userMap[r['user_id']]
 
-        return res
+        return {'data': res, 'total': total_count}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -133,11 +133,6 @@ def delete_flow(*, session: Session = Depends(get_session), flow_id: UUID, Autho
         raise HTTPException(status_code=404, detail='Flow not found')
     if 'admin' != payload.get('role') and flow.user_id != payload.get('user_id'):
         raise HTTPException(status_code=500, detail='没有权限删除此技能')
-
-    # 判断是否属于模板
-    db_template = session.exec(select(Template).where(Template.flow_id == flow_id)).first()
-    if db_template:
-        session.delete(db_template)
 
     session.delete(flow)
     session.commit()
