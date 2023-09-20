@@ -73,6 +73,7 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
     Loader also stores page numbers in metadata.
     """
     def __init__(self,
+                 file_name : str,
                  file_path: str,
                  unstructured_api_key: str = None,
                  unstructured_api_url: str = None,
@@ -83,13 +84,13 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
         self.unstructured_api_url = unstructured_api_url
         self.unstructured_api_key = unstructured_api_key
         self.headers = {'Content-Type': 'application/json'}
+        self.file_name = file_name
         super().__init__(file_path)
 
     def load(self) -> List[Document]:
-        filename = self.file_path
-        b64_data = base64.b64encode(open(filename, 'rb').read()).decode()
+        b64_data = base64.b64encode(open(self.file_path, 'rb').read()).decode()
         payload = dict(
-            filename=os.path.basename(filename),
+            filename=os.path.basename(self.file_name),
             b64_data=[b64_data],
             mode='text')
 
@@ -99,6 +100,6 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
             json=payload).json()
 
         page_content = resp['text']
-        meta = {'source': filename}
+        meta = {'source': self.file_name}
         doc = Document(page_content=page_content, metadata=meta)
         return [doc]

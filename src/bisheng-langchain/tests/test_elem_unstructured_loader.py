@@ -11,6 +11,7 @@ def test_loader():
 def test_elem_loader2():
     url = 'http://192.168.106.12:10001/v1/etl4llm/predict'
     loader = ElemUnstructuredLoaderV0(
+        file_name='毛泽东课件.pptx',
         file_path='./data/毛泽东课件.pptx',
         unstructured_api_url=url)
 
