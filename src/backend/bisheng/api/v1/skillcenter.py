@@ -22,7 +22,11 @@ def create_template(*, session: Session = Depends(get_session), template: Templa
 
     # 增加 order_num  x,x+65535
     max_order = session.exec(select(Template).order_by(Template.order_num.desc()).limit(1)).first()
-    db_template.order_num = max_order.order_num + ORDER_GAP
+    # 如果没有数据，就从 65535 开始
+    if max_order is None:
+        db_template.order_num = ORDER_GAP
+    else:
+        db_template.order_num = max_order.order_num + ORDER_GAP
     session.add(db_template)
     session.commit()
     session.refresh(db_template)
