@@ -146,6 +146,17 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
                 if 'token_to_bbox' in metadata:
                     new_metadata['token_to_bbox'] = metadata['token_to_bbox'][new_metadata['start']:new_metadata['end']+1]
 
+                if 'page' in new_metadata and 'token_to_bbox' in new_metadata:
+                    box_no_duplicates = set()
+                    for index in range(len(new_metadata['page'])):
+                        box_no_duplicates.add(
+                            (new_metadata['page'][index], new_metadata['token_to_bbox'][index]))
+
+                    new_metadata['chunk_bboxes'] = []
+                    for elem in box_no_duplicates:
+                        new_metadata['chunk_bboxes'].append(
+                            {'page': elem[0], 'bbox': new_metadata['bboxes'][elem[1]]})
+
                 new_doc = Document(page_content=chunk, metadata=new_metadata)
                 documents.append(new_doc)
         return documents
