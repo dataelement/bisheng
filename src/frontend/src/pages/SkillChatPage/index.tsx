@@ -24,9 +24,9 @@ export default function SkillChatPage(params) {
         readOnlineFlows().then(res => setOnlineFlows(res))
     }, [])
     // 对话列表
-    const { chatList, chatIndex, setChatIndex, addChat } = useChatList()
+    const { chatList, chatId, chatsRef, setChatId, addChat } = useChatList()
 
-    const chatId = useRef('')
+    const chatIdRef = useRef('')
     const {
         inputState,
         fileInputs,
@@ -39,11 +39,11 @@ export default function SkillChatPage(params) {
         initChat,
         sendMsg,
         loadNextPage
-    } = useWebsocketChat(chatId) // talk
+    } = useWebsocketChat(chatIdRef) // talk
     // select flow
     const handlerSelectFlow = async (node: FlowType) => {
         // 会话ID
-        chatId.current = generateUUID(32)
+        chatIdRef.current = generateUUID(32)
         setOpen(false)
         await initChat(node)
         setFace(false)
@@ -52,7 +52,7 @@ export default function SkillChatPage(params) {
             "flow_name": node.name,
             "flow_description": node.description,
             "flow_id": node.id,
-            "chat_id": chatId.current,
+            "chat_id": chatIdRef.current,
             "create_time": "-",
             "update_time": "-"
         })
@@ -66,10 +66,10 @@ export default function SkillChatPage(params) {
     }
 
     // select chat
-    const handleSelectChat = async (i, chat) => {
-        if (i === chatIndex) return
-        setChatIndex(i)
-        chatId.current = chat.chat_id
+    const handleSelectChat = async (chat) => {
+        if (chat.chat_id === chatId) return
+        setChatId(chat.chat_id)
+        chatIdRef.current = chat.chat_id
         let flow = flows.find(flow => flow.id === chat.flow_id) || await getFlowFromDatabase(chat.flow_id)
         if (!flow) {
             setInputState({ lock: true, error: '该技能已被删除' })
@@ -105,7 +105,7 @@ export default function SkillChatPage(params) {
     useEffect(() => {
         !chating && setTimeout(() => {
             // 对话结束自动聚焦
-            inputRef.current.focus()
+            inputRef.current?.focus()
         }, 1000);
     }, [chating])
 
@@ -139,17 +139,17 @@ export default function SkillChatPage(params) {
     }, [messagesRef.current]);
 
     // 溯源
-    const [souceOpen, setSouceOpen] = useState(false)
+    const [souceId, setSouceId] = useState('')
 
     return <div className="flex">
         <div className="h-screen w-[200px] relative border-r">
             <div className="absolute flex pt-2 ml-[20px] bg-[#fff] dark:bg-gray-950">
                 <div className="border rounded-lg px-4 py-2 text-center cursor-pointer w-[160px] hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setOpen(true)}>新建会话</div>
             </div>
-            <div className="scroll p-4 h-full overflow-y-scroll no-scrollbar pt-12">
+            <div ref={chatsRef} className="scroll p-4 h-full overflow-y-scroll no-scrollbar pt-12">
                 {
                     chatList.map((chat, i) => (
-                        <div key={chat.chat_id} className={`item rounded-xl mt-2 p-2 hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatIndex === i && 'bg-gray-100 dark:bg-gray-800'}`} onClick={() => handleSelectChat(i, chat)}>
+                        <div key={chat.chat_id} className={`item rounded-xl mt-2 p-2 hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-gray-100 dark:bg-gray-800'}`} onClick={() => handleSelectChat(chat)}>
                             <p className="">{chat.flow_name}</p>
                             <span className="text-xs text-gray-500">{chat.flow_description}</span>
                         </div>
@@ -162,11 +162,11 @@ export default function SkillChatPage(params) {
             <p className="text-center mt-[100px]">选择一个对话开始文擎睿见</p>
         </div>
             : <div className="flex-1 chat-box h-screen overflow-hidden relative">
-                <div className="absolute w-full px-4 py-4 bg-[#fff] z-10 dark:bg-gray-950">{chatList[chatIndex].name}</div>
+                <div className="absolute w-full px-4 py-4 bg-[#fff] z-10 dark:bg-gray-950">{chatList.find(chat => chat.chat_id === chatId)?.flow_name}</div>
                 <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
                     <div ref={messagesRef} className="chat-panne h-full overflow-y-scroll no-scrollbar px-4 pb-20">
                         {
-                            chatHistory.map((c, i) => <ChatMessage key={i} chat={c} onSouce={() => setSouceOpen(true)}></ChatMessage>)
+                            chatHistory.map((c, i) => <ChatMessage key={i} chat={c} onSouce={() => setSouceId('c')}></ChatMessage>)
                         }
                         {/* <div className="chat chat-start">
                         <div className="chat-bubble chat-bubble-info bg-gray-300">It's over Anakin, <br />I have the high ground.</div>
@@ -214,7 +214,7 @@ export default function SkillChatPage(params) {
             open={open} setOpen={setOpen}
             onSelect={(e) => handlerSelectFlow(e)}></SkillTemps>
         {/* 源文件类型 */}
-        {/* <ResouceModal open={souceOpen} setOpen={setSouceOpen}></ResouceModal> */}
+        {/* <ResouceModal open={!!souceId} id={souceId} setOpen={() => setSouceId('')}></ResouceModal> */}
     </div>
 };
 /**
@@ -222,7 +222,7 @@ export default function SkillChatPage(params) {
  * 发送（chatHistory, desc, inputs, name, deges, nodes, viewport）
  * 接收存chatHistory({chatKey, isSend, message{k: v}} & {thought}[])
  */
-const useWebsocketChat = (chatId) => {
+const useWebsocketChat = (chatIdRef) => {
     const ws = useRef<WebSocket | null>(null);
     const flow = useRef<FlowType>(null)
 
@@ -237,7 +237,7 @@ const useWebsocketChat = (chatId) => {
     // 聊天记录
     const [chatHistory, setChatHistory] = useState<ChatMessageType[]>([]);
     const loadHistory = async (lastId?: number) => {
-        const res = await getChatHistory(flow.current.id, chatId.current, lastId ? 10 : 30, lastId)
+        const res = await getChatHistory(flow.current.id, chatIdRef.current, lastId ? 10 : 30, lastId)
         const hisData = res.map(item => {
             // let count = 0
             let message = item.message
@@ -284,7 +284,7 @@ const useWebsocketChat = (chatId) => {
         const isSecureProtocol = window.location.protocol === "https:";
         const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
         const host = window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
-        const chatEndpoint = `/api/v1/chat/${_chatId}?type=L1&chat_id=${chatId.current}`;
+        const chatEndpoint = `/api/v1/chat/${_chatId}?type=L1&chat_id=${chatIdRef.current}`;
 
         return `${webSocketProtocol}://${host}${chatEndpoint}`;
     }
@@ -566,7 +566,7 @@ const useWebsocketChat = (chatId) => {
     // 获取上传file input
     const fileInputs = useMemo(() => {
         if (!flow.current) return
-        return tabsState[flow.current.id].formKeysData.input_keys?.filter((input: any) => input.type === 'file')
+        return tabsState[flow.current.id]?.formKeysData.input_keys?.filter((input: any) => input.type === 'file')
     }, [tabsState, flow.current])
 
     // 上传文件
@@ -655,7 +655,7 @@ const useWebsocketChat = (chatId) => {
             newChat[newChat.length - 1].category = 'loading';
             return newChat;
         });
-        await build(flow.current, chatId)
+        await build(flow.current, chatIdRef)
         await connectWS()
         // 链接成功
         // 上一条去loading
@@ -696,7 +696,7 @@ const useWebsocketChat = (chatId) => {
         async initChat(_flow) {
             closeWs()
             await checkPrompt(_flow)
-            await build(_flow, chatId)
+            await build(_flow, chatIdRef)
             setChatHistory([])
             flow.current = _flow
             connectWS()
@@ -790,7 +790,7 @@ const useBuild = () => {
         }
     }
 
-    async function handleBuild(flow: FlowType, chatId: any) {
+    async function handleBuild(flow: FlowType, chatIdRef: any) {
         try {
             const errors = flow.data.nodes.flatMap((n: NodeType) => validateNode(n, flow.data.edges))
             if (errors.length > 0) {
@@ -804,7 +804,7 @@ const useBuild = () => {
             const minimumLoadingTime = 200; // in milliseconds
             const startTime = Date.now();
 
-            await streamNodeData(flow, chatId.current);
+            await streamNodeData(flow, chatIdRef.current);
             await enforceMinimumLoadingTime(startTime, minimumLoadingTime); // 至少等200ms, 再继续(强制最小load时间)
 
             // if (!allNodesValid) {
@@ -828,27 +828,27 @@ const useBuild = () => {
  * 本地对话列表
  */
 const useChatList = () => {
-    const [chatIndex, setChatIndex] = useState(-1)
+    const [id, setId] = useState(-1)
     const [chatList, setChatList] = useState([])
-    // const ITEM_KEY = 'chattabs'
+    const chatsRef = useRef(null)
 
     useEffect(() => {
-        getChatsApi().then(res => {
-            setChatList(res.data)
-        })
-        // const listStr = localStorage.getItem(ITEM_KEY)
-        // listStr && setChatList(JSON.parse(listStr))
+        getChatsApi().then(setChatList)
     }, [])
 
     return {
         chatList,
-        chatIndex,
-        setChatIndex,
+        chatId: id,
+        chatsRef,
+        setChatId: setId,
         addChat: (chat) => {
             const newList = [chat, ...chatList]
             // localStorage.setItem(ITEM_KEY, JSON.stringify(newList))
             setChatList(newList)
-            setChatIndex(0)
+            setId(chat.chat_id)
+            setTimeout(() => {
+                chatsRef.current.scrollTop = 1
+            }, 0);
         }
     }
 }

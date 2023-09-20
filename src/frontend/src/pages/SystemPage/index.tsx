@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import {
     Table,
@@ -16,11 +16,13 @@ import {
 } from "../../components/ui/tabs";
 
 import { disableUserApi, getUsersApi } from "../../controllers/API";
+import { userContext } from "../../contexts/userContext";
 
 export default function FileLibPage() {
     const [datalist, setDataList] = useState([])
 
     const [users, setUsers] = useState([])
+    const { user } = useContext(userContext);
     // 分页
     const [page, setPage] = useState(1)
     const [pageEnd, setPageEnd] = useState(false)
@@ -84,7 +86,8 @@ export default function FileLibPage() {
                                 <TableCell className="text-right">
                                     {
                                         el.delete === 1 ? <a href="javascript:;" onClick={() => handleEnableUser(el)} className="underline ml-4">启用</a> :
-                                            <a href="javascript:;" onClick={() => delConfim(el)} className="underline ml-4 text-red-500">禁用</a>
+                                            user.user_id === el.user_id ? <a href="javascript:;" className=" ml-4 text-gray-400">禁用</a> :
+                                                <a href="javascript:;" onClick={() => delConfim(el)} className="underline ml-4 text-red-500">禁用</a>
                                     }
                                 </TableCell>
                             </TableRow>

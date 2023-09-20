@@ -11,7 +11,7 @@ import {
 } from "../../components/ui/table";
 import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
 
-export default function Templates({ onBack }) {
+export default function Templates({ onBack, onChange }) {
 
     const [temps, setTemps] = useState([])
     useEffect(() => {
@@ -43,12 +43,11 @@ export default function Templates({ onBack }) {
         const currentItem = updatedList[destination.index]
         currentItem.order_num = sort
         const { name, description, order_num } = currentItem
-        updateTempApi(currentItem.id, { name, description, order_num })
-        console.log('sort :>> ', sort);
+        updateTempApi(currentItem.id, { name, description, order_num }).then(onChange)
     }
 
     const handleDelTemp = (index: number, id: number) => {
-        deleteTempApi(id)
+        deleteTempApi(id).then(onChange)
         setTemps(temps.filter((temp, i) => index !== i));
     }
 
@@ -93,26 +92,5 @@ export default function Templates({ onBack }) {
                 </Droppable>
             </DragDropContext>
         </Table>
-
-        {/* // <div className="w-full flex flex-wrap mt-6"
-                    //     {...provided.droppableProps}
-                    //     ref={provided.innerRef}
-                    // >
-                    //     {temps.map((temp: any, index: number) => (
-                    //         <Draggable key={'drag' + temp.flow_id} draggableId={'drag' + temp.flow_id} index={index}>
-                    //             {(provided) => (
-                    //                 <div
-                    //                     className='drag-li'
-                    //                     ref={provided.innerRef}
-                    //                     {...provided.draggableProps}
-                    //                     {...provided.dragHandleProps}
-                    //                 >
-                    //                     <TempItem data={temp} onDelete={() => { }}></TempItem>
-                    //                 </div>
-                    //             )}
-                    //         </Draggable>
-                    //     ))}
-                    //     {provided.placeholder}
-                    // </div> */}
     </div >
 };

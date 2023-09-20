@@ -916,14 +916,17 @@ export function groupByFamily(data, baseClasses, left, type) {
 }
 
 export function buildInputs(tabsState, id) {
-  return tabsState &&
+  if (tabsState &&
     tabsState[id] &&
     tabsState[id].formKeysData &&
-    tabsState[id].formKeysData.input_keys && tabsState[id].formKeysData.input_keys.length 
-    ? JSON.stringify(tabsState[id].formKeysData.input_keys) : '[{"input": "message"}]';
-    // Object.keys(tabsState[id].formKeysData.input_keys).length > 0
-    // ? JSON.stringify(tabsState[id].formKeysData.input_keys)
-    // : '{"input": "message"}';
+    tabsState[id].formKeysData.input_keys && tabsState[id].formKeysData.input_keys.length) {
+    const input = tabsState[id].formKeysData.input_keys.find(el => el.type !== 'file')
+    return JSON.stringify(input)
+  }
+  return '{"input": "message"}'
+  // Object.keys(tabsState[id].formKeysData.input_keys).length > 0
+  // ? JSON.stringify(tabsState[id].formKeysData.input_keys)
+  // : '{"input": "message"}';
 }
 
 export function buildTweaks(flow) {
@@ -955,15 +958,13 @@ export function validateNode(
             template[t].value === null ||
             template[t].value === "") &&
           !(reactFlowInstance?.getEdges?.() || reactFlowInstance).some(
-              (e) =>
-                e.targetHandle.split("|")[1] === t &&
-                e.targetHandle.split("|")[2] === n.id
-            )
+            (e) =>
+              e.targetHandle.split("|")[1] === t &&
+              e.targetHandle.split("|")[2] === n.id
+          )
           ? [
-              `${type} 缺失了 ${
-                template.display_name || toNormalCase(template[t].name)
-              }.`,
-            ]
+            `${type} 缺失了 ${template.display_name || toNormalCase(template[t].name)}.`,
+          ]
           : []
       ),
     [] as string[]

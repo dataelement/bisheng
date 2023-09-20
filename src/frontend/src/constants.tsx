@@ -102,17 +102,14 @@ export const getPythonApiCode = (
   return `import requests
 from typing import Optional
 
-BASE_API_URL = "${window.location.protocol}//${
-    window.location.host
-  }/api/v1/process"
+BASE_API_URL = "${window.location.protocol}//${window.location.host}/api/v1/process"
 FLOW_ID = "${flowId}"
 # You can tweak the flow by adding a tweaks dictionary
 # e.g {"OpenAI-XXXXX": {"model_name": "gpt-4"}}
-TWEAKS = ${
-    tweak && tweak.length > 0
+TWEAKS = ${tweak && tweak.length > 0
       ? buildTweakObject(tweak)
       : JSON.stringify(tweaks, null, 2)
-  }
+    }
 
 def run_flow(inputs: dict, flow_id: str, tweaks: Optional[dict] = None) -> dict:
     """
@@ -152,15 +149,13 @@ export const getCurlCode = (
   const inputs = buildInputs(tabsState, flow.id);
 
   return `curl -X POST \\
-  ${window.location.protocol}//${
-    window.location.host
-  }/api/v1/process/${flowId} \\
+  ${window.location.protocol}//${window.location.host
+    }/api/v1/process/${flowId} \\
   -H 'Content-Type: application/json' \\
-  -d '{"inputs": ${inputs}, "tweaks": ${
-    tweak && tweak.length > 0
+  -d '{"inputs": ${inputs}, "tweaks": ${tweak && tweak.length > 0
       ? buildTweakObject(tweak)
       : JSON.stringify(tweaks, null, 2)
-  }}'`;
+    }}'`;
 };
 /**
  * Function to get the python code for the API
@@ -176,11 +171,10 @@ export const getPythonCode = (
   const tweaks = buildTweaks(flow);
   const inputs = buildInputs(tabsState, flow.id);
   return `from bisheng import load_flow_from_json
-TWEAKS = ${
-    tweak && tweak.length > 0
+TWEAKS = ${tweak && tweak.length > 0
       ? buildTweakObject(tweak)
       : JSON.stringify(tweaks, null, 2)
-  }
+    }
 flow = load_flow_from_json("${flowName}.json", tweaks=TWEAKS)
 # Now you can use it like any chain
 inputs = ${inputs}
@@ -193,7 +187,7 @@ function buildTweakObject(tweak) {
       for (let kp in el[key]) {
         try {
           el[key][kp] = JSON.parse(el[key][kp]);
-        } catch {}
+        } catch { }
       }
     });
   });
@@ -214,7 +208,7 @@ export const IMPORT_DIALOG_SUBTITLE =
  * @constant
  */
 export const EXPORT_CODE_DIALOG =
-  "生成代码，将流程集成到外部应用程序中。";
+  "生成代码，将流程集成到外部应用程序中 (打开此页面前请先build技能)。";
 
 /**
  * The base text for subtitle of code dialog

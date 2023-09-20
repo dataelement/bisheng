@@ -382,7 +382,9 @@ export async function deleteFlowFromDatabase(flowId: string) {
  * 获取会话列表
  */
 export const getChatsApi = () => {
-  return axios.get(`/api/v1/chat/list`)
+  return axios.get(`/api/v1/chat/list`).then(res =>
+    res.data?.filter(el => el.chat_id) || []
+  )
 };
 
 
@@ -589,4 +591,28 @@ export async function getUsersApi(name: string, page: number, pageSize: number) 
 // 修改用户状态（启\禁用）
 export async function disableUserApi(userid, status) {
   return await axios.post(`/api/v1/user/update`, { user_id: userid, delete: status });
+}
+
+
+/**
+ * ************************ 溯源
+ */
+// 分词
+export async function splitWordApi(word: string) {
+  return await axios.get(`/api/v1/qa/keyword?answer=${word}`)
+}
+
+// 获取 chunks
+export async function getSourceChunksApi(chatId: string, messageId: string, keys: string) {
+  try {
+    const response = await axios.get(`/api/v1/qa/chunk?message_id=${messageId}&keys=${keys}`)
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    // 文件列表 {filename url chunks:[]}
+    return response.data;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
 }
