@@ -10,6 +10,7 @@ import {
     TableRow
 } from "../../components/ui/table";
 import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
+import { bsconfirm } from "../../alerts/confirm";
 
 export default function Templates({ onBack, onChange }) {
 
@@ -47,8 +48,15 @@ export default function Templates({ onBack, onChange }) {
     }
 
     const handleDelTemp = (index: number, id: number) => {
-        deleteTempApi(id).then(onChange)
-        setTemps(temps.filter((temp, i) => index !== i));
+        bsconfirm({
+            desc: '是否确认删除该技能模板？',
+            okTxt: '删除',
+            onOk(next) {
+                deleteTempApi(id).then(onChange)
+                setTemps(temps.filter((temp, i) => index !== i));
+                next()
+            }
+        })
     }
 
     return <div className="p-6">
