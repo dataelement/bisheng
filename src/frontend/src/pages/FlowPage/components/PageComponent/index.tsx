@@ -187,8 +187,12 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   const onConnect = useCallback(
     (params: Connection) => {
       takeSnapshot();
-      setEdges((eds) =>
-        addEdge(
+      let hasInputNodeEdg = false
+      setEdges((eds) => {
+        const moreTarget = eds.find(el => el.source === params.source)
+        hasInputNodeEdg = moreTarget && params.source.indexOf('InputFileNode') === 0
+        // 限制InputFileNode节点只有一个下游
+        return hasInputNodeEdg ? eds : addEdge(
           {
             ...params,
             style: { stroke: "#555" },
@@ -201,9 +205,17 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
           },
           eds
         )
-      );
+      });
       setNodes((x) => {
         let newX = _.cloneDeep(x);
+        // inputFileNode input type类型跟随下游组件
+        const inputNodeId = params.source
+        if (!hasInputNodeEdg && inputNodeId.split('-')[0] === 'InputFileNode') {
+          const inputNode = newX.find(el => el.id === params.source);
+          const targetNode = newX.find(el => el.id === params.target);
+          inputNode.data.node.template.file_path.fileTypes = targetNode.data.node.template.file_path.fileTypes
+          inputNode.data.node.template.file_path.suffixes = targetNode.data.node.template.file_path.suffixes
+        }
         return newX;
       });
     },

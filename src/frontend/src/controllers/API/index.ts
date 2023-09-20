@@ -277,7 +277,6 @@ export async function updataOnlineState(id, updatedFlow, open) {
   try {
     const response = await axios.patch(`/api/v1/flows/${id}`, {
       name: updatedFlow.name,
-      data: updatedFlow.data,
       description: updatedFlow.description,
       status: open ? 2 : 1
     });
