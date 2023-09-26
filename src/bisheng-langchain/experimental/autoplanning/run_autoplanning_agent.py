@@ -1,10 +1,10 @@
 import os
 from autoplanning_agent import AutoPlanning
 
-os.environ['OPENAI_PROXY'] =  'http://118.195.232.223:39995'
+os.environ['OPENAI_PROXY'] =  'xxx'
 
 planning_agent = AutoPlanning(model_name="gpt-4-0613",
-                              openai_api_key='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')
+                              openai_api_key='xxx')
 
 # skill = "创建个知识库问答系统"
 # description = "1、选择知识库，对知识库进行问答。"
