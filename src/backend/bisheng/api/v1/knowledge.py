@@ -13,6 +13,7 @@ from bisheng.database.models.user import User
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
+from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -215,13 +216,16 @@ def delete_knowledge_file(*,
         raise HTTPException(status_code=404, detail='没有权限执行操作')
     knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
     # 处理vectordb
-
     collection_name = knowledge.collection_name
     embeddings = decide_embeddings(knowledge.model)
-    vectore_client = decide_vectorstores(collection_name, embeddings)
+    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
     if isinstance(vectore_client, Milvus):
         pk = vectore_client.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])
         res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
+
+    # minio
+    minio_client.delete_minio(knowledge_file.id)
+    # elastic
 
     logger.info(f'act=delete_vector file_id={file_id} res={res}')
     session.delete(knowledge_file)
@@ -237,10 +241,15 @@ def decide_embeddings(model: str) -> Embeddings:
         return HostEmbeddings(**model_list.get(model))
 
 
-def decide_vectorstores(collection_name: str, embedding: Embeddings) -> VectorStore:
-    param = {'collection_name': collection_name, 'embedding': embedding}
-    vector_store = list(settings.knowledges.get('vectorstores').keys())[0]
+def decide_vectorstores(collection_name: str, vector_store: str,
+                        embedding: Embeddings) -> VectorStore:
     vector_config = settings.knowledges.get('vectorstores').get(vector_store)
+    if vector_store == 'ElasticKeywordsSearch':
+        param = {'index_name': collection_name, 'embedding': embedding}
+        if isinstance(vector_config['ssl_verify'], str):
+            vector_config['ssl_verify'] = eval(vector_config['ssl_verify'])
+    else:
+        param = {'collection_name': collection_name, 'embedding': embedding}
     param.update(vector_config)
     class_obj = import_vectorstore(vector_store)
     return instantiate_vectorstore(class_object=class_obj, params=param)
@@ -250,23 +259,32 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, file_paths:
                        knowledge_files: List[KnowledgeFile]):
 
     embeddings = decide_embeddings(model)
-    vectore_client = decide_vectorstores(collection_name, embeddings)
-    # es_param = {'index_name': }
-    # es_client = import_vectorstore("ElasticKeywordsSearch")
+    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+    es_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
         try:
             texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size)
+            logger.info(f'chunk_split size={len(texts)}')
             [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]
             vectore_client.add_texts(texts=texts, metadatas=metadatas)
 
+            # 存储es
+            es_client.add_texts(texts=texts, metadatas=metadatas)
+
+            # 存储 mysql
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 2)
             session.add(db_file)
             session.commit()
+            session.refresh(db_file)
+
+            # 原始文件存储minio
+            minio_client.upload_minio(str(db_file.id), path)
         except Exception as e:
-            logger.error(str(e))
+            logger.error(e)
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)

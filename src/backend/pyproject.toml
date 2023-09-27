@@ -19,6 +19,7 @@ bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
 bisheng_langchain = "^0.1.6"
+minio = "^7.1.16"
 fastapi_jwt_auth = "^0.5.0"
 redis = "^5.0.0"
 jieba = "^0.42.1"

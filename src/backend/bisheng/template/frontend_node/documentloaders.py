@@ -4,10 +4,13 @@ from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
 
 
-def build_file_field(suffixes: list, fileTypes: list, name: str = 'file_path') -> TemplateField:
+def build_file_field(suffixes: list,
+                     fileTypes: list,
+                     name: str = 'file_path',
+                     fieldType='fileNode') -> TemplateField:
     """Build a template field for a document loader."""
     return TemplateField(
-        field_type='fileNode',
+        field_type=fieldType,
         required=False,
         show=True,
         name=name,
@@ -61,7 +64,7 @@ class DocumentLoaderFrontNode(FrontendNode):
         'UnstructuredMarkdownLoader':
             build_file_field(suffixes=['.md'], fileTypes=['md']),
         'PyPDFLoader':
-            build_file_field(suffixes=['.pdf'], fileTypes=['pdf']),
+            build_file_field(suffixes=['.pdf'], fileTypes=['pdf'], fieldType='fileNode'),
         'UnstructuredPowerPointLoader':
             build_file_field(suffixes=['.pptx', '.ppt'], fileTypes=['pptx', 'ppt']),
         'SRTLoader':
@@ -124,7 +127,18 @@ class DocumentLoaderFrontNode(FrontendNode):
                     display_name='File extensions (comma-separated)',
                     advanced=False,
                 ))
-
+        elif self.template.type_name in {'ElemUnstructuredLoaderV0'}:
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='unstructured_api_url',
+                    value='',
+                    display_name='unstructured_api_url',
+                    advanced=False,
+                ))
+            self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in self.file_path_templates:
             self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in {

@@ -1,8 +1,10 @@
+import random
 from typing import List
 
 import jieba.analyse
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
+from bisheng.utils import minio_client
 from bisheng_langchain.chat_models import QwenChat
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
@@ -67,8 +69,20 @@ def get_original_file(*, message_id: int):
     text_splitter = ElemCharacterTextSplitter(chunk_size=10, chunk_overlap=0)
     split_docs = text_splitter.split_documents(docs)
     print('split_docs:', split_docs)
+
+    result = []
+    for index, chunk in enumerate(split_docs):
+        chunk_res = chunk.metadata
+        chunk_res.pop('bboxes')
+        chunk_res.pop('page')
+        chunk_res.pop('token_to_bbox')
+        chunk_res['source_url'] = minio_client.get_share_link('2986')
+        chunk_res['score'] = round(random.randint(0, 100) / 100.0, 3)
+        chunk_res['file_id'] = index
+        result.append(chunk_res)
+
     # sort_and_filter_all_chunks(keywords, all_chunk)
-    return split_docs
+    return {'data': result, 'msg': 'success'}
 
 
 def find_lcsubstr(s1, s2):

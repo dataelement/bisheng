@@ -103,7 +103,7 @@ class Vertex:
                 # what is inside value.get('content')
                 # value.get('value') is the file name
                 file_path = value.get('file_path')
-
+                params['file_name'] = value.get('value')
                 params[key] = file_path
             elif value.get('type') in DIRECT_TYPES and params.get(key) is None:
                 params[key] = value.get('value')

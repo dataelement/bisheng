@@ -43,6 +43,8 @@ class ChatHistory(Subject):
                 logger.info(f'chat={db_message}')
                 seesion.add(db_message)
                 seesion.commit()
+                seesion.refresh(db_message)
+                message.message_id = db_message.id
 
         if not isinstance(message, FileResponse):
             self.notify()

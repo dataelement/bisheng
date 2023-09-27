@@ -10,11 +10,7 @@ admin:
   password: "1234"
 
 # bisheng-rt服务地址
-<<<<<<< HEAD
 # bisheng_rt: 
-=======
-# bisheng-rt: 
->>>>>>> 57fb6c8 (0.2 溯源)
 #   name: "RT-Server"
 #   server: "192.168.0.1:9001"
 
@@ -25,6 +21,9 @@ knowledges:
       openai_api_base: "https://api.openai.com/v1/"
       openai_proxy: ""
       openai_api_key: ""
+    multilingual-e5-large:
+      host_base_url: "http://192.168.106.12:9001/v2.1/models"
+      model: "multilingual-e5-large"
   vectorstores:
     # Milvus 最低要求cpu 4C 8G 推荐4C 16G
     Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
@@ -37,7 +36,6 @@ knowledges:
     MINIO_SHAREPOIN: "110.16.193.170:50061"
     MINIO_ACCESS_KEY: "minioadmin"
     MINIO_SECRET_KEY: "minioadmin"
-    # MINIO_PREVIEW_PDF = "http://morsegpt.com/fileView?url="
 
       
 agents:

@@ -25,6 +25,8 @@ from langchain.schema import BaseOutputParser, Document
 from langchain.vectorstores.base import VectorStore
 from pydantic import ValidationError
 
+# from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoaderV0
+
 
 def instantiate_class(node_type: str, base_type: str, params: Dict) -> Any:
     """Instantiate class from module type and key, and params"""
@@ -333,6 +335,13 @@ def instantiate_documentloader(class_object: Type[BaseLoader], params: Dict):
         file_filter = params.pop('file_filter')
         extensions = file_filter.split(',')
         params['file_filter'] = lambda x: any(extension.strip() in x for extension in extensions)
+    if 'file_path' in params:
+        file_path = params['file_path']
+        if isinstance(file_path, list):
+            file_name = file_path[1]
+            params['file_path'] = file_path[0]
+            if class_object.__name__ == 'ElemUnstructuredLoaderV0':
+                params['file_name'] = file_name
     metadata = params.pop('metadata', None)
     if metadata and isinstance(metadata, str):
         try:

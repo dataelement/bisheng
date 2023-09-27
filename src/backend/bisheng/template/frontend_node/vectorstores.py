@@ -283,6 +283,8 @@ class VectorStoreFrontendNode(FrontendNode):
             elif field.name == 'location':
                 field.value = ':memory:'
                 field.placeholder = ':memory:'
+            elif field.name == 'collection_name' and name == 'Milvus':
+                field.value = ''
 
         elif field.name in advanced_fields:
             field.show = True
@@ -296,9 +298,3 @@ class VectorStoreFrontendNode(FrontendNode):
         elif field.name == 'connection_args':
             field.show = True
             field.advanced = False
-<<<<<<< HEAD
-
-        elif field.name == 'collection_name' and name == 'Milvus':
-=======
->>>>>>> 57fb6c8 (0.2 溯源)
-            field.value = ''

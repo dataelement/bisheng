@@ -75,16 +75,16 @@ def build_flow(graph_data: dict, artifacts, process_file=False, flow_id=None, ch
             }
             yield str(StreamData(event='log', data=log_dict))
             # # 如果存在文件，当前不操作文件，避免重复操作
-            # if not process_file and chat_id is not None:
-            #     template_dict = {
-            #         key: value
-            #         for key, value in vertex.data['node']['template'].items()
-            #         if isinstance(value, dict)
-            #     }
-            #     for key, value in template_dict.items():
-            #         if value.get('type') == 'file':
-            #             # 过滤掉文件
-            #             vertex.params[key] = ''
+            if not process_file and chat_id is not None:
+                template_dict = {
+                    key: value
+                    for key, value in vertex.data['node']['template'].items()
+                    if isinstance(value, dict)
+                }
+                for key, value in template_dict.items():
+                    if value.get('type') == 'file':
+                        # 过滤掉文件
+                        vertex.params[key] = ''
 
             # vectore store 引入自动建库逻辑
             # 聊天窗口等flow 主动生成的vector 需要新建临时collection
@@ -140,16 +140,16 @@ def build_flow_no_yield(graph_data: dict,
     for i, vertex in enumerate(graph.generator_build(), 1):
         try:
             # # 如果存在文件，当前不操作文件，避免重复操作
-            # if not process_file:
-            #     template_dict = {
-            #         key: value
-            #         for key, value in vertex.data['node']['template'].items()
-            #         if isinstance(value, dict)
-            #     }
-            #     for key, value in template_dict.items():
-            #         if value.get('type') == 'file':
-            #             # 过滤掉文件
-            #             vertex.params[key] = ''
+            if not process_file:
+                template_dict = {
+                    key: value
+                    for key, value in vertex.data['node']['template'].items()
+                    if isinstance(value, dict)
+                }
+                for key, value in template_dict.items():
+                    if value.get('type') == 'file':
+                        # 过滤掉文件
+                        vertex.params[key] = ''
 
             # vectore store 引入自动建库逻辑
             # 聊天窗口等flow 主动生成的vector 需要新建临时collection
@@ -158,6 +158,7 @@ def build_flow_no_yield(graph_data: dict,
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
                     vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id}'
                     logger.info(f"rename_vector_col col={vertex.params['collection_name']}")
+                    vertex.params['drop_old'] = True
 
             vertex.build()
             params = vertex._built_object_repr()

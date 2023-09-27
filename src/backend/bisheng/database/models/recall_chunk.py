@@ -12,6 +12,8 @@ class RecallBase(SQLModelSerializable):
     query: Optional[str] = Field(index=False, sa_column=Column(String(length=1024)))
     answer: Optional[str] = Field(index=False)
     chunk: Optional[str] = Field(index=False, sa_column=Column(Text))
+    answer_keywords: Optional[str] = Field(sa_column=Column(String(length=1024)))
+    file_list: Optional[str] = Field(sa_column=Column(String(length=3096)))
 
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
