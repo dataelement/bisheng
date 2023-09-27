@@ -28,14 +28,18 @@ class ChatHistory(Subject):
         """Add a message to the chat history."""
 
         self.history[get_cache_key(client_id, chat_id)].append(message)
-        if (message.message or message.intermediate_steps or message.files) and message.type != 'stream':
+        if (message.message or message.intermediate_steps or
+                message.files) and message.type != 'stream':
             with next(get_session()) as seesion:
                 from bisheng.database.models.message import ChatMessage
                 msg = message.copy()
                 msg.message = str(msg.message) if isinstance(msg.message, dict) else msg.message
                 files = json.dumps(msg.files) if msg.files else ''
                 msg.__dict__.pop('files')
-                db_message = ChatMessage(flow_id=client_id, chat_id=chat_id, files=files, **msg.__dict__)
+                db_message = ChatMessage(flow_id=client_id,
+                                         chat_id=chat_id,
+                                         files=files,
+                                         **msg.__dict__)
                 logger.info(f'chat={db_message}')
                 seesion.add(db_message)
                 seesion.commit()
@@ -97,8 +101,8 @@ class ChatManager:
                 data_type=self.last_cached_object_dict['type'],
             )
 
-            self.chat_history.add_message(self.cache_manager.current_client_id, self.cache_manager.current_chat_id,
-                                          chat_response)
+            self.chat_history.add_message(self.cache_manager.current_client_id,
+                                          self.cache_manager.current_chat_id, chat_response)
 
     async def connect(self, client_id: str, chat_id: str, websocket: WebSocket):
         await websocket.accept()
@@ -130,7 +134,8 @@ class ChatManager:
                 if 'after sending' in str(exc):
                     logger.error(exc)
 
-    async def process_file(self, client_id: str, chat_id: str, user_id: int, file_path: str, id: str):
+    async def process_file(self, client_id: str, chat_id: str, user_id: int, file_path: str,
+                           id: str):
         """upload file to make flow work"""
         db_flow = next(get_session()).get(Flow, client_id)
         graph_data = db_flow.data
@@ -142,6 +147,8 @@ class ChatManager:
                         logger.info(f'key={key} set_filepath={file_path}')
                         value['file_path'] = file_path
 
+        # 如果L3
+
         file = ChatMessage(is_bot=False,
                            files=[{
                                'file_name': file_name
@@ -152,7 +159,11 @@ class ChatManager:
                            user_id=user_id)
         self.chat_history.add_message(client_id, chat_id, file)
         # graph_data = payload
-        start_resp = ChatResponse(message=None, type='begin', intermediate_steps='', category='system', user_id=user_id)
+        start_resp = ChatResponse(message=None,
+                                  type='begin',
+                                  intermediate_steps='',
+                                  category='system',
+                                  user_id=user_id)
         await self.send_json(client_id, chat_id, start_resp)
         start_resp.type = 'start'
         await self.send_json(client_id, chat_id, start_resp)
@@ -220,9 +231,17 @@ class ChatManager:
 
         start_resp.category = 'report'
         await self.send_json(client_id, chat_id, start_resp)
-        response = ChatResponse(message='', type='end', intermediate_steps=report, category='report', user_id=user_id)
+        response = ChatResponse(message='',
+                                type='end',
+                                intermediate_steps=report,
+                                category='report',
+                                user_id=user_id)
         await self.send_json(client_id, chat_id, response)
-        close_resp = ChatResponse(message=None, type='close', intermediate_steps='', category='system', user_id=user_id)
+        close_resp = ChatResponse(message=None,
+                                  type='close',
+                                  intermediate_steps='',
+                                  category='system',
+                                  user_id=user_id)
         await self.send_json(client_id, chat_id, close_resp)
 
     async def process_message(self,
@@ -252,9 +271,15 @@ class ChatManager:
             self.chat_history.add_message(client_id, chat_id, chat_inputs)
         # graph_data = payload
         if not is_bot:
-            start_resp = ChatResponse(message=None, type='begin', intermediate_steps='', user_id=user_id)
+            start_resp = ChatResponse(message=None,
+                                      type='begin',
+                                      intermediate_steps='',
+                                      user_id=user_id)
             await self.send_json(client_id, chat_id, start_resp)
-        start_resp = ChatResponse(message=None, type='start', intermediate_steps='', user_id=user_id)
+        start_resp = ChatResponse(message=None,
+                                  type='start',
+                                  intermediate_steps='',
+                                  user_id=user_id)
         await self.send_json(client_id, chat_id, start_resp)
 
         # is_first_message = len(self.chat_history.get_history(client_id=client_id)) <= 1
@@ -276,7 +301,10 @@ class ChatManager:
                                     category='processing',
                                     user_id=user_id)
             await self.send_json(client_id, chat_id, end_resp)
-            close_resp = ChatResponse(message=None, type='close', intermediate_steps='', user_id=user_id)
+            close_resp = ChatResponse(message=None,
+                                      type='close',
+                                      intermediate_steps='',
+                                      user_id=user_id)
             await self.send_json(client_id, chat_id, close_resp)
             return
 
@@ -302,8 +330,9 @@ class ChatManager:
             step = []
             steps = []
             for s in intermediate_steps.split('\n'):
-                if s.startswith("Answer: {'"):
+                if s.startswith("Answer: {'") and 'result' in s:
                     s = 'Answer: ' + eval(s.split('Answer:')[1]).get('result')
+                    pass
                 step.append(s)
                 if not s:
                     steps.append('\n'.join(step))
@@ -345,7 +374,10 @@ class ChatManager:
                                 user_id=user_id)
         await self.send_json(client_id, chat_id, response)
         # 循环结束
-        close_resp = ChatResponse(message=None, type='close', intermediate_steps='', user_id=user_id)
+        close_resp = ChatResponse(message=None,
+                                  type='close',
+                                  intermediate_steps='',
+                                  user_id=user_id)
         await self.send_json(client_id, chat_id, close_resp)
         return result
 
@@ -357,7 +389,8 @@ class ChatManager:
         self.in_memory_cache.set(client_id, langchain_object)
         return client_id in self.in_memory_cache
 
-    async def handle_websocket(self, client_id: str, chat_id: str, websocket: WebSocket, user_id: int):
+    async def handle_websocket(self, client_id: str, chat_id: str, websocket: WebSocket,
+                               user_id: int):
         await self.connect(client_id, chat_id, websocket)
 
         try:

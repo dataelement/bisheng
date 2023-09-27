@@ -10,9 +10,9 @@ export default function SelectCollection({ collectionId, onChange }:
     const allData = useRef([])
 
     useEffect(() => {
-        readFileLibDatabase().then(res => {
-            setDataList(res)
-            allData.current = res
+        readFileLibDatabase(1, 400).then(res => {
+            setDataList(res.data)
+            allData.current = res.data
         })
     }, [])
 

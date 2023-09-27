@@ -1,6 +1,5 @@
 import asyncio
 from typing import Any, Dict, List, Union
-
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.utils.logger import logger
 from fastapi import WebSocket
@@ -20,35 +19,25 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         resp = ChatResponse(message=token, type='stream', intermediate_steps='')
         await self.websocket.send_json(resp.dict())
 
-    async def on_llm_start(
-        self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
-    ) -> Any:
+    async def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any) -> Any:
         """Run when LLM starts running."""
 
     async def on_llm_end(self, response: LLMResult, **kwargs: Any) -> Any:
         """Run when LLM ends running."""
 
-    async def on_llm_error(
-        self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
-    ) -> Any:
+    async def on_llm_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> Any:
         """Run when LLM errors."""
 
-    async def on_chain_start(
-        self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs: Any
-    ) -> Any:
+    async def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain starts running."""
 
     async def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
 
-    async def on_chain_error(
-        self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
-    ) -> Any:
+    async def on_chain_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> Any:
         """Run when chain errors."""
 
-    async def on_tool_start(
-        self, serialized: Dict[str, Any], input_str: str, **kwargs: Any
-    ) -> Any:
+    async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
         resp = ChatResponse(
             message='',
@@ -60,8 +49,9 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
-        from langchain.docstore.document import Document # noqa
-        result = eval(output).get('result')
+        # from langchain.docstore.document import Document # noqa
+        # result = eval(output).get('result')
+        result = output
 
         # Create a formatted message.
         intermediate_steps = f'{observation_prefix}{result}'
@@ -79,9 +69,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         except Exception as e:
             logger.error(e)
 
-    async def on_tool_error(
-        self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any
-    ) -> Any:
+    async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> Any:
         """Run when tool errors."""
 
     async def on_text(self, text: str, **kwargs: Any) -> Any:
@@ -154,9 +142,7 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         coroutine = self.websocket.send_json(resp.dict())
         asyncio.run_coroutine_threadsafe(coroutine, loop)
 
-    def on_tool_start(
-        self, serialized: Dict[str, Any], input_str: str, **kwargs: Any
-    ) -> Any:
+    def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
         resp = ChatResponse(
             message='',
@@ -171,8 +157,9 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         """Run when tool ends running."""
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
 
-        from langchain.docstore.document import Document # noqa
-        result = eval(output).get('result')
+        # from langchain.docstore.document import Document # noqa
+        # result = eval(output).get('result')
+        result = output
         # Create a formatted message.
         intermediate_steps = f'{observation_prefix}{result}'
 

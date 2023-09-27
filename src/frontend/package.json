@@ -40,6 +40,7 @@
     "lucide-react": "^0.233.0",
     "react": "^18.2.0",
     "react-ace": "^10.1.0",
+    "react-beautiful-dnd": "^13.1.1",
     "react-cookie": "^4.1.1",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
@@ -116,7 +117,10 @@
     "prettier-plugin-tailwindcss": "^0.3.0",
     "tailwindcss": "^3.3.2",
     "typescript": "^5.0.2",
-    "vite-plugin-static-copy": "^0.17.0",
-    "vite": "^4.3.9"
+    "vite": "^4.3.9",
+    "vite-plugin-static-copy": "^0.17.0"
+  },
+  "engines": {
+    "node": ">= 16"
   }
 }

@@ -27,10 +27,21 @@ export default function SkillChatPage(params) {
     const { chatList, chatIndex, setChatIndex, addChat } = useChatList()
 
     const chatId = useRef('')
-    const { inputState, fileInputs, uploadFile, setInputState, changeHistoryByScroll, chatHistory, clearHistory, initChat, sendMsg, closeWs, loadNextPage } = useWebsocketChat(chatId) // talk
+    const {
+        inputState,
+        fileInputs,
+        chating,
+        uploadFile,
+        setInputState,
+        changeHistoryByScroll,
+        chatHistory,
+        clearHistory,
+        initChat,
+        sendMsg,
+        loadNextPage
+    } = useWebsocketChat(chatId) // talk
     // select flow
     const handlerSelectFlow = async (node: FlowType) => {
-        closeWs()
         // 会话ID
         chatId.current = generateUUID(32)
         setOpen(false)
@@ -48,12 +59,15 @@ export default function SkillChatPage(params) {
 
         inputRef.current.value = ''
         setInputEmpty(true)
+
+        setTimeout(() => {
+            inputRef.current.focus()
+        }, 500);
     }
 
     // select chat
     const handleSelectChat = async (i, chat) => {
         if (i === chatIndex) return
-        closeWs()
         setChatIndex(i)
         chatId.current = chat.chat_id
         let flow = flows.find(flow => flow.id === chat.flow_id) || await getFlowFromDatabase(chat.flow_id)
@@ -68,10 +82,15 @@ export default function SkillChatPage(params) {
         if (inputRef.current) inputRef.current.value = ''
         setInputEmpty(true)
         changeHistoryByScroll.current = false
+        // focus
+        setTimeout(() => {
+            inputRef.current.focus()
+        }, 500);
     }
 
     // 输入问答
     const inputRef = useRef(null)
+    const inputDisable = inputState.lock || (fileInputs?.length && chatHistory.length === 0)
     const handleSend = () => {
         const val = inputRef.current.value
         setTimeout(() => {
@@ -80,9 +99,15 @@ export default function SkillChatPage(params) {
             setInputEmpty(true)
         }, 100);
 
-        if (val.trim() === '' || inputState.lock || (fileInputs?.length && chatHistory.length === 0)) return
+        if (val.trim() === '' || inputDisable) return
         sendMsg(val)
     }
+    useEffect(() => {
+        !chating && setTimeout(() => {
+            // 对话结束自动聚焦
+            inputRef.current.focus()
+        }, 1000);
+    }, [chating])
 
     // input 滚动
     const [inputEmpty, setInputEmpty] = useState(true)
@@ -157,9 +182,10 @@ export default function SkillChatPage(params) {
                     </div> */}
                     </div>
                     <div className="absolute w-full bottom-0 bg-gradient-to-t from-[#fff] to-[rgba(255,255,255,0.8)] px-8 dark:bg-gradient-to-t dark:from-[#000] dark:to-[rgba(0,0,0,0.8)]">
-                        <div className={`w-full text-area-box border border-gray-600 rounded-lg my-6 overflow-hidden pr-2 py-2 relative ${(inputState.lock || (fileInputs?.length && chatHistory.length === 0)) && 'bg-gray-200'}`}>
-                            <textarea ref={inputRef}
-                                disabled={inputState.lock || (fileInputs?.length && chatHistory.length === 0)} style={{ height: 36 }} rows={1}
+                        <div className={`w-full text-area-box border border-gray-600 rounded-lg my-6 overflow-hidden pr-2 py-2 relative ${(inputState.lock || (fileInputs?.length && chatHistory.length === 0)) && 'bg-gray-200 dark:bg-gray-600'}`}>
+                            <textarea id='input'
+                                ref={inputRef}
+                                disabled={inputDisable} style={{ height: 36 }} rows={1}
                                 className={`w-full resize-none border-none bg-transparent outline-none px-4 pt-1 text-xl max-h-[200px]`}
                                 placeholder="请输入问题"
                                 onInput={handleTextAreaHeight}
@@ -168,11 +194,11 @@ export default function SkillChatPage(params) {
                                 }}></textarea>
                             <div className="absolute right-6 bottom-4 flex gap-2">
                                 <ShadTooltip content={'上传文件'}>
-                                    <button disabled={inputState.lock || !fileInputs?.length} className=" disabled:text-gray-400" onClick={uploadFile}><FileUp /></button>
+                                    <button disabled={inputState.lock || !fileInputs?.length} className="disabled:text-gray-400" onClick={uploadFile}><FileUp /></button>
                                 </ShadTooltip>
                                 <ShadTooltip content={'发送'}>
                                     {/* 内容为空 or 输入框禁用 or 文件分析类未上传文件 */}
-                                    <button disabled={inputEmpty || inputState.lock || (fileInputs?.length && chatHistory.length === 0)} className=" disabled:text-gray-400" onClick={handleSend}><Send /></button>
+                                    <button disabled={inputEmpty || inputDisable} className=" disabled:text-gray-400" onClick={handleSend}><Send /></button>
                                 </ShadTooltip>
                             </div>
                             {inputState.error && <div className="bg-gray-200 absolute top-0 left-0 w-full h-full text-center text-gray-400 align-middle pt-4">{inputState.error}</div>}
@@ -214,7 +240,6 @@ const useWebsocketChat = (chatId) => {
         const res = await getChatHistory(flow.current.id, chatId.current, lastId ? 10 : 30, lastId)
         const hisData = res.map(item => {
             // let count = 0
-            // item?.message.replace(/\{/g, () => count++) // 统计{次数，两次以上不转
             let message = item.message
             try {
                 message = item.message && item.message[0] === '{' ? JSON.parse(item.message.replace(/([\t\n"])/g, '\\$1').replace(/'/g, '"')) : item.message || ''
@@ -293,14 +318,15 @@ const useWebsocketChat = (chatId) => {
                         setErrorData({
                             title: "网络连接出现错误,请尝试以下方法: ",
                             list: [
+                                "操作不要过快",
                                 "刷新页面",
-                                "使用新的流程选项卡",
                                 "检查后台是否启动"
                             ],
                         });
                     }
                 };
                 ws.current = newWs;
+                console.log('newWs :>> ', newWs);
             } catch (error) {
                 if (flow.current.id === "") {
                     // connectWS();
@@ -604,9 +630,18 @@ const useWebsocketChat = (chatId) => {
     }
 
     const closeWs = () => {
+        // close prev connection
         if (ws.current) {
-            ws.current.close()
-            ws.current = null
+            switch (ws.current.readyState) {
+                case WebSocket.OPEN:
+                    ws.current.close()
+                    ws.current = null
+                        ; break;
+                case WebSocket.CONNECTING:
+                    ws.current.onopen = () => {
+                        ws.current.close()
+                    };
+            }
         }
     }
 
@@ -652,12 +687,14 @@ const useWebsocketChat = (chatId) => {
     }
 
     return {
+        chating: begin,
         inputState,
         fileInputs,
         chatHistory,
         uploadFile,
         setInputState,
         async initChat(_flow) {
+            closeWs()
             await checkPrompt(_flow)
             await build(_flow, chatId)
             setChatHistory([])
@@ -667,7 +704,6 @@ const useWebsocketChat = (chatId) => {
         },
         sendMsg,
         loadNextPage,
-        closeWs,
         changeHistoryByScroll,
         clearHistory() {
             setChatHistory([])

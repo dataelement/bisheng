@@ -6,9 +6,7 @@ API_WORDS = ['api', 'key', 'token']
 
 
 def has_api_terms(word: str):
-    return 'api' in word and (
-        'key' in word or ('token' in word and 'tokens' not in word)
-    )
+    return 'api' in word and ('key' in word or ('token' in word and 'tokens' not in word))
 
 
 def remove_api_keys(flow: dict):
@@ -18,11 +16,8 @@ def remove_api_keys(flow: dict):
             node_data = node.get('data').get('node')
             template = node_data.get('template')
             for value in template.values():
-                if (
-                    isinstance(value, dict)
-                    and has_api_terms(value['name'])
-                    and value.get('password')
-                ):
+                if (isinstance(value, dict) and has_api_terms(value['name']) and
+                        value.get('password')):
                     value['value'] = None
 
     return flow
@@ -32,7 +27,9 @@ def build_input_keys_response(langchain_object, artifacts):
     """Build the input keys response."""
 
     input_keys_response = {
-        'input_keys': {key: '' for key in langchain_object.input_keys},
+        'input_keys': {
+            key: '' for key in langchain_object.input_keys
+        },
         'memory_keys': [],
         'handle_keys': artifacts.get('handle_keys', []),
     }
@@ -43,9 +40,7 @@ def build_input_keys_response(langchain_object, artifacts):
             input_keys_response['input_keys'][key] = value
     # If the object has memory, that memory will have a memory_variables attribute
     # memory variables should be removed from the input keys
-    if hasattr(langchain_object, 'memory') and hasattr(
-        langchain_object.memory, 'memory_variables'
-    ):
+    if hasattr(langchain_object, 'memory') and hasattr(langchain_object.memory, 'memory_variables'):
         # Remove memory variables from input keys
         input_keys_response['input_keys'] = {
             key: value
@@ -55,9 +50,7 @@ def build_input_keys_response(langchain_object, artifacts):
         # Add memory variables to memory_keys
         input_keys_response['memory_keys'] = langchain_object.memory.memory_variables
 
-    if hasattr(langchain_object, 'prompt') and hasattr(
-        langchain_object.prompt, 'template'
-    ):
+    if hasattr(langchain_object, 'prompt') and hasattr(langchain_object.prompt, 'template'):
         input_keys_response['template'] = langchain_object.prompt.template
 
     return input_keys_response
@@ -81,17 +74,17 @@ def build_flow(graph_data: dict, artifacts, process_file=False, flow_id=None, ch
                 'log': f'Building node {vertex.vertex_type}',
             }
             yield str(StreamData(event='log', data=log_dict))
-            # 如果存在文件，当前不操作文件，避免重复操作
-            if not process_file:
-                template_dict = {
-                    key: value
-                    for key, value in vertex.data['node']['template'].items()
-                    if isinstance(value, dict)
-                }
-                for key, value in template_dict.items():
-                    if value.get('type') == 'file':
-                        # 过滤掉文件
-                        vertex.params[key] = ''
+            # # 如果存在文件，当前不操作文件，避免重复操作
+            # if not process_file and chat_id is not None:
+            #     template_dict = {
+            #         key: value
+            #         for key, value in vertex.data['node']['template'].items()
+            #         if isinstance(value, dict)
+            #     }
+            #     for key, value in template_dict.items():
+            #         if value.get('type') == 'file':
+            #             # 过滤掉文件
+            #             vertex.params[key] = ''
 
             # vectore store 引入自动建库逻辑
             # 聊天窗口等flow 主动生成的vector 需要新建临时collection
@@ -104,8 +97,7 @@ def build_flow(graph_data: dict, artifacts, process_file=False, flow_id=None, ch
             params = vertex._built_object_repr()
             valid = True
             logger.debug(
-                f"Building node {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}"
-            )
+                f"Building node {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}")
             if vertex.artifacts:
                 # The artifacts will be prompt variables
                 # passed to build_input_keys_response
@@ -133,27 +125,31 @@ def build_flow(graph_data: dict, artifacts, process_file=False, flow_id=None, ch
     return graph
 
 
-def build_flow_no_yield(graph_data: dict, artifacts, process_file=False, flow_id=None, chat_id=None):
+def build_flow_no_yield(graph_data: dict,
+                        artifacts,
+                        process_file=False,
+                        flow_id=None,
+                        chat_id=None):
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
     except Exception as exc:
         logger.exception(exc)
-        return
+        raise exc
 
     for i, vertex in enumerate(graph.generator_build(), 1):
         try:
-            # 如果存在文件，当前不操作文件，避免重复操作
-            if not process_file:
-                template_dict = {
-                    key: value
-                    for key, value in vertex.data['node']['template'].items()
-                    if isinstance(value, dict)
-                }
-                for key, value in template_dict.items():
-                    if value.get('type') == 'file':
-                        # 过滤掉文件
-                        vertex.params[key] = ''
+            # # 如果存在文件，当前不操作文件，避免重复操作
+            # if not process_file:
+            #     template_dict = {
+            #         key: value
+            #         for key, value in vertex.data['node']['template'].items()
+            #         if isinstance(value, dict)
+            #     }
+            #     for key, value in template_dict.items():
+            #         if value.get('type') == 'file':
+            #             # 过滤掉文件
+            #             vertex.params[key] = ''
 
             # vectore store 引入自动建库逻辑
             # 聊天窗口等flow 主动生成的vector 需要新建临时collection
@@ -161,12 +157,12 @@ def build_flow_no_yield(graph_data: dict, artifacts, process_file=False, flow_id
             if vertex.base_type == 'vectorstores':
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
                     vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id}'
+                    logger.info(f"rename_vector_col col={vertex.params['collection_name']}")
 
             vertex.build()
             params = vertex._built_object_repr()
             logger.debug(
-                f"Building node {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}"
-            )
+                f"Building node {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}")
             if vertex.artifacts:
                 # The artifacts will be prompt variables
                 # passed to build_input_keys_response

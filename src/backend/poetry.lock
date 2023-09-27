@@ -336,12 +336,12 @@ lxml = ["lxml"]
 
 [[package]]
 name = "bisheng-langchain"
-version = "0.0.1"
+version = "0.1.3"
 description = "bisheng langchain modules"
 optional = false
 python-versions = ">=3.6"
 files = [
-    {file = "bisheng_langchain-0.0.1-py3-none-any.whl", hash = "sha256:8213c80e191bd2cdda2cdf87987ac6473d6734a82e90e1d1d3c04e045a63e801"},
+    {file = "bisheng_langchain-0.1.3-py3-none-any.whl", hash = "sha256:e725a85259ca02b40b408048a536500457d1249b461a4bd5f5266cdb52cf504e"},
 ]
 
 [package.dependencies]

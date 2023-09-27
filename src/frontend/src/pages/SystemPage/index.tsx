@@ -1,14 +1,12 @@
-import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import {
     Table,
     TableBody,
-    TableCaption,
     TableCell,
     TableHead,
     TableHeader,
-    TableRow,
+    TableRow
 } from "../../components/ui/table";
 import {
     Tabs,
@@ -17,31 +15,25 @@ import {
     TabsTrigger,
 } from "../../components/ui/tabs";
 
-import { deleteFileLib, disableUserApi, getUsersApi, readFileLibDatabase } from "../../controllers/API";
+import { disableUserApi, getUsersApi } from "../../controllers/API";
 
 export default function FileLibPage() {
     const [datalist, setDataList] = useState([])
-    const loadData = () => {
-        readFileLibDatabase().then(res => {
-            setDataList(res)
-        })
-    }
-    // useEffect(() => {
-    //     loadPage()
-    // }, [])
-
-
 
     const [users, setUsers] = useState([])
     // 分页
     const [page, setPage] = useState(1)
     const [pageEnd, setPageEnd] = useState(false)
+    const pages = useRef(0)
     const loadPage = (_page) => {
         // setLoading(true)
+        const pageSize = 20
         setPage(_page)
-        getUsersApi('', 1, 20).then(res => {
-            setPageEnd(res.data.length < 20)
-            setUsers(res.data)
+        getUsersApi('', _page, pageSize).then(res => {
+            const { data, total } = res.data
+            pages.current = Math.ceil(total / pageSize)
+            setPageEnd(data.length < pageSize)
+            setUsers(data)
             // setLoading(false)
         })
     }
@@ -103,7 +95,7 @@ export default function FileLibPage() {
                 {/* <Pagination count={10}></Pagination> */}
                 <div className="join grid grid-cols-2 w-[200px] mx-auto">
                     <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>上一页</button>
-                    <button disabled={pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>下一页</button>
+                    <button disabled={page >= pages.current || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>下一页</button>
                 </div>
             </TabsContent>
             <TabsContent value="password"></TabsContent>

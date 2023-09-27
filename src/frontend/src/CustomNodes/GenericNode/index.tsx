@@ -17,10 +17,11 @@ import {
 } from "../../utils";
 import ParameterComponent from "./components/parameterComponent";
 
-export default function GenericNode({ data, selected, }: {
+export default function GenericNode({ data, selected }: {
   data: NodeDataType;
   selected: boolean;
 }) {
+  
   const { setErrorData } = useContext(alertContext);
   const showError = useRef(true);
   const { types, deleteNode } = useContext(typesContext);
@@ -64,6 +65,8 @@ export default function GenericNode({ data, selected, }: {
     return;
   }
   useEffect(() => { }, [closePopUp, data.node.template]);
+
+  const [_, fouceUpdateNode] = useState(false)
 
   return (
     <>
@@ -191,6 +194,7 @@ export default function GenericNode({ data, selected, }: {
                       left={true}
                       type={data.node.template[t].type}
                       optionalHandle={data.node.template[t].input_types}
+                      onChange={() => fouceUpdateNode(!_)}
                     />
                   ) : (
                     <></>

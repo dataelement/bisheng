@@ -3,16 +3,16 @@ from typing import Dict, Optional
 from uuid import UUID
 
 from bisheng.database.models.base import SQLModelSerializable
-from pydantic import validator
-from sqlalchemy import Column, DateTime, text
-from sqlmodel import JSON, Field
+from sqlalchemy import JSON, Column, DateTime, text
+from sqlmodel import Field
 
 
 class TemplateSkillBase(SQLModelSerializable):
     name: str = Field(index=True)
     description: str = Field(index=False)
-
-    flow_id: Optional[UUID] = Field(default=None, index=True)
+    data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    order_num: Optional[int] = Field(default=None)
+    flow_id: Optional[UUID] = Field(index=True)
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(sa_column=Column(
@@ -32,7 +32,8 @@ class TemplateCreate(TemplateSkillBase):
     pass
 
 
-class TemplateUpdate(TemplateSkillBase):
+class TemplateUpdate(SQLModelSerializable):
     name: Optional[str] = None
     description: Optional[str] = None
-    parameters: Optional[Dict] = None
+    data: Optional[Dict] = None
+    order_num: Optional[int] = None
