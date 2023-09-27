@@ -353,7 +353,7 @@ class BaseHostChatLLM(BaseChatModel):
         return num_tokens
 
 
-class ChatGLM2Host(BaseHostChatLLM):
+class HostChatGLM2(BaseHostChatLLM):
     # chatglm2-12b, chatglm2-6b
     model_name: str = Field('chatglm2-6b', alias='model')
 
@@ -367,7 +367,7 @@ class ChatGLM2Host(BaseHostChatLLM):
         return 'chatglm2'
 
 
-class BaichuanChat(BaseHostChatLLM):
+class HostBaichuanChat(BaseHostChatLLM):
     # Baichuan-7B-Chat, Baichuan-13B-Chat
     model_name: str = Field('Baichuan-13B-Chat', alias='model')
 
@@ -378,10 +378,10 @@ class BaichuanChat(BaseHostChatLLM):
     @property
     def _llm_type(self) -> str:
         """Return type of chat model."""
-        return 'baichang_chat'
+        return 'baichuan_chat'
 
 
-class QwenChat(BaseHostChatLLM):
+class HostQwenChat(BaseHostChatLLM):
     # Qwen-7B-Chat
     model_name: str = Field('Qwen-7B-Chat', alias='model')
 
@@ -395,7 +395,7 @@ class QwenChat(BaseHostChatLLM):
         return 'qwen_chat'
 
 
-class Llama2Chat(BaseHostChatLLM):
+class HostLlama2Chat(BaseHostChatLLM):
     # Llama-2-7b-chat-hf, Llama-2-13b-chat-hf, Llama-2-70b-chat-hf
     model_name: str = Field('Llama-2-7b-chat-hf', alias='model')
 
