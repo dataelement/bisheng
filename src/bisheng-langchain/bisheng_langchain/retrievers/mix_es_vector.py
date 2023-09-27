@@ -1,41 +1,52 @@
-from typing import List
+from typing import Any, Dict, List
 
-from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
-from langchain.chains.retrieval_qa.base import BaseRetrievalQA
-from pydantic import Field
+from langchain.callbacks.manager import (
+    AsyncCallbackManagerForRetrieverRun,
+    CallbackManagerForRetrieverRun,
+)
+
 from langchain.schema import BaseRetriever, Document
 
 
-class MultiRetrievalQA(BaseRetrievalQA):
-    """Chain for question-answering against an index.
+class MixEsVectorRetriever(BaseRetriever):
+    """
+    This class ensemble the results of es retriever and vector retriever.
 
-    Example:
-        .. code-block:: python
-
-            from langchain.llms import OpenAI
-            from langchain.chains import RetrievalQA
-            from langchain.faiss import FAISS
-            from langchain.vectorstores.base import VectorStoreRetriever
-            retriever = VectorStoreRetriever(vectorstore=FAISS(...))
-            retrievalQA = RetrievalQA.from_llm(llm=OpenAI(), retriever=retriever)
-
+    Args:
+        retrievers: A list of retrievers to ensemble.
+        weights: A list of weights corresponding to the retrievers. Defaults to equal
+            weighting for all retrievers.
+        c: A constant added to the rank, controlling the balance between the importance
+            of high-ranked items and the consideration given to lower-ranked items.
+            Default is 60.
     """
 
-    vector_retriever: BaseRetriever = Field(exclude=True)
-    keyword_retriever: BaseRetriever = Field(exclude=True)
+    vector_retriever: BaseRetriever
+    keyword_retriever: BaseRetriever
     combine_strategy: str = 'keyword_front'  # "keyword_front, vector_front, mix"
 
-    def _get_docs(
+    def _get_relevant_documents(
         self,
-        question: str,
+        query: str,
         *,
-        run_manager: CallbackManagerForChainRun,
+        run_manager: CallbackManagerForRetrieverRun,
     ) -> List[Document]:
-        """Get docs."""
+        """
+        Get the relevant documents for a given query.
+
+        Args:
+            query: The query to search for.
+
+        Returns:
+            A list of documents.
+        """
+
+        # Get fused result of the retrievers.
         vector_docs = self.vector_retriever.get_relevant_documents(
-            question, callbacks=run_manager.get_child())
+            query, callbacks=run_manager.get_child())
         keyword_docs = self.keyword_retriever.get_relevant_documents(
-            question, callbacks=run_manager.get_child())
+            query, callbacks=run_manager.get_child())
+
         if self.combine_strategy == 'keyword_front':
             return keyword_docs + vector_docs
         elif self.combine_strategy == 'vector_front':
@@ -54,17 +65,29 @@ class MultiRetrievalQA(BaseRetrievalQA):
                              f'(keyword_front, vector_front, mix),'
                              f'instead found {self.combine_strategy}')
 
-    async def _aget_docs(
+        return combine_docs
+
+    async def _aget_relevant_documents(
         self,
-        question: str,
+        query: str,
         *,
-        run_manager: AsyncCallbackManagerForChainRun,
+        run_manager: AsyncCallbackManagerForRetrieverRun,
     ) -> List[Document]:
-        """Get docs."""
-        vector_docs = await self.vector_retriever.get_relevant_documents(
-            question, callbacks=run_manager.get_child())
-        keyword_docs = await self.keyword_retriever.get_relevant_documents(
-            question, callbacks=run_manager.get_child())
+        """
+        Asynchronously get the relevant documents for a given query.
+
+        Args:
+            query: The query to search for.
+
+        Returns:
+            A list of reranked documents.
+        """
+
+        # Get fused result of the retrievers.
+        vector_docs = await self.vector_retriever.aget_relevant_documents(
+            query, callbacks=run_manager.get_child())
+        keyword_docs = await self.keyword_retriever.aget_relevant_documents(
+            query, callbacks=run_manager.get_child())
         if self.combine_strategy == 'keyword_front':
             return keyword_docs + vector_docs
         elif self.combine_strategy == 'vector_front':
@@ -83,7 +106,4 @@ class MultiRetrievalQA(BaseRetrievalQA):
                              f'(keyword_front, vector_front, mix),'
                              f'instead found {self.combine_strategy}')
 
-    @property
-    def _chain_type(self) -> str:
-        """Return the chain type."""
-        return 'multi_retrieval_qa'
+        return combine_docs
