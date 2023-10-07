@@ -160,16 +160,15 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
             pages = metadatas[i]['pages']
             types = metadatas[i]['types']
             bboxes = metadatas[i]['bboxes']
-            new_metadata = {}
             searcher = IntervalSearch(indexes)
             split_texts = self.split_text(text)
             for chunk in split_texts:
+                new_metadata = {}
                 index = text.find(chunk, index + 1)
                 inter0 = [index, index + len(chunk) - 1]
                 norm_inter = searcher.find(inter0)
-
                 new_metadata['chunk_bboxes'] = []
-                for j in norm_inter:
+                for j in range(norm_inter[0], norm_inter[1] + 1):
                     new_metadata['chunk_bboxes'].append(
                         {'page': pages[j], 'bbox': bboxes[j]})
 
