@@ -19,5 +19,18 @@ def test_elem_loader2():
     print('docs', docs)
 
 
+def test_elem_loader():
+    url = 'http://192.168.106.12:10001/v1/etl4llm/predict'
+    loader = ElemUnstructuredLoader(
+        file_name='达梦数据库招股说明书.pdf',
+        file_path='./data/达梦数据库招股说明书.pdf',
+        unstructured_api_url=url,
+        start=0,
+        n=10)
+    docs = loader.load()
+    print('docs', docs)
+
+
 # test_loader()
-test_elem_loader2()
+# test_elem_loader2()
+test_elem_loader()

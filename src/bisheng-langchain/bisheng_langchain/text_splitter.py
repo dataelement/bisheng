@@ -1,29 +1,17 @@
+# flake8: noqa
+
 from __future__ import annotations
 
+import bisect
 import copy
 import logging
 import re
 from abc import ABC, abstractmethod
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
-from typing import (
-    AbstractSet,
-    Any,
-    Callable,
-    Collection,
-    Dict,
-    Iterable,
-    List,
-    Literal,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    TypedDict,
-    TypeVar,
-    Union,
-    cast,
-)
+from typing import (AbstractSet, Any, Callable, Collection, Dict, Iterable, List, Literal, Optional,
+                    Sequence, Tuple, Type, TypedDict, TypeVar, Union, cast)
 
 from langchain.docstore.document import Document
 from langchain.schema import BaseDocumentTransformer
@@ -39,7 +27,7 @@ def _split_text_with_regex(
     if separator:
         if keep_separator:
             # The parentheses in the pattern keep the delimiters in the result.
-            _splits = re.split(f"({separator})", text)
+            _splits = re.split(f'({separator})', text)
             splits = [_splits[i] + _splits[i + 1] for i in range(1, len(_splits), 2)]
             if len(_splits) % 2 == 0:
                 splits += _splits[-1:]
@@ -48,7 +36,46 @@ def _split_text_with_regex(
             splits = re.split(separator, text)
     else:
         splits = list(text)
-    return [s for s in splits if s != ""]
+    return [s for s in splits if s != '']
+
+
+class IntervalSearch(object):
+    def __init__(self, inters):
+        arrs = []
+        for inter in inters:
+            arrs.extend(inter)
+
+        self.arrs = arrs
+        self.n = len(self.arrs)
+
+    def _norm_bound(self, ind, v):
+        # [1,3,5,7,9,12]
+        # ind=4,8 is empty interval
+        # ind=15 is exceed interval
+
+        new_ind = None
+        if ind >= self.n:
+            new_ind = self.n - 1
+        elif ind <= 0:
+            new_ind = 0
+        elif self.arrs[ind] == v:
+            new_ind = ind
+        elif ind % 2 == 0:
+            if v > self.arrs[ind - 1] and v < self.arrs[ind]:
+                new_ind = ind - 1
+            else:
+                new_ind = ind
+        else:
+            new_ind = ind
+
+        return new_ind
+
+    def find(self, inter) -> List[int, int]:
+        low_bound1 = bisect.bisect_left(self.arrs, inter[0])
+        low_bound2 = bisect.bisect_left(self.arrs, inter[1])
+        lb1 = self._norm_bound(low_bound1, inter[0])
+        lb2 = self._norm_bound(low_bound2, inter[1])
+        return [lb1 // 2, lb2 // 2]
 
 
 class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
@@ -67,7 +94,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
             keep_separator=keep_separator,
             **kwargs
         )
-        self._separators = separators or ["\n\n", "\n", " ", ""]
+        self._separators = separators or ['\n\n', '\n', ' ', '']
         self._is_separator_regex = False
 
     def split_documents(self, documents: Iterable[Document]) -> List[Document]:
@@ -86,7 +113,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
         new_separators = []
         for i, _s in enumerate(separators):
             _separator = _s if self._is_separator_regex else re.escape(_s)
-            if _s == "":
+            if _s == '':
                 separator = _s
                 break
             if re.search(_separator, text):
@@ -99,7 +126,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
 
         # Now go merging things, recursively splitting longer texts.
         _good_splits = []
-        _separator = "" if self._keep_separator else separator
+        _separator = '' if self._keep_separator else separator
         for s in splits:
             if self._length_function(s) < self._chunk_size:
                 _good_splits.append(s)
@@ -125,39 +152,59 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
         self, texts: List[str], metadatas: Optional[List[dict]] = None
     ) -> List[Document]:
         """Create documents from a list of texts."""
-        _metadatas = metadatas or [{}] * len(texts)
         documents = []
         for i, text in enumerate(texts):
             index = -1
-            metadata = copy.deepcopy(_metadatas[i])
+            # metadata = copy.deepcopy(_metadatas[i])
+            indexes = metadatas[i]['indexes']
+            pages = metadatas[i]['pages']
+            types = metadatas[i]['types']
+            bboxes = metadatas[i]['bboxes']
+            new_metadata = {}
+            searcher = IntervalSearch(indexes)
             split_texts = self.split_text(text)
             for chunk in split_texts:
-                new_metadata = {}
-                new_metadata['chunk_type'] = metadata.get('chunk_type', 'paragraph')
-                new_metadata['bboxes'] = metadata.get('bboxes', [])
-                new_metadata['source'] = metadata.get('source', '')
-                # chunk's start index in text
                 index = text.find(chunk, index + 1)
-                new_metadata['start'] = metadata.get('start', 0) + index
-                new_metadata['end'] = metadata.get('start', 0) + index + len(chunk) - 1
+                inter0 = [index, index + len(chunk) - 1]
+                norm_inter = searcher.find(inter0)
 
-                if 'page' in metadata:
-                    new_metadata['page'] = metadata['page'][new_metadata['start']:new_metadata['end']+1]
-                if 'token_to_bbox' in metadata:
-                    new_metadata['token_to_bbox'] = metadata['token_to_bbox'][new_metadata['start']:new_metadata['end']+1]
+                new_metadata['chunk_bboxes'] = []
+                for j in norm_inter:
+                    new_metadata['chunk_bboxes'].append(
+                        {'page': pages[j], 'bbox': bboxes[j]})
 
-                if 'page' in new_metadata and 'token_to_bbox' in new_metadata:
-                    box_no_duplicates = set()
-                    for index in range(len(new_metadata['page'])):
-                        box_no_duplicates.add(
-                            (new_metadata['page'][index], new_metadata['token_to_bbox'][index]))
+                c = Counter([types[j] for j in norm_inter])
+                chunk_type = c.most_common(1)[0][0]
+                new_metadata['chunk_type'] = chunk_type
+                new_metadata['source'] = metadatas[i].get('source', '')
 
-                    new_metadata['chunk_bboxes'] = []
-                    for elem in box_no_duplicates:
-                        new_metadata['chunk_bboxes'].append(
-                            {'page': elem[0], 'bbox': new_metadata['bboxes'][elem[1]]})
+
+            # for chunk in split_texts:
+            #     new_metadata = {}
+            #     new_metadata['chunk_type'] = metadata.get('chunk_type', 'paragraph')
+            #     new_metadata['bboxes'] = metadata.get('bboxes', [])
+            #     new_metadata['source'] = metadata.get('source', '')
+            #     # chunk's start index in text
+            #     index = text.find(chunk, index + 1)
+            #     new_metadata['start'] = metadata.get('start', 0) + index
+            #     new_metadata['end'] = metadata.get('start', 0) + index + len(chunk) - 1
+
+            #     if 'page' in metadata:
+            #         new_metadata['page'] = metadata['page'][new_metadata['start']:new_metadata['end']+1]
+            #     if 'token_to_bbox' in metadata:
+            #         new_metadata['token_to_bbox'] = metadata['token_to_bbox'][new_metadata['start']:new_metadata['end']+1]
+
+            #     if 'page' in new_metadata and 'token_to_bbox' in new_metadata:
+            #         box_no_duplicates = set()
+            #         for index in range(len(new_metadata['page'])):
+            #             box_no_duplicates.add(
+            #                 (new_metadata['page'][index], new_metadata['token_to_bbox'][index]))
+
+            #         new_metadata['chunk_bboxes'] = []
+            #         for elem in box_no_duplicates:
+            #             new_metadata['chunk_bboxes'].append(
+            #                 {'page': elem[0], 'bbox': new_metadata['bboxes'][elem[1]]})
 
                 new_doc = Document(page_content=chunk, metadata=new_metadata)
                 documents.append(new_doc)
         return documents
-
