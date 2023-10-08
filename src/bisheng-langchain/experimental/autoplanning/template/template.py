@@ -35,6 +35,7 @@ def load_template_node(replace=False):
                 for key, value in template_nodes[node]['template'].items()
                 if isinstance(value, dict)
             }
+            # param type and name
             required_inputs = [
                 (template_dicts[key]['type'], key)
                 for key, value in template_dicts.items()

@@ -4,7 +4,7 @@ import string
 import time
 from collections import defaultdict
 from typing import Dict, Generator, List, Type, Union
-from prompts.task_definitions import COMPONENTS
+from prompts.task_definitions import TASK2COMPONENTS
 from template.template import load_template_node
 from bisheng.interface.listing import ALL_TYPES_DICT
 
@@ -43,8 +43,10 @@ def parse_node(node_name, node_info):
 class GraphGenerator:
     """A class generate a graph of nodes and edges."""
 
-    def __init__(self, tasks, skill='', description=''):
+    def __init__(self, tasks, task_tweaks, skill='', description=''):
         self.tasks = tasks
+        self.task_tweaks = task_tweaks
+        self.task_descriptions = [task['description'] for task in tasks]
         self.template_nodes = load_template_node()
         self.node_id_set = set()
         self.skill = skill
@@ -79,7 +81,7 @@ class GraphGenerator:
         step = task['step']
         task_type = task['task_type']
         master_node = task['master_node']
-        components = copy.deepcopy(COMPONENTS[task_type])
+        components = copy.deepcopy(TASK2COMPONENTS[task_type])
         if master_node not in components:
             raise ValueError(f'master node {master_node} is not in components. Please check.')
         # master_node为根节点
@@ -95,11 +97,10 @@ class GraphGenerator:
         generate nodes and edges
         """
         node_info = self.template_nodes[cur_node]
-        node_parsed_info = parse_node(cur_node, node_info)
-        required_inputs = node_parsed_info['required_inputs']
-        required_candidate_nodes = node_parsed_info['required_candidate_nodes']
-        optional_inputs = node_parsed_info['optional_inputs']
-        optional_candidate_nodes = node_parsed_info['optional_candidate_nodes']
+        required_inputs = node_info['required_inputs']
+        required_candidate_nodes = node_info['required_candidate_nodes']
+        optional_inputs = node_info['optional_inputs']
+        optional_candidate_nodes = node_info['optional_candidate_nodes']
 
         node_index = components.index(cur_node)
         components.pop(node_index)
@@ -157,16 +158,17 @@ class GraphGenerator:
             [(pre_node, cur_node) for pre_node in (find_required_nodes + find_optional_nodes)])
         graph_params.extend(find_required_inputs + find_optional_inputs)
         graph_node_info.append({'cur_node': cur_node, 'path_num': path_num,
-            'layer': layer, 'pre_nodes': find_required_nodes + find_optional_nodes})
+            'layer': layer, 'pre_nodes': find_required_nodes + find_optional_nodes,
+            'param_info': node_info})
 
         return graph_nodes, graph_edges, graph_params, graph_node_info
 
     def instantiate_nodes_edges(self, graph):
         """
-        instantiate each node
+        instantiate each node with id
         """
         graph_nodes, graph_edges, graph_params, graph_nodes_info = graph
-        node_objs = {}
+        node_instantiate_objs = {}
         for index, node in enumerate(graph_nodes):
             while True:
                 node_id = ''.join([random.choice(string.ascii_letters)] +
@@ -175,16 +177,16 @@ class GraphGenerator:
                     self.node_id_set.add(node_id)
                     break
             node_instantiate = node + '-' + node_id
-            node_objs[node] = node_instantiate
+            node_instantiate_objs[node] = node_instantiate
             graph_nodes[index] = node_instantiate
 
         for index, node_info in enumerate(graph_nodes_info):
-            node_info['cur_node'] = node_objs[node_info['cur_node']]
-            node_info['pre_nodes'] = [node_objs[elem] for elem in node_info['pre_nodes']]
+            node_info['cur_node'] = node_instantiate_objs[node_info['cur_node']]
+            node_info['pre_nodes'] = [node_instantiate_objs[elem] for elem in node_info['pre_nodes']]
 
         new_graph_edges = []
         for edge in graph_edges:
-            new_graph_edges.append((node_objs[edge[0]], node_objs[edge[1]]))
+            new_graph_edges.append((node_instantiate_objs[edge[0]], node_instantiate_objs[edge[1]]))
 
         return graph_nodes, new_graph_edges, graph_params, graph_nodes_info
 
@@ -225,7 +227,9 @@ class GraphGenerator:
             whole_graph_nodes_info.extend(graph_nodes_info)
             whole_graph_nodes_info.append({'cur_node': tool_instantiate,
                 'path_num': graph_nodes_info[-1]['path_num'],
-                'layer': 2, 'pre_nodes': [graph_nodes[-1]]})
+                'layer': 2, 'pre_nodes': [graph_nodes[-1]],
+                'param_info': self.template_nodes[tool_type]})
+
             total_path_num += graph_nodes_info[-1]['path_num']
 
         while True:
@@ -234,12 +238,16 @@ class GraphGenerator:
             if agent_id not in self.node_id_set:
                 self.node_id_set.add(agent_id)
                 break
-        zero_shot_agent_instantiate = 'ZeroShotAgent' + '-' + agent_id
+
+        agent_type = 'ZeroShotAgent'
+        zero_shot_agent_instantiate = agent_type + '-' + agent_id
         whole_graph_nodes.append(zero_shot_agent_instantiate)
-        whole_graph_edges.extend((tool_instantiate, zero_shot_agent_instantiate) for tool_instantiate in tool_instantiate_list)
+        whole_graph_edges.extend(
+            (tool_instantiate, zero_shot_agent_instantiate) for tool_instantiate in tool_instantiate_list)
         whole_graph_params.extend(('BaseTool', 'tools') for _ in tool_instantiate_list)
         whole_graph_nodes_info.append({'cur_node': zero_shot_agent_instantiate, 'path_num': total_path_num,
-                'layer': 1, 'pre_nodes': tool_instantiate_list})
+                'layer': 1, 'pre_nodes': tool_instantiate_list,
+                'param_info': self.template_nodes[agent_type]})
 
         return whole_graph_nodes, whole_graph_edges, whole_graph_params, whole_graph_nodes_info
 
@@ -267,7 +275,7 @@ class GraphGenerator:
             res_json['edges'].append(edge_json)
 
         graph_nodes_info = sorted(graph_nodes_info, key=lambda elem: elem['layer'])
-        print(graph_nodes_info)
+        # print(graph_nodes_info)
 
         # decide height
         total_path_num = graph_nodes_info[0]['path_num']
@@ -281,7 +289,8 @@ class GraphGenerator:
         node_info_dict = dict()
         for node_info in graph_nodes_info:
             node_info_dict[node_info['cur_node']] = {'path_num': node_info['path_num'],
-                                                     'layer': node_info['layer']}
+                                                     'layer': node_info['layer'],
+                                                     'param_info': node_info['param_info']}
 
         # root node: layer = 1
         node_info_dict[graph_nodes_info[0]['cur_node']]['height_range'] = (0, 1)
@@ -295,8 +304,9 @@ class GraphGenerator:
                 node_info_dict[pre_node]['height_range'] = (left, right)
                 left = right
 
-            # node position x and y
+            # node position x
             node_info_dict[node_info['cur_node']]['x'] = start_x[total_layer_num - int(node_info_dict[node_info['cur_node']]['layer'])]
+            # node position y
             node_info_dict[node_info['cur_node']]['y'] = int((node_height_range[0] + node_height_range[1])/2 * total_height)
 
         res_json['nodes'] = []
@@ -308,7 +318,7 @@ class GraphGenerator:
             langflow_node['width'] = mean_width
             langflow_node['height'] = mean_height
             langflow_node['id'] = node_name
-            langflow_node['data'] = {'id': node_name, 'node': self.template_nodes[node_type],
+            langflow_node['data'] = {'id': node_name, 'node': node_info['param_info'],
                                      'type': node_type, 'value': None}
             langflow_node['type'] = 'genericNode'
             langflow_node['position'] = {'x': position_x, 'y': position_y}
