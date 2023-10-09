@@ -7,13 +7,13 @@ from sqlmodel import Field
 
 
 class RecallBase(SQLModelSerializable):
-    message_id: int = Field(index=False, unique=False)
+    message_id: Optional[int] = Field(index=False, unique=False)
     chat_id: str = Field(index=False)
     query: Optional[str] = Field(index=False, sa_column=Column(String(length=1024)))
     answer: Optional[str] = Field(index=False)
     chunk: Optional[str] = Field(index=False, sa_column=Column(Text))
-    answer_keywords: Optional[str] = Field(sa_column=Column(String(length=1024)))
-    file_list: Optional[str] = Field(sa_column=Column(String(length=3096)))
+    meta_data: Optional[str] = Field(index=False, sa_column=Column(Text))
+    file_id: Optional[int] = Field(index=False)
 
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))

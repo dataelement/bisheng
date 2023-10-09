@@ -1,20 +1,15 @@
+import json
 import random
 from typing import List
 
 import jieba.analyse
-from bisheng.cache.redis import redis_client
-from bisheng.chat.manager import ChatManager
+from bisheng.database.base import get_session
+from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils import minio_client
-from bisheng_langchain.chat_models import QwenChat
-from bisheng_langchain.document_loaders import ElemUnstructuredLoader
-from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
-from fastapi import APIRouter
+from bisheng_langchain.chat_models import HostQwenChat
+from fastapi import APIRouter, Depends
 from langchain import LLMChain, PromptTemplate
-
-router = APIRouter(tags=['Chat'])
-chat_manager = ChatManager()
-flow_data_store = redis_client
-expire = 600  # reids 60s 过期
+from sqlmodel import Session, select
 
 # build router
 router = APIRouter(prefix='/qa', tags=['QA'])
@@ -27,11 +22,11 @@ def get_answer_keyword(answer: str):
 
 model_name = 'Qwen-7B-Chat'
 host_base_url = 'http://192.168.106.12:9001/v2.1/models'
-llm = QwenChat(model_name=model_name,
-               host_base_url=host_base_url,
-               max_tokens=8192,
-               temperature=0,
-               verbose=False)
+llm = HostQwenChat(model_name=model_name,
+                   host_base_url=host_base_url,
+                   max_tokens=8192,
+                   temperature=0,
+                   verbose=False)
 prompt_template = '''分析给定Question，提取Question中包含的KeyWords，输出列表形式
 
 Examples:
@@ -57,28 +52,15 @@ def extract_keys(answer, method='jiaba_kv'):
 
 
 @router.get('/chunk', status_code=200)
-def get_original_file(*, message_id: int):
+def get_original_file(*, message_id: int, session: Session = Depends(get_session)):
 
-    # all_chunk = session.exec(select(RecallChunk).where(RecallChunk.message_id == message_id)).all()
-    # chunks = json.loads(all_chunk[0].chunk)
-    # all_chunk_str = [chunk.]
-    loader = ElemUnstructuredLoader('/app/dummy.txt')
-    docs = loader.load()
-    print('docs', docs)
-
-    text_splitter = ElemCharacterTextSplitter(chunk_size=10, chunk_overlap=0)
-    split_docs = text_splitter.split_documents(docs)
-    print('split_docs:', split_docs)
-
+    chunks = session.exec(select(RecallChunk).where(RecallChunk.message_id == message_id)).all()
     result = []
-    for index, chunk in enumerate(split_docs):
-        chunk_res = chunk.metadata
-        chunk_res.pop('bboxes')
-        chunk_res.pop('page')
-        chunk_res.pop('token_to_bbox')
-        chunk_res['source_url'] = minio_client.get_share_link('2986')
+    for index, chunk in enumerate(chunks):
+        chunk_res = json.loads(json.loads(chunk.meta_data).get('bbox'))
+        chunk_res['source_url'] = minio_client.get_share_link(str(chunk.file_id))
         chunk_res['score'] = round(random.randint(0, 100) / 100.0, 3)
-        chunk_res['file_id'] = index
+        chunk_res['file_id'] = chunk.file_id
         result.append(chunk_res)
 
     # sort_and_filter_all_chunks(keywords, all_chunk)

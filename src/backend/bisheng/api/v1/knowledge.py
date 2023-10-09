@@ -15,6 +15,7 @@ from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
 from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
+from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoader
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
@@ -68,6 +69,8 @@ async def process_knowledge(*,
     knowledge_id = data.get('knowledge_id')
     chunck_size = data.get('chunck_size')
     file_path = data.get('file_path')
+    auto_p = data.get('auto')
+    separator = data.get('separator') or '\n\n'
 
     knowledge = session.exec(select(Knowledge).where(Knowledge.id == knowledge_id)).one()
     if payload.get('role') != 'admin' and knowledge.user_id != payload.get('user_id'):
@@ -93,6 +96,8 @@ async def process_knowledge(*,
         addEmbedding(collection_name=collection_name,
                      model=knowledge.model,
                      chunk_size=chunck_size,
+                     separator=separator,
+                     auto=auto_p,
                      file_paths=file_paths,
                      knowledge_files=files))
 
@@ -219,15 +224,15 @@ def delete_knowledge_file(*,
     collection_name = knowledge.collection_name
     embeddings = decide_embeddings(knowledge.model)
     vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-    if isinstance(vectore_client, Milvus):
+    if isinstance(vectore_client, Milvus) and vectore_client.col:
         pk = vectore_client.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])
         res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
+        logger.info(f'act=delete_vector file_id={file_id} res={res}')
 
     # minio
-    minio_client.delete_minio(knowledge_file.id)
+    minio_client.delete_minio(str(knowledge_file.id))
     # elastic
 
-    logger.info(f'act=delete_vector file_id={file_id} res={res}')
     session.delete(knowledge_file)
     session.commit()
     return {'message': 'knowledge file deleted successfully'}
@@ -255,8 +260,8 @@ def decide_vectorstores(collection_name: str, vector_store: str,
     return instantiate_vectorstore(class_object=class_obj, params=param)
 
 
-async def addEmbedding(collection_name, model: str, chunk_size: int, file_paths: List[str],
-                       knowledge_files: List[KnowledgeFile]):
+async def addEmbedding(collection_name, model: str, chunk_size: int, separator: str, auto: bool,
+                       file_paths: List[str], knowledge_files: List[KnowledgeFile]):
 
     embeddings = decide_embeddings(model)
     vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
@@ -265,7 +270,8 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, file_paths:
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
         try:
-            texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size)
+            texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
+                                                separator)
             logger.info(f'chunk_split size={len(texts)}')
             [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]
             vectore_client.add_texts(texts=texts, metadatas=metadatas)
@@ -292,30 +298,41 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, file_paths:
             session.commit()
 
 
-def _read_chunk_text(input_file, file_name, size):
+def _read_chunk_text(input_file, file_name, size, separator):
     from langchain.document_loaders import (PyPDFLoader, BSHTMLLoader, TextLoader,
                                             UnstructuredMarkdownLoader)
     from langchain.text_splitter import CharacterTextSplitter
+    from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
     filetype_load_map = {
         'txt': TextLoader,
         'pdf': PyPDFLoader,
         'html': BSHTMLLoader,
-        'md': UnstructuredMarkdownLoader
+        'md': UnstructuredMarkdownLoader,
+        'default': ElemUnstructuredLoader
     }
-
-    file_type = file_name.split('.')[-1]
-    if file_type not in filetype_load_map:
-        raise Exception('Unsupport file type')
-
-    loader = filetype_load_map[file_type](input_file)
-    documents = loader.load()
-    text_splitter = CharacterTextSplitter(chunk_size=size, chunk_overlap=0, add_start_index=True)
-    texts = text_splitter.split_documents(documents)
-    raw_texts = [t.page_content for t in texts]
-    metadatas = []
-    for t in texts:
-        start_index = t.metadata['start_index']
-        page_num = t.metadata['page'] if 'page' in t.metadata else 0
-        metadatas.append({'source': f'{file_name}:P{page_num}_O{start_index}'})
-
+    if not settings.knowledges.get('unstructured_api_url'):
+        file_type = file_name.split('.')[-1]
+        if file_type not in filetype_load_map:
+            raise Exception('Unsupport file type')
+        loader = filetype_load_map[file_type]
+        text_splitter = CharacterTextSplitter(separator=separator,
+                                              chunk_size=size,
+                                              chunk_overlap=0,
+                                              add_start_index=True)
+        documents = loader.load()
+        texts = text_splitter.split_documents(documents)
+        raw_texts = [t.page_content for t in texts]
+        metadatas = [t.metadata for t in texts]
+    else:
+        loader = ElemUnstructuredLoader(
+            file_name,
+            input_file,
+            unstructured_api_url=settings.knowledges.get('unstructured_api_url'))
+        documents = loader.load()
+        text_splitter = ElemCharacterTextSplitter(separators=separator,
+                                                  chunk_size=size,
+                                                  chunk_overlap=0)
+        texts = text_splitter.split_documents(documents)
+        raw_texts = [t.page_content for t in texts]
+        metadatas = [{'bbox': json.dumps(t.metadata)} for t in texts]
     return (raw_texts, metadatas)

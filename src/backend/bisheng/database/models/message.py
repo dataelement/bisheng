@@ -10,6 +10,7 @@ from sqlmodel import Field
 
 class MessageBase(SQLModelSerializable):
     is_bot: bool = Field(index=False)
+    source: Optional[bool] = Field(index=False)
     message: Optional[str] = Field(index=False, sa_column=Column(Text))
     type: str = Field(index=False)
     category: str = Field(index=False)

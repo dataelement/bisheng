@@ -26,11 +26,10 @@ async def process_graph(
             raise ValueError('No message provided')
 
         logger.debug('Generating result and thought')
-        result, intermediate_steps = await get_result_and_steps(
-            langchain_object, chat_inputs.message, websocket=websocket
-        )
+        result, intermediate_steps, source_document = await get_result_and_steps(
+            langchain_object, chat_inputs.message, websocket=websocket)
         logger.debug('Generated result and intermediate_steps')
-        return result, intermediate_steps
+        return result, intermediate_steps, source_document
     except Exception as e:
         # Log stack trace
         logger.exception(e)

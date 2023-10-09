@@ -158,7 +158,9 @@ def build_flow_no_yield(graph_data: dict,
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
                     vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id}'
                     logger.info(f"rename_vector_col col={vertex.params['collection_name']}")
-                    vertex.params['drop_old'] = True
+                    if process_file:
+                        # L1 清除Milvus历史记录
+                        vertex.params['drop_old'] = True
 
             vertex.build()
             params = vertex._built_object_repr()

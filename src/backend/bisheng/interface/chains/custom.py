@@ -3,6 +3,7 @@ from typing import Dict, Optional, Type, Union
 from bisheng.interface.base import CustomChain
 from bisheng.interface.utils import extract_input_variables_from_prompt
 from bisheng_langchain.chains.question_answering import load_qa_chain
+from langchain import BasePromptTemplate
 from langchain.base_language import BaseLanguageModel
 from langchain.chains import ConversationChain
 from langchain.memory.buffer import ConversationBufferMemory
@@ -100,9 +101,13 @@ class CombineDocsChain(CustomChain):
         return 'load_qa_chain'
 
     @classmethod
-    def initialize(cls, llm: BaseLanguageModel, chain_type: str, token_max: str = -1):
+    def initialize(cls,
+                   llm: BaseLanguageModel,
+                   chain_type: str,
+                   prompt: BasePromptTemplate = None,
+                   token_max: str = -1):
         if chain_type == 'stuff':
-            return load_qa_chain(llm=llm, chain_type=chain_type, token_max=token_max)
+            return load_qa_chain(llm=llm, chain_type=chain_type, prompt=prompt, token_max=token_max)
         else:
             return load_qa_chain(llm=llm, chain_type=chain_type)
 

@@ -69,14 +69,12 @@ class ChainFrontendNode(FrontendNode):
                 ))
         elif self.template.type_name == 'SequentialChain':
             self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=True,
-                    show=True,
-                    name='chain_order',
-                    advanced=False,
-                    value='[]'
-                ))
+                TemplateField(field_type='str',
+                              required=True,
+                              show=True,
+                              name='chain_order',
+                              advanced=False,
+                              value='[]'))
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
@@ -281,6 +279,14 @@ class CombineDocsChainNode(FrontendNode):
                 info='当前只对stuff 生效',
                 value=-1,
             ),
+            TemplateField(
+                field_type='BasePromptTemplate',
+                required=False,
+                show=True,
+                name='prompt',
+                display_name='prompt',
+                advanced=False,
+            )
         ],
     )
     description: str = """Load question answering chain."""
