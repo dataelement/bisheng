@@ -16,7 +16,6 @@ class AutoPlanning:
         self,
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         model_name="gpt-4-0613",
-        max_steps=10,
         openai_api_base="",
     ):
         assert len(
@@ -24,7 +23,6 @@ class AutoPlanning:
         ), "Either give openai_api_key as an argument or put it in the environment variable"
         self.model_name = model_name
         self.openai_api_key = openai_api_key
-        self.max_steps = max_steps  # max iteration for refining the model purpose
         self.openai_api_base = openai_api_base
         Chains.setLlm(
             self.model_name, self.openai_api_key, openai_api_base=self.openai_api_base
@@ -37,40 +35,44 @@ class AutoPlanning:
         )
 
     def __repr__(self) -> str:
-        return f"AutoPlanning(model_name='{self.model_name}',max_steps={self.max_steps})"
+        return f"AutoPlanning(model_name='{self.model_name}')"
 
     def __call__(
         self,
         skill,
         description,
-        save_file=''
+        save_file='',
+        input_required_params=False,
     ):
         # phase1: skill -> plan
+        print('-----------phase1: skill -> plan--------------------')
         instruction = f'{skill}: {description}'
         plan = Chains.plan(instruction)
-        print('plan: \n', plan)
 
-        yield {
+        print({
             "stage": "plan",
             "completed": True,
             "percentage": 20,
             "done": False,
             "message": "Plan has been generated.",
-        }
+            "plan": plan
+        })
 
         # phase2: plan -> tasks
+        print('-----------phase2: plan -> tasks--------------------')
         task_list = Chains.tasks(instruction=instruction, plan=plan)
 
-        yield {
+        print({
             "stage": "task",
             "completed": True,
             "percentage": 50,
             "done": False,
             "message": "Tasks have been generated.",
             "tasks": task_list,
-        }
+        })
 
-        # phase3: generate tasks params
+        # phase3: generate tasks params and some params need user input (openai_api_key)
+        print('-----------phase3: generate tasks params--------------------')
         task_tweaks = []
         for task in task_list:
             task_type = task['task_type']
@@ -78,6 +80,8 @@ class AutoPlanning:
             tweaks = defaultdict(dict)
             task_require_params = []
             for component in components:
+                if component not in COMPONENT_PARAMS:
+                    continue
                 component_params = COMPONENT_PARAMS[component]
                 component_require_params = component_params['require']
                 component_option_param = component_params['option']
@@ -85,26 +89,48 @@ class AutoPlanning:
                 for option_param, value in component_option_param.items():
                     tweaks[component][option_param] = value
 
-                # only require params need to input by user
+                # only required params need to input by user
                 for require_param, value in component_require_params.items():
                     task_require_params.append({'component': component,
                                                 'param': require_param,
                                                 'type': value})
 
-            print(f'''task:{task['step']}, description: {task['description']}, 请输入task相关参数: ''')
-            while task_require_params:
-                param = task_require_params.pop(0)
-                input_ = input(f"component name: {param['component']}, param name: {param['param']}, 请配置参数值: ")
-                input_ = param['type'](input_)
-                param['value'] = input_
-                print(param)
-                tweaks[param['component']][param['param']] = param['value']
+            if input_required_params:
+                print(f'''task:{task['step']}, description: {task['description']}, 请输入task相关参数: ''')
+                while task_require_params:
+                    param = task_require_params.pop(0)
+                    input_ = input(f"component name: {param['component']}, param name: {param['param']}, 请配置参数值: ")
+                    input_ = param['type'](input_)
+                    param['value'] = input_
+                    print(param)
+                    tweaks[param['component']][param['param']] = param['value']
 
             task_tweaks.append(tweaks)
 
-        # phase4: tasks -> chain graph
+        print({
+            "stage": "parameters input",
+            "completed": True,
+            "percentage": 70,
+            "done": False,
+            "message": "Task parameters have been generated.",
+            "task_tweaks": task_tweaks,
+        })
+
+        # phase4: tasks -> langflow graph
+        print('-----------phase4: tasks -> langflow graph--------------------')
         graph_generator = GraphGenerator(task_list, task_tweaks, skill=skill, description=description)
         agent_graph = graph_generator.build_graph()
-        with open(save_file, 'w') as f:
-            json.dump(agent_graph, f, ensure_ascii=False, indent=2)
+        if save_file:
+            with open(save_file, 'w') as f:
+                json.dump(agent_graph, f, ensure_ascii=False, indent=2)
+
+        print({
+            "stage": "graph",
+            "completed": True,
+            "percentage": 100,
+            "done": True,
+            "message": "Langflow graph have been generated.",
+        })
+
+        return agent_graph
 

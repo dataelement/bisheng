@@ -68,19 +68,22 @@ COMPONENT_PARAMS = {
                          'option': {'model': 'text-embedding-ada-002'}
                         },
     'Milvus': {'require': {'collection_name': str},
-               'option': {'connection_args': {"host":"localhost", "port":"19530", "user":"", "password":"", "secure":False},
+               'option': {'connection_args': {"host":"192.168.106.12", "port":"19530", "user":"", "password":"", "secure":False},
                           'search_kwargs': {}
-                         },
+                         }
               },
     'ChatOpenAI': {'require': {'openai_api_key': str, 'openai_proxy': str},
-                   'option': {'model_name': 'gpt-3.5-turbo-0613', 'temperature': 0.7},
+                   'option': {'model_name': 'gpt-3.5-turbo-0613', 'temperature': 0.7}
                   },
     'CombineDocsChain': {'require': {},
-                         'option': {'token_max': -1, 'chain_type': 'stuff'},
+                         'option': {'token_max': -1, 'chain_type': 'stuff'}
                         },
     'RetrievalQA': {'require': {},
-                    'option': {'input_key': 'query', 'output_key': 'result', 'return_source_documents': False},
+                    'option': {'input_key': 'query', 'output_key': 'result', 'return_source_documents': False}
                    },
+    'Search': {'require': {'serpapi_api_key': str},
+               'option': {}
+              },
 }
 
 

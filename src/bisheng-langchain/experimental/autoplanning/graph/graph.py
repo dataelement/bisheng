@@ -3,7 +3,7 @@ import random
 import string
 import time
 from collections import defaultdict
-from typing import Dict, Generator, List, Type, Union
+from typing import Any, Dict, Generator, List, Type, Union
 from prompts.task_definitions import TASK2COMPONENTS
 from template.template import load_template_node
 from bisheng.interface.listing import ALL_TYPES_DICT
@@ -40,13 +40,44 @@ def parse_node(node_name, node_info):
     return node_base_info
 
 
+def apply_tweaks(node_info: Dict[str, Any], node_tweaks: Dict[str, Any]) -> None:
+    template_data = node_info.get('param_info', {}).get('template')
+
+    if not isinstance(template_data, dict):
+        logger.warning(
+            f"Template data for node {node.get('id')} should be a dictionary"
+        )
+        return
+
+    for tweak_name, tweak_value in node_tweaks.items():
+        if tweak_name and tweak_value and tweak_name in template_data:
+            key = tweak_name if tweak_name == 'file_path' else 'value'
+            template_data[tweak_name][key] = tweak_value
+
+
+def process_tweaks(
+    graph_nodes_info: list, tweaks: Dict[str, Dict[str, Any]]
+) -> Dict[str, Any]:
+
+    for node_info in graph_nodes_info:
+        if isinstance(node_info, dict) and isinstance(node_info.get('cur_node'), str):
+            node_name = node_info['cur_node']
+            if node_tweaks := tweaks.get(node_name):
+                apply_tweaks(node_info, node_tweaks)
+        else:
+            logger.warning(
+                "Each node should be a dictionary with an 'id' key of type str"
+            )
+
+    return graph_nodes_info
+
+
 class GraphGenerator:
     """A class generate a graph of nodes and edges."""
 
     def __init__(self, tasks, task_tweaks, skill='', description=''):
         self.tasks = tasks
         self.task_tweaks = task_tweaks
-        self.task_descriptions = [task['description'] for task in tasks]
         self.template_nodes = load_template_node()
         self.node_id_set = set()
         self.skill = skill
@@ -60,7 +91,7 @@ class GraphGenerator:
         task_graphs = []
         for task_index, task in enumerate(self.tasks):
             task_graph = self.build_nodes_edges(task)
-            task_graph = self.instantiate_nodes_edges(task_graph)
+            task_graph = self.instantiate_nodes_edges(task_graph, self.task_tweaks[task_index])
             task_graphs.append(task_graph)
 
         # phase2: multi combine method
@@ -76,7 +107,7 @@ class GraphGenerator:
 
     def build_nodes_edges(self, task):
         """
-
+        generate nodes and edges of graph
         """
         step = task['step']
         task_type = task['task_type']
@@ -96,7 +127,7 @@ class GraphGenerator:
         """
         generate nodes and edges
         """
-        node_info = self.template_nodes[cur_node]
+        node_info = copy.deepcopy(self.template_nodes[cur_node])
         required_inputs = node_info['required_inputs']
         required_candidate_nodes = node_info['required_candidate_nodes']
         optional_inputs = node_info['optional_inputs']
@@ -163,13 +194,14 @@ class GraphGenerator:
 
         return graph_nodes, graph_edges, graph_params, graph_node_info
 
-    def instantiate_nodes_edges(self, graph):
+    def instantiate_nodes_edges(self, graph, tweaks):
         """
         instantiate each node with id
         """
         graph_nodes, graph_edges, graph_params, graph_nodes_info = graph
         node_instantiate_objs = {}
         for index, node in enumerate(graph_nodes):
+            # instantiate node
             while True:
                 node_id = ''.join([random.choice(string.ascii_letters)] +
                                   [random.choice(string.ascii_letters + string.digits) for _ in range(4)])
@@ -180,10 +212,16 @@ class GraphGenerator:
             node_instantiate_objs[node] = node_instantiate
             graph_nodes[index] = node_instantiate
 
+        # initial component params of task
+        if tweaks:
+            graph_nodes_info = process_tweaks(graph_nodes_info, tweaks)
+
+        # instantiate node
         for index, node_info in enumerate(graph_nodes_info):
             node_info['cur_node'] = node_instantiate_objs[node_info['cur_node']]
             node_info['pre_nodes'] = [node_instantiate_objs[elem] for elem in node_info['pre_nodes']]
 
+        # instantiate node
         new_graph_edges = []
         for edge in graph_edges:
             new_graph_edges.append((node_instantiate_objs[edge[0]], node_instantiate_objs[edge[1]]))
@@ -200,7 +238,7 @@ class GraphGenerator:
         whole_graph_nodes_info = []
         tool_instantiate_list = []
         total_path_num = 0
-        for task_graph in task_graphs:
+        for task_index, task_graph in enumerate(task_graphs):
             tool_type = 'Tool'
             while True:
                 tool_id = ''.join([random.choice(string.ascii_letters)] +
@@ -225,20 +263,23 @@ class GraphGenerator:
                 # Tool and ZeroShotAgent
                 node_info['layer'] = node_info['layer'] + 2
             whole_graph_nodes_info.extend(graph_nodes_info)
+
+            tool_param_info = copy.deepcopy(self.template_nodes[tool_type])
+            tool_param_info['template']['name']['value'] = self.tasks[task_index]['task_type'] + '_' + str(task_index)
+            tool_param_info['template']['description']['value'] = self.tasks[task_index]['description']
             whole_graph_nodes_info.append({'cur_node': tool_instantiate,
                 'path_num': graph_nodes_info[-1]['path_num'],
                 'layer': 2, 'pre_nodes': [graph_nodes[-1]],
-                'param_info': self.template_nodes[tool_type]})
+                'param_info': tool_param_info})
 
             total_path_num += graph_nodes_info[-1]['path_num']
 
         while True:
             agent_id = ''.join([random.choice(string.ascii_letters)] +
-                              [random.choice(string.ascii_letters + string.digits) for _ in range(4)])
+                               [random.choice(string.ascii_letters + string.digits) for _ in range(4)])
             if agent_id not in self.node_id_set:
                 self.node_id_set.add(agent_id)
                 break
-
         agent_type = 'ZeroShotAgent'
         zero_shot_agent_instantiate = agent_type + '-' + agent_id
         whole_graph_nodes.append(zero_shot_agent_instantiate)
@@ -247,7 +288,7 @@ class GraphGenerator:
         whole_graph_params.extend(('BaseTool', 'tools') for _ in tool_instantiate_list)
         whole_graph_nodes_info.append({'cur_node': zero_shot_agent_instantiate, 'path_num': total_path_num,
                 'layer': 1, 'pre_nodes': tool_instantiate_list,
-                'param_info': self.template_nodes[agent_type]})
+                'param_info': copy.deepcopy(self.template_nodes[agent_type])})
 
         return whole_graph_nodes, whole_graph_edges, whole_graph_params, whole_graph_nodes_info
 
