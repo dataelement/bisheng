@@ -42,6 +42,7 @@ class AutoPlanning:
         skill,
         description,
         save_file='',
+        global_params={},
         input_required_params=False,
     ):
         # phase1: skill -> plan
@@ -71,7 +72,7 @@ class AutoPlanning:
             "tasks": task_list,
         })
 
-        # phase3: generate tasks params and some params need user input (openai_api_key)
+        # phase3: generate tasks params and some params update by global param or user input (openai_api_key)
         print('-----------phase3: generate tasks params--------------------')
         task_tweaks = []
         for task in task_list:
@@ -89,12 +90,20 @@ class AutoPlanning:
                 for option_param, value in component_option_param.items():
                     tweaks[component][option_param] = value
 
-                # only required params need to input by user
+                # required params update by global param
                 for require_param, value in component_require_params.items():
                     task_require_params.append({'component': component,
                                                 'param': require_param,
                                                 'type': value})
+                    # required params initial by global params
+                    if require_param in global_params:
+                        param_value = global_params[require_param]
+                        if param_value and isinstance(param_value, list):
+                            tweaks[component][require_param] = param_value.pop(0)
+                        elif param_value:
+                            tweaks[component][require_param] = param_value
 
+            # required params update by user input
             if input_required_params:
                 print(f'''task:{task['step']}, description: {task['description']}, 请输入task相关参数: ''')
                 while task_require_params:

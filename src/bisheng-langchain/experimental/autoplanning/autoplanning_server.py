@@ -1,13 +1,14 @@
 import os
+import json
 from flask import Flask, request, Response, abort
 from autoplanning_agent import AutoPlanning
 
 app = Flask(__name__)
 
-os.environ['OPENAI_PROXY'] =  'xxxx'
-
+openai_api_key = os.environ.get('OPENAI_API_KEY', '')
+openai_proxy = os.environ.get('OPENAI_PROXY', '')
 planning_agent = AutoPlanning(model_name="gpt-4-0613",
-                              openai_api_key='xxxx')
+                              openai_api_key=openai_api_key)
 
 
 @app.route("/auto_planning_v1", methods=['POST'])
@@ -15,8 +16,11 @@ def auto_planning_v1():
     data = request.json
     skill = data['skill']
     task_desc = data['task_desc']
+    global_params = data['global_params']
+    global_params = json.loads(global_params)
     try:
-        agent_graph = planning_agent(skill=skill, description=task_desc, input_required_params=False)
+        agent_graph = planning_agent(skill=skill, description=task_desc,
+            global_params=global_params, input_required_params=False)
         result = {'code': '200', 'msg': '响应成功', 'data': agent_graph}
     except Exception as e:
         print(e)
@@ -48,5 +52,6 @@ def generate_langchain_app():
 
 
 if __name__ == '__main__':
-    # generate_langchain_app()
     app.run(host='0.0.0.0', port=9118, threaded=True)
+    # generate_langchain_app()
+
