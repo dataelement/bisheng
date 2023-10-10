@@ -407,3 +407,44 @@ class HostLlama2Chat(BaseHostChatLLM):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return 'llama2_chat'
+
+
+class CustomLLMChat(BaseHostChatLLM):
+    # use custom llm chat api, api should compatiable with openai definition
+    model_name: str = Field('custom-llm-chat', alias='model')
+
+    temperature: float = 0.1
+    top_p: float = 0.1
+    max_tokens: int = 8192
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of chat model."""
+        return 'custom_llm_chat'
+
+    def completion_with_retry(self, **kwargs: Any) -> Any:
+        retry_decorator = _create_retry_decorator(self)
+
+        @retry_decorator
+        def _completion_with_retry(**kwargs: Any) -> Any:
+            messages = kwargs.get('messages')
+            temperature = kwargs.get('temperature')
+            top_p = kwargs.get('top_p')
+            max_tokens = kwargs.get('max_tokens')
+            do_sample = kwargs.get('do_sample')
+            params = {
+                'messages': messages,
+                'model': self.model_name,
+                'top_p': top_p,
+                'temperature': temperature,
+                'max_tokens': max_tokens,
+                'do_sample': do_sample
+            }
+
+            if self.verbose:
+                print('payload', params)
+
+            resp = self.client(url=self.host_base_url, json=params).json()
+            return resp
+
+        return _completion_with_retry(**kwargs)
