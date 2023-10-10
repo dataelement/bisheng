@@ -13,4 +13,5 @@ export type ChatMessageType = {
   /** 用户打字机控制光标展示 */
   end: boolean;
   id?: number;
+  source?: boolean;
 };

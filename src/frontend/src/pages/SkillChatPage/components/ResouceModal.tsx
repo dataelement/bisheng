@@ -4,20 +4,21 @@ import { useEffect, useRef, useState } from "react";
 import { Input } from "../../../components/ui/input";
 import FileView from "./FileView";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
+import { ChatMessageType } from "../../../types/chat";
+import React from "react";
 
-// 
-const Anwser = ({ id, onInit, onAdd }) => {
+// 顶部答案区
+const Anwser = ({ msg, onInit, onAdd }) => {
     const [html, setHtml] = useState('')
     const pRef = useRef(null)
 
     // init
     useEffect(() => {
         onInit([])
-        const testStr = '评测集是用于评估场景准确率的数据集，其中包含了该场景的标准答案。评测集用于对模型或系统的性能进行评估和比较。在评测集中，用户需要对样本进行标注，将正确的标注结果作为评测准确率的标准答案。通过评估模型在评测集上的表现，可以了解其准确率和性能。'
-        testStr && splitWordApi(testStr).then((res) => {
+        msg && splitWordApi(msg).then((res) => {
             // 匹配
             const reg = new RegExp(`(${res.data.join('|')})`, 'g')
-            setHtml(testStr.replace(reg, '<span>$1</span>'))
+            setHtml(msg.replace(reg, '<span>$1</span>'))
             onInit(res.data)
         })
     }, [])
@@ -39,7 +40,7 @@ const Anwser = ({ id, onInit, onAdd }) => {
 }
 
 // 
-const ResultPanne = ({ data, onClose, onAdd }) => {
+const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId: string, words: string[], data: ChatMessageType, onClose: any, onAdd: any, children: any }) => {
     const [editCustomKey, setEditCustomKey] = useState(false)
     const inputRef = useRef(null)
 
@@ -52,30 +53,26 @@ const ResultPanne = ({ data, onClose, onAdd }) => {
 
     // 文件s
     const [files, setFiles] = useState([])
-    const [file, setFile] = useState({})
+    const [file, setFile] = useState(null)
     const loadFiles = () => {
-        if (!data.length) return setFiles([])
-        getSourceChunksApi('1', '1', data.join(';')).then(res => {
-            console.log('res :>> ', res);
+        if (!words.length) return setFiles([])
+        getSourceChunksApi(chatId, data.id, words.join(';')).then((_files) => {
+            setFiles(_files)
+            // 默认打开第一个文件
+            _files && setFile(_files[0])
         })
-        const arr = [
-            { name: 'studio使用手册', chunk: 2 },
-            { name: 'STUDIO使用手册STUDIO使用手册STUDIO使用手册', chunk: 1 },
-            { name: 'MFp使用手册', chunk: 3 }
-        ]
-        setFiles(arr.splice(0, data.length + 1))
     }
 
     useEffect(() => {
         loadFiles()
-    }, [data])
+    }, [data, words])
 
     return <div className="flex gap-4 mt-4" style={{ height: 'calc(100vh - 10rem)' }}>
         {/* left */}
         <div className="w-[300px] bg-gray-100 rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar">
             {/* label */}
             <div className="flex flex-wrap gap-2">
-                {data.map((str, i) => <div key={str} className="badge badge-info gap-2 text-gray-600">{str}<span className="cursor-pointer" onClick={() => onClose(i)}>x</span></div>)}
+                {words.map((str, i) => <div key={str} className="badge badge-info gap-2 text-gray-600">{str}<span className="cursor-pointer" onClick={() => onClose(i)}>x</span></div>)}
                 {
                     editCustomKey ? <div className="badge badge-info gap-2 cursor-pointer"><Input ref={inputRef} className="w-20 h-4 py-0"
                         onKeyDown={(event) => {
@@ -91,21 +88,21 @@ const ResultPanne = ({ data, onClose, onAdd }) => {
             </div>
             {/* files */}
             <div className="mt-4">
-                {files.map(file =>
-                    <div key={file.name} className="rounded-xl bg-[#fff] hover:bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer">
-                        <p className="">{file.name}</p>
-                        <span className="absolute right-1 bottom-1 text-blue-400 text-sm">chunk {file.chunk}</span>
+                {files.map(_file =>
+                    <div key={_file.id} onClick={() => setFile(_file)} className={`rounded-xl bg-[#fff] hover:bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
+                        <p className="">{_file.fileName}</p>
+                        <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
                     </div>
                 )}
                 {!files.length && <p className="text-sm text-center mt-10 text-gray-500">无匹配的源文件</p>}
             </div>
         </div>
         {/* file panne */}
-        {/* {children()} */}
+        {file && children(file)}
     </div>
 }
 
-export default function ResouceModal({ id, open, setOpen }) {
+export default function ResouceModal({ chatId, data, open, setOpen }: { chatId: string, data: ChatMessageType, open: boolean, setOpen: (b: boolean) => void }) {
     // labels
     const [keywords, setKeywords] = useState([])
     const handleAddWord = (word: string) => {
@@ -124,13 +121,14 @@ export default function ResouceModal({ id, open, setOpen }) {
 
     //     return () => localStorage.setItem(KEYWORDS_LOCAL_KEY, JSON.stringify(keywords))
     // }, [])
+    const MemoizedFileView = React.memo(FileView);
 
     return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => setOpen(false)}>
         <div className=" rounded-xl px-4 py-6 bg-[#fff] shadow-lg dark:bg-background w-[80%]" onClick={e => e.stopPropagation()}>
             {open && <div>
-                <Anwser id={id} onInit={setKeywords} onAdd={handleAddWord}></Anwser>
-                <ResultPanne data={keywords} onClose={handleDelKeyword} onAdd={handleAddWord}>
-                    {/* {() => <FileView></FileView>} */}
+                <Anwser msg={data.message || data.thought} onInit={setKeywords} onAdd={handleAddWord}></Anwser>
+                <ResultPanne words={keywords} chatId={chatId} data={data} onClose={handleDelKeyword} onAdd={handleAddWord}>
+                    {(file) => <MemoizedFileView data={file}></MemoizedFileView>}
                 </ResultPanne>
             </div>}
         </div>

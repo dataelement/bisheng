@@ -602,14 +602,36 @@ export async function splitWordApi(word: string) {
 }
 
 // 获取 chunks
-export async function getSourceChunksApi(chatId: string, messageId: string, keys: string) {
+export async function getSourceChunksApi(chatId: string, messageId: number, keys: string) {
   try {
-    const response = await axios.get(`/api/v1/qa/chunk?message_id=${messageId}&keys=${keys}`)
+    const response = await axios.get(`/api/v1/qa/chunk?chat_id=${chatId}&message_id=${messageId}&keys=${keys}`)
     if (response.status !== 200) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    // 文件列表 {filename url chunks:[]}
-    return response.data;
+    const fileMap = {}
+    const chunks = response.data.data
+    chunks.forEach(chunk => {
+      const list = fileMap[chunk.file_id]
+      if (list) {
+        fileMap[chunk.file_id].push(chunk)
+      } else {
+        fileMap[chunk.file_id] = [chunk]
+      }
+    });
+
+    return Object.keys(fileMap).map(fileId => {
+      const id = fileMap[fileId][0].file_id
+      const fileName = fileMap[fileId][0].source
+      const fileUrl = fileMap[fileId][0].source_url
+      const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
+        .map(chunk => ({
+          box: chunk.chunk_bboxes,
+          score: chunk.score
+        }))
+      const score = chunks[0].score
+
+      return { id, fileName, fileUrl, chunks, score }
+    }).sort((a, b) => b.score - a.score)
   } catch (error) {
     console.error(error);
     throw error;

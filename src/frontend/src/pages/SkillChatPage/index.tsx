@@ -12,7 +12,7 @@ import { FlowType, NodeType } from "../../types/flow";
 import { generateUUID, validateNode } from "../../utils";
 import SkillTemps from "../SkillPage/components/SkillTemps";
 import { ChatMessage } from "./components/ChatMessage";
-// import ResouceModal from "./components/ResouceModal";
+import ResouceModal from "./components/ResouceModal";
 
 export default function SkillChatPage(params) {
     const [open, setOpen] = useState(false)
@@ -139,7 +139,7 @@ export default function SkillChatPage(params) {
     }, [messagesRef.current]);
 
     // 溯源
-    const [souceId, setSouceId] = useState('')
+    const [souce, setSouce] = useState<ChatMessageType>(null)
 
     return <div className="flex">
         <div className="h-screen w-[200px] relative border-r">
@@ -166,7 +166,7 @@ export default function SkillChatPage(params) {
                 <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
                     <div ref={messagesRef} className="chat-panne h-full overflow-y-scroll no-scrollbar px-4 pb-20">
                         {
-                            chatHistory.map((c, i) => <ChatMessage key={i} chat={c} onSouce={() => setSouceId('c')}></ChatMessage>)
+                            chatHistory.map((c, i) => <ChatMessage key={i} chat={c} onSouce={() => setSouce(c)}></ChatMessage>)
                         }
                         {/* <div className="chat chat-start">
                         <div className="chat-bubble chat-bubble-info bg-gray-300">It's over Anakin, <br />I have the high ground.</div>
@@ -214,7 +214,7 @@ export default function SkillChatPage(params) {
             open={open} setOpen={setOpen}
             onSelect={(e) => handlerSelectFlow(e)}></SkillTemps>
         {/* 源文件类型 */}
-        {/* <ResouceModal open={!!souceId} id={souceId} setOpen={() => setSouceId('')}></ResouceModal> */}
+        <ResouceModal chatId={chatIdRef.current} open={!!souce} data={souce} setOpen={() => setSouce(null)}></ResouceModal>
     </div>
 };
 /**
@@ -255,7 +255,8 @@ const useWebsocketChat = (chatIdRef) => {
                 message,
                 thought: item.intermediate_steps,
                 id: item.id,
-                category: item.category
+                category: item.category,
+                source: item.source
             }
         })
         lastIdRef.current = hisData[hisData.length - 1]?.id || lastIdRef.current // 记录最后一个id
@@ -289,6 +290,12 @@ const useWebsocketChat = (chatIdRef) => {
         return `${webSocketProtocol}://${host}${chatEndpoint}`;
     }
 
+    function heartbeat() {
+        if (!ws.current) return;
+        if (ws.current.readyState !== 1) return;
+        ws.current.send("heartbeat");
+        setTimeout(heartbeat, 30000);
+    }
     function connectWS() {
         return new Promise((res, rej) => {
             try {
@@ -301,6 +308,7 @@ const useWebsocketChat = (chatIdRef) => {
                     setInputState({ lock: false, error: '' });
                     console.log("WebSocket connection established!");
                     res('ok')
+                    // heartbeat()
                 };
                 newWs.onmessage = (event) => {
                     const data = JSON.parse(event.data);
@@ -448,7 +456,15 @@ const useWebsocketChat = (chatIdRef) => {
             updateLastMessage({ str: data.message, thought: data.intermediate_steps });
         }
         if (data.type === "end") {
-            updateLastMessage({ str: data.message, files: data.files || null, end: true, thought: data.intermediate_steps || '', cate: data.category || '' });
+            updateLastMessage({
+                str: data.message,
+                files: data.files || null,
+                end: true,
+                thought: data.intermediate_steps || '',
+                cate: data.category || '',
+                messageId: data.message_id,
+                source: data.source
+            });
             // if (data.message) {
             //     updateLastMessage({ str: data.message, end: true });
             // } else if (data.files) {
@@ -488,13 +504,15 @@ const useWebsocketChat = (chatIdRef) => {
         });
     };
 
-    function updateLastMessage({ str, thought, end = false, files, cate }: {
+    function updateLastMessage({ str, thought, end = false, files, cate, messageId, source }: {
         str?: string;
         thought?: string;
         cate?: string;
         // end param default is false
         end?: boolean;
         files?: Array<any>;
+        messageId?: number
+        source?: boolean
     }) {
         setChatHistory((old) => {
             let newChat = [...old];
@@ -520,6 +538,12 @@ const useWebsocketChat = (chatIdRef) => {
             }
             if (cate) {
                 lastChat.category = cate;
+            }
+            if (messageId) {
+                lastChat.id = messageId;
+            }
+            if (source) {
+                lastChat.source = source;
             }
             // start - end 之间没有内容删除load
             if (end && !(lastChat.files?.length || lastChat.thought || lastChat.message)) {
@@ -575,7 +599,7 @@ const useWebsocketChat = (chatIdRef) => {
         if (!config) return
         var input = document.createElement('input');
         input.type = 'file';
-        input.accept = 'application/pdf';
+        // input.accept = '.pdf,.txt';
         input.style.display = 'none';
         input.addEventListener('change', (e) => handleFileSelect(e, input));
         document.body.appendChild(input);
@@ -585,12 +609,12 @@ const useWebsocketChat = (chatIdRef) => {
     async function handleFileSelect(event, input) {
         const config: any = fileInputs?.[0]
         var file = event.target.files[0];
-        if (file.type !== 'application/pdf') {
-            return setErrorData({
-                title: "只能上传pdf文件",
-                // list: ['1', '2'],
-            })
-        }
+        // if (file.type !== 'application/pdf') {
+        //     return setErrorData({
+        //         title: "只能上传pdf文件",
+        //         // list: ['1', '2'],
+        //     })
+        // }
         // 添加一条记录
         addChatHistory(
             {},

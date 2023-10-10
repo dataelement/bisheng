@@ -11,36 +11,48 @@ interface Chunk {
     box: number[]
 }
 
-
-const Row = React.memo(({ index, style, viewScale, chunks, pdf }: { index: number, style: any, viewScale: number, chunks: Chunk[], pdf: any }) => {
+interface RowProps {
+    index: number
+    style: any
+    size: number
+    labels?: number[]
+    pdf: any
+    onLoad: (w: number) => void
+}
+// 绘制一页pdf
+const Row = React.memo(({ index, style, size, labels, pdf, onLoad }: RowProps) => {
     const wrapRef = useRef(null);
     const txtRef = useRef(null);
     // 绘制
+    const [scaleState, setScaleState] = useState(1)
     const draw = async () => {
-        console.log('window.devicePixelRatio :>> ', window.devicePixelRatio);
         const page = await pdf.getPage(index + 1); // TODO cache
-        const scale = 1;
-        const viewport = page.getViewport({ scale: scale * viewScale });
+        const viewport = page.getViewport({ scale: 1 });
+        const scale = size / viewport.width;
+        setScaleState(scale)
+
         const canvas = document.createElement('canvas')
         const context = canvas.getContext('2d')
         const outputScale = window.devicePixelRatio || 1;
-        canvas.width = Math.floor(viewport.width * outputScale);
-        canvas.height = Math.floor(viewport.height * outputScale);
-        canvas.style.width = Math.floor(viewport.width) + "px";
-        canvas.style.height = Math.floor(viewport.height) + "px";
+        canvas.width = Math.floor(viewport.width * scale * outputScale);
+        canvas.height = Math.floor(viewport.height * scale * outputScale);
+        canvas.style.width = Math.floor(viewport.width * scale) + "px";
+        canvas.style.height = Math.floor(viewport.height * scale) + "px";
         wrapRef.current.append(canvas)
         const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale,
             0, 0
         ] : null;
 
+        onLoad?.(viewport.width)
+
         // 渲染页面
         page.render({
             canvasContext: context,
-            viewport: viewport,
-            transform
+            viewport: page.getViewport({ scale }),
+            // transform
         });
 
-        drawText(page, viewport)
+        drawText(page, page.getViewport({ scale }))
     }
 
     const drawText = async (page, viewport) => {
@@ -55,23 +67,22 @@ const Row = React.memo(({ index, style, viewScale, chunks, pdf }: { index: numbe
     }
 
     useEffect(() => {
-        console.log('draw pdf :>> ', index);
         draw()
         // return () => {};
-    })
+    }, [])
 
-    return <div className="bg-[#fff] border-b-2" style={style}>
+    return <div className="bg-[#fff] border-b-2 overflow-hidden" style={style}>
         {/* canvas  */}
         <div ref={wrapRef} className="canvasWrapper"></div>
         {/* label */}
-        {chunks && <svg className=" absolute top-0">
-            {chunks.map(chunk =>
+        {labels && <svg className="absolute top-0 w-full h-full">
+            {labels.map(box =>
                 <rect
-                    key={chunk.id}
-                    x={chunk.box[0] / viewScale}
-                    y={chunk.box[1] / viewScale}
-                    width={(chunk.box[2] - chunk.box[0]) / viewScale}
-                    height={(chunk.box[4] - chunk.box[1]) / viewScale}
+                    key={box[0]}
+                    x={box[0] * scaleState}
+                    y={box[1] * scaleState}
+                    width={(box[2] - box[0]) * scaleState}
+                    height={(box[3] - box[1]) * scaleState}
                     style={{ fill: 'rgba(255, 236, 61, 0.2)', strokeWidth: 1, stroke: '#ffec3d' }} />
             )}
         </svg>}
@@ -82,39 +93,31 @@ const Row = React.memo(({ index, style, viewScale, chunks, pdf }: { index: numbe
 }, areEqual)
 
 
-export default function FileView() {
-    const s618 = 618
+export default function FileView({ data }) {
     const paneRef = useRef(null)
     const listRef = useRef(null)
     const [boxSize, setBoxSize] = useState({ width: 0, height: 0 })
+    const [loading, setLoading] = useState(false)
     // chunk
-    const [currentChunk, setCurrentChunk] = useState(0)
-    const [chunks, setChunks] = useState([
-        { id: 1, score: 0.8, page: 3, box: [0, 0, 100, 0, 100, 50, 0, 50] },
-        { id: 2, score: 0.5, page: 1, box: [0, 0, 100, 0, 100, 50, 0, 50] },
-        { id: 3, score: 0.4, page: 1, box: [10, 0, 100, 0, 100, 50, 10, 50] },
-        { id: 4, score: 0.4, page: 50, box: [10, 10, 100, 10, 100, 50, 10, 50] }
-    ])
-    const pageChunks = useMemo(() => {
+    const [currentChunk, setCurrentChunk] = useState(0) // 选中的chunk
+    const pageLabels = useMemo(() => {
         const map = {}
-        chunks.forEach(el => {
-            if (map[el.page]) {
-                map[el.page].push(el)
-            } else {
-                map[el.page] = [el]
-            }
-        })
+        data.chunks.forEach(chunk =>
+            chunk.box.forEach(el => map[el.page]
+                ? map[el.page].push(el.bbox)
+                : (map[el.page] = [el.bbox])))
         return map
-    }, [chunks])
+    }, [data])
 
     // 视口
     useEffect(() => {
         const panneDom = paneRef.current
         const resize = () => {
             if (panneDom) {
-                setBoxSize({ width: panneDom.offsetWidth, height: panneDom.offsetHeight })
+                const [width, height] = [panneDom.offsetWidth - 16, panneDom.offsetHeight - 32]
+                setBoxSize({ width, height })
                 const warpDom = document.getElementById('warp-pdf')
-                warpDom.style.setProperty("--scale-factor", panneDom.offsetWidth / s618 + '')
+                warpDom.style.setProperty("--scale-factor", width / fileWidthRef.current + '')
             }
         }
         resize()
@@ -125,38 +128,63 @@ export default function FileView() {
     // 下载文件
     const [pdf, setPdf] = useState(null)
     useEffect(() => {
-        const pdfUrl = '/doc.pdf';
+        // loding
+        setLoading(true)
+
+        const pdfUrl = data.fileUrl // '/doc.pdf';
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
         pdfjsLib.getDocument(pdfUrl).promise.then((pdfDocument) => {
+            setLoading(false)
             setPdf(pdfDocument)
+            // 默认跳转到匹配度最高的page
+            setTimeout(() => {
+                listRef.current.scrollToItem(data.chunks[0].box[0].page - 1, 'start');
+            }, 0);
         })
-    }, [])
+    }, [data])
 
-    const handleJump = (chunk: typeof chunks[number]) => {
-        setCurrentChunk(chunk.id)
-        listRef.current.scrollToItem(chunk.page - 1, 'start');
+    const handleJump = (i: number, chunk: typeof data.chunks[number]) => {
+        setCurrentChunk(i)
+        listRef.current.scrollToItem(chunk.box[0].page - 1, 'start');
+    }
+
+    const fileWidthRef = useRef(1)
+    const handleLoadPage = (w: number) => {
+        if (fileWidthRef.current === w) return
+        const warpDom = document.getElementById('warp-pdf')
+        warpDom.style.setProperty("--scale-factor", boxSize.width / w + '')
+        fileWidthRef.current = w
     }
 
     return <div ref={paneRef} className="flex-1 bg-gray-100 rounded-md py-4 px-2 relative">
-        <div id="warp-pdf" className="file-view absolute">
-            <List
-                ref={listRef}
-                itemCount={pdf?.numPages || 0}
-                // A4 比例
-                itemSize={boxSize.width / 1240 * 1754}
-                width={boxSize.width - 16}
-                height={boxSize.height - 32}
-            >
-                {(props) => <Row {...props} pdf={pdf} viewScale={boxSize.width / s618} chunks={pageChunks[props.index + 1]}></Row>}
-            </List>
-        </div>
+        {
+            loading
+                ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+                    <span className="loading loading-infinity loading-lg"></span>
+                </div>
+                : <div id="warp-pdf" className="file-view absolute">
+                    <List
+                        ref={listRef}
+                        itemCount={pdf?.numPages || 0}
+                        // A4 比例(itemSize：item的高度)
+                        // 1500 * 2000 采用宽高比0.75约束
+                        itemSize={boxSize.width / 0.75}
+                        // 滚动区盒子大小
+                        width={boxSize.width}
+                        height={boxSize.height}
+                    >
+                        {/* {(props) => <div>{props.index}</div>} */}
+                        {(props) => <Row {...props} pdf={pdf} size={boxSize.width} labels={pageLabels[props.index + 1]} onLoad={handleLoadPage}></Row>}
+                    </List>
+                </div>
+        }
         <div className="absolute right-6 top-6 flex flex-col gap-2">
-            {chunks.map(chunk =>
-                <div key={chunk.id}
-                    onClick={() => handleJump(chunk)}
-                    className={`flex gap-1 items-center justify-end ${currentChunk === chunk.id && 'text-blue-600'} cursor-pointer`}
+            {data.chunks.map((chunk, i) =>
+                <div key={i}
+                    onClick={() => handleJump(i, chunk)}
+                    className={`flex gap-1 items-center justify-end ${currentChunk === i && 'text-blue-600'} cursor-pointer`}
                 >
-                    <Bookmark size={18} className={currentChunk === chunk.id ? 'block' : 'hidden'}></Bookmark>
+                    <Bookmark size={18} className={currentChunk === i ? 'block' : 'hidden'}></Bookmark>
                     <span>{chunk.score}</span>
                 </div>
             )}

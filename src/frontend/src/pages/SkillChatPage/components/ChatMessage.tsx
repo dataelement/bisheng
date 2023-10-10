@@ -134,11 +134,12 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
 
     // 日志分析
     if (chat.thought) return <>
-        <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 relative ${color[chat.category || 'system']} ${border[chat.category || 'system']}`}>
+        <div className={`log border-[3px] rounded-xl whitespace-pre-wrap mt-4 p-4 relative ${color[chat.category || 'system']} ${border[chat.category || 'system']}`}>
             {logMkdown}
             {chat.category === 'report' && <Copy size={20} className=" absolute right-4 top-2 cursor-pointer" onClick={handleCopy}></Copy>}
         </div>
         {!chat.end && <span className="loading loading-ring loading-md"></span>}
+        {chat.source && <div className="chat-footer py-1"><button className="btn btn-outline btn-info btn-xs" onClick={onSouce}>参考来源</button></div>}
     </>
 
     return <div className="chat chat-start">
@@ -147,6 +148,6 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
         </div>
-        {/* <div className="chat-footer py-1"><button className="btn btn-outline btn-info btn-xs" onClick={onSouce}>参考来源</button></div> */}
+        {chat.source && <div className="chat-footer py-1"><button className="btn btn-outline btn-info btn-xs" onClick={onSouce}>参考来源</button></div>}
     </div>
 };
