@@ -196,7 +196,8 @@ class GraphGenerator:
 
     def instantiate_nodes_edges(self, graph, tweaks):
         """
-        instantiate each node with id
+        1. instantiate each node with id
+        2. initial component params
         """
         graph_nodes, graph_edges, graph_params, graph_nodes_info = graph
         node_instantiate_objs = {}
