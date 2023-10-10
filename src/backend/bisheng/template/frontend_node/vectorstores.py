@@ -229,25 +229,10 @@ class VectorStoreFrontendNode(FrontendNode):
             'db_name',
         ]
         advanced_fields = [
-            'n_dim',
-            'key',
-            'prefix',
-            'distance_func',
-            'content_payload_key',
-            'metadata_payload_key',
-            'timeout',
-            'host',
-            'path',
-            'url',
-            'port',
-            'https',
-            'prefer_grpc',
-            'grpc_port',
-            'pinecone_api_key',
-            'pinecone_env',
-            'client_kwargs',
-            'search_kwargs',
-            'elasticsearch_url',
+            'n_dim', 'key', 'prefix', 'distance_func', 'content_payload_key',
+            'metadata_payload_key', 'timeout', 'host', 'path', 'url', 'port', 'https',
+            'prefer_grpc', 'grpc_port', 'pinecone_api_key', 'pinecone_env', 'client_kwargs',
+            'search_kwargs', 'elasticsearch_url', 'drop_old'
         ]
 
         # Check and set field attributes
@@ -298,3 +283,4 @@ class VectorStoreFrontendNode(FrontendNode):
         elif field.name == 'connection_args':
             field.show = True
             field.advanced = False
+            field.value = ''

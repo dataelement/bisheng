@@ -3,8 +3,8 @@ from typing import Optional
 
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
-from bisheng.template.frontend_node.constants import (
-    CTRANSFORMERS_DEFAULT_CONFIG, OPENAI_API_BASE_INFO)
+from bisheng.template.frontend_node.constants import (CTRANSFORMERS_DEFAULT_CONFIG,
+                                                      OPENAI_API_BASE_INFO)
 
 
 class LLMFrontendNode(FrontendNode):
@@ -21,8 +21,7 @@ class LLMFrontendNode(FrontendNode):
                     value='',
                     suffixes=['.json'],
                     fileTypes=['json'],
-                )
-            )
+                ))
 
     @staticmethod
     def format_vertex_field(field: TemplateField, name: str):
@@ -55,13 +54,11 @@ class LLMFrontendNode(FrontendNode):
     @staticmethod
     def format_openai_field(field: TemplateField):
         if 'openai' in field.name.lower():
-            field.display_name = (
-                field.name.title().replace('Openai',
-                                           'OpenAI').replace('_', ' ')
-            ).replace('Api', 'API')
+            field.display_name = (field.name.title().replace('Openai',
+                                                             'OpenAI').replace('_', ' ')).replace(
+                                                                 'Api', 'API')
 
-        if 'key' not in field.name.lower() and 'token' not in field.name.lower(
-        ):
+        if 'key' not in field.name.lower() and 'token' not in field.name.lower():
             field.password = False
 
         if field.name == 'openai_api_base':
@@ -120,8 +117,8 @@ class LLMFrontendNode(FrontendNode):
         if field.name in show_fields:
             field.show = True
 
-        if 'api' in field.name.lower() or 'id' in field.name.lower(
-        ) or 'key' in field.name.lower() or 'base' in field.name.lower():
+        if 'api' in field.name.lower() or 'id' in field.name.lower() or 'key' in field.name.lower(
+        ) or 'base' in field.name.lower():
             field.show = True
             field.advanced = False
 
@@ -147,7 +144,7 @@ class LLMFrontendNode(FrontendNode):
         LLMFrontendNode.format_ctransformers_field(field)
         LLMFrontendNode.format_contribute_field(field)
 
-        if name and 'llama' in name.lower():
+        if name and 'llama' in name.lower() and 'host' not in name.lower():
             LLMFrontendNode.format_llama_field(field)
         if name and 'vertex' in name.lower():
             LLMFrontendNode.format_vertex_field(field, name)
@@ -155,10 +152,8 @@ class LLMFrontendNode(FrontendNode):
         if field.name in SHOW_FIELDS:
             field.show = True
 
-        if 'api' in field.name and (
-            'key' in field.name or
-            ('token' in field.name and 'tokens' not in field.name)
-        ):
+        if 'api' in field.name and ('key' in field.name or
+                                    ('token' in field.name and 'tokens' not in field.name)):
             field.password = True
             field.show = True
             # Required should be False to support
@@ -170,9 +165,7 @@ class LLMFrontendNode(FrontendNode):
             field.required = True
             field.show = True
             field.is_list = True
-            field.options = [
-                'text-generation', 'text2text-generation', 'summarization'
-            ]
+            field.options = ['text-generation', 'text2text-generation', 'summarization']
             field.value = field.options[0]
             field.advanced = True
 
@@ -183,24 +176,24 @@ class LLMFrontendNode(FrontendNode):
             field.advanced = True
             field.show = True
         elif field.name in [
-            'model_name',
-            'temperature',
-            'model_file',
-            'model_type',
-            'deployment_name',
-            'credentials',
-            'openai_proxy',
+                'model_name',
+                'temperature',
+                'model_file',
+                'model_type',
+                'deployment_name',
+                'credentials',
+                'openai_proxy',
         ]:
             field.advanced = False
             field.show = True
         if field.name == 'credentials':
             field.field_type = 'file'
         if name == 'VertexAI' and field.name not in [
-            'callbacks',
-            'client',
-            'stop',
-            'tags',
-            'cache',
+                'callbacks',
+                'client',
+                'stop',
+                'tags',
+                'cache',
         ]:
             field.show = True
 
