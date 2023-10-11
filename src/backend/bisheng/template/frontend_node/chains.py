@@ -251,7 +251,7 @@ class CombineDocsChainNode(FrontendNode):
                 name='token_max',
                 display_name='token_max',
                 advanced=False,
-                info='当前只对stuff 生效',
+                info='只对Stuff类型生效',
                 value=-1,
             ),
             TemplateField(field_type='BasePromptTemplate',
