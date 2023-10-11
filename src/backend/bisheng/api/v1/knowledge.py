@@ -211,6 +211,8 @@ def get_filelist(*,
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     db_knowledge = session.get(Knowledge, knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
     if not access_check(payload=payload,
                         owner_user_id=db_knowledge.user_id,
                         target_id=knowledge_id,
