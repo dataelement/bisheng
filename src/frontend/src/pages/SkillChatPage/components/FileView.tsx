@@ -30,12 +30,11 @@ const Row = React.memo(({ index, style, size, labels, pdf, onLoad }: RowProps) =
         const viewport = page.getViewport({ scale: 1 });
         const scale = size / viewport.width;
         setScaleState(scale)
-
         const canvas = document.createElement('canvas')
         const context = canvas.getContext('2d')
         const outputScale = window.devicePixelRatio || 1;
-        canvas.width = Math.floor(viewport.width * scale * outputScale);
-        canvas.height = Math.floor(viewport.height * scale * outputScale);
+        canvas.width = Math.floor(viewport.width * scale);
+        canvas.height = Math.floor(viewport.height * scale);
         canvas.style.width = Math.floor(viewport.width * scale) + "px";
         canvas.style.height = Math.floor(viewport.height * scale) + "px";
         wrapRef.current.append(canvas)
@@ -167,8 +166,8 @@ export default function FileView({ data }) {
                         ref={listRef}
                         itemCount={pdf?.numPages || 0}
                         // A4 比例(itemSize：item的高度)
-                        // 1500 * 2000 采用宽高比0.75约束
-                        itemSize={boxSize.width / 0.75}
+                        // 595.32 * 841.92 采用宽高比0.70约束
+                        itemSize={boxSize.width / 0.7}
                         // 滚动区盒子大小
                         width={boxSize.width}
                         height={boxSize.height}

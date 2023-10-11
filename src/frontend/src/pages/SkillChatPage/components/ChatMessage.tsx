@@ -110,7 +110,7 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
         setSuccessData({ title: '内容已复制' })
     }
 
-    if (chat.isSend) return chat.files ? <>
+    if (chat.isSend) return chat.files?.length ? <>
         <div className="chat chat-end">
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-sky-500 flex items-center justify-center"><User color="#fff" size={28} /></div></div>
             <Card className="my-2 w-[200px] relative">

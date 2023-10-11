@@ -40,9 +40,9 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
             title: "文件不能超50M",
             list: errorFile.map(str => `文件：${str}超过50M`),
         })
-        if (acceptedFiles.length === 1 && acceptedFiles[0].type !== 'application/pdf') {
-            return
-        }
+        // if (acceptedFiles.length === 1 && acceptedFiles[0].type !== 'application/pdf') {
+        //     return
+        // }
 
         const _file = acceptedFiles[0]
         setProgressList((list) => {
