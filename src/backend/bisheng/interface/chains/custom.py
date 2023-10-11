@@ -3,11 +3,22 @@ from typing import Dict, Optional, Type, Union
 from bisheng.interface.base import CustomChain
 from bisheng.interface.utils import extract_input_variables_from_prompt
 from bisheng_langchain.chains.question_answering import load_qa_chain
+<<<<<<< HEAD
 from langchain import PromptTemplate
+=======
+<<<<<<< HEAD
+from langchain import BasePromptTemplate
+>>>>>>> 31af05d (add new ws protocol)
 from langchain.base_language import BaseLanguageModel
 from langchain.chains import ConversationChain
 from langchain.chains.prompt_selector import is_chat_model
 from langchain.chains.summarize import load_summarize_chain
+=======
+from langchain import PromptTemplate
+from langchain.base_language import BaseLanguageModel
+from langchain.chains import ConversationChain
+from langchain.chains.prompt_selector import is_chat_model
+>>>>>>> daa9df2 (update summarize chain)
 from langchain.memory.buffer import ConversationBufferMemory
 from langchain.prompts.chat import (ChatPromptTemplate, HumanMessagePromptTemplate,
                                     SystemMessagePromptTemplate)
@@ -108,9 +119,20 @@ class CombineDocsChain(CustomChain):
     def initialize(cls,
                    llm: BaseLanguageModel,
                    chain_type: str,
+<<<<<<< HEAD
                    prompt: str = None,
                    token_max: str = -1):
         if chain_type == 'stuff':
+=======
+<<<<<<< HEAD
+                   prompt: BasePromptTemplate = None,
+                   token_max: str = -1):
+        if chain_type == 'stuff':
+=======
+                   prompt: str = None,
+                   token_max: str = -1):
+        if chain_type == 'stuff':
+>>>>>>> 31af05d (add new ws protocol)
             if prompt:
                 if is_chat_model(llm):
                     messages = [
@@ -122,6 +144,10 @@ class CombineDocsChain(CustomChain):
                     prompt = PromptTemplate(template=prompt,
                                             input_variables=['context', 'question'])
 
+<<<<<<< HEAD
+=======
+>>>>>>> daa9df2 (update summarize chain)
+>>>>>>> 31af05d (add new ws protocol)
             return load_qa_chain(llm=llm, chain_type=chain_type, prompt=prompt, token_max=token_max)
         else:
             return load_qa_chain(llm=llm, chain_type=chain_type)

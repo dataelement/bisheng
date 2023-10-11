@@ -42,6 +42,35 @@ class ChainFrontendNode(FrontendNode):
                     name='chain_type',
                     advanced=False,
                 ))
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        elif self.template.type_name == 'MultiRetrievalQA':
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='combine_strategy',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='BaseRetriever',
+                    required=True,
+                    show=True,
+                    name='vector_retriever',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='BaseRetriever',
+                    required=True,
+                    show=True,
+                    name='Keyword_retriever',
+                    advanced=False,
+                ))
+>>>>>>> 31af05d (add new ws protocol)
         elif self.template.type_name == 'SequentialChain':
             self.template.add_field(
                 TemplateField(field_type='str',
@@ -50,6 +79,8 @@ class ChainFrontendNode(FrontendNode):
                               name='chain_order',
                               advanced=False,
                               value='[]'))
+=======
+>>>>>>> daa9df2 (update summarize chain)
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
