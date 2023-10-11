@@ -1,11 +1,13 @@
 import json
-import random
 from typing import List
 
 import jieba.analyse
 from bisheng.database.base import get_session
+from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk
+from bisheng.settings import settings
 from bisheng.utils import minio_client
+from bisheng.utils.logger import logger
 from bisheng_langchain.chat_models import HostQwenChat
 from fastapi import APIRouter, Depends
 from langchain import LLMChain, PromptTemplate
@@ -20,13 +22,6 @@ def get_answer_keyword(answer: str):
     return extract_keys(answer)
 
 
-model_name = 'Qwen-7B-Chat'
-host_base_url = 'http://192.168.106.12:9001/v2.1/models'
-llm = HostQwenChat(model_name=model_name,
-                   host_base_url=host_base_url,
-                   max_tokens=8192,
-                   temperature=0,
-                   verbose=False)
 prompt_template = '''分析给定Question，提取Question中包含的KeyWords，输出列表形式
 
 Examples:
@@ -36,30 +31,42 @@ KeyWords: ['过去三年', '流动比率', '2021', '3.74', '2020', '2.82', '2019
 ----------------
 Question: {question}'''
 
-llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
 
-
-def extract_keys(answer, method='jiaba_kv'):
+def extract_keys(answer):
     """
     提取answer中的关键词
     """
-    if method == 'jiaba_kv':
-        keywords = jieba.analyse.extract_tags(answer, topK=100, withWeight=False)
-    elif method == 'llm_kv':
+    model = settings.knowledges.get('keyword_llm')
+    db_session = next(get_session())
+    model_deploy = db_session.exec(select(ModelDeploy).where(ModelDeploy.model == model)).first()
+    if model_deploy and model_deploy.status == '已上线':
+        llm = HostQwenChat(model_name=model_deploy.model,
+                           host_base_url=model_deploy.endpoint,
+                           max_tokens=8192,
+                           temperature=0,
+                           verbose=True)
+        llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
+    try:
         keywords_str = llm_chain.run(answer)
         keywords = eval(keywords_str[9:])
+    except Exception:
+        logger.warning(f'llm {model} extract_not_support, change to jieba')
+        keywords = jieba.analyse.extract_tags(answer, topK=100, withWeight=False)
+
     return keywords
 
 
 @router.get('/chunk', status_code=200)
-def get_original_file(*, message_id: int, session: Session = Depends(get_session)):
-
+def get_original_file(*, message_id: int, keys: str, session: Session = Depends(get_session)):
+    # 获取命中的key
     chunks = session.exec(select(RecallChunk).where(RecallChunk.message_id == message_id)).all()
+    # keywords
+    keywords = keys.split(';') if keys else []
     result = []
     for index, chunk in enumerate(chunks):
         chunk_res = json.loads(json.loads(chunk.meta_data).get('bbox'))
         chunk_res['source_url'] = minio_client.get_share_link(str(chunk.file_id))
-        chunk_res['score'] = round(random.randint(0, 100) / 100.0, 3)
+        chunk_res['score'] = round(match_score(chunk.chunk, keywords), 2)
         chunk_res['file_id'] = chunk.file_id
         result.append(chunk_res)
 

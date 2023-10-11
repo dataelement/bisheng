@@ -6,6 +6,7 @@ from bisheng_langchain.chains.question_answering import load_qa_chain
 from langchain import BasePromptTemplate
 from langchain.base_language import BaseLanguageModel
 from langchain.chains import ConversationChain
+from langchain.chains.summarize import load_summarize_chain
 from langchain.memory.buffer import ConversationBufferMemory
 from langchain.schema import BaseMemory
 from pydantic import Field, root_validator
@@ -118,8 +119,37 @@ class CombineDocsChain(CustomChain):
         return super().run(*args, **kwargs)
 
 
+class SummarizeDocsChain(CustomChain):
+    """Implementation of load_sumarize_chain function"""
+
+    @staticmethod
+    def function_name():
+        return 'load_summarize_chain'
+
+    @classmethod
+    def initialize(cls,
+                   llm: BaseLanguageModel,
+                   chain_type: str,
+                   prompt: BasePromptTemplate = None,
+                   token_max: str = -1):
+        if chain_type == 'stuff':
+            return load_summarize_chain(llm=llm,
+                                        chain_type=chain_type,
+                                        prompt=prompt,
+                                        token_max=token_max)
+        else:
+            return load_summarize_chain(llm=llm, chain_type=chain_type)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def run(self, *args, **kwargs):
+        return super().run(*args, **kwargs)
+
+
 CUSTOM_CHAINS: Dict[str, Type[Union[ConversationChain, CustomChain]]] = {
     'CombineDocsChain': CombineDocsChain,
+    'SummerizeDocsChain': SummarizeDocsChain,
     'SeriesCharacterChain': SeriesCharacterChain,
     'MidJourneyPromptChain': MidJourneyPromptChain,
     'TimeTravelGuideChain': TimeTravelGuideChain,

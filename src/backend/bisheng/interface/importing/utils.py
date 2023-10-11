@@ -54,7 +54,8 @@ def import_by_type(_type: str, name: str) -> Any:
         'retrievers': import_retriever,
     }
     if _type == 'llms':
-        key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower() else 'llm'
+        key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(
+        ) else 'llm'
         loaded_func = func_dict[_type][key]  # type: ignore
     else:
         loaded_func = func_dict[_type]
@@ -78,6 +79,9 @@ def import_chain_contribute_llm(llm: str) -> BaseChatModel:
 
 
 def import_retriever(retriever: str) -> Any:
+    from bisheng.interface.retrievers.base import retriever_creator
+    if retriever in retriever_creator.type_to_loader_dict:
+        return retriever_creator.type_to_loader_dict[retriever]
     """Import retriever from retriever name"""
     return import_module(f'from langchain.retrievers import {retriever}')
 

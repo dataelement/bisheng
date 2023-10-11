@@ -167,8 +167,9 @@ def instantiate_memory(node_type, class_object, params):
 
 
 def instantiate_retriever(node_type, class_object, params):
-    if 'retriever' in params and hasattr(params['retriever'], 'as_retriever'):
-        params['retriever'] = params['retriever'].as_retriever()
+    for key, value in params.items():
+        if 'retriever' in key and hasattr(value, 'as_retriever'):
+            params[key] = value.as_retriever()
     if node_type in retriever_creator.from_method_nodes:
         method = retriever_creator.from_method_nodes[node_type]
         if class_method := getattr(class_object, method, None):
