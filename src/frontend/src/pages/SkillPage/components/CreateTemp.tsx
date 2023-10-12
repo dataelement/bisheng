@@ -39,6 +39,12 @@ export default function CreateTemp({ flow, open, setOpen, onCreated }: { flow: F
             setOpen(false)
             setSuccessData({ title: '技能创建成功' });
             onCreated?.()
+        }).catch(err => {
+            console.error('创建失败 :>> ', err.response);
+            setErrorData({
+                title: "创建失败",
+                list: [err.response.data.detail],
+            });
         })
     }
 

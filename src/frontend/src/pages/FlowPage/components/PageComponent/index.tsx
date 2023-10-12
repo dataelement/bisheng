@@ -214,7 +214,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
           const inputNode = newX.find(el => el.id === params.source);
           const targetNode = newX.find(el => el.id === params.target);
           inputNode.data.node.template.file_path.fileTypes = targetNode.data.node.template.file_path.fileTypes
-          inputNode.data.node.template.file_path.suffixes = targetNode.data.node.template.file_path.suffixes
+          inputNode.data.node.template.file_path.suffixes = targetNode.data.node.template.file_path.suffixes // 上传文件类型；
         }
         return newX;
       });

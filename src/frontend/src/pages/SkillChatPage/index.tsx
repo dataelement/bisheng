@@ -597,9 +597,13 @@ const useWebsocketChat = (chatIdRef) => {
     const uploadFile = () => {
         const config = fileInputs?.[0]
         if (!config) return
+        // 判断上传类型
+        const node = flow.current.data.nodes.find(el => el.id === config.id)
+        const accept = node.data.node.template.file_path.suffixes.join(',')
+
         var input = document.createElement('input');
         input.type = 'file';
-        // input.accept = '.pdf,.txt';
+        input.accept = accept;
         input.style.display = 'none';
         input.addEventListener('change', (e) => handleFileSelect(e, input));
         document.body.appendChild(input);

@@ -668,6 +668,7 @@ export function debounce(func, wait) {
   };
 }
 
+// 从模板中复制template
 export function updateTemplate(
   reference: APITemplateType,
   objectToUpdate: APITemplateType
@@ -692,6 +693,11 @@ export function updateTemplate(
     if (dbParam && !/^_/.test(key)) {
       clonedObject[key].l2 = dbParam.l2 || false
       clonedObject[key].l2_name = dbParam.l2_name || key
+    }
+    // file_path的文件类型不覆盖
+    if (key === 'file_path') {
+      clonedObject[key].fileTypes = objectToUpdate[key].fileTypes
+      clonedObject[key].suffixes = objectToUpdate[key].suffixes
     }
   }
   return clonedObject;

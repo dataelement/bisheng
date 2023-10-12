@@ -169,7 +169,7 @@ export default function FileLibPage() {
         const res = await updateConfigApi(id, code)
 
         setOpen(false)
-        setDataList(oldList => oldList.map(item =>
+        setDataList(oldList => oldList.map(item => 
             item.id === id ? { ...item, config: code } : item
         ))
     }
