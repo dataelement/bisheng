@@ -155,3 +155,25 @@
 .textLayer br::selection {
 	background: transparent;
 }
+
+/* .flag:after {
+	content: "";
+	position: absolute;
+	width: 16px;
+	height: 2px;
+	right: 0;
+	top: 5px;
+	background: rgba(53, 126, 249, .60);
+	transform: rotate(-45deg) translate(0, 0);
+}
+
+.flag::before {
+	content: "";
+	position: absolute;
+	width: 16px;
+	height: 2px;
+	right: 0;
+	top: 16px;
+	background: rgba(53, 126, 249, .60);
+	transform: rotate(45deg) translate(0, 0);
+} */

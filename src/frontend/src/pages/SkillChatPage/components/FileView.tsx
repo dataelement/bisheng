@@ -71,6 +71,7 @@ const Row = React.memo(({ index, style, size, labels, pdf, onLoad }: RowProps) =
     }, [])
 
     return <div className="bg-[#fff] border-b-2 overflow-hidden" style={style}>
+        {/* <span className="absolute">{index + 1}</span> */}
         {/* canvas  */}
         <div ref={wrapRef} className="canvasWrapper"></div>
         {/* label */}
@@ -111,6 +112,7 @@ export default function FileView({ data }) {
         }] as const
     }
     const [pageLabels, setPagesLabels] = useLabels()
+    // console.log('pageLabels :>> ', pageLabels);
 
     // 视口
     useEffect(() => {
@@ -141,8 +143,15 @@ export default function FileView({ data }) {
             setPdf(pdfDocument)
             // 默认跳转到匹配度最高的page
             setTimeout(() => {
-                setPagesLabels(data.chunks[0])
-                listRef.current.scrollToItem(data.chunks[0].box[0].page - 1, 'start');
+                const chunk = data.chunks[0]
+                setPagesLabels(chunk)
+                // 第一个高亮块的当页位移
+                const offsetY = chunk.box[0].bbox[1] * (boxSize.width / fileWidthRef.current) - 100
+                // 页码滚动位置
+                const pageY = (chunk.box[0].page - 1) * (boxSize.width / 0.7)
+                listRef.current.scrollTo(pageY + offsetY);
+                // listRef.current.scrollToItem(data.chunks[0].box[0].page - 1, 'start');
+
             }, 0);
         })
     }, [data])
@@ -151,7 +160,12 @@ export default function FileView({ data }) {
         // 选中的chunk label
         setPagesLabels(chunk)
         setCurrentChunk(i)
-        listRef.current.scrollToItem(chunk.box[0].page - 1, 'start');
+        // listRef.current.scrollToItem(chunk.box[0].page - 1, 'start');
+        // 第一个高亮块的当页位移
+        const offsetY = chunk.box[0].bbox[1] * (boxSize.width / fileWidthRef.current) - 100
+        // 页码滚动位置
+        const pageY = (chunk.box[0].page - 1) * (boxSize.width / 0.7)
+        listRef.current.scrollTo(pageY + offsetY);
     }
 
     const fileWidthRef = useRef(1)
@@ -184,16 +198,18 @@ export default function FileView({ data }) {
                     </List>
                 </div>
         }
-        <div className="absolute right-8 top-6 flex flex-col gap-2">
-            {data.chunks.map((chunk, i) =>
-                <div key={i}
-                    onClick={() => handleJump(i, chunk)}
-                    className={`flex gap-1 items-center justify-end ${currentChunk === i && 'text-blue-600'} cursor-pointer`}
-                >
-                    <Bookmark size={18} className={currentChunk === i ? 'block' : 'hidden'}></Bookmark>
-                    <span>{chunk.score}</span>
-                </div>
-            )}
+        <div className="absolute left-[0px] top-6 rounded-sm p-4 px-0 t-[50%] mt-[40%] ">
+            <p className="mb-1 text-sm font-bold border border-[rgba(53,126,249,.60)] text-center rounded-sm text-blue-600">来源段落</p>
+            <div className="flex flex-col gap-2 ">
+                {data.chunks.map((chunk, i) =>
+                    <div key={i}
+                        onClick={() => handleJump(i, chunk)}
+                        className={`flag h-[40px] leading-[40px] px-6 pl-4 border-2 border-l-0 border-[rgba(53,126,249,.60)] bg-[rgba(255,255,255,1)]  text-blue-600 ${currentChunk === i && 'font-bold bg-[rgb(186,210,249)]'} cursor-pointer relative`}
+                    >
+                        <span>{chunk.score}</span>
+                    </div>
+                )}
+            </div>
         </div>
     </div>
 };

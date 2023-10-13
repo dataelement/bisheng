@@ -22,10 +22,12 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
     const chunkType = useRef('smart')
 
     const [progressList, setProgressList] = useState([])
+    const progressCountRef = useRef(0)
 
     useEffect(() => {
         if (!open) {
             setProgressList([])
+            progressCountRef.current = 0
             filePathsRef.current = []
         }
     }, [open])
@@ -44,7 +46,7 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
         //     return
         // }
 
-        const _file = acceptedFiles[0]
+        // const _file = acceptedFiles[0]
         setProgressList((list) => {
             return [...list, ...acceptedFiles.map(file => {
                 return {
@@ -57,6 +59,7 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
                 }
             })]
         })
+        progressCountRef.current += acceptedFiles.length
     };
     // 确定上传文件
     const filePathsRef = useRef([])
@@ -73,14 +76,15 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
             auto: true
         }
         if (chunkType.current === 'chunk') {
-            params.separator = [symbol.replace(/\\([nrtb])/g, function (match, capture) {
+            // 以；分隔
+            params.separator = symbol.split(/;|；/).map(el => el.replace(/\\([nrtb])/g, function (match, capture) {
                 return {
                     'n': '\n',
                     'r': '\r',
                     't': '\t',
                     'b': '\b'
                 }[capture];
-            })];
+            }))
             params.chunck_size = Number(size)
             params.auto = false
         }
@@ -134,7 +138,7 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
                         }
                     }))
                     filePathsRef.current.push(data.file_path)
-                    setEnd(filePathsRef.current.length === progressList.length)
+                    setEnd(filePathsRef.current.length === progressCountRef.current)
                 })
             })
         }
@@ -186,10 +190,10 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
                         </TabsContent>
                         <TabsContent value="chunk">
                             <div className="grid gap-4 py-4">
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="name" className="text-right">切分符</Label>
+                                <div className="grid grid-cols-5 items-center gap-4">
+                                    <Label htmlFor="name" className="text-right col-span-2">切分符(多个以;分隔)</Label>
                                     <Input id="name" value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="切分符号" className="col-span-3" />
-                                    <Label htmlFor="name" className="text-right">切分文本长度</Label>
+                                    <Label htmlFor="name" className="text-right col-span-2">切分文本长度</Label>
                                     <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder="切分大小" className="col-span-3" />
                                 </div>
                             </div>
