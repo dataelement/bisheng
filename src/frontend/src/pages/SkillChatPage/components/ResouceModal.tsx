@@ -8,14 +8,14 @@ import { ChatMessageType } from "../../../types/chat";
 import React from "react";
 
 // 顶部答案区
-const Anwser = ({ msg, onInit, onAdd }) => {
+const Anwser = ({ id, msg, onInit, onAdd }) => {
     const [html, setHtml] = useState('')
     const pRef = useRef(null)
 
     // init
     useEffect(() => {
         onInit([])
-        msg && splitWordApi(msg).then((res) => {
+        msg && splitWordApi(msg, id).then((res) => {
             // 匹配
             const reg = new RegExp(`(${res.data.join('|')})`, 'g')
             setHtml(msg.replace(reg, '<span>$1</span>'))
@@ -67,6 +67,12 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
         loadFiles()
     }, [data, words])
 
+    // input show
+    const handleOpenInput = () => {
+        setEditCustomKey(true)
+        setTimeout(() => document.getElementById('taginput')?.focus(), 0);
+    }
+
     return <div className="flex gap-4 mt-4" style={{ height: 'calc(100vh - 10rem)' }}>
         {/* left */}
         <div className="w-[300px] bg-gray-100 rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar">
@@ -74,7 +80,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
             <div className="flex flex-wrap gap-2">
                 {words.map((str, i) => <div key={str} className="badge badge-info gap-2 text-gray-600">{str}<span className="cursor-pointer" onClick={() => onClose(i)}>x</span></div>)}
                 {
-                    editCustomKey ? <div className="badge badge-info gap-2 cursor-pointer"><Input ref={inputRef} className="w-20 h-4 py-0"
+                    editCustomKey ? <div className="badge badge-info gap-2 cursor-pointer bg-gray-950 text-gray-50"><input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none"
                         onKeyDown={(event) => {
                             if (event.key === "Enter" && !event.shiftKey) {
                                 handleAddKeyword(inputRef.current.value);
@@ -82,8 +88,8 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                         }}
                         onBlur={() => {
                             handleAddKeyword(inputRef.current.value);
-                        }}></Input></div> :
-                        <div className="badge badge-info gap-2 cursor-pointer font-bold text-gray-600" onClick={() => setEditCustomKey(true)}><span>+自定义</span></div>
+                        }}></input></div> :
+                        <div className="badge badge-info gap-2 cursor-pointer bg-gray-950 text-gray-50" onClick={handleOpenInput}><span>+自定义</span></div>
                 }
             </div>
             {/* files */}
@@ -126,7 +132,7 @@ export default function ResouceModal({ chatId, data, open, setOpen }: { chatId: 
     return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => setOpen(false)}>
         <div className=" rounded-xl px-4 py-6 bg-[#fff] shadow-lg dark:bg-background w-[80%]" onClick={e => e.stopPropagation()}>
             {open && <div>
-                <Anwser msg={data.message || data.thought} onInit={setKeywords} onAdd={handleAddWord}></Anwser>
+                <Anwser id={data.id} msg={data.message || data.thought} onInit={setKeywords} onAdd={handleAddWord}></Anwser>
                 <ResultPanne words={keywords} chatId={chatId} data={data} onClose={handleDelKeyword} onAdd={handleAddWord}>
                     {(file) => <MemoizedFileView data={file}></MemoizedFileView>}
                 </ResultPanne>

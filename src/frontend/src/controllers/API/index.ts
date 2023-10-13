@@ -597,8 +597,8 @@ export async function disableUserApi(userid, status) {
  * ************************ 溯源
  */
 // 分词
-export async function splitWordApi(word: string) {
-  return await axios.get(`/api/v1/qa/keyword?answer=${word}`)
+export async function splitWordApi(word: string, messageId: string) {
+  return await axios.get(`/api/v1/qa/keyword?answer=${word}&message_id=${messageId}`)
 }
 
 // 获取 chunks

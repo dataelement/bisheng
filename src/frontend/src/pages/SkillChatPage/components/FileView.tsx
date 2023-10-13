@@ -99,14 +99,18 @@ export default function FileView({ data }) {
     const [loading, setLoading] = useState(false)
     // chunk
     const [currentChunk, setCurrentChunk] = useState(0) // 选中的chunk
-    const pageLabels = useMemo(() => {
-        const map = {}
-        data.chunks.forEach(chunk =>
+
+    const useLabels = () => {
+        const [data, setData] = useState({})
+        return [data, (chunk) => {
+            const map = {}
             chunk.box.forEach(el => map[el.page]
                 ? map[el.page].push(el.bbox)
-                : (map[el.page] = [el.bbox])))
-        return map
-    }, [data])
+                : (map[el.page] = [el.bbox]))
+            setData(map)
+        }] as const
+    }
+    const [pageLabels, setPagesLabels] = useLabels()
 
     // 视口
     useEffect(() => {
@@ -137,12 +141,15 @@ export default function FileView({ data }) {
             setPdf(pdfDocument)
             // 默认跳转到匹配度最高的page
             setTimeout(() => {
+                setPagesLabels(data.chunks[0])
                 listRef.current.scrollToItem(data.chunks[0].box[0].page - 1, 'start');
             }, 0);
         })
     }, [data])
 
     const handleJump = (i: number, chunk: typeof data.chunks[number]) => {
+        // 选中的chunk label
+        setPagesLabels(chunk)
         setCurrentChunk(i)
         listRef.current.scrollToItem(chunk.box[0].page - 1, 'start');
     }
@@ -177,7 +184,7 @@ export default function FileView({ data }) {
                     </List>
                 </div>
         }
-        <div className="absolute right-6 top-6 flex flex-col gap-2">
+        <div className="absolute right-8 top-6 flex flex-col gap-2">
             {data.chunks.map((chunk, i) =>
                 <div key={i}
                     onClick={() => handleJump(i, chunk)}

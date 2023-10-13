@@ -99,6 +99,7 @@ export function TypesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   function deleteNode(idx: string) {
+    if (!reactFlowInstance) return
     reactFlowInstance.setNodes(
       reactFlowInstance.getNodes().filter((n: Node) => n.id !== idx)
     );

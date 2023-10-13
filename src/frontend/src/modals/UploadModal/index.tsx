@@ -73,7 +73,14 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
             auto: true
         }
         if (chunkType.current === 'chunk') {
-            params.separator = symbol
+            params.separator = [symbol.replace(/\\([nrtb])/g, function (match, capture) {
+                return {
+                    'n': '\n',
+                    'r': '\r',
+                    't': '\t',
+                    'b': '\b'
+                }[capture];
+            })];
             params.chunck_size = Number(size)
             params.auto = false
         }
