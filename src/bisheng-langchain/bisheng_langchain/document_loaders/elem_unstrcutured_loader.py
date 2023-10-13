@@ -52,7 +52,8 @@ def merge_partitions(partitions):
                 doc_content.append(text_elem_sep + text)
 
         last_label = label
-        metadata['bboxes'].extend(extra_data['bboxes'])
+        metadata['bboxes'].extend(
+            list(map(lambda x: list(map(int, x)), extra_data['bboxes'])))
         metadata['pages'].extend(extra_data['pages'])
         metadata['types'].extend(extra_data['types'])
 
