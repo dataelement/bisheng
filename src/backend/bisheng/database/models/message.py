@@ -21,11 +21,12 @@ class MessageBase(SQLModelSerializable):
     files: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(index=True,
+                                            sa_column=Column(
+                                                DateTime,
+                                                nullable=False,
+                                                server_default=text('CURRENT_TIMESTAMP'),
+                                                onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class ChatMessage(MessageBase, table=True):

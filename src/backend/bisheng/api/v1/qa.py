@@ -1,16 +1,10 @@
 import json
 from typing import List
 
-import jieba.analyse
 from bisheng.database.base import get_session
-from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk
-from bisheng.settings import settings
 from bisheng.utils import minio_client
-from bisheng.utils.logger import logger
-from bisheng_langchain.chat_models import HostQwenChat
 from fastapi import APIRouter, Depends
-from langchain import LLMChain, PromptTemplate
 from sqlmodel import Session, select
 
 # build router
@@ -18,42 +12,15 @@ router = APIRouter(prefix='/qa', tags=['QA'])
 
 
 @router.get('/keyword', response_model=List[str], status_code=200)
-def get_answer_keyword(answer: str):
-    return extract_keys(answer)
-
-
-prompt_template = '''分析给定Question，提取Question中包含的KeyWords，输出列表形式
-
-Examples:
-Question: 达梦公司在过去三年中的流动比率如下：2021年：3.74倍；2020年：2.82倍；2019年：2.05倍。
-KeyWords: ['过去三年', '流动比率', '2021', '3.74', '2020', '2.82', '2019', '2.05']
-
-----------------
-Question: {question}'''
-
-
-def extract_keys(answer):
-    """
-    提取answer中的关键词
-    """
-    model = settings.knowledges.get('keyword_llm')
-    db_session = next(get_session())
-    model_deploy = db_session.exec(select(ModelDeploy).where(ModelDeploy.model == model)).first()
-    if model_deploy and model_deploy.status == '已上线':
-        llm = HostQwenChat(model_name=model_deploy.model,
-                           host_base_url=model_deploy.endpoint,
-                           max_tokens=8192,
-                           temperature=0,
-                           verbose=True)
-        llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
-    try:
-        keywords_str = llm_chain.run(answer)
-        keywords = eval(keywords_str[9:])
-    except Exception:
-        logger.warning(f'llm {model} extract_not_support, change to jieba')
-        keywords = jieba.analyse.extract_tags(answer, topK=100, withWeight=False)
-
-    return keywords
+def get_answer_keyword(message_id: int, session: Session = Depends(get_session)):
+    # 获取命中的key
+    chunks = session.exec(select(RecallChunk).where(RecallChunk.message_id == message_id)).first()
+    # keywords
+    if chunks:
+        keywords = chunks.keywords
+        return json.loads(keywords)
+    else:
+        return []
 
 
 @router.get('/chunk', status_code=200)

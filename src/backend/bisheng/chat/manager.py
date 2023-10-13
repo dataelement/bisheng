@@ -9,15 +9,17 @@ from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
 from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
 from bisheng.cache.manager import Subject
-from bisheng.chat.utils import process_graph
+from bisheng.chat.utils import extract_answer_keys, process_graph
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
+from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk, RecallChunkCreate
 from bisheng.interface.utils import pil_to_base64
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
 from fastapi import WebSocket, status
 from langchain.docstore.document import Document
+from sqlmodel import select
 
 
 class ChatHistory(Subject):
@@ -356,7 +358,7 @@ class ChatManager:
                         answer = eval(s.split('Answer:')[1])
                         if 'result' in answer:
                             s = 'Answer: ' + answer.get('result')
-                        # 如果包含source_document 表示支持溯源，进入溯源逻辑
+                        # 如果包含source_document 表示支持溯源，进入溯源逻辑, 某些flow里，source在log参数里
                         if 'source_document' in answer and not source_doucment:
                             source_doucment = answer.get('source_document')
                     step.append(s)
@@ -397,7 +399,6 @@ class ChatManager:
                 source_doucment,
                 chat_id,
                 response.message_id,
-                chat_inputs.message,
                 result,
             )
         # 循环结束
@@ -478,18 +479,34 @@ class ChatManager:
             self.disconnect(client_id, chat_id)
 
     async def process_source_document(self, source_document: List[Document], chat_id, message_id,
-                                      query: str, answer):
+                                      answer):
         if not source_document:
             return
 
+        from bisheng.settings import settings
+        # 使用大模型进行关键词抽取，模型配置临时方案
+        keyword_conf = settings.knowledges.get('keyword_llm')
+        host_base_url = keyword_conf.get('host_base_url')
+        model = keyword_conf.get('model')
+
+        if model and not host_base_url:
+            db_session = next(get_session())
+            model_deploy = db_session.exec(
+                select(ModelDeploy).where(ModelDeploy.model == model)).first()
+            if model_deploy:
+                model = model if model_deploy.status == '已上线' else None
+                host_base_url = model_deploy.endpoint
+            else:
+                logger.error('不能使用配置模型进行关键词抽取，配置不正确')
+
+        answer_keywords = extract_answer_keys(answer, model, host_base_url)
         for doc in source_document:
             if 'bbox' in doc.metadata:
                 # 表示支持溯源
                 db_session = next(get_session())
                 content = doc.page_content
                 recall_chunk = RecallChunkCreate(chat_id=chat_id,
-                                                 query=str(query),
-                                                 answer=answer,
+                                                 keywords=json.dumps(answer_keywords),
                                                  chunk=content,
                                                  file_id=doc.metadata.get('file_id'),
                                                  meta_data=json.dumps(doc.metadata),

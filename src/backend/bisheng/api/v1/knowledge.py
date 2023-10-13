@@ -1,9 +1,11 @@
 import asyncio
+import base64
 import json
 import time
 from typing import List, Optional
 from uuid import uuid4
 
+import requests
 from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.base import get_session
@@ -70,7 +72,7 @@ async def process_knowledge(*,
     chunck_size = data.get('chunck_size')
     file_path = data.get('file_path')
     auto_p = data.get('auto')
-    separator = data.get('separator') or '\n\n'
+    separator = data.get('separator')
 
     knowledge = session.exec(select(Knowledge).where(Knowledge.id == knowledge_id)).one()
     if payload.get('role') != 'admin' and knowledge.user_id != payload.get('user_id'):
@@ -290,7 +292,7 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             # 原始文件存储minio
             minio_client.upload_minio(str(db_file.id), path)
         except Exception as e:
-            logger.error(e)
+            logger.exception(e)
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)
@@ -308,8 +310,8 @@ def _read_chunk_text(input_file, file_name, size, separator):
         'pdf': PyPDFLoader,
         'html': BSHTMLLoader,
         'md': UnstructuredMarkdownLoader,
-        'default': ElemUnstructuredLoader
     }
+
     if not settings.knowledges.get('unstructured_api_url'):
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
@@ -324,6 +326,19 @@ def _read_chunk_text(input_file, file_name, size, separator):
         raw_texts = [t.page_content for t in texts]
         metadatas = [t.metadata for t in texts]
     else:
+        # 如果文件不是pdf 需要内部转pdf
+        if file_name.rsplit('.', 1)[-1] != 'pdf':
+            b64_data = base64.b64encode(open(input_file, 'rb').read()).decode()
+            inp = dict(filename=file_name, b64_data=[b64_data], mode='topdf')
+            resp = requests.post(settings.knowledges.get('unstructured_api_url'), json=inp).json()
+            if not resp or resp['status_code'] != 200:
+                logger.error(f'file_pdf=not_success resp={resp}')
+                raise Exception(f"当前文件无法解析， {resp['status_message']}")
+            b64_data = resp['b64_pdf']
+            # 替换历史文件
+            with open(input_file, 'wb') as fout:
+                fout.write(base64.b64decode(b64_data))
+
         loader = ElemUnstructuredLoader(
             file_name,
             input_file,

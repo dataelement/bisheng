@@ -139,8 +139,8 @@ def build_flow_no_yield(graph_data: dict,
 
     for i, vertex in enumerate(graph.generator_build(), 1):
         try:
-            # # 如果存在文件，当前不操作文件，避免重复操作
-            if not process_file:
+            # 如果存在文件，当前不操作文件，避免重复操作
+            if not process_file and vertex.base_type == 'documentloaders':
                 template_dict = {
                     key: value
                     for key, value in vertex.data['node']['template'].items()
