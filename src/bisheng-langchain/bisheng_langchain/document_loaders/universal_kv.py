@@ -56,8 +56,6 @@ def transpdf2png(pdf_file):
 
 class UniversalKVLoader(BaseLoader):
     """Extract key-value from pdf or image.
-
-    Loader also stores page numbers in metadata.
     """
     def __init__(self,
                  file_path: str,
