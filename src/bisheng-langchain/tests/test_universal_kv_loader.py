@@ -1,4 +1,5 @@
 from bisheng_langchain.document_loaders import UniversalKVLoader
+from bisheng_langchain.chains import LoaderOutputChain
 
 
 def test_universal_kv_loader1():
@@ -11,6 +12,7 @@ def test_universal_kv_loader1():
         )
     doc = loader.load()
     print(doc)
+    return doc
 
 
 def test_universal_kv_loader2():
@@ -23,7 +25,16 @@ def test_universal_kv_loader2():
         )
     doc = loader.load()
     print(doc)
+    return doc
+
+def test_loader_output_chain():
+    doc1 = test_universal_kv_loader1()
+    doc2 = test_universal_kv_loader2()
+    doc = doc1 + doc2
+    chain = LoaderOutputChain(documents=doc)
+    print(chain('开始', return_only_outputs=True)['text'])
 
 
-test_universal_kv_loader1()
-test_universal_kv_loader2()
+# test_universal_kv_loader1()
+# test_universal_kv_loader2()
+test_loader_output_chain()

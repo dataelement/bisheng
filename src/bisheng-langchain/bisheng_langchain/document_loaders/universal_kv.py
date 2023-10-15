@@ -89,7 +89,7 @@ class UniversalKVLoader(BaseLoader):
             if 'code' in resp and resp['code'] == 200:
                 key_values = resp['result']['ellm_result']
             else:
-                raise ValueError(f"universal kv load failed: {resp['status_message']}")
+                raise ValueError(f"universal kv load failed: {resp}")
 
             content = 'key' + '\t' + 'value' + '\t' + 'page' + '\n'
             for key, value in key_values.items():
@@ -115,7 +115,7 @@ class UniversalKVLoader(BaseLoader):
                 if 'code' in resp and resp['code'] == 200:
                     key_values = resp['result']['ellm_result']
                 else:
-                    raise ValueError(f"universal kv load failed: {resp['status_message']}")
+                    raise ValueError(f"universal kv load failed: {resp}")
 
                 for key, value in key_values.items():
                     kv = key + '\t' + '|'.join(value['text']) + '\t' + str(page) + '\n'
