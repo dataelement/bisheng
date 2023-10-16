@@ -43,6 +43,7 @@ jobs:
           pip install wheel
           pip install twine
           cd ./src/bisheng-langchain
+          echo "release" > version.txt
           python setup.py bdist_wheel
           repo="http://${{ env.PY_NEXUS }}/repository/pypi-hosted/"
           twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl    

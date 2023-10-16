@@ -232,7 +232,7 @@ class VectorStoreFrontendNode(FrontendNode):
             'n_dim', 'key', 'prefix', 'distance_func', 'content_payload_key',
             'metadata_payload_key', 'timeout', 'host', 'path', 'url', 'port', 'https',
             'prefer_grpc', 'grpc_port', 'pinecone_api_key', 'pinecone_env', 'client_kwargs',
-            'search_kwargs', 'elasticsearch_url', 'drop_old'
+            'search_kwargs', 'elasticsearch_url'
         ]
 
         # Check and set field attributes
