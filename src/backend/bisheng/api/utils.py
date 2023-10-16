@@ -147,7 +147,7 @@ def build_flow_no_yield(graph_data: dict,
                     if isinstance(value, dict)
                 }
                 for key, value in template_dict.items():
-                    if value.get('type') == 'file':
+                    if value.get('type') == 'fileNode':
                         # 过滤掉文件
                         vertex.params[key] = ''
 

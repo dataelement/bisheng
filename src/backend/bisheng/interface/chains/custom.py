@@ -149,7 +149,7 @@ class SummarizeDocsChain(CustomChain):
 
 CUSTOM_CHAINS: Dict[str, Type[Union[ConversationChain, CustomChain]]] = {
     'CombineDocsChain': CombineDocsChain,
-    'SummerizeDocsChain': SummarizeDocsChain,
+    # 'SummarizeDocsChain': SummarizeDocsChain,
     'SeriesCharacterChain': SeriesCharacterChain,
     'MidJourneyPromptChain': MidJourneyPromptChain,
     'TimeTravelGuideChain': TimeTravelGuideChain,

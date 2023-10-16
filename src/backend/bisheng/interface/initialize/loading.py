@@ -179,11 +179,6 @@ def instantiate_retriever(node_type, class_object, params):
 
 
 def instantiate_chains(node_type, class_object: Type[Chain], params: Dict):
-    # if node_type == 'SequentialChain':
-
-    #     for index, chain in enumerate(chains):
-    #         chain.__setattr__('output_key', chain.output_keys[0] + str(index))
-
     if 'retriever' in params and hasattr(params['retriever'], 'as_retriever'):
         params['retriever'] = params['retriever'].as_retriever()
     if node_type in chain_creator.from_method_nodes:
