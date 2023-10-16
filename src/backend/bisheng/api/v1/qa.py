@@ -32,8 +32,9 @@ def get_original_file(*, message_id: int, keys: str, session: Session = Depends(
     result = []
     for index, chunk in enumerate(chunks):
         chunk_res = json.loads(json.loads(chunk.meta_data).get('bbox'))
-        chunk_res['source_url'] = minio_client.get_share_link(str(chunk.file_id))
-        chunk_res['score'] = round(match_score(chunk.chunk, keywords), 2)
+        chunk_res['source_url'] = minio_client.minio_client.get_share_link(str(chunk.file_id))
+        chunk_res['score'] = round(match_score(chunk.chunk, keywords),
+                                   2) if len(keywords) > 0 else 0
         chunk_res['file_id'] = chunk.file_id
         result.append(chunk_res)
 

@@ -69,10 +69,16 @@ async def process_knowledge(*,
     payload = json.loads(Authorize.get_jwt_subject())
 
     knowledge_id = data.get('knowledge_id')
-    chunck_size = data.get('chunck_size')
+    chunk_size = data.get('chunck_size')
     file_path = data.get('file_path')
     auto_p = data.get('auto')
     separator = data.get('separator')
+    chunk_overlap = 0
+
+    if auto_p:
+        separator = ['\n\n', '\n', ' ', '']
+        chunk_size = 500
+        chunk_overlap = 50
 
     knowledge = session.exec(select(Knowledge).where(Knowledge.id == knowledge_id)).one()
     if payload.get('role') != 'admin' and knowledge.user_id != payload.get('user_id'):
@@ -97,9 +103,9 @@ async def process_knowledge(*,
     asyncio.create_task(
         addEmbedding(collection_name=collection_name,
                      model=knowledge.model,
-                     chunk_size=chunck_size,
+                     chunk_size=chunk_size,
                      separator=separator,
-                     auto=auto_p,
+                     chunk_overlap=chunk_overlap,
                      file_paths=file_paths,
                      knowledge_files=files))
 
@@ -232,7 +238,7 @@ def delete_knowledge_file(*,
         logger.info(f'act=delete_vector file_id={file_id} res={res}')
 
     # minio
-    minio_client.delete_minio(str(knowledge_file.id))
+    minio_client.minio_client.delete_minio(str(knowledge_file.id))
     # elastic
 
     session.delete(knowledge_file)
@@ -251,7 +257,7 @@ def decide_embeddings(model: str) -> Embeddings:
 def decide_vectorstores(collection_name: str, vector_store: str,
                         embedding: Embeddings) -> VectorStore:
     vector_config = settings.knowledges.get('vectorstores').get(vector_store)
-    if vector_store == 'ElasticKeywordsSearch':
+    if vector_store == 'ElasticKeywordsSearch' and vector_config:
         param = {'index_name': collection_name, 'embedding': embedding}
         if isinstance(vector_config['ssl_verify'], str):
             vector_config['ssl_verify'] = eval(vector_config['ssl_verify'])
@@ -262,8 +268,9 @@ def decide_vectorstores(collection_name: str, vector_store: str,
     return instantiate_vectorstore(class_object=class_obj, params=param)
 
 
-async def addEmbedding(collection_name, model: str, chunk_size: int, separator: str, auto: bool,
-                       file_paths: List[str], knowledge_files: List[KnowledgeFile]):
+async def addEmbedding(collection_name, model: str, chunk_size: int, separator: str,
+                       chunk_overlap: int, file_paths: List[str],
+                       knowledge_files: List[KnowledgeFile]):
 
     embeddings = decide_embeddings(model)
     vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
@@ -273,14 +280,7 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
         knowledge_file = knowledge_files[index]
         try:
             texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
-                                                separator)
-            logger.info(f'chunk_split size={len(texts)}')
-            [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]
-            vectore_client.add_texts(texts=texts, metadatas=metadatas)
-
-            # 存储es
-            es_client.add_texts(texts=texts, metadatas=metadatas)
-
+                                                chunk_overlap, separator)
             # 存储 mysql
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
@@ -289,8 +289,20 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             session.commit()
             session.refresh(db_file)
 
-            # 原始文件存储minio
-            minio_client.upload_minio(str(db_file.id), path)
+            # 溯源必须依赖minio, 后期替换更通用的oss
+            if minio_client.minio_client.minio_client:
+                minio_client.minio_client.upload_minio(str(db_file.id), path)
+            else:
+                metadatas = [{} for _ in metadatas]
+
+            logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
+            [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]
+            vectore_client.add_texts(texts=texts, metadatas=metadatas)
+
+            # 存储es
+            if es_client:
+                es_client.add_texts(texts=texts, metadatas=metadatas)
+
         except Exception as e:
             logger.exception(e)
             session = next(get_session())
@@ -300,7 +312,7 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             session.commit()
 
 
-def _read_chunk_text(input_file, file_name, size, separator):
+def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
     from langchain.document_loaders import (PyPDFLoader, BSHTMLLoader, TextLoader,
                                             UnstructuredMarkdownLoader)
     from langchain.text_splitter import CharacterTextSplitter
@@ -319,7 +331,7 @@ def _read_chunk_text(input_file, file_name, size, separator):
         loader = filetype_load_map[file_type]
         text_splitter = CharacterTextSplitter(separator=separator,
                                               chunk_size=size,
-                                              chunk_overlap=0,
+                                              chunk_overlap=chunk_overlap,
                                               add_start_index=True)
         documents = loader.load()
         texts = text_splitter.split_documents(documents)
@@ -338,6 +350,7 @@ def _read_chunk_text(input_file, file_name, size, separator):
             # 替换历史文件
             with open(input_file, 'wb') as fout:
                 fout.write(base64.b64decode(b64_data))
+            file_name = file_name.rsplit('.', 1)[0] + '.pdf'
 
         loader = ElemUnstructuredLoader(
             file_name,
