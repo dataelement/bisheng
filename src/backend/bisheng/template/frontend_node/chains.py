@@ -2,11 +2,12 @@ from typing import Optional
 
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
-from bisheng.template.frontend_node.constants import QA_CHAIN_TYPES
+from bisheng.template.frontend_node.constants import QA_CHAIN_TYPES, SUMMARIZE_CHAIN_TYPES
 from bisheng.template.template.base import Template
 
 
 class ChainFrontendNode(FrontendNode):
+
     def add_extra_fields(self) -> None:
         if self.template.type_name == 'ConversationalRetrievalChain':
             # add memory
@@ -17,8 +18,7 @@ class ChainFrontendNode(FrontendNode):
                     show=True,
                     name='memory',
                     advanced=False,
-                )
-            )
+                ))
             # add return_source_documents
             self.template.add_field(
                 TemplateField(
@@ -29,8 +29,7 @@ class ChainFrontendNode(FrontendNode):
                     advanced=False,
                     value=True,
                     display_name='Return source documents',
-                )
-            )
+                ))
             self.template.add_field(
                 TemplateField(
                     field_type='str',
@@ -42,8 +41,7 @@ class ChainFrontendNode(FrontendNode):
                     value=QA_CHAIN_TYPES[0],
                     name='chain_type',
                     advanced=False,
-                )
-            )
+                ))
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
@@ -246,11 +244,65 @@ class CombineDocsChainNode(FrontendNode):
                 display_name='token_max',
                 advanced=False,
                 info='当前只对stuff 生效',
-                value= -1,
+                value=-1,
             ),
+            TemplateField(field_type='str',
+                          required=False,
+                          show=True,
+                          name='prompt',
+                          display_name='prompt',
+                          advanced=False,
+                          info='只对stuff生效。stuff对默认模板：')
         ],
     )
     description: str = """Load question answering chain."""
+    base_classes: list[str] = ['BaseCombineDocumentsChain', 'function']
+
+
+class SummarizeDocsChain(FrontendNode):
+    name: str = 'SummarizeDocsChain'
+    template: Template = Template(
+        type_name='load_summarize_chain',
+        fields=[
+            TemplateField(
+                field_type='str',
+                required=True,
+                is_list=True,
+                show=True,
+                multiline=False,
+                options=SUMMARIZE_CHAIN_TYPES,
+                value=SUMMARIZE_CHAIN_TYPES[0],
+                name='chain_type',
+                advanced=False,
+            ),
+            TemplateField(
+                field_type='BaseLanguageModel',
+                required=True,
+                show=True,
+                name='llm',
+                display_name='LLM',
+                advanced=False,
+            ),
+            TemplateField(
+                field_type='int',
+                required=False,
+                show=True,
+                name='token_max',
+                display_name='token_max',
+                advanced=False,
+                info='当前只对stuff 生效',
+                value=-1,
+            ),
+            TemplateField(field_type='str',
+                          required=False,
+                          show=True,
+                          name='prompt',
+                          display_name='prompt',
+                          advanced=False,
+                          info='只对stuff生效。stuff对默认模板：')
+        ],
+    )
+    description: str = """Load summarize chain."""
     base_classes: list[str] = ['BaseCombineDocumentsChain', 'function']
 
     def to_dict(self):

@@ -30,6 +30,7 @@ CUSTOM_NODES = {
         'TimeTravelGuideChain': frontend_node.chains.TimeTravelGuideChainNode(),
         'MidJourneyPromptChain': frontend_node.chains.MidJourneyPromptChainNode(),
         'load_qa_chain': frontend_node.chains.CombineDocsChainNode(),
+        'load_summarize_chain': frontend_node.chains.SummarizeDocsChain(),
     },
     'embeddings': {
        'OpenAIProxyEmbedding': frontend_node.embeddings.OpenAIProxyEmbedding(),
