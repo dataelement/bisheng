@@ -22,7 +22,7 @@ export default function SkillPage() {
 
     const [open, setOpen] = useState(false)
     const navigate = useNavigate()
-    const { flows, pages, turnPage, search, removeFlow, setFlows } = useContext(TabsContext);
+    const { page, flows, pages, turnPage, search, removeFlow, setFlows } = useContext(TabsContext);
     const { setErrorData } = useContext(alertContext);
 
     const [temps, setTemps] = useState([])
@@ -36,11 +36,9 @@ export default function SkillPage() {
     const { open: tempOpen, flowRef, toggleTempModal } = useCreateTemp()
     const { delShow, idRef, close, delConfim } = useDelete()
     // 分页
-    const [page, setPage] = useState(1)
     const [pageEnd, setPageEnd] = useState(false)
     const loadPage = (_page) => {
         // setLoading(true)
-        setPage(_page)
         turnPage(_page).then(res => {
             setPageEnd(res.length < 20)
             // setLoading(false)
@@ -97,7 +95,7 @@ export default function SkillPage() {
                     <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>新建</Button>
                 </div>
                 <span className="main-page-description-text">这里管理您的个人项目，对技能上下线、编辑等等</span>
-                <Input ref={inputRef} placeholder="技能搜索" className=" w-[400px] relative top-[-20px]" onChange={hanldeInputChange}
+                <Input ref={inputRef} defaultValue={window.SearchInput || ''} placeholder="技能搜索" className=" w-[400px] relative top-[-20px]" onChange={hanldeInputChange}
                 // onKeyDown={e => e.key === 'Enter' && handleSearch(e)}
                 ></Input>
                 <div className="w-full flex flex-wrap mt-1">

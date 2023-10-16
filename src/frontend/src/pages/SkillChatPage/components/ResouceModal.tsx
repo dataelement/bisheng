@@ -82,7 +82,8 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                 <div className="tooltip fixed" data-tip='系统自动根据答案生成关键信息标签,也可手动增删标签,系统根据标签计算各个文件及段落相关性。'><span data-theme="light" className="badge cursor-pointer">?</span></div>
             </div>
             <div className="flex flex-wrap gap-2">
-                {words.map((str, i) => <div key={str} className="badge badge-info gap-2 text-gray-600 bg-[rgba(53,126,249,.15)]">{str}<span className="cursor-pointer" onClick={() => onClose(i)}>x</span></div>)}
+                {words.map((str, i) => <div key={str} className="badge badge-info h-[auto] gap-2 text-gray-600 bg-[rgba(53,126,249,.15)]">{str}<span className="cursor-pointer" onClick={() => onClose(i)}>x</span></div>)}
+                {/* 自定义 */}
                 {
                     editCustomKey ? <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.15)]"><input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none bg-gray-50"
                         onKeyDown={(event) => {

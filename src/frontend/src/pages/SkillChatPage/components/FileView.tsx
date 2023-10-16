@@ -99,7 +99,7 @@ export default function FileView({ data }) {
     const [boxSize, setBoxSize] = useState({ width: 0, height: 0 })
     const [loading, setLoading] = useState(false)
     // chunk
-    const [currentChunk, setCurrentChunk] = useState(0) // 选中的chunk
+    const [currentChunk, setCurrentChunk] = useState(-1) // 选中的chunk
 
     const useLabels = () => {
         const [data, setData] = useState({})
@@ -135,6 +135,7 @@ export default function FileView({ data }) {
     useEffect(() => {
         // loding
         setLoading(true)
+        setPagesLabels({ box: [] })
 
         const pdfUrl = data.fileUrl // '/doc.pdf';
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
@@ -143,6 +144,7 @@ export default function FileView({ data }) {
             setPdf(pdfDocument)
             // 默认跳转到匹配度最高的page
             setTimeout(() => {
+                setCurrentChunk(0)
                 const chunk = data.chunks[0]
                 setPagesLabels(chunk)
                 // 第一个高亮块的当页位移
@@ -152,7 +154,7 @@ export default function FileView({ data }) {
                 listRef.current.scrollTo(pageY + offsetY);
                 // listRef.current.scrollToItem(data.chunks[0].box[0].page - 1, 'start');
 
-            }, 0);
+            }, 2000);
         })
     }, [data])
 
@@ -198,13 +200,13 @@ export default function FileView({ data }) {
                     </List>
                 </div>
         }
-        <div className="absolute left-[0px] top-6 rounded-sm p-4 px-0 t-[50%] mt-[40%] ">
-            <p className="mb-1 text-sm font-bold border border-[rgba(53,126,249,.60)] text-center rounded-sm text-blue-600">来源段落</p>
+        <div className="absolute left-[0px] rounded-sm p-4 px-0 top-[50%] translate-y-[-50%] max-2xl:scale-75 origin-top-left">
+            <p className="mb-1 text-sm font-bold text-center rounded-sm bg-[rgb(186,210,249)] text-blue-600">来源段落</p>
             <div className="flex flex-col gap-2 ">
                 {data.chunks.map((chunk, i) =>
                     <div key={i}
                         onClick={() => handleJump(i, chunk)}
-                        className={`flag h-[40px] leading-[40px] px-6 pl-4 border-2 border-l-0 border-[rgba(53,126,249,.60)] bg-[rgba(255,255,255,1)]  text-blue-600 ${currentChunk === i && 'font-bold bg-[rgb(186,210,249)]'} cursor-pointer relative`}
+                        className={`flag h-[38px] leading-[38px] px-6 pl-4 border-2 border-l-0 border-r-0 border-[rgba(53,126,249,.60)] bg-[rgba(255,255,255,0.2)]  text-blue-600 ${currentChunk === i && 'font-bold active'} cursor-pointer relative`}
                     >
                         <span>{chunk.score}</span>
                     </div>

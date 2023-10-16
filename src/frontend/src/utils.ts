@@ -700,11 +700,11 @@ export function updateTemplate(
       clonedObject[key].suffixes = objectToUpdate[key].suffixes
     }
     // required与show不覆盖
-    if(clonedObject[key].required) {
+    if(clonedObject[key]?.required) {
       clonedObject[key].required = objectToUpdate[key].required
     }
-    if(clonedObject[key].show) {
-      clonedObject[key].show = objectToUpdate[key].show
+    if(clonedObject[key]?.show) {
+      clonedObject[key].show = objectToUpdate[key]?.show
     }
   }
   return clonedObject;
