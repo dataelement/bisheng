@@ -90,14 +90,14 @@ chains:
   CombineDocsChain:
     documentation: ""
 documentloaders:
+  ElemUnstructuredLoaderV0:
+    documentation: ""
   AirbyteJSONLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/airbyte_json"
   CoNLLULoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/conll-u"
   CSVLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/csv"
-  UnstructuredEmailLoader:
-    documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/email"
   EverNoteLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/evernote"
   FacebookChatLoader:
@@ -106,24 +106,16 @@ documentloaders:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/gutenberg"
   BSHTMLLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/how_to/html"
-  UnstructuredHTMLLoader:
-    documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/how_to/html"
-  UnstructuredMarkdownLoader:
-    documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/how_to/markdown"
   PyPDFDirectoryLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/how_to/pdf"
   PyPDFLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/how_to/pdf"
-  UnstructuredPowerPointLoader:
-    documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/microsoft_powerpoint"
   SRTLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/subtitle"
   TelegramChatLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/telegram"
   TextLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/"
-  UnstructuredWordDocumentLoader:
-    documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/microsoft_word"
   WebBaseLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/web_base"
   AZLyricsLoader:
@@ -334,6 +326,8 @@ utilities:
   WolframAlphaAPIWrapper:
     documentation: ""
 retrievers:
+  MixEsVectorRetriever:
+    documentation: ""
   MultiQueryRetriever:
     documentation: "https://python.langchain.com/docs/modules/data_connection/retrievers/how_to/MultiQueryRetriever"
   # https://github.com/supabase-community/supabase-py/issues/482
