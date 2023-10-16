@@ -277,7 +277,6 @@ export async function updataOnlineState(id, updatedFlow, open) {
   try {
     const response = await axios.patch(`/api/v1/flows/${id}`, {
       name: updatedFlow.name,
-      data: updatedFlow.data,
       description: updatedFlow.description,
       status: open ? 2 : 1
     });
@@ -382,7 +381,9 @@ export async function deleteFlowFromDatabase(flowId: string) {
  * 获取会话列表
  */
 export const getChatsApi = () => {
-  return axios.get(`/api/v1/chat/list`)
+  return axios.get(`/api/v1/chat/list`).then(res =>
+    res.data?.filter(el => el.chat_id) || []
+  )
 };
 
 
@@ -589,4 +590,50 @@ export async function getUsersApi(name: string, page: number, pageSize: number) 
 // 修改用户状态（启\禁用）
 export async function disableUserApi(userid, status) {
   return await axios.post(`/api/v1/user/update`, { user_id: userid, delete: status });
+}
+
+
+/**
+ * ************************ 溯源
+ */
+// 分词
+export async function splitWordApi(word: string, messageId: string) {
+  return await axios.get(`/api/v1/qa/keyword?answer=${word}&message_id=${messageId}`)
+}
+
+// 获取 chunks
+export async function getSourceChunksApi(chatId: string, messageId: number, keys: string) {
+  try {
+    const response = await axios.get(`/api/v1/qa/chunk?chat_id=${chatId}&message_id=${messageId}&keys=${keys}`)
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const fileMap = {}
+    const chunks = response.data.data
+    chunks.forEach(chunk => {
+      const list = fileMap[chunk.file_id]
+      if (list) {
+        fileMap[chunk.file_id].push(chunk)
+      } else {
+        fileMap[chunk.file_id] = [chunk]
+      }
+    });
+
+    return Object.keys(fileMap).map(fileId => {
+      const id = fileMap[fileId][0].file_id
+      const fileName = fileMap[fileId][0].source
+      const fileUrl = fileMap[fileId][0].source_url
+      const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
+        .map(chunk => ({
+          box: chunk.chunk_bboxes,
+          score: chunk.score
+        }))
+      const score = chunks[0].score
+
+      return { id, fileName, fileUrl, chunks, score }
+    }).sort((a, b) => b.score - a.score)
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
 }

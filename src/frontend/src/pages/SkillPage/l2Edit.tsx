@@ -58,7 +58,7 @@ export default function l2Edit() {
         const description = descRef.current.value
         if (isParamError(name, description, true)) return navigate('/flow/' + id, { replace: true })
         // // 保存在跳
-        await saveFlow({ ...flow, name, description });
+        // await saveFlow({ ...flow, name, description });
         navigate('/flow/' + id, { replace: true })
     }
 

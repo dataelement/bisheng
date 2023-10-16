@@ -1,7 +1,7 @@
 from bisheng.api.utils import remove_api_keys
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
-from bisheng.database.models.template import (Template, TemplateCreate, TemplateRead, TemplateUpdate)
+from bisheng.database.models.template import Template, TemplateCreate, TemplateRead, TemplateUpdate
 from bisheng.settings import settings
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
@@ -19,14 +19,14 @@ def create_template(*, session: Session = Depends(get_session), template: Templa
     if not db_template.data:
         db_flow = session.get(Flow, template.flow_id)
         db_template.data = db_flow.data
-
+    # 校验name
+    name_repeat = session.exec(select(Template).where(Template.name == db_template.name)).first()
+    if name_repeat:
+        raise HTTPException(status_code=500, detail='模板名称重复，请重新检查')
     # 增加 order_num  x,x+65535
     max_order = session.exec(select(Template).order_by(Template.order_num.desc()).limit(1)).first()
     # 如果没有数据，就从 65535 开始
-    if max_order is None:
-        db_template.order_num = ORDER_GAP
-    else:
-        db_template.order_num = max_order.order_num + ORDER_GAP
+    db_template.order_num = max_order.order_num + ORDER_GAP if max_order else ORDER_GAP
     session.add(db_template)
     session.commit()
     session.refresh(db_template)

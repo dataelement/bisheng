@@ -259,7 +259,7 @@ export default function ParameterComponent({
                 value={data.node.template[name].value ?? ""}
                 onChange={handleOnNewValue}
               />
-            ) : name === 'collection_name' ? (
+            ) : ['index_name', 'collection_name'].includes(name) ? (
               // 知识库选择
               <CollectionNameComponent
                 setNodeClass={(nodeClass) => {
@@ -268,7 +268,7 @@ export default function ParameterComponent({
                 nodeClass={data.node}
                 disabled={disabled}
                 value={data.node.template[name].value ?? ""}
-                onChange={(val) => { handleOnNewValue(val); val && handleRemoveMilvusEmbeddingEdge() }}
+                onChange={(val) => { handleOnNewValue(val); name === 'collection_name' && val && handleRemoveMilvusEmbeddingEdge() }}
               />
             ) : (
               // 单行输入

@@ -14,18 +14,12 @@ class KnowledgeFileBase(SQLModelSerializable):
     status: Optional[int] = Field(index=False)
     object_name: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(
-        sa_column=Column(
-            DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')
-        )
-    )
+        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
-        sa_column=Column(
-            DateTime,
-            nullable=False,
-            server_default=text('CURRENT_TIMESTAMP'),
-            onupdate=text('CURRENT_TIMESTAMP')
-        )
-    )
+        sa_column=Column(DateTime,
+                         nullable=False,
+                         server_default=text('CURRENT_TIMESTAMP'),
+                         onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class KnowledgeFile(KnowledgeFileBase, table=True):

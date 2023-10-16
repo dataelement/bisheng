@@ -1,24 +1,19 @@
 from datetime import datetime
 from typing import Optional
-from uuid import UUID
 
 from bisheng.database.models.base import SQLModelSerializable
-from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, Text, text
 from sqlmodel import Field
 
 
-class MessageBase(SQLModelSerializable):
-    is_bot: bool = Field(index=False)
-    source: Optional[bool] = Field(index=False)
-    message: Optional[str] = Field(index=False, sa_column=Column(Text))
-    type: str = Field(index=False)
-    category: str = Field(index=False)
-    flow_id: UUID = Field(index=True)
-    chat_id: Optional[str] = Field(index=True)
-    user_id: Optional[str] = Field(index=True)
-    intermediate_steps: Optional[str] = Field(index=False, sa_column=Column(Text))
-    files: Optional[str] = Field(index=False)
+class RecallBase(SQLModelSerializable):
+    message_id: Optional[int] = Field(index=False, unique=False)
+    chat_id: str = Field(index=False)
+    keywords: str = Field(index=False, sa_column=Column(Text))
+    chunk: Optional[str] = Field(index=False, sa_column=Column(Text))
+    meta_data: Optional[str] = Field(index=False, sa_column=Column(Text))
+    file_id: Optional[int] = Field(index=False)
+
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(index=True,
@@ -29,19 +24,19 @@ class MessageBase(SQLModelSerializable):
                                                 onupdate=text('CURRENT_TIMESTAMP')))
 
 
-class ChatMessage(MessageBase, table=True):
+class RecallChunk(RecallBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
-class ChatMessageRead(MessageBase):
+class RecallChunkRead(RecallBase):
     id: Optional[int]
+    score: Optional[int]
 
 
-class ChatMessageQuery(BaseModel):
+class RecallChunkQuery(SQLModelSerializable):
     id: Optional[int]
-    flow_id: str
-    chat_id: str
+    server: Optional[str]
 
 
-class ChatMessageCreate(MessageBase):
+class RecallChunkCreate(RecallBase):
     pass

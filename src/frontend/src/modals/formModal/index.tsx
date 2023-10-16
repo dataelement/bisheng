@@ -148,6 +148,11 @@ export default function FormModal({
         newChat.pop()
         return newChat
       }
+      // 过滤空消息
+      if (!newChat[newChat.length - 1].message && !str) {
+        newChat.pop()
+        return newChat
+      }
       if (str) {
         if (end) {
           newChat[newChat.length - 1].message = str;
@@ -354,7 +359,7 @@ export default function FormModal({
       let inputs: any = tabsState[id.current].formKeysData.input_keys;
       inputs = inputs.find((el: any) => !el.type)
       // const chatKey = Object.keys(inputs)[0];
-      
+
       // if (!chatKey) return setErrorData({ title: "提示", list: ["至少选择一个inputkey"] });
       // if (!inputs[chatKey]) return setErrorData({ title: "提示", list: ["所选inputkey的值不能为空"] });
       setLockChat(true);

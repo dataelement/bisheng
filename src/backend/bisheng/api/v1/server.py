@@ -252,20 +252,17 @@ async def update_model(endpoint: str, server: str):
                                    model=model_name)
 
         # 当前是上下线中，需要判断
-        origin_status = db_model.status
-        if status == 'READY' and origin_status == '上线中':
+        if status == 'READY':
             db_model.status = '已上线'
         if status == 'UNAVAILABLE':
-            if reason == 'unloaded' and origin_status == '下线中':
+            if reason == 'unloaded':
                 db_model.status = '未上线'
             elif reason != 'unloaded':
                 db_model.status = '异常'
                 db_model.remark = error_translate(reason)
-        if not db_model.status:
+        if not db_model.status or not status:
             db_model.status = '未上线'
-        logger.debug(
-            f'update_status={model_name} rt_status={status} db_status={origin_status} now_status={db_model.status}'
-        )
+
         if not db_model.config:
             # 初始化config
             config_url = f'http://{endpoint}/v2/repository/models/{model_name}/config'

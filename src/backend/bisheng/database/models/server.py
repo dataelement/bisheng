@@ -11,10 +11,13 @@ class ServerBase(SQLModelSerializable):
     server: str = Field(index=True)
     remark: Optional[str] = Field(index=False)
     gpu: Optional[str] = Field(index=False, sa_column=Column(String(length=1024)))
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(sa_column=Column(
+        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(
+        sa_column=Column(DateTime,
+                         nullable=False,
+                         server_default=text('CURRENT_TIMESTAMP'),
+                         onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class Server(ServerBase, table=True):

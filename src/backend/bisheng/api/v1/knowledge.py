@@ -1,9 +1,11 @@
 import asyncio
+import base64
 import json
 import time
 from typing import List, Optional
 from uuid import uuid4
 
+import requests
 from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.base import get_session
@@ -13,7 +15,9 @@ from bisheng.database.models.user import User
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
+from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
+from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoader
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
@@ -65,8 +69,16 @@ async def process_knowledge(*,
     payload = json.loads(Authorize.get_jwt_subject())
 
     knowledge_id = data.get('knowledge_id')
-    chunck_size = data.get('chunck_size')
+    chunk_size = data.get('chunck_size')
     file_path = data.get('file_path')
+    auto_p = data.get('auto')
+    separator = data.get('separator')
+    chunk_overlap = 0
+
+    if auto_p:
+        separator = ['\n\n', '\n', ' ', '']
+        chunk_size = 500
+        chunk_overlap = 50
 
     knowledge = session.exec(select(Knowledge).where(Knowledge.id == knowledge_id)).one()
     if payload.get('role') != 'admin' and knowledge.user_id != payload.get('user_id'):
@@ -91,7 +103,9 @@ async def process_knowledge(*,
     asyncio.create_task(
         addEmbedding(collection_name=collection_name,
                      model=knowledge.model,
-                     chunk_size=chunck_size,
+                     chunk_size=chunk_size,
+                     separator=separator,
+                     chunk_overlap=chunk_overlap,
                      file_paths=file_paths,
                      knowledge_files=files))
 
@@ -215,15 +229,18 @@ def delete_knowledge_file(*,
         raise HTTPException(status_code=404, detail='没有权限执行操作')
     knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
     # 处理vectordb
-
     collection_name = knowledge.collection_name
     embeddings = decide_embeddings(knowledge.model)
-    vectore_client = decide_vectorstores(collection_name, embeddings)
-    if isinstance(vectore_client, Milvus):
+    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+    if isinstance(vectore_client, Milvus) and vectore_client.col:
         pk = vectore_client.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])
         res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
+        logger.info(f'act=delete_vector file_id={file_id} res={res}')
 
-    logger.info(f'act=delete_vector file_id={file_id} res={res}')
+    # minio
+    minio_client.minio_client.delete_minio(str(knowledge_file.id))
+    # elastic
+
     session.delete(knowledge_file)
     session.commit()
     return {'message': 'knowledge file deleted successfully'}
@@ -237,36 +254,57 @@ def decide_embeddings(model: str) -> Embeddings:
         return HostEmbeddings(**model_list.get(model))
 
 
-def decide_vectorstores(collection_name: str, embedding: Embeddings) -> VectorStore:
-    param = {'collection_name': collection_name, 'embedding': embedding}
-    vector_store = list(settings.knowledges.get('vectorstores').keys())[0]
+def decide_vectorstores(collection_name: str, vector_store: str,
+                        embedding: Embeddings) -> VectorStore:
     vector_config = settings.knowledges.get('vectorstores').get(vector_store)
+    if vector_store == 'ElasticKeywordsSearch' and vector_config:
+        param = {'index_name': collection_name, 'embedding': embedding}
+        if isinstance(vector_config['ssl_verify'], str):
+            vector_config['ssl_verify'] = eval(vector_config['ssl_verify'])
+    else:
+        param = {'collection_name': collection_name, 'embedding': embedding}
     param.update(vector_config)
     class_obj = import_vectorstore(vector_store)
     return instantiate_vectorstore(class_object=class_obj, params=param)
 
 
-async def addEmbedding(collection_name, model: str, chunk_size: int, file_paths: List[str],
+async def addEmbedding(collection_name, model: str, chunk_size: int, separator: str,
+                       chunk_overlap: int, file_paths: List[str],
                        knowledge_files: List[KnowledgeFile]):
 
     embeddings = decide_embeddings(model)
-    vectore_client = decide_vectorstores(collection_name, embeddings)
-    # es_param = {'index_name': }
-    # es_client = import_vectorstore("ElasticKeywordsSearch")
+    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+    es_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
         try:
-            texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size)
-            [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]
-            vectore_client.add_texts(texts=texts, metadatas=metadatas)
-
+            texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
+                                                chunk_overlap, separator)
+            # 存储 mysql
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 2)
             session.add(db_file)
             session.commit()
+            session.refresh(db_file)
+
+            # 溯源必须依赖minio, 后期替换更通用的oss
+            if minio_client.minio_client.minio_client:
+                minio_client.minio_client.upload_minio(str(db_file.id), path)
+            else:
+                metadatas = [{} for _ in metadatas]
+
+            logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
+            [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]
+            vectore_client.add_texts(texts=texts, metadatas=metadatas)
+
+            # 存储es
+            if es_client:
+                es_client.add_texts(texts=texts, metadatas=metadatas)
+
         except Exception as e:
-            logger.error(str(e))
+            logger.exception(e)
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)
@@ -274,30 +312,55 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, file_paths:
             session.commit()
 
 
-def _read_chunk_text(input_file, file_name, size):
+def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
     from langchain.document_loaders import (PyPDFLoader, BSHTMLLoader, TextLoader,
                                             UnstructuredMarkdownLoader)
     from langchain.text_splitter import CharacterTextSplitter
+    from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
     filetype_load_map = {
         'txt': TextLoader,
         'pdf': PyPDFLoader,
         'html': BSHTMLLoader,
-        'md': UnstructuredMarkdownLoader
+        'md': UnstructuredMarkdownLoader,
     }
 
-    file_type = file_name.split('.')[-1]
-    if file_type not in filetype_load_map:
-        raise Exception('Unsupport file type')
+    if not settings.knowledges.get('unstructured_api_url'):
+        file_type = file_name.split('.')[-1]
+        if file_type not in filetype_load_map:
+            raise Exception('Unsupport file type')
+        loader = filetype_load_map[file_type]
+        text_splitter = CharacterTextSplitter(separator=separator,
+                                              chunk_size=size,
+                                              chunk_overlap=chunk_overlap,
+                                              add_start_index=True)
+        documents = loader.load()
+        texts = text_splitter.split_documents(documents)
+        raw_texts = [t.page_content for t in texts]
+        metadatas = [t.metadata for t in texts]
+    else:
+        # 如果文件不是pdf 需要内部转pdf
+        if file_name.rsplit('.', 1)[-1] != 'pdf':
+            b64_data = base64.b64encode(open(input_file, 'rb').read()).decode()
+            inp = dict(filename=file_name, b64_data=[b64_data], mode='topdf')
+            resp = requests.post(settings.knowledges.get('unstructured_api_url'), json=inp).json()
+            if not resp or resp['status_code'] != 200:
+                logger.error(f'file_pdf=not_success resp={resp}')
+                raise Exception(f"当前文件无法解析， {resp['status_message']}")
+            b64_data = resp['b64_pdf']
+            # 替换历史文件
+            with open(input_file, 'wb') as fout:
+                fout.write(base64.b64decode(b64_data))
+            file_name = file_name.rsplit('.', 1)[0] + '.pdf'
 
-    loader = filetype_load_map[file_type](input_file)
-    documents = loader.load()
-    text_splitter = CharacterTextSplitter(chunk_size=size, chunk_overlap=0, add_start_index=True)
-    texts = text_splitter.split_documents(documents)
-    raw_texts = [t.page_content for t in texts]
-    metadatas = []
-    for t in texts:
-        start_index = t.metadata['start_index']
-        page_num = t.metadata['page'] if 'page' in t.metadata else 0
-        metadatas.append({'source': f'{file_name}:P{page_num}_O{start_index}'})
-
+        loader = ElemUnstructuredLoader(
+            file_name,
+            input_file,
+            unstructured_api_url=settings.knowledges.get('unstructured_api_url'))
+        documents = loader.load()
+        text_splitter = ElemCharacterTextSplitter(separators=separator,
+                                                  chunk_size=size,
+                                                  chunk_overlap=0)
+        texts = text_splitter.split_documents(documents)
+        raw_texts = [t.page_content for t in texts]
+        metadatas = [{'bbox': json.dumps(t.metadata)} for t in texts]
     return (raw_texts, metadatas)

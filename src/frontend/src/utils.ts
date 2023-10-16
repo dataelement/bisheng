@@ -668,6 +668,7 @@ export function debounce(func, wait) {
   };
 }
 
+// 从模板中复制template
 export function updateTemplate(
   reference: APITemplateType,
   objectToUpdate: APITemplateType
@@ -692,6 +693,18 @@ export function updateTemplate(
     if (dbParam && !/^_/.test(key)) {
       clonedObject[key].l2 = dbParam.l2 || false
       clonedObject[key].l2_name = dbParam.l2_name || key
+    }
+    // file_path的文件类型不覆盖
+    if (key === 'file_path') {
+      clonedObject[key].fileTypes = objectToUpdate[key].fileTypes
+      clonedObject[key].suffixes = objectToUpdate[key].suffixes
+    }
+    // required与show不覆盖
+    if(clonedObject[key]?.required) {
+      clonedObject[key].required = objectToUpdate[key].required
+    }
+    if(clonedObject[key]?.show) {
+      clonedObject[key].show = objectToUpdate[key]?.show
     }
   }
   return clonedObject;
@@ -916,14 +929,17 @@ export function groupByFamily(data, baseClasses, left, type) {
 }
 
 export function buildInputs(tabsState, id) {
-  return tabsState &&
+  if (tabsState &&
     tabsState[id] &&
     tabsState[id].formKeysData &&
-    tabsState[id].formKeysData.input_keys && tabsState[id].formKeysData.input_keys.length 
-    ? JSON.stringify(tabsState[id].formKeysData.input_keys) : '[{"input": "message"}]';
-    // Object.keys(tabsState[id].formKeysData.input_keys).length > 0
-    // ? JSON.stringify(tabsState[id].formKeysData.input_keys)
-    // : '{"input": "message"}';
+    tabsState[id].formKeysData.input_keys && tabsState[id].formKeysData.input_keys.length) {
+    const input = tabsState[id].formKeysData.input_keys.find(el => el.type !== 'file')
+    return JSON.stringify(input)
+  }
+  return '{"input": "message"}'
+  // Object.keys(tabsState[id].formKeysData.input_keys).length > 0
+  // ? JSON.stringify(tabsState[id].formKeysData.input_keys)
+  // : '{"input": "message"}';
 }
 
 export function buildTweaks(flow) {
@@ -948,6 +964,7 @@ export function validateNode(
   } = n.data;
   return Object.keys(template).reduce(
     (errors: Array<string>, t) =>
+      // （必填 && 显示 && 值为空 && 无连线） 即验证不通过
       errors.concat(
         template[t].required &&
           template[t].show &&
@@ -955,15 +972,13 @@ export function validateNode(
             template[t].value === null ||
             template[t].value === "") &&
           !(reactFlowInstance?.getEdges?.() || reactFlowInstance).some(
-              (e) =>
-                e.targetHandle.split("|")[1] === t &&
-                e.targetHandle.split("|")[2] === n.id
-            )
+            (e) =>
+              e.targetHandle.split("|")[1] === t &&
+              e.targetHandle.split("|")[2] === n.id
+          )
           ? [
-              `${type} 缺失了 ${
-                template.display_name || toNormalCase(template[t].name)
-              }.`,
-            ]
+            `${type} 缺失了 ${template.display_name || toNormalCase(template[t].name)}.`,
+          ]
           : []
       ),
     [] as string[]

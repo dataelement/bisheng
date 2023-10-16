@@ -8,7 +8,7 @@ import { useContext, useEffect, useState } from "react";
 import { alertContext } from "../../../contexts/alertContext";
 import { createTempApi } from "../../../controllers/API";
 
-export default function CreateTemp({ flow, open, setOpen }: { flow: FlowType, open: boolean, setOpen: any }) {
+export default function CreateTemp({ flow, open, setOpen, onCreated }: { flow: FlowType, open: boolean, setOpen: any, onCreated?: any }) {
     const { setErrorData, setSuccessData } = useContext(alertContext);
 
     const [data, setData] = useState({
@@ -38,6 +38,13 @@ export default function CreateTemp({ flow, open, setOpen }: { flow: FlowType, op
         createTempApi({ ...data, flow_id: flow.id }).then(res => {
             setOpen(false)
             setSuccessData({ title: '技能创建成功' });
+            onCreated?.()
+        }).catch(err => {
+            console.error('创建失败 :>> ', err.response);
+            setErrorData({
+                title: "创建失败",
+                list: [err.response.data.detail],
+            });
         })
     }
 

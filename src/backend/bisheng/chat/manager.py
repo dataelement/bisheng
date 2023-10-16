@@ -9,13 +9,17 @@ from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
 from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
 from bisheng.cache.manager import Subject
-from bisheng.chat.utils import process_graph
+from bisheng.chat.utils import extract_answer_keys, process_graph
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
+from bisheng.database.models.model_deploy import ModelDeploy
+from bisheng.database.models.recall_chunk import RecallChunk, RecallChunkCreate
 from bisheng.interface.utils import pil_to_base64
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
 from fastapi import WebSocket, status
+from langchain.docstore.document import Document
+from sqlmodel import select
 
 
 class ChatHistory(Subject):
@@ -43,6 +47,8 @@ class ChatHistory(Subject):
                 logger.info(f'chat={db_message}')
                 seesion.add(db_message)
                 seesion.commit()
+                seesion.refresh(db_message)
+                message.message_id = db_message.id
 
         if not isinstance(message, FileResponse):
             self.notify()
@@ -134,6 +140,14 @@ class ChatManager:
                 if 'after sending' in str(exc):
                     logger.error(exc)
 
+    async def ping(self, client_id: str, chat_id: str):
+        ping_pong = ChatMessage(
+            is_bot=True,
+            message='pong',
+            intermediate_steps='',
+        )
+        await self.send_json(client_id, chat_id, ping_pong, False)
+
     async def process_file(self, client_id: str, chat_id: str, user_id: int, file_path: str,
                            id: str):
         """upload file to make flow work"""
@@ -146,9 +160,9 @@ class ChatManager:
                     if isinstance(value, dict) and value.get('type') == 'file':
                         logger.info(f'key={key} set_filepath={file_path}')
                         value['file_path'] = file_path
+                        value['value'] = file_name
 
         # 如果L3
-
         file = ChatMessage(is_bot=False,
                            files=[{
                                'file_name': file_name
@@ -287,7 +301,7 @@ class ChatManager:
         try:
             logger.debug(f'Generating result and thought key={key}')
             langchain_object = self.in_memory_cache.get(key)
-            result, intermediate_steps = await process_graph(
+            result, intermediate_steps, source_doucment = await process_graph(
                 langchain_object=langchain_object,
                 chat_inputs=chat_inputs,
                 websocket=self.active_connections[get_cache_key(client_id, chat_id)],
@@ -324,39 +338,42 @@ class ChatManager:
                     file_responses.append(msg)
                 if msg.type == 'start':
                     break
-        if intermediate_steps.strip():
-            # 将最终的分析过程存数据库
-            from langchain.docstore.document import Document  # noqa
-            step = []
-            steps = []
-            for s in intermediate_steps.split('\n'):
-                if s.startswith("Answer: {'") and 'result' in s:
-                    s = 'Answer: ' + eval(s.split('Answer:')[1]).get('result')
-                    pass
-                step.append(s)
-                if not s:
-                    steps.append('\n'.join(step))
-                    step = []
-            steps.append('\n'.join(step))
-            for step in steps:
-                response = ChatResponse(message='',
-                                        intermediate_steps=step,
-                                        type='end',
-                                        files=file_responses,
-                                        category='processing',
-                                        user_id=user_id)
-                self.chat_history.add_message(client_id, chat_id, response)
 
-        if not chat_id and intermediate_steps:
+        if not chat_id:
             # 只有L3用户给出详细的log
             response = ChatResponse(message='',
-                                    intermediate_steps=intermediate_steps.strip(),
+                                    intermediate_steps=intermediate_steps,
                                     type='end',
                                     files=file_responses,
                                     category='processing',
                                     user_id=user_id)
             await self.send_json(client_id, chat_id, response, add=False)
         else:
+            if intermediate_steps.strip():
+                # 将最终的分析过程存数据库
+                step = []
+                steps = []
+                for s in intermediate_steps.split('\n'):
+                    if s.startswith("Answer: {'"):
+                        answer = eval(s.split('Answer:')[1])
+                        if 'result' in answer:
+                            s = 'Answer: ' + answer.get('result')
+                        # 如果包含source_document 表示支持溯源，进入溯源逻辑, 某些flow里，source在log参数里
+                        if 'source_document' in answer and not source_doucment:
+                            source_doucment = answer.get('source_document')
+                    step.append(s)
+                    if not s:
+                        steps.append('\n'.join(step))
+                        step = []
+                steps.append('\n'.join(step))
+                for step in steps:
+                    response = ChatResponse(message='',
+                                            intermediate_steps=step,
+                                            type='end',
+                                            files=file_responses,
+                                            category='processing',
+                                            user_id=user_id)
+                    self.chat_history.add_message(client_id, chat_id, response)
             end_resp = ChatResponse(message=None,
                                     type='end',
                                     intermediate_steps='',
@@ -367,12 +384,23 @@ class ChatManager:
         # 最终结果
         start_resp.category = 'answer'
         await self.send_json(client_id, chat_id, start_resp)
+        source = True if source_doucment and chat_id and next(
+            (True for doc in source_doucment if 'bbox' in doc.metadata), False) else False
         response = ChatResponse(message=result if not is_bot else '',
                                 type='end',
                                 intermediate_steps=result if is_bot else '',
                                 category='answer',
-                                user_id=user_id)
+                                user_id=user_id,
+                                source=source)
         await self.send_json(client_id, chat_id, response)
+        # 处理召回的chunk
+        if source:
+            await self.process_source_document(
+                source_doucment,
+                chat_id,
+                response.message_id,
+                result,
+            )
         # 循环结束
         close_resp = ChatResponse(message=None,
                                   type='close',
@@ -449,3 +477,41 @@ class ChatManager:
             except Exception as e:
                 logger.error(e)
             self.disconnect(client_id, chat_id)
+
+    async def process_source_document(self, source_document: List[Document], chat_id, message_id,
+                                      answer):
+        if not source_document:
+            return
+
+        from bisheng.settings import settings
+        # 使用大模型进行关键词抽取，模型配置临时方案
+        keyword_conf = settings.default_llm.get('keyword_llm')
+        host_base_url = keyword_conf.get('host_base_url')
+        model = keyword_conf.get('model')
+
+        if model and not host_base_url:
+            db_session = next(get_session())
+            model_deploy = db_session.exec(
+                select(ModelDeploy).where(ModelDeploy.model == model)).first()
+            if model_deploy:
+                model = model if model_deploy.status == '已上线' else None
+                host_base_url = model_deploy.endpoint
+            else:
+                logger.error('不能使用配置模型进行关键词抽取，配置不正确')
+
+        answer_keywords = extract_answer_keys(answer, model, host_base_url)
+        for doc in source_document:
+            if 'bbox' in doc.metadata:
+                # 表示支持溯源
+                db_session = next(get_session())
+                content = doc.page_content
+                recall_chunk = RecallChunkCreate(chat_id=chat_id,
+                                                 keywords=json.dumps(answer_keywords),
+                                                 chunk=content,
+                                                 file_id=doc.metadata.get('file_id'),
+                                                 meta_data=json.dumps(doc.metadata),
+                                                 message_id=message_id)
+                recall = RecallChunk.from_orm(recall_chunk)
+                db_session.add(recall)
+                db_session.commit()
+                db_session.refresh(recall)

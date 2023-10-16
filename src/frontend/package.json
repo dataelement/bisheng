@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "0.0.2",
+  "version": "0.2.0",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.10.5",
@@ -38,6 +38,7 @@
     "esbuild": "^0.17.18",
     "lodash": "^4.17.21",
     "lucide-react": "^0.233.0",
+    "pdfjs-dist": "^3.10.111",
     "react": "^18.2.0",
     "react-ace": "^10.1.0",
     "react-beautiful-dnd": "^13.1.1",
@@ -52,6 +53,7 @@
     "react-syntax-highlighter": "^15.5.0",
     "react-tabs": "^6.0.0",
     "react-tooltip": "^5.13.1",
+    "react-window": "^1.8.9",
     "reactflow": "^11.5.5",
     "rehype-mathjax": "^4.0.2",
     "remark-gfm": "^3.0.1",
@@ -121,6 +123,6 @@
     "vite-plugin-static-copy": "^0.17.0"
   },
   "engines": {
-    "node": ">= 16"
+    "node": ">= 18"
   }
 }

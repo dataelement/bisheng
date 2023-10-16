@@ -75,9 +75,7 @@ class Graph:
         """Check that all nodes have edges"""
         for node in self.nodes:
             if not self._validate_node(node):
-                raise ValueError(
-                    f'{node.vertex_type} is not connected to any other components'
-                )
+                raise ValueError(f'{node.vertex_type} is not connected to any other components')
 
     def _validate_node(self, node: Vertex) -> bool:
         """Validates a node."""
@@ -90,9 +88,7 @@ class Graph:
 
     def get_nodes_with_target(self, node: Vertex) -> List[Vertex]:
         """Returns the nodes connected to a node."""
-        connected_nodes: List[Vertex] = [
-            edge.source for edge in self.edges if edge.target == node
-        ]
+        connected_nodes: List[Vertex] = [edge.source for edge in self.edges if edge.target == node]
         return connected_nodes
 
     def build(self) -> Chain:
@@ -121,9 +117,7 @@ class Graph:
         def dfs(node):
             if state[node] == 1:
                 # We have a cycle
-                raise ValueError(
-                    'Graph contains a cycle, cannot perform topological sort'
-                )
+                raise ValueError('Graph contains a cycle, cannot perform topological sort')
             if state[node] == 0:
                 state[node] = 1
                 for edge in node.edges:
@@ -184,9 +178,7 @@ class Graph:
             return FileToolVertex
         if node_type in VERTEX_TYPE_MAP:
             return VERTEX_TYPE_MAP[node_type]
-        return (
-            VERTEX_TYPE_MAP[node_lc_type] if node_lc_type in VERTEX_TYPE_MAP else Vertex
-        )
+        return (VERTEX_TYPE_MAP[node_lc_type] if node_lc_type in VERTEX_TYPE_MAP else Vertex)
 
     def _build_vertices(self) -> List[Vertex]:
         """Builds the vertices of the graph."""
@@ -213,7 +205,5 @@ class Graph:
 
     def __repr__(self):
         node_ids = [node.id for node in self.nodes]
-        edges_repr = '\n'.join(
-            [f'{edge.source.id} --> {edge.target.id}' for edge in self.edges]
-        )
+        edges_repr = '\n'.join([f'{edge.source.id} --> {edge.target.id}' for edge in self.edges])
         return f'Graph:\nNodes: {node_ids}\nConnections:\n{edges_repr}'

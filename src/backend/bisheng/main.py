@@ -86,7 +86,7 @@ def setup_app(static_files_dir: Optional[Path] = None) -> FastAPI:
     return app
 
 
-configure(log_level='DEBUG')
+configure(log_level='DEBUG', log_file='./data/bisheng.log')
 app = create_app()
 
 if __name__ == '__main__':
