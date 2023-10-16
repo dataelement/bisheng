@@ -1,4 +1,6 @@
 from .elem_pdf import PDFWithSemanticLoader
-from .universal_kv import UniversalKVLoader
 
-__all__ = ['PDFWithSemanticLoader', 'UniversalKVLoader']
+from .elem_unstrcutured_loader import ElemUnstructuredLoader, ElemUnstructuredLoaderV0
+
+__all__ = ['PDFWithSemanticLoader', 'ElemUnstructuredLoader', 'ElemUnstructuredLoaderV0', 'UniversalKVLoader']
+

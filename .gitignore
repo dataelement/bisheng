@@ -260,3 +260,4 @@ dmypy.json
 sftp-config.json
 
 /tmp/*
+sftp-config.json
