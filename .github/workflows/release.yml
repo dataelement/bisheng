@@ -11,7 +11,7 @@ env:
   DOCKERHUB_REPO: dataelement/
   PY_NEXUS: 110.16.193.170:50083
   DOCKER_NEXUS: 110.16.193.170:50080
-  RELEASE_VERSION: 0.1.1 # bisheng-langchain nexus 始终替换版本
+  RELEASE_VERSION: 0.0.0 # bisheng-langchain nexus 始终替换版本
   
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -43,7 +43,6 @@ jobs:
           pip install wheel
           pip install twine
           cd ./src/bisheng-langchain
-          echo "v0.0.0" > version.txt
           python setup.py bdist_wheel
           repo="http://${{ env.PY_NEXUS }}/repository/pypi-hosted/"
           twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl    
