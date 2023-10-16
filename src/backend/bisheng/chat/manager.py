@@ -485,7 +485,7 @@ class ChatManager:
 
         from bisheng.settings import settings
         # 使用大模型进行关键词抽取，模型配置临时方案
-        keyword_conf = settings.default_llm
+        keyword_conf = settings.default_llm or {}
         host_base_url = keyword_conf.get('host_base_url')
         model = keyword_conf.get('model')
 

@@ -328,7 +328,7 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
             raise Exception('Unsupport file type')
-        loader = filetype_load_map[file_type]
+        loader = filetype_load_map[file_type](file_path=input_file)
         text_splitter = CharacterTextSplitter(separator=separator,
                                               chunk_size=size,
                                               chunk_overlap=chunk_overlap,
