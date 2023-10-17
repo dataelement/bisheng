@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    branches:
+      - "main"
+
+env:
+  DOCKERHUB_REPO: dataelement/
+  
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    #if: startsWith(github.event.ref, 'refs/tags')
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+        
+      # 登录 docker hub
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          # GitHub Repo => Settings => Secrets 增加 docker hub 登录密钥信息
+          # DOCKERHUB_USERNAME 是 docker hub 账号名.
+          # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    #   - name: Get version
+    #     id: get_version
+    #     run: |
+    #       echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+
+    #   # 构建 bisheng_langchain
+    #   - name: Set python version 3.8
+    #     uses: actions/setup-python@v1
+    #     with:
+    #       python-version: 3.8
+
+    #   - name: Build PyPi bisheng-langchain and push
+    #     id: pypi_build_bisheng_langchain
+    #     run: |
+    #       pip install Cython
+    #       pip install wheel
+    #       pip install twine
+    #       cd ./src/bisheng-langchain
+    #       python setup.py bdist_wheel
+    #       twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
+          
+      # 构建 backend 并推送到 Docker hub
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: install poetry
+        uses: snok/install-poetry@v1
+        with:
+          installer-parallel: true
+      - name: build lock
+        run: | 
+          cd ./src/backend
+          poetry lock
+          cd ../../
+      - name: Build backend and push
+        id: docker_build_backend
+        uses: docker/build-push-action@v2
+        with:
+          # backend 的context目录
+          context: "./src/backend/"
+          # 是否 docker push
+          push: true
+          # docker build arg, 注入 APP_NAME/APP_VERSION
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            APP_NAME="bisheng-backend"
+            APP_VERSION="v0.1.7"
+          # 生成两个 docker tag: ${APP_VERSION} 和 latest
+          tags: |
+            ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
+            ${{ env.DOCKERHUB_REPO }}bisheng-backend:v0.1.7
+      # 构建 Docker frontend 并推送到 Docker hub
+      - name: Build frontend and push
+        id: docker_build_frontend
+        uses: docker/build-push-action@v2
+        with:
+          # frontend 的context目录
+          context: "./src/frontend/"
+          # 是否 docker push
+          push: true
+          # docker build arg, 注入 APP_NAME/APP_VERSION
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            APP_NAME="bisheng-frontend"
+            APP_VERSION=${{ steps.get_version.outputs.VERSION }}
+          # 生成两个 docker tag: ${APP_VERSION} 和 latest
+          tags: |
+            ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
+            ${{ env.DOCKERHUB_REPO }}bisheng-frontend:v0.1.7
+
+      - name: notify feishu
+        uses:  sozo-design/curl@v1.0.2
+        with:
+          args: -X POST -d '{"msg_type":"text","content":{"text":"latest version 编译成功"}}' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b 
+      
