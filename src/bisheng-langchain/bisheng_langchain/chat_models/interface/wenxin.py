@@ -78,7 +78,7 @@ class ChatCompletion(object):
         status_code = response.status_code
         created = get_ts()
         choices = []
-        usage = None
+        usage = Usage()
         if status_code == 200:
             try:
                 info = json.loads(response.text)
