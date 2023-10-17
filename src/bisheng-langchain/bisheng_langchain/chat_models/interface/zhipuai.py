@@ -49,7 +49,7 @@ class ChatCompletion(object):
         req_type = 'chat.completion'
         status_message = 'success'
         choices = []
-        usage = None
+        usage = Usage()
         try:
             resp = zhipuai.model_api.invoke(**payload)
             status_code = resp['code']

@@ -109,7 +109,7 @@ class ChatXunfeiAI(BaseChatModel):
 
     client: Optional[Any]  #: :meta private:
     """Model name to use."""
-    model_name: str = Field('spark', alias='model')
+    model_name: str = Field('spark-1.5', alias='model')
 
     temperature: float = 0.5
     top_p: float = 0.7
@@ -128,7 +128,7 @@ class ChatXunfeiAI(BaseChatModel):
     """Whether to stream the results or not."""
     n: Optional[int] = 1
     """Number of chat completions to generate for each prompt."""
-    max_tokens: Optional[int] = None
+    max_tokens: Optional[int] = 1024
     """Maximum number of tokens to generate."""
     tiktoken_model_name: Optional[str] = None
     """The model name to pass to tiktoken when using this class.

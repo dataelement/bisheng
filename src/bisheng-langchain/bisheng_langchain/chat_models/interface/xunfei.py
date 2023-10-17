@@ -2,6 +2,8 @@ import base64
 import hashlib
 import hmac
 import json
+# import ssl
+# import threading
 from datetime import datetime
 from time import mktime
 from urllib.parse import urlencode, urlparse
@@ -14,9 +16,6 @@ import _thread as thread
 
 from .types import ChatInput, ChatOutput, Choice, Message, Usage
 from .utils import get_ts
-
-# import ssl
-# import threading
 
 
 class Ws_Param(object):
@@ -41,23 +40,28 @@ class Ws_Param(object):
         signature_origin += 'GET ' + self.path + ' HTTP/1.1'
 
         # 进行hmac-sha256进行加密
-        signature_sha = hmac.new(self.APISecret.encode('utf-8'),
-                                 signature_origin.encode('utf-8'),
-                                 digestmod=hashlib.sha256).digest()
+        signature_sha = hmac.new(
+            self.APISecret.encode('utf-8'),
+            signature_origin.encode('utf-8'),
+            digestmod=hashlib.sha256).digest()
 
-        signature_sha_base64 = base64.b64encode(signature_sha).decode(
-            encoding='utf-8')
+        signature_sha_base64 = base64.b64encode(
+            signature_sha).decode(encoding='utf-8')
 
         authorization_origin = (
-            f'api_key="{self.APIKey}", '
-            f'algorithm="hmac-sha256", headers="host date request-line",'
-            f' signature="{signature_sha_base64}"')
+          f'api_key="{self.APIKey}", '
+          f'algorithm="hmac-sha256", headers="host date request-line",'
+          f' signature="{signature_sha_base64}"')
 
         authorization = base64.b64encode(
             authorization_origin.encode('utf-8')).decode(encoding='utf-8')
 
         # 将请求的鉴权参数组合为字典
-        v = {'authorization': authorization, 'date': date, 'host': self.host}
+        v = {
+            'authorization': authorization,
+            'date': date,
+            'host': self.host
+        }
         # 拼接鉴权参数，生成url
         url = self.gpt_url + '?' + urlencode(v)
         # 此处打印出建立连接时候的url,参考本demo的时候可取消上方打印的注释，
@@ -77,7 +81,7 @@ def on_close(ws):
 
 # 收到websocket连接建立的处理
 def on_open(ws):
-    thread.start_new_thread(run, (ws, ))
+    thread.start_new_thread(run, (ws,))
 
 
 def run(ws, *args):
@@ -118,10 +122,9 @@ def gen_params(appid, question):
         },
         'payload': {
             'message': {
-                'text': [{
-                    'role': 'user',
-                    'content': question
-                }]
+                'text': [
+                    {'role': 'user', 'content': question}
+                ]
             }
         }
     }
@@ -129,19 +132,24 @@ def gen_params(appid, question):
 
 
 class ChatCompletion(object):
-
     def __init__(self, appid, api_key, api_secret, **kwargs):
-        gpt_url = 'ws://spark-api.xf-yun.com/v1.1/chat'
-        self.wsParam = Ws_Param(appid, api_key, api_secret, gpt_url)
+        gpt_url1 = 'ws://spark-api.xf-yun.com/v1.1/chat'
+        gpt_url2 = 'ws://spark-api.xf-yun.com/v2.1/chat'
+        self.wsParam1 = Ws_Param(appid, api_key, api_secret, gpt_url1)
+        self.wsParam2 = Ws_Param(appid, api_key, api_secret, gpt_url2)
+
         websocket.enableTrace(False)
-        # wsUrl = wsParam.create_url()
 
         # todo: modify to the ws pool
-        # self.mutex = threading.Lock()
         # self.ws = websocket.WebSocket()
-        # self.ws.connect(wsUrl)
+        # self.ws.connect(self.wsUrl)
 
+        # self.mutex = threading.Lock()
         self.header = {'app_id': appid, 'uid': 'elem'}
+
+    def __del__(self):
+        pass
+        # self.ws.close()
 
     def __call__(self, inp: ChatInput, verbose=False):
         messages = inp.messages
@@ -161,21 +169,18 @@ class ChatCompletion(object):
                 role = 'user'
             new_messages.append({'role': role, 'content': m.content})
 
+        domain = 'generalv2' if model == 'spark-v2.0' else 'general'
         created = get_ts()
         payload = {
             'header': self.header,
-            'payload': {
-                'message': {
-                    'text': new_messages
-                }
-            },
+            'payload': {'message': {'text': new_messages}},
             'parameter': {
-                'chat': {
-                    'domain': 'general',
-                    'temperature': temperature,
-                    'max_tokens': max_tokens,
-                    'auditing': 'default'
-                }
+              'chat': {
+                'domain': domain,
+                'temperature': temperature,
+                'max_tokens': max_tokens,
+                'auditing': 'default'
+              }
             }
         }
 
@@ -186,48 +191,48 @@ class ChatCompletion(object):
         status_code = 200
         status_message = 'success'
         choices = []
-        usage = None
+        usage = Usage()
         texts = []
         ws = None
         try:
             # self.mutex.acquire()
-            wsUrl = self.wsParam.create_url()
+            if model == 'spark-v2.0':
+                wsUrl = self.wsParam2.create_url()
+            else:
+                wsUrl = self.wsParam1.create_url()
             ws = create_connection(wsUrl)
             ws.send(json.dumps(payload))
+            texts = []
             while True:
                 raw_data = ws.recv()
                 if not raw_data:
                     break
-
                 resp = json.loads(raw_data)
                 if resp['header']['code'] == 0:
                     texts.append(
                         resp['payload']['choices']['text'][0]['content'])
-                if resp['header']['code'] == 0 and resp['header'][
-                        'status'] == 2:
+                if resp['header']['code'] == 0 and resp['header']['status'] == 2:
                     usage_dict = resp['payload']['usage']['text']
                     usage_dict.pop('question_tokens')
                     usage = Usage(**usage_dict)
         except Exception as e:
+            print('exception', e)
             status_code = 401
             status_message = str(e)
         finally:
             if ws:
                 ws.close()
+            # self.mutex.release()
 
         if texts:
             finish_reason = 'default'
             msg = Message(role='assistant', content=''.join(texts))
-            cho = Choice(index=0, message=msg, finish_reason=finish_reason)
+            cho = Choice(index=0, message=msg,
+                         finish_reason=finish_reason)
             choices.append(cho)
 
-        if status_code != 200:
-            raise Exception(status_message)
-
-        return ChatOutput(status_code=status_code,
-                          status_message=status_message,
-                          model=model,
-                          object=req_type,
-                          created=created,
-                          choices=choices,
-                          usage=usage)
+        return ChatOutput(
+            status_code=status_code,
+            status_message=status_message,
+            model=model, object=req_type, created=created,
+            choices=choices, usage=usage)
