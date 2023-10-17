@@ -1,5 +1,5 @@
 import { BookOpen, Github } from "lucide-react";
-import { useContext, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import Logo from "../assets/logo.jpeg";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -23,7 +23,7 @@ export const LoginPage = () => {
     // login or register
     const [showLogin, setShowLogin] = useState(true)
 
-    const handleLogin = (e) => {
+    const handleLogin = () => {
         const error = []
         const [mail, pwd] = [mailRef.current.value, pwdRef.current.value]
         if (!mail) error.push('请填写账号')
@@ -57,7 +57,6 @@ export const LoginPage = () => {
             list: error,
         });
         registerApi(mail, pwd).then(res => {
-            console.log('res :>> ', res);
             setSuccessData({ title: '注册成功,请输入密码进行登录' })
             pwdRef.current.value = ''
             setShowLogin(true)
@@ -70,11 +69,19 @@ export const LoginPage = () => {
         })
     }
 
-    return <div className="w-full h-full bg-gray-200">
-        <div className="fixed z-10 w-[1200px] h-[800px] translate-x-[-50%] left-[50%] top-[15%] border rounded-lg shadow-xl overflow-hidden">
-            <div className="w-[800px] h-full bg-gray-950"><StarBg /></div>
+    // useEffect(() => {
+    //     console.log(
+    //         "%cBiSheng 0.2.0",
+    //         "font-size: 38px;" +
+    //         "background-color: #0949f4 ; color: white ; font-weight: bold;padding: 8px 20px; border-radius: 24px;"
+    //     );
+    // }, [])
+
+    return <div className="w-full h-full bg-gray-200 dark:bg-gray-700">
+        <div className="fixed z-10 sm:w-[1200px] w-full sm:h-[750px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden">
+            <div className="w-[800px] h-full bg-gray-950 hidden sm:block"><StarBg /></div>
             <div className=" absolute w-full h-full z-10 flex justify-end top-0">
-                <div className="w-[760px] px-[200px] py-[200px] bg-[rgba(255,255,255,1)] relative">
+                <div className="w-[760px] sm:px-[200px] px-[20px] py-[200px] bg-[rgba(255,255,255,1)] dark:bg-gray-950 relative">
                     <div className="flex gap-4 items-center bg-[#347ef9]">
                         <img src={Logo} className="w-9 h-9" alt="" />
                         <span className="text-[#fff] text-sm">便捷、灵活、可靠的企业级大模型应用开发平台</span>
@@ -92,7 +99,7 @@ export const LoginPage = () => {
                             />
                         </div>
                         <div className="grid">
-                            <Input id="pwd" ref={pwdRef} placeholder="密码" type="password" />
+                            <Input id="pwd" ref={pwdRef} placeholder="密码" type="password" onKeyDown={e => e.key === 'Enter' && showLogin && handleLogin()} />
                         </div>
                         {
                             !showLogin && <div className="grid">
@@ -121,6 +128,7 @@ export const LoginPage = () => {
                     <Button variant="outline" type="button" className="mt-4" disabled>Github</Button>
                     {/* link */}
                     <div className=" absolute right-8 bottom-4 flex h-[28px]">
+                        <span className="mr-4 text-sm text-gray-400 relative top-2">v0.2.0</span>
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger className="flex-1 py-1 px-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">

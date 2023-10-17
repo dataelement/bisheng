@@ -9,12 +9,8 @@ from bisheng.utils import constants
 from docstring_parser import parse  # type: ignore
 
 
-def build_template_from_function(
-    name: str, type_to_loader_dict: Dict, add_function: bool = False
-):
-    classes = [
-        item.__annotations__['return'].__name__ for item in type_to_loader_dict.values()
-    ]
+def build_template_from_function(name: str, type_to_loader_dict: Dict, add_function: bool = False):
+    classes = [item.__annotations__['return'].__name__ for item in type_to_loader_dict.values()]
 
     # Raise error if name is not in chains
     if name not in classes:
@@ -35,21 +31,15 @@ def build_template_from_function(
                 for name_, value_ in value.__repr_args__():
                     if name_ == 'default_factory':
                         try:
-                            variables[class_field_items][
-                                'default'
-                            ] = get_default_factory(
-                                module=_class.__base__.__module__, function=value_
-                            )
+                            variables[class_field_items]['default'] = get_default_factory(
+                                module=_class.__base__.__module__, function=value_)
                         except Exception:
                             variables[class_field_items]['default'] = None
                     elif name_ not in ['name']:
                         variables[class_field_items][name_] = value_
 
                 variables[class_field_items]['placeholder'] = (
-                    docs.params[class_field_items]
-                    if class_field_items in docs.params
-                    else ''
-                )
+                    docs.params[class_field_items] if class_field_items in docs.params else '')
             # Adding function to base classes to allow
             # the output to be a function
             base_classes = get_base_classes(_class)
@@ -63,9 +53,7 @@ def build_template_from_function(
             }
 
 
-def build_template_from_class(
-    name: str, type_to_cls_dict: Dict, add_function: bool = False
-):
+def build_template_from_class(name: str, type_to_cls_dict: Dict, add_function: bool = False):
     classes = [item.__name__ for item in type_to_cls_dict.values()]
 
     # Raise error if name is not in chains
@@ -89,21 +77,15 @@ def build_template_from_class(
                     for name_, value_ in value.__repr_args__():
                         if name_ == 'default_factory':
                             try:
-                                variables[class_field_items][
-                                    'default'
-                                ] = get_default_factory(
-                                    module=_class.__base__.__module__, function=value_
-                                )
+                                variables[class_field_items]['default'] = get_default_factory(
+                                    module=_class.__base__.__module__, function=value_)
                             except Exception:
                                 variables[class_field_items]['default'] = None
                         elif name_ not in ['name']:
                             variables[class_field_items][name_] = value_
 
                     variables[class_field_items]['placeholder'] = (
-                        docs.params[class_field_items]
-                        if class_field_items in docs.params
-                        else ''
-                    )
+                        docs.params[class_field_items] if class_field_items in docs.params else '')
             base_classes = get_base_classes(_class)
             # Adding function to base classes to allow
             # the output to be a function
@@ -134,9 +116,7 @@ def build_template_from_method(
 
             # Check if the method exists in this class
             if not hasattr(_class, method_name):
-                raise ValueError(
-                    f'Method {method_name} not found in class {class_name}'
-                )
+                raise ValueError(f'Method {method_name} not found in class {class_name}')
 
             # Get the method
             method = getattr(_class, method_name)
@@ -155,16 +135,10 @@ def build_template_from_method(
                 '_type': _type,
                 **{
                     name: {
-                        'default': param.default
-                        if param.default != param.empty
-                        else None,
-                        'type': param.annotation
-                        if param.annotation != param.empty
-                        else None,
+                        'default': param.default if param.default != param.empty else None,
+                        'type': param.annotation if param.annotation != param.empty else None,
                         'required': param.default == param.empty,
-                    }
-                    for name, param in params.items()
-                    if name not in ['self', 'kwargs', 'args']
+                    } for name, param in params.items() if name not in ['self', 'kwargs', 'args']
                 },
             }
 
@@ -212,9 +186,11 @@ def get_default_factory(module: str, function: str):
         return getattr(imported_module, match[1])()
     return None
 
+
 def type_to_string(tp):
     if getattr(tp, '__args__', None):
-        args_str = ','.join(type_to_string(arg) for arg in tp.__args__ if arg is not type(None))
+        args_str = ','.join(
+            type_to_string(arg) for arg in tp.__args__ if arg is not type(None))  # noqa
         return f'{tp.__name__}[{args_str}]'
     else:
         return tp.__name__
@@ -250,11 +226,7 @@ def format_dict(d, name: Optional[str] = None):
 
         # Check for list type
         if 'List' in _type or 'Sequence' in _type or 'Set' in _type:
-            _type = (
-                _type.replace('List[', '')
-                .replace('Sequence[', '')
-                .replace('Set[', '')[:-1]
-            )
+            _type = (_type.replace('List[', '').replace('Sequence[', '').replace('Set[', '')[:-1])
             value['list'] = True
         else:
             value['list'] = False
@@ -269,16 +241,12 @@ def format_dict(d, name: Optional[str] = None):
         value['type'] = 'int' if key in ['max_value_length'] else value['type']
 
         # Show or not field
-        value['show'] = bool(
-            (value['required'] and key not in ['input_variables'])
-            or key in FORCE_SHOW_FIELDS
-            or 'api_key' in key
-        )
+        value['show'] = bool((value['required'] and
+                              (key not in ['input_variables'] or name == 'SequentialChain')) or
+                             key in FORCE_SHOW_FIELDS or 'api_key' in key)
 
         # Add password field
-        value['password'] = any(
-            text in key.lower() for text in ['password', 'token', 'api', 'key']
-        )
+        value['password'] = any(text in key.lower() for text in ['password', 'token', 'api', 'key'])
 
         # Add multline
         value['multiline'] = key in [
@@ -306,9 +274,7 @@ def format_dict(d, name: Optional[str] = None):
             value.pop('default')
 
         if key == 'headers':
-            value[
-                'value'
-            ] = """{'Authorization':
+            value['value'] = """{'Authorization':
             'Bearer <token>'}"""
         # Add options to openai
         if name == 'OpenAI' and key == 'model_name':
@@ -357,5 +323,6 @@ def sync_to_async(func):
 
     return async_wrapper
 
-def get_cache_key(flow_id:str, chat_id: str, vertex_id:str = None):
+
+def get_cache_key(flow_id: str, chat_id: str, vertex_id: str = None):
     return f'{flow_id}_{chat_id}_{vertex_id}'

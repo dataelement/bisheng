@@ -5,8 +5,8 @@ from bisheng.interface.importing.utils import import_class
 from bisheng.settings import settings
 from bisheng.template.frontend_node.retrievers import RetrieverFrontendNode
 from bisheng.utils.logger import logger
-from bisheng.utils.util import (build_template_from_class,
-                                build_template_from_method)
+from bisheng.utils.util import build_template_from_class, build_template_from_method
+from bisheng_langchain import retrievers as bisheng_retrievers
 from langchain import retrievers
 
 
@@ -26,6 +26,11 @@ class RetrieverCreator(LangChainTypeCreator):
                 retriever_name: import_class(f'langchain.retrievers.{retriever_name}')
                 for retriever_name in retrievers.__all__
             }
+
+            self.type_dict.update({
+                retriever_name: import_class(f'bisheng_langchain.retrievers.{retriever_name}')
+                for retriever_name in bisheng_retrievers.__all__
+            })
         return self.type_dict
 
     def get_signature(self, name: str) -> Optional[Dict]:
@@ -38,9 +43,7 @@ class RetrieverCreator(LangChainTypeCreator):
                     method_name=self.from_method_nodes[name],
                 )
             else:
-                return build_template_from_class(
-                    name, type_to_cls_dict=self.type_to_loader_dict
-                )
+                return build_template_from_class(name, type_to_cls_dict=self.type_to_loader_dict)
         except ValueError as exc:
             raise ValueError(f'Retriever {name} not found') from exc
         except AttributeError as exc:
@@ -49,8 +52,7 @@ class RetrieverCreator(LangChainTypeCreator):
 
     def to_list(self) -> List[str]:
         return [
-            retriever
-            for retriever in self.type_to_loader_dict.keys()
+            retriever for retriever in self.type_to_loader_dict.keys()
             if retriever in settings.retrievers or settings.dev
         ]
 

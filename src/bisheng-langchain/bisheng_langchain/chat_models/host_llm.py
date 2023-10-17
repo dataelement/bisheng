@@ -237,7 +237,7 @@ class BaseHostChatLLM(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return self._generate(messages, stop, run_manager, kwargs)
+        return self._generate(messages, stop, run_manager, **kwargs)
 
     def _create_message_dicts(
         self, messages: List[BaseMessage], stop: Optional[List[str]]
@@ -255,6 +255,8 @@ class BaseHostChatLLM(BaseChatModel):
 
     def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
         generations = []
+        if 'choices' not in response:
+            raise Exception(f'LLM return error {response}')
         for res in response['choices']:
             message = _convert_dict_to_message(res['message'])
             gen = ChatGeneration(message=message)
@@ -353,7 +355,7 @@ class BaseHostChatLLM(BaseChatModel):
         return num_tokens
 
 
-class ChatGLM2Host(BaseHostChatLLM):
+class HostChatGLM2(BaseHostChatLLM):
     # chatglm2-12b, chatglm2-6b
     model_name: str = Field('chatglm2-6b', alias='model')
 
@@ -367,7 +369,7 @@ class ChatGLM2Host(BaseHostChatLLM):
         return 'chatglm2'
 
 
-class BaichuanChat(BaseHostChatLLM):
+class HostBaichuanChat(BaseHostChatLLM):
     # Baichuan-7B-Chat, Baichuan-13B-Chat
     model_name: str = Field('Baichuan-13B-Chat', alias='model')
 
@@ -378,10 +380,10 @@ class BaichuanChat(BaseHostChatLLM):
     @property
     def _llm_type(self) -> str:
         """Return type of chat model."""
-        return 'baichang_chat'
+        return 'baichuan_chat'
 
 
-class QwenChat(BaseHostChatLLM):
+class HostQwenChat(BaseHostChatLLM):
     # Qwen-7B-Chat
     model_name: str = Field('Qwen-7B-Chat', alias='model')
 
@@ -395,7 +397,7 @@ class QwenChat(BaseHostChatLLM):
         return 'qwen_chat'
 
 
-class Llama2Chat(BaseHostChatLLM):
+class HostLlama2Chat(BaseHostChatLLM):
     # Llama-2-7b-chat-hf, Llama-2-13b-chat-hf, Llama-2-70b-chat-hf
     model_name: str = Field('Llama-2-7b-chat-hf', alias='model')
 
@@ -407,3 +409,57 @@ class Llama2Chat(BaseHostChatLLM):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return 'llama2_chat'
+
+
+class CustomLLMChat(BaseHostChatLLM):
+    # use custom llm chat api, api should compatiable with openai definition
+    model_name: str = Field('custom-llm-chat', alias='model')
+
+    temperature: float = 0.1
+    top_p: float = 0.1
+    max_tokens: int = 8192
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of chat model."""
+        return 'custom_llm_chat'
+
+    def completion_with_retry(self, **kwargs: Any) -> Any:
+        retry_decorator = _create_retry_decorator(self)
+
+        @retry_decorator
+        def _completion_with_retry(**kwargs: Any) -> Any:
+            messages = kwargs.get('messages')
+            temperature = kwargs.get('temperature')
+            top_p = kwargs.get('top_p')
+            max_tokens = kwargs.get('max_tokens')
+            do_sample = kwargs.get('do_sample')
+            params = {
+                'messages': messages,
+                'model': self.model_name,
+                'top_p': top_p,
+                'temperature': temperature,
+                'max_tokens': max_tokens,
+                'do_sample': do_sample
+            }
+
+            if self.verbose:
+                print('payload', params)
+
+            resp = self.client(url=self.host_base_url, json=params).json()
+            return resp
+
+        return _completion_with_retry(**kwargs)
+
+    def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
+        generations = []
+        for res in response['choices']:
+            message = _convert_dict_to_message(res['message'])
+            gen = ChatGeneration(message=message)
+            generations.append(gen)
+
+        llm_output = {
+            'token_usage': response.get('usage', {}),
+            'model_name': self.model_name
+        }
+        return ChatResult(generations=generations, llm_output=llm_output)

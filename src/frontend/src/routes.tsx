@@ -29,7 +29,7 @@ const router = createBrowserRouter([
       { path: "skill", element: <L2Edit /> },
       { path: "skill/:id", element: <L2Edit /> },
       { path: "filelib", element: <FileLibPage /> },
-      { path: "files/:id", element: <FilesPage /> },
+      { path: "filelib/:id", element: <FilesPage /> },
       { path: "skills", element: <SkillPage /> },
       { path: "model", element: <ModelPage /> },
       { path: "sys", element: <SystemPage /> },

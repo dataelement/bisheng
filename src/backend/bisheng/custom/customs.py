@@ -22,8 +22,10 @@ CUSTOM_NODES = {
         'SQLDatabase': frontend_node.agents.SQLDatabaseNode(),
     },
     'memories': {
-        'PostgresChatMessageHistory': frontend_node.memories.PostgresChatMessageHistoryFrontendNode(),
-        'MongoDBChatMessageHistory': frontend_node.memories.MongoDBChatMessageHistoryFrontendNode(),
+        'PostgresChatMessageHistory':
+            frontend_node.memories.PostgresChatMessageHistoryFrontendNode(),
+        'MongoDBChatMessageHistory':
+            frontend_node.memories.MongoDBChatMessageHistoryFrontendNode(),
     },
     'chains': {
         'SeriesCharacterChain': frontend_node.chains.SeriesCharacterChainNode(),
@@ -33,7 +35,7 @@ CUSTOM_NODES = {
         'load_summarize_chain': frontend_node.chains.SummarizeDocsChain(),
     },
     'embeddings': {
-       'OpenAIProxyEmbedding': frontend_node.embeddings.OpenAIProxyEmbedding(),
+        'OpenAIProxyEmbedding': frontend_node.embeddings.OpenAIProxyEmbedding(),
     },
     'input_output': {
         'InputNode': frontend_node.input_output.InputNode(),

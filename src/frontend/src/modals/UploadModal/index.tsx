@@ -22,10 +22,12 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
     const chunkType = useRef('smart')
 
     const [progressList, setProgressList] = useState([])
+    const progressCountRef = useRef(0)
 
     useEffect(() => {
         if (!open) {
             setProgressList([])
+            progressCountRef.current = 0
             filePathsRef.current = []
         }
     }, [open])
@@ -41,10 +43,10 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
             list: errorFile.map(str => `文件：${str}超过50M`),
         })
         // if (acceptedFiles.length === 1 && acceptedFiles[0].type !== 'application/pdf') {
-        //     return 
+        //     return
         // }
 
-        const _file = acceptedFiles[0]
+        // const _file = acceptedFiles[0]
         setProgressList((list) => {
             return [...list, ...acceptedFiles.map(file => {
                 return {
@@ -57,6 +59,7 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
                 }
             })]
         })
+        progressCountRef.current += acceptedFiles.length
     };
     // 确定上传文件
     const filePathsRef = useRef([])
@@ -67,12 +70,24 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
         if (!filePathsRef.current.length) errorList.push('请先选择文件上传')
         if (errorList.length) return setErrorData({ title: '提示', list: errorList })
         setLoading(true)
-        const params = {
+        const params: any = {
             file_path: filePathsRef.current,
             knowledge_id: Number(id),
-            chunck_size: Number(size)
+            auto: true
         }
-        if (chunkType.current === 'chunk') params.symbol = symbol
+        if (chunkType.current === 'chunk') {
+            // 以；分隔
+            params.separator = symbol.split(/;|；/).map(el => el.replace(/\\([nrtb])/g, function (match, capture) {
+                return {
+                    'n': '\n',
+                    'r': '\r',
+                    't': '\t',
+                    'b': '\b'
+                }[capture];
+            }))
+            params.chunck_size = Number(size)
+            params.auto = false
+        }
         await subUploadLibFile(params)
         setOpen(false)
         setLoading(false)
@@ -123,7 +138,7 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
                         }
                     }))
                     filePathsRef.current.push(data.file_path)
-                    setEnd(filePathsRef.current.length === progressList.length)
+                    setEnd(filePathsRef.current.length === progressCountRef.current)
                 })
             })
         }
@@ -132,11 +147,12 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         accept: {
-            // 'application/*': ['.doc']
+            // 'application/*': ['.pdf']
             'application/*': ['.doc', '.docx', '.pdf', '.ppt', '.pptx', '.tsv', '.xlsx'],
             'image/*': ['.jpeg', '.png', '.jpg', '.tiff'],
             'text/*': ['.csv', '.html', '.json', '.md', '.msg', '.txt', '.xml'],
         },
+        useFsAccessApi: false,
         onDrop
     });
 
@@ -159,36 +175,30 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
                             </div>
                         ))}
                     </div>
-                    <div className="grid gap-4 py-4">
+                    {/* <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="name" className="text-right">文件切分大小</Label>
                             <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder="切分大小" className="col-span-3" />
                         </div>
-                    </div>
-                    {/* <Tabs defaultValue="smart" className="w-full" onValueChange={(val) => chunkType.current = val}>
+                    </div> */}
+                    <Tabs defaultValue="smart" className="w-full mt-4" onValueChange={(val) => chunkType.current = val}>
                         <TabsList className="">
                             <TabsTrigger value="smart" className="roundedrounded-xl">智能语义切分</TabsTrigger>
-                            <TabsTrigger value="chunk">手动切分</TabsTrigger>
+                            <TabsTrigger value="chunk">手动设置切分</TabsTrigger>
                         </TabsList>
                         <TabsContent value="smart">
-                            <div className="grid gap-4 py-4">
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="name" className="text-right">文件切分大小</Label>
-                                    <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder="切分大小" className="col-span-3" />
-                                </div>
-                            </div>
                         </TabsContent>
                         <TabsContent value="chunk">
                             <div className="grid gap-4 py-4">
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="name" className="text-right">文件切分大小</Label>
-                                    <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder="切分大小" className="col-span-3" />
-                                    <Label htmlFor="name" className="text-right">切分符号</Label>
+                                <div className="grid grid-cols-5 items-center gap-4">
+                                    <Label htmlFor="name" className="text-right col-span-2">切分符(多个以;分隔)</Label>
                                     <Input id="name" value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="切分符号" className="col-span-3" />
+                                    <Label htmlFor="name" className="text-right col-span-2">切分文本长度</Label>
+                                    <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder="切分大小" className="col-span-3" />
                                 </div>
                             </div>
                         </TabsContent>
-                    </Tabs> */}
+                    </Tabs>
 
                     <div className="flex justify-end gap-4">
                         <Button variant='outline' className="h-8" onClick={() => setOpen(false)}>取消</Button>

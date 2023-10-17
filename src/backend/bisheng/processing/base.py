@@ -1,16 +1,13 @@
 import asyncio
 from typing import Union
 
-from bisheng.api.v1.callback import (AsyncStreamingLLMCallbackHandler,
-                                     StreamingLLMCallbackHandler)
+from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler, StreamingLLMCallbackHandler
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.processing.process import fix_memory_inputs, format_actions
 from bisheng.utils.logger import logger
 
 
-async def get_result_and_steps(
-    langchain_object, inputs: Union[dict, str], **kwargs
-):
+async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwargs):
     """Get result and thought from extracted json"""
 
     try:
@@ -30,19 +27,15 @@ async def get_result_and_steps(
         asyc = True
         try:
             async_callbacks = [AsyncStreamingLLMCallbackHandler(**kwargs)]
-            output = await langchain_object.acall(
-                inputs, callbacks=async_callbacks
-            )
+            output = await langchain_object.acall(inputs, callbacks=async_callbacks)
         except Exception as exc:
             # make the error message more informative
             logger.debug(f'Error: {str(exc)}')
             asyc = False
-            step = ChatResponse(
-                message='',
-                intermediate_steps='分析中',
-                type='stream',
-                category='processing'
-            )
+            step = ChatResponse(message='',
+                                intermediate_steps='分析中',
+                                type='stream',
+                                category='processing')
             await kwargs['websocket'].send_json(step.dict())
             sync_callbacks = [StreamingLLMCallbackHandler(**kwargs)]
             output = langchain_object(inputs, callbacks=sync_callbacks)
@@ -51,23 +44,17 @@ async def get_result_and_steps(
                 # 协程切换一下，将同步的过程打印
                 await asyncio.sleep(1)
 
-        intermediate_steps = (
-            output.get('intermediate_steps', [])
-            if isinstance(output, dict) else []
-        )
-
-        result = (
-            output.get(langchain_object.output_keys[0])
-            if isinstance(output, dict) else output
-        )
+        intermediate_steps = (output.get('intermediate_steps', [])
+                              if isinstance(output, dict) else [])
+        source_document = (output.get('source_documents', '') if isinstance(output, dict) else '')
+        result = (output.get(langchain_object.output_keys[0])
+                  if isinstance(output, dict) else output)
         try:
-            thought = format_actions(
-                intermediate_steps
-            ) if intermediate_steps else ''
+            thought = format_actions(intermediate_steps) if intermediate_steps else ''
         except Exception as exc:
             logger.exception(exc)
             thought = ''
     except Exception as exc:
         logger.exception(exc)
         raise ValueError(f'Error: {str(exc)}') from exc
-    return result, thought
+    return result, thought, source_document

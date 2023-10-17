@@ -129,7 +129,7 @@ class ChatMinimaxAI(BaseChatModel):
     """Whether to stream the results or not."""
     n: Optional[int] = 1
     """Number of chat completions to generate for each prompt."""
-    max_tokens: Optional[int] = None
+    max_tokens: Optional[int] = 1024
     """Maximum number of tokens to generate."""
     tiktoken_model_name: Optional[str] = None
     """The model name to pass to tiktoken when using this class.
@@ -238,7 +238,7 @@ class ChatMinimaxAI(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return self._generate(messages, stop, run_manager, kwargs)
+        return self._generate(messages, stop, run_manager, **kwargs)
 
     def _create_message_dicts(
         self, messages: List[BaseMessage], stop: Optional[List[str]]

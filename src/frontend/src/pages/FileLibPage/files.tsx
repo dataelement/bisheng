@@ -31,13 +31,16 @@ export default function FilesPage() {
     const [page, setPage] = useState(1)
     const [datalist, setDataList] = useState([])
     const [pageEnd, setPageEnd] = useState(false)
+    const pages = useRef(1)
 
     const loadPage = (_page) => {
         setLoading(true)
         readFileByLibDatabase(id, _page).then(res => {
-            setDataList(res)
+            const { data, pages: ps } = res
+            pages.current = ps
+            setDataList(data)
             setPage(_page)
-            setPageEnd(!res.length)
+            setPageEnd(!data.length)
             setLoading(false)
         })
     }
@@ -84,7 +87,7 @@ export default function FilesPage() {
                     <TableCaption>
                         <div className="join grid grid-cols-2 w-[200px]">
                             <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>上一页</button>
-                            <button disabled={pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>下一页</button>
+                            <button disabled={page >= pages.current || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>下一页</button>
                         </div>
                     </TableCaption>
                     <TableHeader>

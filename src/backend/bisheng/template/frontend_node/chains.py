@@ -42,6 +42,14 @@ class ChainFrontendNode(FrontendNode):
                     name='chain_type',
                     advanced=False,
                 ))
+        elif self.template.type_name == 'SequentialChain':
+            self.template.add_field(
+                TemplateField(field_type='str',
+                              required=True,
+                              show=True,
+                              name='chain_order',
+                              advanced=False,
+                              value='[]'))
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:

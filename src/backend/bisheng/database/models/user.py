@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from bisheng.database.models.base import SQLModelSerializable
+from pydantic import validator
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field
 
@@ -14,22 +15,20 @@ class UserBase(SQLModelSerializable):
     remark: Optional[str] = Field(index=False)
     role: str = Field(index=False, default='user')
     delete: int = Field(index=False, default=0)
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(
-            DateTime,
-            nullable=False,
-            index=True,
-            server_default=text('CURRENT_TIMESTAMP')
-        )
-    )
+    create_time: Optional[datetime] = Field(sa_column=Column(
+        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
-        sa_column=Column(
-            DateTime,
-            nullable=False,
-            server_default=text('CURRENT_TIMESTAMP'),
-            onupdate=text('CURRENT_TIMESTAMP')
-        )
-    )
+        sa_column=Column(DateTime,
+                         nullable=False,
+                         server_default=text('CURRENT_TIMESTAMP'),
+                         onupdate=text('CURRENT_TIMESTAMP')))
+
+    @validator('user_name')
+    def validate_str(v):
+        # dict_keys(['description', 'name', 'id', 'data'])
+        if not v:
+            raise ValueError('user_name 不能为空')
+        return v
 
 
 class User(UserBase, table=True):

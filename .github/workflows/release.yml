@@ -9,6 +9,9 @@ on:
 
 env:
   DOCKERHUB_REPO: dataelement/
+  PY_NEXUS: 110.16.193.170:50083
+  DOCKER_NEXUS: 110.16.193.170:50080
+  RELEASE_VERSION: 0.0.0 # bisheng-langchain nexus 始终替换版本
   
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -41,18 +44,48 @@ jobs:
           pip install twine
           cd ./src/bisheng-langchain
           python setup.py bdist_wheel
-          repo="http://110.16.193.170:50083/repository/pypi-hosted/"
-          twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl
+          repo="http://${{ env.PY_NEXUS }}/repository/pypi-hosted/"
+          twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl    
+      
+      # 发布到 私有仓库
+      - name: set insecure registry
+        run: |
+          echo "{ \"insecure-registries\": [\"http://${{ env.DOCKER_NEXUS }}\"] }" | sudo tee /etc/docker/daemon.json
+          sudo service docker restart
 
-      # 发布到
-      - name: Login
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login Nexus Container Registry
         uses: docker/login-action@v2
         with:
-          # GitHub Repo => Settings => Secrets 增加 docker hub 登录密钥信息
-          # DOCKERHUB_USERNAME 是 docker hub 账号名.
-          # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
+          registry: http://${{ env.DOCKER_NEXUS }}/
+          username: ${{ secrets.NEXUS_USER }}
+          password: ${{ secrets.NEXUS_PASSWORD }}
+
+      - name: Login docker hub
+        uses: docker/login-action@v2
+        with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 替换poetry编译为私有服务
+      - name: replace self-host repo
+        uses: snok/install-poetry@v1
+        with:
+          installer-parallel: true
+      
+      - name: build lock
+        run: | 
+          cd ./src/backend
+          poetry source add --priority=supplemental foo http://${{ secrets.NEXUS_PUBLIC }}:${{ secrets.NEXUS_PUBLIC_PASSWORD }}@${{ env.PY_NEXUS }}/repository/pypi-group/simple
+          sed -i 's/^bisheng_langchain.*/bisheng_langchain = "0.0.0"/g' pyproject.toml
+          poetry lock
+          cd ../../
+     
       # 构建 backend 并推送到 Docker hub
       - name: Build backend and push
         id: docker_build_backend
@@ -86,4 +119,7 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:release
 
-     
+      - name: notify feishu
+        uses: sozo-design/curl@v1.0.2
+        with:
+          args: -X POST https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b -d '{"msg_type":"text","content":{"text":"release 编译成功"}}'

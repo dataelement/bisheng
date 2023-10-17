@@ -110,13 +110,13 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
         setSuccessData({ title: '内容已复制' })
     }
 
-    if (chat.isSend) return chat.files ? <>
+    if (chat.isSend) return chat.files?.length ? <>
         <div className="chat chat-end">
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-sky-500 flex items-center justify-center"><User color="#fff" size={28} /></div></div>
             <Card className="my-2 w-[200px] relative">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><File />文件</CardTitle>
-                    <CardDescription>{chat.files[0].file_name}</CardDescription>
+                    <CardDescription>{chat.files[0]?.file_name}</CardDescription>
                 </CardHeader>
                 {chat.files[0].data === 'progress' && <div className=" absolute top-0 left-0 w-full h-full bg-[rgba(255,255,255,0.8)]"><span className="loading loading-spinner loading-xs mr-4 align-middle absolute left-[-24px] bottom-0"></span></div>}
                 {chat.files[0].data === 'error' && <div className="flex w-4 h-4 justify-center items-center absolute left-[-24px] bottom-0 bg-red-500 text-gray-50 rounded-full">!</div>}
@@ -125,8 +125,8 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
         {!chat.files[0].data && <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 ${color['system']} ${border['system']}`}>文件解析中</div>}
     </> :
         <div className="chat chat-end">
-            <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-sky-500 flex items-center justify-center"><User color="#fff" size={28} /></div></div>
-            <div className="chat-bubble chat-bubble-info">
+            <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-[rgba(53,126,249,.6)] flex items-center justify-center"><User color="#fff" size={28} /></div></div>
+            <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)]">
                 {chat.category === 'loading' && <span className="loading loading-spinner loading-xs mr-4 align-middle"></span>}
                 {chat.message[chat.chatKey]}
             </div>
@@ -134,19 +134,20 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
 
     // 日志分析
     if (chat.thought) return <>
-        <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 relative ${color[chat.category || 'system']} ${border[chat.category || 'system']}`}>
+        <div className={`log border-[3px] rounded-xl whitespace-pre-wrap mt-4 p-4 relative ${color[chat.category || 'system']} ${border[chat.category || 'system']}`}>
             {logMkdown}
             {chat.category === 'report' && <Copy size={20} className=" absolute right-4 top-2 cursor-pointer" onClick={handleCopy}></Copy>}
         </div>
         {!chat.end && <span className="loading loading-ring loading-md"></span>}
+        {chat.source && <div className="chat-footer py-1"><button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent" onClick={onSouce}>参考来源</button></div>}
     </>
 
     return <div className="chat chat-start">
         <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-gray-600 flex items-center justify-center"><Bot color="#fff" size={28} /></div></div>
-        <div ref={textRef} className="chat-bubble chat-bubble-info bg-gray-300 dark:bg-gray-600">
+        <div ref={textRef} className="chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600">
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
         </div>
-        {/* <div className="chat-footer py-1"><button className="btn btn-outline btn-info btn-xs" onClick={onSouce}>参考来源</button></div> */}
+        {chat.source && <div className="chat-footer py-1"><button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent" onClick={onSouce}>参考来源</button></div>}
     </div>
 };

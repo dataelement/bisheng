@@ -73,6 +73,8 @@ class ChatMessage(BaseModel):
     intermediate_steps: str = None
     files: list = []
     user_id: int = None
+    message_id: int = None
+    source: bool = False
 
 
 class ChatResponse(ChatMessage):

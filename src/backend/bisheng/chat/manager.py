@@ -9,13 +9,17 @@ from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
 from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
 from bisheng.cache.manager import Subject
-from bisheng.chat.utils import process_graph
+from bisheng.chat.utils import extract_answer_keys, process_graph
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
+from bisheng.database.models.model_deploy import ModelDeploy
+from bisheng.database.models.recall_chunk import RecallChunk, RecallChunkCreate
 from bisheng.interface.utils import pil_to_base64
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
 from fastapi import WebSocket, status
+from langchain.docstore.document import Document
+from sqlmodel import select
 
 
 class ChatHistory(Subject):
@@ -28,17 +32,23 @@ class ChatHistory(Subject):
         """Add a message to the chat history."""
 
         self.history[get_cache_key(client_id, chat_id)].append(message)
-        if (message.message or message.intermediate_steps or message.files) and message.type != 'stream':
+        if (message.message or message.intermediate_steps or
+                message.files) and message.type != 'stream':
             with next(get_session()) as seesion:
                 from bisheng.database.models.message import ChatMessage
                 msg = message.copy()
                 msg.message = str(msg.message) if isinstance(msg.message, dict) else msg.message
                 files = json.dumps(msg.files) if msg.files else ''
                 msg.__dict__.pop('files')
-                db_message = ChatMessage(flow_id=client_id, chat_id=chat_id, files=files, **msg.__dict__)
+                db_message = ChatMessage(flow_id=client_id,
+                                         chat_id=chat_id,
+                                         files=files,
+                                         **msg.__dict__)
                 logger.info(f'chat={db_message}')
                 seesion.add(db_message)
                 seesion.commit()
+                seesion.refresh(db_message)
+                message.message_id = db_message.id
 
         if not isinstance(message, FileResponse):
             self.notify()
@@ -97,8 +107,8 @@ class ChatManager:
                 data_type=self.last_cached_object_dict['type'],
             )
 
-            self.chat_history.add_message(self.cache_manager.current_client_id, self.cache_manager.current_chat_id,
-                                          chat_response)
+            self.chat_history.add_message(self.cache_manager.current_client_id,
+                                          self.cache_manager.current_chat_id, chat_response)
 
     async def connect(self, client_id: str, chat_id: str, websocket: WebSocket):
         await websocket.accept()
@@ -130,7 +140,16 @@ class ChatManager:
                 if 'after sending' in str(exc):
                     logger.error(exc)
 
-    async def process_file(self, client_id: str, chat_id: str, user_id: int, file_path: str, id: str):
+    async def ping(self, client_id: str, chat_id: str):
+        ping_pong = ChatMessage(
+            is_bot=True,
+            message='pong',
+            intermediate_steps='',
+        )
+        await self.send_json(client_id, chat_id, ping_pong, False)
+
+    async def process_file(self, client_id: str, chat_id: str, user_id: int, file_path: str,
+                           id: str):
         """upload file to make flow work"""
         db_flow = next(get_session()).get(Flow, client_id)
         graph_data = db_flow.data
@@ -141,7 +160,9 @@ class ChatManager:
                     if isinstance(value, dict) and value.get('type') == 'file':
                         logger.info(f'key={key} set_filepath={file_path}')
                         value['file_path'] = file_path
+                        value['value'] = file_name
 
+        # 如果L3
         file = ChatMessage(is_bot=False,
                            files=[{
                                'file_name': file_name
@@ -152,7 +173,11 @@ class ChatManager:
                            user_id=user_id)
         self.chat_history.add_message(client_id, chat_id, file)
         # graph_data = payload
-        start_resp = ChatResponse(message=None, type='begin', intermediate_steps='', category='system', user_id=user_id)
+        start_resp = ChatResponse(message=None,
+                                  type='begin',
+                                  intermediate_steps='',
+                                  category='system',
+                                  user_id=user_id)
         await self.send_json(client_id, chat_id, start_resp)
         start_resp.type = 'start'
         await self.send_json(client_id, chat_id, start_resp)
@@ -220,9 +245,17 @@ class ChatManager:
 
         start_resp.category = 'report'
         await self.send_json(client_id, chat_id, start_resp)
-        response = ChatResponse(message='', type='end', intermediate_steps=report, category='report', user_id=user_id)
+        response = ChatResponse(message='',
+                                type='end',
+                                intermediate_steps=report,
+                                category='report',
+                                user_id=user_id)
         await self.send_json(client_id, chat_id, response)
-        close_resp = ChatResponse(message=None, type='close', intermediate_steps='', category='system', user_id=user_id)
+        close_resp = ChatResponse(message=None,
+                                  type='close',
+                                  intermediate_steps='',
+                                  category='system',
+                                  user_id=user_id)
         await self.send_json(client_id, chat_id, close_resp)
 
     async def process_message(self,
@@ -252,9 +285,15 @@ class ChatManager:
             self.chat_history.add_message(client_id, chat_id, chat_inputs)
         # graph_data = payload
         if not is_bot:
-            start_resp = ChatResponse(message=None, type='begin', intermediate_steps='', user_id=user_id)
+            start_resp = ChatResponse(message=None,
+                                      type='begin',
+                                      intermediate_steps='',
+                                      user_id=user_id)
             await self.send_json(client_id, chat_id, start_resp)
-        start_resp = ChatResponse(message=None, type='start', intermediate_steps='', user_id=user_id)
+        start_resp = ChatResponse(message=None,
+                                  type='start',
+                                  intermediate_steps='',
+                                  user_id=user_id)
         await self.send_json(client_id, chat_id, start_resp)
 
         # is_first_message = len(self.chat_history.get_history(client_id=client_id)) <= 1
@@ -262,7 +301,7 @@ class ChatManager:
         try:
             logger.debug(f'Generating result and thought key={key}')
             langchain_object = self.in_memory_cache.get(key)
-            result, intermediate_steps = await process_graph(
+            result, intermediate_steps, source_doucment = await process_graph(
                 langchain_object=langchain_object,
                 chat_inputs=chat_inputs,
                 websocket=self.active_connections[get_cache_key(client_id, chat_id)],
@@ -276,7 +315,10 @@ class ChatManager:
                                     category='processing',
                                     user_id=user_id)
             await self.send_json(client_id, chat_id, end_resp)
-            close_resp = ChatResponse(message=None, type='close', intermediate_steps='', user_id=user_id)
+            close_resp = ChatResponse(message=None,
+                                      type='close',
+                                      intermediate_steps='',
+                                      user_id=user_id)
             await self.send_json(client_id, chat_id, close_resp)
             return
 
@@ -296,38 +338,42 @@ class ChatManager:
                     file_responses.append(msg)
                 if msg.type == 'start':
                     break
-        if intermediate_steps.strip():
-            # 将最终的分析过程存数据库
-            from langchain.docstore.document import Document  # noqa
-            step = []
-            steps = []
-            for s in intermediate_steps.split('\n'):
-                if s.startswith("Answer: {'"):
-                    s = 'Answer: ' + eval(s.split('Answer:')[1]).get('result')
-                step.append(s)
-                if not s:
-                    steps.append('\n'.join(step))
-                    step = []
-            steps.append('\n'.join(step))
-            for step in steps:
-                response = ChatResponse(message='',
-                                        intermediate_steps=step,
-                                        type='end',
-                                        files=file_responses,
-                                        category='processing',
-                                        user_id=user_id)
-                self.chat_history.add_message(client_id, chat_id, response)
 
-        if not chat_id and intermediate_steps:
+        if not chat_id:
             # 只有L3用户给出详细的log
             response = ChatResponse(message='',
-                                    intermediate_steps=intermediate_steps.strip(),
+                                    intermediate_steps=intermediate_steps,
                                     type='end',
                                     files=file_responses,
                                     category='processing',
                                     user_id=user_id)
             await self.send_json(client_id, chat_id, response, add=False)
         else:
+            if intermediate_steps.strip():
+                # 将最终的分析过程存数据库
+                step = []
+                steps = []
+                for s in intermediate_steps.split('\n'):
+                    if s.startswith("Answer: {'"):
+                        answer = eval(s.split('Answer:')[1])
+                        if 'result' in answer:
+                            s = 'Answer: ' + answer.get('result')
+                        # 如果包含source_document 表示支持溯源，进入溯源逻辑, 某些flow里，source在log参数里
+                        if 'source_document' in answer and not source_doucment:
+                            source_doucment = answer.get('source_document')
+                    step.append(s)
+                    if not s:
+                        steps.append('\n'.join(step))
+                        step = []
+                steps.append('\n'.join(step))
+                for step in steps:
+                    response = ChatResponse(message='',
+                                            intermediate_steps=step,
+                                            type='end',
+                                            files=file_responses,
+                                            category='processing',
+                                            user_id=user_id)
+                    self.chat_history.add_message(client_id, chat_id, response)
             end_resp = ChatResponse(message=None,
                                     type='end',
                                     intermediate_steps='',
@@ -338,14 +384,28 @@ class ChatManager:
         # 最终结果
         start_resp.category = 'answer'
         await self.send_json(client_id, chat_id, start_resp)
+        source = True if source_doucment and chat_id and next(
+            (True for doc in source_doucment if 'bbox' in doc.metadata), False) else False
         response = ChatResponse(message=result if not is_bot else '',
                                 type='end',
                                 intermediate_steps=result if is_bot else '',
                                 category='answer',
-                                user_id=user_id)
+                                user_id=user_id,
+                                source=source)
         await self.send_json(client_id, chat_id, response)
+        # 处理召回的chunk
+        if source:
+            await self.process_source_document(
+                source_doucment,
+                chat_id,
+                response.message_id,
+                result,
+            )
         # 循环结束
-        close_resp = ChatResponse(message=None, type='close', intermediate_steps='', user_id=user_id)
+        close_resp = ChatResponse(message=None,
+                                  type='close',
+                                  intermediate_steps='',
+                                  user_id=user_id)
         await self.send_json(client_id, chat_id, close_resp)
         return result
 
@@ -357,7 +417,8 @@ class ChatManager:
         self.in_memory_cache.set(client_id, langchain_object)
         return client_id in self.in_memory_cache
 
-    async def handle_websocket(self, client_id: str, chat_id: str, websocket: WebSocket, user_id: int):
+    async def handle_websocket(self, client_id: str, chat_id: str, websocket: WebSocket,
+                               user_id: int):
         await self.connect(client_id, chat_id, websocket)
 
         try:
@@ -416,3 +477,41 @@ class ChatManager:
             except Exception as e:
                 logger.error(e)
             self.disconnect(client_id, chat_id)
+
+    async def process_source_document(self, source_document: List[Document], chat_id, message_id,
+                                      answer):
+        if not source_document:
+            return
+
+        from bisheng.settings import settings
+        # 使用大模型进行关键词抽取，模型配置临时方案
+        keyword_conf = settings.default_llm or {}
+        host_base_url = keyword_conf.get('host_base_url')
+        model = keyword_conf.get('model')
+
+        if model and not host_base_url:
+            db_session = next(get_session())
+            model_deploy = db_session.exec(
+                select(ModelDeploy).where(ModelDeploy.model == model)).first()
+            if model_deploy:
+                model = model if model_deploy.status == '已上线' else None
+                host_base_url = model_deploy.endpoint
+            else:
+                logger.error('不能使用配置模型进行关键词抽取，配置不正确')
+
+        answer_keywords = extract_answer_keys(answer, model, host_base_url)
+        for doc in source_document:
+            if 'bbox' in doc.metadata:
+                # 表示支持溯源
+                db_session = next(get_session())
+                content = doc.page_content
+                recall_chunk = RecallChunkCreate(chat_id=chat_id,
+                                                 keywords=json.dumps(answer_keywords),
+                                                 chunk=content,
+                                                 file_id=doc.metadata.get('file_id'),
+                                                 meta_data=json.dumps(doc.metadata),
+                                                 message_id=message_id)
+                recall = RecallChunk.from_orm(recall_chunk)
+                db_session.add(recall)
+                db_session.commit()
+                db_session.refresh(recall)

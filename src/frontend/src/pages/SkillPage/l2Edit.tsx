@@ -58,7 +58,7 @@ export default function l2Edit() {
         const description = descRef.current.value
         if (isParamError(name, description, true)) return navigate('/flow/' + id, { replace: true })
         // // 保存在跳
-        await saveFlow({ ...flow, name, description });
+        // await saveFlow({ ...flow, name, description });
         navigate('/flow/' + id, { replace: true })
     }
 
@@ -121,12 +121,19 @@ export default function l2Edit() {
                     isL2 && <div className="mt-4">
                         <p className="text-center pr-2 text-gray-400">参数信息</p>
                         {flow?.data?.nodes.map(({ data }) => (
-                            Object.keys(data.node.template).map(k => (
-                                data.node.template[k].l2 && <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="name" className="text-right">{data.node.template[k].l2_name}</Label>
-                                    <L2ParameterComponent key={k} data={data} type={data.node.template[k].type} name={k} />
+                            <div key={data.id}>
+                                <div className="only:hidden grid-cols-4 mt-6">
+                                    <span className=" p-2 font-bold text-gray-400 ml-[18%] text-base">{data.node.l2_name || data.node.display_name}</span>
                                 </div>
-                            ))
+                                {
+                                    Object.keys(data.node.template).map(k => (
+                                        data.node.template[k].l2 && <div className="grid grid-cols-4 items-center gap-4">
+                                            <Label htmlFor="name" className="text-right">{data.node.template[k].l2_name || data.node.template[k].name}</Label>
+                                            <L2ParameterComponent key={k} data={data} type={data.node.template[k].type} name={k} />
+                                        </div>
+                                    ))
+                                }
+                            </div>
                         ))}
                     </div>
                 }

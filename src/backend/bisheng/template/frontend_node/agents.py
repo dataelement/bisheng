@@ -13,6 +13,7 @@ NON_CHAT_AGENTS = {
 
 
 class AgentFrontendNode(FrontendNode):
+
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
         if field.name in ['suffix', 'prefix', 'format_instructions', 'input_variables']:
@@ -21,13 +22,12 @@ class AgentFrontendNode(FrontendNode):
             field.field_type = 'BaseTool'
             field.is_list = True
         if 'path' == field.name and name == 'CSVAgent':
-            field.field_type ='file'
-            field.required=True
-            field.show=True
-            field.value=''
-            field.suffixes=['.csv']
-            field.fileTypes=['csv']
-
+            field.field_type = 'file'
+            field.required = True
+            field.show = True
+            field.value = ''
+            field.suffixes = ['.csv']
+            field.fileTypes = ['csv']
 
 
 class SQLAgentNode(FrontendNode):
@@ -138,6 +138,7 @@ class SQLDatabaseNode(FrontendNode):
 
     def to_dict(self):
         return super().to_dict()
+
 
 class InitializeAgentNode(FrontendNode):
     name: str = 'AgentInitializer'

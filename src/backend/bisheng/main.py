@@ -1,8 +1,8 @@
+import time
 from pathlib import Path
 from typing import Optional
 
 from bisheng.api import router
-from bisheng.api.JWT import Settings
 from bisheng.database.base import create_db_and_tables
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.utils.logger import configure
@@ -37,6 +37,7 @@ def create_app():
 
     @AuthJWT.load_config
     def get_config():
+        from bisheng.api.JWT import Settings
         return Settings()
 
     @app.exception_handler(AuthJWTException)
@@ -86,7 +87,8 @@ def setup_app(static_files_dir: Optional[Path] = None) -> FastAPI:
     return app
 
 
-configure(log_level='DEBUG')
+configure(log_level='DEBUG', log_file='./data/bisheng.log')
+time.sleep(20)
 app = create_app()
 
 if __name__ == '__main__':

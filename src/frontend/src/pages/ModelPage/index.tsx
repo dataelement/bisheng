@@ -23,6 +23,8 @@ import { Link } from "react-router-dom";
 import { alertContext } from "../../contexts/alertContext";
 import { serverListApi, switchOnLineApi, updateConfigApi } from "../../controllers/API";
 import { CpuDetail } from "./cpuInfo";
+import { userContext } from "../../contexts/userContext";
+import { bsconfirm } from "../../alerts/confirm";
 
 enum STATUS {
     ONLINE,
@@ -129,8 +131,8 @@ export default function FileLibPage() {
             <div className="badge badge-accent"><span>已上线</span></div>,
             <div className="badge"><span>未上线</span></div>,
             <div>
-                <span className="badge bg-warning">异常</span>
-                <div className="tooltip tooltip-warning" data-tip={reason || '处理异常'}><span className="badge cursor-pointer">?</span></div>
+                <span className="badge bg-warning" data-theme="light">异常</span>
+                <div className="tooltip tooltip-warning" data-tip={reason || '处理异常'}><span data-theme="light" className="badge cursor-pointer">?</span></div>
             </div>,
             <div className="badge badge-ghost"><span>上线中</span></div>,
             <div className="badge badge-ghost"><span>下线中</span></div>,
@@ -138,8 +140,6 @@ export default function FileLibPage() {
         return comps[status]
     }
 
-    // 下线
-    const { delShow, idRef, close, delConfim } = useOffLine()
     // 点击上下线
     const handleSwitchOnline = (el) => {
         if ([STATUS.ERROR, STATUS.OFFLINE].includes(el.status)) {
@@ -149,16 +149,19 @@ export default function FileLibPage() {
             // 接口
             switchOnLineApi(el.id, true)
         } else if (el.status === STATUS.ONLINE) {
-            delConfim(el.id)
+            bsconfirm({
+                desc: '是否确认下线该模型，下线后使用该模型服务的技能将无法正常工作',
+                okTxt: '下线',
+                onOk(next) {
+                    setDataList(oldList => oldList.map(item =>
+                        item.id === el.id ? { ...item, status: STATUS.WAIT_OFFLINE } : item
+                    ))
+                    // 接口
+                    switchOnLineApi(el.id, false)
+                    next()
+                }
+            })
         }
-    }
-    const handleOffLine = () => {
-        close()
-        setDataList(oldList => oldList.map(item =>
-            item.id === idRef.current ? { ...item, status: STATUS.WAIT_OFFLINE } : item
-        ))
-        // 接口
-        switchOnLineApi(idRef.current, false)
     }
 
     // 保存
@@ -166,7 +169,7 @@ export default function FileLibPage() {
         const res = await updateConfigApi(id, code)
 
         setOpen(false)
-        setDataList(oldList => oldList.map(item =>
+        setDataList(oldList => oldList.map(item => 
             item.id === id ? { ...item, config: code } : item
         ))
     }
@@ -181,15 +184,20 @@ export default function FileLibPage() {
         return () => clearTimeout(timer)
     }, [open, datalist])
 
+    const { user } = useContext(userContext);
+
     const [showCpu, setShowCpu] = useState(false)
-    return <div className="w-full h-screen p-6 overflow-y-auto" data-theme="light">
+    return <div className="w-full h-screen p-6 overflow-y-auto">
         <Tabs defaultValue="account" className="w-full">
             <TabsList className="">
                 <TabsTrigger value="account" className="roundedrounded-xl">模型管理</TabsTrigger>
                 <TabsTrigger disabled value="password">模型Finetune</TabsTrigger>
             </TabsList>
             <TabsContent value="account">
-                <div className="flex justify-end"><Button className="h-8 rounded-full" onClick={() => setShowCpu(true)}>GPU资源使用情况</Button></div>
+                <div className="flex justify-end gap-4">
+                    <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>刷新</Button>
+                    {user.role === 'admin' && <Button className="h-8 rounded-full" onClick={() => setShowCpu(true)}>GPU资源使用情况</Button>}
+                </div>
                 <Table>
                     <TableCaption>模型集合.</TableCaption>
                     <TableHeader>
@@ -210,10 +218,11 @@ export default function FileLibPage() {
                                 <TableCell>
                                     {statusComponets(el.status, el.remark)}
                                 </TableCell>
-                                <TableCell className="">
+                                {user.role === 'admin' ? <TableCell className="">
                                     <a href="javascript:;" className={`link ${[STATUS.WAIT_ONLINE, STATUS.WAIT_OFFLINE].includes(el.status) && 'text-gray-400 cursor-default'}`}
                                         onClick={() => handleSwitchOnline(el)}>{[STATUS.ERROR, STATUS.OFFLINE, STATUS.WAIT_ONLINE].includes(el.status) ? '上线' : '下线'}</a>
-                                    <a href="javascript:;" className={`link ml-4`} onClick={() => handleOpenConfig(el)} >模型配置</a> </TableCell>
+                                    <a href="javascript:;" className={`link ml-4`} onClick={() => handleOpenConfig(el)} >模型配置</a> </TableCell> :
+                                    <TableCell className="">--</TableCell>}
                             </TableRow>
                         ))}
                     </TableBody>
@@ -234,35 +243,6 @@ export default function FileLibPage() {
                 </div>
             </form>
         </dialog>
-        {/* 下线确认 */}
-        <dialog className={`modal ${delShow && 'modal-open'}`}>
-            <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg">提示!</h3>
-                <p className="py-4">是否确认下线该模型，下线后使用该模型服务的技能将无法正常工作</p>
-                <div className="modal-action">
-                    <Button className="h-8 rounded-full" variant="outline" onClick={close}>取消</Button>
-                    <Button className="h-8 rounded-full" variant="destructive" onClick={handleOffLine}>确定</Button>
-                </div>
-            </form>
-        </dialog>
     </div>
 };
-
-
-const useOffLine = () => {
-    const [delShow, setDelShow] = useState(false)
-    const idRef = useRef<any>(null)
-
-    return {
-        delShow,
-        idRef,
-        close: () => {
-            setDelShow(false)
-        },
-        delConfim: (id) => {
-            idRef.current = id
-            setDelShow(true)
-        }
-    }
-}
 
