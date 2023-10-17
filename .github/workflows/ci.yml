@@ -53,6 +53,12 @@ jobs:
           twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
           
       # 构建 backend 并推送到 Docker hub
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: install poetry
         uses: snok/install-poetry@v1
         with:
@@ -71,6 +77,7 @@ jobs:
           # 是否 docker push
           push: true
           # docker build arg, 注入 APP_NAME/APP_VERSION
+          platforms: linux/amd64,linux/arm64
           build-args: |
             APP_NAME="bisheng-backend"
             APP_VERSION=${{ steps.get_version.outputs.VERSION }}
@@ -88,6 +95,7 @@ jobs:
           # 是否 docker push
           push: true
           # docker build arg, 注入 APP_NAME/APP_VERSION
+          platforms: linux/amd64,linux/arm64
           build-args: |
             APP_NAME="bisheng-frontend"
             APP_VERSION=${{ steps.get_version.outputs.VERSION }}
