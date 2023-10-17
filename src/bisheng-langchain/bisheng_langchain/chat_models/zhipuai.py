@@ -242,7 +242,7 @@ class ChatZhipuAI(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return self._generate(messages, stop, run_manager, kwargs)
+        return self._generate(messages, stop, run_manager, **kwargs)
 
     def _create_message_dicts(
         self, messages: List[BaseMessage], stop: Optional[List[str]]

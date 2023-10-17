@@ -237,7 +237,7 @@ class BaseHostChatLLM(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return self._generate(messages, stop, run_manager, kwargs)
+        return self._generate(messages, stop, run_manager, **kwargs)
 
     def _create_message_dicts(
         self, messages: List[BaseMessage], stop: Optional[List[str]]
@@ -448,3 +448,16 @@ class CustomLLMChat(BaseHostChatLLM):
             return resp
 
         return _completion_with_retry(**kwargs)
+
+    def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
+        generations = []
+        for res in response['choices']:
+            message = _convert_dict_to_message(res['message'])
+            gen = ChatGeneration(message=message)
+            generations.append(gen)
+
+        llm_output = {
+            'token_usage': response.get('usage', {}),
+            'model_name': self.model_name
+        }
+        return ChatResult(generations=generations, llm_output=llm_output)
