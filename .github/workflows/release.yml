@@ -122,4 +122,4 @@ jobs:
       - name: notify feishu
         uses: sozo-design/curl@v1.0.2
         with:
-          args: https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b -d '{"msg_type":"text","content":{"text":"release 编译成功"}}'
+          args: -X POST https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b -d '{"msg_type":"text","content":{"text":"release 编译成功"}}'

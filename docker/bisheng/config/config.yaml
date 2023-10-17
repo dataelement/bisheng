@@ -184,13 +184,15 @@ llms:
     documentation: ""
   ChatXunfeiAI:
     documentation: ""
-  Llama2Chat:
+  HostChatGLM2:
     documentation: ""
-  ChatGLM2Host:
+  HostBaichuanChat:
     documentation: ""
-  BaichuanChat:
+  HostLlama2Chat:
     documentation: ""
-  QwenChat:
+  HostQwenChat:
+    documentation: ""
+  CustomLLMChat:
     documentation: ""
   ###
   # There's a bug in this component deactivating until we get it sorted: _language_models.py", line 804, in send_message
