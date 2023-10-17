@@ -11,6 +11,10 @@ class MinioClient():
     minio_client: minio.Minio
 
     def __init__(self) -> None:
+        if 'minio' not in settings.knowledges:
+            self.minio_client = None
+            self.minio_share = None
+            return
         self.minio_client = minio.Minio(
             endpoint=settings.knowledges.get('minio').get('MINIO_ENDPOINT'),
             access_key=settings.knowledges.get('minio').get('MINIO_ACCESS_KEY'),
@@ -33,10 +37,12 @@ class MinioClient():
         # filepath "/" 开头会有nginx问题
         if object_name[0] == '/':
             object_name = object_name[1:]
-
-        return self.minio_share.presigned_get_object(bucket_name=bucket,
-                                                     object_name=object_name,
-                                                     expires=timedelta(days=7))
+        if self.minio_share:
+            return self.minio_share.presigned_get_object(bucket_name=bucket,
+                                                         object_name=object_name,
+                                                         expires=timedelta(days=7))
+        else:
+            return ''
 
     def delete_minio(self, object_name: str):
         if self.minio_client:
