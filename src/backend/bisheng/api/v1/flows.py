@@ -2,8 +2,6 @@ import json
 from typing import List
 from uuid import UUID
 
-from sqlalchemy import func
-
 from bisheng.api.utils import build_flow_no_yield, remove_api_keys
 from bisheng.api.v1.schemas import FlowListCreate, FlowListRead
 from bisheng.database.base import get_session
@@ -13,6 +11,7 @@ from bisheng.settings import settings
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 # build router
@@ -20,7 +19,10 @@ router = APIRouter(prefix='/flows', tags=['Flows'])
 
 
 @router.post('/', response_model=FlowRead, status_code=201)
-def create_flow(*, session: Session = Depends(get_session), flow: FlowCreate, Authorize: AuthJWT = Depends()):
+def create_flow(*,
+                session: Session = Depends(get_session),
+                flow: FlowCreate,
+                Authorize: AuthJWT = Depends()):
     """Create a new flow."""
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
@@ -124,7 +126,10 @@ def update_flow(*,
 
 
 @router.delete('/{flow_id}', status_code=200)
-def delete_flow(*, session: Session = Depends(get_session), flow_id: UUID, Authorize: AuthJWT = Depends()):
+def delete_flow(*,
+                session: Session = Depends(get_session),
+                flow_id: UUID,
+                Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """Delete a flow."""
@@ -141,7 +146,10 @@ def delete_flow(*, session: Session = Depends(get_session), flow_id: UUID, Autho
 
 # Define a new model to handle multiple flows
 @router.post('/batch/', response_model=List[FlowRead], status_code=201)
-def create_flows(*, session: Session = Depends(get_session), flow_list: FlowListCreate, Authorize: AuthJWT = Depends()):
+def create_flows(*,
+                 session: Session = Depends(get_session),
+                 flow_list: FlowListCreate,
+                 Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """Create multiple new flows."""

@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -86,7 +87,8 @@ def setup_app(static_files_dir: Optional[Path] = None) -> FastAPI:
     return app
 
 
-configure(log_level='DEBUG')
+configure(log_level='DEBUG', log_file='./data/bisheng.log')
+time.sleep(20)
 app = create_app()
 
 if __name__ == '__main__':

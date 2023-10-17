@@ -3,7 +3,6 @@ from typing import Dict, List, Optional, Type
 from bisheng.custom.customs import get_custom_nodes
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.inputoutput.custom import CUSTOM_INPUTOUTPUT
-from bisheng.settings import settings
 from bisheng.template.frontend_node.base import FrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class
@@ -30,9 +29,10 @@ class IOutputCreator(LangChainTypeCreator):
         try:
             if name in get_custom_nodes(self.type_name).keys():
                 return get_custom_nodes(self.type_name)[name]
-            return build_template_from_class(name,
-                    type_to_cls_dict=self.type_to_loader_dict,
-                    )
+            return build_template_from_class(
+                name,
+                type_to_cls_dict=self.type_to_loader_dict,
+            )
         except ValueError as exc:
             raise ValueError('LLM not found') from exc
 

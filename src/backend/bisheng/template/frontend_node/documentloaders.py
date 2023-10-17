@@ -4,12 +4,13 @@ from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
 
 
-def build_file_field(
-    suffixes: list, fileTypes: list, name: str = 'file_path'
-) -> TemplateField:
+def build_file_field(suffixes: list,
+                     fileTypes: list,
+                     name: str = 'file_path',
+                     fieldType='fileNode') -> TemplateField:
     """Build a template field for a document loader."""
     return TemplateField(
-        field_type='fileNode',
+        field_type=fieldType,
         required=False,
         show=True,
         name=name,
@@ -20,42 +21,62 @@ def build_file_field(
 
 
 class DocumentLoaderFrontNode(FrontendNode):
+
     def add_extra_base_classes(self) -> None:
         self.base_classes = ['Document']
         self.output_types = ['Document']
 
     file_path_templates = {
-        'AirbyteJSONLoader': build_file_field(suffixes=['.json'], fileTypes=['json']),
-        'CoNLLULoader': build_file_field(suffixes=['.csv'], fileTypes=['csv']),
-        'CSVLoader': build_file_field(suffixes=['.csv'], fileTypes=['csv']),
-        'UnstructuredEmailLoader': build_file_field(
-            suffixes=['.eml'], fileTypes=['eml']
-        ),
-        'SlackDirectoryLoader': build_file_field(suffixes=['.zip'], fileTypes=['zip']),
-        'EverNoteLoader': build_file_field(suffixes=['.xml'], fileTypes=['xml']),
-        'FacebookChatLoader': build_file_field(suffixes=['.json'], fileTypes=['json']),
-        'BSHTMLLoader': build_file_field(suffixes=['.html'], fileTypes=['html']),
-        'UnstructuredHTMLLoader': build_file_field(
-            suffixes=['.html'], fileTypes=['html']
-        ),
-        'UnstructuredImageLoader': build_file_field(
-            suffixes=['.jpg', '.jpeg', '.png', '.gif', '.bmp'],
-            fileTypes=['jpg', 'jpeg', 'png', 'gif', 'bmp'],
-        ),
-        'UnstructuredMarkdownLoader': build_file_field(
-            suffixes=['.md'], fileTypes=['md']
-        ),
-        'PyPDFLoader': build_file_field(suffixes=['.pdf'], fileTypes=['pdf']),
-        'UnstructuredPowerPointLoader': build_file_field(
-            suffixes=['.pptx', '.ppt'], fileTypes=['pptx', 'ppt']
-        ),
-        'SRTLoader': build_file_field(suffixes=['.srt'], fileTypes=['srt']),
-        'TelegramChatLoader': build_file_field(suffixes=['.json'], fileTypes=['json']),
-        'TextLoader': build_file_field(suffixes=['.txt'], fileTypes=['txt']),
-        'UnstructuredWordDocumentLoader': build_file_field(
-            suffixes=['.docx', '.doc'], fileTypes=['docx', 'doc']
-        ),
-        'PDFWithSemanticLoader': build_file_field(suffixes=['.pdf'], fileTypes=['pdf']),
+        'ElemUnstructuredLoaderV0':
+            build_file_field(
+                suffixes=[
+                    '.html', '.md', '.txt', '.jpg', '.png', '.jpeg', '.csv', '.doc', '.docx',
+                    '.pdf', '.ppt', '.pptx', '.xlsx', '.tiff'
+                ],
+                fileTypes=[
+                    'html', 'md', 'txt', 'jpg', 'png', 'jpeg', 'csv', 'doc', 'docx', 'pdf', 'ppt',
+                    'pptx', 'tiff', 'xlsx'
+                ],
+            ),
+        'AirbyteJSONLoader':
+            build_file_field(suffixes=['.json'], fileTypes=['json']),
+        'CoNLLULoader':
+            build_file_field(suffixes=['.csv'], fileTypes=['csv']),
+        'CSVLoader':
+            build_file_field(suffixes=['.csv'], fileTypes=['csv']),
+        'UnstructuredEmailLoader':
+            build_file_field(suffixes=['.eml'], fileTypes=['eml']),
+        'SlackDirectoryLoader':
+            build_file_field(suffixes=['.zip'], fileTypes=['zip']),
+        'EverNoteLoader':
+            build_file_field(suffixes=['.xml'], fileTypes=['xml']),
+        'FacebookChatLoader':
+            build_file_field(suffixes=['.json'], fileTypes=['json']),
+        'BSHTMLLoader':
+            build_file_field(suffixes=['.html'], fileTypes=['html']),
+        'UnstructuredHTMLLoader':
+            build_file_field(suffixes=['.html'], fileTypes=['html']),
+        'UnstructuredImageLoader':
+            build_file_field(
+                suffixes=['.jpg', '.jpeg', '.png', '.gif', '.bmp'],
+                fileTypes=['jpg', 'jpeg', 'png', 'gif', 'bmp'],
+            ),
+        'UnstructuredMarkdownLoader':
+            build_file_field(suffixes=['.md'], fileTypes=['md']),
+        'PyPDFLoader':
+            build_file_field(suffixes=['.pdf'], fileTypes=['pdf'], fieldType='fileNode'),
+        'UnstructuredPowerPointLoader':
+            build_file_field(suffixes=['.pptx', '.ppt'], fileTypes=['pptx', 'ppt']),
+        'SRTLoader':
+            build_file_field(suffixes=['.srt'], fileTypes=['srt']),
+        'TelegramChatLoader':
+            build_file_field(suffixes=['.json'], fileTypes=['json']),
+        'TextLoader':
+            build_file_field(suffixes=['.txt'], fileTypes=['txt']),
+        'UnstructuredWordDocumentLoader':
+            build_file_field(suffixes=['.docx', '.doc'], fileTypes=['docx', 'doc']),
+        'PDFWithSemanticLoader':
+            build_file_field(suffixes=['.pdf'], fileTypes=['pdf']),
     }
 
     def add_extra_fields(self) -> None:
@@ -75,8 +96,7 @@ class DocumentLoaderFrontNode(FrontendNode):
                     value='',
                     display_name='Path to repository',
                     advanced=False,
-                )
-            )
+                ))
             self.template.add_field(
                 TemplateField(
                     field_type='str',
@@ -86,8 +106,7 @@ class DocumentLoaderFrontNode(FrontendNode):
                     value='',
                     display_name='Clone URL',
                     advanced=False,
-                )
-            )
+                ))
             self.template.add_field(
                 TemplateField(
                     field_type='str',
@@ -97,8 +116,7 @@ class DocumentLoaderFrontNode(FrontendNode):
                     value='',
                     display_name='Branch',
                     advanced=False,
-                )
-            )
+                ))
             self.template.add_field(
                 TemplateField(
                     field_type='str',
@@ -108,19 +126,29 @@ class DocumentLoaderFrontNode(FrontendNode):
                     value='',
                     display_name='File extensions (comma-separated)',
                     advanced=False,
-                )
-            )
-
+                ))
+        elif self.template.type_name in {'ElemUnstructuredLoaderV0'}:
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='unstructured_api_url',
+                    value='',
+                    display_name='unstructured_api_url',
+                    advanced=False,
+                ))
+            self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in self.file_path_templates:
             self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in {
-            'WebBaseLoader',
-            'AZLyricsLoader',
-            'CollegeConfidentialLoader',
-            'HNLoader',
-            'IFixitLoader',
-            'IMSDbLoader',
-            'GutenbergLoader',
+                'WebBaseLoader',
+                'AZLyricsLoader',
+                'CollegeConfidentialLoader',
+                'HNLoader',
+                'IFixitLoader',
+                'IMSDbLoader',
+                'GutenbergLoader',
         }:
             name = 'web_path'
         elif self.template.type_name in {'GutenbergLoader'}:
@@ -128,10 +156,10 @@ class DocumentLoaderFrontNode(FrontendNode):
         elif self.template.type_name in {'GitbookLoader'}:
             name = 'web_page'
         elif self.template.type_name in {
-            'DirectoryLoader',
-            'ReadTheDocsLoader',
-            'NotionDirectoryLoader',
-            'PyPDFDirectoryLoader',
+                'DirectoryLoader',
+                'ReadTheDocsLoader',
+                'NotionDirectoryLoader',
+                'PyPDFDirectoryLoader',
         }:
             name = 'path'
             display_name = 'Local directory'
@@ -148,8 +176,7 @@ class DocumentLoaderFrontNode(FrontendNode):
                         name=name,
                         value='',
                         display_name=display_name,
-                    )
-                )
+                    ))
             # add a metadata field of type dict
         self.template.add_field(
             TemplateField(
@@ -160,9 +187,7 @@ class DocumentLoaderFrontNode(FrontendNode):
                 value='{}',
                 display_name='Metadata',
                 multiline=False,
-            )
-        )
-
+            ))
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
@@ -171,6 +196,10 @@ class DocumentLoaderFrontNode(FrontendNode):
             field.show = True
             field.advanced = False
         field.show = True
+        if field.name == 'unstructured_api_url':
+            field.show = True
+            field.advanced = False
+
 
 def build_pdf_semantic_loader_fields():
     # file_path: str,
@@ -184,105 +213,84 @@ def build_pdf_semantic_loader_fields():
     #     start: int = 0,
     #     n: int = None,
     #     verbose: bool = False
-    file_path = TemplateField(
-        field_type='file',
-        required=True,
-        show=True,
-        name='file_path',
-        value='',
-        display_name='pdf文件'
-    )
-    password = TemplateField(
-        field_type='str',
-        required=True,
-        show=True,
-        advanced=True,
-        name='password',
-        value=None,
-        display_name='password'
-    )
-    layout_api_key = TemplateField(
-        field_type='str',
-        required=False,
-        show=True,
-        name='layout_api_key',
-        value=None,
-        display_name='layout_api_key'
-    )
-    layout_api_url=TemplateField(
-        field_type='str',
-        required=False,
-        show=True,
-        name='layout_api_url',
-        value=None,
-        display_name='layout_api_url'
-    )
-    is_join_table = TemplateField(
-        field_type='bool',
-        required=True,
-        show=True,
-        advanced=True,
-        name='is_join_table',
-        value='True',
-        display_name='is_join_table'
-    )
-    with_columns = TemplateField(
-        field_type='bool',
-        required=True,
-        show=True,
-        advanced=True,
-        name='with_columns',
-        value='False',
-        display_name='with_columns'
-    )
-    support_rotate= TemplateField(
-        field_type='bool',
-        required=True,
-        show=True,
-        advanced=True,
-        name='support_rotate',
-        value='False',
-        display_name='support_rotate'
-    )
-    text_elem_sep =TemplateField(
-        field_type='str',
-        required=True,
-        show=True,
-        advanced=True,
-        name='text_elem_sep',
-        value='\\n',
-        display_name='text_elem_sep'
-    )
-    start = TemplateField(
-        field_type='int',
-        required=True,
-        show=True,
-        advanced=True,
-        name='start',
-        value=0,
-        display_name='start'
-    )
-    n = TemplateField(
-        field_type='int',
-        required=False,
-        show=True,
-        advanced=True,
-        name='n',
-        value=None,
-        display_name='n'
-    )
-    verbose = TemplateField(
-        field_type='bool',
-        required=True,
-        show=True,
-        advanced=True,
-        name='verbose',
-        value='False',
-        display_name='verbose'
-    )
+    file_path = TemplateField(field_type='file',
+                              required=True,
+                              show=True,
+                              name='file_path',
+                              value='',
+                              display_name='pdf文件')
+    password = TemplateField(field_type='str',
+                             required=True,
+                             show=True,
+                             advanced=True,
+                             name='password',
+                             value=None,
+                             display_name='password')
+    layout_api_key = TemplateField(field_type='str',
+                                   required=False,
+                                   show=True,
+                                   name='layout_api_key',
+                                   value=None,
+                                   display_name='layout_api_key')
+    layout_api_url = TemplateField(field_type='str',
+                                   required=False,
+                                   show=True,
+                                   name='layout_api_url',
+                                   value=None,
+                                   display_name='layout_api_url')
+    is_join_table = TemplateField(field_type='bool',
+                                  required=True,
+                                  show=True,
+                                  advanced=True,
+                                  name='is_join_table',
+                                  value='True',
+                                  display_name='is_join_table')
+    with_columns = TemplateField(field_type='bool',
+                                 required=True,
+                                 show=True,
+                                 advanced=True,
+                                 name='with_columns',
+                                 value='False',
+                                 display_name='with_columns')
+    support_rotate = TemplateField(field_type='bool',
+                                   required=True,
+                                   show=True,
+                                   advanced=True,
+                                   name='support_rotate',
+                                   value='False',
+                                   display_name='support_rotate')
+    text_elem_sep = TemplateField(field_type='str',
+                                  required=True,
+                                  show=True,
+                                  advanced=True,
+                                  name='text_elem_sep',
+                                  value='\\n',
+                                  display_name='text_elem_sep')
+    start = TemplateField(field_type='int',
+                          required=True,
+                          show=True,
+                          advanced=True,
+                          name='start',
+                          value=0,
+                          display_name='start')
+    n = TemplateField(field_type='int',
+                      required=False,
+                      show=True,
+                      advanced=True,
+                      name='n',
+                      value=None,
+                      display_name='n')
+    verbose = TemplateField(field_type='bool',
+                            required=True,
+                            show=True,
+                            advanced=True,
+                            name='verbose',
+                            value='False',
+                            display_name='verbose')
 
-    return (file_path, password, layout_api_key, layout_api_url,n, verbose,
-            is_join_table,with_columns, support_rotate, text_elem_sep,start)
+    return (file_path, password, layout_api_key, layout_api_url, n, verbose, is_join_table,
+            with_columns, support_rotate, text_elem_sep, start)
+
 
 def build_directory_loader_fields():
     # if loader_kwargs is None:

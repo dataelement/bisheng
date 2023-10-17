@@ -13,11 +13,20 @@ export const CpuDetail = () => {
 
     const [datalist, setDatalist] = useState([])
 
-    useEffect(() => {
+    const loadData = () => {
         GPUlistApi().then(res => {
             setDatalist(res.data.list[0])
         })
-    }, [])
+    }
+
+    useEffect(loadData, [])
+
+    // 2s刷新一次
+    useEffect(() => {
+        const timer = setTimeout(loadData, 1000 * 2);
+
+        return () => clearTimeout(timer)
+    }, [open, datalist])
 
     return <Table className="w-full">
         <TableHeader>

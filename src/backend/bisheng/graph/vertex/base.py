@@ -1,4 +1,5 @@
 import inspect
+import json
 import types
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
 
 
 class Vertex:
+
     def __init__(self, data: Dict, base_type: Optional[str] = None) -> None:
         self.id: str = data['id']
         self._data = data
@@ -43,20 +45,14 @@ class Vertex:
             if not value['required']
         ]
         # Add the template_dicts[key]["input_types"] to the optional_inputs
-        self.optional_inputs.extend(
-            [
-                input_type
-                for value in template_dicts.values()
-                for input_type in value.get('input_types', [])
-            ]
-        )
+        self.optional_inputs.extend([
+            input_type for value in template_dicts.values()
+            for input_type in value.get('input_types', [])
+        ])
 
         template_dict = self.data['node']['template']
-        self.vertex_type = (
-            self.data['type']
-            if 'Tool' not in self.output or template_dict['_type'].islower()
-            else template_dict['_type']
-        )
+        self.vertex_type = (self.data['type'] if 'Tool' not in self.output or
+                            template_dict['_type'].islower() else template_dict['_type'])
 
         if self.base_type is None:
             for base_type, value in ALL_TYPES_DICT.items():
@@ -107,7 +103,7 @@ class Vertex:
                 # what is inside value.get('content')
                 # value.get('value') is the file name
                 file_path = value.get('file_path')
-
+                params['file_name'] = value.get('value')
                 params[key] = file_path
             elif value.get('type') in DIRECT_TYPES and params.get(key) is None:
                 params[key] = value.get('value')
@@ -135,6 +131,14 @@ class Vertex:
         """
         Iterates over each node in the params dictionary and builds it.
         """
+        if self.vertex_type == 'SequentialChain':
+            # 改造sequence 支持自定义chain顺序
+            try:
+                chain_order = json.loads(self.params.pop('chain_order'))
+            except Exception:
+                raise Exception('chain_order 不是标准数组')
+            chains_dict = {chain.id: chain for chain in self.params.get('chains')}
+            self.params['chains'] = [chains_dict.get(id) for id in chain_order]
         for key, value in self.params.copy().items():
             if self._is_node(value):
                 if value == self:
@@ -214,9 +218,7 @@ class Vertex:
             )
             self._update_built_object_and_artifacts(result)
         except Exception as exc:
-            raise ValueError(
-                f'Error building node {self.vertex_type}: {str(exc)}'
-            ) from exc
+            raise ValueError(f'Error building node {self.vertex_type}: {str(exc)}') from exc
 
     def _update_built_object_and_artifacts(self, result):
         """

@@ -6,15 +6,15 @@ import {
     Tabs,
     TabsContent
 } from "../../components/ui/tabs";
+import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
+import { userContext } from "../../contexts/userContext";
 import { readTempsDatabase, saveFlowToDatabase } from "../../controllers/API";
 import { generateUUID } from "../../utils";
 import CardItem from "./components/CardItem";
-import SkillTemps from "./components/SkillTemps";
-import { userContext } from "../../contexts/userContext";
-import Templates from "./temps";
 import CreateTemp from "./components/CreateTemp";
-
+import SkillTemps from "./components/SkillTemps";
+import Templates from "./temps";
 
 export default function SkillPage() {
     const { user } = useContext(userContext);
@@ -22,23 +22,23 @@ export default function SkillPage() {
 
     const [open, setOpen] = useState(false)
     const navigate = useNavigate()
-    const { flows, pages, turnPage, search, removeFlow, setFlows } = useContext(TabsContext);
+    const { page, flows, pages, turnPage, search, removeFlow, setFlows } = useContext(TabsContext);
+    const { setErrorData } = useContext(alertContext);
 
     const [temps, setTemps] = useState([])
+    const loadTemps = () => {
+        readTempsDatabase().then(setTemps)
+    }
     useEffect(() => {
-        readTempsDatabase().then(res => {
-            setTemps(res)
-        })
+        loadTemps()
     }, [])
 
     const { open: tempOpen, flowRef, toggleTempModal } = useCreateTemp()
     const { delShow, idRef, close, delConfim } = useDelete()
     // 分页
-    const [page, setPage] = useState(1)
     const [pageEnd, setPageEnd] = useState(false)
     const loadPage = (_page) => {
         // setLoading(true)
-        setPage(_page)
         turnPage(_page).then(res => {
             setPageEnd(res.length < 20)
             // setLoading(false)
@@ -52,6 +52,12 @@ export default function SkillPage() {
             setOpen(false)
             setFlows(el => [res, ...el])
             navigate("/skill/" + res.id)
+        }).catch(e => {
+            console.error(e.response.data.detail);
+            setErrorData({
+                title: "提示: ",
+                list: [e.response.data.detail],
+            });
         })
     }
 
@@ -75,7 +81,7 @@ export default function SkillPage() {
     }
 
     // 模板管理
-    if (isTempsPage) return <Templates onBack={() => setIsTempPage(false)}></Templates>
+    if (isTempsPage) return <Templates onBack={() => setIsTempPage(false)} onChange={loadTemps}></Templates>
 
     return <div className={`w-full p-6 h-screen overflow-y-auto`}>
         <Tabs defaultValue="my" className="w-full">
@@ -89,7 +95,7 @@ export default function SkillPage() {
                     <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>新建</Button>
                 </div>
                 <span className="main-page-description-text">这里管理您的个人项目，对技能上下线、编辑等等</span>
-                <Input ref={inputRef} placeholder="技能搜索" className=" w-[400px] relative top-[-20px]" onChange={hanldeInputChange}
+                <Input ref={inputRef} defaultValue={window.SearchInput || ''} placeholder="技能搜索" className=" w-[400px] relative top-[-20px]" onChange={hanldeInputChange}
                 // onKeyDown={e => e.key === 'Enter' && handleSearch(e)}
                 ></Input>
                 <div className="w-full flex flex-wrap mt-1">
@@ -113,10 +119,10 @@ export default function SkillPage() {
             </TabsContent>
             <TabsContent value="temp"> </TabsContent>
         </Tabs>
-        {/* 添加模型 */}
+        {/* chose temp */}
         <SkillTemps flows={temps} isTemp open={open} setOpen={setOpen} onSelect={handldSelectTemp}></SkillTemps>
         {/* 添加模板 */}
-        <CreateTemp flow={flowRef.current} open={tempOpen} setOpen={() => toggleTempModal()} ></CreateTemp>
+        <CreateTemp flow={flowRef.current} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={loadTemps} ></CreateTemp>
         {/* Open the modal using ID.showModal() method */}
         <dialog className={`modal ${delShow && 'modal-open'}`}>
             <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">

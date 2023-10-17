@@ -53,6 +53,12 @@ jobs:
           twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
           
       # 构建 backend 并推送到 Docker hub
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: install poetry
         uses: snok/install-poetry@v1
         with:
@@ -71,6 +77,7 @@ jobs:
           # 是否 docker push
           push: true
           # docker build arg, 注入 APP_NAME/APP_VERSION
+          platforms: linux/amd64,linux/arm64
           build-args: |
             APP_NAME="bisheng-backend"
             APP_VERSION=${{ steps.get_version.outputs.VERSION }}
@@ -88,6 +95,7 @@ jobs:
           # 是否 docker push
           push: true
           # docker build arg, 注入 APP_NAME/APP_VERSION
+          platforms: linux/amd64,linux/arm64
           build-args: |
             APP_NAME="bisheng-frontend"
             APP_VERSION=${{ steps.get_version.outputs.VERSION }}
@@ -95,4 +103,9 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+
+      - name: notify feishu
+        uses:  sozo-design/curl@v1.0.2
+        with:
+          args: -X POST -d '{"msg_type":"text","content":{"text":"latest version 编译成功"}}' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b 
       

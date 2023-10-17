@@ -114,7 +114,7 @@
 	} */
 }
 
-.anwser-souce span{
+.anwser-souce span {
 	color: #347ef9;
 	cursor: pointer;
 }
@@ -132,4 +132,51 @@
 @font-face {
 	font-family: text-security-disc;
 	src: url("assets/text-security-disc.woff") format("woff");
+}
+
+/* pdf-text */
+.textLayer :is(span, br) {
+	color: transparent;
+	position: absolute;
+	white-space: pre;
+	cursor: text;
+	transform-origin: 0% 0%;
+}
+
+.textLayer span.markedContent {
+	top: 0;
+	height: 0;
+}
+
+.textLayer ::selection {
+	background: #357ef9;
+}
+
+.textLayer br::selection {
+	background: transparent;
+}
+
+.flag.active{
+	background: linear-gradient(to right, rgba(53,126,249,.60), transparent);
+}
+.flag:after {
+	content: "";
+    position: absolute;
+    width: 23px;
+    height: 2px;
+    right: -3px;
+    top: 7px;
+    background: rgba(53, 126, 249, .60);
+    transform: rotate(-50deg) translate(0, 0);
+}
+
+.flag::before {
+	content: "";
+    position: absolute;
+    width: 23px;
+    height: 2px;
+    right: -3px;
+    top: 25px;
+    background: rgba(53, 126, 249, .60);
+    transform: rotate(50deg) translate(0, 0);
 }

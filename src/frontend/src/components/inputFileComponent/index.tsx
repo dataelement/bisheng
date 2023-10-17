@@ -54,7 +54,7 @@ export default function InputFileComponent({
       const file = (e.target as HTMLInputElement).files?.[0];
 
       // Check if the file type is correct
-      if (file && checkFileType(file.name)) {
+      // if (file && checkFileType(file.name)) {
         // Upload the file
         uploadFile(file, tabId)
           .then((res) => res.data)
@@ -75,15 +75,15 @@ export default function InputFileComponent({
             console.error("Error occurred while uploading file");
             setLoading(false);
           });
-      } else {
-        // Show an error if the file type is not allowed
-        setErrorData({
-          title:
-            "请选择有效文件。只允许使用这些文件类型：",
-          list: fileTypes,
-        });
-        setLoading(false);
-      }
+      // } else {
+      //   // Show an error if the file type is not allowed
+      //   setErrorData({
+      //     title:
+      //       "请选择有效文件。只允许使用这些文件类型：",
+      //     list: fileTypes,
+      //   });
+      //   setLoading(false);
+      // }
     };
 
     // Trigger the file selection dialog

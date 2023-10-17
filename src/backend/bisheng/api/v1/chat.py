@@ -55,7 +55,8 @@ def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: Aut
                   func.max(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
                       ChatMessage.user_id == payload.get('user_id')).group_by(
-                          ChatMessage.flow_id, ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
+                          ChatMessage.flow_id,
+                          ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
     db_message = session.exec(smt).all()
     flow_ids = [message.flow_id for message in db_message]
     db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
@@ -100,10 +101,13 @@ async def chat(client_id: str,
         graph_data = db_flow.data
     else:
         flow_data_key = 'flow_data_' + client_id
-        if str(flow_data_store.hget(flow_data_key, 'status'), 'utf-8') != BuildStatus.SUCCESS.value:
+        if not flow_data_store.exists(flow_data_key) or str(
+                flow_data_store.hget(flow_data_key, 'status'),
+                'utf-8') != BuildStatus.SUCCESS.value:
             await websocket.accept()
             message = '当前编译没通过'
             await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER, reason=message)
+            return
         graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
 
     try:

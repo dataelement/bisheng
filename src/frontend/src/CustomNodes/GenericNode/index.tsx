@@ -21,43 +21,43 @@ export default function GenericNode({ data, selected }: {
   data: NodeDataType;
   selected: boolean;
 }) {
-  
+
   const { setErrorData } = useContext(alertContext);
   const showError = useRef(true);
   const { types, deleteNode } = useContext(typesContext);
-  
+
   const { closePopUp, openPopUp } = useContext(PopUpContext);
   // any to avoid type conflict
   const Icon: any =
-  nodeIconsLucide[data.type] || nodeIconsLucide[types[data.type]];
+    nodeIconsLucide[data.type] || nodeIconsLucide[types[data.type]];
   const [validationStatus, setValidationStatus] = useState(null);
   // State for outline color
   const { sseData, isBuilding } = useSSE();
   const refHtml = useRef(null);
-  
+
   // useEffect(() => {
-    //   if (reactFlowInstance) {
-      //     setParams(Object.values(reactFlowInstance.toObject()));
-      //   }
-      // }, [save]);
-      
-      // New useEffect to watch for changes in sseData and update validation status
-      useEffect(() => {
-        const relevantData = sseData[data.id];
-        if (relevantData) {
-          // Extract validation information from relevantData and update the validationStatus state
-          setValidationStatus(relevantData);
+  //   if (reactFlowInstance) {
+  //     setParams(Object.values(reactFlowInstance.toObject()));
+  //   }
+  // }, [save]);
+
+  // New useEffect to watch for changes in sseData and update validation status
+  useEffect(() => {
+    const relevantData = sseData[data.id];
+    if (relevantData) {
+      // Extract validation information from relevantData and update the validationStatus state
+      setValidationStatus(relevantData);
     } else {
       setValidationStatus(null);
     }
   }, [sseData, data.id]);
-  
+
   if (!Icon) {
     if (showError.current) {
       setErrorData({
         title: data.type
-        ? `无法呈现 ${data.type} 节点，请查看您的 json 文件`
-        : "有一个节点无法呈现，请查看您的 json 文件",
+          ? `无法呈现 ${data.type} 节点，请查看您的 json 文件`
+          : "有一个节点无法呈现，请查看您的 json 文件",
       });
       showError.current = false;
     }
@@ -78,7 +78,7 @@ export default function GenericNode({ data, selected }: {
         ></NodeToolbarComponent>
       </NodeToolbar>
 
-      <div className={classNames("border-4 generic-node-div", selected ? "border-ring" : "")} style={{borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown}}>
+      <div className={classNames("border-4 generic-node-div", selected ? "border-ring" : "")} style={{ borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown }}>
         <div className="generic-node-div-title">
           {/* title */}
           <div className="generic-node-title-arrangement">

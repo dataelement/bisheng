@@ -69,13 +69,13 @@ export const LoginPage = () => {
         })
     }
 
-    useEffect(() => {
-        console.log(
-            "%cBiSheng 0.2.0",
-            "font-size: 38px;" +
-            "background-color: #0949f4 ; color: white ; font-weight: bold;padding: 8px 20px; border-radius: 24px;"
-        );
-    }, [])
+    // useEffect(() => {
+    //     console.log(
+    //         "%cBiSheng 0.2.0",
+    //         "font-size: 38px;" +
+    //         "background-color: #0949f4 ; color: white ; font-weight: bold;padding: 8px 20px; border-radius: 24px;"
+    //     );
+    // }, [])
 
     return <div className="w-full h-full bg-gray-200 dark:bg-gray-700">
         <div className="fixed z-10 sm:w-[1200px] w-full sm:h-[750px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden">
@@ -128,6 +128,7 @@ export const LoginPage = () => {
                     <Button variant="outline" type="button" className="mt-4" disabled>Github</Button>
                     {/* link */}
                     <div className=" absolute right-8 bottom-4 flex h-[28px]">
+                        <span className="mr-4 text-sm text-gray-400 relative top-2">v0.2.0</span>
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger className="flex-1 py-1 px-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">

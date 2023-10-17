@@ -24,6 +24,7 @@ import { alertContext } from "../../contexts/alertContext";
 import { serverListApi, switchOnLineApi, updateConfigApi } from "../../controllers/API";
 import { CpuDetail } from "./cpuInfo";
 import { userContext } from "../../contexts/userContext";
+import { bsconfirm } from "../../alerts/confirm";
 
 enum STATUS {
     ONLINE,
@@ -139,8 +140,6 @@ export default function FileLibPage() {
         return comps[status]
     }
 
-    // 下线
-    const { delShow, idRef, close, delConfim } = useOffLine()
     // 点击上下线
     const handleSwitchOnline = (el) => {
         if ([STATUS.ERROR, STATUS.OFFLINE].includes(el.status)) {
@@ -150,16 +149,19 @@ export default function FileLibPage() {
             // 接口
             switchOnLineApi(el.id, true)
         } else if (el.status === STATUS.ONLINE) {
-            delConfim(el.id)
+            bsconfirm({
+                desc: '是否确认下线该模型，下线后使用该模型服务的技能将无法正常工作',
+                okTxt: '下线',
+                onOk(next) {
+                    setDataList(oldList => oldList.map(item =>
+                        item.id === el.id ? { ...item, status: STATUS.WAIT_OFFLINE } : item
+                    ))
+                    // 接口
+                    switchOnLineApi(el.id, false)
+                    next()
+                }
+            })
         }
-    }
-    const handleOffLine = () => {
-        close()
-        setDataList(oldList => oldList.map(item =>
-            item.id === idRef.current ? { ...item, status: STATUS.WAIT_OFFLINE } : item
-        ))
-        // 接口
-        switchOnLineApi(idRef.current, false)
     }
 
     // 保存
@@ -167,7 +169,7 @@ export default function FileLibPage() {
         const res = await updateConfigApi(id, code)
 
         setOpen(false)
-        setDataList(oldList => oldList.map(item =>
+        setDataList(oldList => oldList.map(item => 
             item.id === id ? { ...item, config: code } : item
         ))
     }
@@ -241,35 +243,6 @@ export default function FileLibPage() {
                 </div>
             </form>
         </dialog>
-        {/* 下线确认 */}
-        <dialog className={`modal ${delShow && 'modal-open'}`}>
-            <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg">提示!</h3>
-                <p className="py-4">是否确认下线该模型，下线后使用该模型服务的技能将无法正常工作</p>
-                <div className="modal-action">
-                    <Button className="h-8 rounded-full" variant="outline" onClick={close}>取消</Button>
-                    <Button className="h-8 rounded-full" variant="destructive" onClick={handleOffLine}>确定</Button>
-                </div>
-            </form>
-        </dialog>
     </div>
 };
-
-
-const useOffLine = () => {
-    const [delShow, setDelShow] = useState(false)
-    const idRef = useRef<any>(null)
-
-    return {
-        delShow,
-        idRef,
-        close: () => {
-            setDelShow(false)
-        },
-        delConfim: (id) => {
-            idRef.current = id
-            setDelShow(true)
-        }
-    }
-}
 

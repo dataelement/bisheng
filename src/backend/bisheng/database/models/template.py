@@ -13,10 +13,13 @@ class TemplateSkillBase(SQLModelSerializable):
     data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
     order_num: Optional[int] = Field(default=None)
     flow_id: Optional[UUID] = Field(index=True)
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(sa_column=Column(
+        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(
+        sa_column=Column(DateTime,
+                         nullable=False,
+                         server_default=text('CURRENT_TIMESTAMP'),
+                         onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class Template(TemplateSkillBase, table=True):
