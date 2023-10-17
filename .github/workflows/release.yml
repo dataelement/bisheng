@@ -101,7 +101,6 @@ jobs:
             APP_VERSION="release"
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
-            ${{ env.DOCKER_NEXUS }}/${{ env.DOCKERHUB_REPO }}bisheng-backend:release
             ${{ env.DOCKERHUB_REPO }}bisheng-backend:release
       # 构建 Docker frontend 并推送到 Docker hub
       - name: Build frontend and push
@@ -118,7 +117,6 @@ jobs:
             APP_VERSION="release"
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
-            ${{ env.DOCKER_NEXUS }}/${{ env.DOCKERHUB_REPO }}bisheng-frontend:release
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:release
 
       - name: notify feishu
