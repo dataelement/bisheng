@@ -4,8 +4,8 @@ from redis import ConnectionPool
 
 
 class RedisClient:
-    def __init__(self, host='localhost', port=6379, db=0, max_connections=10):
-        self.pool = ConnectionPool(host=host, port=port, db=db, max_connections=max_connections)
+    def __init__(self, host='localhost', port=6379, password="", db=0, max_connections=10):
+        self.pool = ConnectionPool(host=host, port=port, db=db, password=password, max_connections=max_connections)
         self.connection = redis.StrictRedis(connection_pool=self.pool)
 
     def set(self, key, value, expiration=None):
@@ -61,5 +61,6 @@ class RedisClient:
 
 
 # 示例用法
-host, port = settings.redis_url.split(':')
-redis_client = RedisClient(host, port)
+password, rest = settings.redis_url.split("@")
+host, port = rest.split(":")
+redis_client = RedisClient(host, port, password)
