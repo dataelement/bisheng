@@ -591,8 +591,22 @@ export async function getUsersApi(name: string, page: number, pageSize: number) 
 export async function disableUserApi(userid, status) {
   return await axios.post(`/api/v1/user/update`, { user_id: userid, delete: status });
 }
-
-
+// 角色列表
+export async function getRolesApi() {
+  return await axios.get(`/api/v1/role/list`)
+}
+/**
+ * 获取配置
+ */
+export async function getSysConfigApi() {
+  return await axios.get(`/api/v1/config`);
+}
+/**
+ * 更新配置
+ */
+export async function setSysConfigApi(data) {
+  return await axios.post(`/api/v1/config/save`, data);
+}
 /**
  * ************************ 溯源
  */

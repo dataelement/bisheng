@@ -519,8 +519,7 @@ const useWebsocketChat = (chatIdRef) => {
             const lastChat = newChat[newChat.length - 1]
             // hack 过滤重复最后消息
             if (end && str && newChat.length > 1 && str === newChat[newChat.length - 2].message && !newChat[newChat.length - 2].thought) {
-                newChat.pop()
-                return newChat
+                newChat.splice(newChat.length - 2, 1) // 删上一条
             }
             if (end) {
                 // 最后全集msg

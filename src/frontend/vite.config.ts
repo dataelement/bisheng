@@ -31,7 +31,9 @@ export default defineConfig(() => {
             src: [
               'node_modules/ace-builds/src-min-noconflict/ace.js',
               'node_modules/ace-builds/src-min-noconflict/mode-json.js',
-              'node_modules/ace-builds/src-min-noconflict/worker-json.js'
+              'node_modules/ace-builds/src-min-noconflict/worker-json.js',
+              'node_modules/ace-builds/src-min-noconflict/mode-yaml.js',
+              'node_modules/ace-builds/src-min-noconflict/worker-yaml.js'
             ],
             dest: 'node_modules/ace-builds/src-min-noconflict/'
           }
