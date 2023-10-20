@@ -1,5 +1,6 @@
 import { BookOpen, Github } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
+import json from "../../package.json";
 import Logo from "../assets/logo.jpeg";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -7,7 +8,7 @@ import { Separator } from "../components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { alertContext } from "../contexts/alertContext";
 import { userContext } from "../contexts/userContext";
-import { loginApi, registerApi } from "../controllers/API";
+import { loginApi, registerApi } from "../controllers/API/user";
 import StarBg from "./starBg";
 
 export const LoginPage = () => {
@@ -128,7 +129,7 @@ export const LoginPage = () => {
                     <Button variant="outline" type="button" className="mt-4" disabled>Github</Button>
                     {/* link */}
                     <div className=" absolute right-8 bottom-4 flex h-[28px]">
-                        <span className="mr-4 text-sm text-gray-400 relative top-2">v0.2.0</span>
+                        <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger className="flex-1 py-1 px-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">

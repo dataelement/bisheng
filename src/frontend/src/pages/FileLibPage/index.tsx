@@ -23,6 +23,7 @@ import Dropdown from "../../components/dropdownComponent";
 import { Textarea } from "../../components/ui/textarea";
 import { alertContext } from "../../contexts/alertContext";
 import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "../../controllers/API";
+import { userContext } from "../../contexts/userContext";
 
 function CreateModal({ datalist, open, setOpen }) {
 
@@ -97,7 +98,7 @@ function CreateModal({ datalist, open, setOpen }) {
                         <Label htmlFor="desc" className="text-right">描述</Label>
                         <Textarea id="desc" ref={descRef} placeholder="描述" className={`col-span-3 ${error.desc && 'border-red-400'}`} />
                     </div>
-                    {options.length && <div className="grid grid-cols-4 items-center gap-4">
+                    {!!options.length && <div className="grid grid-cols-4 items-center gap-4">
                         <Label className="text-right">模型</Label>
                         <Dropdown
                             options={options}
@@ -120,6 +121,8 @@ export default function FileLibPage() {
     const [datalist, setDataList] = useState([])
     const [pageEnd, setPageEnd] = useState(false)
     const pages = useRef(1)
+
+    const { user } = useContext(userContext);
 
     const loadPage = (_page) => {
         setLoading(true)
@@ -183,12 +186,17 @@ export default function FileLibPage() {
                                 <TableCell>{el.model || '--'}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+
                                 <TableCell>{el.user_name || '--'}</TableCell>
                                 <TableCell className="text-right" onClick={() => {
                                     // @ts-ignore
                                     window.libname = el.name
                                 }}><Link to={`/filelib/${el.id}`} className="underline">详情</Link>
-                                    <a href="javascript:;" onClick={() => delConfim(el)} className="underline ml-4">删除</a></TableCell>
+                                    {user.user_name === 'admin' || user.user_id === el.user_id ?
+                                        <a href="javascript:;" onClick={() => delConfim(el)} className="underline ml-4">删除</a> :
+                                        <a href="javascript:;" className="underline ml-4 text-gray-400">删除</a>
+                                    }
+                                </TableCell>
                             </TableRow>
                         ))}
                     </TableBody>

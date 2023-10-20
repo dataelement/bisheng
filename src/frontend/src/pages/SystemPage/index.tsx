@@ -5,7 +5,7 @@ import {
     TabsList,
     TabsTrigger,
 } from "../../components/ui/tabs";
-import Roles from "./Roles";
+import Roles from "./components/Roles";
 import Config from "./components/Config";
 import Users from "./components/Users";
 
@@ -15,8 +15,8 @@ export default function FileLibPage() {
         <Tabs defaultValue="account" className="w-full">
             <TabsList className="">
                 <TabsTrigger value="account" className="roundedrounded-xl">用户管理</TabsTrigger>
-                <TabsTrigger disabled value="role">角色管理</TabsTrigger>
-                <TabsTrigger disabled value="password">系统配置</TabsTrigger>
+                <TabsTrigger value="role">角色管理</TabsTrigger>
+                <TabsTrigger value="password">系统配置</TabsTrigger>
             </TabsList>
             <TabsContent value="account">
                 <Users></Users>

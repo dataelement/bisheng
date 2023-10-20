@@ -10,6 +10,7 @@ import { Textarea } from "../../components/ui/textarea";
 import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { getFlowFromDatabase } from "../../controllers/API";
+import { userContext } from "../../contexts/userContext";
 
 export default function l2Edit() {
 
@@ -32,6 +33,7 @@ export default function l2Edit() {
         setLoading(false)
     }
 
+    const { user } = useContext(userContext);
     const [error, setError] = useState({ name: false, desc: false })
     const isParamError = (name, desc, noError = false) => {
         const errorlist = []
@@ -39,7 +41,7 @@ export default function l2Edit() {
         if (name.length > 30) errorlist.push('技能名称过长，不要超过30字')
 
         // 重名校验
-        if (flows.find(flow => flow.name === name && flow.id !== id)) errorlist.push('该名称已存在')
+        if (flows.find(flow => flow.name === name && flow.user_id === user.user_id && flow.id !== id)) errorlist.push('该名称已存在')
         const nameErrors = errorlist.length
         if (!desc) errorlist.push('请填写技能描述') // 加些描述能够快速让别人理解您创造的技能')
         if (desc.length > 200) errorlist.push('技能描述过长，不要超过200字')
@@ -83,11 +85,11 @@ export default function l2Edit() {
         flow.name = nameRef.current.value
         flow.description = descRef.current.value
         if (isParamError(flow.name, flow.description)) return
+        setLoading(true)
         await saveFlow(flow);
+        setLoading(false)
         setSuccessData({ title: "保存成功" });
-        setTimeout(() => {
-            navigate(-1)
-        }, 2000);
+        setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
     }
 
     return <div className="p-6 h-screen overflow-y-auto">
@@ -147,8 +149,8 @@ export default function l2Edit() {
                         </TooltipProvider> */}
                         {/* <Button className="extra-side-bar-save-disable" >技能校验</Button> */}
                         <div className="flex gap-4">
-                            <Button className="extra-side-bar-save-disable w-[70%] rounded-full" onClick={handleSave} >保存</Button>
-                            <Button className="w-[30%] rounded-full" variant="outline" onClick={() => handleJumpFlow()} >高级配置</Button>
+                            <Button disabled={loading} className="extra-side-bar-save-disable w-[70%] rounded-full" onClick={handleSave} >保存</Button>
+                            <Button disabled={loading} className="w-[30%] rounded-full" variant="outline" onClick={() => handleJumpFlow()} >高级配置</Button>
                         </div>
                     </div> :
                         <div className="flex justify-center m-4">
