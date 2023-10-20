@@ -150,7 +150,7 @@ export default function SkillChatPage(params) {
                 {
                     chatList.map((chat, i) => (
                         <div key={chat.chat_id} className={`item rounded-xl mt-2 p-2 hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-gray-100 dark:bg-gray-800'}`} onClick={() => handleSelectChat(chat)}>
-                            <p className="">{chat.flow_name}</p>
+                            <p className="break-words">{chat.flow_name}</p>
                             <span className="text-xs text-gray-500">{chat.flow_description}</span>
                         </div>
                     ))

@@ -9,7 +9,7 @@ import {
     TableRow
 } from "../../../components/ui/table";
 import { userContext } from "../../../contexts/userContext";
-import { disableUserApi, getUsersApi } from "../../../controllers/API";
+import { disableUserApi, getUsersApi } from "../../../controllers/API/user";
 import UserRoleModal from "./UserRoleModal";
 
 
@@ -59,7 +59,6 @@ export default function Users(params) {
         loadPage(page)
     }
 
-    const roleMap = { 'user': '普通用户', 'admin': '系统管理员' }
     return <>
         <Table>
             {/* <TableCaption>用户列表.</TableCaption> */}
@@ -75,10 +74,11 @@ export default function Users(params) {
                 {users.map((el) => (
                     <TableRow key={el.id}>
                         <TableCell className="font-medium">{el.user_name}</TableCell>
-                        <TableCell>{roleMap[el.role]}</TableCell>
+                        <TableCell>{el.role}</TableCell>
                         <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                         <TableCell className="text-right">
-                            {/* <a href="javascript:;" onClick={() => setRoleOpenId(1)} className="underline ml-4">编辑</a> */}
+                            {user.user_id === el.user_id ? <a href="javascript:;" className=" ml-4 text-gray-400">编辑</a> :
+                                <a href="javascript:;" onClick={() => setRoleOpenId(el.user_id)} className="underline ml-4">编辑</a>}
                             {
                                 el.delete === 1 ? <a href="javascript:;" onClick={() => handleEnableUser(el)} className="underline ml-4">启用</a> :
                                     user.user_id === el.user_id ? <a href="javascript:;" className=" ml-4 text-gray-400">禁用</a> :

@@ -1,25 +1,36 @@
 import { Listbox, Transition } from "@headlessui/react"
-import { Fragment, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { Button } from "../../../components/ui/button"
 import { CheckIcon, ChevronsUpDown } from "lucide-react"
+import { getRolesApi, getUserRoles, updateUserRoles } from "../../../controllers/API/user"
+import { ROLE } from "./Roles"
 
 export default function UserRoleModal({ id, onClose, onChange }) {
 
-    const people = [
-        { id: 1, name: '管理员' },
-        { id: 2, name: '系统管理原' },
-        { id: 3, name: '角色1' },
-        { id: 4, name: '角色2' }
-    ]
+    const [roles, setRoles] = useState<ROLE[]>([])
+    const [selected, setSelected] = useState([])
+    const [error, setError] = useState(false)
 
-    const [selected, setSelected] = useState([people[0]])
+    useEffect(() => {
+        if (!id) return
+        getRolesApi().then(res => {
+            setRoles(res.data.data);
+        })
+        getUserRoles(id).then(res => {
+            setSelected(res.data.data)
+        })
+        setError(false)
+    }, [id])
+
 
     function compareDepartments(a, b) {
         return a.id === b.id
     }
 
-    const handleSave = () => {
-        console.log('selected :>> ', selected);
+    const handleSave = async () => {
+        if (!selected.length) return setError(true)
+        const res = await updateUserRoles(id, selected.map(item => item.id))
+        console.log('res :>> ', res);
         onChange()
     }
 
@@ -31,15 +42,15 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                 onChange={setSelected}
                 by={compareDepartments} >
                 <div className="relative mt-1">
-                    <Listbox.Button className="relative w-full cursor-default rounded-lg bg-white py-2 pl-3 pr-10 text-left shadow-md focus:outline-none border sm:text-sm">
-                        <div className="block truncate">{selected.map(el => el.name).join(';')}</div>
+                    <Listbox.Button className={`relative w-full cursor-default rounded-lg bg-white py-2 pl-3 pr-10 text-left shadow-md focus:outline-none border sm:text-sm  h-[38px] ${error && 'border-red-400'}`}>
+                        <div className="block truncate">{selected.map(el => el.role_name).join(';')}</div>
                         <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                             <ChevronsUpDown />
                         </span>
                     </Listbox.Button>
 
                     <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
-                        {people.map((person, personIdx) => (
+                        {roles.map((person, personIdx) => (
                             <Listbox.Option
                                 key={person.id}
                                 className={({ active }) =>
@@ -51,7 +62,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                                 {({ selected }) => (
                                     <>
                                         <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`} >
-                                            {person.name}
+                                            {person.role_name}
                                         </span>
                                         {selected ? (
                                             <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600">
