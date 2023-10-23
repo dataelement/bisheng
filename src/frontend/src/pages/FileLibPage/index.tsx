@@ -98,14 +98,14 @@ function CreateModal({ datalist, open, setOpen }) {
                         <Label htmlFor="desc" className="text-right">描述</Label>
                         <Textarea id="desc" ref={descRef} placeholder="描述" className={`col-span-3 ${error.desc && 'border-red-400'}`} />
                     </div>
-                    {!!options.length && <div className="grid grid-cols-4 items-center gap-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
                         <Label className="text-right">模型</Label>
                         <Dropdown
                             options={options}
                             onSelect={(val) => setModal(val)}
                             value={modal}
                         ></Dropdown>
-                    </div>}
+                    </div>
                     <Button type="submit" className="mt-6 h-8 rounded-full" onClick={handleCreate}>创建</Button>
                 </div>
             </div>
