@@ -147,10 +147,10 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         accept: {
-            // 'application/*': ['.pdf']
-            'application/*': ['.doc', '.docx', '.pdf', '.ppt', '.pptx', '.tsv', '.xlsx'],
+            'application/*': ['.pdf'],
+            // 'application/*': ['.doc', '.docx', '.pdf', '.ppt', '.pptx', '.tsv', '.xlsx'],
             'image/*': ['.jpeg', '.png', '.jpg', '.tiff'],
-            'text/*': ['.csv', '.html', '.json', '.md', '.msg', '.txt', '.xml'],
+            // 'text/*': ['.csv', '.html', '.json', '.md', '.msg', '.txt', '.xml'],
         },
         useFsAccessApi: false,
         onDrop
