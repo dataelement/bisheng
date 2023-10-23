@@ -107,6 +107,8 @@ class UniversalKVLoader(BaseLoader):
             content = 'key' + '\t' + 'value' + '\t' + 'page' + '\n'
             for pdf_name in pdf_images:
                 page = int(pdf_name.split('page_')[-1])
+                if page > self.max_pages:
+                    continue
 
                 b64data = convert_base64(pdf_images[pdf_name])
                 payload = {'b64_image': b64data, 'keys': self.schema}
