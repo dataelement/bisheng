@@ -68,9 +68,8 @@ export default function ParameterComponent({
   const { reactFlowInstance } = useContext(typesContext);
   const disabled = useMemo(() => {
     let dis = reactFlowInstance?.getEdges().some((e) => e.targetHandle === id) ?? false;
-    // 特殊处理milvus组件的 disabled
-    if (data.type === "Milvus"
-      && name === 'collection_name'
+    // 特殊处理milvus、ElasticKeywordsSearch组件的 disabled
+    if (((data.type === "Milvus" && name === 'collection_name') || (data.type === "ElasticKeywordsSearch" && name === 'index_name'))
       && reactFlowInstance?.getEdges().some((e) => e.targetHandle.indexOf('documents') !== -1
         && e.targetHandle.indexOf(data.id) !== -1)) {
       dis = true
