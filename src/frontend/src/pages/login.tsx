@@ -122,11 +122,11 @@ export const LoginPage = () => {
                         <div className="absolute inset-0 flex items-center">
                             <span className="w-full border-t" />
                         </div>
-                        <div className="relative flex justify-center text-xs uppercase">
+                        {/* <div className="relative flex justify-center text-xs uppercase">
                             <span className="bg-background px-2 text-muted-foreground">其它方式登录</span>
-                        </div>
+                        </div> */}
                     </div>
-                    <Button variant="outline" type="button" className="mt-4" disabled>Github</Button>
+                    {/* <Button variant="outline" type="button" className="mt-4" disabled>Github</Button> */}
                     {/* link */}
                     <div className=" absolute right-8 bottom-4 flex h-[28px]">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>

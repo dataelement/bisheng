@@ -589,7 +589,7 @@ const useWebsocketChat = (chatIdRef) => {
     // 获取上传file input
     const fileInputs = useMemo(() => {
         if (!flow.current) return
-        return tabsState[flow.current.id]?.formKeysData.input_keys?.filter((input: any) => input.type === 'file')
+        return tabsState[flow.current.id]?.formKeysData?.input_keys?.filter((input: any) => input.type === 'file')
     }, [tabsState, flow.current])
 
     // 上传文件
