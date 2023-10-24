@@ -260,9 +260,14 @@ class CombineDocsChainNode(FrontendNode):
                           name='prompt',
                           display_name='prompt',
                           advanced=False,
-                          info='只对stuff生效。stuff对默认模板：')
+                          info='只对Stuff类型生效')
         ],
     )
+
+    @staticmethod
+    def format_field(field: TemplateField, name: Optional[str] = None) -> None:
+        pass
+
     description: str = """Load question answering chain."""
     base_classes: list[str] = ['BaseCombineDocumentsChain', 'function']
 
@@ -307,7 +312,7 @@ class SummarizeDocsChain(FrontendNode):
                           name='prompt',
                           display_name='prompt',
                           advanced=False,
-                          info='只对stuff生效。stuff对默认模板：')
+                          info='只对Stuff类型生效')
         ],
     )
     description: str = """Load summarize chain."""

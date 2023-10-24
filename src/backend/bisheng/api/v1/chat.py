@@ -113,7 +113,7 @@ async def chat(client_id: str,
     try:
         graph = build_flow_no_yield(graph_data=graph_data,
                                     artifacts={},
-                                    process_file=False,
+                                    process_file=True,
                                     flow_id=UUID(client_id).hex,
                                     chat_id=chat_id)
         langchain_object = graph.build()
@@ -160,9 +160,10 @@ async def union_websocket(client_id: str,
         graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
 
     try:
+        process_file = False if chat_id else True
         graph = build_flow_no_yield(graph_data=graph_data,
                                     artifacts={},
-                                    process_file=False,
+                                    process_file=process_file,
                                     flow_id=UUID(client_id).hex,
                                     chat_id=chat_id)
         langchain_object = graph.build()
@@ -251,7 +252,7 @@ async def stream_build(flow_id: str, chat_id: Optional[str] = None):
 
             # L1 用户，采用build流程
             try:
-                process_file = False if chat_id else True
+                process_file = False
                 graph = build_flow(graph_data=graph_data,
                                    artifacts=artifacts,
                                    process_file=process_file,

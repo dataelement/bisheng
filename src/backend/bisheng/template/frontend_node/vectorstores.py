@@ -198,6 +198,31 @@ class VectorStoreFrontendNode(FrontendNode):
             )
             extra_fields.extend((extra_field, extra_field2, extra_field3, extra_field4))
 
+        elif self.template.type_name == 'ElasticKeywordsSearch':
+            extra_field = TemplateField(
+                name='elasticsearch_url',
+                field_type='str',
+                required=False,
+                placeholder='',
+                show=True,
+                advanced=False,
+                multiline=False,
+                display_name='ES_connection_url',
+                value='',
+            )
+            extra_field2 = TemplateField(
+                name='ssl_verify',
+                field_type='str',
+                required=False,
+                placeholder='',
+                show=True,
+                advanced=False,
+                multiline=False,
+                display_name='ssl_verify',
+                value='',
+            )
+            extra_fields.extend((extra_field, extra_field2))
+
         if extra_fields:
             for field in extra_fields:
                 self.template.add_field(field)
@@ -210,29 +235,16 @@ class VectorStoreFrontendNode(FrontendNode):
         FrontendNode.format_field(field, name)
         # Define common field attributes
         basic_fields = [
-            'work_dir',
-            'collection_name',
-            'api_key',
-            'location',
-            'persist_directory',
-            'persist',
-            'weaviate_url',
-            'index_name',
-            'namespace',
-            'folder_path',
-            'table_name',
-            'query_name',
-            'supabase_url',
-            'supabase_service_key',
-            'mongodb_atlas_cluster_uri',
-            'collection_name',
-            'db_name',
+            'work_dir', 'collection_name', 'api_key', 'location', 'persist_directory', 'persist',
+            'weaviate_url', 'index_name', 'namespace', 'folder_path', 'table_name', 'query_name',
+            'supabase_url', 'supabase_service_key', 'mongodb_atlas_cluster_uri', 'collection_name',
+            'db_name', 'ssl_verify', 'elasticsearch_url'
         ]
         advanced_fields = [
             'n_dim', 'key', 'prefix', 'distance_func', 'content_payload_key',
             'metadata_payload_key', 'timeout', 'host', 'path', 'url', 'port', 'https',
             'prefer_grpc', 'grpc_port', 'pinecone_api_key', 'pinecone_env', 'client_kwargs',
-            'search_kwargs', 'elasticsearch_url'
+            'search_kwargs'
         ]
 
         # Check and set field attributes
