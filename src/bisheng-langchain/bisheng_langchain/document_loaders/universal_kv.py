@@ -10,6 +10,7 @@ import tempfile
 import time
 import filetype
 import cv2
+from collections import defaultdict
 from abc import ABC
 from collections import Counter
 from copy import deepcopy
@@ -91,11 +92,11 @@ class UniversalKVLoader(BaseLoader):
             else:
                 raise ValueError(f"universal kv load failed: {resp}")
 
-            content = 'key' + '\t' + 'value' + '\t' + 'page' + '\n'
+            kv_results = defaultdict(list)
             for key, value in key_values.items():
-                kv = key + '\t' + '|'.join(value['text']) + '\t' + '0' + '\n'
-                content += kv
+                kv_results[key] = value['text']
 
+            content = json.dumps(kv_results, indent=2, ensure_ascii=False)
             file_name = os.path.basename(self.file_path)
             meta = {'source': file_name}
             doc = Document(page_content=content, metadata=meta)
@@ -104,7 +105,7 @@ class UniversalKVLoader(BaseLoader):
         elif file_type == 'pdf':
             pdf_images = transpdf2png(self.file_path)
 
-            content = 'key' + '\t' + 'value' + '\t' + 'page' + '\n'
+            kv_results = defaultdict(list)
             for pdf_name in pdf_images:
                 page = int(pdf_name.split('page_')[-1])
                 if page > self.max_pages:
@@ -120,9 +121,9 @@ class UniversalKVLoader(BaseLoader):
                     raise ValueError(f"universal kv load failed: {resp}")
 
                 for key, value in key_values.items():
-                    kv = key + '\t' + '|'.join(value['text']) + '\t' + str(page) + '\n'
-                    content += kv
+                    kv_results[key].extend(value['text'])
 
+            content = json.dumps(kv_results, indent=2, ensure_ascii=False)
             file_name = os.path.basename(self.file_path)
             meta = {'source': file_name}
             doc = Document(page_content=content, metadata=meta)

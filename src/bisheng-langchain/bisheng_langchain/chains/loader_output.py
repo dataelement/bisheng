@@ -63,6 +63,7 @@ class LoaderOutputChain(Chain):
         run_manager: Optional[AsyncCallbackManagerForChainRun] = None,
     ) -> Dict[str, Any]:
         contents = [doc.page_content for doc in self.documents]
-        contents = json.dumps(contents, indent=2, ensure_ascii=False)
+        contents = '\n\n'.join(contents)
+        # contents = json.dumps(contents, indent=2, ensure_ascii=False)
         output = {self.output_key: contents}
         return output
