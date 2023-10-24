@@ -135,7 +135,7 @@ export default function FormModal({
     setChatHistory((old) => {
       let newChat = [...old];
       let prevChat = newChat[newChat.length - 2]
-      let lastChat = newChat[newChat.length - 1]
+      // let lastChat = newChat[newChat.length - 1]
       // 上一条log时，当前条与上一条合并(确保log在一条中)
       if (end && !prevChat?.message && prevChat?.thought) {
         prevChat.message += str || '';
@@ -149,7 +149,7 @@ export default function FormModal({
         return newChat
       }
       // 过滤空消息
-      if (!newChat[newChat.length - 1].message && !str) {
+      if (end && !newChat[newChat.length - 1].message && !str) {
         newChat.pop()
         return newChat
       }
@@ -194,42 +194,43 @@ export default function FormModal({
   function handleWsMessage(data: any) {
     if (Array.isArray(data)) {
       //set chat history
-      setChatHistory((_) => {
-        let newChatHistory: ChatMessageType[] = [];
-        data.forEach(
-          (chatItem: {
-            intermediate_steps?: string;
-            is_bot: boolean;
-            message: string;
-            template: string;
-            type: string;
-            chatKey: string;
-            files?: Array<any>;
-          }) => {
-            if (chatItem.message) {
-              newChatHistory.push(
-                chatItem.files
-                  ? {
-                    isSend: !chatItem.is_bot,
-                    message: chatItem.message,
-                    template: chatItem.template,
-                    thought: chatItem.intermediate_steps,
-                    files: chatItem.files,
-                    chatKey: chatItem.chatKey,
-                  }
-                  : {
-                    isSend: !chatItem.is_bot,
-                    message: chatItem.message,
-                    template: chatItem.template,
-                    thought: chatItem.intermediate_steps,
-                    chatKey: chatItem.chatKey,
-                  }
-              );
-            }
-          }
-        );
-        return newChatHistory;
-      });
+      // setChatHistory((_) => {
+      //   let newChatHistory: ChatMessageType[] = [];
+      //   data.forEach(
+      //     (chatItem: {
+      //       intermediate_steps?: string;
+      //       is_bot: boolean;
+      //       message: string;
+      //       template: string;
+      //       type: string;
+      //       chatKey: string;
+      //       files?: Array<any>;
+      //     }) => {
+      //       if (chatItem.message) {
+      //         newChatHistory.push(
+      //           chatItem.files
+      //             ? {
+      //               isSend: !chatItem.is_bot,
+      //               message: chatItem.message,
+      //               template: chatItem.template,
+      //               thought: chatItem.intermediate_steps,
+      //               files: chatItem.files,
+      //               chatKey: chatItem.chatKey,
+      //             }
+      //             : {
+      //               isSend: !chatItem.is_bot,
+      //               message: chatItem.message,
+      //               template: chatItem.template,
+      //               thought: chatItem.intermediate_steps,
+      //               chatKey: chatItem.chatKey,
+      //             }
+      //         );
+      //       }
+      //     }
+      //   );
+      //   return newChatHistory;
+      // });
+      return []
     }
     if (data.type === "start") {
       addChatHistory("", false, chatKey);
