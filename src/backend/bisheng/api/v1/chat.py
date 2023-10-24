@@ -51,20 +51,12 @@ def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: Aut
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
 
-<<<<<<< HEAD
     smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
                   func.max(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
                       ChatMessage.user_id == payload.get('user_id')).group_by(
                           ChatMessage.flow_id,
                           ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
-=======
-    smt = (select(ChatMessage.flow_id, ChatMessage.chat_id, ChatMessage.chat_id,
-                  func.max(ChatMessage.create_time).label('create_time'),
-                  func.max(ChatMessage.update_time).label('update_time')).where(
-                      ChatMessage.user_id == payload.get('user_id')).group_by(
-                          ChatMessage.flow_id).order_by(func.max(ChatMessage.create_time).desc()))
->>>>>>> ee8f95c (add new ws protocol)
     db_message = session.exec(smt).all()
     flow_ids = [message.flow_id for message in db_message]
     db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
@@ -121,7 +113,7 @@ async def chat(client_id: str,
     try:
         graph = build_flow_no_yield(graph_data=graph_data,
                                     artifacts={},
-                                    process_file=True,
+                                    process_file=False,
                                     flow_id=UUID(client_id).hex,
                                     chat_id=chat_id)
         langchain_object = graph.build()
@@ -168,10 +160,9 @@ async def union_websocket(client_id: str,
         graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
 
     try:
-        process_file = False if chat_id else True
         graph = build_flow_no_yield(graph_data=graph_data,
                                     artifacts={},
-                                    process_file=process_file,
+                                    process_file=False,
                                     flow_id=UUID(client_id).hex,
                                     chat_id=chat_id)
         langchain_object = graph.build()
@@ -260,7 +251,7 @@ async def stream_build(flow_id: str, chat_id: Optional[str] = None):
 
             # L1 用户，采用build流程
             try:
-                process_file = False
+                process_file = False if chat_id else True
                 graph = build_flow(graph_data=graph_data,
                                    artifacts=artifacts,
                                    process_file=process_file,
