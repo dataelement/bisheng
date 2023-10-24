@@ -29,7 +29,7 @@ def get_config(session: Session = Depends(get_session)):
     config_str = []
     for config in configs:
         config_str.append(config.key + ':')
-        config_str.append('  ' + config.value)
+        config_str.append(config.value)
     return '\n'.join(config_str)
 
 

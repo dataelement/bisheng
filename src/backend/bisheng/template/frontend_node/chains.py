@@ -43,6 +43,7 @@ class ChainFrontendNode(FrontendNode):
                     advanced=False,
                 ))
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
         elif self.template.type_name == 'MultiRetrievalQA':
@@ -81,6 +82,8 @@ class ChainFrontendNode(FrontendNode):
                               value='[]'))
 =======
 >>>>>>> daa9df2 (update summarize chain)
+=======
+>>>>>>> 712a12e (add config page)
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:

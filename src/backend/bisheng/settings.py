@@ -163,7 +163,7 @@ def parse_key(keys: list[str], setting_str: str = None) -> str:
         for index, key in enumerate(keys):
             if value_start_flag[index]:
                 if line.startswith('  '):
-                    value_of_key[index].append(line[2:])
+                    value_of_key[index].append(line)
                 else:
                     value_start_flag[index] = False
                     continue
