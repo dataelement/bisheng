@@ -44,6 +44,7 @@ class ChainFrontendNode(FrontendNode):
                 ))
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 <<<<<<< HEAD
         elif self.template.type_name == 'MultiRetrievalQA':
@@ -72,6 +73,8 @@ class ChainFrontendNode(FrontendNode):
                     advanced=False,
                 ))
 >>>>>>> 31af05d (add new ws protocol)
+=======
+>>>>>>> 0b1e417 (modify node combindocschain)
         elif self.template.type_name == 'SequentialChain':
             self.template.add_field(
                 TemplateField(field_type='str',
@@ -80,10 +83,13 @@ class ChainFrontendNode(FrontendNode):
                               name='chain_order',
                               advanced=False,
                               value='[]'))
+<<<<<<< HEAD
 =======
 >>>>>>> daa9df2 (update summarize chain)
 =======
 >>>>>>> 712a12e (add config page)
+=======
+>>>>>>> 0b1e417 (modify node combindocschain)
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
@@ -340,7 +346,7 @@ class SummarizeDocsChain(FrontendNode):
                 info='当前只对stuff 生效',
                 value=-1,
             ),
-            TemplateField(field_type='str',
+            TemplateField(field_type='BasePromptTemplate',
                           required=False,
                           show=True,
                           name='prompt',
