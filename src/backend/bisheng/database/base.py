@@ -1,11 +1,10 @@
 import hashlib
 
-import yaml
 from bisheng.database.models.config import Config
 from bisheng.database.models.role import Role
 from bisheng.database.models.user import User
 from bisheng.database.models.user_role import UserRole
-from bisheng.settings import settings
+from bisheng.settings import parse_key, settings
 from bisheng.utils.logger import logger
 from sqlmodel import Session, SQLModel, create_engine, select
 
@@ -68,12 +67,15 @@ def create_db_and_tables():
         # 初始化config
         config = session.exec(select(Config).limit(1)).all()
         if not config:
-            knowledge = settings.knowledges
-            default_llm = settings.default_llm
-            db_knowledge = Config(key='knowledges', value=yaml.dump(knowledge))
-            db_llm = Config(key='default_llm', value=yaml.dump(default_llm))
-            session.add(db_knowledge)
-            session.add(db_llm)
+            keys = ['knowledges', 'default_llm']
+            values = parse_key(keys)
+            if settings.knowledges:
+                db_knowledge = Config(key='knowledges', value=values[0])
+                session.add(db_knowledge)
+
+            if settings.default_llm:
+                db_llm = Config(key='default_llm', value=values[1])
+                session.add(db_llm)
             session.commit()
 
 

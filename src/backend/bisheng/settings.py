@@ -152,5 +152,25 @@ def save_conf(file_path: str, content: str):
         f.write(content)
 
 
+def parse_key(keys: list[str], setting_str: str = None) -> str:
+    # 通过key，返回yaml配置里value所有的字符串，包含注释
+    if not setting_str:
+        setting_str = read_from_conf(config_file)
+    setting_lines = setting_str.split('\n')
+    value_of_key = [[] for _ in keys]
+    value_start_flag = [False for _ in keys]
+    for line in setting_lines:
+        for index, key in enumerate(keys):
+            if value_start_flag[index]:
+                if line.startswith('  '):
+                    value_of_key[index].append(line[2:])
+                else:
+                    value_start_flag[index] = False
+                    continue
+            if line.startswith(key + ':'):
+                value_start_flag[index] = True
+    return ['\n'.join(value) for value in value_of_key]
+
+
 config_file = os.getenv('config', 'config.yaml')
 settings = load_settings_from_yaml(config_file)

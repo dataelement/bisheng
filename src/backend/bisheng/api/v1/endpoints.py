@@ -8,6 +8,7 @@ from bisheng.database.models.config import Config
 from bisheng.database.models.flow import Flow
 from bisheng.interface.types import langchain_types_dict
 from bisheng.processing.process import process_graph_cached, process_tweaks
+from bisheng.settings import parse_key
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import delete
@@ -25,10 +26,11 @@ def get_all():
 @router.get('/config')
 def get_config(session: Session = Depends(get_session)):
     configs = session.exec(select(Config)).all()
-    config_yaml = {}
+    config_str = []
     for config in configs:
-        config_yaml[config.key] = yaml.safe_load(config.value)
-    return yaml.dump(config_yaml)
+        config_str.append(config.key + ':')
+        config_str.append('  ' + config.value)
+    return '\n'.join(config_str)
 
 
 @router.post('/config/save')
@@ -36,8 +38,11 @@ def save_config(data: dict, session: Session = Depends(get_session)):
     try:
         config_yaml = yaml.safe_load(data.get('data'))
         session.exec(delete(Config))
-        for key in config_yaml:
-            config = Config(key=key, value=yaml.dump(config_yaml[key]))
+        keys = list(config_yaml.keys())
+        values = parse_key(keys, data.get('data'))
+
+        for index, key in enumerate(keys):
+            config = Config(key=key, value=values[index])
             session.add(config)
         session.commit()
     except Exception as e:
