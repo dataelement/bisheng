@@ -140,7 +140,13 @@ export default function ResouceModal({ chatId, data, open, setOpen }: { chatId: 
             {open && <div>
                 <Anwser id={data.id} msg={data.message || data.thought} onInit={setKeywords} onAdd={handleAddWord}></Anwser>
                 <ResultPanne words={keywords} chatId={chatId} data={data} onClose={handleDelKeyword} onAdd={handleAddWord}>
-                    {(file) => <MemoizedFileView data={file}></MemoizedFileView>}
+                    {
+                        (file) => file.fileUrl ?
+                            <MemoizedFileView data={file}></MemoizedFileView> :
+                            <div className="flex-1 bg-gray-100 rounded-md text-center">
+                                <p className=" text-gray-500 text-md mt-[40%]">文件存储故障!</p>
+                            </div>
+                    }
                 </ResultPanne>
             </div>}
         </div>

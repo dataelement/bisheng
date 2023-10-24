@@ -1,4 +1,3 @@
-import asyncio
 import json
 from collections import defaultdict
 from typing import Any, Dict, List
@@ -14,7 +13,6 @@ from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk, RecallChunkCreate
-from bisheng.interface.utils import pil_to_base64
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
 from fastapi import WebSocket, status
@@ -31,9 +29,8 @@ class ChatHistory(Subject):
     def add_message(self, client_id: str, chat_id: str, message: ChatMessage):
         """Add a message to the chat history."""
 
-        self.history[get_cache_key(client_id, chat_id)].append(message)
-        if (message.message or message.intermediate_steps or
-                message.files) and message.type != 'stream':
+        if chat_id and (message.message or message.intermediate_steps or
+                        message.files) and message.type != 'stream':
             with next(get_session()) as seesion:
                 from bisheng.database.models.message import ChatMessage
                 msg = message.copy()
@@ -53,15 +50,6 @@ class ChatHistory(Subject):
         if not isinstance(message, FileResponse):
             self.notify()
 
-    def get_history(self, client_id: str, chat_id: str, filter_messages=True) -> List[ChatMessage]:
-        """Get the chat history for a client."""
-        if history := self.history.get(get_cache_key(client_id, chat_id), []):
-            if filter_messages:
-                return [msg for msg in history if msg.type not in ['start', 'stream']]
-            return history
-        else:
-            return []
-
     def empty_history(self, client_id: str, chat_id: str):
         """Empty the chat history for a client."""
         self.history[get_cache_key(client_id, chat_id)] = []
@@ -76,25 +64,25 @@ class ChatManager:
         self.cache_manager.attach(self.update)
         self.in_memory_cache = InMemoryCache()
 
-    def on_chat_history_update(self):
-        """Send the last chat message to the client."""
-        client_id = self.cache_manager.current_client_id
-        if client_id in self.active_connections:
-            chat_response = self.chat_history.get_history(client_id, filter_messages=False)[-1]
-            if chat_response.is_bot:
-                # Process FileResponse
-                if isinstance(chat_response, FileResponse):
-                    # If data_type is pandas, convert to csv
-                    if chat_response.data_type == 'pandas':
-                        chat_response.data = chat_response.data.to_csv()
-                    elif chat_response.data_type == 'image':
-                        # Base64 encode the image
-                        chat_response.data = pil_to_base64(chat_response.data)
-                # get event loop
-                loop = asyncio.get_event_loop()
+    # def on_chat_history_update(self):
+    #     """Send the last chat message to the client."""
+    #     client_id = self.cache_manager.current_client_id
+    #     if client_id in self.active_connections:
+    #         chat_response = self.chat_history.get_history(client_id, filter_messages=False)[-1]
+    #         if chat_response.is_bot:
+    #             # Process FileResponse
+    #             if isinstance(chat_response, FileResponse):
+    #                 # If data_type is pandas, convert to csv
+    #                 if chat_response.data_type == 'pandas':
+    #                     chat_response.data = chat_response.data.to_csv()
+    #                 elif chat_response.data_type == 'image':
+    #                     # Base64 encode the image
+    #                     chat_response.data = pil_to_base64(chat_response.data)
+    #             # get event loop
+    #             loop = asyncio.get_event_loop()
 
-                coroutine = self.send_json(client_id, chat_response)
-                asyncio.run_coroutine_threadsafe(coroutine, loop)
+    #             coroutine = self.send_json(client_id, chat_response)
+    #             asyncio.run_coroutine_threadsafe(coroutine, loop)
 
     def update(self):
         if self.cache_manager.current_client_id in self.active_connections:
@@ -319,25 +307,31 @@ class ChatManager:
                                       type='close',
                                       intermediate_steps='',
                                       user_id=user_id)
+            if not chat_id:
+                # 技能编排页面， 无法展示intermediate
+                await self.send_json(client_id, chat_id, start_resp)
+                end_resp.message = end_resp.intermediate_steps
+                end_resp.intermediate_steps = None
+                await self.send_json(client_id, chat_id, end_resp)
             await self.send_json(client_id, chat_id, close_resp)
             return
 
         # Send a response back to the frontend, if needed
         intermediate_steps = intermediate_steps or ''
-        history = self.chat_history.get_history(client_id, chat_id, filter_messages=False)
+        # history = self.chat_history.get_history(client_id, chat_id, filter_messages=False)
         file_responses = []
-        if history:
-            # Iterate backwards through the history
-            for msg in reversed(history):
-                if isinstance(msg, FileResponse):
-                    if msg.data_type == 'image':
-                        # Base64 encode the image
-                        if isinstance(msg.data, str):
-                            continue
-                        msg.data = pil_to_base64(msg.data)
-                    file_responses.append(msg)
-                if msg.type == 'start':
-                    break
+        # if history:
+        #     # Iterate backwards through the history
+        #     for msg in reversed(history):
+        #         if isinstance(msg, FileResponse):
+        #             if msg.data_type == 'image':
+        #                 # Base64 encode the image
+        #                 if isinstance(msg.data, str):
+        #                     continue
+        #                 msg.data = pil_to_base64(msg.data)
+        #             file_responses.append(msg)
+        #         if msg.type == 'start':
+        #             break
 
         if not chat_id:
             # 只有L3用户给出详细的log
@@ -384,8 +378,14 @@ class ChatManager:
         # 最终结果
         start_resp.category = 'answer'
         await self.send_json(client_id, chat_id, start_resp)
-        source = True if source_doucment and chat_id and next(
-            (True for doc in source_doucment if 'bbox' in doc.metadata), False) else False
+
+        source = True if source_doucment and chat_id else False
+        if source:
+            for doc in source_doucment:
+                # 确保每个chunk 都可溯源
+                if 'bbox' not in doc.metadata or not doc.metadata['bbox']:
+                    source = False
+
         response = ChatResponse(message=result if not is_bot else '',
                                 type='end',
                                 intermediate_steps=result if is_bot else '',
@@ -422,11 +422,6 @@ class ChatManager:
         await self.connect(client_id, chat_id, websocket)
 
         try:
-            chat_history = self.chat_history.get_history(client_id, chat_id)
-            # iterate and make BaseModel into dict
-            chat_history = [chat.dict() for chat in chat_history]
-            await websocket.send_json(chat_history)
-
             while True:
                 json_payload = await websocket.receive_json()
                 try:
@@ -485,7 +480,7 @@ class ChatManager:
 
         from bisheng.settings import settings
         # 使用大模型进行关键词抽取，模型配置临时方案
-        keyword_conf = settings.default_llm or {}
+        keyword_conf = settings.get_default_llm() or {}
         host_base_url = keyword_conf.get('host_base_url')
         model = keyword_conf.get('model')
 

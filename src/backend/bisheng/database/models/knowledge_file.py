@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, String, text
 from sqlmodel import Field
 
 
@@ -13,6 +13,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     md5: Optional[str] = Field(index=False)
     status: Optional[int] = Field(index=False)
     object_name: Optional[str] = Field(index=False)
+    remark: Optional[str] = Field(index=False, sa_column=String(length=512))
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(

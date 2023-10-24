@@ -33,15 +33,18 @@ export default function FilesPage() {
     const [pageEnd, setPageEnd] = useState(false)
     const pages = useRef(1)
 
+    const [hasPermission, setHasPermission] = useState(true)
+
     const loadPage = (_page) => {
         setLoading(true)
         readFileByLibDatabase(id, _page).then(res => {
-            const { data, pages: ps } = res
+            const { data, writeable, pages: ps } = res
             pages.current = ps
             setDataList(data)
             setPage(_page)
             setPageEnd(!data.length)
             setLoading(false)
+            setHasPermission(writeable)
         })
     }
     useEffect(() => {
@@ -81,7 +84,7 @@ export default function FilesPage() {
             <TabsContent value="account">
                 <div className="flex justify-between items-center">
                     <span className=" text-gray-800">{title}</span>
-                    <Button className="h-8 rounded-full" onClick={() => { setOpen(true) }}>上传</Button>
+                    {hasPermission && <Button className="h-8 rounded-full" onClick={() => { setOpen(true) }}>上传</Button>}
                 </div>
                 <Table>
                     <TableCaption>
@@ -102,10 +105,17 @@ export default function FilesPage() {
                         {datalist.map(el => (
                             <TableRow key={el.id}>
                                 <TableCell className="font-medium">{el.file_name}</TableCell>
-                                <TableCell><span className={el.status === 3 && 'text-red-500'}>{['解析失败', '解析中', '完成', '解析失败'][el.status]}</span></TableCell>
+                                <TableCell>
+                                    {el.status === 3 ? <div className="tooltip" data-tip={el.remark}>
+                                        <span className='text-red-500'>解析失败</span>
+                                    </div> :
+                                        <span className={el.status === 3 && 'text-red-500'}>{['解析失败', '解析中', '完成', '解析失败'][el.status]}</span>
+                                    }
+                                </TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell className="text-right">
-                                    <a href="javascript:;" onClick={() => delConfim(el.id)} className="underline ml-4">删除</a>
+                                    {hasPermission ? <a href="javascript:;" onClick={() => delConfim(el.id)} className="underline ml-4">删除</a> :
+                                        <a href="javascript:;" className="underline ml-4 text-gray-400">删除</a>}
                                 </TableCell>
                             </TableRow>
                         ))}

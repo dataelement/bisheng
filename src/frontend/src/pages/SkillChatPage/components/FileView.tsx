@@ -137,6 +137,7 @@ export default function FileView({ data }) {
         // loding
         setLoading(true)
         setPagesLabels({ box: [] })
+
         // sass环境使用sass地址
         const pdfUrl = location.origin === SASS_HOST ? data.fileUrl.replace(/^http:\/\/.*:\d+/, SASS_HOST) : data.fileUrl // '/doc.pdf';
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';

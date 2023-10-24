@@ -2,8 +2,10 @@ import os
 from typing import Optional
 
 import yaml
+from bisheng.database.models.config import Config
 from bisheng.utils.logger import logger
 from pydantic import BaseSettings, root_validator
+from sqlmodel import select
 
 
 class Settings(BaseSettings):
@@ -55,6 +57,20 @@ class Settings(BaseSettings):
                 values[key] = []
         return values
 
+    def get_knowledge(self):
+        # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
+        from bisheng.database.base import get_session
+        session = next(get_session())
+        knowledge_config = session.exec(select(Config).where(Config.key == 'knowledges')).first()
+        return yaml.safe_load(knowledge_config.value)
+
+    def get_default_llm(self):
+        # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
+        from bisheng.database.base import get_session
+        session = next(get_session())
+        llm_config = session.exec(select(Config).where(Config.key == 'default_llm')).first()
+        return yaml.safe_load(llm_config.value)
+
     def update_from_yaml(self, file_path: str, dev: bool = False):
         new_settings = load_settings_from_yaml(file_path)
         self.chains = new_settings.chains or {}
@@ -86,6 +102,13 @@ class Settings(BaseSettings):
 
 
 def save_settings_to_yaml(settings: Settings, file_path: str):
+    # Check if a string is a valid path or a file name
+    if '/' not in file_path:
+        # Get current path
+        current_path = os.path.dirname(os.path.abspath(__file__))
+
+        file_path = os.path.join(current_path, file_path)
+
     with open(file_path, 'w') as f:
         settings_dict = settings.dict()
         yaml.dump(settings_dict, f)
@@ -103,6 +126,50 @@ def load_settings_from_yaml(file_path: str) -> Settings:
         settings_dict = yaml.safe_load(f)
 
     return Settings(**settings_dict)
+
+
+def read_from_conf(file_path: str) -> str:
+    if '/' not in file_path:
+        # Get current path
+        current_path = os.path.dirname(os.path.abspath(__file__))
+
+        file_path = os.path.join(current_path, file_path)
+
+    with open(file_path, 'r') as f:
+        content = f.read()
+
+    return content
+
+
+def save_conf(file_path: str, content: str):
+    if '/' not in file_path:
+        # Get current path
+        current_path = os.path.dirname(os.path.abspath(__file__))
+
+        file_path = os.path.join(current_path, file_path)
+
+    with open(file_path, 'w') as f:
+        f.write(content)
+
+
+def parse_key(keys: list[str], setting_str: str = None) -> str:
+    # 通过key，返回yaml配置里value所有的字符串，包含注释
+    if not setting_str:
+        setting_str = read_from_conf(config_file)
+    setting_lines = setting_str.split('\n')
+    value_of_key = [[] for _ in keys]
+    value_start_flag = [False for _ in keys]
+    for line in setting_lines:
+        for index, key in enumerate(keys):
+            if value_start_flag[index]:
+                if line.startswith('  '):
+                    value_of_key[index].append(line)
+                else:
+                    value_start_flag[index] = False
+                    continue
+            if line.startswith(key + ':'):
+                value_start_flag[index] = True
+    return ['\n'.join(value) for value in value_of_key]
 
 
 config_file = os.getenv('config', 'config.yaml')

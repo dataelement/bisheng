@@ -2,14 +2,14 @@ from datetime import datetime
 from typing import Optional
 
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, String, text
 from sqlmodel import Field
 
 
-class ServerBase(SQLModelSerializable):
-    endpoint: str = Field(index=False, unique=True)
-    server: str = Field(index=True)
-    remark: Optional[str] = Field(index=False)
+class ConfigBase(SQLModelSerializable):
+    key: str = Field(index=True, unique=True)
+    value: str = Field(index=False, sa_column=Column(String(length=1024)))
+    comment: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
@@ -19,18 +19,19 @@ class ServerBase(SQLModelSerializable):
                          onupdate=text('CURRENT_TIMESTAMP')))
 
 
-class Server(ServerBase, table=True):
+class Config(ConfigBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
-class ServerRead(ServerBase):
-    id: Optional[int]
+class ConfigRead(ConfigBase):
+    id: int
 
 
-class ServerQuery(ServerBase):
-    id: Optional[int]
-    server: Optional[str]
-
-
-class ServerCreate(ServerBase):
+class ConfigCreate(ConfigBase):
     pass
+
+
+class ConfigUpdate(SQLModelSerializable):
+    key: str
+    value: Optional[str]
+    comment: Optional[str]

@@ -150,7 +150,7 @@ export default function SkillChatPage(params) {
                 {
                     chatList.map((chat, i) => (
                         <div key={chat.chat_id} className={`item rounded-xl mt-2 p-2 hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-gray-100 dark:bg-gray-800'}`} onClick={() => handleSelectChat(chat)}>
-                            <p className="">{chat.flow_name}</p>
+                            <p className="break-words">{chat.flow_name}</p>
                             <span className="text-xs text-gray-500">{chat.flow_description}</span>
                         </div>
                     ))
@@ -519,8 +519,7 @@ const useWebsocketChat = (chatIdRef) => {
             const lastChat = newChat[newChat.length - 1]
             // hack 过滤重复最后消息
             if (end && str && newChat.length > 1 && str === newChat[newChat.length - 2].message && !newChat[newChat.length - 2].thought) {
-                newChat.pop()
-                return newChat
+                newChat.splice(newChat.length - 2, 1) // 删上一条
             }
             if (end) {
                 // 最后全集msg
@@ -590,7 +589,7 @@ const useWebsocketChat = (chatIdRef) => {
     // 获取上传file input
     const fileInputs = useMemo(() => {
         if (!flow.current) return
-        return tabsState[flow.current.id]?.formKeysData.input_keys?.filter((input: any) => input.type === 'file')
+        return tabsState[flow.current.id]?.formKeysData?.input_keys?.filter((input: any) => input.type === 'file')
     }, [tabsState, flow.current])
 
     // 上传文件

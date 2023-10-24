@@ -42,7 +42,7 @@ class ChatCompletion(object):
         req_type = 'chat.completion'
         status_message = 'success'
         choices = []
-        usage = None
+        usage = Usage()
         try:
             resp = openai.ChatCompletion.create(**payload)
             status_code = 200
