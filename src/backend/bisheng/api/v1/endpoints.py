@@ -2,6 +2,7 @@ from typing import Optional
 
 import yaml
 from bisheng.api.v1.schemas import ProcessResponse, UploadFileResponse
+from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.base import get_session
 from bisheng.database.models.config import Config
@@ -37,7 +38,9 @@ def get_config(session: Session = Depends(get_session)):
 def save_config(data: dict, session: Session = Depends(get_session)):
     try:
         config_yaml = yaml.safe_load(data.get('data'))
-        session.exec(delete(Config))
+        old_config = session.exec(select(Config).where(Config.id > 0)).all()
+        session.exec(delete(Config).where(Config.id > 0))
+        session.flush()
         keys = list(config_yaml.keys())
         values = parse_key(keys, data.get('data'))
 
@@ -45,6 +48,10 @@ def save_config(data: dict, session: Session = Depends(get_session)):
             config = Config(key=key, value=values[index])
             session.add(config)
         session.commit()
+        # 淘汰缓存
+        for old in old_config:
+            redis_key = 'config_' + old.key
+            redis_client.delete(redis_key)
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=500, detail=f'格式不正确, {str(e)}')

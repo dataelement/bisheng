@@ -7,7 +7,7 @@ from sqlmodel import Field
 
 
 class RecallBase(SQLModelSerializable):
-    message_id: Optional[int] = Field(index=False, unique=False)
+    message_id: Optional[int] = Field(index=True, unique=False)
     chat_id: str = Field(index=False)
     keywords: str = Field(index=False, sa_column=Column(Text))
     chunk: Optional[str] = Field(index=False, sa_column=Column(Text))

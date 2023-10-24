@@ -12,7 +12,7 @@ from bisheng.chat.utils import extract_answer_keys, process_graph
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.model_deploy import ModelDeploy
-from bisheng.database.models.recall_chunk import RecallChunk, RecallChunkCreate
+from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
 from fastapi import WebSocket, status
@@ -393,20 +393,23 @@ class ChatManager:
                                 user_id=user_id,
                                 source=source)
         await self.send_json(client_id, chat_id, response)
-        # 处理召回的chunk
-        if source:
-            await self.process_source_document(
-                source_doucment,
-                chat_id,
-                response.message_id,
-                result,
-            )
+
         # 循环结束
         close_resp = ChatResponse(message=None,
                                   type='close',
                                   intermediate_steps='',
                                   user_id=user_id)
         await self.send_json(client_id, chat_id, close_resp)
+
+        if source:
+            # 处理召回的chunk
+            await self.process_source_document(
+                source_doucment,
+                chat_id,
+                response.message_id,
+                result,
+            )
+
         return result
 
     def set_cache(self, client_id: str, langchain_object: Any) -> bool:
@@ -500,13 +503,12 @@ class ChatManager:
                 # 表示支持溯源
                 db_session = next(get_session())
                 content = doc.page_content
-                recall_chunk = RecallChunkCreate(chat_id=chat_id,
-                                                 keywords=json.dumps(answer_keywords),
-                                                 chunk=content,
-                                                 file_id=doc.metadata.get('file_id'),
-                                                 meta_data=json.dumps(doc.metadata),
-                                                 message_id=message_id)
-                recall = RecallChunk.from_orm(recall_chunk)
-                db_session.add(recall)
+                recall_chunk = RecallChunk(chat_id=chat_id,
+                                           keywords=json.dumps(answer_keywords),
+                                           chunk=content,
+                                           file_id=doc.metadata.get('file_id'),
+                                           meta_data=json.dumps(doc.metadata),
+                                           message_id=message_id)
+                db_session.add(recall_chunk)
                 db_session.commit()
-                db_session.refresh(recall)
+                db_session.refresh(recall_chunk)

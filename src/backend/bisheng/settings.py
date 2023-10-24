@@ -60,16 +60,34 @@ class Settings(BaseSettings):
     def get_knowledge(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
         from bisheng.database.base import get_session
+        from bisheng.cache.redis import redis_client
+        redis_key = 'config_knowledges'
+        cache = redis_client.get(redis_key)
+        if cache:
+            return yaml.safe_load(cache)
         session = next(get_session())
         knowledge_config = session.exec(select(Config).where(Config.key == 'knowledges')).first()
-        return yaml.safe_load(knowledge_config.value)
+        if knowledge_config:
+            redis_client.set(redis_key, knowledge_config.value, 100)
+            return yaml.safe_load(knowledge_config.value)
+        else:
+            return {}
 
     def get_default_llm(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
         from bisheng.database.base import get_session
+        from bisheng.cache.redis import redis_client
+        redis_key = 'config_default_llm'
+        cache = redis_client.get(redis_key)
+        if cache:
+            return yaml.safe_load(cache)
         session = next(get_session())
         llm_config = session.exec(select(Config).where(Config.key == 'default_llm')).first()
-        return yaml.safe_load(llm_config.value)
+        if llm_config:
+            redis_client.set(redis_key, llm_config.value, 100)
+            return yaml.safe_load(llm_config.value)
+        else:
+            return {}
 
     def update_from_yaml(self, file_path: str, dev: bool = False):
         new_settings = load_settings_from_yaml(file_path)
@@ -162,7 +180,7 @@ def parse_key(keys: list[str], setting_str: str = None) -> str:
     for line in setting_lines:
         for index, key in enumerate(keys):
             if value_start_flag[index]:
-                if line.startswith('  '):
+                if line.startswith('  ') or not line.strip() or line.startswith('#'):
                     value_of_key[index].append(line)
                 else:
                     value_start_flag[index] = False
