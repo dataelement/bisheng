@@ -4,6 +4,7 @@ import { FixedSizeList as List, areEqual } from 'react-window';
 import { Button } from "../../../components/ui/button";
 import * as pdfjsLib from 'pdfjs-dist';
 
+const SASS_HOST = 'https://bisheng.dataelem.com'
 interface Chunk {
     id: number
     scoreL: number
@@ -137,7 +138,8 @@ export default function FileView({ data }) {
         setLoading(true)
         setPagesLabels({ box: [] })
 
-        const pdfUrl = data.fileUrl // '/doc.pdf';
+        // sass环境使用sass地址
+        const pdfUrl = location.origin === SASS_HOST ? data.fileUrl.replace(/^http:\/\/.*:\d+/, SASS_HOST) : data.fileUrl // '/doc.pdf';
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
         pdfjsLib.getDocument(pdfUrl).promise.then((pdfDocument) => {
             setLoading(false)

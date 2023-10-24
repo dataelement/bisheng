@@ -11,8 +11,8 @@ class TemplateSkillBase(SQLModelSerializable):
     name: str = Field(index=True)
     description: str = Field(index=False)
     data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
-    order_num: Optional[int] = Field(default=None)
-    flow_id: Optional[UUID] = Field(index=True)
+    order_num: Optional[int] = Field(default=True)
+    flow_id: Optional[UUID] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(

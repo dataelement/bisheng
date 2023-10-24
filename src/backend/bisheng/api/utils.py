@@ -1,6 +1,9 @@
 from bisheng.api.v1.schemas import StreamData
+from bisheng.database.base import get_session
+from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
+from sqlmodel import select
 
 API_WORDS = ['api', 'key', 'token']
 
@@ -91,7 +94,10 @@ def build_flow(graph_data: dict, artifacts, process_file=False, flow_id=None, ch
             # tmp_{chat_id}
             if vertex.base_type == 'vectorstores':
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
-                    vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id}'
+                    vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
+                elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
+                    # es
+                    vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
 
             vertex.build()
             params = vertex._built_object_repr()
@@ -156,11 +162,14 @@ def build_flow_no_yield(graph_data: dict,
             # tmp_{chat_id}
             if vertex.base_type == 'vectorstores':
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
-                    vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id}'
+                    vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
                     logger.info(f"rename_vector_col col={vertex.params['collection_name']}")
                     if process_file:
                         # L1 清除Milvus历史记录
                         vertex.params['drop_old'] = True
+                elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
+                    # es
+                    vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
 
             vertex.build()
             params = vertex._built_object_repr()
@@ -174,3 +183,16 @@ def build_flow_no_yield(graph_data: dict,
         except Exception as exc:
             raise exc
     return graph
+
+
+def access_check(payload: dict, owner_user_id: int, target_id: int, type: AccessType) -> bool:
+    if payload.get('role') != 'admin':
+        # role_access
+        session = next(get_session())
+        role_access = session.exec(
+            select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
+                                     RoleAccess.type == type.value)).all()
+        third_ids = [access.third_id for access in role_access]
+        if owner_user_id != payload.get('user_id') and not third_ids and target_id not in third_ids:
+            return False
+    return True

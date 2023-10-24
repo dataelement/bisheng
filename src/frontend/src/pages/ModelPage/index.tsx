@@ -197,6 +197,7 @@ export default function FileLibPage() {
                 <div className="flex justify-end gap-4">
                     <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>刷新</Button>
                     {user.role === 'admin' && <Button className="h-8 rounded-full" onClick={() => setShowCpu(true)}>GPU资源使用情况</Button>}
+                    {/* <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>RT服务管理</Button> */}
                 </div>
                 <Table>
                     <TableCaption>模型集合.</TableCaption>

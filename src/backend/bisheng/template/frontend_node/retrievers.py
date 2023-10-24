@@ -28,3 +28,6 @@ class RetrieverFrontendNode(FrontendNode):
             field.value = STRATEGY_TYPES[0]
             field.name = 'combine_strategy'
             field.advanced = False
+        if field.name in {'metadata', 'tags'} and name == 'MixEsVectorRetriever':
+            field.show = True
+            field.advanced = True

@@ -16,12 +16,18 @@ export default function Dropdown({
   const { closePopUp } = useContext(PopUpContext);
 
   let [internalValue, setInternalValue] = useState(
-    value === "" || !value ? "Choose an option" : value
+    value === "" || !value ? "" : value
   );
 
   useEffect(() => {
-    setInternalValue(value === "" || !value ? "Choose an option" : value);
+    setInternalValue(value === "" || !value ? "" : value);
   }, [closePopUp]);
+
+  useEffect(() => {
+    if (internalValue !== value) {
+      setInternalValue(value)
+    }
+  }, [value])
 
   return (
     <>

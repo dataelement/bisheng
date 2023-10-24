@@ -19,12 +19,13 @@ class MessageBase(SQLModelSerializable):
     user_id: Optional[str] = Field(index=True)
     intermediate_steps: Optional[str] = Field(index=False, sa_column=Column(Text))
     files: Optional[str] = Field(index=False)
-    create_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(
+        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(index=True,
                                             sa_column=Column(
                                                 DateTime,
                                                 nullable=False,
+                                                index=True,
                                                 server_default=text('CURRENT_TIMESTAMP'),
                                                 onupdate=text('CURRENT_TIMESTAMP')))
 

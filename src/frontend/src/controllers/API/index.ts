@@ -117,8 +117,8 @@ export async function readFileLibDatabase(page = 1, pageSize = 40) {
 export async function readFileByLibDatabase(id, page) {
   const pageSize = 20
   const response = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}`);
-  const { data, total } = response.data
-  return { data, pages: Math.ceil(total / pageSize) }
+  const { data, total, writeable } = response.data
+  return { data, writeable, pages: Math.ceil(total / pageSize) }
 }
 
 /**
@@ -569,29 +569,6 @@ export async function GPUlistApi() {
   const response = await axios.get(`/api/v1/server/GPU`);
   return response.data
 }
-
-
-/**
- * ************************ user
- */
-
-// 登录
-export async function loginApi(name, pwd) {
-  return await axios.post(`/api/v1/user/login`, { user_name: name, password: pwd });
-}
-// 注册
-export async function registerApi(name, pwd) {
-  return await axios.post(`/api/v1/user/regist`, { user_name: name, password: pwd });
-}
-// 用户列表
-export async function getUsersApi(name: string, page: number, pageSize: number) {
-  return await axios.get(`/api/v1/user/list?page_num=${page}&page_size=${pageSize}&name=${name || ''}`)
-}
-// 修改用户状态（启\禁用）
-export async function disableUserApi(userid, status) {
-  return await axios.post(`/api/v1/user/update`, { user_id: userid, delete: status });
-}
-
 
 /**
  * ************************ 溯源

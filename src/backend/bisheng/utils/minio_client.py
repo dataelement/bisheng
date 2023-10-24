@@ -11,22 +11,25 @@ class MinioClient():
     minio_client: minio.Minio
 
     def __init__(self) -> None:
-        if 'minio' not in settings.knowledges:
+        if 'minio' not in settings.get_knowledge(
+        ) or not settings.get_knowledge().get('minio').get('MINIO_ENDPOINT'):
             self.minio_client = None
             self.minio_share = None
             return
         self.minio_client = minio.Minio(
-            endpoint=settings.knowledges.get('minio').get('MINIO_ENDPOINT'),
-            access_key=settings.knowledges.get('minio').get('MINIO_ACCESS_KEY'),
-            secret_key=settings.knowledges.get('minio').get('MINIO_SECRET_KEY'),
+            endpoint=settings.get_knowledge().get('minio').get('MINIO_ENDPOINT'),
+            access_key=settings.get_knowledge().get('minio').get('MINIO_ACCESS_KEY'),
+            secret_key=settings.get_knowledge().get('minio').get('MINIO_SECRET_KEY'),
             secure=False)
         self.minio_share = minio.Minio(
-            endpoint=settings.knowledges.get('minio').get('MINIO_SHAREPOIN'),
-            access_key=settings.knowledges.get('minio').get('MINIO_ACCESS_KEY'),
-            secret_key=settings.knowledges.get('minio').get('MINIO_SECRET_KEY'),
+            endpoint=settings.get_knowledge().get('minio').get('MINIO_SHAREPOIN'),
+            access_key=settings.get_knowledge().get('minio').get('MINIO_ACCESS_KEY'),
+            secret_key=settings.get_knowledge().get('minio').get('MINIO_SECRET_KEY'),
             secure=False)
 
     def upload_minio(self, object_name: str, file_path, content_type='application/text'):
+        # 初始化minio
+        self.mkdir(bucket=bucket)
         if self.minio_client:
             self.minio_client.fput_object(bucket_name=bucket,
                                           object_name=object_name,
@@ -48,5 +51,7 @@ class MinioClient():
         if self.minio_client:
             self.minio_client.remove_object(bucket_name=bucket, object_name=object_name)
 
-
-minio_client = MinioClient()
+    def mkdir(self, bucket: str):
+        if self.minio_client:
+            if not self.minio_client.bucket_exists(bucket):
+                self.minio_client.make_bucket(bucket)
