@@ -3,29 +3,11 @@ from typing import Dict, Optional, Type, Union
 from bisheng.interface.base import CustomChain
 from bisheng.interface.utils import extract_input_variables_from_prompt
 from bisheng_langchain.chains.question_answering import load_qa_chain
-<<<<<<< HEAD
-<<<<<<< HEAD
-from langchain import PromptTemplate
-=======
-<<<<<<< HEAD
 from langchain import BasePromptTemplate
->>>>>>> 31af05d (add new ws protocol)
 from langchain.base_language import BaseLanguageModel
 from langchain.chains import ConversationChain
-from langchain.chains.prompt_selector import is_chat_model
-from langchain.chains.summarize import load_summarize_chain
-=======
-from langchain import PromptTemplate
-=======
-from langchain import BasePromptTemplate, PromptTemplate
->>>>>>> 712a12e (add config page)
-from langchain.base_language import BaseLanguageModel
-from langchain.chains import ConversationChain
-from langchain.chains.prompt_selector import is_chat_model
 from langchain.chains.summarize import load_summarize_chain
 from langchain.memory.buffer import ConversationBufferMemory
-from langchain.prompts.chat import (ChatPromptTemplate, HumanMessagePromptTemplate,
-                                    SystemMessagePromptTemplate)
 from langchain.schema import BaseMemory
 from pydantic import Field, root_validator
 
@@ -123,41 +105,9 @@ class CombineDocsChain(CustomChain):
     def initialize(cls,
                    llm: BaseLanguageModel,
                    chain_type: str,
-<<<<<<< HEAD
-<<<<<<< HEAD
-                   prompt: str = None,
-                   token_max: str = -1):
-        if chain_type == 'stuff':
-=======
-<<<<<<< HEAD
                    prompt: BasePromptTemplate = None,
                    token_max: str = -1):
         if chain_type == 'stuff':
-=======
-=======
->>>>>>> 712a12e (add config page)
-                   prompt: str = None,
-                   token_max: str = -1):
-        if chain_type == 'stuff':
->>>>>>> 31af05d (add new ws protocol)
-            if prompt:
-                if is_chat_model(llm):
-                    messages = [
-                        SystemMessagePromptTemplate.from_template(prompt),
-                        HumanMessagePromptTemplate.from_template('{question}'),
-                    ]
-                    prompt = ChatPromptTemplate.from_messages(messages)
-                else:
-                    prompt = PromptTemplate(template=prompt,
-                                            input_variables=['context', 'question'])
-
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> daa9df2 (update summarize chain)
->>>>>>> 31af05d (add new ws protocol)
-=======
->>>>>>> 712a12e (add config page)
             return load_qa_chain(llm=llm, chain_type=chain_type, prompt=prompt, token_max=token_max)
         else:
             return load_qa_chain(llm=llm, chain_type=chain_type)
