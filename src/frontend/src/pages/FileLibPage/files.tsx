@@ -106,7 +106,7 @@ export default function FilesPage() {
                             <TableRow key={el.id}>
                                 <TableCell className="font-medium">{el.file_name}</TableCell>
                                 <TableCell>
-                                    {el.status === 3 ? <div className="tooltip tooltip-warning" data-tip={el.remark}>
+                                    {el.status === 3 ? <div className="tooltip" data-tip={el.remark}>
                                         <span className='text-red-500'>解析失败</span>
                                     </div> :
                                         <span className={el.status === 3 && 'text-red-500'}>{['解析失败', '解析中', '完成', '解析失败'][el.status]}</span>
