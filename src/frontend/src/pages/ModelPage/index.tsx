@@ -20,11 +20,13 @@ import {
 
 import { useContext, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { bsconfirm } from "../../alerts/confirm";
 import { alertContext } from "../../contexts/alertContext";
+import { locationContext } from "../../contexts/locationContext";
+import { userContext } from "../../contexts/userContext";
 import { serverListApi, switchOnLineApi, updateConfigApi } from "../../controllers/API";
 import { CpuDetail } from "./cpuInfo";
-import { userContext } from "../../contexts/userContext";
-import { bsconfirm } from "../../alerts/confirm";
+import RTConfig from "./components/RTConfig";
 
 enum STATUS {
     ONLINE,
@@ -101,6 +103,7 @@ function ConfigModal({ data, readonly, open, setOpen, onSave }) {
 }
 
 export default function FileLibPage() {
+    const { appConfig } = useContext(locationContext);
     const [open, setOpen] = useState(false)
     const [readOnlyConfig, setReadOnlyConfig] = useState(false)
     // 
@@ -169,7 +172,7 @@ export default function FileLibPage() {
         const res = await updateConfigApi(id, code)
 
         setOpen(false)
-        setDataList(oldList => oldList.map(item => 
+        setDataList(oldList => oldList.map(item =>
             item.id === id ? { ...item, config: code } : item
         ))
     }
@@ -187,6 +190,14 @@ export default function FileLibPage() {
     const { user } = useContext(userContext);
 
     const [showCpu, setShowCpu] = useState(false)
+
+    // RT 
+    const [rtOpen, setRTOpen] = useState(false)
+    const handleRTChange = (change: boolean) => {
+        if (change) loadData()
+        setRTOpen(false)
+    }
+
     return <div className="w-full h-screen p-6 overflow-y-auto">
         <Tabs defaultValue="account" className="w-full">
             <TabsList className="">
@@ -197,7 +208,7 @@ export default function FileLibPage() {
                 <div className="flex justify-end gap-4">
                     <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>刷新</Button>
                     {user.role === 'admin' && <Button className="h-8 rounded-full" onClick={() => setShowCpu(true)}>GPU资源使用情况</Button>}
-                    {/* <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>RT服务管理</Button> */}
+                    <Button className="h-8 rounded-full" onClick={() => setRTOpen(true)}>RT服务管理</Button>
                 </div>
                 <Table>
                     <TableCaption>模型集合.</TableCaption>
@@ -220,8 +231,8 @@ export default function FileLibPage() {
                                     {statusComponets(el.status, el.remark)}
                                 </TableCell>
                                 {user.role === 'admin' ? <TableCell className="">
-                                    <a href="javascript:;" className={`link ${[STATUS.WAIT_ONLINE, STATUS.WAIT_OFFLINE].includes(el.status) && 'text-gray-400 cursor-default'}`}
-                                        onClick={() => handleSwitchOnline(el)}>{[STATUS.ERROR, STATUS.OFFLINE, STATUS.WAIT_ONLINE].includes(el.status) ? '上线' : '下线'}</a>
+                                    {appConfig.isDev && <a href="javascript:;" className={`link ${[STATUS.WAIT_ONLINE, STATUS.WAIT_OFFLINE].includes(el.status) && 'text-gray-400 cursor-default'}`}
+                                        onClick={() => handleSwitchOnline(el)}>{[STATUS.ERROR, STATUS.OFFLINE, STATUS.WAIT_ONLINE].includes(el.status) ? '上线' : '下线'}</a>}
                                     <a href="javascript:;" className={`link ml-4`} onClick={() => handleOpenConfig(el)} >模型配置</a> </TableCell> :
                                     <TableCell className="">--</TableCell>}
                             </TableRow>
@@ -244,6 +255,8 @@ export default function FileLibPage() {
                 </div>
             </form>
         </dialog>
+        {/* RT配置 */}
+        <RTConfig open={rtOpen} onChange={handleRTChange}></RTConfig>
     </div>
 };
 

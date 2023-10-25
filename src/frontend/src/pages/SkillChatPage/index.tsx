@@ -166,20 +166,8 @@ export default function SkillChatPage(params) {
                 <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
                     <div ref={messagesRef} className="chat-panne h-full overflow-y-scroll no-scrollbar px-4 pb-20">
                         {
-                            chatHistory.map((c, i) => <ChatMessage key={i} chat={c} onSouce={() => setSouce(c)}></ChatMessage>)
+                            chatHistory.map((c, i) => <ChatMessage key={c.id || i} chat={c} onSouce={() => setSouce(c)}></ChatMessage>)
                         }
-                        {/* <div className="chat chat-start">
-                        <div className="chat-bubble chat-bubble-info bg-gray-300">It's over Anakin, <br />I have the high ground.</div>
-                        <div className="chat-footer flex text-xs pt-2">
-                            <span className="opacity-50">来源:</span>
-                            <ul>
-                                <li><a href="#" className="text-blue-600">一个PDF.pdf</a></li>
-                                <li><a href="#" className="text-blue-600">量个PDF.pdf</a></li>
-                                <li><a href="#" className="text-blue-600">网页地址</a></li>
-                                <li><a href="#" className="text-blue-600">sql语句</a></li>
-                            </ul>
-                        </div>
-                    </div> */}
                     </div>
                     <div className="absolute w-full bottom-0 bg-gradient-to-t from-[#fff] to-[rgba(255,255,255,0.8)] px-8 dark:bg-gradient-to-t dark:from-[#000] dark:to-[rgba(0,0,0,0.8)]">
                         <div className={`w-full text-area-box border border-gray-600 rounded-lg my-6 overflow-hidden pr-2 py-2 relative ${(inputState.lock || (fileInputs?.length && chatHistory.length === 0)) && 'bg-gray-200 dark:bg-gray-600'}`}>
@@ -250,13 +238,14 @@ const useWebsocketChat = (chatIdRef) => {
             return {
                 chatKey: typeof message === 'string' ? undefined : Object.keys(message)[0],
                 end: true,
-                files: item.files ? JSON.parse(item.files) : null,
+                files: item.files ? JSON.parse(item.files) : [],
                 isSend: !item.is_bot,
                 message,
                 thought: item.intermediate_steps,
                 id: item.id,
                 category: item.category,
-                source: item.source
+                source: item.source,
+                noAccess: true
             }
         })
         lastIdRef.current = hisData[hisData.length - 1]?.id || lastIdRef.current // 记录最后一个id
@@ -351,12 +340,11 @@ const useWebsocketChat = (chatIdRef) => {
         let inputs = tabsState[flow.current.id].formKeysData.input_keys;
         const input = inputs.find((el: any) => !el.type)
         const inputKey = Object.keys(input)[0];
-        addChatHistory(
-            { ...input, [inputKey]: msg },
-            true,
-            inputKey,
-            tabsState[flow.current.id].formKeysData.template
-        );
+        addChatHistory({
+            isSend: true,
+            message: { ...input, [inputKey]: msg },
+            chatKey: inputKey
+        })
         await checkReLinkWs()
 
         sendAll({
@@ -396,44 +384,45 @@ const useWebsocketChat = (chatIdRef) => {
     function handleWsMessage(data: any) {
         if (Array.isArray(data) && data.length) {
             //set chat history
-            setChatHistory((_) => {
-                let newChatHistory: ChatMessageType[] = [];
-                data.forEach(
-                    (chatItem: {
-                        intermediate_steps?: string;
-                        is_bot: boolean;
-                        message: string;
-                        template: string;
-                        type: string;
-                        chatKey: string;
-                        files?: Array<any>;
-                    }) => {
-                        if (chatItem.message) {
-                            newChatHistory.push(
-                                chatItem.files
-                                    ? {
-                                        isSend: !chatItem.is_bot,
-                                        message: chatItem.message,
-                                        template: chatItem.template,
-                                        thought: chatItem.intermediate_steps,
-                                        files: chatItem.files,
-                                        chatKey: chatItem.chatKey,
-                                        end: true
-                                    }
-                                    : {
-                                        isSend: !chatItem.is_bot,
-                                        message: chatItem.message,
-                                        template: chatItem.template,
-                                        thought: chatItem.intermediate_steps,
-                                        chatKey: chatItem.chatKey,
-                                        end: true
-                                    }
-                            );
-                        }
-                    }
-                );
-                return newChatHistory;
-            });
+            // setChatHistory((_) => {
+            //     let newChatHistory: ChatMessageType[] = [];
+            //     data.forEach(
+            //         (chatItem: {
+            //             intermediate_steps?: string;
+            //             is_bot: boolean;
+            //             message: string;
+            //             template: string;
+            //             type: string;
+            //             chatKey: string;
+            //             files?: Array<any>;
+            //         }) => {
+            //             if (chatItem.message) {
+            //                 newChatHistory.push(
+            //                     chatItem.files
+            //                         ? {
+            //                             isSend: !chatItem.is_bot,
+            //                             message: chatItem.message,
+            //                             template: chatItem.template,
+            //                             thought: chatItem.intermediate_steps,
+            //                             files: chatItem.files,
+            //                             chatKey: chatItem.chatKey,
+            //                             end: true
+            //                         }
+            //                         : {
+            //                             isSend: !chatItem.is_bot,
+            //                             message: chatItem.message,
+            //                             template: chatItem.template,
+            //                             thought: chatItem.intermediate_steps,
+            //                             chatKey: chatItem.chatKey,
+            //                             end: true
+            //                         }
+            //                 );
+            //             }
+            //         }
+            //     );
+            //     return newChatHistory;
+            // });
+            return
         }
         if (data.type === "begin") {
             setBegin(true)
@@ -444,12 +433,12 @@ const useWebsocketChat = (chatIdRef) => {
             setInputState({ lock: false, error: '' });
             changeHistoryByScroll.current = true
         }
-        // 日志分析 (独立一条)
-        // if (data.intermediate_steps) {
-        //     addChatHistory( '', false, undefined, '', data.intermediate_steps, data.category );
-        // }
         if (data.type === "start") {
-            addChatHistory("", false, undefined, '', data.intermediate_steps || '', data.category || '');
+            addChatHistory({
+                isSend: false,
+                thought: data.intermediate_steps,
+                category: data.category
+            })
             isStream = true;
         }
         if (data.type === "stream" && isStream) {
@@ -463,92 +452,75 @@ const useWebsocketChat = (chatIdRef) => {
                 thought: data.intermediate_steps || '',
                 cate: data.category || '',
                 messageId: data.message_id,
-                source: data.source
+                source: data.source,
+                noAccess: false
             });
-            // if (data.message) {
-            //     updateLastMessage({ str: data.message, end: true });
-            // } else if (data.files) {
-            //     updateLastMessage({
-            //         end: true,
-            //         files: data.files,
-            //     });
-            // }
 
             isStream = false;
         }
     }
 
     //add proper type signature for function
-    const addChatHistory = (
-        message: string | Object,
+    const addChatHistory = (data: {
         isSend: boolean,
-        chatKey: string,
-        template?: string,
+        message?: string | Object,
+        chatKey?: string,
         thought?: string,
         category?: string,
-        files?: Array<any>
-    ) => {
+        files?: Array<any>,
+        end?: boolean
+    }) => {
         setChatHistory((old) => {
-            const end = false
             let newChat = _.cloneDeep(old);
-            if (files) {
-                newChat.push({ end, message, isSend, thought, category, chatKey, files });
-            } else if (thought) {
-                newChat.push({ end, message, isSend, thought, category, chatKey });
-            } else if (template) {
-                newChat.push({ end, message, isSend, template, chatKey });
-            } else {
-                newChat.push({ end, message, isSend, thought: '', category, chatKey });
-            }
-            return newChat;
+            newChat.push({
+                isSend: data.isSend,
+                message: data.message || '',
+                chatKey: data.chatKey || '',
+                thought: data.thought || '',
+                category: data.category || '',
+                files: data.files || [],
+                end: data.end || false
+            })
+            return newChat
         });
     };
 
-    function updateLastMessage({ str, thought, end = false, files, cate, messageId, source }: {
-        str?: string;
+    function updateLastMessage({ str, thought = '', end = false, files = [], cate = '', messageId = 0, source = false, noAccess = false }: {
+        str: string;
+        messageId?: number
         thought?: string;
         cate?: string;
-        // end param default is false
         end?: boolean;
         files?: Array<any>;
-        messageId?: number
         source?: boolean
+        noAccess?: boolean
     }) {
         setChatHistory((old) => {
-            let newChat = [...old];
-            const lastChat = newChat[newChat.length - 1]
+            const newChats = [...old]
+            const chatsLen = newChats.length
             // hack 过滤重复最后消息
-            if (end && str && newChat.length > 1 && str === newChat[newChat.length - 2].message && !newChat[newChat.length - 2].thought) {
-                newChat.splice(newChat.length - 2, 1) // 删上一条
+            if (end && str && chatsLen > 1 && str === newChats[chatsLen - 2].message && !newChats[chatsLen - 2].thought) {
+                newChats.splice(chatsLen - 2, 1) // 删上一条
             }
-            if (end) {
-                // 最后全集msg
-                lastChat.end = true;
-            }
-            if (str) {
-                // 累加msg
-                lastChat.message += str;
-            }
-            if (thought) {
-                lastChat.thought += thought + '\n';
-            }
-            if (files) {
-                lastChat.files = files;
-            }
-            if (cate) {
-                lastChat.category = cate;
-            }
-            if (messageId) {
-                lastChat.id = messageId;
-            }
-            if (source) {
-                lastChat.source = source;
+            // 更新
+            const lastChat = newChats[chatsLen - 1]
+            const newLastChat = {
+                ...newChats[chatsLen - 1],
+                id: messageId,
+                message: lastChat.message + str,
+                thought: lastChat.thought + (thought ? `${thought}\n` : ''),
+                files,
+                category: cate,
+                source,
+                noAccess,
+                end
             }
             // start - end 之间没有内容删除load
-            if (end && !(lastChat.files?.length || lastChat.thought || lastChat.message)) {
-                newChat.pop()
+            if (end && !(newLastChat.files.length || newLastChat.thought || newLastChat.message)) {
+                newChats.pop()
             }
-            return newChat;
+            newChats[chatsLen - 1] = newLastChat
+            return newChats;
         });
     }
 
@@ -560,9 +532,10 @@ const useWebsocketChat = (chatIdRef) => {
             setErrorData({ title: event.reason });
             setChatHistory((old) => {
                 let newChat = _.cloneDeep(old);
-                if (!newChat.length) return []
-                newChat[newChat.length - 1].end = true;
-                newChat.push({ end: true, message: event.reason ? '链接异常断开:' + event.reason : '网络断开！', isSend: false, chatKey: '' });
+                if (newChat.length) {
+                    newChat[newChat.length - 1].end = true;
+                }
+                newChat.push({ end: true, message: event.reason ? '链接异常断开:' + event.reason : '网络断开！', isSend: false, chatKey: '', files: [] });
                 return newChat
             })
             setInputState({ lock: false, error: '' });
@@ -612,26 +585,15 @@ const useWebsocketChat = (chatIdRef) => {
     async function handleFileSelect(event, input) {
         const config: any = fileInputs?.[0]
         var file = event.target.files[0];
-        // if (file.type !== 'application/pdf') {
-        //     return setErrorData({
-        //         title: "只能上传pdf文件",
-        //         // list: ['1', '2'],
-        //     })
-        // }
         // 添加一条记录
-        addChatHistory(
-            {},
-            true,
-            '',
-            undefined,
-            undefined,
-            undefined,
-            [{
+        addChatHistory({
+            isSend: true,
+            files: [{
                 file_name: file.name,
                 data: 'progress',
                 data_type: 'PDF'
             }]
-        );
+        });
         await checkReLinkWs()
         setInputState({ lock: true, error: '' });
         uploadFileWithProgress(file, (count) => { }).then(data => {

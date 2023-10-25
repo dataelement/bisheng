@@ -1,4 +1,4 @@
-import { ChevronDownSquare, ChevronUpSquare } from "lucide-react";
+import { ChevronDownSquare, ChevronUpSquare, Download, Import } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "../../../components/ui/input";
@@ -6,6 +6,7 @@ import FileView from "./FileView";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
 import { ChatMessageType } from "../../../types/chat";
 import React from "react";
+import ShadTooltip from "../../../components/ShadTooltipComponent";
 
 // 顶部答案区
 const Anwser = ({ id, msg, onInit, onAdd }) => {
@@ -101,17 +102,33 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
             <div className="mt-4">
                 <p className="mb-4 text-sm font-bold">来源文档</p>
                 {files.map(_file =>
-                    <div key={_file.id} onClick={() => setFile(_file)} className={`rounded-xl bg-[#fff] hover:bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
+                    !_file ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] hover:bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
                         <p className="text-sm">{_file.fileName}</p>
+                        <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
+                            <div className="tooltip" data-tip='下载双层PDF'>
+                                <a href="http://www.baidu.com" target="_blank" onClick={(event) => event.stopPropagation()} >
+                                    <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
+                                </a>
+                            </div>
+                            <div className="tooltip tooltip-left" data-tip='下载原文件'>
+                                <a href="http://www.baidu.com" target="_blank" onClick={(event) => event.stopPropagation()} >
+                                    <Download color="rgba(53,126,249,1)" size={20} strokeWidth={1.5}></Download>
+                                </a>
+                            </div>
+                        </div>
                         <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
-                    </div>
+                    </div> :
+                        <div key={_file.id} className={`group rounded-xl bg-[#fff] hover:bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
+                            <p className="text-sm blur-sm">是真的马赛克.msk</p>
+                            <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
+                        </div>
                 )}
                 {!files.length && <p className="text-sm text-center mt-10 text-gray-500">无匹配的源文件</p>}
             </div>
         </div>
         {/* file panne */}
         {file && children(file)}
-    </div>
+    </div >
 }
 
 export default function ResouceModal({ chatId, data, open, setOpen }: { chatId: string, data: ChatMessageType, open: boolean, setOpen: (b: boolean) => void }) {

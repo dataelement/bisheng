@@ -110,7 +110,12 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
         setSuccessData({ title: '内容已复制' })
     }
 
-    if (chat.isSend) return chat.files?.length ? <>
+    const source = <div className="chat-footer py-1">
+        {chat.noAccess && <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>因权限不足，该答案剔除了无权查看的内容</p>}
+        <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent" onClick={onSouce}>参考来源</button>
+    </div>
+
+    if (chat.isSend) return chat.files.length ? <>
         <div className="chat chat-end">
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-sky-500 flex items-center justify-center"><User color="#fff" size={28} /></div></div>
             <Card className="my-2 w-[200px] relative">
@@ -118,11 +123,11 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
                     <CardTitle className="flex items-center gap-2"><File />文件</CardTitle>
                     <CardDescription>{chat.files[0]?.file_name}</CardDescription>
                 </CardHeader>
-                {chat.files[0].data === 'progress' && <div className=" absolute top-0 left-0 w-full h-full bg-[rgba(255,255,255,0.8)]"><span className="loading loading-spinner loading-xs mr-4 align-middle absolute left-[-24px] bottom-0"></span></div>}
-                {chat.files[0].data === 'error' && <div className="flex w-4 h-4 justify-center items-center absolute left-[-24px] bottom-0 bg-red-500 text-gray-50 rounded-full">!</div>}
+                {chat.files[0]?.data === 'progress' && <div className=" absolute top-0 left-0 w-full h-full bg-[rgba(255,255,255,0.8)]"><span className="loading loading-spinner loading-xs mr-4 align-middle absolute left-[-24px] bottom-0"></span></div>}
+                {chat.files[0]?.data === 'error' && <div className="flex w-4 h-4 justify-center items-center absolute left-[-24px] bottom-0 bg-red-500 text-gray-50 rounded-full">!</div>}
             </Card>
         </div>
-        {!chat.files[0].data && <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 ${color['system']} ${border['system']}`}>文件解析中</div>}
+        {!chat.files[0]?.data && <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 ${color['system']} ${border['system']}`}>文件解析中</div>}
     </> :
         <div className="chat chat-end">
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-[rgba(53,126,249,.6)] flex items-center justify-center"><User color="#fff" size={28} /></div></div>
@@ -139,7 +144,7 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
             {chat.category === 'report' && <Copy size={20} className=" absolute right-4 top-2 cursor-pointer" onClick={handleCopy}></Copy>}
         </div>
         {!chat.end && <span className="loading loading-ring loading-md"></span>}
-        {chat.source && <div className="chat-footer py-1"><button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent" onClick={onSouce}>参考来源</button></div>}
+        {chat.source && source}
     </>
 
     return <div className="chat chat-start">
@@ -148,6 +153,6 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
         </div>
-        {chat.source && <div className="chat-footer py-1"><button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent" onClick={onSouce}>参考来源</button></div>}
+        {chat.source && source}
     </div>
 };

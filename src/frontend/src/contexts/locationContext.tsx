@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useState } from "react";
+import { createContext, ReactNode, useEffect, useState } from "react";
 
 //types for location context
 type locationContextType = {
@@ -28,6 +28,7 @@ type locationContextType = {
   }) => void;
   extraComponent: any;
   setExtraComponent: (newState: any) => void;
+  appConfig: any;
 };
 
 //initial value for location context
@@ -46,6 +47,7 @@ const initialValue = {
   setExtraNavigation: () => {},
   extraComponent: <></>,
   setExtraComponent: () => {},
+  appConfig: {}
 };
 
 export const locationContext = createContext<locationContextType>(initialValue);
@@ -58,6 +60,15 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [showSideBar, setShowSideBar] = useState(initialValue.showSideBar);
   const [extraNavigation, setExtraNavigation] = useState({ title: "" });
   const [extraComponent, setExtraComponent] = useState(<></>);
+  const [appConfig, setAppConfig] = useState<any>({})
+
+  // TODO 获取系统配置
+  useEffect(() => {
+    setAppConfig({
+      isDev: true
+    })
+  }, [])
+
   return (
     <locationContext.Provider
       value={{
@@ -71,6 +82,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         setExtraNavigation,
         extraComponent,
         setExtraComponent,
+        appConfig
       }}
     >
       {children}
