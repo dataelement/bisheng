@@ -10,6 +10,9 @@ from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
 from langchain.utils import get_from_dict_or_env
 from langchain.vectorstores.base import VectorStore
+from langchain.chains.llm import LLMChain
+from langchain.llms.base import BaseLLM
+from langchain.prompts.prompt import PromptTemplate
 
 if TYPE_CHECKING:
     from elasticsearch import Elasticsearch  # noqa: F401
@@ -17,6 +20,20 @@ if TYPE_CHECKING:
 
 def _default_text_mapping() -> Dict:
     return {'properties': {'text': {'type': 'text'}}}
+
+
+DEFAULT_PROMPT = PromptTemplate(
+    input_variables=["question"],
+    template="""分析给定Question，提取Question中包含的KeyWords，输出列表形式
+
+Examples:
+Question: 达梦公司在过去三年中的流动比率如下：2021年：3.74倍；2020年：2.82倍；2019年：2.05倍。
+KeyWords: ['过去三年', '流动比率', '2021', '3.74', '2020', '2.82', '2019', '2.05']
+
+----------------
+Question: {question}
+KeyWords: """,
+)
 
 
 # ElasticKeywordsSearch is a concrete implementation of the abstract base class
@@ -90,6 +107,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         index_name: str,
         *,
         ssl_verify: Optional[Dict[str, Any]] = None,
+        llm_chain: Optional[LLMChain] = None,
     ):
         """Initialize with necessary components."""
         try:
@@ -98,6 +116,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
             raise ImportError('Could not import elasticsearch python package. '
                               'Please install it with `pip install elasticsearch`.')
         self.index_name = index_name
+        self.llm_chain = llm_chain
         _ssl_verify = ssl_verify or {}
         try:
             self.client = elasticsearch.Elasticsearch(elasticsearch_url, **_ssl_verify)
@@ -164,7 +183,19 @@ class ElasticKeywordsSearch(VectorStore, ABC):
                           must_or_should: str = 'should',
                           **kwargs: Any) -> List[Document]:
         assert must_or_should in ['must', 'should'], 'only support must and should.'
-        keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
+        # llm or
+        if self.llm_chain:
+            keywords_str = self.llm_chain.run(query)
+            print('keywords_str:', keywords_str)
+            try:
+                keywords = eval(keywords_str)
+                if not isinstance(keywords, list):
+                    raise ValueError('Keywords extracted by llm is not list.')
+            except Exception as e:
+                print(str(e))
+                keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
+        else:
+            keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
         match_query = {'bool': {must_or_should: []}}
         for key in keywords:
             match_query['bool'][must_or_should].append({query_strategy: {'text': key}})
@@ -193,6 +224,8 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         ids: Optional[List[str]] = None,
         index_name: Optional[str] = None,
         refresh_indices: bool = True,
+        llm: Optional[BaseLLM] = None,
+        prompt: Optional[PromptTemplate] = DEFAULT_PROMPT,
         **kwargs: Any,
     ) -> ElasticKeywordsSearch:
         """Construct ElasticKeywordsSearch wrapper from raw documents.
@@ -220,7 +253,11 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         if 'elasticsearch_url' in kwargs:
             del kwargs['elasticsearch_url']
         index_name = index_name or uuid.uuid4().hex
-        vectorsearch = cls(elasticsearch_url, index_name, **kwargs)
+        if llm:
+            llm_chain = LLMChain(llm=llm, prompt=prompt)
+            vectorsearch = cls(elasticsearch_url, index_name, llm_chain=llm_chain, **kwargs)
+        else:
+            vectorsearch = cls(elasticsearch_url, index_name, **kwargs)
         vectorsearch.add_texts(texts, metadatas=metadatas, ids=ids, refresh_indices=refresh_indices)
         return vectorsearch
 
