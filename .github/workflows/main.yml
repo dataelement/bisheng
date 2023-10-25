@@ -32,10 +32,10 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # - name: Get version
-      #   id: get_version
-      #   run: |
-      #     echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      - name: Get version
+        id: get_version
+        run: |
+          echo ::set-output name=VERSION::v0.1.8
       
       # - name: Set Environment Variable
       #   run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
