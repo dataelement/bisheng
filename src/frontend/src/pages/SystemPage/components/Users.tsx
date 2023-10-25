@@ -77,8 +77,8 @@ export default function Users(params) {
                         {/* <TableCell>{el.role}</TableCell> */}
                         <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                         <TableCell className="text-right">
-                            {/* {user.user_id === el.user_id ? <a href="javascript:;" className=" ml-4 text-gray-400">编辑</a> :
-                                <a href="javascript:;" onClick={() => setRoleOpenId(el.user_id)} className="underline ml-4">编辑</a>} */}
+                            {user.user_id === el.user_id ? <a href="javascript:;" className=" ml-4 text-gray-400">编辑</a> :
+                                <a href="javascript:;" onClick={() => setRoleOpenId(el.user_id)} className="underline ml-4">编辑</a>}
                             {
                                 el.delete === 1 ? <a href="javascript:;" onClick={() => handleEnableUser(el)} className="underline ml-4">启用</a> :
                                     user.user_id === el.user_id ? <a href="javascript:;" className=" ml-4 text-gray-400">禁用</a> :

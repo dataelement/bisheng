@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import {
@@ -9,7 +9,7 @@ import {
     TableHeader,
     TableRow
 } from "../../../components/ui/table";
-import { generateUUID } from "../../../utils";
+import { addServiceApi, deleteServiceApi, getServicesApi } from "../../../controllers/API";
 
 export default function RTConfig({ open, onChange }) {
     const nameRef = useRef(null)
@@ -39,8 +39,8 @@ export default function RTConfig({ open, onChange }) {
                             </TableRow>
                         ))}
                         {showAdd && <TableRow>
-                            <TableCell><Input ref={nameRef}></Input></TableCell>
-                            <TableCell><Input ref={urlRef}></Input></TableCell>
+                            <TableCell><Input ref={nameRef} placeholder="name"></Input></TableCell>
+                            <TableCell><Input ref={urlRef} placeholder="IP:PORT"></Input></TableCell>
                             <TableCell><Button variant="ghost" className="h-8 rounded-full" onClick={() => addItem(nameRef.current.value, urlRef.current.value)}>添加</Button></TableCell>
                         </TableRow>}
                     </TableBody>
@@ -54,29 +54,51 @@ export default function RTConfig({ open, onChange }) {
     </dialog>
 };
 
+type SERVICE = {
+    id: number,
+    create_time?: string,
+    update_time?: string,
+    url: string,
+    remark?: string,
+    name: string
+}
 
 const useRTService = (onChange) => {
-    const [services, setServices] = useState([])
+    const [services, setServices] = useState<SERVICE[]>([])
     const [showAdd, setShowAdd] = useState(false)
 
-    const addItem = (name, url) => {
+    useEffect(() => {
+        loadData()
+    }, [])
+
+    const loadData = async () => {
+        const { data } = await getServicesApi()
+        setServices(data.data.map(el => ({
+            id: el.id,
+            name: el.server,
+            url: el.endpoint
+        })))
+    }
+
+    const addItem = async (name, url) => {
         if (!name || !url) return
+        const { data } = await addServiceApi(name, url)
+
         setServices([...services, {
-            id: generateUUID(6),
+            id: data.id,
             name,
             url
         }])
         setShowAdd(false)
     }
 
-    const handleDel = (id) => {
+    const handleDel = async (id) => {
+        const res = await deleteServiceApi(id)
         setServices(services.filter(el => el.id !== id))
     }
 
     const create = () => {
-        console.log('services :>> ', services);
-        // api
-        onChange(true)
+        onChange()
         setShowAdd(false)
     }
 

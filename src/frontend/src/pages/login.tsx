@@ -30,7 +30,7 @@ export const LoginPage = () => {
         if (!mail) error.push(t('login.pleaseEnterAccount'))
         if (!pwd) error.push(t('login.pleaseEnterPassword'))
         if (error.length) return setErrorData({
-            title: `${t('tip')}:`,
+            title: `${t('prompt')}:`,
             list: error,
         });
         loginApi(mail, pwd).then(res => {
@@ -40,7 +40,7 @@ export const LoginPage = () => {
         }).catch(e => {
             console.error(e.response.data.detail);
             setErrorData({
-                title: `${t('tip')}:`,
+                title: `${t('prompt')}:`,
                 list: [e.response.data.detail],
             });
         })
@@ -54,7 +54,7 @@ export const LoginPage = () => {
         if (!/.{6,}/.test(pwd)) error.push(t('login.passwordTooShort'))
         if (pwd !== apwd) error.push(t('login.passwordMismatch'))
         if (error.length) return setErrorData({
-            title: `${t('tip')}:`,
+            title: `${t('prompt')}:`,
             list: error,
         });
         registerApi(mail, pwd).then(res => {
@@ -64,7 +64,7 @@ export const LoginPage = () => {
         }).catch(err => {
             console.error(err.response.data.detail);
             setErrorData({
-                title: `${t('tip')}:`,
+                title: `${t('prompt')}:`,
                 list: [err.response.data.detail],
             });
         })

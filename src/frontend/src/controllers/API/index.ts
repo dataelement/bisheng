@@ -168,6 +168,27 @@ export async function getEmbeddingModel() {
 }
 
 /**
+ * 获取RT服务列表
+ */
+export async function getServicesApi() {
+  return await axios.get(`/api/v1/server/list_server`);
+}
+/**
+ * 获取RT服务列表
+ */
+export async function addServiceApi(name: string, url: string) {
+  return await axios.post(`/api/v1/server/add`,
+    { endpoint: url, server: name, remark: 'RT模块创建' });
+}
+/**
+ * 删除知识库下文件
+ *
+ */
+export async function deleteServiceApi(id) {
+  return await axios.delete(`/api/v1/server/${id}`);
+}
+
+/**
  * Sends data to the API for prediction.
  *
  * @param {sendAllProps} data - The data to be sent to the API.
