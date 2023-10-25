@@ -135,8 +135,10 @@ class ChatCompletion(object):
     def __init__(self, appid, api_key, api_secret, **kwargs):
         gpt_url1 = 'ws://spark-api.xf-yun.com/v1.1/chat'
         gpt_url2 = 'ws://spark-api.xf-yun.com/v2.1/chat'
+        gpt_url3 = 'ws://spark-api.xf-yun.com/v3.1/chat'
         self.wsParam1 = Ws_Param(appid, api_key, api_secret, gpt_url1)
         self.wsParam2 = Ws_Param(appid, api_key, api_secret, gpt_url2)
+        self.wsParam3 = Ws_Param(appid, api_key, api_secret, gpt_url3)
 
         websocket.enableTrace(False)
 
@@ -169,7 +171,12 @@ class ChatCompletion(object):
                 role = 'user'
             new_messages.append({'role': role, 'content': m.content})
 
-        domain = 'generalv2' if model == 'spark-v2.0' else 'general'
+        domain = 'general'
+        if model == 'spark-v2.0':
+            domain = 'generalv2'
+        elif model == 'spark-v3.0':
+            domain = 'generalv3'
+
         created = get_ts()
         payload = {
             'header': self.header,
@@ -198,8 +205,11 @@ class ChatCompletion(object):
             # self.mutex.acquire()
             if model == 'spark-v2.0':
                 wsUrl = self.wsParam2.create_url()
+            elif model == 'spark-v3.0':
+                wsUrl = self.wsParam3.create_url()
             else:
                 wsUrl = self.wsParam1.create_url()
+
             ws = create_connection(wsUrl)
             ws.send(json.dumps(payload))
             texts = []
