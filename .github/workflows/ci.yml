@@ -35,6 +35,9 @@ jobs:
         id: get_version
         run: |
           echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      
+      - name: Set Environment Variable
+        run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
 
       # 构建 bisheng_langchain
       - name: Set python version 3.8
@@ -66,8 +69,11 @@ jobs:
       - name: build lock
         run: | 
           cd ./src/backend
+          pip install bisheng_langchain==$RELEASE_VERSION
+          sed -i 's/^bisheng_langchain.*/bisheng_langchain = "$RELEASE_VERSION"/g' pyproject.toml
           poetry lock
           cd ../../
+
       - name: Build backend and push
         id: docker_build_backend
         uses: docker/build-push-action@v2
