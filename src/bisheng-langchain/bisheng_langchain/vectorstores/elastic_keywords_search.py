@@ -183,7 +183,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
                           must_or_should: str = 'should',
                           **kwargs: Any) -> List[Document]:
         assert must_or_should in ['must', 'should'], 'only support must and should.'
-        # llm or
+        # llm or jiaba extract keywords
         if self.llm_chain:
             keywords_str = self.llm_chain.run(query)
             print('keywords_str:', keywords_str)
