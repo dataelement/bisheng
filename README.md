@@ -1,5 +1,13 @@
 <img src="https://www.dataelem.com/nstatic/bisheng.png" alt="Bisheng banner">
 
+<p align="center">
+    <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
+    <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
+    <img src="https://img.shields.io/docker/pulls/dataelement/bisheng-frontend" alt="docker-pull-count" />
+    <a href=""><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
+    <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
+</p>
+
 
 <div class="column" align="middle">
   <!-- <a href="https://bisheng.slack.com/join/shared_invite/"> -->
@@ -134,3 +142,7 @@ Bisheng 采用了以下依赖库:
 - 感谢开源非结构化数据解析引擎 [unstructured](https://github.com/Unstructured-IO/unstructured)。
 - 感谢开源langchain可视化工具 [langflow](https://github.com/logspace-ai/langflow)。
 
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=dataelement/bisheng&type=Date)](https://star-history.com/#dataelement/bisheng&Date)

@@ -77,6 +77,11 @@ class DocumentLoaderFrontNode(FrontendNode):
             build_file_field(suffixes=['.docx', '.doc'], fileTypes=['docx', 'doc']),
         'PDFWithSemanticLoader':
             build_file_field(suffixes=['.pdf'], fileTypes=['pdf']),
+        'UniversalKVLoader':
+            build_file_field(
+                suffixes=['.jpg', '.png', '.jpeg', '.pdf'],
+                fileTypes=['jpg', 'png', 'jpeg', 'pdf'],
+            ),
     }
 
     def add_extra_fields(self) -> None:
@@ -136,6 +141,38 @@ class DocumentLoaderFrontNode(FrontendNode):
                     name='unstructured_api_url',
                     value='',
                     display_name='unstructured_api_url',
+                    advanced=False,
+                ))
+            self.template.add_field(self.file_path_templates[self.template.type_name])
+        elif self.template.type_name in {'UniversalKVLoader'}:
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='ellm_model_url',
+                    value='',
+                    display_name='ellm_model_url',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='int',
+                    required=False,
+                    show=True,
+                    name='max_pages',
+                    value=30,
+                    display_name='max_pages',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='schema',
+                    value='',
+                    display_name='schema',
                     advanced=False,
                 ))
             self.template.add_field(self.file_path_templates[self.template.type_name])

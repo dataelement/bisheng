@@ -28,6 +28,9 @@ class ChatCompletion(object):
         self.sec_key = sec_key
         self.ep_url = ('https://aip.baidubce.com/rpc/2.0/ai_custom/v1/'
                        'wenxinworkshop/chat/completions')
+        self.ep_url_pro = ('https://aip.baidubce.com/rpc/2.0/ai_custom/v1/'
+                           'wenxinworkshop/chat/completions_pro')
+
         self.ep_url_turbo = ('https://aip.baidubce.com/rpc/2.0/ai_custom/v1/'
                              'wenxinworkshop/chat/eb-instant')
 
@@ -70,6 +73,8 @@ class ChatCompletion(object):
         endpoint = f'{self.ep_url}?access_token={token}'
         if model == 'ernie-bot-turbo':
             endpoint = f'{self.ep_url_turbo}?access_token={token}'
+        elif model == 'ernie-bot-4':
+            endpoint = f'{self.ep_url_pro}?access_token={token}'
 
         response = requests.post(endpoint, headers=self.headers, json=payload)
 

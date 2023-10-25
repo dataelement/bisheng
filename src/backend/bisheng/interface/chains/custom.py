@@ -130,7 +130,7 @@ class SummarizeDocsChain(CustomChain):
     def initialize(cls,
                    llm: BaseLanguageModel,
                    chain_type: str,
-                   prompt: BasePromptTemplate = None,
+                   prompt: str = None,
                    token_max: str = -1):
         if chain_type == 'stuff':
             return load_summarize_chain(llm=llm,
@@ -149,7 +149,7 @@ class SummarizeDocsChain(CustomChain):
 
 CUSTOM_CHAINS: Dict[str, Type[Union[ConversationChain, CustomChain]]] = {
     'CombineDocsChain': CombineDocsChain,
-    # 'SummarizeDocsChain': SummarizeDocsChain,
+    'SummarizeDocsChain': SummarizeDocsChain,
     'SeriesCharacterChain': SeriesCharacterChain,
     'MidJourneyPromptChain': MidJourneyPromptChain,
     'TimeTravelGuideChain': TimeTravelGuideChain,

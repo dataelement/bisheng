@@ -148,6 +148,11 @@ def import_chain(chain: str) -> Type[Chain]:
 
     if chain in CUSTOM_CHAINS:
         return CUSTOM_CHAINS[chain]
+
+    from bisheng_langchain import chains
+    if chain in chains.__all__:
+        return import_class(f'bisheng_langchain.chains.{chain}')
+
     return import_class(f'langchain.chains.{chain}')
 
 

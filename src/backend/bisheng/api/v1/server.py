@@ -12,6 +12,7 @@ from bisheng.database.models.server import Server, ServerCreate, ServerRead
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import delete
 from sqlmodel import select
 
 # build router
@@ -29,11 +30,38 @@ async def add_server(*, session=Depends(get_session), server: ServerCreate):
         session.commit()
         session.refresh(db_server)
         # 拉取模型
-        await update_model(db_server.endpoint, db_server.server)
+        # await update_model(db_server.endpoint, db_server.server)
         return db_server
     except Exception as exc:
         session.rollback()
         logger.error(f'Error add server: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get('/list_server', response_model=ServerRead, status_code=200)
+async def list_server(*, session=Depends(get_session), server_id: int):
+    try:
+        rt_server = session.exec(select(Server)).all()
+        if rt_server:
+            return {'data': [jsonable_encoder(server) for server in rt_server]}
+        else:
+            return {'data': []}
+    except Exception as exc:
+        logger.error(f'Error delete server: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.delete('/{server_id}', status_code=200)
+async def delete_server(*, session=Depends(get_session), server_id: int):
+    try:
+        rt_server = session.get(Server, server_id)
+        if rt_server:
+            session.delete(rt_server)
+            session.commit()
+
+        return {'code': 200, 'message': 'success'}
+    except Exception as exc:
+        logger.error(f'Error delete server: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -42,13 +70,16 @@ async def list(*, session=Depends(get_session), query: ModelDeployQuery = None):
     try:
         # 更新模型
         servers = session.exec(select(Server)).all()
+        id2server = {server.id: server for server in servers}
+        name2server = {server.server: server for server in servers}
         for server in servers:
-            await update_model(server.endpoint, server.server)
+            await update_model(server.endpoint, server.id)
         sql = select(ModelDeploy)
         if query and query.server:
-            sql = sql.where(ModelDeploy.server == query.server)
-
+            sql = sql.where(ModelDeploy.server == str(name2server.get(query.server).id))
         db_model = session.exec(sql.order_by(ModelDeploy.model)).all()
+        for model in db_model:
+            model.server = id2server.get(int(model.server)).server
         return [jsonable_encoder(model) for model in db_model]
     except Exception as exc:
         logger.error(f'Error add server: {exc}')
@@ -145,13 +176,11 @@ async def get_gpu(*, session=Depends(get_session)):
             ip = service.endpoint.split(':')[0]
             url = f'http://{ip}:9002/metrics'
             gpu = await queryGPU(url)
-            logger.info(f'gpu_get=success url={url} gpu={gpu}')
-            service.gpu = json.dumps(gpu)
-            session.add(service)
-            [g.update({'server': service.server}) for g in gpu]
-            resp.append(gpu)
-        session.commit()
-
+            if gpu:
+                [g.update({'server': service.server}) for g in gpu]
+                resp.append(gpu)
+            else:
+                logger.error(f'gpu_query_none url={url}')
         return {'data': {'list': resp}}
 
     except Exception as exc:
@@ -226,7 +255,7 @@ async def queryGPU(query_url: str):
     return gpus
 
 
-async def update_model(endpoint: str, server: str):
+async def update_model(endpoint: str, server_id: int):
     try:
         url = f'http://{endpoint}/v2/repository/index'
         resp = requests.post(url)
@@ -238,19 +267,21 @@ async def update_model(endpoint: str, server: str):
         return []
 
     session = next(get_session())
-    db_deploy = session.exec(select(ModelDeploy).where(ModelDeploy.server == server)).all()
+    db_deploy = session.exec(select(ModelDeploy).where(ModelDeploy.server == str(server_id))).all()
     model_dict = {deploy.model: deploy for deploy in db_deploy}
+    model_delete = {model.id for key, model in model_dict.items()}
     for model in json.loads(content):
         model_name = model['name']
         status = model.get('state')
         reason = model.get('reason')
         if model_name in model_dict:
             db_model = model_dict.get(model_name)
+            # 依然存在
+            model_delete.remove(db_model.id)
         else:
-            db_model = ModelDeploy(server=server,
+            db_model = ModelDeploy(server=str(server_id),
                                    endpoint=f'http://{endpoint}/v2.1/models',
                                    model=model_name)
-
         # 当前是上下线中，需要判断
         if status == 'READY':
             db_model.status = '已上线'
@@ -268,8 +299,9 @@ async def update_model(endpoint: str, server: str):
             config_url = f'http://{endpoint}/v2/repository/models/{model_name}/config'
             resp = requests.post(config_url)
             db_model.config = resp.text
-
         session.add(db_model)
+    if model_delete:
+        session.exec(delete(ModelDeploy).where(ModelDeploy.id.in_(model_delete)))
     session.commit()
 
 
