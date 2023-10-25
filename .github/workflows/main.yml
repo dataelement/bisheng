@@ -3,11 +3,12 @@ name: CI
 on:
   push:
     # Sequence of patterns matched against refs/tags
-    tags:
-      - "v*"
+    branches:
+      - "main"
 
 env:
   DOCKERHUB_REPO: dataelement/
+  RELEASE_VERSION: v0.1.8
   
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -34,26 +35,26 @@ jobs:
       - name: Get version
         id: get_version
         run: |
-          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+          echo ::set-output name=VERSION::v0.1.8
       
-      - name: Set Environment Variable
-        run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
+      # - name: Set Environment Variable
+      #   run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
 
-      # 构建 bisheng_langchain
-      - name: Set python version 3.8
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.8
+      # # 构建 bisheng_langchain
+      # - name: Set python version 3.8
+      #   uses: actions/setup-python@v1
+      #   with:
+      #     python-version: 3.8
 
-      - name: Build PyPi bisheng-langchain and push
-        id: pypi_build_bisheng_langchain
-        run: |
-          pip install Cython
-          pip install wheel
-          pip install twine
-          cd ./src/bisheng-langchain
-          python setup.py bdist_wheel
-          twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
+      # - name: Build PyPi bisheng-langchain and push
+      #   id: pypi_build_bisheng_langchain
+      #   run: |
+      #     pip install Cython
+      #     pip install wheel
+      #     pip install twine
+      #     cd ./src/bisheng-langchain
+      #     python setup.py bdist_wheel
+      #     twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
           
       # 构建 backend 并推送到 Docker hub
       - name: Set up QEMU
@@ -70,7 +71,7 @@ jobs:
         run: | 
           cd ./src/backend
           pip install bisheng_langchain==$RELEASE_VERSION
-          sed -i 's/^bisheng_langchain.*/bisheng_langchain = "$RELEASE_VERSION"/g' pyproject.toml
+          sed -i 's/^bisheng_langchain.*/bisheng_langchain = "'$RELEASE_VERSION'"/g' pyproject.toml
           poetry lock
           cd ../../
 

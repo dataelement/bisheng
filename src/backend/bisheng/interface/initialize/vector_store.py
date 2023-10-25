@@ -208,7 +208,7 @@ def initialize_qdrant(class_object: Type[Qdrant], params: dict):
 
 
 def initial_milvus(class_object: Type[Milvus], params: dict):
-    if not params['connection_args']:
+    if not params['connection_args'] and settings.get_knowledge().get('vectorstores').get('Milvus'):
         params['connection_args'] = settings.get_knowledge().get('vectorstores').get('Milvus').get(
             'connection_args')
     elif isinstance(params.get('connection_args'), str):
@@ -232,11 +232,13 @@ def initial_milvus(class_object: Type[Milvus], params: dict):
 
 
 def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict):
-    if not params['elasticsearch_url']:
+    if not params['elasticsearch_url'] and settings.get_knowledge().get('vectorstores').get(
+            'ElasticKeywordsSearch'):
         params['elasticsearch_url'] = settings.get_knowledge().get('vectorstores').get(
             'ElasticKeywordsSearch').get('elasticsearch_url')
 
-    if not params['ssl_verify']:
+    if not params['ssl_verify'] and settings.get_knowledge().get('vectorstores').get(
+            'ElasticKeywordsSearch'):
         params['ssl_verify'] = eval(settings.get_knowledge().get('vectorstores').get(
             'ElasticKeywordsSearch').get('ssl_verify'))
     elif isinstance(params.get('ssl_verify'), str):
