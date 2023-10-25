@@ -38,8 +38,8 @@ async def add_server(*, session=Depends(get_session), server: ServerCreate):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.get('/list_server', response_model=ServerRead, status_code=200)
-async def list_server(*, session=Depends(get_session), server_id: int):
+@router.get('/list_server', status_code=200)
+async def list_server(*, session=Depends(get_session)):
     try:
         rt_server = session.exec(select(Server)).all()
         if rt_server:
