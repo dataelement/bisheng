@@ -160,7 +160,7 @@ export default function ResouceModal({ chatId, data, open, setOpen }: { chatId: 
                         (file) => file.fileUrl ?
                             <MemoizedFileView data={file}></MemoizedFileView> :
                             <div className="flex-1 bg-gray-100 rounded-md text-center">
-                                <p className="text-gray-500 text-md mt-[40%]">{t('tt.fileStorageFailure')}</p>
+                                <p className="text-gray-500 text-md mt-[40%]">{t('chat.fileStorageFailure')}</p>
                             </div>
                     }
                 </ResultPanne>

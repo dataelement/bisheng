@@ -29,10 +29,10 @@ export default function CreateTemp({ flow, open, setOpen, onCreated }: { flow: F
         const { name, description } = data
         if (!name) errorlist.push(t('skills.skillNameRequired'))
         if (name.length > 30) errorlist.push(t('skills.skillNameTooLong'))
-        if (!description) errorlist.push(t('skills.skillDescriptionRequired')) // 加些描述能够快速让别人理解您创造的技能')
-        if (description.length > 200) errorlist.push(t('skills.skillDescriptionTooLong'))
+        if (!description) errorlist.push(t('skills.skillDescRequired')) // 加些描述能够快速让别人理解您创造的技能')
+        if (description.length > 200) errorlist.push(t('skills.skillDescTooLong'))
         if (errorlist.length) setErrorData({
-            title: t('skills.keyInfoErrorTitle'),
+            title: t('skills.errorTitle'),
             list: errorlist,
         });
         // rq

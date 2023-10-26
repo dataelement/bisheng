@@ -1,14 +1,18 @@
 import { AppWindow, BookOpen, Github, HardDrive, LayoutDashboard, LogOut, MoonIcon, Puzzle, Settings, SunIcon } from "lucide-react";
 import { useContext } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import Logo from "../assets/logo.jpeg";
+import CrashErrorComponent from "../components/CrashErrorComponent";
 import { Separator } from "../components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { darkContext } from "../contexts/darkContext";
+import { TabsContext } from "../contexts/tabsContext";
 import { userContext } from "../contexts/userContext";
 
 export default function MainLayout() {
+    const { hardReset } = useContext(TabsContext);
     const { dark, setDark } = useContext(darkContext);
     // const _location = useLocation()
     const { t } = useTranslation()
@@ -19,7 +23,6 @@ export default function MainLayout() {
         <div className="bg-white h-screen w-40 px-4 py-8 shadow-xl dark:shadow-slate-700 relative text-center">
             <Link className="inline-block mb-1" to='/'><img src={Logo} className="w-9 h-9" alt="" /></Link>
             <h1 className="text-white font-bold text-xl text-center">文擎毕昇</h1>
-
             <nav className="mt-8">
                 <NavLink to='/' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
                     <AppWindow /><span className="mx-3">{t('menu.app')}</span>
@@ -98,7 +101,17 @@ export default function MainLayout() {
             </div>
         </div>
         <div className="flex-1">
-            <Outlet />
+            <ErrorBoundary
+                onReset={() => {
+                    window.localStorage.removeItem("tabsData");
+                    // window.localStorage.clear();
+                    hardReset();
+                    window.location.href = window.location.href;
+                }}
+                FallbackComponent={CrashErrorComponent}
+            >
+                <Outlet />
+            </ErrorBoundary>
         </div>
         {/* // mobile */}
         <div className="fixed w-full h-full top-0 left-0 bg-[rgba(0,0,0,0.4)] sm:hidden text-sm">

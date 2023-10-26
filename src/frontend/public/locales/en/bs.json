@@ -90,7 +90,7 @@
     },
     "chat": {
         "newChat": "New Chat",
-        "selectChat": "Select a conversation to start using EngineSee",
+        "selectChat": "Select a skill to start",
         "inputPlaceholder": "Enter your question",
         "uploadFileTooltip": "Upload File",
         "sendTooltip": "Send",

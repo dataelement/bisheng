@@ -22,8 +22,8 @@ export default function Select({ value, options, onChange, className = '', multi
         onChange={onChange}
     // by={compareDepartments}
     >
-        <div className="relative mt-1">
-            <Listbox.Button className={cn(`relative w-full cursor-default rounded-lg bg-white py-2 pl-3 pr-10 text-left shadow-md focus:outline-none border sm:text-sm  h-[38px] ${error && 'border-red-400'}`, className)}>
+        <div className={cn(`relative mt-1`, className)}>
+            <Listbox.Button className={`relative w-full cursor-default rounded-lg bg-white py-2 pl-3 pr-10 text-left shadow-md focus:outline-none border sm:text-sm  h-[38px] ${error && 'border-red-400'}`}>
                 <div className="block truncate">{name}</div>
                 <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                     <ChevronsUpDown />
