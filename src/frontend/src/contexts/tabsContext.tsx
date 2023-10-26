@@ -235,7 +235,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     flow.data.nodes.forEach((node: NodeType) => {
       const template = templates[node.data.type];
       if (!template) {
-        setErrorData({ title: `未知的节点类型: ${node.data.type}` });
+        setErrorData({ title: `Unknown node type: ${node.data.type}` });
         return;
       }
       if (Object.keys(template["template"]).length > 0) {

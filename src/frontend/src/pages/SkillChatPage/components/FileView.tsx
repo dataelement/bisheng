@@ -1,8 +1,7 @@
-import { ChevronDownSquare, ChevronUpSquare, Bookmark } from "lucide-react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { FixedSizeList as List, areEqual } from 'react-window';
-import { Button } from "../../../components/ui/button";
 import * as pdfjsLib from 'pdfjs-dist';
+import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { FixedSizeList as List, areEqual } from 'react-window';
 
 const SASS_HOST = 'https://bisheng.dataelem.com'
 interface Chunk {
@@ -95,6 +94,7 @@ const Row = React.memo(({ index, style, size, labels, pdf, onLoad }: RowProps) =
 
 
 export default function FileView({ data }) {
+    const { t } = useTranslation()
     const paneRef = useRef(null)
     const listRef = useRef(null)
     const [boxSize, setBoxSize] = useState({ width: 0, height: 0 })
@@ -203,7 +203,7 @@ export default function FileView({ data }) {
                 </div>
         }
         <div className="absolute left-[0px] rounded-sm p-4 px-0 top-[50%] translate-y-[-50%] max-2xl:scale-75 origin-top-left">
-            <p className="mb-1 text-sm font-bold text-center rounded-sm bg-[rgb(186,210,249)] text-blue-600">来源段落</p>
+            <p className="mb-1 text-sm font-bold text-center rounded-sm bg-[rgb(186,210,249)] text-blue-600">{t('chat.sourceTooltip')}</p>
             <div className="flex flex-col gap-2 ">
                 {data.chunks.map((chunk, i) =>
                     <div key={i}

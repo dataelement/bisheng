@@ -1,5 +1,6 @@
 import { AppWindow, BookOpen, Github, HardDrive, LayoutDashboard, LogOut, MoonIcon, Puzzle, Settings, SunIcon } from "lucide-react";
 import { useContext } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import Logo from "../assets/logo.jpeg";
 import { Separator } from "../components/ui/separator";
@@ -10,7 +11,7 @@ import { userContext } from "../contexts/userContext";
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
     // const _location = useLocation()
-
+    const { t } = useTranslation()
     // 角色
     const { user, setUser } = useContext(userContext);
 
@@ -21,21 +22,21 @@ export default function MainLayout() {
 
             <nav className="mt-8">
                 <NavLink to='/' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
-                    <AppWindow /><span className="mx-3">应 用</span>
+                    <AppWindow /><span className="mx-3">{t('menu.app')}</span>
                 </NavLink>
                 <NavLink to='/skills' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
-                    <LayoutDashboard /><span className="mx-3">技 能</span>
+                    <LayoutDashboard /><span className="mx-3">{t('menu.skills')}</span>
                 </NavLink>
                 <NavLink to='/filelib' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
-                    <HardDrive /><span className="mx-3">知 识</span>
+                    <HardDrive /><span className="mx-3">{t('menu.knowledge')}</span>
                 </NavLink>
                 <NavLink to='/model' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
-                    <Puzzle /><span className="mx-3">模 型</span>
+                    <Puzzle /><span className="mx-3">{t('menu.models')}</span>
                 </NavLink>
                 {
                     user.role === 'admin' && <>
                         <NavLink to='/sys' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
-                            <Settings /><span className="mx-3">系 统</span>
+                            <Settings /><span className="mx-3">{t('menu.system')}</span>
                         </NavLink>
                     </>
                 }
@@ -54,7 +55,7 @@ export default function MainLayout() {
                                     )}
                                 </div>
                             </TooltipTrigger>
-                            <TooltipContent><p>主题切换</p></TooltipContent>
+                            <TooltipContent><p>{t('menu.themeSwitch')}</p></TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
                     <Separator className="mx-1" orientation="vertical" />
@@ -76,7 +77,7 @@ export default function MainLayout() {
                                     <BookOpen className="side-bar-button-size mx-auto" />
                                 </Link>
                             </TooltipTrigger>
-                            <TooltipContent><p>文档</p></TooltipContent>
+                            <TooltipContent><p>{t('menu.document')}</p></TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
                 </div>
@@ -87,10 +88,10 @@ export default function MainLayout() {
                             <TooltipTrigger className="flex-1 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
                                 <div className=" flex justify-center gap-2 items-center" onClick={() => { setUser(null); localStorage.setItem('UUR_INFO', '') }}>
                                     <LogOut className="side-bar-button-size" />
-                                    <span>退出</span>
+                                    <span>{t('menu.logout')}</span>
                                 </div>
                             </TooltipTrigger>
-                            <TooltipContent><p>退出登录</p></TooltipContent>
+                            <TooltipContent><p>{t('menu.logoutDescription')}</p></TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
                 </div>
@@ -102,13 +103,13 @@ export default function MainLayout() {
         {/* // mobile */}
         <div className="fixed w-full h-full top-0 left-0 bg-[rgba(0,0,0,0.4)] sm:hidden text-sm">
             <div className="w-10/12 bg-gray-50 mx-auto mt-[30%] rounded-xl px-4 py-10">
-                <p className=" text-sm text-center">为了您的良好体验，请在 PC 端访问该网站</p>
+                <p className=" text-sm text-center">{t('menu.forBestExperience')}</p>
                 <div className="flex mt-8 justify-center gap-4">
                     <a href={"https://github.com/dataelement/bisheng"} target="_blank">
                         <Github className="side-bar-button-size mx-auto" />Github
                     </a>
                     <a href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
-                        <BookOpen className="side-bar-button-size mx-auto" /> 在线文档
+                        <BookOpen className="side-bar-button-size mx-auto" /> {t('menu.onlineDocumentation')}
                     </a>
                 </div>
             </div>

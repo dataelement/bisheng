@@ -286,11 +286,11 @@ export default function FormModal({
           connectWS();
         } else {
           setErrorData({
-            title: "网络连接出现错误,请尝试以下方法 ",
+            title: "Network connection error, please try the following methods:",
             list: [
-              "刷新页面",
-              "使用新的流程选项卡",
-              "检查后台是否启动"
+              "Refresh the page.",
+              "Use a new flow tab.",
+              "Check if the background is running."
             ],
           });
         }
@@ -560,11 +560,11 @@ export default function FormModal({
                       <br />
                       <div className="bisheng-chat-desc">
                         <span className="bisheng-chat-desc-span">
-                          开始对话并单击agent's的分析过程{" "}
+                          Start the conversation and click on the agent's analysis process{" "}
                           <span>
                             <THOUGHTS_ICON className="mx-1 inline h-5 w-5 animate-bounce " />
                           </span>{" "}
-                          来检查链接过程。
+                          to inspect the linking process.。
                         </span>
                       </div>
                     </div>

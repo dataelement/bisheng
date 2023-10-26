@@ -1,6 +1,8 @@
+import { t } from "i18next";
 import _ from "lodash";
 import { FileUp, Send } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
@@ -17,6 +19,8 @@ import ResouceModal from "./components/ResouceModal";
 export default function SkillChatPage(params) {
     const [open, setOpen] = useState(false)
     const [face, setFace] = useState(true);
+
+    const { t } = useTranslation()
 
     const { flows } = useContext(TabsContext);
     const [onlineFlows, setOnlineFlows] = useState([])
@@ -72,7 +76,7 @@ export default function SkillChatPage(params) {
         chatIdRef.current = chat.chat_id
         let flow = flows.find(flow => flow.id === chat.flow_id) || await getFlowFromDatabase(chat.flow_id)
         if (!flow) {
-            setInputState({ lock: true, error: '该技能已被删除' })
+            setInputState({ lock: true, error: t('chat.skillDeleted') })
             clearHistory()
             return setFace(false)
         }
@@ -144,7 +148,7 @@ export default function SkillChatPage(params) {
     return <div className="flex">
         <div className="h-screen w-[200px] relative border-r">
             <div className="absolute flex pt-2 ml-[20px] bg-[#fff] dark:bg-gray-950">
-                <div className="border rounded-lg px-4 py-2 text-center cursor-pointer w-[160px] hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setOpen(true)}>新建会话</div>
+                <div className="border rounded-lg px-4 py-2 text-center cursor-pointer w-[160px] hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setOpen(true)}>{t('chat.newChat')}</div>
             </div>
             <div ref={chatsRef} className="scroll p-4 h-full overflow-y-scroll no-scrollbar pt-12">
                 {
@@ -159,14 +163,14 @@ export default function SkillChatPage(params) {
         </div>
         {/* chat */}
         {face ? <div className="flex-1 chat-box h-screen overflow-hidden relative">
-            <p className="text-center mt-[100px]">选择一个对话开始文擎睿见</p>
+            <p className="text-center mt-[100px]">{t('chat.selectChat')}</p>
         </div>
             : <div className="flex-1 chat-box h-screen overflow-hidden relative">
                 <div className="absolute w-full px-4 py-4 bg-[#fff] z-10 dark:bg-gray-950">{chatList.find(chat => chat.chat_id === chatId)?.flow_name}</div>
                 <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
                     <div ref={messagesRef} className="chat-panne h-full overflow-y-scroll no-scrollbar px-4 pb-20">
                         {
-                            chatHistory.map((c, i) => <ChatMessage key={c.id || i} chat={c} onSouce={() => setSouce(c)}></ChatMessage>)
+                            chatHistory.map((c, i) => <ChatMessage key={c.id || i} chat={c} onSource={() => setSouce(c)}></ChatMessage>)
                         }
                     </div>
                     <div className="absolute w-full bottom-0 bg-gradient-to-t from-[#fff] to-[rgba(255,255,255,0.8)] px-8 dark:bg-gradient-to-t dark:from-[#000] dark:to-[rgba(0,0,0,0.8)]">
@@ -175,17 +179,16 @@ export default function SkillChatPage(params) {
                                 ref={inputRef}
                                 disabled={inputDisable} style={{ height: 36 }} rows={1}
                                 className={`w-full resize-none border-none bg-transparent outline-none px-4 pt-1 text-xl max-h-[200px]`}
-                                placeholder="请输入问题"
+                                placeholder={t('chat.inputPlaceholder')}
                                 onInput={handleTextAreaHeight}
                                 onKeyDown={(event) => {
                                     if (event.key === "Enter" && !event.shiftKey) handleSend()
                                 }}></textarea>
                             <div className="absolute right-6 bottom-4 flex gap-2">
-                                <ShadTooltip content={'上传文件'}>
+                                <ShadTooltip content={t('chat.uploadFileTooltip')}>
                                     <button disabled={inputState.lock || !fileInputs?.length} className="disabled:text-gray-400" onClick={uploadFile}><FileUp /></button>
                                 </ShadTooltip>
-                                <ShadTooltip content={'发送'}>
-                                    {/* 内容为空 or 输入框禁用 or 文件分析类未上传文件 */}
+                                <ShadTooltip content={t('chat.sendTooltip')}>
                                     <button disabled={inputEmpty || inputDisable} className=" disabled:text-gray-400" onClick={handleSend}><Send /></button>
                                 </ShadTooltip>
                             </div>
@@ -197,8 +200,8 @@ export default function SkillChatPage(params) {
         {/* 添加模型 */}
         <SkillTemps
             flows={onlineFlows}
-            title='技能选择'
-            desc='选择一个您想使用的线上技能'
+            title={t('chat.skillTempsTitle')}
+            desc={t('chat.skillTempsDesc')}
             open={open} setOpen={setOpen}
             onSelect={(e) => handlerSelectFlow(e)}></SkillTemps>
         {/* 源文件类型 */}
@@ -213,6 +216,7 @@ export default function SkillChatPage(params) {
 const useWebsocketChat = (chatIdRef) => {
     const ws = useRef<WebSocket | null>(null);
     const flow = useRef<FlowType>(null)
+    const { t } = useTranslation()
 
     const { tabsState } = useContext(TabsContext);
     const [inputState, setInputState] = useState({
@@ -313,11 +317,11 @@ const useWebsocketChat = (chatIdRef) => {
                         // connectWS();
                     } else {
                         setErrorData({
-                            title: "网络连接出现错误,请尝试以下方法: ",
+                            title: `${t('chat.networkError')}:`,
                             list: [
-                                "操作不要过快",
-                                "刷新页面",
-                                "检查后台是否启动"
+                                t('chat.networkErrorList1'),
+                                t('chat.networkErrorList2'),
+                                t('chat.networkErrorList3')
                             ],
                         });
                     }
@@ -354,12 +358,6 @@ const useWebsocketChat = (chatIdRef) => {
             name: flow.current.name,
             description: flow.current.description,
         });
-        // setTabsState((old) => {
-        //     if (!chatKey) return old;
-        //     let newTabsState = _.cloneDeep(old);
-        //     newTabsState[id.current].formKeysData.input_keys[chatKey] = ""; // input值制空
-        //     return newTabsState;
-        // });
     }
 
     // 发送ws
@@ -535,7 +533,7 @@ const useWebsocketChat = (chatIdRef) => {
                 if (newChat.length) {
                     newChat[newChat.length - 1].end = true;
                 }
-                newChat.push({ end: true, message: event.reason ? '链接异常断开:' + event.reason : '网络断开！', isSend: false, chatKey: '', files: [] });
+                newChat.push({ end: true, message: event.reason ? `${t('chat.connectionbreakTip')}${event.reason}` : t('chat.connectionbreak'), isSend: false, chatKey: '', files: [] });
                 return newChat
             })
             setInputState({ lock: false, error: '' });
@@ -544,10 +542,10 @@ const useWebsocketChat = (chatIdRef) => {
         ws.current?.close()
         ws.current = null
 
-        setTimeout(() => {
-            // connectWS();
-            // setLockChat(false);
-        }, 1000);
+        // setTimeout(() => {
+        // connectWS();
+        // setLockChat(false);
+        // }, 1000);
     }
 
     useEffect(() => {
@@ -556,7 +554,6 @@ const useWebsocketChat = (chatIdRef) => {
                 ws.current.close();
             }
         };
-        // do not add connectWS on dependencies array
     }, []);
 
     // 获取上传file input
@@ -784,7 +781,7 @@ const useBuild = () => {
             const errors = flow.data.nodes.flatMap((n: NodeType) => validateNode(n, flow.data.edges))
             if (errors.length > 0) {
                 setErrorData({
-                    title: "您好像缺少了某些配置",
+                    title: t('chat.buildError'),
                     list: errors,
                 });
                 return;
@@ -796,14 +793,6 @@ const useBuild = () => {
             await streamNodeData(flow, chatIdRef.current);
             await enforceMinimumLoadingTime(startTime, minimumLoadingTime); // 至少等200ms, 再继续(强制最小load时间)
 
-            // if (!allNodesValid) {
-            //     setErrorData({
-            //         title: "您好像缺少了某些配置",
-            //         list: [
-            //             "检查组件并重试。将鼠标悬停在组件状态图标 🔴 上进行检查。",
-            //         ],
-            //     });
-            // }
         } catch (error) {
             console.error("Error:", error);
         } finally {

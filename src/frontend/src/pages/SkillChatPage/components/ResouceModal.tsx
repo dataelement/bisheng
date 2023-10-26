@@ -1,12 +1,9 @@
-import { ChevronDownSquare, ChevronUpSquare, Download, Import } from "lucide-react";
-import { Button } from "../../../components/ui/button";
-import { useEffect, useRef, useState } from "react";
-import { Input } from "../../../components/ui/input";
-import FileView from "./FileView";
+import { Download, Import } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
 import { ChatMessageType } from "../../../types/chat";
-import React from "react";
-import ShadTooltip from "../../../components/ShadTooltipComponent";
+import FileView from "./FileView";
 
 // 顶部答案区
 const Anwser = ({ id, msg, onInit, onAdd }) => {
@@ -42,6 +39,7 @@ const Anwser = ({ id, msg, onInit, onAdd }) => {
 
 // 
 const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId: string, words: string[], data: ChatMessageType, onClose: any, onAdd: any, children: any }) => {
+    const { t } = useTranslation()
     const [editCustomKey, setEditCustomKey] = useState(false)
     const inputRef = useRef(null)
 
@@ -79,8 +77,8 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
         <div className="w-[300px] bg-gray-100 rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar">
             {/* label */}
             <div className="mb-4 text-sm font-bold">
-                筛选标签
-                <div className="tooltip fixed" data-tip='系统自动根据答案生成关键信息标签,也可手动增删标签,系统根据标签计算各个文件及段落相关性。'><span data-theme="light" className="badge cursor-pointer">?</span></div>
+                {t('chat.filterLabel')}
+                <div className="tooltip fixed" data-tip={t('chat.tooltipText')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
             </div>
             <div className="flex flex-wrap gap-2">
                 {words.map((str, i) => <div key={str} className="badge badge-info h-[auto] gap-2 text-gray-600 bg-[rgba(53,126,249,.15)]">{str}<span className="cursor-pointer" onClick={() => onClose(i)}>x</span></div>)}
@@ -95,22 +93,22 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                         onBlur={() => {
                             handleAddKeyword(inputRef.current.value);
                         }}></input></div> :
-                        <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>+自定义</span></div>
+                        <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>{t('chat.addCustomLabel')}</span></div>
                 }
             </div>
             {/* files */}
             <div className="mt-4">
-                <p className="mb-4 text-sm font-bold">来源文档</p>
+                <p className="mb-4 text-sm font-bold">{t('chat.sourceDocumentsLabel')}</p>
                 {files.map(_file =>
-                    !_file ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] hover:bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
+                    !_file ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
                         <p className="text-sm">{_file.fileName}</p>
                         <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
-                            <div className="tooltip" data-tip='下载双层PDF'>
+                            <div className="tooltip" data-tip={t('chat.downloadPDFTooltip')}>
                                 <a href="http://www.baidu.com" target="_blank" onClick={(event) => event.stopPropagation()} >
                                     <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                 </a>
                             </div>
-                            <div className="tooltip tooltip-left" data-tip='下载原文件'>
+                            <div className="tooltip tooltip-left" data-tip={t('chat.downloadOriginalTooltip')}>
                                 <a href="http://www.baidu.com" target="_blank" onClick={(event) => event.stopPropagation()} >
                                     <Download color="rgba(53,126,249,1)" size={20} strokeWidth={1.5}></Download>
                                 </a>
@@ -118,21 +116,22 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                         </div>
                         <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
                     </div> :
-                        <div key={_file.id} className={`group rounded-xl bg-[#fff] hover:bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
+                        <div key={_file.id} className={`group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
                             <p className="text-sm blur-sm">是真的马赛克.msk</p>
                             <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
                         </div>
                 )}
-                {!files.length && <p className="text-sm text-center mt-10 text-gray-500">无匹配的源文件</p>}
+                {!files.length && <p className="text-sm text-center mt-10 text-gray-500">{t('chat.noMatchedFilesMessage')}</p>}
             </div>
         </div>
-        {/* file panne */}
+        {/* file pane */}
         {file && children(file)}
-    </div >
+    </div>
 }
 
 export default function ResouceModal({ chatId, data, open, setOpen }: { chatId: string, data: ChatMessageType, open: boolean, setOpen: (b: boolean) => void }) {
     // labels
+    const { t } = useTranslation()
     const [keywords, setKeywords] = useState([])
     const handleAddWord = (word: string) => {
         // 去重 更新
@@ -161,7 +160,7 @@ export default function ResouceModal({ chatId, data, open, setOpen }: { chatId: 
                         (file) => file.fileUrl ?
                             <MemoizedFileView data={file}></MemoizedFileView> :
                             <div className="flex-1 bg-gray-100 rounded-md text-center">
-                                <p className=" text-gray-500 text-md mt-[40%]">文件存储故障!</p>
+                                <p className="text-gray-500 text-md mt-[40%]">{t('tt.fileStorageFailure')}</p>
                             </div>
                     }
                 </ResultPanne>

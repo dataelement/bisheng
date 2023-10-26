@@ -8,23 +8,25 @@ import {
 import Roles from "./components/Roles";
 import Config from "./components/Config";
 import Users from "./components/Users";
+import { useTranslation } from "react-i18next";
 
 export default function FileLibPage() {
+    const { t } = useTranslation()
 
     return <div className="w-full h-screen p-6 overflow-y-auto">
-        <Tabs defaultValue="account" className="w-full">
+        <Tabs defaultValue="user" className="w-full">
             <TabsList className="">
-                <TabsTrigger value="account" className="roundedrounded-xl">用户管理</TabsTrigger>
-                <TabsTrigger value="role">角色管理</TabsTrigger>
-                <TabsTrigger value="password">系统配置</TabsTrigger>
+                <TabsTrigger value="user" className="roundedrounded-xl">{t('system.userManagement')}</TabsTrigger>
+                <TabsTrigger value="role">{t('system.roleManagement')}</TabsTrigger>
+                <TabsTrigger value="system">{t('system.systemConfiguration')}</TabsTrigger>
             </TabsList>
-            <TabsContent value="account">
+            <TabsContent value="user">
                 <Users></Users>
             </TabsContent>
             <TabsContent value="role">
                 <Roles></Roles>
             </TabsContent>
-            <TabsContent value="password">
+            <TabsContent value="system">
                 <Config></Config>
             </TabsContent>
         </Tabs>

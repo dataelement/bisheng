@@ -1,11 +1,13 @@
-import { Listbox, Transition } from "@headlessui/react"
-import { Fragment, useEffect, useState } from "react"
-import { Button } from "../../../components/ui/button"
+import { Listbox } from "@headlessui/react"
 import { CheckIcon, ChevronsUpDown } from "lucide-react"
+import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { Button } from "../../../components/ui/button"
 import { getRolesApi, getUserRoles, updateUserRoles } from "../../../controllers/API/user"
 import { ROLE } from "./Roles"
 
 export default function UserRoleModal({ id, onClose, onChange }) {
+    const { t } = useTranslation()
 
     const [roles, setRoles] = useState<ROLE[]>([])
     const [selected, setSelected] = useState([])
@@ -36,7 +38,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
 
     return <dialog className={`modal ${id && 'modal-open'}`}>
         <div className="modal-box w-[600px] max-w-[600px] bg-[#fff] shadow-lg dark:bg-background relative overflow-visible">
-            <p className="font-bold mt-8 mb-2">角色选择</p>
+            <p className="font-bold mt-8 mb-2">{t('system.roleSelect')}</p>
             <Listbox multiple
                 value={selected}
                 onChange={setSelected}
@@ -77,8 +79,8 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                 </div>
             </Listbox>
             <div className="mt-12 flex justify-center gap-4">
-                <Button variant="outline" className="px-16 rounded-full" onClick={onClose}>取消</Button>
-                <Button className="px-16 rounded-full" onClick={handleSave}>保存</Button>
+                <Button variant="outline" className="px-16 rounded-full" onClick={onClose}>{t('cancel')}</Button>
+                <Button className="px-16 rounded-full" onClick={handleSave}>{t('save')}</Button>
             </div>
         </div>
     </dialog>

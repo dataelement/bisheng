@@ -103,7 +103,7 @@ export default function InputFileComponent({
               : "input-dialog input-primary text-muted-foreground"
           }
         >
-          {myValue !== "" ? myValue : "当前文件为空"}
+          {myValue !== "" ? myValue : "The current file is empty"}
         </span>
         <button onClick={handleButtonClick}>
           {!editNode && !loading && (

@@ -106,7 +106,7 @@ export default function L2ParameterComponent({
                 <Dropdown
                     options={data.node.template[name].options}
                     onSelect={handleOnNewValue}
-                    value={data.node.template[name].value ?? "选一个选项"}
+                    value={data.node.template[name].value ?? "choose option"}
                 ></Dropdown>
             </div>
         ) : type === "code" ? (

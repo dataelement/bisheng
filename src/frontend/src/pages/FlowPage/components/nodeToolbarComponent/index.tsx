@@ -1,4 +1,4 @@
-import { Copy, FileText, Settings2, Trash2 } from "lucide-react";
+import { Copy, Settings2, Trash2 } from "lucide-react";
 import { useContext, useState } from "react";
 import { useReactFlow } from "reactflow";
 import ShadTooltip from "../../../../components/ShadTooltipComponent";
@@ -29,7 +29,7 @@ const NodeToolbarComponent = (props) => {
     <>
       <div className="w-26 h-10">
         <span className="isolate inline-flex rounded-md shadow-sm">
-          <ShadTooltip content="删除" side="top">
+          <ShadTooltip content="delete" side="top">
             <button
               className="rounded-l-md bg-background px-2 py-2 shadow-md ring-inset transition-all hover:bg-muted"
               onClick={() => { props.deleteNode(props.data.id); }}
@@ -38,7 +38,7 @@ const NodeToolbarComponent = (props) => {
             </button>
           </ShadTooltip>
 
-          <ShadTooltip content="复制" side="top">
+          <ShadTooltip content="copy" side="top">
             <button
               className="-ml-px bg-background px-2 py-2 shadow-md ring-inset transition-all hover:bg-muted"
               onClick={(event) => {
@@ -84,7 +84,7 @@ const NodeToolbarComponent = (props) => {
             </a>
           </ShadTooltip> */}
 
-          <ShadTooltip content="编辑节点" side="top">
+          <ShadTooltip content="Edit Node" side="top">
             <button
               className={classNames(
                 "rounded-r-md -ml-px bg-background px-2 py-2 shadow-md ring-inset transition-all hover:bg-muted" +
@@ -99,99 +99,6 @@ const NodeToolbarComponent = (props) => {
               <Settings2 className="h-4 w-4 "></Settings2>
             </button>
           </ShadTooltip>
-
-          {/*
-          <Menu as="div" className="relative inline-block text-left z-100">
-            <button className="hover:dark:hover:bg-[#242f47] text-gray-700 transition-all duration-500 ease-in-out dark:bg-gray-800 dark:text-gray-300 shadow-md relative -ml-px inline-flex items-center bg-white px-2 py-2 ring-1 ring-inset ring-gray-300 hover:bg-muted focus:z-10 rounded-r-md">
-              <div>
-                <Menu.Button className="flex items-center">
-                  <EllipsisVerticalIcon
-                    className="w-5 h-5 "
-                    aria-hidden="true"
-                  />
-                </Menu.Button>
-              </div>
-
-              <Transition
-                as={Fragment}
-                enter="transition ease-out duration-100"
-                enterFrom="transform opacity-0 scale-95"
-                enterTo="transform opacity-100 scale-100"
-                leave="transition ease-in duration-75"
-                leaveFrom="transform opacity-100 scale-100"
-                leaveTo="transform opacity-0 scale-95"
-              >
-                <Menu.Items className="absolute z-40 mt-2 w-56 origin-top-right rounded-md bg-background shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none top-[28px]">
-                  <div className="py-1">
-                    <Menu.Item>
-                      {({ active }) => (
-                        <button
-                          onClick={(event) => {
-                            event.preventDefault();
-                            props.openPopUp(
-                              <EditNodeModal data={props.data} />
-                            );
-                          }}
-                          className={classNames(
-                            active
-                              ? "bg-muted text-gray-900"
-                              : "text-foreground",
-                            "w-full group flex items-center px-4 py-2 text-sm"
-                          )}
-                        >
-                          <Settings
-                            className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500"
-                            aria-hidden="true"
-                          />
-                          Edit
-                        </button>
-                      )}
-                    </Menu.Item>
-                    <Menu.Item>
-                      {({ active }) => (
-                        <button
-                          onClick={(event) => {
-                            event.preventDefault();
-                            console.log(
-                              reactFlowInstance.getNode(props.data.id)
-                            );
-                            paste(
-                              {
-                                nodes: [
-                                  reactFlowInstance.getNode(props.data.id),
-                                ],
-                                edges: [],
-                              },
-                              {
-                                x: 50,
-                                y: 10,
-                                paneX: reactFlowInstance.getNode(props.data.id)
-                                  .position.x,
-                                paneY: reactFlowInstance.getNode(props.data.id)
-                                  .position.y,
-                              }
-                            );
-                          }}
-                          className={classNames(
-                            active
-                              ? "bg-muted text-gray-900"
-                              : "text-foreground",
-                            "w-full group flex items-center px-4 py-2 text-sm"
-                          )}
-                        >
-                          <DocumentDuplicateIcon
-                            className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500"
-                            aria-hidden="true"
-                          />
-                          Duplicate
-                        </button>
-                      )}
-                    </Menu.Item>
-                  </div>
-                </Menu.Items>
-              </Transition>
-            </button>
-          </Menu> */}
         </span>
       </div>
     </>

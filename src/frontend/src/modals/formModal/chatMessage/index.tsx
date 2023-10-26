@@ -170,33 +170,33 @@ export default function ChatMessage({
               <span className="prose inline-block break-words text-primary dark:prose-invert">
                 {promptOpen
                   ? template?.split("\n")?.map((line, index) => {
-                      const regex = /{([^}]+)}/g;
-                      let match;
-                      let parts = [];
-                      let lastIndex = 0;
-                      while ((match = regex.exec(line)) !== null) {
-                        // Push text up to the match
-                        if (match.index !== lastIndex) {
-                          parts.push(line.substring(lastIndex, match.index));
-                        }
-                        // Push div with matched text
-                        if (chat.message[match[1]]) {
-                          parts.push(
-                            <span className="chat-message-highlight">
-                              {chat.message[match[1]]}
-                            </span>
-                          );
-                        }
+                    const regex = /{([^}]+)}/g;
+                    let match;
+                    let parts = [];
+                    let lastIndex = 0;
+                    while ((match = regex.exec(line)) !== null) {
+                      // Push text up to the match
+                      if (match.index !== lastIndex) {
+                        parts.push(line.substring(lastIndex, match.index));
+                      }
+                      // Push div with matched text
+                      if (chat.message[match[1]]) {
+                        parts.push(
+                          <span className="chat-message-highlight">
+                            {chat.message[match[1]]}
+                          </span>
+                        );
+                      }
 
-                        // Update last index
-                        lastIndex = regex.lastIndex;
-                      }
-                      // Push text after the last match
-                      if (lastIndex !== line.length) {
-                        parts.push(line.substring(lastIndex));
-                      }
-                      return <p>{parts}</p>;
-                    })
+                      // Update last index
+                      lastIndex = regex.lastIndex;
+                    }
+                    // Push text after the last match
+                    if (lastIndex !== line.length) {
+                      parts.push(line.substring(lastIndex));
+                    }
+                    return <p>{parts}</p>;
+                  })
                   : chat.message[chat.chatKey]}
               </span>
             </>

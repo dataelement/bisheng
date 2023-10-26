@@ -1,5 +1,6 @@
 import { Bot, Copy, File, User } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
@@ -9,8 +10,9 @@ import { alertContext } from "../../../contexts/alertContext";
 import { CodeBlock } from "../../../modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "../../../types/chat";
 
-export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce: () => void }) => {
+export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSource: () => void }) => {
     const textRef = useRef(null)
+    const { t } = useTranslation()
     const [cursor, setCursor] = useState({ x: 0, y: 0 })
     useEffect(() => {
         if (!textRef.current || chat.end || !chat.message) return
@@ -107,12 +109,12 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
         document.execCommand('copy');
         window.getSelection().removeAllRanges();
         // alert('已复制文本到剪贴板：' + copyDiv.innerText);
-        setSuccessData({ title: '内容已复制' })
+        setSuccessData({ title: t('chat.copyTip') })
     }
 
     const source = <div className="chat-footer py-1">
-        {chat.noAccess && <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>因权限不足，该答案剔除了无权查看的内容</p>}
-        <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent" onClick={onSouce}>参考来源</button>
+        {chat.noAccess && <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>{t('chat.noAccess')}</p>}
+        <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent" onClick={onSource}>{t('chat.source')}</button>
     </div>
 
     if (chat.isSend) return chat.files.length ? <>
@@ -120,14 +122,14 @@ export const ChatMessage = ({ chat, onSouce }: { chat: ChatMessageType, onSouce:
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-sky-500 flex items-center justify-center"><User color="#fff" size={28} /></div></div>
             <Card className="my-2 w-[200px] relative">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><File />文件</CardTitle>
+                    <CardTitle className="flex items-center gap-2"><File />{t('file')}</CardTitle>
                     <CardDescription>{chat.files[0]?.file_name}</CardDescription>
                 </CardHeader>
                 {chat.files[0]?.data === 'progress' && <div className=" absolute top-0 left-0 w-full h-full bg-[rgba(255,255,255,0.8)]"><span className="loading loading-spinner loading-xs mr-4 align-middle absolute left-[-24px] bottom-0"></span></div>}
                 {chat.files[0]?.data === 'error' && <div className="flex w-4 h-4 justify-center items-center absolute left-[-24px] bottom-0 bg-red-500 text-gray-50 rounded-full">!</div>}
             </Card>
         </div>
-        {!chat.files[0]?.data && <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 ${color['system']} ${border['system']}`}>文件解析中</div>}
+        {!chat.files[0]?.data && <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 ${color['system']} ${border['system']}`}>{t('chat.filePrsing')}</div>}
     </> :
         <div className="chat chat-end">
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-[rgba(53,126,249,.6)] flex items-center justify-center"><User color="#fff" size={28} /></div></div>

@@ -50,7 +50,7 @@ export default function ImportModal() {
       })
       .catch((error) =>
         setErrorData({
-          title: "加载示例时出现错误，请重试",
+          title: "An error occurred while loading the sample. Please try again.",
           list: [error.message],
         })
       );

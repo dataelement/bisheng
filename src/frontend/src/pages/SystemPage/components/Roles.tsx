@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { bsconfirm } from "../../../alerts/confirm";
+import { Button } from "../../../components/ui/button";
 import {
     Table,
     TableBody,
@@ -8,11 +11,8 @@ import {
     TableHeader,
     TableRow
 } from "../../../components/ui/table";
-import { Button } from "../../../components/ui/button";
-import { useNavigate } from "react-router-dom";
-import EditRole from "./EditRole";
 import { delRoleApi, getRolesApi } from "../../../controllers/API/user";
-import { bsconfirm } from "../../../alerts/confirm";
+import EditRole from "./EditRole";
 
 export type ROLE = {
     create_time: string
@@ -22,8 +22,8 @@ export type ROLE = {
     update_time: string
 }
 
-export default function Roles(params) {
-
+export default function Roles() {
+    const { t } = useTranslation()
 
     const [role, setRole] = useState<ROLE | null | {}>(null)
     const [roles, setRoles] = useState<ROLE[]>([])
@@ -45,8 +45,8 @@ export default function Roles(params) {
     // 删除
     const handleDelete = (item) => {
         bsconfirm({
-            desc: `是否删除 【${item.role_name}】 ?`,
-            okTxt: '删除',
+            desc: `${t('system.confirmText')} 【${item.role_name}】 ?`,
+            okTxt: t('delete'),
             onOk(next) {
                 delRoleApi(item.id).then(loadData)
                 next()
@@ -57,14 +57,14 @@ export default function Roles(params) {
     if (role) return <EditRole id={role?.id || -1} name={role?.role_name || ''} onChange={handleChange}></EditRole>
 
     return <div className=" relative">
-        <Button className="h-8 rounded-full absolute right-0 top-[-40px]" onClick={() => setRole({})}>创建</Button>
+        <Button className="h-8 rounded-full absolute right-0 top-[-40px]" onClick={() => setRole({})}>{t('create')}</Button>
         <Table>
-            <TableCaption>角色列表.</TableCaption>
+            <TableCaption>{t('system.roleList')}.</TableCaption>
             <TableHeader>
                 <TableRow>
-                    <TableHead className="w-[200px]">角色名</TableHead>
-                    <TableHead>创建时间</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
+                    <TableHead className="w-[200px]">{t('system.roleName')}</TableHead>
+                    <TableHead>{t('createTime')}</TableHead>
+                    <TableHead className="text-right">{t('operations')}</TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -73,8 +73,8 @@ export default function Roles(params) {
                         <TableCell className="font-medium">{el.role_name}</TableCell>
                         <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                         <TableCell className="text-right">
-                            <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => setRole(el)}>编辑</Button>
-                            <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => handleDelete(el)} className="text-red-500">删除</Button>
+                            <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => setRole(el)}>{t('edit')}</Button>
+                            <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => handleDelete(el)} className="text-red-500">{t('delete')}</Button>
                         </TableCell>
                     </TableRow>
                 ))}

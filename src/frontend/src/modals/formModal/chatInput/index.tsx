@@ -38,11 +38,10 @@ export default function ChatInput({
           resize: "none",
           bottom: `${inputRef?.current?.scrollHeight}px`,
           maxHeight: "150px",
-          overflow: `${
-            inputRef.current && inputRef.current.scrollHeight > 150
-              ? "auto"
-              : "hidden"
-          }`,
+          overflow: `${inputRef.current && inputRef.current.scrollHeight > 150
+            ? "auto"
+            : "hidden"
+            }`,
         }}
         value={lockChat ? "Thinking..." : chatValue}
         onChange={(e) => {
@@ -52,15 +51,15 @@ export default function ChatInput({
           lockChat
             ? " form-modal-lock-true bg-input"
             : noInput
-            ? "form-modal-no-input bg-input"
-            : " form-modal-lock-false bg-background",
+              ? "form-modal-no-input bg-input"
+              : " form-modal-lock-false bg-background",
 
           "form-modal-lockchat"
         )}
         placeholder={
           noInput
-            ? "找不到聊天input入口。单击以运行你的技能。"
-            : "发送 message..."
+            ? "cannot find a chat input entry. Click to run your skill."
+            : "send message..."
         }
       />
       <div className="form-modal-send-icon-position">
@@ -70,8 +69,8 @@ export default function ChatInput({
             noInput
               ? "bg-indigo-600 text-background"
               : chatValue === ""
-              ? "text-primary"
-              : "bg-emerald-600 text-background"
+                ? "text-primary"
+                : "bg-emerald-600 text-background"
           )}
           disabled={lockChat}
           onClick={() => sendMessage()}
