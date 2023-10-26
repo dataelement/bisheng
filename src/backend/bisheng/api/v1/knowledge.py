@@ -4,6 +4,7 @@ import json
 import time
 from typing import List, Optional
 from uuid import uuid4
+from bisheng_langchain.vectorstores.elastic_keywords_search import ElasticKeywordsSearch
 
 import requests
 from bisheng.api.utils import access_check
@@ -278,6 +279,11 @@ def delete_knowledge_file(*,
         pk = vectore_client.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])
         res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
         logger.info(f'act=delete_vector file_id={file_id} res={res}')
+
+    esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+    if isinstance(esvectore_client, ElasticKeywordsSearch):
+        esvectore_client.client.delete_by_query(index=collection_name,query={"match":{"metadata.file_id":file_id}})
+        logger.info(f'act=delete_es file_id={file_id} res={res}')
 
     # minio
     minio_client.MinioClient().delete_minio(str(knowledge_file.id))
