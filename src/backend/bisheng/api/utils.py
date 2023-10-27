@@ -59,7 +59,11 @@ def build_input_keys_response(langchain_object, artifacts):
     return input_keys_response
 
 
-def build_flow(graph_data: dict, artifacts, process_file=False, flow_id=None, chat_id=None):
+def build_flow(graph_data: dict,
+               artifacts,
+               process_file=False,
+               flow_id=None,
+               chat_id=None) -> Graph:
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
