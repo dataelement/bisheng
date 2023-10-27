@@ -109,11 +109,11 @@ export const LoginPage = () => {
                         }
                         {
                             showLogin ? <>
-                                <div className="text-center"><a href="javascript:;" className=" text-blue-500 text-sm underline" onClick={() => setShowLogin(false)}>没有账号，注册</a></div>
+                                <div className="text-center"><a href="javascript:;" className=" text-blue-500 text-sm underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a></div>
                                 <Button disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button>
                             </> :
                                 <>
-                                    <div className="text-center"><a href="javascript:;" className=" text-blue-500 text-sm underline" onClick={() => setShowLogin(true)}>已有账号，登录</a></div>
+                                    <div className="text-center"><a href="javascript:;" className=" text-blue-500 text-sm underline" onClick={() => setShowLogin(true)}>{t('login.haveAccountLogin')}</a></div>
                                     <Button disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }

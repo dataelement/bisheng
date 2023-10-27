@@ -22,7 +22,7 @@ export default function MainLayout() {
     return <div className="flex">
         <div className="bg-white h-screen w-40 px-4 py-8 shadow-xl dark:shadow-slate-700 relative text-center">
             <Link className="inline-block mb-1" to='/'><img src={Logo} className="w-9 h-9" alt="" /></Link>
-            <h1 className="text-white font-bold text-xl text-center">文擎毕昇</h1>
+            <h1 className="text-white font-bold text-xl text-center">{t('title')}</h1>
             <nav className="mt-8">
                 <NavLink to='/' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
                     <AppWindow /><span className="mx-3">{t('menu.app')}</span>

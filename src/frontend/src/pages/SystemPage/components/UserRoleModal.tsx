@@ -16,22 +16,28 @@ export default function UserRoleModal({ id, onClose, onChange }) {
     useEffect(() => {
         if (!id) return
         getRolesApi().then(res => {
-            setRoles(res.data.data);
-        })
-        getUserRoles(id).then(res => {
-            setSelected(res.data.data)
+            setRoles(res.data.data.filter(role => role.id !== 1));
+
+            getUserRoles(id).then(result => {
+                const roles = result.data.data
+                // 默认 普通用户
+                if (!roles.find(role => role.role_id === 2)) {
+                    const roleByroles = res.data.data.find(role => role.id === 2)
+                    roles.unshift({ ...roleByroles, role_id: roleByroles.id })
+                }
+                setSelected(roles)
+            })
         })
         setError(false)
     }, [id])
 
-
     function compareDepartments(a, b) {
-        return a.id === b.id
+        return a.role_id === b.id
     }
 
     const handleSave = async () => {
         if (!selected.length) return setError(true)
-        const res = await updateUserRoles(id, selected.map(item => item.id))
+        const res = await updateUserRoles(id, selected.map(item => item.role_id))
         console.log('res :>> ', res);
         onChange()
     }
@@ -44,7 +50,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                 onChange={setSelected}
                 by={compareDepartments} >
                 <div className="relative mt-1">
-                    <Listbox.Button className={`relative w-full cursor-default rounded-lg bg-white py-2 pl-3 pr-10 text-left shadow-md focus:outline-none border sm:text-sm  h-[38px] ${error && 'border-red-400'}`}>
+                    <Listbox.Button className={`relative w-full cursor-default rounded-lg bg-white py-2 pl-3 pr-10 text-left shadow-md focus:outline-none border sm:text-sm h-[38px] ${error && 'border-red-400'}`}>
                         <div className="block truncate">{selected.map(el => el.role_name).join(';')}</div>
                         <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                             <ChevronsUpDown />
@@ -56,10 +62,12 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                             <Listbox.Option
                                 key={person.id}
                                 className={({ active }) =>
-                                    `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? 'bg-blue-100 text-gray-700' : 'text-gray-900 bg-gray-50'
-                                    }`
+                                    `relative select-none py-2 pl-10 pr-4
+                                    ${active ? 'bg-blue-100 text-gray-700' : 'text-gray-900 bg-gray-50'} 
+                                    ${person.id === 2 ? 'cursor-not-allowed text-gray-300' : "cursor-default"}`
                                 }
                                 value={person}
+                                disabled={person.id === 2}
                             >
                                 {({ selected }) => (
                                     <>

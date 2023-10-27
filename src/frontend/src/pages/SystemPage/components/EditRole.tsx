@@ -148,7 +148,7 @@ export default function EditRole({ id, name, onChange }) {
                         {skillData.data.map((el) => (
                             <TableRow key={el.id}>
                                 <TableCell className="font-medium">{el.name}</TableCell>
-                                <TableCell>{el.user_id}</TableCell>
+                                <TableCell>{el.user_name}</TableCell>
                                 <TableCell className="text-right">
                                     <Switch checked={form.useSkills.includes(el.id)} onCheckedChange={(bln) => switchDataChange(el.id, 'useSkills', bln)} />
                                 </TableCell>
@@ -173,7 +173,7 @@ export default function EditRole({ id, name, onChange }) {
                         {libData.data.map((el) => (
                             <TableRow key={el.id}>
                                 <TableCell className="font-medium">{el.name}</TableCell>
-                                <TableCell>{el.user_id}</TableCell>
+                                <TableCell>{el.user_name}</TableCell>
                                 <TableCell className="text-right">
                                     <Switch checked={form.useLibs.includes(el.id)} onCheckedChange={(bln) => switchUseLib(el.id, bln)} />
                                 </TableCell>

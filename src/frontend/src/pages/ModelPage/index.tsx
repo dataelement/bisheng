@@ -115,7 +115,7 @@ export default function FileLibPage() {
     const loadData = () => {
         serverListApi().then(res => {
             setDataList(res.map(item => {
-                item.status = [t('model.onlineStatus'), t('model.offlineStatus'), t('model.exceptionStatus'), t('model.inProgressOnlineStatus'), t('model.inProgressOfflineStatus')].indexOf(item.status);
+                item.status = ['已上线', '未上线', '异常', '上线中', '下线中'].indexOf(item.status);
                 return item;
             }));
         })

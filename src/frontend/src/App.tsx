@@ -12,6 +12,7 @@ import { locationContext } from "./contexts/locationContext";
 import { userContext } from "./contexts/userContext";
 import { LoginPage } from "./pages/login";
 import router from "./routes";
+import { useTranslation } from "react-i18next";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -134,6 +135,12 @@ export default function App() {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
+
+  // i18n title
+  const { t } = useTranslation()
+  useEffect(() => {
+    document.title = t('title')
+  }, [t])
 
   return (
     //need parent component with width and height

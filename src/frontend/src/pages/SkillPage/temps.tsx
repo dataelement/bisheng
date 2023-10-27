@@ -61,7 +61,7 @@ export default function Templates({ onBack, onChange }) {
         })
     }
 
-    return <div className="p-6">
+    return <div className="p-6 h-screen overflow-y-auto">
         <div className="flex justify-end">
             <Button className="h-8 rounded-full" onClick={onBack}>{t('skills.backToSkillList')}</Button>
         </div>
