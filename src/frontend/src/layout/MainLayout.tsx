@@ -1,9 +1,9 @@
-import { AppWindow, BookOpen, Github, HardDrive, LayoutDashboard, LogOut, MoonIcon, Puzzle, Settings, SunIcon } from "lucide-react";
-import { useContext } from "react";
+import i18next from "i18next";
+import { AppWindow, BookOpen, Github, HardDrive, Languages, LayoutDashboard, LogOut, MoonIcon, Puzzle, Settings, SunIcon } from "lucide-react";
+import { useContext, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet } from "react-router-dom";
-import Logo from "../assets/logo.jpeg";
 import CrashErrorComponent from "../components/CrashErrorComponent";
 import { Separator } from "../components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
@@ -15,13 +15,14 @@ export default function MainLayout() {
     const { hardReset } = useContext(TabsContext);
     const { dark, setDark } = useContext(darkContext);
     // const _location = useLocation()
-    const { t } = useTranslation()
     // 角色
     const { user, setUser } = useContext(userContext);
 
+    const { language, options, changLanguage, t } = useLanguage()
+
     return <div className="flex">
         <div className="bg-white h-screen w-40 px-4 py-8 shadow-xl dark:shadow-slate-700 relative text-center">
-            <Link className="inline-block mb-1" to='/'><img src={Logo} className="w-9 h-9" alt="" /></Link>
+            <Link className="inline-block mb-1" to='/'><img src='/logo.jpeg' className="w-9 h-9" alt="" /></Link>
             <h1 className="text-white font-bold text-xl text-center">{t('title')}</h1>
             <nav className="mt-8">
                 <NavLink to='/' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
@@ -59,6 +60,17 @@ export default function MainLayout() {
                                 </div>
                             </TooltipTrigger>
                             <TooltipContent><p>{t('menu.themeSwitch')}</p></TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    <Separator className="mx-1" orientation="vertical" />
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger className="flex-1 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
+                                <div className="" onClick={changLanguage}>
+                                    <Languages className="side-bar-button-size mx-auto" />
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent><p>{options[language]}</p></TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
                     <Separator className="mx-1" orientation="vertical" />
@@ -129,3 +141,23 @@ export default function MainLayout() {
         </div>
     </div>
 };
+
+const useLanguage = () => {
+    const [language, setLanguage] = useState(() =>
+        localStorage.getItem('language') || 'en'
+    )
+
+    const { t } = useTranslation()
+    const changLanguage = () => {
+        const ln = language === 'en' ? 'zh' : 'en'
+        setLanguage(ln)
+        localStorage.setItem('language', ln)
+        i18next.changeLanguage(ln)
+    }
+    return {
+        language,
+        options: { en: '使用中文', zh: 'use English' },
+        changLanguage,
+        t
+    }
+}

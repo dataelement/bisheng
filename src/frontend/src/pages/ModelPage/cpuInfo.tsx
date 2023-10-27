@@ -17,7 +17,7 @@ export const CpuDetail = () => {
 
     const loadData = () => {
         GPUlistApi().then(res => {
-            setDatalist(res.data.list[0])
+            setDatalist(res.data.list.flat())
         })
     }
 

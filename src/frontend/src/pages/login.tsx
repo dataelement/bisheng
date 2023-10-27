@@ -2,7 +2,6 @@ import { BookOpen, Github } from "lucide-react";
 import { useContext, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 import json from "../../package.json";
-import Logo from "../assets/logo.jpeg";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Separator } from "../components/ui/separator";
@@ -70,21 +69,13 @@ export const LoginPage = () => {
         })
     }
 
-    // useEffect(() => {
-    //     console.log(
-    //         "%cBiSheng 0.2.0",
-    //         "font-size: 38px;" +
-    //         "background-color: #0949f4 ; color: white ; font-weight: bold;padding: 8px 20px; border-radius: 24px;"
-    //     );
-    // }, [])
-
     return <div className="w-full h-full bg-gray-200 dark:bg-gray-700">
         <div className="fixed z-10 sm:w-[1200px] w-full sm:h-[750px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden">
             <div className="w-[800px] h-full bg-gray-950 hidden sm:block"><StarBg /></div>
             <div className=" absolute w-full h-full z-10 flex justify-end top-0">
                 <div className="w-[760px] sm:px-[200px] px-[20px] py-[200px] bg-[rgba(255,255,255,1)] dark:bg-gray-950 relative">
                     <div className="flex gap-4 items-center bg-[#347ef9]">
-                        <img src={Logo} className="w-9 h-9" alt="" />
+                        <img src='/logo.jpeg' className="w-9 h-9" alt="" />
                         <span className="text-[#fff] text-sm">{t('login.slogen')}</span>
                     </div>
                     <div className="grid gap-4 mt-6">

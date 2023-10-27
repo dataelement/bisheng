@@ -133,7 +133,7 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
     </> :
         <div className="chat chat-end">
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-[rgba(53,126,249,.6)] flex items-center justify-center"><User color="#fff" size={28} /></div></div>
-            <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)]">
+            <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)] dark:text-gray-100">
                 {chat.category === 'loading' && <span className="loading loading-spinner loading-xs mr-4 align-middle"></span>}
                 {chat.message[chat.chatKey]}
             </div>

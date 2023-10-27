@@ -48,6 +48,13 @@ export async function getRepoStars(owner, repo) {
 }
 
 /**
+ * 修改配置
+ */
+export async function getAppConfig() {
+  return await axios.get(`/api/v1/env`);
+}
+
+/**
  * Reads all templates from the database.
  *
  * @returns {Promise<any>} The flows data.
@@ -618,9 +625,8 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
     });
 
     return Object.keys(fileMap).map(fileId => {
-      const id = fileMap[fileId][0].file_id
-      const fileName = fileMap[fileId][0].source
-      const fileUrl = fileMap[fileId][0].source_url
+      const { file_id: id, source: fileName, source_url: fileUrl, original_url: originUrl } = fileMap[fileId][0]
+
       const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
         .map(chunk => ({
           box: chunk.chunk_bboxes,
@@ -628,7 +634,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         }))
       const score = chunks[0].score
 
-      return { id, fileName, fileUrl, chunks, score }
+      return { id, fileName, fileUrl, originUrl, chunks, score }
     }).sort((a, b) => b.score - a.score)
   } catch (error) {
     console.error(error);
