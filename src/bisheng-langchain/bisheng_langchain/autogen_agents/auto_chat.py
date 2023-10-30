@@ -79,7 +79,7 @@ class AutoGenChat(Chain):
         # io_output = io.StringIO()
         # with contextlib.redirect_stdout(io_output):
         global_chat_messages = []
-        await self.user_proxy_agent.a_initiate_chat(self.recipient,
+        self.user_proxy_agent.initiate_chat(self.recipient,
             message=message, global_chat_messages=global_chat_messages)
         # chat_content = io_output.getvalue()
         chat_content = json.dumps(
