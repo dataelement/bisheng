@@ -59,10 +59,14 @@ class AutoGenChat(Chain):
         run_manager: Optional[CallbackManagerForChainRun] = None,
     ) -> Dict[str, str]:
         message = inputs[self.input_key]
-        io_output = io.StringIO()
-        with contextlib.redirect_stdout(io_output):
-            self.user_proxy_agent.initiate_chat(self.recipient, message=message)
-        chat_content = io_output.getvalue()
+        # io_output = io.StringIO()
+        # with contextlib.redirect_stdout(io_output):
+        global_chat_messages = []
+        self.user_proxy_agent.initiate_chat(self.recipient, message=message,
+            global_chat_messages=global_chat_messages)
+        # chat_content = io_output.getvalue()
+        chat_content = json.dumps(
+            global_chat_messages, indent=2, ensure_ascii=False)
         output = {self.output_key: chat_content}
         return output
 
@@ -72,10 +76,14 @@ class AutoGenChat(Chain):
         run_manager: Optional[AsyncCallbackManagerForChainRun] = None,
     ) -> Dict[str, Any]:
         message = inputs[self.input_key]
-        io_output = io.StringIO()
-        with contextlib.redirect_stdout(io_output):
-            await self.user_proxy_agent.a_initiate_chat(self.recipient, message=message)
-        chat_content = io_output.getvalue()
+        # io_output = io.StringIO()
+        # with contextlib.redirect_stdout(io_output):
+        global_chat_messages = []
+        await self.user_proxy_agent.a_initiate_chat(self.recipient,
+            message=message, global_chat_messages=global_chat_messages)
+        # chat_content = io_output.getvalue()
+        chat_content = json.dumps(
+            global_chat_messages, indent=2, ensure_ascii=False)
         output = {self.output_key: chat_content}
         return output
 
