@@ -16,23 +16,25 @@ export default function UserRoleModal({ id, onClose, onChange }) {
     useEffect(() => {
         if (!id) return
         getRolesApi().then(res => {
-            setRoles(res.data.data.filter(role => role.id !== 1));
+            const roleOptions = res.data.data.filter(role => role.id !== 1)
+                .map(role => ({ ...role, role_id: role.id }))
+            setRoles(roleOptions);
 
             getUserRoles(id).then(result => {
-                const roles = result.data.data
-                // 默认 普通用户
-                if (!roles.find(role => role.role_id === 2)) {
-                    const roleByroles = res.data.data.find(role => role.id === 2)
-                    roles.unshift({ ...roleByroles, role_id: roleByroles.id })
+                const userRoles = result.data.data
+                // 默认设置 普通用户
+                if (!userRoles.find(role => role.role_id === 2)) {
+                    const roleByroles = roleOptions.find(role => role.role_id === 2)
+                    userRoles.unshift({ ...roleByroles })
                 }
-                setSelected(roles)
+                setSelected(userRoles)
             })
         })
         setError(false)
     }, [id])
 
     function compareDepartments(a, b) {
-        return a.role_id === b.id
+        return a.role_id === b.role_id
     }
 
     const handleSave = async () => {
@@ -58,21 +60,21 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                     </Listbox.Button>
 
                     <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
-                        {roles.map((person, personIdx) => (
+                        {roles.map((role, personIdx) => (
                             <Listbox.Option
-                                key={person.id}
+                                key={role.role_id}
                                 className={({ active }) =>
                                     `relative select-none py-2 pl-10 pr-4
                                     ${active ? 'bg-blue-100 text-gray-700' : 'text-gray-900 bg-gray-50'} 
-                                    ${person.id === 2 ? 'cursor-not-allowed text-gray-300' : "cursor-default"}`
+                                    ${role.role_id === 2 ? 'cursor-not-allowed text-gray-300' : "cursor-default"}`
                                 }
-                                value={person}
-                                disabled={person.id === 2}
+                                value={role}
+                                disabled={role.role_id === 2}
                             >
                                 {({ selected }) => (
                                     <>
                                         <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`} >
-                                            {person.role_name}
+                                            {role.role_name}
                                         </span>
                                         {selected ? (
                                             <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600">

@@ -48,6 +48,8 @@
         "usePermission": "使用权限",
         "managePermission": "管理权限",
         "roleNamePrompt": "角色名称不能超过50字符",
+        "roleNameRequired": "角色名称不能为空",
+        "roleNameExists": "角色名称已存在",
         "parameterConfig": "参数配置",
         "language": "语言"
     },
@@ -235,7 +237,8 @@
         "selectFileToUpload": "请先选择文件上传",
         "fileSizeExceedsLimit": "文件不能超50M",
         "file": "文件",
-        "sizeExceedsLimit": "超过50M"
+        "sizeExceedsLimit": "超过50M",
+        "editDictionary": "编辑词典"
     },
     "confirmButton": "确定",
     "add": "添加",

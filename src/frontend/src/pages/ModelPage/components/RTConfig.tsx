@@ -11,6 +11,7 @@ import {
     TableRow
 } from "../../../components/ui/table";
 import { addServiceApi, deleteServiceApi, getServicesApi } from "../../../controllers/API";
+import { PlusCircle } from "lucide-react";
 
 export default function RTConfig({ open, onChange }) {
     const { t } = useTranslation()
@@ -19,6 +20,14 @@ export default function RTConfig({ open, onChange }) {
     const urlRef = useRef(null)
 
     const { services, showAdd, addItem, handleDel, create, setShowAdd } = useRTService(onChange)
+
+    const handleAdd = () => {
+        const [name, url] = [nameRef.current.value, urlRef.current.value]
+        if (!name || !url) return
+        addItem(name, url)
+        nameRef.current.value = ''
+        urlRef.current.value = ''
+    }
 
     return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => { }}>
         <div className="max-w-[800px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background">
@@ -44,14 +53,16 @@ export default function RTConfig({ open, onChange }) {
                         {showAdd && <TableRow>
                             <TableCell><Input ref={nameRef} placeholder="name"></Input></TableCell>
                             <TableCell><Input ref={urlRef} placeholder="IP:PORT"></Input></TableCell>
-                            <TableCell><Button variant="ghost" className="h-8 rounded-full" onClick={() => addItem(nameRef.current.value, urlRef.current.value)}>{t('add')}</Button></TableCell>
+                            <TableCell>
+                                <Button variant="ghost" className="h-8 rounded-full" onClick={handleAdd}>{t('confirmButton')}</Button>
+                                <Button variant="ghost" className="h-8 rounded-full text-gray-400" onClick={() => setShowAdd(false)}>{t('cancel')}</Button>
+                            </TableCell>
                         </TableRow>}
                     </TableBody>
                 </Table>
             </div>
             <div className="flex justify-end gap-4 mt-4">
-                <Button variant="ghost" className="h-8 rounded-full px-4 py-2" onClick={() => setShowAdd(true)}>{t('model.addOne')}</Button>
-                <Button type="submit" className="h-8 rounded-full px-4 py-2" onClick={create}>{t('create')}</Button>
+                <Button variant="ghost" className="h-8 rounded-full" onClick={() => setShowAdd(true)}><PlusCircle className="pr-1" />创建</Button>
             </div>
         </div>
     </dialog>
@@ -84,7 +95,6 @@ const useRTService = (onChange) => {
     }
 
     const addItem = async (name, url) => {
-        if (!name || !url) return
         const { data } = await addServiceApi(name, url)
 
         setServices([...services, {

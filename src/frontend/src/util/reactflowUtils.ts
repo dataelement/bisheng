@@ -44,3 +44,53 @@ export function cleanEdges({
   });
   updateEdge(newEdges);
 }
+
+export function convertObjToArray(singleObject: object | string) {
+  if (typeof singleObject === "string") {
+    singleObject = JSON.parse(singleObject);
+  }
+  if (Array.isArray(singleObject)) return singleObject;
+
+  let arrConverted: any[] = [];
+  if (typeof singleObject === "object") {
+    for (const key in singleObject) {
+      if (Object.prototype.hasOwnProperty.call(singleObject, key)) {
+        const newObj = {};
+        newObj[key] = singleObject[key];
+        arrConverted.push(newObj);
+      }
+    }
+  }
+  return arrConverted;
+}
+
+export function convertValuesToNumbers(arr) {
+  return arr.map((obj) => {
+    const newObj = {};
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        let value = obj[key];
+        if (/^\d+$/.test(value)) {
+          value = value?.toString().trim();
+        }
+        newObj[key] =
+          value === "" || isNaN(value) ? value.toString() : Number(value);
+      }
+    }
+    return newObj;
+  });
+}
+
+
+export function hasDuplicateKeys(array) {
+  const keys = {};
+  for (const obj of array) {
+    for (const key in obj) {
+      if (keys[key]) {
+        return true;
+      }
+      keys[key] = true;
+    }
+  }
+  return false;
+}

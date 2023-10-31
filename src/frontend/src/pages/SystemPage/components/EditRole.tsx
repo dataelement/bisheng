@@ -53,7 +53,7 @@ const SearchPanne = ({ title, total, onChange, children }) => {
 
 
 // -1 id表示新增
-export default function EditRole({ id, name, onChange }) {
+export default function EditRole({ id, name, onChange, onBeforeChange }) {
     const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t } = useTranslation()
 
@@ -102,11 +102,17 @@ export default function EditRole({ id, name, onChange }) {
     const { data: libData, change: handleLibChange } = usePageData<any>(id, 'lib')
 
     const handleSave = async () => {
-        if (form.name.length > 50) {
+        if (!form.name.length || form.name.length > 50) {
             return setErrorData({
                 title: t('prompt'),
-                list: [t('roleNamePrompt')],
+                list: [t('system.roleNameRequired'), t('system.roleNamePrompt')],
             });
+        }
+        if (onBeforeChange(form.name)) {
+            return setErrorData({
+                title: t('prompt'),
+                list: [t('system.roleNameExists')]
+            })
         }
         // 新增先创建角色
         let roleId = id

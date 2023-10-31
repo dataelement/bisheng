@@ -48,10 +48,11 @@ export default function SkillPage() {
         })
     }
 
-    // 选模板
+    // 选模板(创建技能)
     const handldSelectTemp = (el) => {
         el.name = `${el.name}-${generateUUID(5)}`
         saveFlowToDatabase({ ...el, id: el.flow_id }).then(res => {
+            res.user_name = user.user_name
             setOpen(false)
             setFlows(el => [res, ...el])
             navigate("/skill/" + res.id)

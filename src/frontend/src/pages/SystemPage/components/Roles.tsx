@@ -17,6 +17,7 @@ import EditRole from "./EditRole";
 export type ROLE = {
     create_time: string
     id: number
+    role_id: number
     remark: string
     role_name: string
     update_time: string
@@ -54,7 +55,12 @@ export default function Roles() {
         })
     }
 
-    if (role) return <EditRole id={role?.id || -1} name={role?.role_name || ''} onChange={handleChange}></EditRole>
+    // 验证重名
+    const checkSameName = (name: string) => {
+        return roles.find(role => role.role_name === name)
+    }
+
+    if (role) return <EditRole id={role?.id || -1} name={role?.role_name || ''} onBeforeChange={checkSameName} onChange={handleChange}></EditRole>
 
     return <div className=" relative">
         <Button className="h-8 rounded-full absolute right-0 top-[-40px]" onClick={() => setRole({})}>{t('create')}</Button>

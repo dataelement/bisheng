@@ -18,7 +18,7 @@ import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
 import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
 import { ParameterComponentType } from "../../../../types/components";
-import { cleanEdges } from "../../../../util/reactflowUtils";
+import { cleanEdges, convertObjToArray, convertValuesToNumbers, hasDuplicateKeys } from "../../../../util/reactflowUtils";
 import {
   classNames,
   getRandomKeyByssmm,
@@ -28,6 +28,8 @@ import {
   nodeIconsLucide,
   nodeNames,
 } from "../../../../utils";
+import DictComponent from "../../../../components/dictComponent";
+import KeypairListComponent from "../../../../components/keypairListComponent";
 
 export default function ParameterComponent({
   left,
@@ -117,6 +119,8 @@ export default function ParameterComponent({
       </div>
     );
   }, [info]);
+
+  const [errorDuplicateKey, setErrorDuplicateKey] = useState(false);
 
   useEffect(() => {
     const groupedObj = groupByFamily(myData, tooltipTitle, left, data.type);
@@ -367,6 +371,43 @@ export default function ParameterComponent({
               disabled={disabled}
               value={data.node.template[name].value ?? ""}
               onChange={handleOnNewValue}
+            />
+          </div>
+        ) : left === true && type === "NestedDict" ? (
+          <div className="mt-2 w-full">
+            <DictComponent
+              disabled={disabled}
+              editNode={false}
+              value={
+                !data.node!.template[name].value ||
+                  data.node!.template[name].value?.toString() === "{}"
+                  ? '{"yourkey": "value"}'
+                  : data.node!.template[name].value
+              }
+              onChange={(newValue) => {
+                data.node!.template[name].value = newValue;
+                handleOnNewValue(newValue);
+              }}
+            />
+          </div>
+        ) : left === true && type === "dict" ? (
+          <div className="mt-2 w-full">
+            <KeypairListComponent
+              disabled={disabled}
+              editNode={false}
+              value={
+                data.node!.template[name].value?.length === 0 ||
+                  !data.node!.template[name].value
+                  ? [{ "": "" }]
+                  : convertObjToArray(data.node!.template[name].value)
+              }
+              duplicateKey={errorDuplicateKey}
+              onChange={(newValue) => {
+                const valueToNumbers = convertValuesToNumbers(newValue);
+                data.node!.template[name].value = valueToNumbers;
+                setErrorDuplicateKey(hasDuplicateKeys(valueToNumbers));
+                handleOnNewValue(valueToNumbers);
+              }}
             />
           </div>
         ) : (

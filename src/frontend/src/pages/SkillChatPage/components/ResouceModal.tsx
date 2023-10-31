@@ -38,6 +38,7 @@ const Anwser = ({ id, msg, onInit, onAdd }) => {
 }
 
 // 
+let timer = null
 const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId: string, words: string[], data: ChatMessageType, onClose: any, onAdd: any, children: any }) => {
     const { t } = useTranslation()
     const [editCustomKey, setEditCustomKey] = useState(false)
@@ -55,16 +56,19 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
     const [file, setFile] = useState(null)
     const loadFiles = () => {
         // if (!words.length) return setFiles([])
-        getSourceChunksApi(chatId, data.id, words.join(';')).then((_files) => {
-            setFiles(_files)
-            // 默认打开第一个文件
-            _files && setFile(_files[0])
-        })
+        clearTimeout(timer) // 简单防抖
+        timer = setTimeout(() => {
+            getSourceChunksApi(chatId, data.id, words.join(';')).then((_files) => {
+                setFiles(_files)
+                // 默认打开第一个文件
+                _files && setFile(_files[0])
+            })
+        }, 200);
     }
 
     useEffect(() => {
         loadFiles()
-    }, [data, words])
+    }, [words])
 
     // input show
     const handleOpenInput = () => {
