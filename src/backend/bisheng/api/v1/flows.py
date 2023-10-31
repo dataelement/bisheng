@@ -57,7 +57,7 @@ def read_flows(*,
                 select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')))).all()
             if rol_flow_id:
                 flow_ids = [
-                    acess.third_id for acess in rol_flow_id if acess.type == AccessType.FLOW
+                    acess.third_id for acess in rol_flow_id if acess.type == AccessType.FLOW.value
                 ]
                 sql = sql.where(or_(Flow.user_id == payload.get('user_id'), Flow.id.in_(flow_ids)))
                 count_sql = count_sql.where(

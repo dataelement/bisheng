@@ -22,6 +22,7 @@ class ChainCreator(LangChainTypeCreator):
 
     # We need to find a better solution for this
     from_method_nodes = {
+        'APIChain': 'from_llm_and_api_docs',
         'ConversationalRetrievalChain': 'from_llm',
         'LLMCheckerChain': 'from_llm',
         'SQLDatabaseChain': 'from_llm',

@@ -1,4 +1,5 @@
 import hashlib
+import sys
 
 from bisheng.database.models.config import Config
 from bisheng.database.models.role import Role
@@ -23,6 +24,7 @@ def create_db_and_tables():
         SQLModel.metadata.create_all(engine)
     except Exception as exc:
         logger.error(f'Error creating database and tables: {exc}')
+        sys.exit(-1)
         raise RuntimeError('Error creating database and tables') from exc
     # Now check if the table Flow exists, if not, something went wrong
     # and we need to create the tables again.

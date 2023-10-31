@@ -57,6 +57,8 @@ async def delete_server(*, session=Depends(get_session), server_id: int):
         rt_server = session.get(Server, server_id)
         if rt_server:
             session.delete(rt_server)
+            # 删除服务带带模型
+            session.exec(delete(ModelDeploy).where(ModelDeploy.server == str(server_id)))
             session.commit()
 
         return {'code': 200, 'message': 'success'}
@@ -226,7 +228,7 @@ async def queryGPU(query_url: str):
             # nv_gpu_utilization{gpu_uuid="GPU-c8a73d12-b320-0910-68f1-a74bd0d626bd"}
             match = re.search(pattern, line)
             gpu_uuid = match.group(1) if match else None
-            utility[gpu_uuid] = line.split(' ')[1]
+            utility[gpu_uuid] = round(int(line.split(' ')[1]), 2)
 
         if 'nv_gpu_uuid_to_deviceid' in line:
             match = re.search(pattern, line)
@@ -262,15 +264,16 @@ async def update_model(endpoint: str, server_id: int):
         if resp.status_code != 200:
             return []
         content = resp.text
+        models = json.loads(content)
     except Exception as e:
-        logger.error(str(e))
+        logger.error(f'return={content} {str(e)}')
         return []
 
     session = next(get_session())
     db_deploy = session.exec(select(ModelDeploy).where(ModelDeploy.server == str(server_id))).all()
     model_dict = {deploy.model: deploy for deploy in db_deploy}
     model_delete = {model.id for key, model in model_dict.items()}
-    for model in json.loads(content):
+    for model in models:
         model_name = model['name']
         status = model.get('state')
         reason = model.get('reason')
@@ -311,4 +314,4 @@ def error_translate(err: str):
     else:
         reason = f'上线失败，{err}'
 
-    return reason
+    return reason[:512]

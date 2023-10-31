@@ -168,7 +168,9 @@ def get_knowledge(*,
                 select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')))).all()
             if role_third_id:
                 third_ids = [
-                    acess.third_id for acess in role_third_id if acess.type == AccessType.KNOWLEDGE
+                    acess.third_id
+                    for acess in role_third_id
+                    if acess.type == AccessType.KNOWLEDGE.value
                 ]
                 sql = sql.where(
                     or_(Knowledge.user_id == payload.get('user_id'), Knowledge.id.in_(third_ids)))
@@ -326,15 +328,18 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
         try:
-            texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
-                                                chunk_overlap, separator)
             # 存储 mysql
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 2)
+            setattr(db_file, 'object_name', knowledge_file.file_name)
             session.add(db_file)
-            session.commit()
-            session.refresh(db_file)
+            session.flush()
+            # 原文件
+            minio_client.MinioClient().upload_minio(knowledge_file.file_name, path)
+
+            texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
+                                                chunk_overlap, separator)
 
             # 溯源必须依赖minio, 后期替换更通用的oss
             minio_client.MinioClient().upload_minio(str(db_file.id), path)
@@ -346,7 +351,8 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             # 存储es
             if es_client:
                 es_client.add_texts(texts=texts, metadatas=metadatas)
-
+            session.commit()
+            session.refresh(db_file)
         except Exception as e:
             logger.exception(e)
             session = next(get_session())
