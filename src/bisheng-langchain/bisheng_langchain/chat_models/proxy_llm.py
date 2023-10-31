@@ -234,10 +234,15 @@ class ProxyChatLLM(BaseChatModel):
             # Use OpenAI's async api https://github.com/openai/openai-python#async-api
             async with self.client.apost(url=self.elemai_base_url, data=kwargs) as response:
                 async for txt in response.content.iter_any():
-                    yield txt.decode('utf-8').strip()
+                    if b'\n' in txt:
+                        for txt_ in txt.split(b'\n'):
+                            yield txt_.decode('utf-8').strip()
+                    else:
+                        yield txt.decode('utf-8').strip()
 
         async for response in _acompletion_with_retry(**kwargs):
-            yield json.loads(response)
+            if response:
+                yield json.loads(response)
 
     async def _agenerate(
         self,

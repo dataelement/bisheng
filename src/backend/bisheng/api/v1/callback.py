@@ -1,11 +1,13 @@
 import asyncio
 from typing import Any, Dict, List, Union
+
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.utils.logger import logger
 from fastapi import WebSocket
 from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
 from langchain.schema import AgentFinish, LLMResult
 from langchain.schema.agent import AgentAction
+from langchain.schema.document import Document
 
 
 # https://github.com/hwchase17/chat-langchain/blob/master/callback.py
@@ -19,22 +21,27 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         resp = ChatResponse(message=token, type='stream', intermediate_steps='')
         await self.websocket.send_json(resp.dict())
 
-    async def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any) -> Any:
+    async def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str],
+                           **kwargs: Any) -> Any:
         """Run when LLM starts running."""
+        logger.debug(f'llm_start prompts={prompts}')
 
     async def on_llm_end(self, response: LLMResult, **kwargs: Any) -> Any:
         """Run when LLM ends running."""
+        logger.debug(f'llm_end response={response}')
 
     async def on_llm_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> Any:
         """Run when LLM errors."""
 
-    async def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any], **kwargs: Any) -> Any:
+    async def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any],
+                             **kwargs: Any) -> Any:
         """Run when chain starts running."""
 
     async def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
 
-    async def on_chain_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> Any:
+    async def on_chain_error(self, error: Union[Exception, KeyboardInterrupt],
+                             **kwargs: Any) -> Any:
         """Run when chain errors."""
 
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
@@ -99,6 +106,15 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
             intermediate_steps=finish.log,
         )
         await self.websocket.send_json(resp.dict())
+
+    async def on_retriever_start(self, serialized: Dict[str, Any], query: str,
+                                 **kwargs: Any) -> Any:
+        """Run when retriever start running."""
+
+    async def on_retriever_end(self, result: List[Document], **kwargs: Any) -> Any:
+        """Run when retriever end running."""
+        # todo 判断技能权限
+        logger.debug(f'retriver_result result={result}')
 
 
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
@@ -178,3 +194,11 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
             asyncio.run_coroutine_threadsafe(coroutine, loop)
         except Exception as e:
             logger.error(e)
+
+    def on_retriever_start(self, serialized: Dict[str, Any], query: str, **kwargs: Any) -> Any:
+        """Run when retriever start running."""
+
+    def on_retriever_end(self, result: List[Document], **kwargs: Any) -> Any:
+        """Run when retriever end running."""
+        # todo 判断技能权限
+        logger.debug(f'retriver_result result={result}')
