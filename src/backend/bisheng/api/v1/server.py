@@ -266,7 +266,7 @@ async def update_model(endpoint: str, server_id: int):
         content = resp.text
         models = json.loads(content)
     except Exception as e:
-        logger.error(f'return={content} {str(e)}')
+        logger.error(f'{str(e)}')
         return []
 
     session = next(get_session())

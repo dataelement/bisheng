@@ -2,7 +2,7 @@ import json
 from typing import List
 from uuid import UUID
 
-from bisheng.api.utils import build_flow_no_yield, remove_api_keys
+from bisheng.api.utils import access_check, build_flow_no_yield, remove_api_keys
 from bisheng.api.v1.schemas import FlowListCreate, FlowListRead
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate
@@ -85,6 +85,8 @@ def read_flows(*,
             userMap = {user.user_id: user.user_name for user in db_user}
             for r in res:
                 r['user_name'] = userMap[r['user_id']]
+                r['write'] = True if 'admin' == payload.get('role') or r.get(
+                    'user_id') == payload.get('user_id') else False
 
         return {'data': res, 'total': total_count}
 
@@ -114,7 +116,7 @@ def update_flow(*,
     if not db_flow:
         raise HTTPException(status_code=404, detail='Flow not found')
 
-    if 'admin' != payload.get('role') and db_flow.user_id != payload.get('user_id'):
+    if not access_check(payload, db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
         raise HTTPException(status_code=500, detail='没有权限编辑此技能')
 
     flow_data = flow.dict(exclude_unset=True)

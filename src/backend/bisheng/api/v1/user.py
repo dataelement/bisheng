@@ -234,13 +234,18 @@ async def user_addrole(*,
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无设置权限')
 
+    db_role = session.exec(select(UserRole).where(UserRole.user_id == userRole.user_id,)).all()
+    role_ids = {role.role_id for role in db_role}
     for role_id in userRole.role_id:
-        db_role = session.exec(
-            select(UserRole).where(UserRole.user_id == userRole.user_id,
-                                   UserRole.role_id == role_id)).all()
-        if not db_role:
+        if role_id not in role_ids:
             db_role = UserRole(user_id=userRole.user_id, role_id=role_id)
             session.add(db_role)
+        else:
+            role_ids.remove(role_id)
+    if role_ids:
+        session.exec(
+            delete(UserRole).where(UserRole.user_id == userRole.user_id,
+                                   UserRole.role_id.in_(role_ids)))
     session.commit()
     return {'message': 'success'}
 

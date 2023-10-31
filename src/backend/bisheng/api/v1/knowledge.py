@@ -251,7 +251,7 @@ def delete_knowledge(*,
     knowledge = session.get(Knowledge, knowledge_id)
     if not knowledge:
         raise HTTPException(status_code=404, detail='knowledge not found')
-    if 'admin' != payload.get('role') and knowledge.user_id != payload.get('user_id'):
+    if not access_check(payload, knowledge.user_id, knowledge_id, AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
     session.delete(knowledge)
     session.commit()
@@ -269,9 +269,10 @@ def delete_knowledge_file(*,
     knowledge_file = session.get(KnowledgeFile, file_id)
     if not knowledge_file:
         raise HTTPException(status_code=404, detail='文件不存在')
-    if 'admin' != payload.get('role') and knowledge_file.user_id != payload.get('user_id'):
-        raise HTTPException(status_code=404, detail='没有权限执行操作')
+
     knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
+    if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
+        raise HTTPException(status_code=404, detail='没有权限执行操作')
     # 处理vectordb
     collection_name = knowledge.collection_name
     embeddings = decide_embeddings(knowledge.model)
