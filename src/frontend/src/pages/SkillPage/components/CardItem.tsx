@@ -25,12 +25,13 @@ import { gradients } from "../../../utils"
 interface IProps {
     data: FlowType,
     isAdmin: boolean,
+    showAdd?: boolean,
     edit: boolean,
     onDelete: () => void,
     onCreate: (flow: FlowType) => void
 }
 
-export default function CardItem({ data, isAdmin, edit = false, onDelete, onCreate }: IProps) {
+export default function CardItem({ data, isAdmin, showAdd = false, edit = false, onDelete, onCreate }: IProps) {
     const { setErrorData, setSuccessData } = useContext(alertContext);
     const [open, setOpen] = useState(data.status === 2)
     const { t } = useTranslation()
@@ -66,7 +67,7 @@ export default function CardItem({ data, isAdmin, edit = false, onDelete, onCrea
                 {isAdmin && <button onClick={() => onCreate(data)}><CopyPlus className="card-component-delete-icon"></CopyPlus></button>}
                 <button className="" onClick={onDelete}> <Trash2 className="card-component-delete-icon" /> </button>
             </div> :
-                <Button type="submit" className="custom-card-btn absolute right-4 bottom-2 h-5 text-xs transition-all bg-gray-500" >{t('add')}</Button>}
+                showAdd && <Button type="submit" className="custom-card-btn absolute right-4 bottom-2 h-5 text-xs transition-all bg-gray-500" >{t('add')}</Button>}
         </CardHeader>
     </Card>
 };

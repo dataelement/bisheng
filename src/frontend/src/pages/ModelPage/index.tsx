@@ -211,7 +211,7 @@ export default function FileLibPage() {
                 <div className="flex justify-end gap-4">
                     <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
                     {user.role === 'admin' && <Button className="h-8 rounded-full" onClick={() => setShowCpu(true)}>{t('model.gpuResourceUsage')}</Button>}
-                    {appConfig.isDev && <Button className="h-8 rounded-full" onClick={() => setRTOpen(true)}>{t('model.rtServiceManagement')}</Button>}
+                    {user.role === 'admin' && appConfig.isDev && <Button className="h-8 rounded-full" onClick={() => setRTOpen(true)}>{t('model.rtServiceManagement')}</Button>}
                 </div>
                 <Table>
                     <TableCaption>{t('model.modelCollectionCaption')}.</TableCaption>

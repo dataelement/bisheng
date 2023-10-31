@@ -131,7 +131,7 @@ export default function FileView({ data }) {
         return () => window.removeEventListener('resize', resize)
     }, [])
 
-    // 下载文件
+    // 加载文件
     const [pdf, setPdf] = useState(null)
     useEffect(() => {
         // loding
@@ -149,14 +149,13 @@ export default function FileView({ data }) {
                 setCurrentChunk(0)
                 const chunk = data.chunks[0]
                 setPagesLabels(chunk)
+                const pageY = (chunk.box[0].page - 1) * (boxSize.width / 0.7)
                 // 第一个高亮块的当页位移
                 const offsetY = chunk.box[0].bbox[1] * (boxSize.width / fileWidthRef.current) - 100
                 // 页码滚动位置
-                const pageY = (chunk.box[0].page - 1) * (boxSize.width / 0.7)
                 listRef.current.scrollTo(pageY + offsetY);
                 // listRef.current.scrollToItem(data.chunks[0].box[0].page - 1, 'start');
-
-            }, 2000);
+            }, 3000);
         })
     }, [data])
 
@@ -189,7 +188,7 @@ export default function FileView({ data }) {
                 : <div id="warp-pdf" className="file-view absolute">
                     <List
                         ref={listRef}
-                        itemCount={pdf?.numPages || 0}
+                        itemCount={pdf?.numPages || 100}
                         // A4 比例(itemSize：item的高度)
                         // 595.32 * 841.92 采用宽高比0.70约束
                         itemSize={boxSize.width / 0.7}
