@@ -1,6 +1,9 @@
+import { Search } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Checkbox } from "../../../components/ui/checkbox";
+import { useTranslation } from "react-i18next";
+import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
+import { Switch } from "../../../components/ui/switch";
 import {
     Table,
     TableBody,
@@ -9,18 +12,16 @@ import {
     TableHeader,
     TableRow
 } from "../../../components/ui/table";
-import { Switch } from "../../../components/ui/switch";
-import { useDebounce } from "../../../util/hook";
-import { Search } from "lucide-react";
-import { Button } from "../../../components/ui/button";
 import { alertContext } from "../../../contexts/alertContext";
 import { createRole, getRoleLibsApi, getRolePermissionsApi, getRoleSkillsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
+import { useDebounce } from "../../../util/hook";
 
 const pageSize = 10
 const SearchPanne = ({ title, total, onChange, children }) => {
     const [page, setPage] = useState(1)
     const pageCount = Math.ceil(total / pageSize)
     const searchKeyRef = useRef('')
+    const { t } = useTranslation()
 
     const handleSearch = useDebounce((e) => {
         searchKeyRef.current = e.target.value
@@ -43,8 +44,8 @@ const SearchPanne = ({ title, total, onChange, children }) => {
             {children}
         </div>
         <div className="join grid grid-cols-2 w-[200px] mx-auto my-4">
-            <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>上一页</button>
-            <button disabled={page >= pageCount} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>下一页</button>
+            <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>{t('previousPage')}</button>
+            <button disabled={page >= pageCount} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>{t('nextPage')}</button>
         </div>
     </>
 
@@ -52,8 +53,9 @@ const SearchPanne = ({ title, total, onChange, children }) => {
 
 
 // -1 id表示新增
-export default function EditRole({ id, name, onChange }) {
+export default function EditRole({ id, name, onChange, onBeforeChange }) {
     const { setErrorData, setSuccessData } = useContext(alertContext);
+    const { t } = useTranslation()
 
     const [form, setForm] = useState({
         name,
@@ -100,11 +102,17 @@ export default function EditRole({ id, name, onChange }) {
     const { data: libData, change: handleLibChange } = usePageData<any>(id, 'lib')
 
     const handleSave = async () => {
-        if (form.name.length > 50) {
+        if (!form.name.length || form.name.length > 50) {
             return setErrorData({
-                title: "提示",
-                list: ['角色名称不能超过50字符'],
+                title: t('prompt'),
+                list: [t('system.roleNameRequired'), t('system.roleNamePrompt')],
             });
+        }
+        if (onBeforeChange(form.name)) {
+            return setErrorData({
+                title: t('prompt'),
+                list: [t('system.roleNameExists')]
+            })
         }
         // 新增先创建角色
         let roleId = id
@@ -123,30 +131,30 @@ export default function EditRole({ id, name, onChange }) {
         ])
 
         console.log('form :>> ', form, res);
-        setSuccessData({ title: '保存成功' })
+        setSuccessData({ title: t('success') })
         onChange(true)
     }
 
     return <div className="max-w-[600px] mx-auto pt-4">
         <div className="font-bold mt-4">
-            <p className="mb-4">角色名称</p>
-            <Input placeholder="角色名称" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60}></Input>
+            <p className="mb-4">{t('system.roleName')}</p>
+            <Input placeholder={t('system.roleName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60}></Input>
         </div>
         <div className="">
-            <SearchPanne title='技能授权' total={skillData.total} onChange={handleSkillChange}>
+            <SearchPanne title={t('system.skillAuthorization')} total={skillData.total} onChange={handleSkillChange}>
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>技能名称</TableHead>
-                            <TableHead className="w-[100px]">创建人</TableHead>
-                            <TableHead className="text-right">使用权限</TableHead>
+                            <TableHead>{t('system.skillName')}</TableHead>
+                            <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
+                            <TableHead className="text-right">{t('system.usePermission')}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {skillData.data.map((el) => (
                             <TableRow key={el.id}>
                                 <TableCell className="font-medium">{el.name}</TableCell>
-                                <TableCell>{el.user_id}</TableCell>
+                                <TableCell>{el.user_name}</TableCell>
                                 <TableCell className="text-right">
                                     <Switch checked={form.useSkills.includes(el.id)} onCheckedChange={(bln) => switchDataChange(el.id, 'useSkills', bln)} />
                                 </TableCell>
@@ -157,21 +165,21 @@ export default function EditRole({ id, name, onChange }) {
             </SearchPanne>
         </div>
         <div className="">
-            <SearchPanne title='知识库授权' total={libData.total} onChange={handleLibChange}>
+            <SearchPanne title={t('system.knowledgeAuthorization')} total={libData.total} onChange={handleLibChange}>
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>知识库名称</TableHead>
-                            <TableHead className="w-[100px]">创建人</TableHead>
-                            <TableHead className="text-right">使用权限</TableHead>
-                            <TableHead className="text-right">管理权限</TableHead>
+                            <TableHead>{t('system.skillName')}</TableHead>
+                            <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
+                            <TableHead className="text-right">{t('system.usePermission')}</TableHead>
+                            <TableHead className="text-right">{t('system.managePermission')}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {libData.data.map((el) => (
                             <TableRow key={el.id}>
                                 <TableCell className="font-medium">{el.name}</TableCell>
-                                <TableCell>{el.user_id}</TableCell>
+                                <TableCell>{el.user_name}</TableCell>
                                 <TableCell className="text-right">
                                     <Switch checked={form.useLibs.includes(el.id)} onCheckedChange={(bln) => switchUseLib(el.id, bln)} />
                                 </TableCell>
@@ -185,11 +193,10 @@ export default function EditRole({ id, name, onChange }) {
             </SearchPanne>
         </div>
         <div className="flex justify-center gap-4 mt-16">
-            <Button variant="outline" className="h-8 rounded-full px-16" onClick={() => onChange()}>取消</Button>
-            <Button className="h-8 rounded-full px-16" onClick={handleSave}>保存</Button>
+            <Button variant="outline" className="h-8 rounded-full px-16" onClick={() => onChange()}>{t('cancel')}</Button>
+            <Button className="h-8 rounded-full px-16" onClick={handleSave}>{t('save')}</Button>
         </div>
     </div>
-
 }
 
 const usePageData = <T,>(id: number, key: 'skill' | 'lib') => {

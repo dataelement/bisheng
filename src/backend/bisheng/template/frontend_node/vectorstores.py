@@ -20,6 +20,7 @@ class VectorStoreFrontendNode(FrontendNode):
             value='{}',
         )
         extra_fields.append(extra_field)
+
         if self.template.type_name == 'Weaviate':
             extra_field = TemplateField(
                 name='weaviate_url',
@@ -221,7 +222,23 @@ class VectorStoreFrontendNode(FrontendNode):
                 display_name='ssl_verify',
                 value='',
             )
-            extra_fields.extend((extra_field, extra_field2))
+            extra_field3 = TemplateField(
+                name='llm',
+                field_type='BaseLLM',
+                required=False,
+                show=True,
+                advanced=False,
+                display_name='LLM',
+            )
+            extra_field4 = TemplateField(
+                name='prompt',
+                field_type='BasePromptTemplate',
+                required=False,
+                show=True,
+                advanced=False,
+                display_name='prompt',
+            )
+            extra_fields.extend((extra_field, extra_field2, extra_field3, extra_field4))
 
         if extra_fields:
             for field in extra_fields:
@@ -238,7 +255,7 @@ class VectorStoreFrontendNode(FrontendNode):
             'work_dir', 'collection_name', 'api_key', 'location', 'persist_directory', 'persist',
             'weaviate_url', 'index_name', 'namespace', 'folder_path', 'table_name', 'query_name',
             'supabase_url', 'supabase_service_key', 'mongodb_atlas_cluster_uri', 'collection_name',
-            'db_name', 'ssl_verify', 'elasticsearch_url'
+            'db_name', 'ssl_verify', 'elasticsearch_url', 'llm', 'prompt'
         ]
         advanced_fields = [
             'n_dim', 'key', 'prefix', 'distance_func', 'content_payload_key',

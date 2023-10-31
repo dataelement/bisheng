@@ -48,6 +48,13 @@ export async function getRepoStars(owner, repo) {
 }
 
 /**
+ * 修改配置
+ */
+export async function getAppConfig() {
+  return await axios.get(`/api/v1/env`);
+}
+
+/**
  * Reads all templates from the database.
  *
  * @returns {Promise<any>} The flows data.
@@ -165,6 +172,27 @@ export async function deleteFile(id) {
  */
 export async function getEmbeddingModel() {
   return await axios.get(`/api/v1/knowledge/embedding_param`);
+}
+
+/**
+ * 获取RT服务列表
+ */
+export async function getServicesApi() {
+  return await axios.get(`/api/v1/server/list_server`);
+}
+/**
+ * 获取RT服务列表
+ */
+export async function addServiceApi(name: string, url: string) {
+  return await axios.post(`/api/v1/server/add`,
+    { endpoint: url, server: name, remark: 'RT模块创建' });
+}
+/**
+ * 删除知识库下文件
+ *
+ */
+export async function deleteServiceApi(id) {
+  return await axios.delete(`/api/v1/server/${id}`);
 }
 
 /**
@@ -597,9 +625,8 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
     });
 
     return Object.keys(fileMap).map(fileId => {
-      const id = fileMap[fileId][0].file_id
-      const fileName = fileMap[fileId][0].source
-      const fileUrl = fileMap[fileId][0].source_url
+      const { file_id: id, source: fileName, source_url: fileUrl, original_url: originUrl } = fileMap[fileId][0]
+
       const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
         .map(chunk => ({
           box: chunk.chunk_bboxes,
@@ -607,7 +634,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         }))
       const score = chunks[0].score
 
-      return { id, fileName, fileUrl, chunks, score }
+      return { id, fileName, fileUrl, originUrl, chunks, score }
     }).sort((a, b) => b.score - a.score)
   } catch (error) {
     console.error(error);

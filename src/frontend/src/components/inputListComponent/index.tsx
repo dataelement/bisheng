@@ -43,7 +43,7 @@ export default function InputListComponent({
                   ? "input-edit-node "
                   : "input-primary " + (disabled ? "input-disable" : "")
               }
-              placeholder="请输入..."
+              placeholder="input..."
               onChange={(e) => {
                 setInputList((old) => {
                   let newInputList = _.cloneDeep(old);

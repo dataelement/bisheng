@@ -49,6 +49,23 @@ export type InputListComponentType = {
   onAddInput?: (value?: string[]) => void;
 };
 
+export type KeyPairListComponentType = {
+  value: any;
+  onChange: (value: Object[]) => void;
+  disabled: boolean;
+  editNode?: boolean;
+  duplicateKey?: boolean;
+  advanced?: boolean | null;
+  dataValue?: any;
+};
+
+export type DictComponentType = {
+  value: any;
+  onChange: (value) => void;
+  disabled: boolean;
+  editNode?: boolean;
+};
+
 export type TextAreaComponentType = {
   field_name?: string;
   nodeClass?: APIClassType;
@@ -103,18 +120,18 @@ export type TooltipComponentType = {
   children: ReactElement;
   title: string | ReactElement;
   placement?:
-    | "bottom-end"
-    | "bottom-start"
-    | "bottom"
-    | "left-end"
-    | "left-start"
-    | "left"
-    | "right-end"
-    | "right-start"
-    | "right"
-    | "top-end"
-    | "top-start"
-    | "top";
+  | "bottom-end"
+  | "bottom-start"
+  | "bottom"
+  | "left-end"
+  | "left-start"
+  | "left"
+  | "right-end"
+  | "right-start"
+  | "right"
+  | "top-end"
+  | "top-start"
+  | "top";
 };
 
 export type ProgressBarType = {
@@ -162,3 +179,15 @@ export type TextHighlightType = {
 export interface IVarHighlightType {
   name: string;
 }
+
+export type IconComponentProps = {
+  name: string;
+  className?: string;
+  iconColor?: string;
+  onClick?: () => void;
+};
+
+export type modalHeaderType = {
+  children: ReactNode;
+  description: string | null;
+};

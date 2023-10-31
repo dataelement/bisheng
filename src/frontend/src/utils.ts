@@ -700,10 +700,10 @@ export function updateTemplate(
       clonedObject[key].suffixes = objectToUpdate[key].suffixes
     }
     // required与show不覆盖
-    if(clonedObject[key]?.required) {
+    if (clonedObject[key]?.required) {
       clonedObject[key].required = objectToUpdate[key].required
     }
-    if(clonedObject[key]?.show) {
+    if (clonedObject[key]?.show) {
       clonedObject[key].show = objectToUpdate[key]?.show
     }
   }
@@ -1076,3 +1076,26 @@ export const generateUUID = (length: number) => {
   })
   return uuid
 }
+
+// 复制到剪切板
+export const copyText = (text: string) => {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text)
+  }
+
+  const areaDom = document.createElement("textarea");
+  return new Promise((res) => {
+    areaDom.value = text
+    document.body.appendChild(areaDom);
+
+    const range = document.createRange();
+    range.selectNode(areaDom);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    document.execCommand('copy');
+    res(text)
+  }).then(() => {
+    window.getSelection().removeAllRanges();
+    document.body.removeChild(areaDom);
+  })
+};

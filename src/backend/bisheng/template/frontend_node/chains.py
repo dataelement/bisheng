@@ -317,11 +317,3 @@ class SummarizeDocsChain(FrontendNode):
     )
     description: str = """Load summarize chain."""
     base_classes: list[str] = ['BaseCombineDocumentsChain', 'function']
-
-    def to_dict(self):
-        return super().to_dict()
-
-    @staticmethod
-    def format_field(field: TemplateField, name: Optional[str] = None) -> None:
-        # do nothing and don't return anything
-        pass

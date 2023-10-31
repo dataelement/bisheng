@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     input_output: dict = {}
     output_parsers: dict = {}
     dev: bool = False
+    environment: str = 'dev'
     database_url: Optional[str] = None
     redis_url: Optional[str] = None
     admin: dict = {}
@@ -34,6 +35,7 @@ class Settings(BaseSettings):
     remove_api_keys: bool = False
     bisheng_rt: dict = {}
     default_llm: dict = {}
+    jwt_secret: str = 'secret'
 
     @root_validator(pre=True)
     def set_database_url(cls, values):
@@ -44,6 +46,30 @@ class Settings(BaseSettings):
             else:
                 logger.debug('No DATABASE_URL env variable, using sqlite database')
                 values['database_url'] = 'sqlite:///./bisheng.db'
+        # else:
+        #     # 对密码进行加密
+        #     import re
+        #     pattern = r"(?<=:)[^:]+(?=@)"  # 匹配冒号后面到@符号前面的任意字符
+        #     match = re.search(pattern, values['database_url'])
+        #     if match:
+        #         password = match.group(0)
+        #         new_password = decrypt_token(password)
+        #         new_mysql_url = re.sub(pattern, f":{new_password}@", values['database_url'])
+        #         values['database_url'] = new_mysql_url
+
+        return values
+
+    @root_validator(pre=True)
+    def set_redis_url(cls, values):
+        # if 'redis_url' in values:
+        #     import re
+        #     pattern = r"(?<=:)[^:]+(?=@)"  # 匹配冒号后面到@符号前面的任意字符
+        #     match = re.search(pattern, values['redis_url'])
+        #     if match:
+        #         password = match.group(0)
+        #         new_password = decrypt_token(password)
+        #         new_mysql_url = re.sub(pattern, f":{new_password}@", values['redis_url'])
+        #         values['redis_url'] = new_mysql_url
         return values
 
     class Config:
@@ -189,6 +215,16 @@ def parse_key(keys: list[str], setting_str: str = None) -> str:
                 value_start_flag[index] = True
     return ['\n'.join(value) for value in value_of_key]
 
+
+# from cryptography.fernet import Fernet
+
+# secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
+
+# def encrypt_token(token: str):
+#     return Fernet(secret_key).encrypt(token.encode())
+
+# def decrypt_token(token: str):
+#     return Fernet(secret_key).decrypt(token).decode()
 
 config_file = os.getenv('config', 'config.yaml')
 settings = load_settings_from_yaml(config_file)

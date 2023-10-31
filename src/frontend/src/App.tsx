@@ -4,17 +4,15 @@ import { RouterProvider } from "react-router-dom";
 import "reactflow/dist/style.css";
 import "./App.css";
 
-import { ErrorBoundary } from "react-error-boundary";
 import ErrorAlert from "./alerts/error";
 import NoticeAlert from "./alerts/notice";
 import SuccessAlert from "./alerts/success";
-import CrashErrorComponent from "./components/CrashErrorComponent";
 import { alertContext } from "./contexts/alertContext";
 import { locationContext } from "./contexts/locationContext";
-import { TabsContext } from "./contexts/tabsContext";
+import { userContext } from "./contexts/userContext";
 import { LoginPage } from "./pages/login";
 import router from "./routes";
-import { userContext } from "./contexts/userContext";
+import { useTranslation } from "react-i18next";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -24,7 +22,6 @@ export default function App() {
     setShowSideBar(true);
     setIsStackedOpen(true);
   }, [setCurrent, setIsStackedOpen, setShowSideBar]);
-  const { hardReset } = useContext(TabsContext);
   const {
     errorData,
     errorOpen,
@@ -139,21 +136,17 @@ export default function App() {
     };
   }, []);
 
+  // i18n title
+  const { t } = useTranslation()
+  useEffect(() => {
+    document.title = t('title')
+  }, [t])
+
   return (
     //need parent component with width and height
     <div className="flex h-full flex-col">
-      <ErrorBoundary
-        onReset={() => {
-          window.localStorage.removeItem("tabsData");
-          // window.localStorage.clear();
-          hardReset();
-          window.location.href = window.location.href;
-        }}
-        FallbackComponent={CrashErrorComponent}
-      >
-        {/* <Header /> */}
-        {user ? <RouterProvider router={router} /> : <LoginPage></LoginPage>}
-      </ErrorBoundary>
+      {/* <Header /> */}
+      {user ? <RouterProvider router={router} /> : <LoginPage></LoginPage>}
       <div></div>
       <div className="app-div" style={{ zIndex: 999 }}>
         {alertsList.map((alert) => (

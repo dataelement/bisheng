@@ -1,4 +1,5 @@
-import { createContext, ReactNode, useState } from "react";
+import { createContext, ReactNode, useEffect, useState } from "react";
+import { getAppConfig } from "../controllers/API";
 
 //types for location context
 type locationContextType = {
@@ -28,6 +29,7 @@ type locationContextType = {
   }) => void;
   extraComponent: any;
   setExtraComponent: (newState: any) => void;
+  appConfig: any;
 };
 
 //initial value for location context
@@ -38,14 +40,15 @@ const initialValue = {
     window.innerWidth > 1024 && window.location.pathname.split("/")[1]
       ? true
       : false,
-  setCurrent: () => {},
-  setIsStackedOpen: () => {},
+  setCurrent: () => { },
+  setIsStackedOpen: () => { },
   showSideBar: window.location.pathname.split("/")[1] ? true : false,
-  setShowSideBar: () => {},
+  setShowSideBar: () => { },
   extraNavigation: { title: "" },
-  setExtraNavigation: () => {},
+  setExtraNavigation: () => { },
   extraComponent: <></>,
-  setExtraComponent: () => {},
+  setExtraComponent: () => { },
+  appConfig: {}
 };
 
 export const locationContext = createContext<locationContextType>(initialValue);
@@ -58,6 +61,17 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [showSideBar, setShowSideBar] = useState(initialValue.showSideBar);
   const [extraNavigation, setExtraNavigation] = useState({ title: "" });
   const [extraComponent, setExtraComponent] = useState(<></>);
+  const [appConfig, setAppConfig] = useState<any>({})
+
+  // 获取系统配置
+  useEffect(() => {
+    getAppConfig().then(res => {
+      setAppConfig({
+        isDev: res.data.data === 'dev'
+      })
+    })
+  }, [])
+
   return (
     <locationContext.Provider
       value={{
@@ -71,6 +85,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         setExtraNavigation,
         extraComponent,
         setExtraComponent,
+        appConfig
       }}
     >
       {children}

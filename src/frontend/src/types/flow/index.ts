@@ -9,6 +9,7 @@ export type FlowType = {
   status: number;
   style?: FlowStyleType;
   user_name?: string;
+  write: boolean;
 };
 export type NodeType = {
   id: string;

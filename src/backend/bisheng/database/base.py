@@ -1,10 +1,11 @@
 import hashlib
+import sys
 
-from bisheng.database.models.config import Config
+from bisheng.database.init_config import init_config
 from bisheng.database.models.role import Role
 from bisheng.database.models.user import User
 from bisheng.database.models.user_role import UserRole
-from bisheng.settings import parse_key, settings
+from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from sqlmodel import Session, SQLModel, create_engine, select
 
@@ -23,6 +24,7 @@ def create_db_and_tables():
         SQLModel.metadata.create_all(engine)
     except Exception as exc:
         logger.error(f'Error creating database and tables: {exc}')
+        sys.exit(-1)
         raise RuntimeError('Error creating database and tables') from exc
     # Now check if the table Flow exists, if not, something went wrong
     # and we need to create the tables again.
@@ -64,19 +66,7 @@ def create_db_and_tables():
             session.add(db_userrole)
             session.commit()
 
-        # 初始化config
-        config = session.exec(select(Config).limit(1)).all()
-        if not config:
-            keys = ['knowledges', 'default_llm']
-            values = parse_key(keys)
-            if settings.knowledges:
-                db_knowledge = Config(key='knowledges', value=values[0])
-                session.add(db_knowledge)
-
-            if settings.default_llm:
-                db_llm = Config(key='default_llm', value=values[1])
-                session.add(db_llm)
-            session.commit()
+    init_config()
 
 
 def get_session():

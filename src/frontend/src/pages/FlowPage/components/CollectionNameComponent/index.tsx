@@ -41,7 +41,7 @@ export default function CollectionNameComponent({
                 )
             }}>
                 <span className={(disabled ? " input-disable input-ring " : "") + " input-primary text-muted-foreground "} >
-                    {myValue !== "" ? myValue : "请输入..."}
+                    {myValue !== "" ? myValue : "Please enter..."}
                 </span>
                 <button>
                     <HardDrive strokeWidth={1.5} className={"icons-parameters-comp" + (disabled ? " text-ring" : " hover:text-accent-foreground")} />

@@ -14,6 +14,7 @@ import { PopUpContext } from "../../contexts/popUpContext";
 import { postValidateCode } from "../../controllers/API";
 import { APIClassType } from "../../types/api";
 import BaseModal from "../baseModal";
+import { useTranslation } from "react-i18next";
 
 export default function CodeAreaModal({
   value,
@@ -30,6 +31,7 @@ export default function CodeAreaModal({
   const { dark } = useContext(darkContext);
   const { closePopUp, setCloseEdit } = useContext(PopUpContext);
   const { setErrorData, setSuccessData } = useContext(alertContext);
+  const { t } = useTranslation()
 
   function setModalOpen(x: boolean) {
     if (x === false) {
@@ -46,45 +48,45 @@ export default function CodeAreaModal({
           let funcErrors = apiReturn.data.function.errors;
           if (funcErrors.length === 0 && importsErrors.length === 0) {
             setSuccessData({
-              title: "代码准备运行",
+              title: t('code.codeReadyToRun'),
             });
             setValue(code);
             setModalOpen(false);
           } else {
             if (funcErrors.length !== 0) {
               setErrorData({
-                title: "您的函数中存在一个错误",
+                title: t('code.functionError'),
                 list: funcErrors,
               });
             }
             if (importsErrors.length !== 0) {
               setErrorData({
-                title: "您的导入有误",
+                title: t('code.importsError'),
                 list: importsErrors,
               });
             }
           }
         } else {
           setErrorData({
-            title: "出错了，请重试",
+            title: t('code.errorOccurred'),
           });
         }
       })
       .catch((_) => {
         setErrorData({
-          title: "这段代码有问题，请检查以下",
+          title: t('code.codeError'),
         });
       });
   }
 
   return (
     <BaseModal open={true} setOpen={setModalOpen}>
-      <BaseModal.Header description={'编辑你的 Python 代码此代码片段接受模块导入和一个函数定义。确保您的函数返回一个字符串。'}>
+      <BaseModal.Header description={t('code.editPythonCodeDescription')}>
         <DialogTitle className="flex items-center">
-          <span className="pr-2">编辑代码</span>
+          <span className="pr-2">{t('code.editCode')}</span>
           <TerminalSquare
             strokeWidth={1.5}
-            className="h-6 w-6 pl-1 text-primary "
+            className="h-6 w-6 pl-1 text-primary"
             aria-hidden="true"
           />
         </DialogTitle>
@@ -110,7 +112,7 @@ export default function CodeAreaModal({
           </div>
           <div className="flex h-fit w-full justify-end">
             <Button className="mt-3" onClick={handleClick} type="submit">
-              检查 & 保存
+              {t('code.checkAndSave')}
             </Button>
           </div>
         </div>
@@ -118,3 +120,4 @@ export default function CodeAreaModal({
     </BaseModal>
   );
 }
+

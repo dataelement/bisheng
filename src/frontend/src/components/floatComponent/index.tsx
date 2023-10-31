@@ -57,7 +57,7 @@ export default function FloatComponent({
             : "input-primary" + (disabled ? " input-disable " : "")
         }
         placeholder={
-          editNode ? "数字 0 至 1" : "输入从 0 到 1 的数字"
+          editNode ? "number from 0 to 1" : "Input a number from 0 to 1"
         }
         onChange={(e) => {
           setMyValue(e.target.value);

@@ -1,24 +1,25 @@
-import { FileDown, FileUp, Menu, Save, Search, TerminalSquare, LogOut, Combine, Bell } from "lucide-react";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { Bell, Combine, FileDown, FileUp, LogOut, Menu, Save, Search, TerminalSquare } from "lucide-react";
+import { useContext, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import AlertDropdown from "../../../../alerts/alertDropDown";
 import ShadTooltip from "../../../../components/ShadTooltipComponent";
-import { Separator } from "../../../../components/ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../../components/ui/tooltip";
 import { alertContext } from "../../../../contexts/alertContext";
 import { PopUpContext } from "../../../../contexts/popUpContext";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
 import ApiModal from "../../../../modals/ApiModal";
+import L2ParamsModal from "../../../../modals/L2ParamsModal";
 import ExportModal from "../../../../modals/exportModal";
 import { APIClassType, APIObjectType } from "../../../../types/api";
+import { FlowType } from "../../../../types/flow";
 import { classNames, nodeColors, nodeIconsLucide, nodeNames, } from "../../../../utils";
 import DisclosureComponent from "../DisclosureComponent";
-import { useNavigate } from "react-router-dom";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../../components/ui/tooltip";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../../../../components/ui/dropdown-menu";
-import L2ParamsModal from "../../../../modals/L2ParamsModal";
-import AlertDropdown from "../../../../alerts/alertDropDown";
-import { FlowType } from "../../../../types/flow";
 
 export default function ExtraSidebar({ flow }: { flow: FlowType }) {
+  const { t } = useTranslation()
+
   const { data } = useContext(typesContext);
   const { openPopUp } = useContext(PopUpContext);
   const { flows, tabId, uploadFlow, tabsState, saveFlow } =
@@ -68,19 +69,17 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
   const navgate = useNavigate()
   return (
     <div className="side-bar-arrangement">
-      <ShadTooltip content="简化配置" side="bottom">
+      <ShadTooltip content={t('flow.simplifyConfig')} side="bottom">
         <button className="extra-side-bar-buttons w-[80px] absolute right-[173px] top-4 bg-gray-0 z-10 rounded-l-full rounded-r-none" onClick={() => setOpen(true)}>
-          <Combine strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" color="#34d399"></Combine>简化
+          <Combine strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" color="#34d399"></Combine>{t('flow.simplify')}
         </button>
       </ShadTooltip>
-      <ShadTooltip content="通知" side="bottom">
+      <ShadTooltip content={t('flow.notifications')} side="bottom">
         <button
           className="extra-side-bar-buttons w-[80px] absolute right-[94px] top-4 bg-gray-0 z-10 rounded-none"
           onClick={(event: React.MouseEvent<HTMLElement>) => {
             setNotificationCenter(false);
-            const { top, left } = (
-              event.target as Element
-            ).getBoundingClientRect();
+            const { top, left } = (event.target as Element).getBoundingClientRect();
             openPopUp(
               <>
                 <div className="absolute z-10" style={{ top: top + 40, left: left - AlertWidth }} ><AlertDropdown /></div>
@@ -90,36 +89,35 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
           }}
         >
           {notificationCenter && <div className="header-notifications"></div>}
-          <Bell className="side-bar-button-size" aria-hidden="true" />通知
+          <Bell className="side-bar-button-size" aria-hidden="true" />{t('flow.notifications')}
         </button>
       </ShadTooltip>
-      <ShadTooltip content="返回" side="bottom">
+      <ShadTooltip content={t('flow.exit')} side="bottom">
         <button className="extra-side-bar-buttons w-[80px] absolute right-4 top-4 bg-gray-0 z-10 rounded-r-full rounded-l-none" onClick={() => navgate('/skill/' + flow.id, { replace: true })} >
-          <LogOut strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" ></LogOut>退出
+          <LogOut strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" ></LogOut>{t('flow.exit')}
         </button>
       </ShadTooltip>
       <div className="side-bar-buttons-arrangement">
-        <ShadTooltip content="导入" side="bottom">
+        <ShadTooltip content={t('flow.import')} side="bottom">
           <button className="extra-side-bar-buttons" onClick={() => { uploadFlow(); }} >
             <FileUp strokeWidth={1.5} className="side-bar-button-size " ></FileUp>
           </button>
         </ShadTooltip>
-
-        <ShadTooltip content="导出" side="bottom">
+        <ShadTooltip content={t('flow.export')} side="bottom">
           <button className={classNames("extra-side-bar-buttons")} onClick={(event) => { openPopUp(<ExportModal />); }} >
             <FileDown strokeWidth={1.5} className="side-bar-button-size" ></FileDown>
           </button>
         </ShadTooltip>
-        <ShadTooltip content="代码" side="bottom">
+        <ShadTooltip content={t('flow.code')} side="bottom">
           <button className={classNames("extra-side-bar-buttons")} onClick={(event) => { openPopUp(<ApiModal flow={flows.find((f) => f.id === tabId)} />); }} >
             <TerminalSquare strokeWidth={1.5} className="side-bar-button-size"></TerminalSquare>
           </button>
         </ShadTooltip>
 
-        <ShadTooltip content="保存" side="bottom">
+        <ShadTooltip content={t('save')} side="bottom">
           <button className="extra-side-bar-buttons" onClick={(event) => {
             saveFlow(flow);
-            setSuccessData({ title: "保存成功" });
+            setSuccessData({ title: t('success') });
           }}
             disabled={!isPending}
           >
@@ -129,7 +127,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
       </div>
       {/* <Separator /> */}
       <div className="side-bar-search-div-placement">
-        <input type="text" name="search" id="search" placeholder="查找组件" className="input-search rounded-full"
+        <input type="text" name="search" id="search" placeholder={t('flow.searchComponent')} className="input-search rounded-full"
           onChange={(e) => {
             handleSearchInput(e.target.value);
             setSearch(e.target.value);
@@ -199,7 +197,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
       {/* 高级配置l2配置 */}
       <L2ParamsModal data={flow} open={open} setOpen={setOpen} onSave={() => {
         saveFlow(flow);
-        setSuccessData({ title: "保存成功" });
+        setSuccessData({ title: t('success') });
       }}></L2ParamsModal>
     </div >
   );

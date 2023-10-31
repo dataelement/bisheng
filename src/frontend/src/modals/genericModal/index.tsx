@@ -7,9 +7,7 @@ import { Button } from "../../components/ui/button";
 import { DialogTitle } from "../../components/ui/dialog";
 import { Textarea } from "../../components/ui/textarea";
 import {
-  MAX_WORDS_HIGHLIGHT,
-  PROMPT_DIALOG_SUBTITLE,
-  TEXT_DIALOG_SUBTITLE,
+  MAX_WORDS_HIGHLIGHT
 } from "../../constants";
 import { alertContext } from "../../contexts/alertContext";
 import { darkContext } from "../../contexts/darkContext";
@@ -143,12 +141,12 @@ export default function GenericModal({
           if (inputVariables && inputVariables.length === 0) {
             setIsEdit(true);
             setNoticeData({
-              title: "您的模板没有任何变量。",
+              title: "Your template has no variables.",
             });
           } else {
             setIsEdit(false);
             setSuccessData({
-              title: "Prompt已就绪",
+              title: "Prompt ready",
             });
             setModalOpen(closeModal);
             setValue(inputValue);
@@ -156,7 +154,7 @@ export default function GenericModal({
         } else {
           setIsEdit(true);
           setErrorData({
-            title: "出错了，请重试",
+            title: "An error occurred, please try again.",
           });
         }
       })
@@ -164,7 +162,7 @@ export default function GenericModal({
         console.log(error);
         setIsEdit(true);
         return setErrorData({
-          title: "此提示有问题，请复查",
+          title: "This prompt has an issue, please review.",
           list: [error?.response?.data?.detail],
         });
       });
@@ -175,11 +173,11 @@ export default function GenericModal({
       <BaseModal.Header
         description={(() => {
           switch (myModalTitle) {
-            case "编辑文本":
-              return TEXT_DIALOG_SUBTITLE;
+            case "Edit Text":
+              return "edit text";
 
-            case "编辑提示词":
-              return PROMPT_DIALOG_SUBTITLE;
+            case "Edit Prompt":
+              return "Create prompts. Prompts can help guide the behavior of the language model.";
 
             default:
               return null;
@@ -246,7 +244,7 @@ export default function GenericModal({
                     <div className="flex flex-wrap items-center">
                       <Variable className=" -ml-px mr-1 flex h-4 w-4 text-primary"></Variable>
                       <span className="text-md font-semibold text-primary">
-                        提示词变量:
+                        Prompt word variable.:
                       </span>
 
                       {wordsHighlight.map((word, index) => (
@@ -265,7 +263,7 @@ export default function GenericModal({
                               <span>
                                 {word.replace(/[{}]/g, "").length > 59
                                   ? word.replace(/[{}]/g, "").slice(0, 56) +
-                                    "..."
+                                  "..."
                                   : word.replace(/[{}]/g, "")}
                               </span>
                             </div>
@@ -275,7 +273,7 @@ export default function GenericModal({
                     </div>
                   </div>
                   <span className="mt-1 text-xs text-muted-foreground">
-                  提示词的名称可以在大括号内任意选择，例如 {"{variable_name}"}
+                    The name of the prompt word can be freely chosen within curly braces, for example {"{variable_name}"}
                   </span>
                 </div>
               )}

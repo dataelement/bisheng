@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { useTranslation } from "react-i18next";
+import { bsconfirm } from "../../alerts/confirm";
 import { Button } from "../../components/ui/button";
 import {
     Table,
@@ -10,9 +12,9 @@ import {
     TableRow
 } from "../../components/ui/table";
 import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
-import { bsconfirm } from "../../alerts/confirm";
 
 export default function Templates({ onBack, onChange }) {
+    const { t } = useTranslation()
 
     const [temps, setTemps] = useState([])
     useEffect(() => {
@@ -49,8 +51,8 @@ export default function Templates({ onBack, onChange }) {
 
     const handleDelTemp = (index: number, id: number) => {
         bsconfirm({
-            desc: '是否确认删除该技能模板？',
-            okTxt: '删除',
+            desc: t('skills.confirmText'),
+            okTxt: t('delete'),
             onOk(next) {
                 deleteTempApi(id).then(onChange)
                 setTemps(temps.filter((temp, i) => index !== i));
@@ -59,18 +61,18 @@ export default function Templates({ onBack, onChange }) {
         })
     }
 
-    return <div className="p-6">
+    return <div className="p-6 h-screen overflow-y-auto">
         <div className="flex justify-end">
-            <Button className="h-8 rounded-full" onClick={onBack}>返回技能列表</Button>
+            <Button className="h-8 rounded-full" onClick={onBack}>{t('skills.backToSkillList')}</Button>
         </div>
-        <p className="text-gray-500">技能模板管理，模板对所有用户可见，支持拖拽排序、删除操作</p>
+        <p className="text-gray-500">{t('skills.skillTemplateManagement')}</p>
 
         <Table className="mt-10">
             <TableHeader>
                 <TableRow>
-                    <TableHead className="w-[400px]">模板名称</TableHead>
-                    <TableHead>模板描述</TableHead>
-                    <TableHead>操作</TableHead>
+                    <TableHead className="w-[400px]">{t('skills.templateName')}</TableHead>
+                    <TableHead>{t('skills.templateDescription')}</TableHead>
+                    <TableHead>{t('operations')}</TableHead>
                 </TableRow>
             </TableHeader>
             <DragDropContext onDragEnd={handleDragEnd}>
@@ -89,7 +91,7 @@ export default function Templates({ onBack, onChange }) {
                                             <TableCell className="font-medium min-w-[400px]">{temp.name}</TableCell>
                                             <TableCell>{temp.description}</TableCell>
                                             <TableCell className="">
-                                                <a href="javascript:;" onClick={() => handleDelTemp(index, temp.id)} className="underline">删除</a>
+                                                <a href="javascript:;" onClick={() => handleDelTemp(index, temp.id)} className="underline">{t('delete')}</a>
                                             </TableCell>
                                         </tr>
                                     )}
@@ -100,5 +102,5 @@ export default function Templates({ onBack, onChange }) {
                 </Droppable>
             </DragDropContext>
         </Table>
-    </div >
+    </div>
 };

@@ -1,11 +1,12 @@
 """proxy llm chat wrapper."""
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
-import requests
+from langchain import requests
 from langchain.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
 from langchain.chat_models.base import BaseChatModel
 from langchain.schema import ChatGeneration, ChatResult
@@ -118,7 +119,7 @@ class ProxyChatLLM(BaseChatModel):
 
     request_timeout: Optional[Union[float, Tuple[float, float]]] = None
     """Timeout for requests to OpenAI completion API. Default is 600 seconds."""
-    max_retries: Optional[int] = 6
+    max_retries: Optional[int] = 0
     """Maximum number of retries to make when generating."""
     streaming: Optional[bool] = False
     """Whether to stream the results or not."""
@@ -157,7 +158,7 @@ class ProxyChatLLM(BaseChatModel):
         }
 
         try:
-            values['client'] = requests.post
+            values['client'] = requests.Requests(headers=values['headers'])
         except AttributeError:
             raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
         return values
@@ -192,7 +193,8 @@ class ProxyChatLLM(BaseChatModel):
                 'function_call': kwargs.get('function_call', None),
                 'functions': kwargs.get('functions', [])
             }
-            return self.client(self.elemai_base_url, headers=self.headers, json=params).json()
+            response = self.client.post(self.elemai_base_url, data=params)
+            return response.json()
 
         return _completion_with_retry(**kwargs)
 
@@ -223,6 +225,25 @@ class ProxyChatLLM(BaseChatModel):
         response = self.completion_with_retry(messages=message_dicts, **params)
         return self._create_chat_result(response)
 
+    async def acompletion_with_retry(self, **kwargs: Any) -> Any:
+        """Use tenacity to retry the async completion call."""
+        retry_decorator = _create_retry_decorator(self)
+
+        @retry_decorator
+        async def _acompletion_with_retry(**kwargs: Any) -> Any:
+            # Use OpenAI's async api https://github.com/openai/openai-python#async-api
+            async with self.client.apost(url=self.elemai_base_url, data=kwargs) as response:
+                async for txt in response.content.iter_any():
+                    if b'\n' in txt:
+                        for txt_ in txt.split(b'\n'):
+                            yield txt_.decode('utf-8').strip()
+                    else:
+                        yield txt.decode('utf-8').strip()
+
+        async for response in _acompletion_with_retry(**kwargs):
+            if response:
+                yield json.loads(response)
+
     async def _agenerate(
         self,
         messages: List[BaseMessage],
@@ -230,7 +251,35 @@ class ProxyChatLLM(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return self._generate(messages, stop, run_manager, **kwargs)
+        message_dicts, params = self._create_message_dicts(messages, stop)
+        params = {**params, **kwargs}
+        if self.streaming:
+            inner_completion = ''
+            role = 'assistant'
+            params['stream'] = True
+            function_call: Optional[dict] = None
+            async for stream_resp in self.acompletion_with_retry(messages=message_dicts, **params):
+
+                role = stream_resp['choices'][0]['delta'].get('role', role)
+                token = stream_resp['choices'][0]['delta'].get('content', '')
+                inner_completion += token or ''
+                _function_call = stream_resp['choices'][0]['delta'].get('function_call')
+                if _function_call:
+                    if function_call is None:
+                        function_call = _function_call
+                    else:
+                        function_call['arguments'] += _function_call['arguments']
+                if run_manager:
+                    await run_manager.on_llm_new_token(token)
+            message = _convert_dict_to_message({
+                'content': inner_completion,
+                'role': role,
+                'function_call': function_call,
+            })
+            return ChatResult(generations=[ChatGeneration(message=message)])
+        else:
+            response = await self.acompletion_with_retry(messages=message_dicts, **params)
+            return self._create_chat_result(response)
 
     def _create_message_dicts(
             self, messages: List[BaseMessage],

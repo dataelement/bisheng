@@ -40,6 +40,7 @@ class AccessType(Enum):
     KNOWLEDGE = 1
     FLOW = 2
     KNOWLEDGE_WRITE = 3
+    FLOW_WRITE = 4
 
 
 class RoleRefresh(BaseModel):

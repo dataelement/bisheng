@@ -10,8 +10,8 @@ export type ChatMessageType = {
   category?: string;
   files?: Array<{ data: string; type: string; data_type: string, file_name?: string }>;
   chatKey: string;
-  /** 用户打字机控制光标展示 */
   end: boolean;
   id?: number;
   source?: boolean;
+  noAccess?: boolean;
 };
