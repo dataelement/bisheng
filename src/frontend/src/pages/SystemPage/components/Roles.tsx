@@ -57,6 +57,7 @@ export default function Roles() {
 
     // 验证重名
     const checkSameName = (name: string) => {
+        if (role?.id) return false
         return roles.find(role => role.role_name === name)
     }
 

@@ -495,10 +495,11 @@ const useWebsocketChat = (chatIdRef) => {
     }) {
         setChatHistory((old) => {
             const newChats = [...old]
-            const chatsLen = newChats.length
+            let chatsLen = newChats.length
             // hack 过滤重复最后消息
             if (end && str && chatsLen > 1 && str === newChats[chatsLen - 2].message && !newChats[chatsLen - 2].thought) {
                 newChats.splice(chatsLen - 2, 1) // 删上一条
+                chatsLen = newChats.length
             }
             // 更新
             const lastChat = newChats[chatsLen - 1]

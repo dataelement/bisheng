@@ -211,7 +211,7 @@ export default function FileLibPage() {
                 <div className="flex justify-end gap-4">
                     <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
                     {user.role === 'admin' && <Button className="h-8 rounded-full" onClick={() => setShowCpu(true)}>{t('model.gpuResourceUsage')}</Button>}
-                    <Button className="h-8 rounded-full" onClick={() => setRTOpen(true)}>{t('model.rtServiceManagement')}</Button>
+                    {appConfig.isDev && <Button className="h-8 rounded-full" onClick={() => setRTOpen(true)}>{t('model.rtServiceManagement')}</Button>}
                 </div>
                 <Table>
                     <TableCaption>{t('model.modelCollectionCaption')}.</TableCaption>
@@ -247,7 +247,7 @@ export default function FileLibPage() {
             <TabsContent value="password"></TabsContent>
         </Tabs>
         {/* 编辑配置 */}
-        <ConfigModal data={currentModel} readonly={readOnlyConfig} open={open} setOpen={setOpen} onSave={handleSave}></ConfigModal>
+        <ConfigModal data={currentModel} readonly={readOnlyConfig || !appConfig.isDev} open={open} setOpen={setOpen} onSave={handleSave}></ConfigModal>
         {/* CPU使用情况 */}
         <dialog className={`modal bg-blur-shared ${showCpu ? 'modal-open' : 'modal-close'}`} onClick={() => setShowCpu(false)}>
             <form method="dialog" className="max-w-[80%] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={e => e.stopPropagation()}>

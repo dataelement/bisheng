@@ -102,7 +102,7 @@ export default function SkillPage() {
                             key={flow.id}
                             data={flow}
                             isAdmin={user.role === 'admin'}
-                            edit
+                            edit={flow.write}
                             onDelete={() => delConfim(flow.id)}
                             onCreate={toggleTempModal}
                         ></CardItem>

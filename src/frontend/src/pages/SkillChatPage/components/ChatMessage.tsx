@@ -113,7 +113,7 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
     }
 
     const source = <div className="chat-footer py-1">
-        {chat.noAccess && <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>{t('chat.noAccess')}</p>}
+        {/* {chat.noAccess && <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>{t('chat.noAccess')}</p>} */}
         <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent" onClick={onSource}>{t('chat.source')}</button>
     </div>
 

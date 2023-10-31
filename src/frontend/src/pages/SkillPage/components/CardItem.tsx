@@ -54,7 +54,7 @@ export default function CardItem({ data, isAdmin, edit = false, onDelete, onCrea
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger><Switch checked={open} onCheckedChange={handleChange} /></TooltipTrigger>
-                        <TooltipContent><p>{open ? t('offline') : t('online')}</p></TooltipContent>
+                        <TooltipContent><p>{open ? t('model.offline') : t('model.online')}</p></TooltipContent>
                     </Tooltip>
                 </TooltipProvider>
             </div>}

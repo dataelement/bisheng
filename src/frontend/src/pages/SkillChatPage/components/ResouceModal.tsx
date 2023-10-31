@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
 import { ChatMessageType } from "../../../types/chat";
 import FileView from "./FileView";
+import { downloadFile } from "../../../util/utils";
 
 // 顶部答案区
 const Anwser = ({ id, msg, onInit, onAdd }) => {
@@ -109,14 +110,14 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                         <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
                             {
                                 _file.fileUrl && <div className="tooltip" data-tip={t('chat.downloadPDFTooltip')}>
-                                    <a href={_file.fileUrl} target="_blank" onClick={(event) => event.stopPropagation()} >
+                                    <a href="javascript:;" onClick={(event) => { downloadFile(_file.fileUrl, _file.fileName); event.stopPropagation() }} >
                                         <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                     </a>
                                 </div>
                             }
                             {
                                 _file.originUrl && <div className="tooltip tooltip-left" data-tip={t('chat.downloadOriginalTooltip')}>
-                                    <a href={_file.originUrl} target="_blank" onClick={(event) => event.stopPropagation()} >
+                                    <a href="javascript:;" onClick={(event) => { downloadFile(_file.originUrl, _file.fileName.replace(/\.[\w\d]+$/, '') + _file.originUrl.match(/(\.\w+)\?/)?.[1]); event.stopPropagation() }} >
                                         <Download color="rgba(53,126,249,1)" size={20} strokeWidth={1.5}></Download>
                                     </a>
                                 </div>
