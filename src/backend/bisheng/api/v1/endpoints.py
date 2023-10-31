@@ -2,6 +2,7 @@ import json
 from typing import Optional
 
 import yaml
+from bisheng import settings
 from bisheng.api.v1.schemas import ProcessResponse, UploadFileResponse
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file
@@ -24,6 +25,11 @@ router = APIRouter(tags=['Base'])
 @router.get('/all')
 def get_all():
     return langchain_types_dict
+
+
+@router.get('/env')
+def getn_env():
+    return {'data': settings.settings.environment}
 
 
 @router.get('/config')
@@ -77,6 +83,8 @@ async def process_flow(
     """
     Endpoint to process an input with a given flow_id.
     """
+    if inputs and isinstance(inputs, dict):
+        inputs.pop('id')
 
     try:
         flow = session.get(Flow, flow_id)

@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     input_output: dict = {}
     output_parsers: dict = {}
     dev: bool = False
+    environment: str = 'dev'
     database_url: Optional[str] = None
     redis_url: Optional[str] = None
     admin: dict = {}
@@ -34,6 +35,7 @@ class Settings(BaseSettings):
     remove_api_keys: bool = False
     bisheng_rt: dict = {}
     default_llm: dict = {}
+    jwt_secret: str = 'secret'
 
     @root_validator(pre=True)
     def set_database_url(cls, values):

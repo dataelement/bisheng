@@ -1,2 +1,2 @@
 class ChatConfig:
-    streaming: bool = True
+    streaming: bool = False

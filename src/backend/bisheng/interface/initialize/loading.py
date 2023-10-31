@@ -190,6 +190,10 @@ def instantiate_retriever(node_type, class_object, params):
 def instantiate_chains(node_type, class_object: Type[Chain], params: Dict):
     if 'retriever' in params and hasattr(params['retriever'], 'as_retriever'):
         params['retriever'] = params['retriever'].as_retriever()
+    # dict 转换
+    if 'headers' in params and isinstance(params['headers'], str):
+        params['headers'] = eval(params['headers'])
+
     if node_type in chain_creator.from_method_nodes:
         method = chain_creator.from_method_nodes[node_type]
         if class_method := getattr(class_object, method, None):
