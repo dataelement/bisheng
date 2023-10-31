@@ -284,6 +284,13 @@ def delete_knowledge_file(*,
     # minio
     minio_client.MinioClient().delete_minio(str(knowledge_file.id))
     # elastic
+    esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+    if esvectore_client:
+        esvectore_client.client.delete_by_query(index=collection_name,
+                                                query={'match': {
+                                                    'metadata.file_id': file_id
+                                                }})
+        logger.info(f'act=delete_es file_id={file_id} res={res}')
 
     session.delete(knowledge_file)
     session.commit()
