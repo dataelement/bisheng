@@ -4,6 +4,9 @@ import { useTranslation } from "react-i18next";
 import { FixedSizeList as List, areEqual } from 'react-window';
 
 const SASS_HOST = 'https://bisheng.dataelem.com'
+export const checkSassUrl = (url: string) => {
+    return location.origin !== SASS_HOST ? url.replace(/^http:\/\/.*:\d+/, SASS_HOST) : url;
+}
 interface Chunk {
     id: number
     scoreL: number
@@ -139,7 +142,7 @@ export default function FileView({ data }) {
         setPagesLabels({ box: [] })
 
         // sass环境使用sass地址
-        const pdfUrl = location.origin === SASS_HOST ? data.fileUrl.replace(/^http:\/\/.*:\d+/, SASS_HOST) : data.fileUrl // '/doc.pdf';
+        const pdfUrl = checkSassUrl(data.fileUrl);  // '/doc.pdf';
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
         pdfjsLib.getDocument(pdfUrl).promise.then((pdfDocument) => {
             setLoading(false)
