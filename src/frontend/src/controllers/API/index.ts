@@ -13,6 +13,13 @@ import {
 
 
 axios.interceptors.response.use(function (response) {
+  if (response.data.status_code) {
+    return Promise.reject({
+      response: {
+        data: { detail: response.data.status_message }
+      }
+    });
+  }
   return response;
 }, function (error) {
   if (error.response.status === 401) {
