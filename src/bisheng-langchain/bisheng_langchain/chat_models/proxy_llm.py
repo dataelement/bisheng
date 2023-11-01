@@ -167,6 +167,7 @@ class ProxyChatLLM(BaseChatModel):
     def _default_params(self) -> Dict[str, Any]:
         """Get the default parameters for calling ProxyChatLLM API."""
         return {
+            'request_timeout': self.request_timeout,
             'model': self.model_name,
             'temperature': self.temperature,
             'top_p': self.top_p,

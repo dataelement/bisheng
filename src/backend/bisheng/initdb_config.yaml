@@ -27,6 +27,8 @@ default_llm: # 可选配置。BISHENG系统中有些功能需要使用大模型�
   model: "" # 在模型管理页面中已上线的大模型服务的名称
   host_base_url: "" # 在模型管理页面中已上线的大模型服务的地址
 
-
-# file_access: # 接入第三方文件权限校验
-#   file_api: "http://"
+# 模型访问的超时配置
+llm_request:
+  request_timeout: 600
+  max_retries: 6
+  stream: true

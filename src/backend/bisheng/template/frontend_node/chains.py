@@ -99,6 +99,10 @@ class ChainFrontendNode(FrontendNode):
             field.show = True
             field.advanced = True
             field.value = True
+        if field.name == 'combine_docs_chain_kwargs':
+            field.show = True
+            field.field_type = 'BasePromptTemplate'
+            field.display_name = 'prompt'
 
 
 class SeriesCharacterChainNode(FrontendNode):

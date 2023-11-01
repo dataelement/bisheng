@@ -57,8 +57,8 @@ export default function Roles() {
 
     // 验证重名
     const checkSameName = (name: string) => {
-        if (role?.id) return false
-        return roles.find(role => role.role_name === name)
+        return (roles.find(_role =>
+            _role.role_name === name && role.id !== _role.id))
     }
 
     if (role) return <EditRole id={role?.id || -1} name={role?.role_name || ''} onBeforeChange={checkSameName} onChange={handleChange}></EditRole>

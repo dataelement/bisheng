@@ -228,7 +228,7 @@ async def queryGPU(query_url: str):
             # nv_gpu_utilization{gpu_uuid="GPU-c8a73d12-b320-0910-68f1-a74bd0d626bd"}
             match = re.search(pattern, line)
             gpu_uuid = match.group(1) if match else None
-            utility[gpu_uuid] = round(int(line.split(' ')[1]), 2)
+            utility[gpu_uuid] = round(float(line.split(' ')[1]), 2)
 
         if 'nv_gpu_uuid_to_deviceid' in line:
             match = re.search(pattern, line)
