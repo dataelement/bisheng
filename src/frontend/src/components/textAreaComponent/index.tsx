@@ -44,7 +44,7 @@ export default function TextAreaComponent({
               ? " input-edit-node "
               : " input-primary " + (disabled ? " input-disable" : "")
           }
-          placeholder={"请输入..."}
+          placeholder={"input enter..."}
           onChange={(e) => {
             setMyValue(e.target.value);
             onChange(e.target.value);

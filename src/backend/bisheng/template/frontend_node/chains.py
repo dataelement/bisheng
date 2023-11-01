@@ -99,6 +99,10 @@ class ChainFrontendNode(FrontendNode):
             field.show = True
             field.advanced = True
             field.value = True
+        if field.name == 'combine_docs_chain_kwargs':
+            field.show = True
+            field.field_type = 'BasePromptTemplate'
+            field.display_name = 'prompt'
 
 
 class SeriesCharacterChainNode(FrontendNode):
@@ -317,11 +321,3 @@ class SummarizeDocsChain(FrontendNode):
     )
     description: str = """Load summarize chain."""
     base_classes: list[str] = ['BaseCombineDocumentsChain', 'function']
-
-    def to_dict(self):
-        return super().to_dict()
-
-    @staticmethod
-    def format_field(field: TemplateField, name: Optional[str] = None) -> None:
-        # do nothing and don't return anything
-        pass

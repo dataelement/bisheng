@@ -59,7 +59,11 @@ def build_input_keys_response(langchain_object, artifacts):
     return input_keys_response
 
 
-def build_flow(graph_data: dict, artifacts, process_file=False, flow_id=None, chat_id=None):
+def build_flow(graph_data: dict,
+               artifacts,
+               process_file=False,
+               flow_id=None,
+               chat_id=None) -> Graph:
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
@@ -193,6 +197,6 @@ def access_check(payload: dict, owner_user_id: int, target_id: int, type: Access
             select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
                                      RoleAccess.type == type.value)).all()
         third_ids = [access.third_id for access in role_access]
-        if owner_user_id != payload.get('user_id') and not third_ids and target_id not in third_ids:
+        if owner_user_id != payload.get('user_id') and str(target_id) not in third_ids:
             return False
     return True

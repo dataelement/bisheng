@@ -72,7 +72,7 @@ export default function IntComponent({
             ? " input-edit-node "
             : " input-primary " + (disabled ? " input-disable" : "")
         }
-        placeholder={editNode ? "整数": "输入整数"}
+        placeholder={editNode ? "integer": "Enter an integer"}
         onChange={(e) => {
           setMyValue(e.target.value);
           onChange(e.target.value);

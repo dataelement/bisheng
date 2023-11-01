@@ -40,11 +40,15 @@ class MinioClient():
         # filepath "/" 开头会有nginx问题
         if object_name[0] == '/':
             object_name = object_name[1:]
-        if self.minio_share:
-            return self.minio_share.presigned_get_object(bucket_name=bucket,
-                                                         object_name=object_name,
-                                                         expires=timedelta(days=7))
-        else:
+        try:
+            if self.minio_share and self.minio_share.stat_object(bucket_name=bucket,
+                                                                 object_name=object_name):
+                return self.minio_share.presigned_get_object(bucket_name=bucket,
+                                                             object_name=object_name,
+                                                             expires=timedelta(days=7))
+            else:
+                return ''
+        except Exception:
             return ''
 
     def delete_minio(self, object_name: str):

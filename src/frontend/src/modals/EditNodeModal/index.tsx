@@ -109,7 +109,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
               {data.node?.description}
               <div className="flex pt-3">
                 {/* <Variable className="edit-node-modal-variable "></Variable> */}
-                <span className="edit-node-modal-span">参数列表</span>
+                <span className="edit-node-modal-span">List</span>
               </div>
             </div>
           </DialogDescription>
@@ -129,9 +129,9 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
                 <Table className="table-fixed bg-muted outline-1">
                   <TableHeader className="edit-node-modal-table-header">
                     <TableRow className="">
-                      <TableHead className="h-7 text-center">参数</TableHead>
-                      <TableHead className="h-7 p-0 text-center">值</TableHead>
-                      <TableHead className="h-7 text-center">展示</TableHead>
+                      <TableHead className="h-7 text-center">parameter</TableHead>
+                      <TableHead className="h-7 p-0 text-center">value</TableHead>
+                      <TableHead className="h-7 text-center">show</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody className="p-0">
@@ -157,7 +157,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
                           </TableCell>
                           <TableCell className="w-[300px] p-0 text-center text-xs text-foreground ">
                             {data.node.template[n].type === "str" &&
-                            !data.node.template[n].options ? (
+                              !data.node.template[n].options ? (
                               <div className="mx-auto">
                                 {data.node.template[n].list ? (
                                   <InputListComponent
@@ -165,7 +165,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
                                     disabled={disabled}
                                     value={
                                       !data.node.template[n].value ||
-                                      data.node.template[n].value === ""
+                                        data.node.template[n].value === ""
                                         ? [""]
                                         : data.node.template[n].value
                                     }
@@ -315,7 +315,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
         </div>
 
         <DialogFooter>
-          <Button className="mt-3 rounded-full" onClick={() => { setModalOpen(false); }} type="submit" >保存修改</Button>
+          <Button className="mt-3 rounded-full" onClick={() => { setModalOpen(false); }} type="submit" >save</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

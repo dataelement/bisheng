@@ -1,10 +1,12 @@
-import { ChevronDownSquare, ChevronUpSquare, Bookmark } from "lucide-react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { FixedSizeList as List, areEqual } from 'react-window';
-import { Button } from "../../../components/ui/button";
 import * as pdfjsLib from 'pdfjs-dist';
+import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { FixedSizeList as List, areEqual } from 'react-window';
 
 const SASS_HOST = 'https://bisheng.dataelem.com'
+export const checkSassUrl = (url: string) => {
+    return location.origin !== SASS_HOST ? url.replace(/^http:\/\/.*:\d+/, SASS_HOST) : url;
+}
 interface Chunk {
     id: number
     scoreL: number
@@ -95,6 +97,7 @@ const Row = React.memo(({ index, style, size, labels, pdf, onLoad }: RowProps) =
 
 
 export default function FileView({ data }) {
+    const { t } = useTranslation()
     const paneRef = useRef(null)
     const listRef = useRef(null)
     const [boxSize, setBoxSize] = useState({ width: 0, height: 0 })
@@ -131,7 +134,7 @@ export default function FileView({ data }) {
         return () => window.removeEventListener('resize', resize)
     }, [])
 
-    // 下载文件
+    // 加载文件
     const [pdf, setPdf] = useState(null)
     useEffect(() => {
         // loding
@@ -139,7 +142,7 @@ export default function FileView({ data }) {
         setPagesLabels({ box: [] })
 
         // sass环境使用sass地址
-        const pdfUrl = location.origin === SASS_HOST ? data.fileUrl.replace(/^http:\/\/.*:\d+/, SASS_HOST) : data.fileUrl // '/doc.pdf';
+        const pdfUrl = checkSassUrl(data.fileUrl);  // '/doc.pdf';
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
         pdfjsLib.getDocument(pdfUrl).promise.then((pdfDocument) => {
             setLoading(false)
@@ -149,14 +152,13 @@ export default function FileView({ data }) {
                 setCurrentChunk(0)
                 const chunk = data.chunks[0]
                 setPagesLabels(chunk)
+                const pageY = (chunk.box[0].page - 1) * (boxSize.width / 0.7)
                 // 第一个高亮块的当页位移
                 const offsetY = chunk.box[0].bbox[1] * (boxSize.width / fileWidthRef.current) - 100
                 // 页码滚动位置
-                const pageY = (chunk.box[0].page - 1) * (boxSize.width / 0.7)
                 listRef.current.scrollTo(pageY + offsetY);
                 // listRef.current.scrollToItem(data.chunks[0].box[0].page - 1, 'start');
-
-            }, 2000);
+            }, 3000);
         })
     }, [data])
 
@@ -189,7 +191,7 @@ export default function FileView({ data }) {
                 : <div id="warp-pdf" className="file-view absolute">
                     <List
                         ref={listRef}
-                        itemCount={pdf?.numPages || 0}
+                        itemCount={pdf?.numPages || 100}
                         // A4 比例(itemSize：item的高度)
                         // 595.32 * 841.92 采用宽高比0.70约束
                         itemSize={boxSize.width / 0.7}
@@ -203,7 +205,7 @@ export default function FileView({ data }) {
                 </div>
         }
         <div className="absolute left-[0px] rounded-sm p-4 px-0 top-[50%] translate-y-[-50%] max-2xl:scale-75 origin-top-left">
-            <p className="mb-1 text-sm font-bold text-center rounded-sm bg-[rgb(186,210,249)] text-blue-600">来源段落</p>
+            <p className="mb-1 text-sm font-bold text-center rounded-sm bg-[rgb(186,210,249)] text-blue-600">{t('chat.sourceTooltip')}</p>
             <div className="flex flex-col gap-2 ">
                 {data.chunks.map((chunk, i) =>
                     <div key={i}

@@ -1,6 +1,8 @@
+import json
 from typing import Optional
 
 import yaml
+from bisheng import settings
 from bisheng.api.v1.schemas import ProcessResponse, UploadFileResponse
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file
@@ -12,6 +14,7 @@ from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.settings import parse_key
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi_jwt_auth import AuthJWT
 from sqlalchemy import delete
 from sqlmodel import Session, select
 
@@ -24,8 +27,17 @@ def get_all():
     return langchain_types_dict
 
 
+@router.get('/env')
+def getn_env():
+    return {'data': settings.settings.environment}
+
+
 @router.get('/config')
-def get_config(session: Session = Depends(get_session)):
+def get_config(session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    if payload.get('role') != 'admin':
+        raise HTTPException(status_code=500, detail='Unauthorized')
     configs = session.exec(select(Config)).all()
     config_str = []
     for config in configs:
@@ -71,6 +83,8 @@ async def process_flow(
     """
     Endpoint to process an input with a given flow_id.
     """
+    if inputs and isinstance(inputs, dict):
+        inputs.pop('id')
 
     try:
         flow = session.get(Flow, flow_id)

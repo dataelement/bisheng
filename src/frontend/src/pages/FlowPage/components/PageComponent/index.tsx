@@ -1,5 +1,6 @@
 import _ from "lodash";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { unstable_useBlocker as useBlocker } from "react-router-dom";
 import ReactFlow, {
   Background,
@@ -370,16 +371,19 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
 
   const { setDisableCopyPaste } = useContext(TabsContext);
 
+  const { t } = useTranslation()
+
   // 离开提示保存
   useEffect(() => {
     const fun = (e) => {
-      var confirmationMessage = '您有未保存的更改，确定要离开吗？';
-      (e || window.event).returnValue = confirmationMessage; // 兼容不同浏览器
+      var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
+      (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
       return confirmationMessage;
     }
     window.addEventListener('beforeunload', fun);
     return () => { window.removeEventListener('beforeunload', fun) }
   }, [])
+
   const hasChange = useMemo(() => {
     if (!flow.data) return false
     const oldFlowData = JSON.parse(preFlow)
@@ -472,12 +476,12 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       {/* 删除确认 */}
       <dialog className={`modal ${blocker.state === "blocked" && 'modal-open'}`}>
         <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-          <h3 className="font-bold text-lg">提示!</h3>
-          <p className="py-4">您有修改未保存，确认离开吗？</p>
+          <h3 className="font-bold text-lg">{t('prompt')}</h3>
+          <p className="py-4">{t('flow.unsavedChangesConfirmation')}</p>
           <div className="modal-action">
-            <Button className="h-8 rounded-full" variant="outline" onClick={() => blocker.reset?.()}>取消</Button>
-            <Button className="h-8 rounded-full" variant="destructive" onClick={() => blocker.proceed?.()}>离开</Button>
-            <Button className="h-8 rounded-full" onClick={handleSaveAndClose}>离开并保存</Button>
+            <Button className="h-8 rounded-full" variant="outline" onClick={() => blocker.reset?.()}>{t('cancel')}</Button>
+            <Button className="h-8 rounded-full" variant="destructive" onClick={() => blocker.proceed?.()}>{t('flow.leave')}</Button>
+            <Button className="h-8 rounded-full" onClick={handleSaveAndClose}>{t('flow.leaveAndSave')}</Button>
           </div>
         </form>
       </dialog>

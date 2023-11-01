@@ -1,12 +1,13 @@
 import hashlib
 import json
 from typing import Optional
+from uuid import UUID
 
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.knowledge import Knowledge
 from bisheng.database.models.role import Role, RoleCreate, RoleUpdate
-from bisheng.database.models.role_access import RoleAccess, RoleRefresh
+from bisheng.database.models.role_access import AccessType, RoleAccess, RoleRefresh
 from bisheng.database.models.user import User, UserCreate, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_role import UserRole, UserRoleCreate
 from bisheng.utils.logger import logger
@@ -107,7 +108,7 @@ async def list(*,
     total_count = session.scalar(count_sql)
 
     if page_size and page_num:
-        sql = sql.offset((page_num - 1) * page_size).limit(page_size)
+        sql = sql.order_by(User.user_id.desc()).offset((page_num - 1) * page_size).limit(page_size)
     users = session.exec(sql).all()
     return {
         'data': [jsonable_encoder(UserRead.from_orm(user)) for user in users],
@@ -126,7 +127,11 @@ async def update(*,
 
     db_user = session.get(User, user.user_id)
     if db_user and user.delete is not None:
-        if db_user.role == 'admin':
+        # 判断是否是管理员
+        admin = session.exec(
+            select(UserRole).where(UserRole.role_id == 1,
+                                   UserRole.user_id == user.user_id)).first()
+        if admin:
             raise HTTPException(status_code=500, detail='不能操作管理员')
         db_user.delete = user.delete
 
@@ -143,6 +148,9 @@ async def create_role(*,
     Authorize.jwt_required()
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无查看权限')
+
+    if not role.role_name:
+        raise HTTPException(status_code=500, detail='角色名称不能为空')
 
     db_role = Role.from_orm(role)
     try:
@@ -186,7 +194,8 @@ async def get_role(*, session: Session = Depends(get_session), Authorize: AuthJW
     Authorize.jwt_required()
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无查看权限')
-    db_role = session.exec(select(Role)).all()
+    # 默认不返回 管理员和普通用户，因为用户无法设置
+    db_role = session.exec(select(Role).where(Role.id > 1)).all()
     return {'data': [jsonable_encoder(role) for role in db_role]}
 
 
@@ -203,8 +212,16 @@ async def delete_role(*,
     if db_role.role_name in {'系统管理员', '普通用户'}:
         raise HTTPException(status_code=500, detail='内置角色不能删除')
 
-    session.delete(db_role)
-    session.commit()
+    # 删除role相关的数据
+    try:
+        session.delete(db_role)
+        session.exec(delete(UserRole).where(UserRole.role_id == role_id))
+        session.exec(delete(RoleAccess).where(RoleAccess.role_id == role_id))
+        session.commit()
+    except Exception as e:
+        logger.exception(e)
+        session.rollback()
+        raise HTTPException(status_code=500, detail='删除角色失败')
     return {'message': 'success'}
 
 
@@ -217,15 +234,19 @@ async def user_addrole(*,
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无设置权限')
 
+    db_role = session.exec(select(UserRole).where(UserRole.user_id == userRole.user_id,)).all()
+    role_ids = {role.role_id for role in db_role}
     for role_id in userRole.role_id:
-        db_role = session.exec(
-            select(UserRole).where(UserRole.user_id == userRole.user_id,
-                                   UserRole.role_id == role_id)).all()
-        if not db_role:
+        if role_id not in role_ids:
             db_role = UserRole(user_id=userRole.user_id, role_id=role_id)
             session.add(db_role)
+        else:
+            role_ids.remove(role_id)
+    if role_ids:
+        session.exec(
+            delete(UserRole).where(UserRole.user_id == userRole.user_id,
+                                   UserRole.role_id.in_(role_ids)))
     session.commit()
-
     return {'message': 'success'}
 
 
@@ -243,9 +264,13 @@ async def get_user_role(*,
     role_ids = [role.role_id for role in db_userroles]
     db_role = session.exec(select(Role).where(Role.id.in_(role_ids))).all()
     role_name_dict = {role.id: role.role_name for role in db_role}
+
     res = []
     for db_user_role in db_userroles:
         user_role = db_user_role.__dict__
+        if db_user_role.role_id not in role_name_dict:
+            # 错误数据
+            continue
         user_role['role_name'] = role_name_dict[db_user_role.role_id]
         res.append(user_role)
 
@@ -270,6 +295,8 @@ async def access_refresh(*,
     session.commit()
     # 添加新的权限
     for id in access_id:
+        if access_type == AccessType.FLOW.value:
+            id = UUID(id).hex
         role_access = RoleAccess(role_id=role_id, third_id=str(id), type=access_type)
         session.add(role_access)
     session.commit()
@@ -294,6 +321,11 @@ async def access_list(*,
 
     db_role_access = session.exec(sql).all()
     total_count = session.scalar(count_sql)
+    # uuid 和str的转化
+    for access in db_role_access:
+        if access.type == AccessType.FLOW.value:
+            access.third_id = UUID(access.third_id)
+
     return {
         'msg': 'success',
         'data': [jsonable_encoder(access) for access in db_role_access],
@@ -315,14 +347,15 @@ async def knowledge_list(*,
 
     statment = select(Knowledge,
                       RoleAccess).join(RoleAccess,
-                                       and_(RoleAccess.role_id == role_id, RoleAccess.type == 1,
+                                       and_(RoleAccess.role_id == role_id,
+                                            RoleAccess.type == AccessType.KNOWLEDGE.value,
                                             RoleAccess.third_id == Knowledge.id),
                                        isouter=True)
     count_sql = select(func.count(Knowledge.id))
 
     if name:
-        statment = statment.where(Knowledge.name == name)
-        count_sql = count_sql.where(Knowledge.name == name)
+        statment = statment.where(Knowledge.name.like('%' + name + '%'))
+        count_sql = count_sql.where(Knowledge.name.like('%' + name + '%'))
     if page_num and page_size and page_num != 'undefined':
         page_num = int(page_num)
         statment = statment.order_by(RoleAccess.type.desc()).order_by(
@@ -330,9 +363,21 @@ async def knowledge_list(*,
 
     db_role_access = session.exec(statment).all()
     total_count = session.scalar(count_sql)
+
+    # 补充用户名
+    user_ids = [access[0].user_id for access in db_role_access]
+    db_users = session.query(User).filter(User.user_id.in_(user_ids)).all()
+    user_dict = {user.user_id: user.user_name for user in db_users}
+
     return {
         'msg': 'success',
-        'data': [jsonable_encoder(access[0]) for access in db_role_access],
+        'data': [{
+            'name': access[0].name,
+            'user_name': user_dict.get(access[0].user_id),
+            'user_id': access[0].user_id,
+            'update_time': access[0].update_time,
+            'id': access[0].id
+        } for access in db_role_access],
         'total': total_count
     }
 
@@ -341,7 +386,7 @@ async def knowledge_list(*,
 async def flow_list(*,
                     role_id: int,
                     page_size: int,
-                    page_num: str,
+                    page_num: int,
                     name: Optional[str] = None,
                     session: Session = Depends(get_session),
                     Authorize: AuthJWT = Depends()):
@@ -349,27 +394,37 @@ async def flow_list(*,
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无查看权限')
 
-    statment = select(Flow,
-                      RoleAccess).join(RoleAccess,
-                                       and_(RoleAccess.role_id == role_id, RoleAccess.type == 1,
-                                            RoleAccess.third_id == Flow.id),
-                                       isouter=True)
+    statment = select(Flow, RoleAccess).join(RoleAccess,
+                                             and_(RoleAccess.role_id == role_id,
+                                                  RoleAccess.type == AccessType.FLOW.value,
+                                                  RoleAccess.third_id == Flow.id),
+                                             isouter=True)
     count_sql = select(func.count(Flow.id))
 
     if name:
-        statment = statment.where(Flow.name == name)
-        count_sql = count_sql.where(Flow.name == name)
+        statment = statment.where(Flow.name.like('%' + name + '%'))
+        count_sql = count_sql.where(Flow.name.like('%' + name + '%'))
 
-    if page_num and page_size and page_num != 'undefined':
-        page_num = int(page_num)
+    if page_num and page_size:
         statment = statment.order_by(RoleAccess.type.desc()).order_by(
             Flow.update_time.desc()).offset((page_num - 1) * page_size).limit(page_size)
 
     db_role_access = session.exec(statment).all()
     total_count = session.scalar(count_sql)
+
+    # 补充用户名
+    user_ids = [access[0].user_id for access in db_role_access]
+    db_users = session.query(User).filter(User.user_id.in_(user_ids)).all()
+    user_dict = {user.user_id: user.user_name for user in db_users}
     return {
         'msg': 'success',
-        'data': [jsonable_encoder(access[0]) for access in db_role_access],
+        'data': [{
+            'name': access[0].name,
+            'user_name': user_dict.get(access[0].user_id),
+            'user_id': access[0].user_id,
+            'update_time': access[0].update_time,
+            'id': access[0].id
+        } for access in db_role_access],
         'total': total_count
     }
 

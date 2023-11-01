@@ -33,7 +33,6 @@ export default function GenericNode({ data, selected }: {
   const [validationStatus, setValidationStatus] = useState(null);
   // State for outline color
   const { sseData, isBuilding } = useSSE();
-  const refHtml = useRef(null);
 
   // useEffect(() => {
   //   if (reactFlowInstance) {
@@ -56,8 +55,8 @@ export default function GenericNode({ data, selected }: {
     if (showError.current) {
       setErrorData({
         title: data.type
-          ? `无法呈现 ${data.type} 节点，请查看您的 json 文件`
-          : "有一个节点无法呈现，请查看您的 json 文件",
+          ? `can be translated to "Unable to render the ${data.type} node. Please check your JSON file.`
+          : `can be translated to "One node cannot be rendered. Please check your JSON file.`
       });
       showError.current = false;
     }
@@ -93,7 +92,7 @@ export default function GenericNode({ data, selected }: {
               <div>
                 <Tooltip
                   title={
-                    isBuilding ? (<span>构建中...</span>) :
+                    isBuilding ? (<span>build...</span>) :
                       !validationStatus ? (
                         <span className="flex">
                           Build{" "} <Zap className="mx-0.5 h-5 fill-build-trigger stroke-build-trigger stroke-1" strokeWidth={1.5} />{" "} flow to validate status.

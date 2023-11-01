@@ -5,8 +5,8 @@ import { cn } from "../../utils";
 
 const Dialog = DialogPrimitive.Root;
 
+// 该组件有众多 bug, 尽量不用
 const DialogTrigger = DialogPrimitive.Trigger;
-
 const DialogPortal = ({
   className,
   children,

@@ -51,7 +51,7 @@ import {
 import { darkContext } from "../../contexts/darkContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { FlowType } from "../../types/flow/index";
-import { buildTweaks, classNames } from "../../utils";
+import { buildTweaks, classNames, copyText } from "../../utils";
 
 export default function ApiModal({ flow }: { flow: FlowType }) {
   const [open, setOpen] = useState(true);
@@ -65,17 +65,12 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
   const tweaksList = useRef([]);
   const { setTweak, getTweak, tabsState } = useContext(TabsContext);
   const copyToClipboard = () => {
-    if (!navigator.clipboard || !navigator.clipboard.writeText) {
-      return;
-    }
-
-    navigator.clipboard.writeText(tabs[activeTab].code).then(() => {
-      setIsCopied(true);
-
+    setIsCopied(true);
+    copyText(tabs[activeTab].code).then(() => {
       setTimeout(() => {
         setIsCopied(false);
       }, 2000);
-    });
+    })
   };
   const pythonApiCode = getPythonApiCode(flow, tweak.current, tabsState);
   const curl_code = getCurlCode(flow, tweak.current, tabsState);
@@ -363,17 +358,17 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                           (t.data.node.template[n].type ===
                                             "str" ||
                                             t.data.node.template[n].type ===
-                                              "bool" ||
+                                            "bool" ||
                                             t.data.node.template[n].type ===
-                                              "float" ||
+                                            "float" ||
                                             t.data.node.template[n].type ===
-                                              "code" ||
+                                            "code" ||
                                             t.data.node.template[n].type ===
-                                              "prompt" ||
+                                            "prompt" ||
                                             t.data.node.template[n].type ===
-                                              "file" ||
+                                            "file" ||
                                             t.data.node.template[n].type ===
-                                              "int")
+                                            "int")
                                       )
                                       .map((n, i) => {
                                         return (
@@ -388,8 +383,8 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                               <div className="m-auto w-[250px]">
                                                 {t.data.node.template[n]
                                                   .type === "str" &&
-                                                !t.data.node.template[n]
-                                                  .options ? (
+                                                  !t.data.node.template[n]
+                                                    .options ? (
                                                   <div className="mx-auto">
                                                     {t.data.node.template[n]
                                                       .list ? (
@@ -400,15 +395,15 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                           !t.data.node.template[
                                                             n
                                                           ].value ||
-                                                          t.data.node.template[
-                                                            n
-                                                          ].value === ""
+                                                            t.data.node.template[
+                                                              n
+                                                            ].value === ""
                                                             ? [""]
                                                             : t.data.node
-                                                                .template[n]
-                                                                .value
+                                                              .template[n]
+                                                              .value
                                                         }
-                                                        onChange={(k) => {}}
+                                                        onChange={(k) => { }}
                                                         onAddInput={(k) => {
                                                           buildTweakObject(
                                                             t["data"]["id"],
@@ -419,7 +414,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                         }}
                                                       />
                                                     ) : t.data.node.template[n]
-                                                        .multiline ? (
+                                                      .multiline ? (
                                                       <ShadTooltip
                                                         content={buildContent(
                                                           t.data.node.template[
@@ -465,7 +460,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                           ].value,
                                                           t.data,
                                                           t.data.node.template[
-                                                            n
+                                                          n
                                                           ]
                                                         )}
                                                         onChange={(k) => {
@@ -480,7 +475,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                     )}
                                                   </div>
                                                 ) : t.data.node.template[n]
-                                                    .type === "bool" ? (
+                                                  .type === "bool" ? (
                                                   <div className="ml-auto">
                                                     {" "}
                                                     <ToggleShadComponent
@@ -497,7 +492,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                           t["data"]["id"],
                                                           e,
                                                           t.data.node.template[
-                                                            n
+                                                          n
                                                           ]
                                                         );
                                                       }}
@@ -506,7 +501,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                     />
                                                   </div>
                                                 ) : t.data.node.template[n]
-                                                    .type === "file" ? (
+                                                  .type === "file" ? (
                                                   <ShadTooltip
                                                     content={buildContent(
                                                       getValue(
@@ -528,7 +523,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                         }
                                                         onChange={(
                                                           k: any
-                                                        ) => {}}
+                                                        ) => { }}
                                                         fileTypes={
                                                           t.data.node.template[
                                                             n
@@ -541,12 +536,12 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                         }
                                                         onFileChange={(
                                                           k: any
-                                                        ) => {}}
+                                                        ) => { }}
                                                       ></InputFileComponent>
                                                     </div>
                                                   </ShadTooltip>
                                                 ) : t.data.node.template[n]
-                                                    .type === "float" ? (
+                                                  .type === "float" ? (
                                                   <div className="mx-auto">
                                                     <FloatComponent
                                                       disabled={false}
@@ -562,14 +557,14 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                           t["data"]["id"],
                                                           k,
                                                           t.data.node.template[
-                                                            n
+                                                          n
                                                           ]
                                                         );
                                                       }}
                                                     />
                                                   </div>
                                                 ) : t.data.node.template[n]
-                                                    .type === "str" &&
+                                                  .type === "str" &&
                                                   t.data.node.template[n]
                                                     .options ? (
                                                   <div className="mx-auto">
@@ -585,7 +580,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                           t["data"]["id"],
                                                           k,
                                                           t.data.node.template[
-                                                            n
+                                                          n
                                                           ]
                                                         );
                                                       }}
@@ -598,7 +593,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                     ></Dropdown>
                                                   </div>
                                                 ) : t.data.node.template[n]
-                                                    .type === "int" ? (
+                                                  .type === "int" ? (
                                                   <div className="mx-auto">
                                                     <IntComponent
                                                       disabled={false}
@@ -614,14 +609,14 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                           t["data"]["id"],
                                                           k,
                                                           t.data.node.template[
-                                                            n
+                                                          n
                                                           ]
                                                         );
                                                       }}
                                                     />
                                                   </div>
                                                 ) : t.data.node.template[n]
-                                                    .type === "prompt" ? (
+                                                  .type === "prompt" ? (
                                                   <ShadTooltip
                                                     content={buildContent(
                                                       getValue(
@@ -642,7 +637,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                           ].value,
                                                           t.data,
                                                           t.data.node.template[
-                                                            n
+                                                          n
                                                           ]
                                                         )}
                                                         onChange={(k) => {
@@ -657,7 +652,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                     </div>
                                                   </ShadTooltip>
                                                 ) : t.data.node.template[n]
-                                                    .type === "code" ? (
+                                                  .type === "code" ? (
                                                   <ShadTooltip
                                                     content={buildContent(
                                                       getValue(
@@ -678,7 +673,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                           ].value,
                                                           t.data,
                                                           t.data.node.template[
-                                                            n
+                                                          n
                                                           ]
                                                         )}
                                                         onChange={(k) => {
@@ -693,7 +688,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
                                                     </div>
                                                   </ShadTooltip>
                                                 ) : t.data.node.template[n]
-                                                    .type === "Any" ? (
+                                                  .type === "Any" ? (
                                                   "-"
                                                 ) : (
                                                   <div className="hidden"></div>

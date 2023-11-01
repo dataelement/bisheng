@@ -1,19 +1,18 @@
 import { BookOpen, Github } from "lucide-react";
 import { useContext, useRef, useState } from "react";
+import { useTranslation } from 'react-i18next';
 import json from "../../package.json";
-import Logo from "../assets/logo.jpeg";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Separator } from "../components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { alertContext } from "../contexts/alertContext";
-import { userContext } from "../contexts/userContext";
 import { loginApi, registerApi } from "../controllers/API/user";
 import StarBg from "./starBg";
 
 export const LoginPage = () => {
     const { setErrorData, setSuccessData } = useContext(alertContext);
-    const { setUser } = useContext(userContext);
+    const { t, i18n } = useTranslation();
 
     const isLoading = false
 
@@ -27,10 +26,10 @@ export const LoginPage = () => {
     const handleLogin = () => {
         const error = []
         const [mail, pwd] = [mailRef.current.value, pwdRef.current.value]
-        if (!mail) error.push('请填写账号')
-        if (!pwd) error.push('请填写密码')
+        if (!mail) error.push(t('login.pleaseEnterAccount'))
+        if (!pwd) error.push(t('login.pleaseEnterPassword'))
         if (error.length) return setErrorData({
-            title: "提示: ",
+            title: `${t('prompt')}:`,
             list: error,
         });
         loginApi(mail, pwd).then(res => {
@@ -40,7 +39,7 @@ export const LoginPage = () => {
         }).catch(e => {
             console.error(e.response.data.detail);
             setErrorData({
-                title: "提示: ",
+                title: `${t('prompt')}:`,
                 list: [e.response.data.detail],
             });
         })
@@ -49,34 +48,26 @@ export const LoginPage = () => {
     const handleRegister = () => {
         const error = []
         const [mail, pwd, apwd] = [mailRef.current.value, pwdRef.current.value, agenPwdRef.current.value]
-        if (!mail) error.push('请填写账号')
-        if (mail.length < 3) error.push('账号过短')
-        if (!/.{6,}/.test(pwd)) error.push('请填写密码,至少六位')
-        if (pwd !== apwd) error.push('两次密码不一致')
+        if (!mail) error.push(t('login.pleaseEnterAccount'))
+        if (mail.length < 3) error.push(t('login.accountTooShort'))
+        if (!/.{6,}/.test(pwd)) error.push(t('login.passwordTooShort'))
+        if (pwd !== apwd) error.push(t('login.passwordMismatch'))
         if (error.length) return setErrorData({
-            title: "提示: ",
+            title: `${t('prompt')}:`,
             list: error,
         });
         registerApi(mail, pwd).then(res => {
-            setSuccessData({ title: '注册成功,请输入密码进行登录' })
+            setSuccessData({ title: t('login.registrationSuccess') })
             pwdRef.current.value = ''
             setShowLogin(true)
         }).catch(err => {
             console.error(err.response.data.detail);
             setErrorData({
-                title: "提示: ",
+                title: `${t('prompt')}:`,
                 list: [err.response.data.detail],
             });
         })
     }
-
-    // useEffect(() => {
-    //     console.log(
-    //         "%cBiSheng 0.2.0",
-    //         "font-size: 38px;" +
-    //         "background-color: #0949f4 ; color: white ; font-weight: bold;padding: 8px 20px; border-radius: 24px;"
-    //     );
-    // }, [])
 
     return <div className="w-full h-full bg-gray-200 dark:bg-gray-700">
         <div className="fixed z-10 sm:w-[1200px] w-full sm:h-[750px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden">
@@ -84,15 +75,15 @@ export const LoginPage = () => {
             <div className=" absolute w-full h-full z-10 flex justify-end top-0">
                 <div className="w-[760px] sm:px-[200px] px-[20px] py-[200px] bg-[rgba(255,255,255,1)] dark:bg-gray-950 relative">
                     <div className="flex gap-4 items-center bg-[#347ef9]">
-                        <img src={Logo} className="w-9 h-9" alt="" />
-                        <span className="text-[#fff] text-sm">便捷、灵活、可靠的企业级大模型应用开发平台</span>
+                        <img src='/logo.jpeg' className="w-9 h-9" alt="" />
+                        <span className="text-[#fff] text-sm">{t('login.slogen')}</span>
                     </div>
                     <div className="grid gap-4 mt-6">
                         <div className="grid">
                             <Input
                                 id="email"
                                 ref={mailRef}
-                                placeholder="账号"
+                                placeholder={t('login.account')}
                                 type="email"
                                 autoCapitalize="none"
                                 autoComplete="email"
@@ -100,21 +91,21 @@ export const LoginPage = () => {
                             />
                         </div>
                         <div className="grid">
-                            <Input id="pwd" ref={pwdRef} placeholder="密码" type="password" onKeyDown={e => e.key === 'Enter' && showLogin && handleLogin()} />
+                            <Input id="pwd" ref={pwdRef} placeholder={t('login.password')} type="password" onKeyDown={e => e.key === 'Enter' && showLogin && handleLogin()} />
                         </div>
                         {
                             !showLogin && <div className="grid">
-                                <Input id="pwd" ref={agenPwdRef} placeholder="确认密码" type="password" />
+                                <Input id="pwd" ref={agenPwdRef} placeholder={t('login.confirmPassword')} type="password" />
                             </div>
                         }
                         {
                             showLogin ? <>
-                                <div className="text-center"><a href="javascript:;" className=" text-blue-500 text-sm underline" onClick={() => setShowLogin(false)}>没有账号，注册</a></div>
-                                <Button disabled={isLoading} onClick={handleLogin} >登 录</Button>
+                                <div className="text-center"><a href="javascript:;" className=" text-blue-500 text-sm underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a></div>
+                                <Button disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button>
                             </> :
                                 <>
-                                    <div className="text-center"><a href="javascript:;" className=" text-blue-500 text-sm underline" onClick={() => setShowLogin(true)}>已有账号，登录</a></div>
-                                    <Button disabled={isLoading} onClick={handleRegister} >注 册</Button>
+                                    <div className="text-center"><a href="javascript:;" className=" text-blue-500 text-sm underline" onClick={() => setShowLogin(true)}>{t('login.haveAccountLogin')}</a></div>
+                                    <Button disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
                     </div>
@@ -148,7 +139,7 @@ export const LoginPage = () => {
                                         <BookOpen className="side-bar-button-size mx-auto" />
                                     </a>
                                 </TooltipTrigger>
-                                <TooltipContent className="z-10"><p>文档</p></TooltipContent>
+                                <TooltipContent className="z-10"><p>{t('login.document')}</p></TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
                     </div>
@@ -157,4 +148,3 @@ export const LoginPage = () => {
         </div>
     </div>
 };
-

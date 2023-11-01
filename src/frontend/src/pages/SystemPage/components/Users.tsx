@@ -1,4 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/ui/button";
 import {
     Table,
@@ -12,10 +13,10 @@ import { userContext } from "../../../contexts/userContext";
 import { disableUserApi, getUsersApi } from "../../../controllers/API/user";
 import UserRoleModal from "./UserRoleModal";
 
-
 export default function Users(params) {
     const [users, setUsers] = useState([])
     const { user } = useContext(userContext);
+    const { t } = useTranslation()
 
     // 分页
     const [page, setPage] = useState(1)
@@ -64,10 +65,9 @@ export default function Users(params) {
             {/* <TableCaption>用户列表.</TableCaption> */}
             <TableHeader>
                 <TableRow>
-                    <TableHead className="w-[200px]">用户名</TableHead>
-                    {/* <TableHead>角色</TableHead> */}
-                    <TableHead>创建时间</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
+                    <TableHead className="w-[200px]">{t('system.username')}</TableHead>
+                    <TableHead>{t('createTime')}</TableHead>
+                    <TableHead className="text-right">{t('operations')}</TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -77,12 +77,12 @@ export default function Users(params) {
                         {/* <TableCell>{el.role}</TableCell> */}
                         <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                         <TableCell className="text-right">
-                            {/* {user.user_id === el.user_id ? <a href="javascript:;" className=" ml-4 text-gray-400">编辑</a> :
-                                <a href="javascript:;" onClick={() => setRoleOpenId(el.user_id)} className="underline ml-4">编辑</a>} */}
+                            {user.user_id === el.user_id ? <a href="javascript:;" className=" ml-4 text-gray-400">{t('edit')}</a> :
+                                <a href="javascript:;" onClick={() => setRoleOpenId(el.user_id)} className="underline ml-4">{t('edit')}</a>}
                             {
-                                el.delete === 1 ? <a href="javascript:;" onClick={() => handleEnableUser(el)} className="underline ml-4">启用</a> :
-                                    user.user_id === el.user_id ? <a href="javascript:;" className=" ml-4 text-gray-400">禁用</a> :
-                                        <a href="javascript:;" onClick={() => delConfim(el)} className="underline ml-4 text-red-500">禁用</a>
+                                el.delete === 1 ? <a href="javascript:;" onClick={() => handleEnableUser(el)} className="underline ml-4">{t('enable')}</a> :
+                                    user.user_id === el.user_id ? <a href="javascript:;" className=" ml-4 text-gray-400">{t('disable')}</a> :
+                                        <a href="javascript:;" onClick={() => delConfim(el)} className="underline ml-4 text-red-500">{t('disable')}</a>
                             }
                         </TableCell>
                     </TableRow>
@@ -92,18 +92,18 @@ export default function Users(params) {
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
         <div className="join grid grid-cols-2 w-[200px] mx-auto">
-            <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>上一页</button>
-            <button disabled={page >= pages.current || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>下一页</button>
+            <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>{t('previousPage')}</button>
+            <button disabled={page >= pages.current || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>{t('nextPage')}</button>
         </div>
 
         {/* 禁用确认 */}
         <dialog className={`modal ${delShow && 'modal-open'}`}>
             <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg">提示!</h3>
-                <p className="py-4">确认禁用该用户？</p>
+                <h3 className="font-bold text-lg">{t('prompt')}!</h3>
+                <p className="py-4">{t('system.confirmDisable')}</p>
                 <div className="modal-action">
-                    <Button className="h-8 rounded-full" variant="outline" onClick={close}>取消</Button>
-                    <Button className="h-8 rounded-full" variant="destructive" onClick={handleDelete}>禁用</Button>
+                    <Button className="h-8 rounded-full" variant="outline" onClick={close}>{t('system.cancel')}</Button>
+                    <Button className="h-8 rounded-full" variant="destructive" onClick={handleDelete}>{t('system.disable')}</Button>
                 </div>
             </form>
         </dialog>

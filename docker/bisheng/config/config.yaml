@@ -1,49 +1,14 @@
 # 数据库配置
 database_url:
   "mysql+pymysql://root:1234@mysql:3306/bisheng?charset=utf8mb4"
-redis_url:
-  "redis:6379"
+
+# 缓存配置  redis://[[username]:[password]]@localhost:6379/0
+redis_url: "redis://redis:6379/0"
 
 # admin 用户配置
 admin:
   user_name: "admin"
   password: "1234"
-
-# bisheng-rt服务地址
-# bisheng_rt: 
-#   name: "RT-Server"
-#   server: "192.168.0.1:9001"
-
-# 为知识库的embedding进行模型撇脂
-knowledges: # 知识库相关配置
-  unstructured_api_url: ""  # 毕昇非结构化数据解析服务地址，提供包括OCR文字识别、表格识别、版式分析等能力。非必填，填写后能够提升PDF、图片、 
-  embeddings: # 配置知识库的embedding服务，以下示例填写了两类embedding服务的配置方法，第一个是openai的embedding模型服务的配置方法，第二个是本地部署的embedding模型服务的配置方法，如果有多个可以添加多个
-    text-embedding-ada-002: # 知识库下拉框中显示的embedding模型的名称，可自定义
-      openai_api_base: "https://api.openai.com/v1"
-      openai_proxy: "" # 如果是自己代理的服务地址，则填在这里
-      openai_api_key: "" # 私有的，openai账号的key
-    embedding-host: # 知识库下拉框中显示的embedding模型的名称，可自定义
-      host_base_url: "" # 在模型管理页面中已上线的embedding服务的地址
-      model: "" # 在模型管理页面中已上线的embedding模型的名称
-  vectorstores:
-    # Milvus 最低要求cpu 4C 8G 推荐4C 16G
-    Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
-      connection_args: {'host': '110.16.193.170', 'port': '50032', 'user': '', 'password': '', 'secure': False}
-    # 可选配置，有些类型的场景使用ES可以提高召回效果
-    ElasticKeywordsSearch:
-      elasticsearch_url: ""
-      ssl_verify: "{'ca_certs': False, 'basic_auth': ('elastic', 'password'), 'verify_certs': False}"
-  minio: # 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储
-    MINIO_ENDPOINT: ""
-    MINIO_SHAREPOIN: ""
-    MINIO_ACCESS_KEY: ""
-    MINIO_SECRET_KEY: ""
-
-# 全局配置大模型    
-default_llm: # 可选配置。BISHENG系统中有些功能需要使用大模型的能力，当前问答溯源功能中会用到，未来还会有其他功能会使用到。在问答溯源功能中，使用大语言模型自动从答案中提取关键词，来帮助用户快速定位到答案的可能来源段落，如果这里没有配置，则会使用jieba分词来输出答案中的关键词。
-  model: "" # 在模型管理页面中已上线的大模型服务的名称
-  host_base_url: "" # 在模型管理页面中已上线的大模型服务的地址
-
       
 agents:
   ZeroShotAgent:

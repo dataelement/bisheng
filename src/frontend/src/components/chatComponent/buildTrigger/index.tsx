@@ -38,7 +38,7 @@ export default function BuildTrigger({
       const errors = validateNodes(reactFlowInstance);
       if (errors.length > 0) {
         setErrorData({
-          title: "您好像缺少了某些配置",
+          title: "It seems like you are missing some configurations.",
           list: errors,
         });
         return;
@@ -52,9 +52,9 @@ export default function BuildTrigger({
       setIsBuilt(allNodesValid);
       if (!allNodesValid) {
         setErrorData({
-          title: "您好像缺少了某些配置",
+          title: "It seems like you are missing some configurations.",
           list: [
-            "检查组件并重试。将鼠标悬停在组件状态图标 🔴 上可检查。",
+            "Check the components and try again. You can hover over the component status icon 🔴 to inspect.",
           ],
         });
       }
@@ -172,8 +172,8 @@ export default function BuildTrigger({
           onClick={() => {
             handleBuild(flow);
           }}
-          // onMouseEnter={handleMouseEnter}
-          // onMouseLeave={handleMouseLeave}
+        // onMouseEnter={handleMouseEnter}
+        // onMouseLeave={handleMouseLeave}
         >
           <button>
             <div className="round-button-div">

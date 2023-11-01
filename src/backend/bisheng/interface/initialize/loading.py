@@ -14,6 +14,7 @@ from bisheng.interface.retrievers.base import retriever_creator
 from bisheng.interface.toolkits.base import toolkits_creator
 from bisheng.interface.utils import load_file_into_dict
 from bisheng.interface.wrappers.base import wrapper_creator
+from bisheng.settings import settings
 from bisheng.utils import validate
 from langchain.agents import ZeroShotAgent
 from langchain.agents import agent as agent_module
@@ -142,11 +143,21 @@ def instantiate_llm(node_type, class_object, params: Dict):
             params.pop('max_tokens', None)
     # 支持stream
     llm = class_object(**params)
+    llm_config = settings.get_from_db('llm_request')
     if isinstance(llm, BaseLanguageModel):
         if hasattr(llm, 'streaming') and isinstance(llm.streaming, bool):
-            llm.streaming = ChatConfig.streaming
+            llm.streaming = llm_config.get(
+                'stream') if 'stream' in llm_config else ChatConfig.streaming
         elif hasattr(llm, 'stream') and isinstance(llm.stream, bool):
-            llm.stream = ChatConfig.streaming
+            llm.stream = llm_config.get(
+                'stream') if 'stream' in llm_config else ChatConfig.streaming
+
+    # 支持request_timeout & max_retries
+    if hasattr(llm, 'request_timeout') and 'request_timeout' in llm_config:
+        llm.request_timeout = llm_config.get('request_timeout')
+    if hasattr(llm, 'max_retries') and 'max_retries' in llm_config:
+        llm.max_retries = llm_config.get('max_retries')
+
     return llm
 
 
@@ -190,6 +201,14 @@ def instantiate_retriever(node_type, class_object, params):
 def instantiate_chains(node_type, class_object: Type[Chain], params: Dict):
     if 'retriever' in params and hasattr(params['retriever'], 'as_retriever'):
         params['retriever'] = params['retriever'].as_retriever()
+    # dict 转换
+    if 'headers' in params and isinstance(params['headers'], str):
+        params['headers'] = eval(params['headers'])
+    if node_type == 'ConversationalRetrievalChain':
+        params['get_chat_history'] = str
+        params['combine_docs_chain_kwargs'] = {
+            'prompt': params.pop('combine_docs_chain_kwargs', None)
+        }
     if node_type in chain_creator.from_method_nodes:
         method = chain_creator.from_method_nodes[node_type]
         if class_method := getattr(class_object, method, None):

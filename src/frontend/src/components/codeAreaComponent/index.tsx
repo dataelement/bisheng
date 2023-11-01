@@ -52,7 +52,7 @@ export default function CodeAreaComponent({
                 " input-primary text-muted-foreground "
           }
         >
-          {myValue !== "" ? myValue : "请输入..."}
+          {myValue !== "" ? myValue : "input..."}
         </span>
         <button
           onClick={() => {

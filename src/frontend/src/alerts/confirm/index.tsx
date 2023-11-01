@@ -1,3 +1,4 @@
+import i18next from "i18next";
 import { useRef, useState } from "react";
 import ReactDOM from "react-dom";
 import { Button } from "../../components/ui/button";
@@ -13,6 +14,7 @@ interface ConfirmParams {
 
 let openFn = (_: ConfirmParams) => { }
 function ConfirmWrapper() {
+
   const [open, setOpen] = useState(false)
   const paramRef = useRef(null)
 
@@ -37,11 +39,11 @@ function ConfirmWrapper() {
 
   return <dialog className={`modal ${open && 'modal-open'}`}>
     <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-      <h3 className="font-bold text-lg">{title || '提示!'}</h3>
+      <h3 className="font-bold text-lg">{title}</h3>
       <p className="py-4">{desc}</p>
       <div className="modal-action">
-        <Button className="h-8 rounded-full" variant="outline" onClick={close}>{canelTxt || '取消'}</Button>
-        <Button className="h-8 rounded-full" variant="destructive" onClick={handleOkClick}>{okTxt || '确定'}</Button>
+        <Button className="h-8 rounded-full" variant="outline" onClick={close}>{canelTxt}</Button>
+        <Button className="h-8 rounded-full" variant="destructive" onClick={handleOkClick}>{okTxt}</Button>
       </div>
     </form>
   </dialog>
@@ -60,5 +62,12 @@ function ConfirmWrapper() {
 
 
 export const bsconfirm = (params: ConfirmParams) => {
-  openFn(params)
+  const resource = i18next.getResourceBundle(i18next.language, 'bs')
+
+  openFn({
+    title: resource.prompt,
+    canelTxt: resource.cancel,
+    okTxt: resource.confirmButton,
+    ...params,
+  })
 }

@@ -18,10 +18,13 @@ import {
 
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { deleteFile, readFileByLibDatabase } from "../../controllers/API";
 import UploadModal from "../../modals/UploadModal";
 export default function FilesPage() {
+    const { t } = useTranslation()
+
     const { id } = useParams()
     // 上传 上传成功添加到列表
     const [open, setOpen] = useState(false)
@@ -71,34 +74,34 @@ export default function FilesPage() {
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <ShadTooltip content="返回" side="top">
+        <ShadTooltip content="back" side="top">
             <button className="extra-side-bar-buttons w-[36px] absolute top-[26px]" onClick={() => { }} >
                 <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
             </button>
         </ShadTooltip>
         <Tabs defaultValue="account" className="w-full">
             <TabsList className="ml-12">
-                <TabsTrigger value="account" className="roundedrounded-xl">文件列表</TabsTrigger>
-                <TabsTrigger disabled value="password">系统对接</TabsTrigger>
+                <TabsTrigger value="account" className="roundedrounded-xl">{t('lib.fileList')}</TabsTrigger>
+                <TabsTrigger disabled value="password">{t('lib.systemIntegration')}</TabsTrigger>
             </TabsList>
             <TabsContent value="account">
                 <div className="flex justify-between items-center">
                     <span className=" text-gray-800">{title}</span>
-                    {hasPermission && <Button className="h-8 rounded-full" onClick={() => { setOpen(true) }}>上传</Button>}
+                    {hasPermission && <Button className="h-8 rounded-full" onClick={() => { setOpen(true) }}>{t('lib.upload')}</Button>}
                 </div>
                 <Table>
                     <TableCaption>
                         <div className="join grid grid-cols-2 w-[200px]">
-                            <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>上一页</button>
-                            <button disabled={page >= pages.current || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>下一页</button>
+                            <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>{t('previousPage')}</button>
+                            <button disabled={page >= pages.current || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>{t('nextPage')}</button>
                         </div>
                     </TableCaption>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-[600px]">文件名称</TableHead>
-                            <TableHead>状态</TableHead>
-                            <TableHead>上传时间</TableHead>
-                            <TableHead>操作</TableHead>
+                            <TableHead className="w-[600px]">{t('lib.fileName')}</TableHead>
+                            <TableHead>{t('lib.status')}</TableHead>
+                            <TableHead>{t('lib.uploadTime')}</TableHead>
+                            <TableHead>{t('operations')}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -107,33 +110,33 @@ export default function FilesPage() {
                                 <TableCell className="font-medium">{el.file_name}</TableCell>
                                 <TableCell>
                                     {el.status === 3 ? <div className="tooltip" data-tip={el.remark}>
-                                        <span className='text-red-500'>解析失败</span>
+                                        <span className='text-red-500'>{t('lib.parseFailed')}</span>
                                     </div> :
-                                        <span className={el.status === 3 && 'text-red-500'}>{['解析失败', '解析中', '完成', '解析失败'][el.status]}</span>
+                                        <span className={el.status === 3 && 'text-red-500'}>{[t('lib.parseFailed'), t('lib.parsing'), t('lib.completed'), t('lib.parseFailed')][el.status]}</span>
                                     }
                                 </TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell className="text-right">
-                                    {hasPermission ? <a href="javascript:;" onClick={() => delConfim(el.id)} className="underline ml-4">删除</a> :
-                                        <a href="javascript:;" className="underline ml-4 text-gray-400">删除</a>}
+                                    {hasPermission ? <a href="javascript:;" onClick={() => delConfim(el.id)} className="underline ml-4">{t('delete')}</a> :
+                                        <a href="javascript:;" className="underline ml-4 text-gray-400">{t('delete')}</a>}
                                 </TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
                 </Table>
-                {/* 分页 */}
+                {/* Pagination */}
             </TabsContent>
             <TabsContent value="password"></TabsContent>
         </Tabs>
         <UploadModal id={id} open={open} setOpen={handleOpen}></UploadModal>
-        {/* 删除确认 */}
+        {/* Delete confirmation */}
         <dialog className={`modal ${delShow && 'modal-open'}`}>
             <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg">提示!</h3>
-                <p className="py-4">确认删除该文件？</p>
+                <h3 className="font-bold text-lg">{t('prompt')}</h3>
+                <p className="py-4">{t('lib.confirmDeleteFile')}</p>
                 <div className="modal-action">
-                    <Button className="h-8 rounded-full" variant="outline" onClick={close}>取消</Button>
-                    <Button className="h-8 rounded-full" variant="destructive" onClick={handleDelete}>删除</Button>
+                    <Button className="h-8 rounded-full" variant="outline" onClick={close}>{t('cancel')}</Button>
+                    <Button className="h-8 rounded-full" variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
                 </div>
             </form>
         </dialog>

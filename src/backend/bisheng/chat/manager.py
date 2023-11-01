@@ -368,12 +368,12 @@ class ChatManager:
                                             category='processing',
                                             user_id=user_id)
                     self.chat_history.add_message(client_id, chat_id, response)
-            end_resp = ChatResponse(message=None,
+            end_resp = ChatResponse(message='',
                                     type='end',
                                     intermediate_steps='',
                                     category='processing',
                                     user_id=user_id)
-            await self.send_json(client_id, chat_id, end_resp)
+            await self.send_json(client_id, chat_id, end_resp, add=False)
 
         # 最终结果
         start_resp.category = 'answer'
