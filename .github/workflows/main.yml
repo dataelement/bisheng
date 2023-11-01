@@ -8,7 +8,7 @@ on:
 
 env:
   DOCKERHUB_REPO: dataelement/
-  RELEASE_VERSION: v0.1.8
+  RELEASE_VERSION: v0.1.9
   
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
