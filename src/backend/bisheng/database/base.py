@@ -25,7 +25,7 @@ def create_db_and_tables():
     except Exception as exc:
         logger.error(f'Error creating database and tables: {exc}')
         sys.exit(-1)
-        raise RuntimeError('Error creating database and tables') from exc
+
     # Now check if the table Flow exists, if not, something went wrong
     # and we need to create the tables again.
     from sqlalchemy import inspect

@@ -36,9 +36,11 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any],
                              **kwargs: Any) -> Any:
         """Run when chain starts running."""
+        logger.debug(f'on_chain_start inputs={inputs}')
 
     async def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
+        logger.debug(f'on_chain_end outputs={outputs}')
 
     async def on_chain_error(self, error: Union[Exception, KeyboardInterrupt],
                              **kwargs: Any) -> Any:
@@ -202,3 +204,12 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         """Run when retriever end running."""
         # todo 判断技能权限
         logger.debug(f'retriver_result result={result}')
+
+    def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any],
+                       **kwargs: Any) -> Any:
+        """Run when chain starts running."""
+        logger.debug(f'on_chain_start inputs={inputs}')
+
+    def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
+        """Run when chain ends running."""
+        logger.debug(f'on_chain_end outputs={outputs}')

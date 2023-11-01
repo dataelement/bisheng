@@ -115,6 +115,22 @@ class Settings(BaseSettings):
         else:
             return {}
 
+    def get_from_db(self, key: str):
+        # 直接从db中添加配置
+        from bisheng.database.base import get_session
+        from bisheng.cache.redis import redis_client
+        redis_key = 'config_' + key
+        cache = redis_client.get(redis_key)
+        if cache:
+            return yaml.safe_load(cache)
+        session = next(get_session())
+        llm_config = session.exec(select(Config).where(Config.key == key)).first()
+        if llm_config:
+            redis_client.set(redis_key, llm_config.value, 100)
+            return yaml.safe_load(llm_config.value)
+        else:
+            return {}
+
     def update_from_yaml(self, file_path: str, dev: bool = False):
         new_settings = load_settings_from_yaml(file_path)
         self.chains = new_settings.chains or {}
