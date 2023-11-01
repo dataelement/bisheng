@@ -495,6 +495,7 @@ const useWebsocketChat = (chatIdRef) => {
     }) {
         setChatHistory((old) => {
             const newChats = [...old]
+            console.log('newchats :>> ', newChats);
             let chatsLen = newChats.length
             // hack 过滤重复最后消息
             if (end && str && chatsLen > 1 && str === newChats[chatsLen - 2].message && !newChats[chatsLen - 2].thought) {
@@ -514,11 +515,11 @@ const useWebsocketChat = (chatIdRef) => {
                 noAccess,
                 end
             }
+            newChats[chatsLen - 1] = newLastChat
             // start - end 之间没有内容删除load
             if (end && !(newLastChat.files.length || newLastChat.thought || newLastChat.message)) {
                 newChats.pop()
             }
-            newChats[chatsLen - 1] = newLastChat
             return newChats;
         });
     }
