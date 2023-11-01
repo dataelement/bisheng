@@ -21,7 +21,7 @@ class MessageBase(SQLModelSerializable):
                                               sa_column=Column(Text),
                                               description='过程日志')
     files: Optional[str] = Field(index=False, description='上传的文件等')
-    file_access: Optional[bool] = Field(index=False, default=True, description='召回文件是否可以访问')
+    # file_access: Optional[bool] = Field(index=False, default=True, description='召回文件是否可以访问')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(index=True,
