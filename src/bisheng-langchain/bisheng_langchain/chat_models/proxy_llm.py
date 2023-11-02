@@ -158,8 +158,7 @@ class ProxyChatLLM(BaseChatModel):
         }
 
         try:
-            values['client'] = requests.Requests(headers=values['headers'],
-                                                 request_timeout=values['request_timeout'])
+            values['client'] = requests.Requests(headers=values['headers'])
         except AttributeError:
             raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
         return values
@@ -167,6 +166,7 @@ class ProxyChatLLM(BaseChatModel):
     @property
     def _default_params(self) -> Dict[str, Any]:
         """Get the default parameters for calling ProxyChatLLM API."""
+        self.client.request_timeout = self.request_timeout
         return {
             'model': self.model_name,
             'temperature': self.temperature,

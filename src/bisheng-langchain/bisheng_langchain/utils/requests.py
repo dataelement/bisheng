@@ -50,6 +50,8 @@ class Requests(BaseModel):
                         **kwargs: Any) -> AsyncGenerator[aiohttp.ClientResponse, None]:
         """Make an async request."""
         if not self.aiosession:
+            if not self.request_timeout:
+                self.request_timeout = 120
             async with aiohttp.ClientSession(timeout=self.request_timeout) as session:
                 async with session.request(method, url, headers=self.headers, **kwargs) as response:
                     yield response
