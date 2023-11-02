@@ -6,7 +6,7 @@ import logging
 import sys
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
-from langchain import requests
+from bisheng_langchain.utils import requests
 from langchain.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
 from langchain.chat_models.base import BaseChatModel
 from langchain.schema import ChatGeneration, ChatResult
@@ -158,7 +158,8 @@ class ProxyChatLLM(BaseChatModel):
         }
 
         try:
-            values['client'] = requests.Requests(headers=values['headers'])
+            values['client'] = requests.Requests(headers=values['headers'],
+                                                 request_timeout=values['request_timeout'])
         except AttributeError:
             raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
         return values
@@ -167,7 +168,6 @@ class ProxyChatLLM(BaseChatModel):
     def _default_params(self) -> Dict[str, Any]:
         """Get the default parameters for calling ProxyChatLLM API."""
         return {
-            'request_timeout': self.request_timeout,
             'model': self.model_name,
             'temperature': self.temperature,
             'top_p': self.top_p,
