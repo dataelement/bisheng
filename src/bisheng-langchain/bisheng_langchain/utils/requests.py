@@ -27,23 +27,46 @@ class Requests(BaseModel):
 
     def get(self, url: str, **kwargs: Any) -> requests.Response:
         """GET the URL and return the text."""
-        return requests.get(url, headers=self.headers, auth=self.auth, **kwargs)
+        return requests.get(url,
+                            headers=self.headers,
+                            auth=self.auth,
+                            timeout=self.request_timeout,
+                            **kwargs)
 
     def post(self, url: str, data: Dict[str, Any], **kwargs: Any) -> requests.Response:
         """POST to the URL and return the text."""
-        return requests.post(url, json=data, headers=self.headers, auth=self.auth, **kwargs)
+        return requests.post(url,
+                             json=data,
+                             headers=self.headers,
+                             auth=self.auth,
+                             timeout=self.request_timeout,
+                             **kwargs)
 
     def patch(self, url: str, data: Dict[str, Any], **kwargs: Any) -> requests.Response:
         """PATCH the URL and return the text."""
-        return requests.patch(url, json=data, headers=self.headers, auth=self.auth, **kwargs)
+        return requests.patch(url,
+                              json=data,
+                              headers=self.headers,
+                              auth=self.auth,
+                              timeout=self.request_timeout,
+                              **kwargs)
 
     def put(self, url: str, data: Dict[str, Any], **kwargs: Any) -> requests.Response:
         """PUT the URL and return the text."""
-        return requests.put(url, json=data, headers=self.headers, auth=self.auth, **kwargs)
+        return requests.put(url,
+                            json=data,
+                            headers=self.headers,
+                            auth=self.auth,
+                            timeout=self.request_timeout,
+                            **kwargs)
 
     def delete(self, url: str, **kwargs: Any) -> requests.Response:
         """DELETE the URL and return the text."""
-        return requests.delete(url, headers=self.headers, auth=self.auth, **kwargs)
+        return requests.delete(url,
+                               headers=self.headers,
+                               auth=self.auth,
+                               timeout=self.request_timeout,
+                               **kwargs)
 
     @asynccontextmanager
     async def _arequest(self, method: str, url: str,
@@ -53,7 +76,8 @@ class Requests(BaseModel):
             if not self.request_timeout:
                 self.request_timeout = 120
             if isinstance(self.request_timeout, tuple):
-                timeout = aiohttp.ClientTimeout(connect=self.request_timeout[0], total=self.request_timeout[1])
+                timeout = aiohttp.ClientTimeout(connect=self.request_timeout[0],
+                                                total=self.request_timeout[1])
             else:
                 timeout = aiohttp.ClientTimeout(total=self.request_timeout)
             async with aiohttp.ClientSession(timeout=timeout) as session:
