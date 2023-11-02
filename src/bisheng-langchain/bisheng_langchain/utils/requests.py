@@ -52,7 +52,11 @@ class Requests(BaseModel):
         if not self.aiosession:
             if not self.request_timeout:
                 self.request_timeout = 120
-            async with aiohttp.ClientSession(timeout=self.request_timeout) as session:
+            if isinstance(self.request_timeout, tuple):
+                timeout = aiohttp.ClientTimeout(connect=self.request_timeout[0], total=self.request_timeout[1])
+            else:
+                timeout = aiohttp.ClientTimeout(total=self.request_timeout)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.request(method, url, headers=self.headers, **kwargs) as response:
                     yield response
         else:
