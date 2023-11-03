@@ -4,7 +4,6 @@ import json
 import time
 from typing import List, Optional
 from uuid import uuid4
-from bisheng_langchain.vectorstores.elastic_keywords_search import ElasticKeywordsSearch
 
 import requests
 from bisheng.api.utils import access_check
@@ -370,6 +369,7 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             setattr(db_file, 'remark', str(e)[:500])
             session.add(db_file)
             session.commit()
+            raise e
 
 
 def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):

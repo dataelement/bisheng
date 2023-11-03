@@ -348,13 +348,10 @@ class ChatManager:
                 step = []
                 steps = []
                 for s in intermediate_steps.split('\n'):
-                    if s.startswith("Answer: {'"):
-                        answer = eval(s.split('Answer:')[1])
+                    if 'source_documents' in s:
+                        answer = eval(s.split(':', 1)[1])
                         if 'result' in answer:
                             s = 'Answer: ' + answer.get('result')
-                        # 如果包含source_document 表示支持溯源，进入溯源逻辑, 某些flow里，source在log参数里
-                        if 'source_document' in answer and not source_doucment:
-                            source_doucment = answer.get('source_document')
                     step.append(s)
                     if not s:
                         steps.append('\n'.join(step))
