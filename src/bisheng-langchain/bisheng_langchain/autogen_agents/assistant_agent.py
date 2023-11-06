@@ -1,13 +1,9 @@
 """Chain that runs an arbitrary python function."""
-import functools
 import logging
-import json
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Optional
 
 import openai
-import autogen
-from autogen import AssistantAgent, UserProxyAgent, ConversableAgent
-
+from autogen import AssistantAgent
 
 logger = logging.getLogger(__name__)
 
@@ -27,21 +23,21 @@ If you want the user to save the code in a file before executing it, put # filen
 If the result indicates there is an error, fix the error and output the code again. Suggest the full code instead of partial code or code changes. If the error can't be fixed or if the task is not solved even after the code is executed successfully, analyze the problem, revisit your assumption, collect additional info you need, and think of a different approach to try.
 When you find an answer, verify the answer carefully. Include verifiable evidence in your response if possible.
 Reply "TERMINATE" in the end when everything is done.
-    """
+    """ # noqa
 
     def __init__(
         self,
         name: str,
-        model_name: Optional[str] = "gpt-4-0613", # when llm_flag=True, need to set
-        openai_api_key: Optional[str] = "", # when llm_flag=True, need to set
-        openai_proxy: Optional[str] = "", # when llm_flag=True, need to set
-        temperature: Optional[int] = 0, # when llm_flag=True, need to set
-        system_message: Optional[str] = DEFAULT_SYSTEM_MESSAGE, # agent system message, llm or group chat manage will use
+        model_name: Optional[str] = 'gpt-4-0613',  # when llm_flag=True, need to set
+        openai_api_key: Optional[str] = '',  # when llm_flag=True, need to set
+        openai_proxy: Optional[str] = '',  # when llm_flag=True, need to set
+        temperature: Optional[int] = 0,  # when llm_flag=True, need to set
+        system_message: Optional[str] = DEFAULT_SYSTEM_MESSAGE,  # agent system message, llm or group chat manage will use # noqa
         **kwargs,
     ):
 
         if openai_proxy:
-            openai.proxy = {"https": openai_proxy, "http": openai_proxy}
+            openai.proxy = {'https': openai_proxy, 'http': openai_proxy}
 
         config_list = [
             {
@@ -50,10 +46,10 @@ Reply "TERMINATE" in the end when everything is done.
             },
         ]
         llm_config = {
-            "seed": 42,  # change the seed for different trials
-            "temperature": temperature,
-            "config_list": config_list,
-            "request_timeout": 120,
+            'seed': 42,  # change the seed for different trials
+            'temperature': temperature,
+            'config_list': config_list,
+            'request_timeout': 120,
         }
 
         super().__init__(
