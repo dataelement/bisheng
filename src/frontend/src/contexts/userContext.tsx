@@ -1,8 +1,9 @@
 import { ReactNode, createContext, useState } from "react";
+import { User } from "../types/app";
 
 type userContextType = {
-    user: any;
-    setUser: (newState: any) => void;
+    user: User;
+    setUser: (newState: User) => void;
 }
 
 const userInfoLocalStr = localStorage.getItem('UUR_INFO')
@@ -14,7 +15,7 @@ const initialValue = {
 export const userContext = createContext<userContextType>(initialValue);
 
 export function UserProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState(initialValue.user);
+    const [user, setUser] = useState<User>(initialValue.user);
 
     return (
         <userContext.Provider

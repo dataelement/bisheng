@@ -1,9 +1,7 @@
 import { t } from "i18next";
 import _ from "lodash";
-import { FileUp, Send } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import ShadTooltip from "../../components/ShadTooltipComponent";
 import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { getChatHistory, getChatsApi, getFlowFromDatabase, postBuildInit, postValidatePrompt, readOnlineFlows } from "../../controllers/API";
@@ -13,8 +11,7 @@ import { ChatMessageType } from "../../types/chat";
 import { FlowType, NodeType } from "../../types/flow";
 import { generateUUID, validateNode } from "../../utils";
 import SkillTemps from "../SkillPage/components/SkillTemps";
-import { ChatMessage } from "./components/ChatMessage";
-import ResouceModal from "./components/ResouceModal";
+import ChatPanne from "./components/chatPanne";
 
 export default function SkillChatPage(params) {
     const [open, setOpen] = useState(false)
@@ -29,7 +26,6 @@ export default function SkillChatPage(params) {
     }, [])
     // 对话列表
     const { chatList, chatId, chatsRef, setChatId, addChat } = useChatList()
-
     const chatIdRef = useRef('')
     const {
         inputState,
@@ -62,8 +58,6 @@ export default function SkillChatPage(params) {
         })
 
         inputRef.current.value = ''
-        setInputEmpty(true)
-
         setTimeout(() => {
             inputRef.current.focus()
         }, 500);
@@ -83,8 +77,6 @@ export default function SkillChatPage(params) {
         await initChat(flow)
         setFace(false)
 
-        if (inputRef.current) inputRef.current.value = ''
-        setInputEmpty(true)
         changeHistoryByScroll.current = false
         // focus
         setTimeout(() => {
@@ -94,56 +86,12 @@ export default function SkillChatPage(params) {
 
     // 输入问答
     const inputRef = useRef(null)
-    const inputDisable = inputState.lock || (fileInputs?.length && chatHistory.length === 0)
-    const handleSend = () => {
-        const val = inputRef.current.value
-        setTimeout(() => {
-            inputRef.current.value = ''
-            inputRef.current.style.height = 'auto'
-            setInputEmpty(true)
-        }, 100);
-
-        if (val.trim() === '' || inputDisable) return
-        sendMsg(val)
-    }
     useEffect(() => {
         !chating && setTimeout(() => {
             // 对话结束自动聚焦
             inputRef.current?.focus()
         }, 1000);
     }, [chating])
-
-    // input 滚动
-    const [inputEmpty, setInputEmpty] = useState(true)
-    const handleTextAreaHeight = (e) => {
-        const textarea = e.target
-        textarea.style.height = 'auto'
-        textarea.style.height = textarea.scrollHeight + 'px'
-        setInputEmpty(textarea.value.trim() === '')
-    }
-
-    // 消息滚动
-    const messagesRef = useRef(null);
-    useEffect(() => {
-        if (messagesRef.current && !changeHistoryByScroll.current) { // 滚动加载不触发
-            messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-        }
-    }, [chatHistory, changeHistoryByScroll.current]);
-
-    // 消息滚动加载
-    useEffect(() => {
-        function handleScroll() {
-            if (messagesRef.current.scrollTop <= 30) {
-                loadNextPage()
-            }
-        }
-
-        messagesRef.current?.addEventListener('scroll', handleScroll);
-        return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
-    }, [messagesRef.current]);
-
-    // 溯源
-    const [souce, setSouce] = useState<ChatMessageType>(null)
 
     return <div className="flex">
         <div className="h-screen w-[200px] relative border-r">
@@ -162,50 +110,29 @@ export default function SkillChatPage(params) {
             </div>
         </div>
         {/* chat */}
-        {face ? <div className="flex-1 chat-box h-screen overflow-hidden relative">
-            <p className="text-center mt-[100px]">{t('chat.selectChat')}</p>
-        </div>
-            : <div className="flex-1 chat-box h-screen overflow-hidden relative">
-                <div className="absolute w-full px-4 py-4 bg-[#fff] z-10 dark:bg-gray-950">{chatList.find(chat => chat.chat_id === chatId)?.flow_name}</div>
-                <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
-                    <div ref={messagesRef} className="chat-panne h-full overflow-y-scroll no-scrollbar px-4 pb-20">
-                        {
-                            chatHistory.map((c, i) => <ChatMessage key={c.id || i} chat={c} onSource={() => setSouce(c)}></ChatMessage>)
-                        }
-                    </div>
-                    <div className="absolute w-full bottom-0 bg-gradient-to-t from-[#fff] to-[rgba(255,255,255,0.8)] px-8 dark:bg-gradient-to-t dark:from-[#000] dark:to-[rgba(0,0,0,0.8)]">
-                        <div className={`w-full text-area-box border border-gray-600 rounded-lg my-6 overflow-hidden pr-2 py-2 relative ${(inputState.lock || (fileInputs?.length && chatHistory.length === 0)) && 'bg-gray-200 dark:bg-gray-600'}`}>
-                            <textarea id='input'
-                                ref={inputRef}
-                                disabled={inputDisable} style={{ height: 36 }} rows={1}
-                                className={`w-full resize-none border-none bg-transparent outline-none px-4 pt-1 text-xl max-h-[200px]`}
-                                placeholder={t('chat.inputPlaceholder')}
-                                onInput={handleTextAreaHeight}
-                                onKeyDown={(event) => {
-                                    if (event.key === "Enter" && !event.shiftKey) handleSend()
-                                }}></textarea>
-                            <div className="absolute right-6 bottom-4 flex gap-2">
-                                <ShadTooltip content={t('chat.uploadFileTooltip')}>
-                                    <button disabled={inputState.lock || !fileInputs?.length} className="disabled:text-gray-400" onClick={uploadFile}><FileUp /></button>
-                                </ShadTooltip>
-                                <ShadTooltip content={t('chat.sendTooltip')}>
-                                    <button disabled={inputEmpty || inputDisable} className=" disabled:text-gray-400" onClick={handleSend}><Send /></button>
-                                </ShadTooltip>
-                            </div>
-                            {inputState.error && <div className="bg-gray-200 absolute top-0 left-0 w-full h-full text-center text-gray-400 align-middle pt-4">{inputState.error}</div>}
-                        </div>
-                    </div>
-                </div>
-            </div>}
-        {/* 添加模型 */}
+        {face
+            ? <div className="flex-1 chat-box h-screen overflow-hidden relative">
+                <p className="text-center mt-[100px]">{t('chat.selectChat')}</p>
+            </div>
+            : <ChatPanne
+                ref={inputRef}
+                fileInputs={fileInputs}
+                inputState={inputState}
+                chatId={chatId}
+                messages={chatHistory}
+                flowName={chatList.find(chat => chat.chat_id === chatId)?.flow_name}
+                changeHistoryByScroll={changeHistoryByScroll.current}
+                onSendMsg={sendMsg}
+                onNextPageClick={loadNextPage}
+                onUploadFile={uploadFile}
+            />}
+        {/* 选择对话技能 */}
         <SkillTemps
             flows={onlineFlows}
             title={t('chat.skillTempsTitle')}
             desc={t('chat.skillTempsDesc')}
             open={open} setOpen={setOpen}
             onSelect={(e) => handlerSelectFlow(e)}></SkillTemps>
-        {/* 源文件类型 */}
-        <ResouceModal chatId={chatIdRef.current} open={!!souce} data={souce} setOpen={() => setSouce(null)}></ResouceModal>
     </div>
 };
 /**
@@ -529,15 +456,17 @@ const useWebsocketChat = (chatIdRef) => {
         if ([1005, 1008].includes(event.code)) {
             setInputState({ lock: true, error: event.reason });
         } else {
-            setErrorData({ title: event.reason });
-            setChatHistory((old) => {
-                let newChat = _.cloneDeep(old);
-                if (newChat.length) {
-                    newChat[newChat.length - 1].end = true;
-                }
-                newChat.push({ end: true, message: event.reason ? `${t('chat.connectionbreakTip')}${event.reason}` : t('chat.connectionbreak'), isSend: false, chatKey: '', files: [] });
-                return newChat
-            })
+            if (event.reason) {
+                setErrorData({ title: event.reason });
+                setChatHistory((old) => {
+                    let newChat = _.cloneDeep(old);
+                    if (newChat.length) {
+                        newChat[newChat.length - 1].end = true;
+                    }
+                    newChat.push({ end: true, message: `${t('chat.connectionbreakTip')}${event.reason}`, isSend: false, chatKey: '', files: [] });
+                    return newChat
+                })
+            }
             setInputState({ lock: false, error: '' });
         }
 
@@ -808,7 +737,7 @@ const useBuild = () => {
  * 本地对话列表
  */
 const useChatList = () => {
-    const [id, setId] = useState(-1)
+    const [id, setId] = useState('')
     const [chatList, setChatList] = useState([])
     const chatsRef = useRef(null)
 

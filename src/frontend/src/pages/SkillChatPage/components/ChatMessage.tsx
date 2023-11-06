@@ -9,8 +9,11 @@ import { Card, CardDescription, CardHeader, CardTitle } from "../../../component
 import { alertContext } from "../../../contexts/alertContext";
 import { CodeBlock } from "../../../modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "../../../types/chat";
+import { userContext } from "../../../contexts/userContext";
 
-export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSource: () => void }) => {
+export const ChatMessage = ({ chat, userColor, onSource }: { chat: ChatMessageType, userColor: string, onSource: () => void }) => {
+    const { user } = useContext(userContext);
+
     const textRef = useRef(null)
     const { t } = useTranslation()
     const [cursor, setCursor] = useState({ x: 0, y: 0 })
@@ -117,9 +120,27 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
         <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent" onClick={onSource}>{t('chat.source')}</button>
     </div>
 
+    // 日志分析
+    if (chat.thought) return <>
+        <div className={`log border-[3px] rounded-xl whitespace-pre-wrap mt-4 p-4 relative ${color[chat.category || 'system']} ${border[chat.category || 'system']}`}>
+            {logMkdown}
+            {chat.category === 'report' && <Copy size={20} className=" absolute right-4 top-2 cursor-pointer" onClick={handleCopy}></Copy>}
+        </div>
+        {!chat.end && <span className="loading loading-ring loading-md"></span>}
+        {chat.source && source}
+    </>
+
+    if (chat.category === 'line') {
+        // 轮次分割线
+        return <div className="divider text-gray-500 text-sm">本轮结束</div>
+    }
+
+
     if (chat.isSend) return chat.files.length ? <>
+        {/* 文件 */}
         <div className="chat chat-end">
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-sky-500 flex items-center justify-center"><User color="#fff" size={28} /></div></div>
+            <div className="chat-header text-gray-400 text-sm">{user.user_name}</div>
             <Card className="my-2 w-[200px] relative">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><File />{t('file')}</CardTitle>
@@ -131,28 +152,26 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
         </div>
         {!chat.files[0]?.data && <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 ${color['system']} ${border['system']}`}>{t('chat.filePrsing')}</div>}
     </> :
+        // 发送消息
         <div className="chat chat-end">
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-[rgba(53,126,249,.6)] flex items-center justify-center"><User color="#fff" size={28} /></div></div>
+            <div className="chat-header text-gray-400 text-sm">{user.user_name}</div>
             <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)] dark:text-gray-100">
                 {chat.category === 'loading' && <span className="loading loading-spinner loading-xs mr-4 align-middle"></span>}
                 {chat.message[chat.chatKey]}
             </div>
         </div>
 
-    // 日志分析
-    if (chat.thought) return <>
-        <div className={`log border-[3px] rounded-xl whitespace-pre-wrap mt-4 p-4 relative ${color[chat.category || 'system']} ${border[chat.category || 'system']}`}>
-            {logMkdown}
-            {chat.category === 'report' && <Copy size={20} className=" absolute right-4 top-2 cursor-pointer" onClick={handleCopy}></Copy>}
-        </div>
-        {!chat.end && <span className="loading loading-ring loading-md"></span>}
-        {chat.source && source}
-    </>
 
+    // 模型user
     return <div className="chat chat-start">
         <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-gray-600 flex items-center justify-center"><Bot color="#fff" size={28} /></div></div>
+        <div className="chat-header text-gray-400 text-sm">{chat.user_name || 'robot'}</div>
         <div ref={textRef} className="chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600">
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
+            {/* @user */}
+            {!chat.at && <p className="text-blue-500 text-sm">@ {chat.at || '联调'}</p>}
+            {/* 光标 */}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
         </div>
         {chat.source && source}

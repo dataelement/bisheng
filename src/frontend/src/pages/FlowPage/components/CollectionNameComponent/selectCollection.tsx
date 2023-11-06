@@ -37,7 +37,7 @@ export default function SelectCollection({ collectionId, onChange }:
     }
 
     return <div>
-        <p className="my-4 font-bold">{t('model.knowledgeBaseSelection')}</p>
+        <p className="my-4 font-bold">{t('flow.knowledgeBaseSelection')}</p>
         <Input placeholder={t('flow.searchKnowledgeBase')} ref={inputRef} onChange={handleInputChange} />
         <div className="mt-4 h-[280px] overflow-y-auto no-scrollbar">
             {libList.map(item =>

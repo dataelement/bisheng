@@ -62,7 +62,7 @@ export default function MainLayout() {
                             <TooltipContent><p>{t('menu.themeSwitch')}</p></TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
-                    {/* <Separator className="mx-1" orientation="vertical" />
+                    <Separator className="mx-1" orientation="vertical" />
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger className="flex-1 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
@@ -72,7 +72,7 @@ export default function MainLayout() {
                             </TooltipTrigger>
                             <TooltipContent><p>{options[language]}</p></TooltipContent>
                         </Tooltip>
-                    </TooltipProvider> */}
+                    </TooltipProvider>
                     <Separator className="mx-1" orientation="vertical" />
                     <TooltipProvider>
                         <Tooltip>
