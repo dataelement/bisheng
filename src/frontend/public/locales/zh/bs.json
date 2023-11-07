@@ -118,7 +118,8 @@
         "downloadPDFTooltip": "下载双层PDF",
         "downloadOriginalTooltip": "下载原文件",
         "noMatchedFilesMessage": "无匹配的源文件",
-        "fileStorageFailure": "文件存储故障!"
+        "fileStorageFailure": "文件存储故障!",
+        "confirmDeleteChat": "确认删除该会话？"
     },
     "model": {
         "modelConfiguration": "模型配置",

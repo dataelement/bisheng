@@ -7,11 +7,26 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { alertContext } from "../../../contexts/alertContext";
+import { userContext } from "../../../contexts/userContext";
 import { CodeBlock } from "../../../modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "../../../types/chat";
-import { userContext } from "../../../contexts/userContext";
 
-export const ChatMessage = ({ chat, userColor, onSource }: { chat: ChatMessageType, userColor: string, onSource: () => void }) => {
+// 颜色列表
+const colorList = [
+    "#666",
+    "#FF5733",
+    "#3498DB",
+    "#27AE60",
+    "#E74C3C",
+    "#9B59B6",
+    "#F1C40F",
+    "#34495E",
+    "#16A085",
+    "#E67E22",
+    "#95A5A6"
+]
+
+export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSource: () => void }) => {
     const { user } = useContext(userContext);
 
     const textRef = useRef(null)
@@ -163,9 +178,12 @@ export const ChatMessage = ({ chat, userColor, onSource }: { chat: ChatMessageTy
         </div>
 
 
+    const avatarColor = colorList[parseInt(chat.user_id || 0, 16) % colorList.length]
     // 模型user
     return <div className="chat chat-start">
-        <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-gray-600 flex items-center justify-center"><Bot color="#fff" size={28} /></div></div>
+        <div className="chat-image avatar">
+            <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center" style={{ background: avatarColor }}><Bot color="#fff" size={28} /></div>
+        </div>
         <div className="chat-header text-gray-400 text-sm">{chat.user_name || 'robot'}</div>
         <div ref={textRef} className="chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600">
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}

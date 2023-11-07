@@ -130,6 +130,7 @@ export const nodeColors: { [char: string]: string } = {
   str: "#049524",
   retrievers: "#e6b25a",
   input_output: "#0ea5e9",
+  autogen: '#12a5f8',
   unknown: "#9CA3AF",
 };
 
@@ -152,6 +153,7 @@ export const nodeNames: { [char: string]: string } = {
   input_output: "输入/input",
   utilities: "通用工具/Utilities",
   output_parsers: "输出解析器/OutputParsers",
+  autogen: '多智能体角色/AutogenRole',
   unknown: "Unknown",
 };
 

@@ -1,27 +1,30 @@
-import { t } from "i18next";
 import { FileUp, Send, StopCircle } from "lucide-react";
 import { forwardRef, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import ShadTooltip from "../../../components/ShadTooltipComponent";
+import { Button } from "../../../components/ui/button";
 import { ChatMessageType } from "../../../types/chat";
 import { ChatMessage } from "./ChatMessage";
 import ResouceModal from "./ResouceModal";
-import { Button } from "../../../components/ui/button";
 
 interface Iprops {
     chatId: string
     inputState: any
     fileInputs: any[]
+    isRoom: boolean
     flowName: string
+    stopState: boolean
     messages: ChatMessageType[]
     changeHistoryByScroll: boolean
+    onStopClick: () => void
     onNextPageClick: () => void
     onUploadFile: () => void
     onSendMsg: (msg: string) => void
 }
 
 export default forwardRef(function ChatPanne({
-    chatId, messages, inputState, fileInputs, changeHistoryByScroll, flowName,
-    onSendMsg, onUploadFile, onNextPageClick
+    chatId, messages, inputState, fileInputs, changeHistoryByScroll, flowName, stopState, isRoom,
+    onSendMsg, onUploadFile, onNextPageClick, onStopClick
 }: Iprops, inputRef: any) {
 
     const inputDisable = inputState.lock || (fileInputs?.length && messages.length === 0)
@@ -73,12 +76,13 @@ export default forwardRef(function ChatPanne({
     // 溯源
     const [souce, setSouce] = useState<ChatMessageType>(null)
 
+
     return <div className="flex-1 chat-box h-screen overflow-hidden relative">
         <div className="absolute w-full px-4 py-4 bg-[#fff] z-10 dark:bg-gray-950">{flowName}</div>
         <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
             <div ref={messagesRef} className="chat-panne h-full overflow-y-scroll no-scrollbar px-4 pb-20">
                 {
-                    messages.map((c, i) => <ChatMessage userColor={'#ff6600'} key={c.id || i} chat={c} onSource={() => setSouce(c)}></ChatMessage>)
+                    messages.map((c, i) => <ChatMessage key={c.id || i} chat={c} onSource={() => setSouce(c)}></ChatMessage>)
                 }
             </div>
             <div className="absolute w-full bottom-0 bg-gradient-to-t from-[#fff] to-[rgba(255,255,255,0.8)] px-8 dark:bg-gradient-to-t dark:from-[#000] dark:to-[rgba(0,0,0,0.8)]">
@@ -104,9 +108,9 @@ export default forwardRef(function ChatPanne({
                 </div>
             </div>
         </div>
-        <div className=" absolute w-full flex justify-center bottom-[100px]">
-            <Button className="rounded-full" variant="outline" disabled><StopCircle className="mr-2" />停止</Button>
-        </div>
+        {isRoom && <div className=" absolute w-full flex justify-center bottom-[100px]">
+            <Button className="rounded-full" variant="outline" disabled={stopState} onClick={onStopClick}><StopCircle className="mr-2" />Stop</Button>
+        </div>}
         {/* 源文件类型 */}
         <ResouceModal chatId={chatId} open={!!souce} data={souce} setOpen={() => setSouce(null)}></ResouceModal>
     </div>

@@ -11,9 +11,11 @@ import { ChatMessageType } from "../../types/chat";
 import { FlowType, NodeType } from "../../types/flow";
 import { generateUUID, validateNode } from "../../utils";
 import SkillTemps from "../SkillPage/components/SkillTemps";
-import ChatPanne from "./components/chatPanne";
+import ChatPanne from "./components/ChatPanne";
+import { Trash2 } from "lucide-react";
+import { bsconfirm } from "../../alerts/confirm";
 
-export default function SkillChatPage(params) {
+export default function SkillChatPage() {
     const [open, setOpen] = useState(false)
     const [face, setFace] = useState(true);
 
@@ -25,12 +27,15 @@ export default function SkillChatPage(params) {
         readOnlineFlows().then(res => setOnlineFlows(res))
     }, [])
     // 对话列表
-    const { chatList, chatId, chatsRef, setChatId, addChat } = useChatList()
+    const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat } = useChatList()
     const chatIdRef = useRef('')
     const {
+        isRoom,
         inputState,
         fileInputs,
         chating,
+        stopState,
+        stopClick,
         uploadFile,
         setInputState,
         changeHistoryByScroll,
@@ -93,6 +98,19 @@ export default function SkillChatPage(params) {
         }, 1000);
     }, [chating])
 
+    // del
+    const handleDeleteChat = (e, id) => {
+        e.stopPropagation();
+        bsconfirm({
+            desc: t('chat.confirmDeleteChat'),
+            onOk(next) {
+                deleteChat(id);
+                setFace(true)
+                next()
+            }
+        })
+    }
+
     return <div className="flex">
         <div className="h-screen w-[200px] relative border-r">
             <div className="absolute flex pt-2 ml-[20px] bg-[#fff] dark:bg-gray-950">
@@ -101,9 +119,12 @@ export default function SkillChatPage(params) {
             <div ref={chatsRef} className="scroll p-4 h-full overflow-y-scroll no-scrollbar pt-12">
                 {
                     chatList.map((chat, i) => (
-                        <div key={chat.chat_id} className={`item rounded-xl mt-2 p-2 hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-gray-100 dark:bg-gray-800'}`} onClick={() => handleSelectChat(chat)}>
+                        <div key={chat.chat_id}
+                            className={`group item rounded-xl mt-2 p-2 relative hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-gray-100 dark:bg-gray-800'}`}
+                            onClick={() => handleSelectChat(chat)}>
                             <p className="break-words">{chat.flow_name}</p>
                             <span className="text-xs text-gray-500">{chat.flow_description}</span>
+                            <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
                         </div>
                     ))
                 }
@@ -116,12 +137,15 @@ export default function SkillChatPage(params) {
             </div>
             : <ChatPanne
                 ref={inputRef}
+                isRoom={isRoom}
                 fileInputs={fileInputs}
                 inputState={inputState}
                 chatId={chatId}
                 messages={chatHistory}
                 flowName={chatList.find(chat => chat.chat_id === chatId)?.flow_name}
                 changeHistoryByScroll={changeHistoryByScroll.current}
+                stopState={stopState}
+                onStopClick={stopClick}
                 onSendMsg={sendMsg}
                 onNextPageClick={loadNextPage}
                 onUploadFile={uploadFile}
@@ -159,23 +183,20 @@ const useWebsocketChat = (chatIdRef) => {
         const res = await getChatHistory(flow.current.id, chatIdRef.current, lastId ? 10 : 30, lastId)
         const hisData = res.map(item => {
             // let count = 0
-            let message = item.message
+            let { message, files, is_bot, intermediate_steps, ...other } = item
             try {
-                message = item.message && item.message[0] === '{' ? JSON.parse(item.message.replace(/([\t\n"])/g, '\\$1').replace(/'/g, '"')) : item.message || ''
+                message = message && message[0] === '{' ? JSON.parse(message.replace(/([\t\n"])/g, '\\$1').replace(/'/g, '"')) : message || ''
             } catch (e) {
                 // 未考虑的情况暂不处理
-                message = item.message
             }
             return {
+                ...other,
                 chatKey: typeof message === 'string' ? undefined : Object.keys(message)[0],
                 end: true,
-                files: item.files ? JSON.parse(item.files) : [],
-                isSend: !item.is_bot,
+                files: files ? JSON.parse(files) : [],
+                isSend: !is_bot,
                 message,
-                thought: item.intermediate_steps,
-                id: item.id,
-                category: item.category,
-                source: item.source,
+                thought: intermediate_steps,
                 noAccess: true
             }
         })
@@ -240,6 +261,8 @@ const useWebsocketChat = (chatIdRef) => {
                 };
                 newWs.onerror = (ev) => {
                     console.error('error', ev);
+                    setIsStop(true)
+
                     if (flow.current.id === "") {
                         // connectWS();
                     } else {
@@ -351,12 +374,15 @@ const useWebsocketChat = (chatIdRef) => {
         }
         if (data.type === "begin") {
             setBegin(true)
+            setIsStop(false)
             changeHistoryByScroll.current = false
         }
         if (data.type === "close") {
             setBegin(false)
+            setIsStop(true)
             setInputState({ lock: false, error: '' });
             changeHistoryByScroll.current = true
+            // TODO 分割线  群聊情况下
         }
         if (data.type === "start") {
             addChatHistory({
@@ -371,14 +397,14 @@ const useWebsocketChat = (chatIdRef) => {
         }
         if (data.type === "end") {
             updateLastMessage({
+                ...data,
                 str: data.message,
                 files: data.files || null,
                 end: true,
                 thought: data.intermediate_steps || '',
                 cate: data.category || '',
                 messageId: data.message_id,
-                source: data.source,
-                noAccess: false
+                noAccess: false,
             });
 
             isStream = false;
@@ -410,7 +436,7 @@ const useWebsocketChat = (chatIdRef) => {
         });
     };
 
-    function updateLastMessage({ str, thought = '', end = false, files = [], cate = '', messageId = 0, source = false, noAccess = false }: {
+    function updateLastMessage({ str, thought = '', end = false, files = [], cate = '', messageId = 0, source = false, noAccess = false, ...data }: {
         str: string;
         messageId?: number
         thought?: string;
@@ -440,7 +466,11 @@ const useWebsocketChat = (chatIdRef) => {
                 category: cate,
                 source,
                 noAccess,
-                end
+                end,
+                ...data
+                // user_id
+                // user_name
+                // at
             }
             newChats[chatsLen - 1] = newLastChat
             // start - end 之间没有内容删除load
@@ -453,6 +483,8 @@ const useWebsocketChat = (chatIdRef) => {
 
     function handleOnClose(event: CloseEvent) {
         console.error('链接断开 event :>> ', event);
+        setIsStop(true)
+
         if ([1005, 1008].includes(event.code)) {
             setInputState({ lock: true, error: event.reason });
         } else {
@@ -603,7 +635,15 @@ const useWebsocketChat = (chatIdRef) => {
         return Promise.all(promises)
     }
 
+    // 是否群聊
+    const isRoom = useMemo(() => {
+        return !!flow.current?.data.nodes.find(node => node.data.type === "AutogenChain")
+    }, [flow.current])
+
+    // 停止状态
+    const [isStop, setIsStop] = useState(true)
     return {
+        isRoom,
         chating: begin,
         inputState,
         fileInputs,
@@ -624,6 +664,11 @@ const useWebsocketChat = (chatIdRef) => {
         changeHistoryByScroll,
         clearHistory() {
             setChatHistory([])
+        },
+        stopState: isStop,
+        stopClick: () => {
+            setIsStop(true)
+            // sendAll() // TODO ws stop
         }
     }
 }
@@ -758,6 +803,10 @@ const useChatList = () => {
             setTimeout(() => {
                 chatsRef.current.scrollTop = 1
             }, 0);
+        },
+        deleteChat: (id: string) => {
+            setChatList(oldList => oldList.filter(item => item.chat_id !== id))
+            // api
         }
     }
 }

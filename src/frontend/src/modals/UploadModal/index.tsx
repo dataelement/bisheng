@@ -11,7 +11,7 @@ import { subUploadLibFile } from "../../controllers/API";
 import { uploadFileWithProgress } from "./upload";
 
 let qid = 1
-export default function UploadModal({ id, open, desc = '', children = null, setOpen }) {
+export default function UploadModal({ id, accept, open, desc = '', children = null, setOpen }) {
     const { t } = useTranslation()
     // const [file, setFile] = useState(null);
     // const [progress, setProgress] = useState(0);
@@ -148,12 +148,7 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
     }, [progressList])
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        accept: {
-            'application/*': ['.pdf'],
-            // 'application/*': ['.doc', '.docx', '.pdf', '.ppt', '.pptx', '.tsv', '.xlsx'],
-            'image/*': ['.jpeg', '.png', '.jpg', '.tiff'],
-            // 'text/*': ['.csv', '.html', '.json', '.md', '.msg', '.txt', '.xml'],
-        },
+        accept,
         useFsAccessApi: false,
         onDrop
     });

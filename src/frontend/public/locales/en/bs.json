@@ -121,7 +121,8 @@
         "downloadPDFTooltip": "Download Dual-Layered PDF",
         "downloadOriginalTooltip": "Download Original File",
         "noMatchedFilesMessage": "No matched source files",
-        "fileStorageFailure": "File storage failure!"
+        "fileStorageFailure": "File storage failure!",
+        "confirmDeleteChat": "Confirm deletion of this chat？"
     },
     "model": {
         "modelConfiguration": "Model Configuration",

@@ -156,7 +156,7 @@ const useLanguage = () => {
     }
     return {
         language,
-        options: { en: '使用中文', zh: 'use English' },
+        options: { en: '使用中文', zh: 'English' },
         changLanguage,
         t
     }
