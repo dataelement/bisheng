@@ -9,7 +9,7 @@ from bisheng.database.models.flow import Flow
 from bisheng.database.models.knowledge import Knowledge
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
-from fastapi import APIRouter, Depends, WebSocket, WebSocketException, status
+from fastapi import APIRouter, Depends, WebSocket, status
 from sqlmodel import Session
 
 router = APIRouter(prefix='/chat', tags=['Chat'])
@@ -60,8 +60,6 @@ async def union_websocket(flow_id: str,
             chat_manager.set_cache(key_node, node._built_object)
             chat_manager.set_cache(get_cache_key(flow_id, chat_id), node._built_object)
         await chat_manager.handle_websocket(flow_id, chat_id, websocket, default_user_id)
-    except WebSocketException as exc:
+    except Exception as exc:
         logger.error(exc)
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))
-    except Exception as e:
-        logger.error(str(e))
