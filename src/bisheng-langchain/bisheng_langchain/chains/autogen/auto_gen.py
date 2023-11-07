@@ -1,32 +1,25 @@
 """Chain that runs an arbitrary python function."""
-import os
-import io
-import contextlib
 import functools
-import logging
 import json
-from typing import Any, Awaitable, Callable, Dict, List, Optional
-
-from langchain.callbacks.manager import (
-    AsyncCallbackManagerForChainRun,
-    CallbackManagerForChainRun,
-)
-from langchain.chains.base import Chain
+import logging
+from typing import Any, Dict, List, Optional
 
 from autogen import ConversableAgent
-from .user_proxy_agent import AutoGenUserProxyAgent
+from bisheng_langchain.autogen_role import AutoGenUser
+from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
+from langchain.chains.base import Chain
 
 logger = logging.getLogger(__name__)
 
 
-class AutoGenChat(Chain):
+class AutoGenChain(Chain):
     """Chain that print the loader output.
     """
-    user_proxy_agent: AutoGenUserProxyAgent
+    user_proxy_agent: AutoGenUser
     recipient: ConversableAgent
 
-    input_key: str = "chat_topic"  #: :meta private:
-    output_key: str = "chat_content"  #: :meta private:
+    input_key: str = 'chat_topic'  #: :meta private:
+    output_key: str = 'chat_content'  #: :meta private:
 
     @staticmethod
     @functools.lru_cache
@@ -63,7 +56,8 @@ class AutoGenChat(Chain):
         # with contextlib.redirect_stdout(io_output):
         global_chat_messages = []
         self.user_proxy_agent.initiate_chat(self.recipient, message=message,
-            global_chat_messages=global_chat_messages)
+                                            global_chat_messages=global_chat_messages,
+                                            run_manager=run_manager)
         # chat_content = io_output.getvalue()
         chat_content = json.dumps(
             global_chat_messages, indent=2, ensure_ascii=False)
@@ -80,10 +74,11 @@ class AutoGenChat(Chain):
         # with contextlib.redirect_stdout(io_output):
         global_chat_messages = []
         self.user_proxy_agent.initiate_chat(self.recipient,
-            message=message, global_chat_messages=global_chat_messages)
+                                            message=message,
+                                            global_chat_messages=global_chat_messages,
+                                            run_manager=run_manager)
         # chat_content = io_output.getvalue()
         chat_content = json.dumps(
             global_chat_messages, indent=2, ensure_ascii=False)
         output = {self.output_key: chat_content}
         return output
-

@@ -1,13 +1,9 @@
 """Chain that runs an arbitrary python function."""
-import functools
 import logging
-import json
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import openai
-import autogen
-from autogen import GroupChat, GroupChatManager, Agent
-
+from autogen import Agent, GroupChat, GroupChatManager
 
 logger = logging.getLogger(__name__)
 
@@ -21,16 +17,16 @@ class AutoGenGroupChatManager(GroupChatManager):
         agents: List[Agent],
         max_round: int = 50,
         messages: List[Dict] = [],
-        model_name: Optional[str] = "gpt-4-0613",
-        openai_api_key: Optional[str] = "",
-        openai_proxy: Optional[str] = "",
+        model_name: Optional[str] = 'gpt-4-0613',
+        openai_api_key: Optional[str] = '',
+        openai_proxy: Optional[str] = '',
         temperature: Optional[int] = 0,
         **kwargs,
     ):
         groupchat = GroupChat(agents=agents, messages=messages, max_round=max_round)
 
         if openai_proxy:
-            openai.proxy = {"https": openai_proxy, "http": openai_proxy}
+            openai.proxy = {'https': openai_proxy, 'http': openai_proxy}
 
         config_list = [
             {
@@ -39,10 +35,10 @@ class AutoGenGroupChatManager(GroupChatManager):
             },
         ]
         llm_config = {
-            "seed": 42,  # change the seed for different trials
-            "temperature": temperature,
-            "config_list": config_list,
-            "request_timeout": 120,
+            'seed': 42,  # change the seed for different trials
+            'temperature': temperature,
+            'config_list': config_list,
+            'request_timeout': 120,
         }
 
         super().__init__(

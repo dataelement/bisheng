@@ -8,7 +8,7 @@ from autogen import AssistantAgent
 logger = logging.getLogger(__name__)
 
 
-class AutoGenAssistantAgent(AssistantAgent):
+class AutoGenAssistant(AssistantAgent):
     """Assistant agent, designed to solve a task with LLM.
     """
 
