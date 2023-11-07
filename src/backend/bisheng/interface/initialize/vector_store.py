@@ -208,12 +208,12 @@ def initialize_qdrant(class_object: Type[Qdrant], params: dict):
 
 
 def initial_milvus(class_object: Type[Milvus], params: dict):
-    if not params['connection_args']:
-        params['connection_args'] = settings.knowledges.get('vectorstores').get('Milvus').get(
+    if not params['connection_args'] and settings.get_knowledge().get('vectorstores').get('Milvus'):
+        params['connection_args'] = settings.get_knowledge().get('vectorstores').get('Milvus').get(
             'connection_args')
     elif isinstance(params.get('connection_args'), str):
         print(f"milvus before params={params} type={type(params['connection_args'])}")
-        params['connection_args'] = json.loads(params.pop('connection_args'))
+        params['connection_args'] = eval(params.pop('connection_args'))
     if 'embedding' not in params:
         # 匹配知识库的embedding
         col = params['collection_name']
@@ -221,7 +221,7 @@ def initial_milvus(class_object: Type[Milvus], params: dict):
         knowledge = session.exec(select(Knowledge).where(Knowledge.collection_name == col)).first()
         if not knowledge:
             raise Exception(f'不能找到知识库collection={col}')
-        model_param = settings.knowledges.get('embeddings').get(knowledge.model)
+        model_param = settings.get_knowledge().get('embeddings').get(knowledge.model)
         if knowledge.model == 'text-embedding-ada-002':
             embedding = OpenAIEmbeddings(**model_param)
         else:
@@ -232,16 +232,17 @@ def initial_milvus(class_object: Type[Milvus], params: dict):
 
 
 def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict):
-    if 'elasticsearch_url' not in params:
-        elasticsearch_url = 'https://192.168.106.14:9200'
-        params['elasticsearch_url'] = elasticsearch_url
+    if not params['elasticsearch_url'] and settings.get_knowledge().get('vectorstores').get(
+            'ElasticKeywordsSearch'):
+        params['elasticsearch_url'] = settings.get_knowledge().get('vectorstores').get(
+            'ElasticKeywordsSearch').get('elasticsearch_url')
 
-    if 'ssl_verify' not in params:
-        params['ssl_verify'] = {
-            'ca_certs': False,
-            'basic_auth': ('elastic', 'F94h5JtdQn6EQB-G9Hjv'),
-            'verify_certs': False
-        }
+    if not params['ssl_verify'] and settings.get_knowledge().get('vectorstores').get(
+            'ElasticKeywordsSearch'):
+        params['ssl_verify'] = eval(settings.get_knowledge().get('vectorstores').get(
+            'ElasticKeywordsSearch').get('ssl_verify'))
+    elif isinstance(params.get('ssl_verify'), str):
+        params['ssl_verify'] = eval(params['ssl_verify'])
 
     params['embedding'] = ''
     return class_object.from_documents(**params)

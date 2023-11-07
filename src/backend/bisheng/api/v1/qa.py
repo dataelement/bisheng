@@ -2,6 +2,7 @@ import json
 from typing import List
 
 from bisheng.database.base import get_session
+from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils import minio_client
 from fastapi import APIRouter, Depends
@@ -27,12 +28,23 @@ def get_answer_keyword(message_id: int, session: Session = Depends(get_session))
 def get_original_file(*, message_id: int, keys: str, session: Session = Depends(get_session)):
     # 获取命中的key
     chunks = session.exec(select(RecallChunk).where(RecallChunk.message_id == message_id)).all()
+
+    if not chunks:
+        return {'data': [], 'message': 'no chunk found'}
+
+    # chunk 的所有file
+    file_ids = {chunk.file_id for chunk in chunks}
+    db_knowledge_files = session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
+    id2file = {file.id: file for file in db_knowledge_files}
     # keywords
     keywords = keys.split(';') if keys else []
     result = []
     for index, chunk in enumerate(chunks):
+        file = id2file.get(chunk.file_id)
         chunk_res = json.loads(json.loads(chunk.meta_data).get('bbox'))
-        chunk_res['source_url'] = minio_client.minio_client.get_share_link(str(chunk.file_id))
+        chunk_res['source_url'] = minio_client.MinioClient().get_share_link(str(chunk.file_id))
+        chunk_res['original_url'] = minio_client.MinioClient().get_share_link(
+            file.object_name if file.object_name else str(file.id))
         chunk_res['score'] = round(match_score(chunk.chunk, keywords),
                                    2) if len(keywords) > 0 else 0
         chunk_res['file_id'] = chunk.file_id

@@ -6,9 +6,8 @@ from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field
 
 
-class ServerBase(SQLModelSerializable):
-    endpoint: str = Field(index=False, unique=True)
-    server: str = Field(index=True)
+class RoleBase(SQLModelSerializable):
+    role_name: str = Field(index=False, description='前端展示名称', unique=True)
     remark: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -19,18 +18,18 @@ class ServerBase(SQLModelSerializable):
                          onupdate=text('CURRENT_TIMESTAMP')))
 
 
-class Server(ServerBase, table=True):
+class Role(RoleBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
-class ServerRead(ServerBase):
+class RoleRead(RoleBase):
     id: Optional[int]
 
 
-class ServerQuery(ServerBase):
-    id: Optional[int]
-    server: Optional[str]
+class RoleUpdate(RoleBase):
+    role_name: Optional[str]
+    remark: Optional[str]
 
 
-class ServerCreate(ServerBase):
+class RoleCreate(RoleBase):
     pass

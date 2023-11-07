@@ -4,13 +4,16 @@ import json
 import time
 from typing import List, Optional
 from uuid import uuid4
+from bisheng_langchain.vectorstores.elastic_keywords_search import ElasticKeywordsSearch
 
 import requests
+from bisheng.api.utils import access_check
 from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.base import get_session
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
 from bisheng.database.models.knowledge_file import KnowledgeFile
+from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -26,7 +29,7 @@ from langchain.embeddings.base import Embeddings
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Milvus
 from langchain.vectorstores.base import VectorStore
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
 # build router
@@ -49,8 +52,11 @@ async def upload_file(*, file: UploadFile = File(...)):
 async def get_embedding():
     try:
         # 获取本地配置的名字
-        model_list = settings.knowledges.get('embeddings')
-        models = list(model_list.keys())
+        model_list = settings.get_knowledge().get('embeddings')
+        if model_list:
+            models = list(model_list.keys())
+        else:
+            models = list()
         return {'data': {'models': models}}
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
@@ -81,8 +87,13 @@ async def process_knowledge(*,
         chunk_overlap = 50
 
     knowledge = session.exec(select(Knowledge).where(Knowledge.id == knowledge_id)).one()
-    if payload.get('role') != 'admin' and knowledge.user_id != payload.get('user_id'):
-        raise HTTPException(status_code=500, detail='没有权限操作当前知识库')
+
+    if not access_check(payload=payload,
+                        owner_user_id=knowledge.user_id,
+                        target_id=knowledge.id,
+                        type=AccessType.KNOWLEDGE_WRITE):
+        raise HTTPException(status_code=500, detail='当前用户无此知识库操作权限')
+
     collection_name = knowledge.collection_name
     files = []
     file_paths = []
@@ -100,6 +111,7 @@ async def process_knowledge(*,
         files.append(db_file)
         file_paths.append(filepath)
         logger.info(f'fileName={file_name} col={collection_name}')
+
     asyncio.create_task(
         addEmbedding(collection_name=collection_name,
                      model=knowledge.model,
@@ -153,8 +165,21 @@ def get_knowledge(*,
         sql = select(Knowledge)
         count_sql = select(func.count(Knowledge.id))
         if 'admin' != payload.get('role'):
-            sql = sql.where(Knowledge.user_id == payload.get('user_id'))
-            count_sql = count_sql.where(Knowledge.user_id == payload.get('user_id'))
+            role_third_id = session.exec(
+                select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')))).all()
+            if role_third_id:
+                third_ids = [
+                    acess.third_id
+                    for acess in role_third_id
+                    if acess.type == AccessType.KNOWLEDGE.value
+                ]
+                sql = sql.where(
+                    or_(Knowledge.user_id == payload.get('user_id'), Knowledge.id.in_(third_ids)))
+                count_sql = count_sql.where(
+                    or_(Knowledge.user_id == payload.get('user_id'), Knowledge.id.in_(third_ids)))
+            else:
+                sql = sql.where(Knowledge.user_id == payload.get('user_id'))
+                count_sql = count_sql.where(Knowledge.user_id == payload.get('user_id'))
         sql = sql.order_by(Knowledge.update_time.desc())
         total_count = session.scalar(count_sql)
 
@@ -181,8 +206,27 @@ def get_filelist(*,
                  session: Session = Depends(get_session),
                  knowledge_id: int,
                  page_size: int = 10,
-                 page_num: int = 1):
+                 page_num: int = 1,
+                 Authorize: AuthJWT = Depends()):
     """ 获取知识库文件信息. """
+
+    # 查询当前知识库，是否有写入权限
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    db_knowledge = session.get(Knowledge, knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
+    if not access_check(payload=payload,
+                        owner_user_id=db_knowledge.user_id,
+                        target_id=knowledge_id,
+                        type=AccessType.KNOWLEDGE):
+        raise HTTPException(status_code=500, detail='没有访问权限')
+
+    writable = access_check(payload=payload,
+                            owner_user_id=db_knowledge.user_id,
+                            target_id=knowledge_id,
+                            type=AccessType.KNOWLEDGE_WRITE)
+
     # 查找上传的文件信息
     total_count = session.scalar(
         select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
@@ -192,7 +236,8 @@ def get_filelist(*,
                                                      (page_num - 1)).limit(page_size)).all()
     return {
         'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
-        'total': total_count
+        'total': total_count,
+        'writeable': writable
     }
 
 
@@ -207,7 +252,7 @@ def delete_knowledge(*,
     knowledge = session.get(Knowledge, knowledge_id)
     if not knowledge:
         raise HTTPException(status_code=404, detail='knowledge not found')
-    if 'admin' != payload.get('role') and knowledge.user_id != payload.get('user_id'):
+    if not access_check(payload, knowledge.user_id, knowledge_id, AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
     session.delete(knowledge)
     session.commit()
@@ -225,9 +270,10 @@ def delete_knowledge_file(*,
     knowledge_file = session.get(KnowledgeFile, file_id)
     if not knowledge_file:
         raise HTTPException(status_code=404, detail='文件不存在')
-    if 'admin' != payload.get('role') and knowledge_file.user_id != payload.get('user_id'):
-        raise HTTPException(status_code=404, detail='没有权限执行操作')
+
     knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
+    if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
+        raise HTTPException(status_code=404, detail='没有权限执行操作')
     # 处理vectordb
     collection_name = knowledge.collection_name
     embeddings = decide_embeddings(knowledge.model)
@@ -238,8 +284,15 @@ def delete_knowledge_file(*,
         logger.info(f'act=delete_vector file_id={file_id} res={res}')
 
     # minio
-    minio_client.minio_client.delete_minio(str(knowledge_file.id))
+    minio_client.MinioClient().delete_minio(str(knowledge_file.id))
     # elastic
+    esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+    if esvectore_client:
+        esvectore_client.client.delete_by_query(index=collection_name,
+                                                query={'match': {
+                                                    'metadata.file_id': file_id
+                                                }})
+        logger.info(f'act=delete_es file_id={file_id} res={res}')
 
     session.delete(knowledge_file)
     session.commit()
@@ -247,7 +300,7 @@ def delete_knowledge_file(*,
 
 
 def decide_embeddings(model: str) -> Embeddings:
-    model_list = settings.knowledges.get('embeddings')
+    model_list = settings.get_knowledge().get('embeddings')
     if model == 'text-embedding-ada-002':
         return OpenAIEmbeddings(**model_list.get(model))
     else:
@@ -256,8 +309,11 @@ def decide_embeddings(model: str) -> Embeddings:
 
 def decide_vectorstores(collection_name: str, vector_store: str,
                         embedding: Embeddings) -> VectorStore:
-    vector_config = settings.knowledges.get('vectorstores').get(vector_store)
-    if vector_store == 'ElasticKeywordsSearch' and vector_config:
+    vector_config = settings.get_knowledge().get('vectorstores').get(vector_store)
+    if not vector_config:
+        # 无相关配置
+        return None
+    if vector_store == 'ElasticKeywordsSearch':
         param = {'index_name': collection_name, 'embedding': embedding}
         if isinstance(vector_config['ssl_verify'], str):
             vector_config['ssl_verify'] = eval(vector_config['ssl_verify'])
@@ -271,29 +327,31 @@ def decide_vectorstores(collection_name: str, vector_store: str,
 async def addEmbedding(collection_name, model: str, chunk_size: int, separator: str,
                        chunk_overlap: int, file_paths: List[str],
                        knowledge_files: List[KnowledgeFile]):
-
-    embeddings = decide_embeddings(model)
-    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-    es_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+    try:
+        embeddings = decide_embeddings(model)
+        vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+        es_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+    except Exception as e:
+        logger.exception(e)
 
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
         try:
-            texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
-                                                chunk_overlap, separator)
             # 存储 mysql
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 2)
+            setattr(db_file, 'object_name', knowledge_file.file_name)
             session.add(db_file)
-            session.commit()
-            session.refresh(db_file)
+            session.flush()
+            # 原文件
+            minio_client.MinioClient().upload_minio(knowledge_file.file_name, path)
+
+            texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
+                                                chunk_overlap, separator)
 
             # 溯源必须依赖minio, 后期替换更通用的oss
-            if minio_client.minio_client.minio_client:
-                minio_client.minio_client.upload_minio(str(db_file.id), path)
-            else:
-                metadatas = [{} for _ in metadatas]
+            minio_client.MinioClient().upload_minio(str(db_file.id), path)
 
             logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
             [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]
@@ -302,12 +360,14 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             # 存储es
             if es_client:
                 es_client.add_texts(texts=texts, metadatas=metadatas)
-
+            session.commit()
+            session.refresh(db_file)
         except Exception as e:
             logger.exception(e)
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)
+            setattr(db_file, 'remark', str(e)[:500])
             session.add(db_file)
             session.commit()
 
@@ -324,7 +384,7 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         'md': UnstructuredMarkdownLoader,
     }
 
-    if not settings.knowledges.get('unstructured_api_url'):
+    if not settings.get_knowledge().get('unstructured_api_url'):
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
             raise Exception('Unsupport file type')
@@ -337,13 +397,15 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         documents = loader.load()
         texts = text_splitter.split_documents(documents)
         raw_texts = [t.page_content for t in texts]
+        metadatas = [t.metadata.update({'bbox': ''}) for t in texts]
         metadatas = [t.metadata for t in texts]
     else:
         # 如果文件不是pdf 需要内部转pdf
         if file_name.rsplit('.', 1)[-1] != 'pdf':
             b64_data = base64.b64encode(open(input_file, 'rb').read()).decode()
             inp = dict(filename=file_name, b64_data=[b64_data], mode='topdf')
-            resp = requests.post(settings.knowledges.get('unstructured_api_url'), json=inp).json()
+            resp = requests.post(settings.get_knowledge().get('unstructured_api_url'),
+                                 json=inp).json()
             if not resp or resp['status_code'] != 200:
                 logger.error(f'file_pdf=not_success resp={resp}')
                 raise Exception(f"当前文件无法解析， {resp['status_message']}")
@@ -356,7 +418,7 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         loader = ElemUnstructuredLoader(
             file_name,
             input_file,
-            unstructured_api_url=settings.knowledges.get('unstructured_api_url'))
+            unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
         documents = loader.load()
         text_splitter = ElemCharacterTextSplitter(separators=separator,
                                                   chunk_size=size,

@@ -2,16 +2,18 @@ import json
 from typing import List
 from uuid import UUID
 
-from bisheng.api.utils import build_flow_no_yield, remove_api_keys
+from bisheng.api.utils import access_check, build_flow_no_yield, remove_api_keys
 from bisheng.api.v1.schemas import FlowListCreate, FlowListRead
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate
+from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.settings import settings
+from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
 # build router
@@ -51,8 +53,18 @@ def read_flows(*,
         sql = select(Flow)
         count_sql = select(func.count(Flow.id))
         if 'admin' != payload.get('role'):
-            sql = sql.where(Flow.user_id == payload.get('user_id'))
-            count_sql = count_sql.where(Flow.user_id == payload.get('user_id'))
+            rol_flow_id = session.exec(
+                select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')))).all()
+            if rol_flow_id:
+                flow_ids = [
+                    acess.third_id for acess in rol_flow_id if acess.type == AccessType.FLOW.value
+                ]
+                sql = sql.where(or_(Flow.user_id == payload.get('user_id'), Flow.id.in_(flow_ids)))
+                count_sql = count_sql.where(
+                    or_(Flow.user_id == payload.get('user_id'), Flow.id.in_(flow_ids)))
+            else:
+                sql = sql.where(Flow.user_id == payload.get('user_id'))
+                count_sql = count_sql.where(Flow.user_id == payload.get('user_id'))
         if name:
             sql = sql.where(Flow.name.like(f'%{name}%'))
             count_sql = count_sql.where(Flow.name.like(f'%{name}%'))
@@ -73,6 +85,8 @@ def read_flows(*,
             userMap = {user.user_id: user.user_name for user in db_user}
             for r in res:
                 r['user_name'] = userMap[r['user_id']]
+                r['write'] = True if 'admin' == payload.get('role') or r.get(
+                    'user_id') == payload.get('user_id') else False
 
         return {'data': res, 'total': total_count}
 
@@ -102,7 +116,7 @@ def update_flow(*,
     if not db_flow:
         raise HTTPException(status_code=404, detail='Flow not found')
 
-    if 'admin' != payload.get('role') and db_flow.user_id != payload.get('user_id'):
+    if not access_check(payload, db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
         raise HTTPException(status_code=500, detail='没有权限编辑此技能')
 
     flow_data = flow.dict(exclude_unset=True)
@@ -111,9 +125,13 @@ def update_flow(*,
         # 上线校验
         try:
             art = {}
-            build_flow_no_yield(graph_data=db_flow.data, artifacts=art, process_file=False)
+            build_flow_no_yield(graph_data=db_flow.data,
+                                artifacts=art,
+                                process_file=False,
+                                flow_id=flow_id.hex)
         except Exception as exc:
-            raise HTTPException(status_code=500, detail='Flow 编译不通过') from exc
+            logger.exception(exc)
+            raise HTTPException(status_code=500, detail=f'Flow 编译不通过, {str(exc)}')
 
     if settings.remove_api_keys:
         flow_data = remove_api_keys(flow_data)
