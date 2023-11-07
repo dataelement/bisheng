@@ -44,6 +44,8 @@ async def union_websocket(flow_id: str,
         process_file = False if chat_id else True
         if knowledge_id:
             knowledge = session.get(Knowledge, knowledge_id)
+        else:
+            knowledge = None
 
         graph = build_flow_no_yield(graph_data=graph_data,
                                     artifacts={},
