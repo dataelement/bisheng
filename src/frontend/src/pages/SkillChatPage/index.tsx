@@ -85,7 +85,7 @@ export default function SkillChatPage() {
         changeHistoryByScroll.current = false
         // focus
         setTimeout(() => {
-            inputRef.current.focus()
+            inputRef.current?.focus()
         }, 500);
     }
 

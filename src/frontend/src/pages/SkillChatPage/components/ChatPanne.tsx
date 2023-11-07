@@ -27,6 +27,8 @@ export default forwardRef(function ChatPanne({
     onSendMsg, onUploadFile, onNextPageClick, onStopClick
 }: Iprops, inputRef: any) {
 
+    const { t } = useTranslation()
+
     const inputDisable = inputState.lock || (fileInputs?.length && messages.length === 0)
     const handleSend = () => {
         const val = inputRef.current.value
