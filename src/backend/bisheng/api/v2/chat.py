@@ -12,14 +12,14 @@ from bisheng.utils.util import get_cache_key
 from fastapi import APIRouter, Depends, WebSocket, WebSocketException, status
 from sqlmodel import Session
 
-router = APIRouter(tags=['Chat'])
+router = APIRouter(prefix='/chat', tags=['Chat'])
 chat_manager = ChatManager()
 flow_data_store = redis_client
 expire = 600  # reids 60s 过期
 default_user_id = 1
 
 
-@router.websocket('/chat/ws/{flow_id}')
+@router.websocket('/ws/{flow_id}')
 async def union_websocket(flow_id: str,
                           websocket: WebSocket,
                           chat_id: Optional[str] = None,
@@ -29,8 +29,7 @@ async def union_websocket(flow_id: str,
                           ):
     """Websocket endpoint forF  chat."""
     if type and type == 'L1':
-        with next(get_session()) as session:
-            db_flow = session.get(Flow, flow_id)
+        db_flow = session.get(Flow, flow_id)
         if not db_flow:
             await websocket.accept()
             message = '该技能已被删除'
