@@ -4,7 +4,6 @@ import json
 import time
 from typing import List, Optional
 from uuid import uuid4
-from bisheng_langchain.vectorstores.elastic_keywords_search import ElasticKeywordsSearch
 
 import requests
 from bisheng.api.utils import access_check
