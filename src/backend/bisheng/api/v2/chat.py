@@ -7,6 +7,7 @@ from bisheng.chat.manager import ChatManager
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.knowledge import Knowledge
+from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
 from fastapi import APIRouter, Depends, WebSocket, status
@@ -16,7 +17,7 @@ router = APIRouter(prefix='/chat', tags=['Chat'])
 chat_manager = ChatManager()
 flow_data_store = redis_client
 expire = 600  # reids 60s 过期
-default_user_id = 1
+default_user_id = settings.get_from_db('default_operator')
 
 
 @router.websocket('/ws/{flow_id}')

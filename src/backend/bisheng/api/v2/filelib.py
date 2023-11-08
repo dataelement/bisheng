@@ -10,6 +10,7 @@ from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, Knowl
 from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
+from bisheng.settings import settings
 from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -21,7 +22,7 @@ from sqlmodel import Session, select
 # build router
 router = APIRouter(prefix='/filelib')
 
-default_user_id = 1
+default_user_id = settings.get_from_db('default_operator')
 
 
 @router.post('/', response_model=KnowledgeRead, status_code=201)

@@ -89,7 +89,7 @@ async def get_info(
                 Authorize: AuthJWT = Depends()):
     # check if user already exist
     Authorize.jwt_required()
-    payload = Authorize.get_jwt_subject()
+    payload = json.loads(Authorize.get_jwt_subject())
     try:
         user_id = payload.get('user_id')
         user = session.get(User, user_id)
