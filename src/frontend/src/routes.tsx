@@ -9,6 +9,7 @@ import SystemPage from "./pages/SystemPage";
 import Doc from "./pages/ModelPage/doc";
 import SkillChatPage from "./pages/SkillChatPage";
 import SkillPage from "./pages/SkillPage";
+import ChatShare from "./pages/SkillChatPage/chatShare";
 import L2Edit from "./pages/SkillPage/l2Edit";
 
 // react 与 react router dom版本不匹配
@@ -40,6 +41,7 @@ const router = createBrowserRouter([
       { path: "", element: <FlowPage /> }
     ]
   },
+  { path: "/chat/:id/", element: <ChatShare /> },
   { path: "*", element: <Navigate to="/" replace /> },
   { path: "/home", element: <HomePage /> }
 ]);
