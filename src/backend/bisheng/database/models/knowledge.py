@@ -31,5 +31,10 @@ class KnowledgeRead(KnowledgeBase):
     user_name: Optional[str]
 
 
+class KnowledgeUpdate(KnowledgeBase):
+    id: int
+    name: str
+
+
 class KnowledgeCreate(KnowledgeBase):
     pass
