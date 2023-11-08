@@ -42,31 +42,6 @@ class ChainFrontendNode(FrontendNode):
                     name='chain_type',
                     advanced=False,
                 ))
-        elif self.template.type_name == 'MultiRetrievalQA':
-            self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=True,
-                    show=True,
-                    name='combine_strategy',
-                    advanced=False,
-                ))
-            self.template.add_field(
-                TemplateField(
-                    field_type='BaseRetriever',
-                    required=True,
-                    show=True,
-                    name='vector_retriever',
-                    advanced=False,
-                ))
-            self.template.add_field(
-                TemplateField(
-                    field_type='BaseRetriever',
-                    required=True,
-                    show=True,
-                    name='Keyword_retriever',
-                    advanced=False,
-                ))
         elif self.template.type_name == 'SequentialChain':
             self.template.add_field(
                 TemplateField(field_type='str',
