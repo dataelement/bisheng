@@ -1,17 +1,15 @@
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from bisheng.custom.customs import get_custom_nodes
-from bisheng.interface.agents.custom import CUSTOM_AGENTS
 from bisheng.interface.base import LangChainTypeCreator
-from bisheng.settings import settings
-from bisheng.template.frontend_node.autoagentrole import AutogenRoleFrontNode
+from bisheng.interface.importing.utils import import_class
+from bisheng.template.frontend_node.autogenrole import AutogenRoleFrontNode
 from bisheng.utils.logger import logger
-from bisheng.utils.util import build_template_from_class, build_template_from_method
-from langchain.agents import types
+from bisheng.utils.util import build_template_from_class
+from bisheng_langchain import autogen_role
 
 
-class AutogentRole(LangChainTypeCreator):
-    type_name: str = 'autoagentrole'
+class AutogenRole(LangChainTypeCreator):
+    type_name: str = 'autogen_roles'
 
     @property
     def frontend_node_class(self) -> type[AutogenRoleFrontNode]:
@@ -20,24 +18,14 @@ class AutogentRole(LangChainTypeCreator):
     @property
     def type_to_loader_dict(self) -> Dict:
         if self.type_dict is None:
-            self.type_dict = types.AGENT_TO_CLASS
-            # Add JsonAgent to the list of agents
-            for name, agent in CUSTOM_AGENTS.items():
-                # TODO: validate AgentType
-                self.type_dict[name] = agent  # type: ignore
+            self.type_dict: dict[str, Any] = {
+                role_name: import_class(f'bisheng_langchain.autogen_role.{role_name}')
+                for role_name in autogen_role.__all__
+            }
         return self.type_dict
 
     def get_signature(self, name: str) -> Optional[Dict]:
         try:
-            if name in get_custom_nodes(self.type_name).keys():
-                return get_custom_nodes(self.type_name)[name]
-            elif name in self.from_method_nodes:
-                return build_template_from_method(
-                    name,
-                    type_to_cls_dict=self.type_to_loader_dict,
-                    add_function=True,
-                    method_name=self.from_method_nodes[name],
-                )
             return build_template_from_class(
                 name, self.type_to_loader_dict, add_function=True
             )
@@ -50,15 +38,11 @@ class AutogentRole(LangChainTypeCreator):
     # Now this is a generator
     def to_list(self) -> List[str]:
         names = []
-        for _, agent in self.type_to_loader_dict.items():
-            agent_name = (
-                agent.function_name()
-                if hasattr(agent, 'function_name')
-                else agent.__name__
-            )
-            if agent_name in settings.agents or settings.dev:
-                names.append(agent_name)
+        for _, role in self.type_to_loader_dict.items():
+            role_name = (role.function_name()
+                         if hasattr(role, 'function_name') else role.__name__)
+            names.append(role_name)
         return names
 
 
-autogenrole_creator = AutogentRole()
+autogenrole_creator = AutogenRole()

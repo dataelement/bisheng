@@ -23,7 +23,7 @@ class Requests(BaseModel):
         """Configuration for this pydantic object."""
 
         extra = Extra.forbid
-        arbitrary_types_allowed = False
+        arbitrary_types_allowed = True
 
     def get(self, url: str, **kwargs: Any) -> requests.Response:
         """GET the URL and return the text."""

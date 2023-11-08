@@ -16,6 +16,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
+from httpx import delete
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -43,6 +44,21 @@ def get_chatmessage(*,
     if id:
         where = where.where(ChatMessage.id < id)
     db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
+    return [jsonable_encoder(message) for message in db_message]
+
+
+@router.delete('/chat/{chat_id}', status_code=200)
+def del_chat_id(*,
+                session: Session = Depends(get_session),
+                chat_id: str,
+                Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+
+    where = select(ChatMessage).where(ChatMessage.chat_id == chat_id,
+                                      ChatMessage.user_id == payload.get('user_id'))
+
+    db_message = session.exec(delete(where))
     return [jsonable_encoder(message) for message in db_message]
 
 

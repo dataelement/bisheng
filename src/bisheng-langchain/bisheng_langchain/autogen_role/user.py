@@ -11,6 +11,13 @@ logger = logging.getLogger(__name__)
 class AutoGenUser(UserProxyAgent):
     """A proxy agent for the user, that can execute code and provide feedback to the other agents.
     """
+    name: str
+    human_input_mode: str = 'ALWAYS'
+    model_name: Optional[str] = 'gpt-4-0613'
+    openai_api_key: Optional[str] = ''
+    temperature: Optional[int] = 0
+    system_message: Optional[str] = ''
+    openai_proxy: Optional[str] = ''
 
     def __init__(
         self,
