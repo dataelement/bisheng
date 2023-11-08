@@ -2,7 +2,7 @@
 from bisheng.api.v1 import (chat_router, endpoints_router, flow_styles_router, flows_router,
                             knowledge_router, qa_router, server_router, skillcenter_router,
                             user_router, validate_router)
-from bisheng.api.v2 import chat_router_rpc, knowledge_router_rpc
+from bisheng.api.v2 import chat_router_rpc, knowledge_router_rpc, rpc_router_rpc
 from fastapi import APIRouter
 
 router = APIRouter(prefix='/api/v1',)
@@ -20,3 +20,4 @@ router.include_router(qa_router)
 router_rpc = APIRouter(prefix='/api/v2',)
 router_rpc.include_router(knowledge_router_rpc)
 router_rpc.include_router(chat_router_rpc)
+router_rpc.include_router(rpc_router_rpc)
