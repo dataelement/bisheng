@@ -83,6 +83,29 @@ async def login(*,
         raise HTTPException(status_code=500, detail='密码不正确')
 
 
+@router.get('/user/info', response_model=UserRead, status_code=201)
+async def get_info(
+                session: Session = Depends(get_session),
+                Authorize: AuthJWT = Depends()):
+    # check if user already exist
+    Authorize.jwt_required()
+    payload = Authorize.get_jwt_subject()
+    try:
+        user_id = payload.get('user_id')
+        user = session.get(User, user_id)
+        # 查询角色
+        db_user_role = session.exec(
+            select(UserRole).where(UserRole.user_id == user_id)).all()
+        if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
+            # 是管理员，忽略其他的角色
+            role = 'admin'
+        else:
+            role = [user_role.role_id for user_role in db_user_role]
+        return UserRead(role=str(role), **user.__dict__)
+    except Exception:
+        raise HTTPException(status_code=500, detail='用户信息失败')
+
+
 @router.post('/user/logout', status_code=201)
 async def logout(Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
