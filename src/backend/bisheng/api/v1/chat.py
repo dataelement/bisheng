@@ -77,8 +77,8 @@ def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: Aut
     return [jsonable_encoder(chat) for chat in chat_list]
 
 
-@router.websocket('/chat/{client_id}')
-async def chat(client_id: str,
+@router.websocket('/chat/{flow_id}')
+async def chat(flow_id: str,
                websocket: WebSocket,
                chat_id: Optional[str] = None,
                type: Optional[str] = None,
@@ -89,7 +89,7 @@ async def chat(client_id: str,
     """Websocket endpoint for chat."""
     if type and type == 'L1':
         with next(get_session()) as session:
-            db_flow = session.get(Flow, client_id)
+            db_flow = session.get(Flow, flow_id)
         if not db_flow:
             await websocket.accept()
             message = '该技能已被删除'
@@ -100,7 +100,7 @@ async def chat(client_id: str,
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=message)
         graph_data = db_flow.data
     else:
-        flow_data_key = 'flow_data_' + client_id
+        flow_data_key = 'flow_data_' + flow_id
         if not flow_data_store.exists(flow_data_key) or str(
                 flow_data_store.hget(flow_data_key, 'status'),
                 'utf-8') != BuildStatus.SUCCESS.value:
@@ -115,14 +115,14 @@ async def chat(client_id: str,
         graph = build_flow_no_yield(graph_data=graph_data,
                                     artifacts={},
                                     process_file=process_file,
-                                    flow_id=UUID(client_id).hex,
+                                    flow_id=UUID(flow_id).hex,
                                     chat_id=chat_id)
         langchain_object = graph.build()
         for node in langchain_object:
-            key_node = get_cache_key(client_id, chat_id, node.id)
+            key_node = get_cache_key(flow_id, chat_id, node.id)
             chat_manager.set_cache(key_node, node._built_object)
-            chat_manager.set_cache(get_cache_key(client_id, chat_id), node._built_object)
-        await chat_manager.handle_websocket(client_id, chat_id, websocket, user_id)
+            chat_manager.set_cache(get_cache_key(flow_id, chat_id), node._built_object)
+        await chat_manager.handle_websocket(flow_id, chat_id, websocket, user_id)
     except WebSocketException as exc:
         logger.error(exc)
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))

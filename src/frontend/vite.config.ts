@@ -5,7 +5,7 @@ import { viteStaticCopy } from 'vite-plugin-static-copy'
 const apiRoutes = ["^/api/v1/", "/health"];
 
 // Use environment variable to determine the target.
-const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.116:7861";
+const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.120:7860";
 
 const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
   proxyObj[route] = {
