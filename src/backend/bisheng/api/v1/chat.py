@@ -16,7 +16,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
-from httpx import delete
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -44,21 +43,6 @@ def get_chatmessage(*,
     if id:
         where = where.where(ChatMessage.id < id)
     db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
-    return [jsonable_encoder(message) for message in db_message]
-
-
-@router.delete('/chat/{chat_id}', status_code=200)
-def del_chat_id(*,
-                session: Session = Depends(get_session),
-                chat_id: str,
-                Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-
-    where = select(ChatMessage).where(ChatMessage.chat_id == chat_id,
-                                      ChatMessage.user_id == payload.get('user_id'))
-
-    db_message = session.exec(delete(where))
     return [jsonable_encoder(message) for message in db_message]
 
 
@@ -177,9 +161,10 @@ async def union_websocket(client_id: str,
         graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
 
     try:
+        process_file = False if chat_id else True
         graph = build_flow_no_yield(graph_data=graph_data,
                                     artifacts={},
-                                    process_file=False,
+                                    process_file=process_file,
                                     flow_id=UUID(client_id).hex,
                                     chat_id=chat_id)
         langchain_object = graph.build()
