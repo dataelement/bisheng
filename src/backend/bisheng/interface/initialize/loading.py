@@ -154,7 +154,10 @@ def instantiate_llm(node_type, class_object, params: Dict):
 
     # 支持request_timeout & max_retries
     if hasattr(llm, 'request_timeout') and 'request_timeout' in llm_config:
-        llm.request_timeout = llm_config.get('request_timeout')
+        if isinstance(llm.request_timeout, str):
+            llm.request_timeout = eval(llm_config.get('request_timeout'))
+        else:
+            llm.request_timeout = llm_config.get('request_timeout')
     if hasattr(llm, 'max_retries') and 'max_retries' in llm_config:
         llm.max_retries = llm_config.get('max_retries')
 

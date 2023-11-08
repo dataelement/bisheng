@@ -43,11 +43,11 @@ def merge_partitions(partitions):
             is_first_elem = False
         else:
             if last_label == 'Title' and label == 'Title':
-                doc_content.append('\n' + text + '\n')
+                doc_content.append('\n' + text)
             elif label == 'Title':
-                doc_content.append('\n\n' + text + '\n')
+                doc_content.append('\n\n' + text)
             elif label == 'Table':
-                doc_content.append('\n\n' + text + '\n')
+                doc_content.append('\n\n' + text)
             else:
                 doc_content.append(text_elem_sep + text)
 

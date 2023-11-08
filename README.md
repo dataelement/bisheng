@@ -101,6 +101,11 @@ Todo: 待补充
 <!-- Do not remove end of hero-bot -->
 <br>
 
+### All Thanks To Our Contributors:
+<a href="https://github.com/dataelement/bisheng/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=dataelement/bisheng" />
+</a>
+
 ## Bisheng 文档
 
 获取更多有关安装、开发、部署和管理的指南，请查看 [Bisheng 文档](https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde).

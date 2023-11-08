@@ -53,6 +53,7 @@ export default function SkillPage() {
         el.name = `${el.name}-${generateUUID(5)}`
         saveFlowToDatabase({ ...el, id: el.flow_id }).then(res => {
             res.user_name = user.user_name
+            res.write = true
             setOpen(false)
             setFlows(el => [res, ...el])
             navigate("/skill/" + res.id)

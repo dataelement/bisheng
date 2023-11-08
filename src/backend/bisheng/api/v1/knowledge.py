@@ -369,6 +369,7 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             setattr(db_file, 'remark', str(e)[:500])
             session.add(db_file)
             session.commit()
+            raise e
 
 
 def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):

@@ -1,8 +1,11 @@
 # 数据库配置
 database_url:
   "mysql+pymysql://root:1234@mysql:3306/bisheng?charset=utf8mb4"
-redis_url:
-  "redis:6379"
+
+# 缓存配置  redis://[[username]:[password]]@localhost:6379/0
+redis_url: "redis://redis:6379/0"
+
+environment: "dev"
 
 # admin 用户配置
 admin:
