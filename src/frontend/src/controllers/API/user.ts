@@ -12,6 +12,10 @@ axios.interceptors.response.use(function (response) {
     }
     return Promise.reject(error);
 })
+// 校验登录
+export async function getUserInfo() {
+    return await axios.get(`/api/v1/user/info`);
+}
 // 登录
 export async function loginApi(name, pwd) {
     return await axios.post(`/api/v1/user/login`, { user_name: name, password: pwd });

@@ -146,11 +146,15 @@ export default function App() {
   const noAuthPages = ['chat']
   const path = location.pathname.split('/')?.[1] || ''
 
+  console.log('user :>> ', user);
+
   return (
     //need parent component with width and height
     <div className="flex h-full flex-col">
       {/* <Header /> */}
-      {user || noAuthPages.includes(path) ? <RouterProvider router={router} /> : <LoginPage></LoginPage>}
+      {(user?.user_id || noAuthPages.includes(path)) ? <RouterProvider router={router} />
+        : user ? <div className="loading"></div>
+          : <LoginPage></LoginPage>}
       <div></div>
       <div className="app-div" style={{ zIndex: 999 }}>
         {alertsList.map((alert) => (
