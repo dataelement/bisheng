@@ -1,6 +1,6 @@
 import _ from "lodash";
 import { useContext, useEffect, useState } from "react";
-import { RouterProvider } from "react-router-dom";
+import { RouterProvider, useSearchParams } from "react-router-dom";
 import "reactflow/dist/style.css";
 import "./App.css";
 
@@ -142,11 +142,19 @@ export default function App() {
     document.title = t('title')
   }, [t])
 
+  // 免登录列表
+  const noAuthPages = ['chat']
+  const path = location.pathname.split('/')?.[1] || ''
+
+  console.log('user :>> ', user);
+
   return (
     //need parent component with width and height
     <div className="flex h-full flex-col">
       {/* <Header /> */}
-      {user ? <RouterProvider router={router} /> : <LoginPage></LoginPage>}
+      {(user?.user_id || noAuthPages.includes(path)) ? <RouterProvider router={router} />
+        : user ? <div className="loading"></div>
+          : <LoginPage></LoginPage>}
       <div></div>
       <div className="app-div" style={{ zIndex: 999 }}>
         {alertsList.map((alert) => (

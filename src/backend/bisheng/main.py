@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Optional
 
-from bisheng.api import router
+from bisheng.api import router, router_rpc
 from bisheng.database.base import create_db_and_tables
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.utils.logger import configure
@@ -55,6 +55,7 @@ def create_app():
         return JSONResponse(status_code=401, content={'detail': exc.message})
 
     app.include_router(router)
+    app.include_router(router_rpc)
     app.on_event('startup')(create_db_and_tables)
     app.on_event('startup')(setup_llm_caching)
 
@@ -98,6 +99,7 @@ def setup_app(static_files_dir: Optional[Path] = None) -> FastAPI:
 
 
 configure(log_level='DEBUG', log_file='./data/bisheng.log')
+
 app = create_app()
 
 if __name__ == '__main__':

@@ -63,7 +63,8 @@ def build_flow(graph_data: dict,
                artifacts,
                process_file=False,
                flow_id=None,
-               chat_id=None) -> Graph:
+               chat_id=None,
+               **kwargs) -> Graph:
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
@@ -97,6 +98,12 @@ def build_flow(graph_data: dict,
             # 聊天窗口等flow 主动生成的vector 需要新建临时collection
             # tmp_{chat_id}
             if vertex.base_type == 'vectorstores':
+                # 知识库通过参数传参
+                if 'collection_name' in kwargs and 'collection_name' in vertex.params:
+                    vertex.params['collection_name'] = kwargs['collection_name']
+                if 'collection_name' in kwargs and 'index_name' in vertex.params:
+                    vertex.params['index_name'] = kwargs['collection_name']
+
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
                     vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
                 elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
@@ -139,7 +146,8 @@ def build_flow_no_yield(graph_data: dict,
                         artifacts,
                         process_file=False,
                         flow_id=None,
-                        chat_id=None):
+                        chat_id=None,
+                        **kwargs):
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
@@ -165,6 +173,12 @@ def build_flow_no_yield(graph_data: dict,
             # 聊天窗口等flow 主动生成的vector 需要新建临时collection
             # tmp_{chat_id}
             if vertex.base_type == 'vectorstores':
+                # 知识库通过参数传参
+                if 'collection_name' in kwargs and 'collection_name' in vertex.params:
+                    vertex.params['collection_name'] = kwargs['collection_name']
+                if 'collection_name' in kwargs and 'index_name' in vertex.params:
+                    vertex.params['index_name'] = kwargs['collection_name']
+
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
                     vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
                     logger.info(f"rename_vector_col col={vertex.params['collection_name']}")
