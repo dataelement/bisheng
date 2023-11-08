@@ -1,0 +1,20 @@
+{
+    "tip": "提示",
+    "login": {
+        "slogen": "便捷、灵活、可靠的企业级大模型应用开发平台",
+        "account": "账号",
+        "password": "密码",
+        "confirmPassword": "确认密码",
+        "noAccountRegister": "没有账号，注册",
+        "haveAccountLogin": "已有账号，登录",
+        "loginButton": "登 录",
+        "registerButton": "注 册",
+        "document": "文档",
+        "pleaseEnterAccount": "请填写账号",
+        "pleaseEnterPassword": "请填写密码",
+        "accountTooShort": "账号过短",
+        "passwordTooShort": "请填写密码,至少六位",
+        "passwordMismatch": "两次密码不一致",
+        "registrationSuccess": "注册成功,请输入密码进行登录"
+    }
+}
