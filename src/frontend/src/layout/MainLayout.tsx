@@ -20,6 +20,17 @@ export default function MainLayout() {
 
     const { language, options, changLanguage, t } = useLanguage()
 
+    function clearAllCookies() {
+        var cookies = document.cookie.split(";");
+
+        for (var i = 0; i < cookies.length; i++) {
+            var cookie = cookies[i];
+            var eqPos = cookie.indexOf("=");
+            var name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+            document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        }
+    }
+
     return <div className="flex">
         <div className="bg-white h-screen w-40 px-4 py-8 shadow-xl dark:shadow-slate-700 relative text-center">
             <Link className="inline-block mb-1" to='/'><img src='/logo.jpeg' className="w-9 h-9" alt="" /></Link>
@@ -101,7 +112,7 @@ export default function MainLayout() {
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger className="flex-1 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                                <div className=" flex justify-center gap-2 items-center" onClick={() => { setUser(null); localStorage.setItem('UUR_INFO', '') }}>
+                                <div className=" flex justify-center gap-2 items-center" onClick={() => { clearAllCookies(); setUser(null);  }}>
                                     <LogOut className="side-bar-button-size" />
                                     <span>{t('menu.logout')}</span>
                                 </div>

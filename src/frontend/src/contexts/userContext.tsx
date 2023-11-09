@@ -1,21 +1,38 @@
-import { ReactNode, createContext, useState } from "react";
+import { ReactNode, createContext, useLayoutEffect, useState } from "react";
+import { getUserInfo } from "../controllers/API/user";
 import { User } from "../types/app";
 
 type userContextType = {
-    user: User;
+    user: any;
     setUser: (newState: User) => void;
 }
 
-const userInfoLocalStr = localStorage.getItem('UUR_INFO')
+// const userInfoLocalStr = localStorage.getItem('UUR_INFO')
 const initialValue = {
-    user: userInfoLocalStr ? JSON.parse(atob(userInfoLocalStr)) : null,
+    user: {}, // userInfoLocalStr ? JSON.parse(atob(userInfoLocalStr)) : null,
     setUser: () => { }
 }
 
 export const userContext = createContext<userContextType>(initialValue);
 
 export function UserProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<User>(initialValue.user);
+    const [user, setUser] = useState<any>(initialValue.user);
+
+    useLayoutEffect(() => {
+        // 链接ar参数存cookie（免登录接口）
+        const cookie = location.search.match(/(?<=token=)[^&]+/g)?.[0]
+        if (cookie) {
+            document.cookie = `access_token_cookie=${cookie}`;
+            location.href = location.origin + location.pathname;
+            return
+        }
+
+        getUserInfo().then(res => {
+            setUser(res.data.user_id ? res.data : null)
+        }).catch(e => {
+            setUser(null)
+        })
+    }, [])
 
     return (
         <userContext.Provider
