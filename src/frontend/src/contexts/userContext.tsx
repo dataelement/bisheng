@@ -28,6 +28,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         getUserInfo().then(res => {
             setUser(res.data.user_id ? res.data : null)
+        }).catch(e => {
+            setUser(null)
         })
     }, [])
 
