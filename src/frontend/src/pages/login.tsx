@@ -34,7 +34,7 @@ export const LoginPage = () => {
         });
         loginApi(mail, pwd).then(res => {
             // setUser(res.data)
-            localStorage.setItem('UUR_INFO', btoa(JSON.stringify(res.data)))
+            localStorage.setItem('isLogin', '1')
             location.href = '/'
         }).catch(e => {
             console.error(e.response.data.detail);

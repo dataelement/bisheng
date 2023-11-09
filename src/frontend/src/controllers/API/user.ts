@@ -6,15 +6,19 @@ axios.interceptors.response.use(function (response) {
     if (error.response.status === 401) {
         // cookie expires
         console.error('登录过期 :>> ');
-        const infoStr = localStorage.getItem('UUR_INFO')
-        localStorage.removeItem('UUR_INFO')
-        infoStr && location.reload()
+        const isLogin = localStorage.getItem('isLogin')
+        localStorage.removeItem('isLogin')
+        isLogin && location.reload()
     }
     return Promise.reject(error);
 })
 // 校验登录
 export async function getUserInfo() {
     return await axios.get(`/api/v1/user/info`);
+}
+// 退出登录
+export async function logoutApi() {
+    return await axios.post(`/api/v1/user/logout`);
 }
 // 登录
 export async function loginApi(name, pwd) {

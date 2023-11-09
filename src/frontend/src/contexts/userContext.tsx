@@ -3,7 +3,7 @@ import { getUserInfo } from "../controllers/API/user";
 import { User } from "../types/app";
 
 type userContextType = {
-    user: any;
+    user: any; // {} loading null login
     setUser: (newState: User) => void;
 }
 
@@ -23,6 +23,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const cookie = location.search.match(/(?<=token=)[^&]+/g)?.[0]
         if (cookie) {
             document.cookie = `access_token_cookie=${cookie}`;
+            localStorage.setItem('isLogin', '1')
             location.href = location.origin + location.pathname;
             return
         }
