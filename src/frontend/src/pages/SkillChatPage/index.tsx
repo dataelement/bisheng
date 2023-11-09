@@ -4,7 +4,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
-import { getChatHistory, getChatsApi, getFlowFromDatabase, postBuildInit, postValidatePrompt, readOnlineFlows } from "../../controllers/API";
+import { deleteChatApi, getChatHistory, getChatsApi, getFlowFromDatabase, postBuildInit, postValidatePrompt, readOnlineFlows } from "../../controllers/API";
 import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
 import { sendAllProps } from "../../types/api";
 import { ChatMessageType } from "../../types/chat";
@@ -459,6 +459,7 @@ const useWebsocketChat = (chatIdRef) => {
             const lastChat = newChats[chatsLen - 1]
             const newLastChat = {
                 ...newChats[chatsLen - 1],
+                ...data,
                 id: messageId,
                 message: lastChat.message + str,
                 thought: lastChat.thought + (thought ? `${thought}\n` : ''),
@@ -467,7 +468,6 @@ const useWebsocketChat = (chatIdRef) => {
                 source,
                 noAccess,
                 end,
-                ...data
                 // user_id
                 // user_name
                 // at
@@ -805,8 +805,9 @@ const useChatList = () => {
             }, 0);
         },
         deleteChat: (id: string) => {
-            setChatList(oldList => oldList.filter(item => item.chat_id !== id))
             // api
+            deleteChatApi(id)
+            setChatList(oldList => oldList.filter(item => item.chat_id !== id))
         }
     }
 }

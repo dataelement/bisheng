@@ -421,6 +421,13 @@ export const getChatsApi = () => {
   )
 };
 
+/**
+ * 获取会话列表
+ */
+export const deleteChatApi = (chatId) => {
+  return axios.delete(`/api/v1/chat/${chatId}`)
+};
+
 
 /**
  * 获取会话消息记录
