@@ -8,6 +8,7 @@ from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
 from langchain.schema import AgentFinish, LLMResult
 from langchain.schema.agent import AgentAction
 from langchain.schema.document import Document
+from langchain.schema.messages import BaseMessage
 
 
 # https://github.com/hwchase17/chat-langchain/blob/master/callback.py
@@ -118,6 +119,12 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # todo 判断技能权限
         logger.debug(f'retriver_result result={result}')
 
+    async def on_chat_model_start(self, serialized: Dict[str, Any],
+                                  messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
+        """Run when retriever end running."""
+        # todo 判断技能权限
+        logger.debug(f'retriver_result result={messages}')
+
 
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
     """Callback handler for streaming LLM responses."""
@@ -213,3 +220,9 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
     def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
         logger.debug(f'on_chain_end outputs={outputs}')
+
+    def on_chat_model_start(self, serialized: Dict[str, Any],
+                            messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
+        """Run when retriever end running."""
+        # todo 判断技能权限
+        logger.debug(f'retriver_result result={messages}')

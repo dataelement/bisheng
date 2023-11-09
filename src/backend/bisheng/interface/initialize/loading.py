@@ -103,6 +103,8 @@ def instantiate_based_on_type(class_object, base_type, node_type, params):
         return instantiate_wrapper(node_type, class_object, params)
     elif base_type == 'input_output':
         return instantiate_input_output(node_type, class_object, params)
+    # elif base_type == 'autogen_roles':
+    #     return instantiate_autogen_roles(node_type, class_object, params)
     else:
         return class_object(**params)
 

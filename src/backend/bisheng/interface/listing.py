@@ -35,7 +35,7 @@ def get_type_dict():
         'outputParsers': output_parser_creator.to_list(),
         'retrievers': retriever_creator.to_list(),
         'inputOutput': input_output_creator.to_list(),
-        'autogenRole': autogenrole_creator.to_dict(),
+        'autogenRoles': autogenrole_creator.to_list(),
     }
 
 
