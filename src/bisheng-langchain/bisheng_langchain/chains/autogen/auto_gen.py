@@ -73,12 +73,16 @@ class AutoGenChain(Chain):
         # io_output = io.StringIO()
         # with contextlib.redirect_stdout(io_output):
         global_chat_messages = []
-        self.user_proxy_agent.initiate_chat(self.recipient,
-                                            message=message,
-                                            global_chat_messages=global_chat_messages,
-                                            run_manager=run_manager)
+        await self.user_proxy_agent.a_initiate_chat(self.recipient,
+                                                    message=message,
+                                                    global_chat_messages=global_chat_messages,
+                                                    run_manager=run_manager)
         # chat_content = io_output.getvalue()
         chat_content = json.dumps(
             global_chat_messages, indent=2, ensure_ascii=False)
         output = {self.output_key: chat_content}
         return output
+
+    async def stop(self):
+        self.user_proxy_agent.reset()
+        [agent.reset() for agent in self.recipient]

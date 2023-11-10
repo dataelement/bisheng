@@ -25,13 +25,6 @@ When you find an answer, verify the answer carefully. Include verifiable evidenc
 Reply "TERMINATE" in the end when everything is done.
     """ # noqa
 
-    name: str
-    model_name: Optional[str] = 'gpt-4-0613'
-    openai_api_key: Optional[str] = ''
-    temperature: Optional[int] = 0
-    system_message: Optional[str] = DEFAULT_SYSTEM_MESSAGE
-    openai_proxy: Optional[str] = ''
-
     def __init__(
         self,
         name: str,

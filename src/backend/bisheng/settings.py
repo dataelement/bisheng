@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     output_parsers: dict = {}
     autogen_roles: dict = {}
     dev: bool = False
-    environment: str = 'dev'
+    environment: dict = {}
     database_url: Optional[str] = None
     redis_url: Optional[str] = None
     admin: dict = {}

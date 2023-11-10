@@ -11,12 +11,6 @@ logger = logging.getLogger(__name__)
 class AutoGenGroupChatManager(GroupChatManager):
     """A chat manager agent that can manage a group chat of multiple agents.
     """
-    agents: List[Agent]
-    max_round: int = 50
-    model_name: Optional[str] = 'gpt-4-0613'
-    openai_api_key: Optional[str] = ''
-    openai_proxy: Optional[str] = ''
-    temperature: Optional[int] = 0
 
     def __init__(
         self,

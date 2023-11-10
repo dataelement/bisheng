@@ -97,3 +97,13 @@ class AutogenRoleFrontNode(FrontendNode):
                     name='system_message',
                     advanced=False,
                 ))
+
+        if self.name == 'AutoGenUser':
+            self.template.add_field(
+                TemplateField(
+                    field_type='bool',
+                    required=True,
+                    show=True,
+                    name='code_execution_flag',
+                    advanced=False,
+                ))

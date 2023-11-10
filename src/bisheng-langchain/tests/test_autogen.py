@@ -82,5 +82,5 @@ Explain the plan first. Be clear which step is performed by an engineer, and whi
     print(response)
 
 
-test_two_agents()
-# test_group_agents()
+# test_two_agents()
+test_group_agents()

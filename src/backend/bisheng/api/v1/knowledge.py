@@ -374,7 +374,9 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
 
 def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
     from langchain.document_loaders import (PyPDFLoader, BSHTMLLoader, TextLoader,
-                                            UnstructuredMarkdownLoader)
+                                            UnstructuredMarkdownLoader,
+                                            UnstructuredWordDocumentLoader,
+                                            UnstructuredPowerPointLoader)
     from langchain.text_splitter import CharacterTextSplitter
     from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
     filetype_load_map = {
@@ -382,6 +384,10 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         'pdf': PyPDFLoader,
         'html': BSHTMLLoader,
         'md': UnstructuredMarkdownLoader,
+        'doc': UnstructuredWordDocumentLoader,
+        'docx': UnstructuredWordDocumentLoader,
+        'ppt': UnstructuredPowerPointLoader,
+        'pptx': UnstructuredPowerPointLoader,
     }
 
     if not settings.get_knowledge().get('unstructured_api_url'):

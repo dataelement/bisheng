@@ -246,6 +246,12 @@ class ChatManager:
                                   user_id=user_id)
         await self.send_json(client_id, chat_id, close_resp)
 
+    async def process_stop(self, client_id, chat_id, node_id):
+        key = get_cache_key(client_id, chat_id, node_id)
+        langchain_object = self.in_memory_cache.get(key)
+        if hasattr(langchain_object, 'stop'):
+            await langchain_object.stop()
+
     async def process_message(self,
                               client_id: str,
                               chat_id: str,
@@ -434,6 +440,12 @@ class ChatManager:
 
                 if 'clear_cache' in payload:
                     self.in_memory_cache
+
+                if 'action' in payload:
+                    action = json.loads(payload)
+                    if 'stop' == action['action'].lower():
+                        # auto gen 停止
+                        pass
 
                 if 'file_path' in payload:
                     # 上传文件，需要处理文件逻辑
