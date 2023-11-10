@@ -188,7 +188,8 @@ class BaseHostChatLLM(BaseChatModel):
             url = f'{self.host_base_url}/{self.model_name}/infer'
             resp = self.client(url=url, json=params).json()
 
-            if resp.get('choices', []):
+            if not resp.get('choices', []):
+                logger.error(f'host_llm_response response={resp}')
                 raise ValueError('empty choices in llm chat result')
 
             resp['usage'] = {}

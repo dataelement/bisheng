@@ -48,7 +48,7 @@ const initialValue = {
   setExtraNavigation: () => { },
   extraComponent: <></>,
   setExtraComponent: () => { },
-  appConfig: {}
+  appConfig: { libAccepts: [] }
 };
 
 export const locationContext = createContext<locationContextType>(initialValue);
@@ -61,13 +61,16 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [showSideBar, setShowSideBar] = useState(initialValue.showSideBar);
   const [extraNavigation, setExtraNavigation] = useState({ title: "" });
   const [extraComponent, setExtraComponent] = useState(<></>);
-  const [appConfig, setAppConfig] = useState<any>({})
+  const [appConfig, setAppConfig] = useState<any>({
+    libAccepts: []
+  })
 
   // 获取系统配置
   useEffect(() => {
     getAppConfig().then(res => {
       setAppConfig({
-        isDev: res.data.data === 'dev'
+        isDev: res.data.data.env === 'dev',
+        libAccepts: res.data.data.uns_support
       })
     })
   }, [])

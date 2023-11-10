@@ -17,11 +17,13 @@ import {
 } from "../../components/ui/tabs";
 
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { deleteFile, readFileByLibDatabase } from "../../controllers/API";
 import UploadModal from "../../modals/UploadModal";
+import { locationContext } from "../../contexts/locationContext";
+
 export default function FilesPage() {
     const { t } = useTranslation()
 
@@ -37,6 +39,7 @@ export default function FilesPage() {
     const pages = useRef(1)
 
     const [hasPermission, setHasPermission] = useState(true)
+    const { appConfig } = useContext(locationContext)
 
     const loadPage = (_page) => {
         setLoading(true)
@@ -128,7 +131,7 @@ export default function FilesPage() {
             </TabsContent>
             <TabsContent value="password"></TabsContent>
         </Tabs>
-        <UploadModal id={id} open={open} setOpen={handleOpen}></UploadModal>
+        <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen}></UploadModal>
         {/* Delete confirmation */}
         <dialog className={`modal ${delShow && 'modal-open'}`}>
             <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
