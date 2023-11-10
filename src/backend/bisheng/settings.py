@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, Union
 
 import yaml
 from bisheng.database.models.config import Config
@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     input_output: dict = {}
     output_parsers: dict = {}
     dev: bool = False
-    environment: str = 'dev'
+    environment: Union[dict, str] = 'dev'
     database_url: Optional[str] = None
     redis_url: Optional[str] = None
     admin: dict = {}
