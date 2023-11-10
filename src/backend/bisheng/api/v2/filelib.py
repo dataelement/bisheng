@@ -22,8 +22,6 @@ from sqlmodel import Session, select
 # build router
 router = APIRouter(prefix='/filelib')
 
-default_user_id = settings.get_from_db('default_operator')
-
 
 @router.post('/', response_model=KnowledgeRead, status_code=201)
 def create_knowledge(
@@ -35,13 +33,14 @@ def create_knowledge(
     db_knowldge = Knowledge.from_orm(knowledge)
     know = session.exec(
         select(Knowledge).where(Knowledge.name == knowledge.name,
-                                knowledge.user_id == default_user_id)).all()
+                                knowledge.user_id == settings.get_from_db('default_operator'))
+                                ).all()
     if know:
         raise HTTPException(status_code=500, detail='知识库名称重复')
     if not db_knowldge.collection_name:
         # 默认collectionName
         db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
-    db_knowldge.user_id = default_user_id
+    db_knowldge.user_id = settings.get_from_db('default_operator')
     session.add(db_knowldge)
     session.commit()
     session.refresh(db_knowldge)
@@ -62,7 +61,8 @@ def update_knowledge(
 
     know = session.exec(
         select(Knowledge).where(Knowledge.name == knowledge.name,
-                                knowledge.user_id == default_user_id)).all()
+                                knowledge.user_id == settings.get_from_db('default_operator')
+                                )).all()
     if know:
         raise HTTPException(status_code=500, detail='知识库名称重复')
 
@@ -81,7 +81,7 @@ def get_knowledge(
         page_num: Optional[str],
 ):
     """ 读取所有知识库信息. """
-
+    default_user_id = settings.get_from_db('default_operator')
     try:
         sql = select(Knowledge)
         count_sql = select(func.count(Knowledge.id))

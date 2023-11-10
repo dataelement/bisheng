@@ -17,7 +17,6 @@ router = APIRouter(prefix='/chat', tags=['Chat'])
 chat_manager = ChatManager()
 flow_data_store = redis_client
 expire = 600  # reids 60s 过期
-default_user_id = settings.get_from_db('default_operator')
 
 
 @router.websocket('/ws/{flow_id}')
@@ -60,7 +59,8 @@ async def union_websocket(flow_id: str,
             key_node = get_cache_key(flow_id, chat_id, node.id)
             chat_manager.set_cache(key_node, node._built_object)
             chat_manager.set_cache(get_cache_key(flow_id, chat_id), node._built_object)
-        await chat_manager.handle_websocket(flow_id, chat_id, websocket, default_user_id)
+        await chat_manager.handle_websocket(flow_id, chat_id, websocket,
+                                            settings.get_from_db('default_operator'))
     except Exception as exc:
         logger.error(exc)
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))
