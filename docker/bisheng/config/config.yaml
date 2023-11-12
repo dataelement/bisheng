@@ -7,7 +7,7 @@ redis_url: "redis://redis:6379/0"
 
 environment:
   env: dev
-  uns_support: ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html']
+  uns_support: ['png','jpg','jpeg','bmp','doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf']
 
 # admin 用户配置
 admin:
