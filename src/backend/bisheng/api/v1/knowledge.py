@@ -21,11 +21,16 @@ from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
 from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoader
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
+from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
+from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
+                                        UnstructuredMarkdownLoader, UnstructuredPowerPointLoader,
+                                        UnstructuredWordDocumentLoader)
 from langchain.embeddings.base import Embeddings
 from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores import Milvus
 from langchain.vectorstores.base import VectorStore
 from sqlalchemy import func, or_
@@ -33,6 +38,16 @@ from sqlmodel import Session, select
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Skills'])
+filetype_load_map = {
+        'txt': TextLoader,
+        'pdf': PyPDFLoader,
+        'html': BSHTMLLoader,
+        'md': UnstructuredMarkdownLoader,
+        'doc': UnstructuredWordDocumentLoader,
+        'docx': UnstructuredWordDocumentLoader,
+        'ppt': UnstructuredPowerPointLoader,
+        'pptx': UnstructuredPowerPointLoader,
+    }
 
 
 @router.post('/upload', response_model=UploadFileResponse, status_code=201)
@@ -335,9 +350,9 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
 
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
+        session = next(get_session())
         try:
             # 存储 mysql
-            session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 2)
             setattr(db_file, 'object_name', knowledge_file.file_name)
@@ -363,7 +378,6 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             session.refresh(db_file)
         except Exception as e:
             logger.exception(e)
-            session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)
             setattr(db_file, 'remark', str(e)[:500])
@@ -373,17 +387,6 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
 
 
 def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
-    from langchain.document_loaders import (PyPDFLoader, BSHTMLLoader, TextLoader,
-                                            UnstructuredMarkdownLoader)
-    from langchain.text_splitter import CharacterTextSplitter
-    from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
-    filetype_load_map = {
-        'txt': TextLoader,
-        'pdf': PyPDFLoader,
-        'html': BSHTMLLoader,
-        'md': UnstructuredMarkdownLoader,
-    }
-
     if not settings.get_knowledge().get('unstructured_api_url'):
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
