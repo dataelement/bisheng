@@ -106,4 +106,14 @@ class AutogenRoleFrontNode(FrontendNode):
                     show=True,
                     name='code_execution_flag',
                     advanced=False,
+                    value=False
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='human_input_mode',
+                    advanced=False,
+                    value='NEVER'
                 ))

@@ -122,7 +122,14 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_chat_model_start(self, serialized: Dict[str, Any],
                                   messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
         """Run when retriever end running."""
-        # todo 判断技能权限
+        sender = kwargs['sender']
+        receiver = kwargs['receiver']
+        content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
+        end = ChatResponse(message=f'{content}', type='end', sender=sender, recevier=receiver)
+        start = ChatResponse(type='start', sender=sender, recevier=receiver)
+        await self.websocket.send_json(end.dict())
+        await self.websocket.send_json(start.dict())
+
         logger.debug(f'retriver_result result={messages}')
 
 
@@ -235,3 +242,6 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         asyncio.run_coroutine_threadsafe(coroutine2, loop)
         asyncio.run_coroutine_threadsafe(coroutine3, loop)
         logger.debug(f'on_chat result={messages}')
+
+    def on_text(self, text: str, **kwargs) -> Any:
+        logger.info(text)
