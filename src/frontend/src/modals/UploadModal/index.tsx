@@ -148,7 +148,9 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
     }, [progressList])
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        accept,
+        accept: {
+            'application/*': accept.map(str => `.${str}`)
+        },
         useFsAccessApi: false,
         onDrop
     });

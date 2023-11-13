@@ -23,18 +23,7 @@ import ShadTooltip from "../../components/ShadTooltipComponent";
 import { locationContext } from "../../contexts/locationContext";
 import { deleteFile, readFileByLibDatabase } from "../../controllers/API";
 import UploadModal from "../../modals/UploadModal";
-
-const accepts = {
-    BISHENG: {
-        'application/*': ['.pdf'],
-        'image/*': ['.jpeg', '.png', '.jpg']
-    },
-    IO: {
-        'application/*': ['.doc', '.docx', '.pdf', '.ppt', '.pptx'], // '.tsv', '.xlsx'],
-        'text/*': ['.html', '.md', '.txt'],
-    }
-}
-
+import { locationContext } from "../../contexts/locationContext";
 
 export default function FilesPage() {
     const { t } = useTranslation()
@@ -51,6 +40,7 @@ export default function FilesPage() {
     const pages = useRef(1)
 
     const [hasPermission, setHasPermission] = useState(true)
+    const { appConfig } = useContext(locationContext)
 
     const { appConfig } = useContext(locationContext);
 
@@ -144,7 +134,7 @@ export default function FilesPage() {
             </TabsContent>
             <TabsContent value="password"></TabsContent>
         </Tabs>
-        <UploadModal id={id} accept={accepts[appConfig.structure]} open={open} setOpen={handleOpen}></UploadModal>
+        <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen}></UploadModal>
         {/* Delete confirmation */}
         <dialog className={`modal ${delShow && 'modal-open'}`}>
             <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
