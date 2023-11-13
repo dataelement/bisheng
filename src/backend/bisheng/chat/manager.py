@@ -136,6 +136,22 @@ class ChatManager:
         )
         await self.send_json(client_id, chat_id, ping_pong, False)
 
+    async def process_autogen(self, client_id: str, chat_id: str, data: dict):
+        key = get_cache_key(client_id, chat_id)
+        langchain_object = self.in_memory_cache.get(key)
+        action = data.get('action')
+        if action.lower() == 'stop':
+            if hasattr(langchain_object, 'stop'):
+                await langchain_object.stop()
+            else:
+                logger.error(f'act=auto_gen act={action}')
+        elif action.lower() == 'continue':
+            # autgen_user 对话的时候，进程 wait() 需要换新
+            if hasattr(langchain_object, 'input'):
+                await langchain_object.input(data.get('inputs'))
+            else:
+                logger.error(f'act=auto_gen act={action}')
+
     async def process_file(self, client_id: str, chat_id: str, user_id: int, file_path: str,
                            id: str):
         """upload file to make flow work"""
@@ -245,12 +261,6 @@ class ChatManager:
                                   category='system',
                                   user_id=user_id)
         await self.send_json(client_id, chat_id, close_resp)
-
-    async def process_stop(self, client_id, chat_id, node_id):
-        key = get_cache_key(client_id, chat_id, node_id)
-        langchain_object = self.in_memory_cache.get(key)
-        if hasattr(langchain_object, 'stop'):
-            await langchain_object.stop()
 
     async def process_message(self,
                               client_id: str,
@@ -442,10 +452,7 @@ class ChatManager:
                     self.in_memory_cache
 
                 if 'action' in payload:
-                    action = json.loads(payload)
-                    if 'stop' == action['action'].lower():
-                        # auto gen 停止
-                        pass
+                    await self.process_autogen(client_id, chat_id, payload)
 
                 if 'file_path' in payload:
                     # 上传文件，需要处理文件逻辑

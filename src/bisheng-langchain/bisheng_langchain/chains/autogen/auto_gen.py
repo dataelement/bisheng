@@ -86,3 +86,8 @@ class AutoGenChain(Chain):
     async def stop(self):
         self.user_proxy_agent.reset()
         [agent.reset() for agent in self.recipient]
+
+    async def input(self, input: str):
+        self.user_proxy_agent.input = input
+        self.user_proxy_agent.event.set()
+        self.user_proxy_agent.event.clear()

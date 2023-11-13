@@ -87,6 +87,16 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # This runs when first sending the prompt
         # to the LLM, adding it will send the final prompt
         # to the frontend
+        sender = kwargs.get('sender')
+        receiver = kwargs.get('reciever')
+        if kwargs.get('sender'):
+            receiver = {'user_name': receiver, 'is_self': True}
+            log = ChatResponse(message='', type='stream', intermediate_steps=text,
+                               sender=sender, recevier=receiver)
+            await self.websocket.send_json(log.dict())
+        else:
+            log = ChatResponse(message='', type='stream', intermediate_steps=text)
+            await self.websocket.send_json(log.dict())
 
     async def on_agent_action(self, action: AgentAction, **kwargs: Any):
         log = f'Thought: {action.log}'
