@@ -254,7 +254,11 @@ const useWebsocketChat = (chatIdRef) => {
                 newWs.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     handleWsMessage(data);
-                    //get chat history
+                    // get chat history
+                    // 群聊@自己时，开启input
+                    if (data.type === 'end' && data.recevier?.is_self) {
+                        setInputState({ lock: false, error: '' })
+                    }
                 };
                 newWs.onclose = (event) => {
                     handleOnClose(event);
@@ -301,13 +305,15 @@ const useWebsocketChat = (chatIdRef) => {
         })
         await checkReLinkWs()
 
-        sendAll({
-            ...flow.current.data,
-            inputs: { ...input, [inputKey]: msg },
-            chatHistory,
-            name: flow.current.name,
-            description: flow.current.description,
-        });
+        // @ts-ignore
+        isRoom && begin ? sendAll({ action: "continue", "inputs": { ...input, [inputKey]: msg } })
+            : sendAll({
+                ...flow.current.data,
+                inputs: { ...input, [inputKey]: msg },
+                chatHistory,
+                name: flow.current.name,
+                description: flow.current.description,
+            });
     }
 
     // 发送ws
@@ -675,6 +681,20 @@ const useWebsocketChat = (chatIdRef) => {
         stopClick: () => {
             setIsStop(true)
             // sendAll() // TODO ws stop
+            try {
+                if (ws) {
+                    ws.current.send(JSON.stringify({
+                        "action": "stop"
+                    }));
+                }
+            } catch (error) {
+                setErrorData({
+                    title: "There was an error stop the message",
+                    list: [error.message],
+                });
+                //   setChatValue(data.inputs);
+                // connectWS();
+            }
         }
     }
 }

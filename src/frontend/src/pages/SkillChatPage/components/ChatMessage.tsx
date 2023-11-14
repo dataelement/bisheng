@@ -145,7 +145,7 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
         {chat.source && source}
     </>
 
-    if (chat.category === 'line') {
+    if (chat.category === 'divider') {
         // 轮次分割线
         return <div className="divider text-gray-500 text-sm">本轮结束</div>
     }
@@ -183,10 +183,10 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
         <div className="chat-image avatar">
             <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center" style={{ background: avatarColor }}><Bot color="#fff" size={28} /></div>
         </div>
-        <div className="chat-header text-gray-400 text-sm">{chat.sender}</div>
+        {chat.sender && <div className="chat-header text-gray-400 text-sm">{chat.sender}</div>}
         <div ref={textRef} className="chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600">
             {/* @user */}
-            {chat.recevier && <p className="text-blue-500 text-sm">@ {chat.recevier}</p>}
+            {chat.recevier && <p className="text-blue-500 text-sm">@ {chat.recevier.user_name}</p>}
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {/* 光标 */}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
