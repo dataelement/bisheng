@@ -140,7 +140,6 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         start = ChatResponse(type='start', sender=sender, recevier=receiver)
         await self.websocket.send_json(end.dict())
         await self.websocket.send_json(start.dict())
-
         logger.debug(f'retriver_result result={messages}')
 
 

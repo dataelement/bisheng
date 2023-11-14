@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 from bisheng_langchain.autogen_role import AutoGenAssistant, AutoGenGroupChatManager, AutoGenUser
@@ -26,7 +27,7 @@ def test_two_agents():
     print(response)
 
 
-def test_group_agents():
+async def test_group_agents():
     user_proxy = AutoGenUser('Admin',
                              code_execution_flag=False,
                              system_message='A human admin. Interact with the planner to discuss the plan. Plan execution needs to be approved by this admin.',  # noqa
@@ -78,9 +79,9 @@ Explain the plan first. Be clear which step is performed by an engineer, and whi
                                             temperature=0) # noqa
 
     chat = AutoGenChain(user_proxy_agent=user_proxy, recipient=manager)
-    response = chat.run('find papers on LLM applications from arxiv in the last week, create a markdown table of different domains.')  # noqa
+    response = await chat.arun('find papers on LLM applications from arxiv in the last week, create a markdown table of different domains.')  # noqa
     print(response)
 
 
 # test_two_agents()
-test_group_agents()
+asyncio.run(test_group_agents())

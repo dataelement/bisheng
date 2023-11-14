@@ -456,7 +456,9 @@ class ChatManager:
                     self.in_memory_cache
 
                 if 'action' in payload:
+                    self.cache_manager.set_client_id(client_id, chat_id)
                     asyncio.create_task(self.process_autogen(client_id, chat_id, payload))
+                    continue
 
                 if 'file_path' in payload:
                     # 上传文件，需要处理文件逻辑
@@ -471,7 +473,7 @@ class ChatManager:
                                         user_id=user_id))
                     continue
 
-                # with self.cache_manager.set_client_id(client_id, chat_id):
+                self.cache_manager.set_client_id(client_id, chat_id)
                 logger.info(f'client_id={client_id} act=process_message user_id={chat_id}')
                 asyncio.create_task(self.process_message(client_id, chat_id, payload, None, False, user_id))
 

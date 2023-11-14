@@ -189,8 +189,8 @@ class BaseHostChatLLM(BaseChatModel):
             resp = self.client(url=url, json=params).json()
 
             if not resp.get('choices', []):
-                logger.error(f'host_llm_response response={resp}')
-                raise ValueError('empty choices in llm chat result')
+                logger.info(resp)
+                raise ValueError(f'empty choices in llm chat result {resp}')
 
             resp['usage'] = {}
             return resp
