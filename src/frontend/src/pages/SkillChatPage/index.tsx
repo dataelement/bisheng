@@ -450,8 +450,14 @@ const useWebsocketChat = (chatIdRef) => {
             const newChats = [...old]
             console.log('newchats :>> ', newChats);
             let chatsLen = newChats.length
+            const prevChat = newChats[chatsLen - 2]
             // hack 过滤重复最后消息
-            if (end && str && chatsLen > 1 && str === newChats[chatsLen - 2].message && !newChats[chatsLen - 2].thought) {
+            if (end
+                && str
+                && chatsLen > 1
+                && str === prevChat.message
+                // && data.sender === prevChat.sender
+                && !prevChat.thought) {
                 newChats.splice(chatsLen - 2, 1) // 删上一条
                 chatsLen = newChats.length
             }
@@ -637,7 +643,7 @@ const useWebsocketChat = (chatIdRef) => {
 
     // 是否群聊
     const isRoom = useMemo(() => {
-        return !!flow.current?.data.nodes.find(node => node.data.type === "AutogenChain")
+        return !!flow.current?.data.nodes.find(node => node.data.type === "AutoGenChain")
     }, [flow.current])
 
     // 停止状态
