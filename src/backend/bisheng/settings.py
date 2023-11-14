@@ -1,4 +1,6 @@
+import json
 import os
+import subprocess
 from typing import Optional, Union
 
 import yaml
@@ -26,10 +28,12 @@ class Settings(BaseSettings):
     utilities: dict = {}
     input_output: dict = {}
     output_parsers: dict = {}
+    autogen_roles: dict = {}
     dev: bool = False
     environment: Union[dict, str] = 'dev'
     database_url: Optional[str] = None
     redis_url: Optional[str] = None
+    db2_url: Optional[str] = None
     admin: dict = {}
     cache: str = 'InMemoryCache'
     remove_api_keys: bool = False
@@ -46,30 +50,35 @@ class Settings(BaseSettings):
             else:
                 logger.debug('No DATABASE_URL env variable, using sqlite database')
                 values['database_url'] = 'sqlite:///./bisheng.db'
-        # else:
-        #     # 对密码进行加密
-        #     import re
-        #     pattern = r"(?<=:)[^:]+(?=@)"  # 匹配冒号后面到@符号前面的任意字符
-        #     match = re.search(pattern, values['database_url'])
-        #     if match:
-        #         password = match.group(0)
-        #         new_password = decrypt_token(password)
-        #         new_mysql_url = re.sub(pattern, f":{new_password}@", values['database_url'])
-        #         values['database_url'] = new_mysql_url
-
+        else:
+            # 对密码进行加密
+            import re
+            pattern = r"(?<=:)[^:]+(?=@)"  # 匹配冒号后面到@符号前面的任意字符
+            match = re.search(pattern, values['database_url'])
+            if match:
+                password = match.group(0)
+                new_password = decrypt_token(password)
+                
+                new_mysql_url = re.sub(pattern, f"{new_password}", values['database_url']
+                                       ).replace("db1", "mysql+pymysql")
+                values['database_url'] = new_mysql_url
+                
         return values
 
     @root_validator(pre=True)
     def set_redis_url(cls, values):
-        # if 'redis_url' in values:
-        #     import re
-        #     pattern = r"(?<=:)[^:]+(?=@)"  # 匹配冒号后面到@符号前面的任意字符
-        #     match = re.search(pattern, values['redis_url'])
-        #     if match:
-        #         password = match.group(0)
-        #         new_password = decrypt_token(password)
-        #         new_mysql_url = re.sub(pattern, f":{new_password}@", values['redis_url'])
-        #         values['redis_url'] = new_mysql_url
+        if 'db2_url' in values:
+            values['db2_url'] = values['db2_url'].replace("db2", "redis")
+            import re
+            pattern = r"(?<=:)[^:]+(?=@)"  # 匹配冒号后面到@符号前面的任意字符
+            match = re.search(pattern, values['db2_url'])
+            if match:
+                password = match.group(0)
+                new_password = decrypt_token(password)
+                new_mysql_url = re.sub(pattern, f"{new_password}", values['redis_url'])
+                values['redis_url'] = new_mysql_url
+            else:
+                values['redis_url'] = values['db2_url']
         return values
 
     class Config:
@@ -150,6 +159,7 @@ class Settings(BaseSettings):
         self.retrievers = new_settings.retrievers or {}
         self.output_parsers = new_settings.output_parsers or {}
         self.input_output = new_settings.input_output or {}
+        self.autogen_roles = new_settings.autogen_roles or {}
         self.admin = new_settings.admin or {}
         self.bisheng_rt = new_settings.bisheng_rt or {}
         self.default_llm = new_settings.default_llm or {}
@@ -239,8 +249,14 @@ def parse_key(keys: list[str], setting_str: str = None) -> str:
 # def encrypt_token(token: str):
 #     return Fernet(secret_key).encrypt(token.encode())
 
-# def decrypt_token(token: str):
-#     return Fernet(secret_key).decrypt(token).decode()
+def decrypt_token(token: str):
+    # Get current path
+    current_path = os.path.dirname(os.path.abspath(__file__))
+    ret = subprocess.run([f"{current_path}/edtoolcli", "d", f"{current_path}/001.acpk", token],
+                         capture_output=True,
+                         text=True)
+    return json.loads(ret.stdout).get("value")
+
 
 config_file = os.getenv('config', 'config.yaml')
 settings = load_settings_from_yaml(config_file)
