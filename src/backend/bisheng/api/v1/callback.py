@@ -134,6 +134,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         """Run when retriever end running."""
         sender = kwargs['sender']
         receiver = kwargs['receiver']
+        receiver = {'user_name': receiver, 'is_self': False}
         content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
         end = ChatResponse(message=f'{content}', type='end', sender=sender, recevier=receiver)
         start = ChatResponse(type='start', sender=sender, recevier=receiver)

@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from autogen import ConversableAgent
-from bisheng_langchain.autogen_role import AutoGenUser
+from bisheng_langchain.autogen_role import AutoGenGroupChatManager, AutoGenUser
 from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
 from langchain.chains.base import Chain
 
@@ -85,7 +85,10 @@ class AutoGenChain(Chain):
 
     async def stop(self):
         self.user_proxy_agent.reset()
-        [agent.reset() for agent in self.recipient]
+        if isinstance(self.recipient, AutoGenGroupChatManager):
+            [agent.reset() for agent in self.recipient.agents]
+        else:
+            self.recipient.reset()
 
     async def input(self, input: str):
         self.user_proxy_agent.input = input

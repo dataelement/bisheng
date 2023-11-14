@@ -76,7 +76,7 @@ class ChatMessage(BaseModel):
     message_id: int = None
     source: bool = False
     sender: str = None
-    recevier: str = None
+    recevier: dict = None
 
 
 class ChatResponse(ChatMessage):

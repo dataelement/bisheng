@@ -14,7 +14,7 @@ admin:
   user_name: "admin"
   password: "1234"
       
-agents:
+agents: 
   ZeroShotAgent:
     documentation: "https://python.langchain.com/docs/modules/agents/how_to/custom_mrkl_agent"
   JsonAgent:
