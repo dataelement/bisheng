@@ -50,13 +50,20 @@ class AutogenRoleFrontNode(FrontendNode):
                     value='',
                     advanced=False,
                 ))
-
         self.template.add_field(
                 TemplateField(
                     field_type='str',
                     required=False,
                     show=True,
                     name='openai_proxy',
+                    advanced=False,
+                ))
+        self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=False,
+                    show=True,
+                    name='system_message',
                     advanced=False,
                 ))
 
@@ -79,6 +86,16 @@ class AutogenRoleFrontNode(FrontendNode):
                     advanced=False,
                     value=50
                 ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    multiline=True,
+                    required=False,
+                    show=True,
+                    name='messages',
+                    advanced=False,
+                    value='[]'
+                ))
         else:
             self.template.add_field(
                 TemplateField(
@@ -87,14 +104,6 @@ class AutogenRoleFrontNode(FrontendNode):
                     show=True,
                     name='name',
                     value='',
-                    advanced=False,
-                ))
-            self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=False,
-                    show=True,
-                    name='system_message',
                     advanced=False,
                 ))
 

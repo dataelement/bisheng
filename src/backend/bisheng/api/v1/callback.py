@@ -88,12 +88,22 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # to the LLM, adding it will send the final prompt
         # to the frontend
         sender = kwargs.get('sender')
-        receiver = kwargs.get('reciever')
+        receiver = kwargs.get('receiver')
         if kwargs.get('sender'):
-            receiver = {'user_name': receiver, 'is_self': True}
-            log = ChatResponse(message='', type='stream', intermediate_steps=text,
+            log = ChatResponse(message='', type='end', intermediate_steps=text,
                                sender=sender, recevier=receiver)
-            await self.websocket.send_json(log.dict())
+            start = ChatResponse(type='start', sender=sender, recevier=receiver)
+
+            if receiver and receiver.get('is_self'):
+                await self.websocket.send_json(log.dict())
+            else:
+                await self.websocket.send_json(log.dict())
+                await self.websocket.send_json(start.dict())
+        elif kwargs.get('type'):
+            start = ChatResponse(type='start', category=kwargs.get('type'))
+            end = ChatResponse(type='end', intermediate_steps=text, category=kwargs.get('type'))
+            await self.websocket.send_json(start.dict())
+            await self.websocket.send_json(end.dict())
         else:
             log = ChatResponse(message='', type='stream', intermediate_steps=text)
             await self.websocket.send_json(log.dict())
@@ -136,11 +146,9 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         receiver = kwargs['receiver']
         receiver = {'user_name': receiver, 'is_self': False}
         content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
-        end = ChatResponse(message=f'{content}', type='end', sender=sender, recevier=receiver)
-        start = ChatResponse(type='start', sender=sender, recevier=receiver)
+        end = ChatResponse(message=f'{content}', type='stream', sender=sender, recevier=receiver)
         await self.websocket.send_json(end.dict())
-        await self.websocket.send_json(start.dict())
-        logger.debug(f'retriver_result result={messages}')
+        logger.debug(f'chat_message result={messages}')
 
 
 class StreamingLLMCallbackHandler(BaseCallbackHandler):

@@ -41,7 +41,10 @@ CUSTOM_NODES = {
         'InputNode': frontend_node.input_output.InputNode(),
         'OutputNode': frontend_node.input_output.OutputNode(),
         'InputFileNode': frontend_node.input_output.InputFileNode(),
-    }
+    },
+    # 'output_parsers': {
+    #     'RouterOutputParser': frontend_node.output_parsers.RouterOutputParserFrontendNode(),
+    # }
 }
 
 

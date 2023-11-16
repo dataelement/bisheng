@@ -215,6 +215,7 @@ class Vertex:
                 node_type=self.vertex_type,
                 base_type=self.base_type,
                 params=self.params,
+                data=self._data
             )
             self._update_built_object_and_artifacts(result)
         except Exception as exc:
