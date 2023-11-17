@@ -90,7 +90,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         sender = kwargs.get('sender')
         receiver = kwargs.get('receiver')
         if kwargs.get('sender'):
-            log = ChatResponse(message='', type='end', intermediate_steps=text,
+            log = ChatResponse(message=text, type='end',
                                sender=sender, recevier=receiver)
             start = ChatResponse(type='start', sender=sender, recevier=receiver)
 
@@ -105,7 +105,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
             await self.websocket.send_json(start.dict())
             await self.websocket.send_json(end.dict())
         else:
-            log = ChatResponse(message='', type='stream', intermediate_steps=text)
+            log = ChatResponse(message=text, type='stream')
             await self.websocket.send_json(log.dict())
 
     async def on_agent_action(self, action: AgentAction, **kwargs: Any):
@@ -141,13 +141,10 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
 
     async def on_chat_model_start(self, serialized: Dict[str, Any],
                                   messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
-        """Run when retriever end running."""
-        sender = kwargs['sender']
-        receiver = kwargs['receiver']
-        receiver = {'user_name': receiver, 'is_self': False}
-        content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
-        end = ChatResponse(message=f'{content}', type='stream', sender=sender, recevier=receiver)
-        await self.websocket.send_json(end.dict())
+        # """Run when retriever end running."""
+        # content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
+        # stream = ChatResponse(message=f'{content}', type='stream')
+        # await self.websocket.send_json(stream.dict())
         logger.debug(f'chat_message result={messages}')
 
 
