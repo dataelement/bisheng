@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build_bisheng_api:
+  build_bisheng_langchain:
     runs-on: ubuntu-latest
     #if: startsWith(github.event.ref, 'refs/tags')
     steps:
@@ -43,10 +43,12 @@ jobs:
           pip install twine
           cd ./src/bisheng-langchain
           python setup.py bdist_wheel
+          set +e
           twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
-    
+          set -e
+        
   build_bisheng:
-    needs: build_bisheng_api
+    needs: build_bisheng_langchain
     runs-on: ubuntu-latest
     # if: startsWith(github.event.ref, 'refs/tags')
     steps:

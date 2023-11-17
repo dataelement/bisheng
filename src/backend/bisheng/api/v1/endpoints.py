@@ -1,8 +1,10 @@
+import copy
 import json
 from typing import Optional
 
 import yaml
 from bisheng import settings
+from bisheng.api.v1 import knowledge
 from bisheng.api.v1.schemas import ProcessResponse, UploadFileResponse
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file
@@ -29,7 +31,19 @@ def get_all():
 
 @router.get('/env')
 def getn_env():
-    return {'data': settings.settings.environment}
+    uns_support = ['png', 'jpg', 'jpeg', 'bmp', 'doc', 'docx', 'ppt',
+                   'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf']
+    env = {}
+    if isinstance(settings.settings.environment, str):
+        env['env'] = settings.settings.environment
+    else:
+        env = copy.deepcopy(settings.settings.environment)
+    if settings.settings.get_knowledge().get('unstructured_api_url'):
+        if not env.get('uns_support'):
+            env['uns_support'] = uns_support
+    else:
+        env['uns_support'] = list(knowledge.filetype_load_map.keys())
+    return {'data': env}
 
 
 @router.get('/config')

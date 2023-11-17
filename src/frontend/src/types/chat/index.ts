@@ -14,4 +14,6 @@ export type ChatMessageType = {
   id?: number;
   source?: boolean;
   noAccess?: boolean;
+  user_name: string;
+  at?: string;
 };

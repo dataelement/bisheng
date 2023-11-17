@@ -5,3 +5,4 @@ websocket-client
 elasticsearch
 opencv-python==4.5.5.64
 Pillow==9.5.0
+bisheng-pyautogen==0.1.13

@@ -75,12 +75,14 @@ class ChatMessage(BaseModel):
     user_id: int = None
     message_id: int = None
     source: bool = False
+    sender: str = None
+    recevier: dict = None
 
 
 class ChatResponse(ChatMessage):
     """Chat response schema."""
 
-    intermediate_steps: str
+    intermediate_steps: str = ''
     type: str
     is_bot: bool = True
     files: list = []

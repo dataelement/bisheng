@@ -146,8 +146,6 @@ export default function App() {
   const noAuthPages = ['chat']
   const path = location.pathname.split('/')?.[1] || ''
 
-  console.log('user :>> ', user);
-
   return (
     //need parent component with width and height
     <div className="flex h-full flex-col">

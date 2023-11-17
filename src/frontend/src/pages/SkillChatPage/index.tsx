@@ -1,22 +1,21 @@
 import { t } from "i18next";
 import _ from "lodash";
-import { FileUp, Send } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import ShadTooltip from "../../components/ShadTooltipComponent";
 import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
-import { getChatHistory, getChatsApi, getFlowFromDatabase, postBuildInit, postValidatePrompt, readOnlineFlows } from "../../controllers/API";
+import { deleteChatApi, getChatHistory, getChatsApi, getFlowFromDatabase, postBuildInit, postValidatePrompt, readOnlineFlows } from "../../controllers/API";
 import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
 import { sendAllProps } from "../../types/api";
 import { ChatMessageType } from "../../types/chat";
 import { FlowType, NodeType } from "../../types/flow";
 import { generateUUID, validateNode } from "../../utils";
 import SkillTemps from "../SkillPage/components/SkillTemps";
-import { ChatMessage } from "./components/ChatMessage";
-import ResouceModal from "./components/ResouceModal";
+import ChatPanne from "./components/ChatPanne";
+import { Trash2 } from "lucide-react";
+import { bsconfirm } from "../../alerts/confirm";
 
-export default function SkillChatPage(params) {
+export default function SkillChatPage() {
     const [open, setOpen] = useState(false)
     const [face, setFace] = useState(true);
 
@@ -28,13 +27,15 @@ export default function SkillChatPage(params) {
         readOnlineFlows().then(res => setOnlineFlows(res))
     }, [])
     // 对话列表
-    const { chatList, chatId, chatsRef, setChatId, addChat } = useChatList()
-
+    const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat } = useChatList()
     const chatIdRef = useRef('')
     const {
+        isRoom,
         inputState,
         fileInputs,
         chating,
+        stopState,
+        stopClick,
         uploadFile,
         setInputState,
         changeHistoryByScroll,
@@ -62,8 +63,6 @@ export default function SkillChatPage(params) {
         })
 
         inputRef.current.value = ''
-        setInputEmpty(true)
-
         setTimeout(() => {
             inputRef.current.focus()
         }, 500);
@@ -83,29 +82,15 @@ export default function SkillChatPage(params) {
         await initChat(flow)
         setFace(false)
 
-        if (inputRef.current) inputRef.current.value = ''
-        setInputEmpty(true)
         changeHistoryByScroll.current = false
         // focus
         setTimeout(() => {
-            inputRef.current.focus()
+            inputRef.current?.focus()
         }, 500);
     }
 
     // 输入问答
     const inputRef = useRef(null)
-    const inputDisable = inputState.lock || (fileInputs?.length && chatHistory.length === 0)
-    const handleSend = () => {
-        const val = inputRef.current.value
-        setTimeout(() => {
-            inputRef.current.value = ''
-            inputRef.current.style.height = 'auto'
-            setInputEmpty(true)
-        }, 100);
-
-        if (val.trim() === '' || inputDisable) return
-        sendMsg(val)
-    }
     useEffect(() => {
         !chating && setTimeout(() => {
             // 对话结束自动聚焦
@@ -113,37 +98,18 @@ export default function SkillChatPage(params) {
         }, 1000);
     }, [chating])
 
-    // input 滚动
-    const [inputEmpty, setInputEmpty] = useState(true)
-    const handleTextAreaHeight = (e) => {
-        const textarea = e.target
-        textarea.style.height = 'auto'
-        textarea.style.height = textarea.scrollHeight + 'px'
-        setInputEmpty(textarea.value.trim() === '')
-    }
-
-    // 消息滚动
-    const messagesRef = useRef(null);
-    useEffect(() => {
-        if (messagesRef.current && !changeHistoryByScroll.current) { // 滚动加载不触发
-            messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-        }
-    }, [chatHistory, changeHistoryByScroll.current]);
-
-    // 消息滚动加载
-    useEffect(() => {
-        function handleScroll() {
-            if (messagesRef.current.scrollTop <= 30) {
-                loadNextPage()
+    // del
+    const handleDeleteChat = (e, id) => {
+        e.stopPropagation();
+        bsconfirm({
+            desc: t('chat.confirmDeleteChat'),
+            onOk(next) {
+                deleteChat(id);
+                setFace(true)
+                next()
             }
-        }
-
-        messagesRef.current?.addEventListener('scroll', handleScroll);
-        return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
-    }, [messagesRef.current]);
-
-    // 溯源
-    const [souce, setSouce] = useState<ChatMessageType>(null)
+        })
+    }
 
     return <div className="flex">
         <div className="h-screen w-[200px] relative border-r">
@@ -153,59 +119,44 @@ export default function SkillChatPage(params) {
             <div ref={chatsRef} className="scroll p-4 h-full overflow-y-scroll no-scrollbar pt-12">
                 {
                     chatList.map((chat, i) => (
-                        <div key={chat.chat_id} className={`item rounded-xl mt-2 p-2 hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-gray-100 dark:bg-gray-800'}`} onClick={() => handleSelectChat(chat)}>
+                        <div key={chat.chat_id}
+                            className={`group item rounded-xl mt-2 p-2 relative hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-gray-100 dark:bg-gray-800'}`}
+                            onClick={() => handleSelectChat(chat)}>
                             <p className="break-words">{chat.flow_name}</p>
                             <span className="text-xs text-gray-500">{chat.flow_description}</span>
+                            <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
                         </div>
                     ))
                 }
             </div>
         </div>
         {/* chat */}
-        {face ? <div className="flex-1 chat-box h-screen overflow-hidden relative">
-            <p className="text-center mt-[100px]">{t('chat.selectChat')}</p>
-        </div>
-            : <div className="flex-1 chat-box h-screen overflow-hidden relative">
-                <div className="absolute w-full px-4 py-4 bg-[#fff] z-10 dark:bg-gray-950">{chatList.find(chat => chat.chat_id === chatId)?.flow_name}</div>
-                <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
-                    <div ref={messagesRef} className="chat-panne h-full overflow-y-scroll no-scrollbar px-4 pb-20">
-                        {
-                            chatHistory.map((c, i) => <ChatMessage key={c.id || i} chat={c} onSource={() => setSouce(c)}></ChatMessage>)
-                        }
-                    </div>
-                    <div className="absolute w-full bottom-0 bg-gradient-to-t from-[#fff] to-[rgba(255,255,255,0.8)] px-8 dark:bg-gradient-to-t dark:from-[#000] dark:to-[rgba(0,0,0,0.8)]">
-                        <div className={`w-full text-area-box border border-gray-600 rounded-lg my-6 overflow-hidden pr-2 py-2 relative ${(inputState.lock || (fileInputs?.length && chatHistory.length === 0)) && 'bg-gray-200 dark:bg-gray-600'}`}>
-                            <textarea id='input'
-                                ref={inputRef}
-                                disabled={inputDisable} style={{ height: 36 }} rows={1}
-                                className={`w-full resize-none border-none bg-transparent outline-none px-4 pt-1 text-xl max-h-[200px]`}
-                                placeholder={t('chat.inputPlaceholder')}
-                                onInput={handleTextAreaHeight}
-                                onKeyDown={(event) => {
-                                    if (event.key === "Enter" && !event.shiftKey) handleSend()
-                                }}></textarea>
-                            <div className="absolute right-6 bottom-4 flex gap-2">
-                                <ShadTooltip content={t('chat.uploadFileTooltip')}>
-                                    <button disabled={inputState.lock || !fileInputs?.length} className="disabled:text-gray-400" onClick={uploadFile}><FileUp /></button>
-                                </ShadTooltip>
-                                <ShadTooltip content={t('chat.sendTooltip')}>
-                                    <button disabled={inputEmpty || inputDisable} className=" disabled:text-gray-400" onClick={handleSend}><Send /></button>
-                                </ShadTooltip>
-                            </div>
-                            {inputState.error && <div className="bg-gray-200 absolute top-0 left-0 w-full h-full text-center text-gray-400 align-middle pt-4">{inputState.error}</div>}
-                        </div>
-                    </div>
-                </div>
-            </div>}
-        {/* 添加模型 */}
+        {face
+            ? <div className="flex-1 chat-box h-screen overflow-hidden relative">
+                <p className="text-center mt-[100px]">{t('chat.selectChat')}</p>
+            </div>
+            : <ChatPanne
+                ref={inputRef}
+                isRoom={isRoom}
+                fileInputs={fileInputs}
+                inputState={inputState}
+                chatId={chatId}
+                messages={chatHistory}
+                flowName={chatList.find(chat => chat.chat_id === chatId)?.flow_name}
+                changeHistoryByScroll={changeHistoryByScroll.current}
+                stopState={stopState}
+                onStopClick={stopClick}
+                onSendMsg={sendMsg}
+                onNextPageClick={loadNextPage}
+                onUploadFile={uploadFile}
+            />}
+        {/* 选择对话技能 */}
         <SkillTemps
             flows={onlineFlows}
             title={t('chat.skillTempsTitle')}
             desc={t('chat.skillTempsDesc')}
             open={open} setOpen={setOpen}
             onSelect={(e) => handlerSelectFlow(e)}></SkillTemps>
-        {/* 源文件类型 */}
-        <ResouceModal chatId={chatIdRef.current} open={!!souce} data={souce} setOpen={() => setSouce(null)}></ResouceModal>
     </div>
 };
 /**
@@ -232,23 +183,20 @@ const useWebsocketChat = (chatIdRef) => {
         const res = await getChatHistory(flow.current.id, chatIdRef.current, lastId ? 10 : 30, lastId)
         const hisData = res.map(item => {
             // let count = 0
-            let message = item.message
+            let { message, files, is_bot, intermediate_steps, ...other } = item
             try {
-                message = item.message && item.message[0] === '{' ? JSON.parse(item.message.replace(/([\t\n"])/g, '\\$1').replace(/'/g, '"')) : item.message || ''
+                message = message && message[0] === '{' ? JSON.parse(message.replace(/([\t\n"])/g, '\\$1').replace(/'/g, '"')) : message || ''
             } catch (e) {
                 // 未考虑的情况暂不处理
-                message = item.message
             }
             return {
+                ...other,
                 chatKey: typeof message === 'string' ? undefined : Object.keys(message)[0],
                 end: true,
-                files: item.files ? JSON.parse(item.files) : [],
-                isSend: !item.is_bot,
+                files: files ? JSON.parse(files) : [],
+                isSend: !is_bot,
                 message,
-                thought: item.intermediate_steps,
-                id: item.id,
-                category: item.category,
-                source: item.source,
+                thought: intermediate_steps,
                 noAccess: true
             }
         })
@@ -306,13 +254,19 @@ const useWebsocketChat = (chatIdRef) => {
                 newWs.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     handleWsMessage(data);
-                    //get chat history
+                    // get chat history
+                    // 群聊@自己时，开启input
+                    if (data.type === 'end' && data.recevier?.is_self) {
+                        setInputState({ lock: false, error: '' })
+                    }
                 };
                 newWs.onclose = (event) => {
                     handleOnClose(event);
                 };
                 newWs.onerror = (ev) => {
                     console.error('error', ev);
+                    setIsStop(true)
+
                     if (flow.current.id === "") {
                         // connectWS();
                     } else {
@@ -351,13 +305,15 @@ const useWebsocketChat = (chatIdRef) => {
         })
         await checkReLinkWs()
 
-        sendAll({
-            ...flow.current.data,
-            inputs: { ...input, [inputKey]: msg },
-            chatHistory,
-            name: flow.current.name,
-            description: flow.current.description,
-        });
+        // @ts-ignore
+        isRoom && begin ? sendAll({ action: "continue", "inputs": { ...input, [inputKey]: msg } })
+            : sendAll({
+                ...flow.current.data,
+                inputs: { ...input, [inputKey]: msg },
+                chatHistory,
+                name: flow.current.name,
+                description: flow.current.description,
+            });
     }
 
     // 发送ws
@@ -424,12 +380,15 @@ const useWebsocketChat = (chatIdRef) => {
         }
         if (data.type === "begin") {
             setBegin(true)
+            setIsStop(false)
             changeHistoryByScroll.current = false
         }
         if (data.type === "close") {
             setBegin(false)
+            setIsStop(true)
             setInputState({ lock: false, error: '' });
             changeHistoryByScroll.current = true
+            // TODO 分割线  群聊情况下
         }
         if (data.type === "start") {
             addChatHistory({
@@ -444,14 +403,14 @@ const useWebsocketChat = (chatIdRef) => {
         }
         if (data.type === "end") {
             updateLastMessage({
+                ...data,
                 str: data.message,
                 files: data.files || null,
                 end: true,
                 thought: data.intermediate_steps || '',
                 cate: data.category || '',
                 messageId: data.message_id,
-                source: data.source,
-                noAccess: false
+                noAccess: false,
             });
 
             isStream = false;
@@ -483,7 +442,7 @@ const useWebsocketChat = (chatIdRef) => {
         });
     };
 
-    function updateLastMessage({ str, thought = '', end = false, files = [], cate = '', messageId = 0, source = false, noAccess = false }: {
+    function updateLastMessage({ str, thought = '', end = false, files = [], cate = '', messageId = 0, source = false, noAccess = false, ...data }: {
         str: string;
         messageId?: number
         thought?: string;
@@ -497,8 +456,14 @@ const useWebsocketChat = (chatIdRef) => {
             const newChats = [...old]
             console.log('newchats :>> ', newChats);
             let chatsLen = newChats.length
+            const prevChat = newChats[chatsLen - 2]
             // hack 过滤重复最后消息
-            if (end && str && chatsLen > 1 && str === newChats[chatsLen - 2].message && !newChats[chatsLen - 2].thought) {
+            if (end
+                && str
+                && chatsLen > 1
+                && str === prevChat.message
+                // && data.sender === prevChat.sender
+                && !prevChat.thought) {
                 newChats.splice(chatsLen - 2, 1) // 删上一条
                 chatsLen = newChats.length
             }
@@ -506,6 +471,7 @@ const useWebsocketChat = (chatIdRef) => {
             const lastChat = newChats[chatsLen - 1]
             const newLastChat = {
                 ...newChats[chatsLen - 1],
+                ...data,
                 id: messageId,
                 message: lastChat.message + str,
                 thought: lastChat.thought + (thought ? `${thought}\n` : ''),
@@ -513,7 +479,10 @@ const useWebsocketChat = (chatIdRef) => {
                 category: cate,
                 source,
                 noAccess,
-                end
+                end,
+                // user_id
+                // user_name
+                // at
             }
             newChats[chatsLen - 1] = newLastChat
             // start - end 之间没有内容删除load
@@ -526,18 +495,22 @@ const useWebsocketChat = (chatIdRef) => {
 
     function handleOnClose(event: CloseEvent) {
         console.error('链接断开 event :>> ', event);
+        setIsStop(true)
+
         if ([1005, 1008].includes(event.code)) {
             setInputState({ lock: true, error: event.reason });
         } else {
-            setErrorData({ title: event.reason });
-            setChatHistory((old) => {
-                let newChat = _.cloneDeep(old);
-                if (newChat.length) {
-                    newChat[newChat.length - 1].end = true;
-                }
-                newChat.push({ end: true, message: event.reason ? `${t('chat.connectionbreakTip')}${event.reason}` : t('chat.connectionbreak'), isSend: false, chatKey: '', files: [] });
-                return newChat
-            })
+            if (event.reason) {
+                setErrorData({ title: event.reason });
+                setChatHistory((old) => {
+                    let newChat = _.cloneDeep(old);
+                    if (newChat.length) {
+                        newChat[newChat.length - 1].end = true;
+                    }
+                    newChat.push({ end: true, message: `${t('chat.connectionbreakTip')}${event.reason}`, isSend: false, chatKey: '', files: [] });
+                    return newChat
+                })
+            }
             setInputState({ lock: false, error: '' });
         }
 
@@ -674,7 +647,15 @@ const useWebsocketChat = (chatIdRef) => {
         return Promise.all(promises)
     }
 
+    // 是否群聊
+    const isRoom = useMemo(() => {
+        return !!flow.current?.data.nodes.find(node => node.data.type === "AutoGenChain")
+    }, [flow.current])
+
+    // 停止状态
+    const [isStop, setIsStop] = useState(true)
     return {
+        isRoom,
         chating: begin,
         inputState,
         fileInputs,
@@ -695,6 +676,25 @@ const useWebsocketChat = (chatIdRef) => {
         changeHistoryByScroll,
         clearHistory() {
             setChatHistory([])
+        },
+        stopState: isStop,
+        stopClick: () => {
+            setIsStop(true)
+            // sendAll() // TODO ws stop
+            try {
+                if (ws) {
+                    ws.current.send(JSON.stringify({
+                        "action": "stop"
+                    }));
+                }
+            } catch (error) {
+                setErrorData({
+                    title: "There was an error stop the message",
+                    list: [error.message],
+                });
+                //   setChatValue(data.inputs);
+                // connectWS();
+            }
         }
     }
 }
@@ -808,7 +808,7 @@ const useBuild = () => {
  * 本地对话列表
  */
 const useChatList = () => {
-    const [id, setId] = useState(-1)
+    const [id, setId] = useState('')
     const [chatList, setChatList] = useState([])
     const chatsRef = useRef(null)
 
@@ -829,6 +829,11 @@ const useChatList = () => {
             setTimeout(() => {
                 chatsRef.current.scrollTop = 1
             }, 0);
+        },
+        deleteChat: (id: string) => {
+            // api
+            deleteChatApi(id)
+            setChatList(oldList => oldList.filter(item => item.chat_id !== id))
         }
     }
 }

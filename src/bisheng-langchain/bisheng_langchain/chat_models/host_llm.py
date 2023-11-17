@@ -187,8 +187,11 @@ class BaseHostChatLLM(BaseChatModel):
 
             url = f'{self.host_base_url}/{self.model_name}/infer'
             resp = self.client(url=url, json=params).json()
-            if resp['status_code'] != 200:
-                raise ValueError(f"API returned an error: {resp['status_message']}")
+
+            if not resp.get('choices', []):
+                logger.info(resp)
+                raise ValueError(f'empty choices in llm chat result {resp}')
+
             resp['usage'] = {}
             return resp
 

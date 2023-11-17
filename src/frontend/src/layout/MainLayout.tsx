@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../com
 import { darkContext } from "../contexts/darkContext";
 import { TabsContext } from "../contexts/tabsContext";
 import { userContext } from "../contexts/userContext";
+import { logoutApi } from "../controllers/API/user";
 
 export default function MainLayout() {
     const { hardReset } = useContext(TabsContext);
@@ -20,15 +21,11 @@ export default function MainLayout() {
 
     const { language, options, changLanguage, t } = useLanguage()
 
-    function clearAllCookies() {
-        var cookies = document.cookie.split(";");
-
-        for (var i = 0; i < cookies.length; i++) {
-            var cookie = cookies[i];
-            var eqPos = cookie.indexOf("=");
-            var name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-            document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT";
-        }
+    const handleLogout = () => {
+        logoutApi().then(_ => {
+            setUser(null)
+            localStorage.removeItem('isLogin')
+        })
     }
 
     return <div className="flex">
@@ -73,7 +70,7 @@ export default function MainLayout() {
                             <TooltipContent><p>{t('menu.themeSwitch')}</p></TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
-                    {/* <Separator className="mx-1" orientation="vertical" />
+                    <Separator className="mx-1" orientation="vertical" />
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger className="flex-1 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
@@ -83,7 +80,7 @@ export default function MainLayout() {
                             </TooltipTrigger>
                             <TooltipContent><p>{options[language]}</p></TooltipContent>
                         </Tooltip>
-                    </TooltipProvider> */}
+                    </TooltipProvider>
                     <Separator className="mx-1" orientation="vertical" />
                     <TooltipProvider>
                         <Tooltip>
@@ -112,7 +109,7 @@ export default function MainLayout() {
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger className="flex-1 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                                <div className=" flex justify-center gap-2 items-center" onClick={() => { clearAllCookies(); setUser(null);  }}>
+                                <div className=" flex justify-center gap-2 items-center" onClick={handleLogout}>
                                     <LogOut className="side-bar-button-size" />
                                     <span>{t('menu.logout')}</span>
                                 </div>
@@ -167,7 +164,7 @@ const useLanguage = () => {
     }
     return {
         language,
-        options: { en: '使用中文', zh: 'use English' },
+        options: { en: '使用中文', zh: 'English' },
         changLanguage,
         t
     }

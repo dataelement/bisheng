@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections import defaultdict
 from typing import Any, Dict, List
@@ -135,6 +136,43 @@ class ChatManager:
             intermediate_steps='',
         )
         await self.send_json(client_id, chat_id, ping_pong, False)
+
+    async def dispatch_task(self, client_id: str, chat_id: str, payload: dict, user_id):
+        with self.cache_manager.set_client_id(client_id, chat_id):
+            if 'action' in payload:
+                await self.process_autogen(client_id, chat_id, payload)
+            elif 'file_path' in payload:
+                # 上传文件，需要处理文件逻辑
+                file_path = payload.get('file_path')
+                node_id = payload.get('id')
+                logger.info(f'client_id={client_id} act=process_message user_id={chat_id}')
+                await self.process_file(file_path=file_path,
+                                        chat_id=chat_id,
+                                        client_id=client_id,
+                                        id=node_id,
+                                        user_id=user_id)
+            else:
+                logger.info(f'client_id={client_id} act=process_message user_id={chat_id}')
+                await self.process_message(client_id, chat_id, payload, None, False, user_id)
+
+    async def process_autogen(self, client_id: str, chat_id: str, data: dict):
+        key = get_cache_key(client_id, chat_id)
+        langchain_object = self.in_memory_cache.get(key)
+        logger.info(f'reciever_human_interactive langchain={langchain_object}')
+        action = data.get('action')
+        if action.lower() == 'stop':
+            if hasattr(langchain_object, 'stop'):
+                logger.info('reciever_human_interactive langchain_objct')
+                await langchain_object.stop()
+            else:
+                logger.error(f'act=auto_gen act={action}')
+        elif action.lower() == 'continue':
+            # autgen_user 对话的时候，进程 wait() 需要换新
+            if hasattr(langchain_object, 'input'):
+                await langchain_object.input(data.get('inputs').get(
+                    langchain_object.input_key))
+            else:
+                logger.error(f'act=auto_gen act={action}')
 
     async def process_file(self, client_id: str, chat_id: str, user_id: int, file_path: str,
                            id: str):
@@ -424,6 +462,7 @@ class ChatManager:
         try:
             while True:
                 json_payload = await websocket.receive_json()
+                logger.info(f'receive_message payload={json_payload}')
                 try:
                     payload = json.loads(json_payload)
                 except TypeError:
@@ -435,22 +474,8 @@ class ChatManager:
                 if 'clear_cache' in payload:
                     self.in_memory_cache
 
-                if 'file_path' in payload:
-                    # 上传文件，需要处理文件逻辑
-                    file_path = payload.get('file_path')
-                    node_id = payload.get('id')
-                    with self.cache_manager.set_client_id(client_id, chat_id):
-                        logger.info(f'client_id={client_id} act=process_message user_id={chat_id}')
-                        await self.process_file(file_path=file_path,
-                                                chat_id=chat_id,
-                                                client_id=client_id,
-                                                id=node_id,
-                                                user_id=user_id)
-                    continue
-
-                with self.cache_manager.set_client_id(client_id, chat_id):
-                    logger.info(f'client_id={client_id} act=process_message user_id={chat_id}')
-                    await self.process_message(client_id, chat_id, payload, None, False, user_id)
+                asyncio.create_task(self.dispatch_task(
+                    client_id, chat_id, payload, user_id))
 
         except Exception as e:
             # Handle any exceptions that might occur

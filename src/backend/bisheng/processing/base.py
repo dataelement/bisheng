@@ -30,7 +30,7 @@ async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwa
             output = await langchain_object.acall(inputs, callbacks=async_callbacks)
         except Exception as exc:
             # make the error message more informative
-            logger.debug(f'Error: {str(exc)}')
+            logger.exception(exc)
             asyc = False
             step = ChatResponse(message='',
                                 intermediate_steps='分析中',
