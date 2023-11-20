@@ -1,9 +1,10 @@
+
 from typing import List
 
 from pydantic import BaseModel
 
 
-class Input(BaseModel):
+class InputNode(BaseModel):
     """Input组件，用来控制输入"""
 
     @classmethod
@@ -11,15 +12,16 @@ class Input(BaseModel):
         return input if input else ''
 
 
-class Output(BaseModel):
-    """Output组件，用来控制输出"""
+class VariableNode(BaseModel):
+
+    variables: List[str]
 
     @classmethod
-    def initialize(cls, file_path: str = None):
-        return file_path if file_path else ''
+    def initialize(cls, variables: List[str] = None):
+        return variables if variables else ''
 
 
-class InputFile(BaseModel):
+class InputFileNode(BaseModel):
     file_path: str
     """Output组件，用来控制输出"""
 
@@ -30,10 +32,3 @@ class InputFile(BaseModel):
     @classmethod
     def initialize(cls, file_path: str = None, file_name: str = None):
         return [file_path, file_name] if file_path else ''
-
-
-CUSTOM_INPUTOUTPUT = {
-    'InputNode': Input,
-    'OutputNode': Output,
-    'InputFileNode': InputFile,
-}

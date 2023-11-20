@@ -16,6 +16,7 @@ from bisheng.interface.utils import load_file_into_dict
 from bisheng.interface.wrappers.base import wrapper_creator
 from bisheng.settings import settings
 from bisheng.utils import validate
+from bisheng.utils.constants import NODE_ID_DICT
 from langchain.agents import ZeroShotAgent
 from langchain.agents import agent as agent_module
 from langchain.agents.agent import AgentExecutor
@@ -35,6 +36,7 @@ def instantiate_class(node_type: str, base_type: str, params: Dict) -> Any:
     """Instantiate class from module type and key, and params"""
     params = convert_params_to_sets(params)
     params = convert_kwargs(params)
+    params_node_id_dict = params.pop(NODE_ID_DICT)
     if node_type in CUSTOM_NODES:
         if custom_node := CUSTOM_NODES.get(node_type):
             if hasattr(custom_node, 'initialize'):
@@ -42,7 +44,8 @@ def instantiate_class(node_type: str, base_type: str, params: Dict) -> Any:
             return custom_node(**params)
 
     class_object = import_by_type(_type=base_type, name=node_type)
-    return instantiate_based_on_type(class_object, base_type, node_type, params)
+    return instantiate_based_on_type(class_object, base_type,
+                                     node_type, params, params_node_id_dict)
 
 
 def convert_params_to_sets(params):
@@ -66,7 +69,7 @@ def convert_kwargs(params):
     return params
 
 
-def instantiate_based_on_type(class_object, base_type, node_type, params):
+def instantiate_based_on_type(class_object, base_type, node_type, params, param_id_dict):
     if base_type == 'agents':
         return instantiate_agent(node_type, class_object, params)
     elif base_type == 'prompts':
@@ -90,7 +93,7 @@ def instantiate_based_on_type(class_object, base_type, node_type, params):
     elif base_type == 'utilities':
         return instantiate_utility(node_type, class_object, params)
     elif base_type == 'chains':
-        return instantiate_chains(node_type, class_object, params)
+        return instantiate_chains(node_type, class_object, params, param_id_dict)
     elif base_type == 'output_parsers':
         return instantiate_output_parser(node_type, class_object, params)
     elif base_type == 'llms':
@@ -102,12 +105,23 @@ def instantiate_based_on_type(class_object, base_type, node_type, params):
     elif base_type == 'wrappers':
         return instantiate_wrapper(node_type, class_object, params)
     elif base_type == 'input_output':
-        return instantiate_input_output(node_type, class_object, params)
+        return instantiate_input_output(node_type, class_object, params, param_id_dict)
     else:
         return class_object(**params)
 
 
-def instantiate_input_output(node_type, class_object, params):
+def instantiate_input_output(node_type, class_object, params, id_dict):
+    # if node_type == 'report':
+    #     chains = params['chains']
+    #     chains_idlist = id_dict['chains']
+    #     # 需要对chains对象进行丰富处理
+    #     # [{"object": object, # 实例化的 agent 对象
+    #         #     "input":{""},    # input
+    #         #     "node_id":xx,    # node 的ID
+    #         # }]
+
+    #     chain_list = []
+    #     for id in chains_idlist
     return class_object(**params).text()
 
 
@@ -201,9 +215,19 @@ def instantiate_retriever(node_type, class_object, params):
     return class_object(**params)
 
 
-def instantiate_chains(node_type, class_object: Type[Chain], params: Dict):
+def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_dict: Dict):
     if 'retriever' in params and hasattr(params['retriever'], 'as_retriever'):
         params['retriever'] = params['retriever'].as_retriever()
+    # sequence chain
+    if node_type == 'SequentialChain':
+        # 改造sequence 支持自定义chain顺序
+        try:
+            chain_order = json.loads(params.pop('chain_order'))
+        except Exception:
+            raise Exception('chain_order 不是标准数组')
+        chains_origin = params.get('chains')
+        chains_dict = {id: index for index, id in enumerate(id_dict.get('chains'))}
+        params['chains'] = [chains_origin[chains_dict.get(id)] for id in chain_order]
     # dict 转换
     if 'headers' in params and isinstance(params['headers'], str):
         params['headers'] = eval(params['headers'])

@@ -60,7 +60,7 @@ async def union_websocket(flow_id: str,
             chat_manager.set_cache(key_node, node._built_object)
             chat_manager.set_cache(get_cache_key(flow_id, chat_id), node._built_object)
         await chat_manager.handle_websocket(flow_id, chat_id, websocket,
-                                            settings.get_from_db('default_operator'))
+                                            settings.get_from_db('default_operator').get('user'))
     except Exception as exc:
         logger.error(exc)
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))

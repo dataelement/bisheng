@@ -55,7 +55,7 @@ class ChainFrontendNode(FrontendNode):
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
         FrontendNode.format_field(field, name)
 
-        if 'name' == 'RetrievalQA' and field.name == 'memory':
+        if name == 'RetrievalQA' and field.name == 'memory':
             field.show = False
             field.required = False
 

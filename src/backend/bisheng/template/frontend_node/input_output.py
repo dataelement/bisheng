@@ -1,6 +1,41 @@
+from typing import Optional
+
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
 from bisheng.template.template.base import Template
+
+
+class InputOutputNode(FrontendNode):
+    name: str = 'InputOutputNode'
+
+    def add_extra_fields(self) -> None:
+        if self.template.type_name == 'Report':
+            self.template.add_field(
+                TemplateField(
+                    field_type='BaseChatMemory',
+                    required=True,
+                    show=True,
+                    name='memory',
+                    advanced=False,
+                ))
+
+    @staticmethod
+    def format_field(field: TemplateField, name: Optional[str] = None) -> None:
+        FrontendNode.format_field(field, name)
+        if name == 'Report':
+            if field.name == 'agents':
+                field.show = True
+                field.field_type = 'AgentExecutor'
+            elif field.name == 'chains':
+                field.show = True
+                field.field_type = 'Chain'
+            elif field.name == 'input_key':
+                field.show = True
+                field.display_name = 'Report Name'
+                field.info = 'the file name we generate'
+            elif field.name == 'variables':
+                field.show = True
+                field.field_type = 'Variable'
 
 
 class InputNode(FrontendNode):

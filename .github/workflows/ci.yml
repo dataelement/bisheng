@@ -15,8 +15,6 @@ concurrency:
 
 jobs:
   build_bisheng_langchain:
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-latest
     #if: startsWith(github.event.ref, 'refs/tags')
     steps:
@@ -49,8 +47,6 @@ jobs:
           twine upload dist/* -u ${{ secrets.PYPI_USER }} -p ${{ secrets.PYPI_PASSWORD }} --repository pypi
           set -e
         
-        
-    
   build_bisheng:
     needs: build_bisheng_langchain
     runs-on: ubuntu-latest

@@ -51,6 +51,25 @@ class MinioClient():
         except Exception:
             return ''
 
+    def upload_tmp(self, object_name):
+        bucket_name = 'tmp_dir'
+        self.mkdir(bucket_name)
+        from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
+        from minio.commonconfig import Filter
+        lifecycle_conf = LifecycleConfig(
+                [
+                    Rule(
+                        'ENABLED',
+                        rule_filter=Filter(prefix='documents/'),
+                        rule_id='rule1',
+                        expiration=Expiration(days=1),
+                    ),
+
+                ],
+            )
+        if self.minio_client:
+            self.minio_client.set_bucket_lifecycle(bucket_name, lifecycle_conf)
+
     def delete_minio(self, object_name: str):
         if self.minio_client:
             self.minio_client.remove_object(bucket_name=bucket, object_name=object_name)

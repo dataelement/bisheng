@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections import defaultdict
 from typing import Any, Dict, List
@@ -434,6 +435,10 @@ class ChatManager:
 
                 if 'clear_cache' in payload:
                     self.in_memory_cache
+
+                if 'action' in payload:
+                    asyncio.create_task(self.process_autogen(client_id, chat_id, payload))
+                    continue
 
                 if 'file_path' in payload:
                     # 上传文件，需要处理文件逻辑
