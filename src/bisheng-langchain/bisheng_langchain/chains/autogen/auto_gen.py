@@ -19,6 +19,7 @@ class AutoGenChain(Chain):
     recipient: ConversableAgent
 
     input_key: str = 'chat_topic'  #: :meta private:
+
     output_key: str = 'chat_content'  #: :meta private:
 
     @staticmethod

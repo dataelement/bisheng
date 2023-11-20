@@ -13,29 +13,15 @@ class AutogenRoleFrontNode(FrontendNode):
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
         FrontendNode.format_field(field, name)
-        if field.name == 'metadata':
-            field.show = True
-            field.advanced = False
         field.show = True
-        if field.name == 'unstructured_api_url':
-            field.show = True
-            field.advanced = False
 
     def add_extra_fields(self) -> None:
-        self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=False,
-                    show=True,
-                    name='system_message',
-                    advanced=False,
-                ))
         if self.name in {'AutoGenAssistant',
                          'AutoGenGroupChatManager',
                          }:
             self.template.add_field(
                     TemplateField(
-                        field_type='int',
+                        field_type='float',
                         required=True,
                         show=True,
                         name='temperature',
@@ -92,12 +78,20 @@ class AutogenRoleFrontNode(FrontendNode):
             self.template.add_field(
                 TemplateField(
                     field_type='str',
-                    multiline=True,
                     required=False,
                     show=True,
-                    name='messages',
+                    name='system_message',
                     advanced=False,
-                    value='[]'
+                    value='Group chat manager.'
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='name',
+                    value='chat_manage',
+                    advanced=False,
                 ))
         else:
             self.template.add_field(
@@ -107,6 +101,14 @@ class AutogenRoleFrontNode(FrontendNode):
                     show=True,
                     name='name',
                     value='',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='system_message',
                     advanced=False,
                 ))
 
@@ -127,5 +129,14 @@ class AutogenRoleFrontNode(FrontendNode):
                     show=True,
                     name='human_input_mode',
                     advanced=False,
-                    value='NEVER'
+                    value='ALWAYS'
+                ))
+        if self.name == 'AutoGenCustomRole':
+            self.template.add_field(
+                TemplateField(
+                    field_type='function',
+                    required=True,
+                    show=True,
+                    name='func',
+                    advanced=False,
                 ))

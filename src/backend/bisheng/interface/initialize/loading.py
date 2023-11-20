@@ -110,11 +110,6 @@ def instantiate_based_on_type(class_object, base_type, node_type, params, data):
 
 
 def instantiate_autogen_roles(node_type, class_object, params):
-    if 'messages' in params:
-        # 因为autogen 函数默认传参 [], 会导致内存共享， python 坑
-        params['messages'] = eval(params['messages'])
-    else:
-        params['messages'] = []
     return class_object(**params)
 
 
