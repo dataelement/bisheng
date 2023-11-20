@@ -35,7 +35,11 @@ class InputOutputNode(FrontendNode):
                 field.info = 'the file name we generate'
             elif field.name == 'variables':
                 field.show = True
-                field.field_type = 'Variable'
+                field.field_type = 'VariableNode'
+        if name == 'VariableNode':
+            if field.name == 'variables':
+                field.show = True
+                field.field_type = 'variable'
 
 
 class InputNode(FrontendNode):
@@ -71,14 +75,23 @@ class InputFileNode(FrontendNode):
                 show=True,
                 name='file_path',
                 value='',
-                display_name='输入内容',
-                suffixes=['.pdf'],
-                fileTypes=['pdf'],
+            ),
+            TemplateField(
+                field_type='str',
+                show=True,
+                name='file_type',
+                placeholder='提示上传文件类型',
+                value='',
             ),
         ],
     )
     description: str = """输入节点，用来自动对接输入"""
     base_classes: list[str] = ['fileNode']
+
+    @staticmethod
+    def format_field(field: TemplateField, name: Optional[str] = None) -> None:
+        FrontendNode.format_field(field, name)
+        field.show = True
 
     def to_dict(self):
         return super().to_dict()

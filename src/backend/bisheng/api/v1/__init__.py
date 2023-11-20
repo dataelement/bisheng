@@ -8,6 +8,7 @@ from bisheng.api.v1.server import router as server_router
 from bisheng.api.v1.skillcenter import router as skillcenter_router
 from bisheng.api.v1.user import router as user_router
 from bisheng.api.v1.validate import router as validate_router
+from bisheng.api.v1.variable import router as variable_router
 
 __all__ = [
     'chat_router',
@@ -20,4 +21,5 @@ __all__ = [
     'server_router',
     'user_router',
     'qa_router',
+    'variable_router'
 ]

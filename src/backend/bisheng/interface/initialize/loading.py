@@ -111,17 +111,21 @@ def instantiate_based_on_type(class_object, base_type, node_type, params, param_
 
 
 def instantiate_input_output(node_type, class_object, params, id_dict):
-    # if node_type == 'report':
+    # if node_type == 'InputNode':
+    # elif node_type == 'Report':
     #     chains = params['chains']
     #     chains_idlist = id_dict['chains']
     #     # 需要对chains对象进行丰富处理
-    #     # [{"object": object, # 实例化的 agent 对象
-    #         #     "input":{""},    # input
-    #         #     "node_id":xx,    # node 的ID
-    #         # }]
-
     #     chain_list = []
-    #     for id in chains_idlist
+    #     for index, id in enumerate(chains_idlist):
+    #         chain_obj = {}
+    #         chain_obj['object'] = chains[index]
+    #         chain_obj['node_id'] = id
+    #         chain_obj['input'] =
+    #         chain_list.append(chain_obj)
+    #     # variables
+    #     return class_object(**params)
+
     return class_object(**params).text()
 
 

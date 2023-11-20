@@ -176,7 +176,8 @@ async def get_gpu(*, session=Depends(get_session)):
         resp = []
         for service in db_service:
             ip = service.endpoint.split(':')[0]
-            url = f'http://{ip}:9002/metrics'
+            port = int(service.endpoint.split(':')[1]) + 1
+            url = f'http://{ip}:{port}/metrics'
             gpu = await queryGPU(url)
             if gpu:
                 [g.update({'server': service.server}) for g in gpu]

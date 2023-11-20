@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from langchain.agents.agent import AgentExecutor
+from bisheng_langchain.input_output import VariableNode
 from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
 from langchain.chains.base import Chain
 from pydantic import BaseModel, Extra
@@ -35,13 +35,13 @@ class Output(BaseModel):
 
 class Report(Chain):
     chains: Optional[List[Dict]]
-    agents: Optional[List[Dict]]
+    variables: Optional[VariableNode]
+
     input_key: str = 'report_name'  #: :meta private:
     output_key: str = 'report_content'  #: :meta private:
 
     class Config:
         """Configuration for this pydantic object."""
-
         extra = Extra.forbid
         arbitrary_types_allowed = True
 
@@ -71,18 +71,6 @@ class Report(Chain):
                     )
             return values
 
-    def validate_agents(cls, values: Dict) -> Dict:
-        """Validate agents."""
-        if values.get('agents'):
-            for agent in values['agents']:
-                agent_output_keys = agent['object'].output_keys
-                if len(agent_output_keys) != 1:
-                    raise ValueError(
-                        'Agent used in Report should all have one output, got '
-                        f"{agent['object']} with {len(agent_output_keys)} outputs."
-                    )
-            return values
-
     def _call(
         self,
         verbose: Optional[bool] = None,
@@ -103,16 +91,6 @@ class Report(Chain):
                 )
                 outputs.update({chain['node_id']: chain_outputs.get('text')})
 
-        if self.agents:
-            for agent in self.agents:
-                print(agent['object'])
-                if not isinstance(agent['object'],  AgentExecutor):
-                    raise TypeError(
-                        f"{agent['object']} not be AgentExecutor object"
-                    )
-                agent_outputs = agent['object'](agent['input'], callbacks=run_manager)
-                outputs.update({agent['node_id']: agent_outputs.get('output')})
-
         return {self.output_key: outputs}
 
     async def _acall(
@@ -132,12 +110,4 @@ class Report(Chain):
             )
             outputs.update({chain['node_id']: chain_outputs})
 
-        if self.agents:
-            for agent in self.agents:
-                if not isinstance(agent['object'],  AgentExecutor):
-                    raise TypeError(
-                        f"{agent['object']} not be AgentExecutor object"
-                    )
-                agent_outputs = await agent['object'].arun(agent['input'], callbacks=run_manager)
-                outputs.update({agent['node_id']: agent_outputs})
         return {self.output_key: outputs, self.input_key: report_name}

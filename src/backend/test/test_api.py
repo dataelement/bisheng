@@ -31,14 +31,16 @@ def _test_uns():
     # 使用场景1： 文件到tokens
     url = 'http://192.168.106.12:10001/v1/etl4llm/predict'
 
-    filename = '/Users/huangly/Downloads/联创锐鑫-徐登文.doc'
+    filename = '/Users/huangly/Downloads/合同(1).pdf'
     b64_data = base64.b64encode(open(filename, 'rb').read()).decode()
-    filename_type = 'xx.doc'
+    filename_type = '合同(1).pdf'
 
     inp = dict(
         filename=filename_type,
         b64_data=[b64_data],
-        mode='topdf')
+        mode='partition',
+        parameters={'start': 0, 'n': None})
+
     resp = requests.post(url, json=inp).json()
     print(resp)
 

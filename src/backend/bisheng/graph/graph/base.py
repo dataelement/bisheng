@@ -20,6 +20,7 @@ class Graph:
     ) -> None:
         self._nodes = nodes
         self._edges = edges
+        self._param_public = {}  # for some node should store in graph scope
         self._build_graph()
 
     @classmethod
