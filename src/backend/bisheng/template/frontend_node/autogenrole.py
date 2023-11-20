@@ -24,48 +24,51 @@ class AutogenRoleFrontNode(FrontendNode):
     def add_extra_fields(self) -> None:
         self.template.add_field(
                 TemplateField(
-                    field_type='int',
-                    required=True,
-                    show=True,
-                    name='temperature',
-                    advanced=False,
-                    value=0
-                ))
-        self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=True,
-                    show=True,
-                    name='model_name',
-                    value='gpt-4-0613',
-                    advanced=False,
-                ))
-
-        self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=False,
-                    show=True,
-                    name='openai_api_key',
-                    value='',
-                    advanced=False,
-                ))
-        self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=False,
-                    show=True,
-                    name='openai_proxy',
-                    advanced=False,
-                ))
-        self.template.add_field(
-                TemplateField(
                     field_type='str',
                     required=False,
                     show=True,
                     name='system_message',
                     advanced=False,
                 ))
+        if self.name in {'AutoGenAssistant',
+                         'AutoGenGroupChatManager',
+                         }:
+            self.template.add_field(
+                    TemplateField(
+                        field_type='int',
+                        required=True,
+                        show=True,
+                        name='temperature',
+                        advanced=False,
+                        value=0
+                    ))
+            self.template.add_field(
+                    TemplateField(
+                        field_type='str',
+                        required=True,
+                        show=True,
+                        name='model_name',
+                        value='gpt-4-0613',
+                        advanced=False,
+                    ))
+
+            self.template.add_field(
+                    TemplateField(
+                        field_type='str',
+                        required=False,
+                        show=True,
+                        name='openai_api_key',
+                        value='',
+                        advanced=False,
+                    ))
+            self.template.add_field(
+                    TemplateField(
+                        field_type='str',
+                        required=False,
+                        show=True,
+                        name='openai_proxy',
+                        advanced=False,
+                    ))
 
         if self.name == 'AutoGenGroupChatManager':
             self.template.add_field(
@@ -110,12 +113,12 @@ class AutogenRoleFrontNode(FrontendNode):
         if self.name == 'AutoGenUser':
             self.template.add_field(
                 TemplateField(
-                    field_type='bool',
-                    required=True,
+                    field_type='int',
+                    required=False,
                     show=True,
-                    name='code_execution_flag',
+                    name='max_consecutive_auto_reply',
                     advanced=False,
-                    value=False
+                    value=10
                 ))
             self.template.add_field(
                 TemplateField(
