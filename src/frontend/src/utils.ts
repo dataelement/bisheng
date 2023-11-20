@@ -131,7 +131,7 @@ export const nodeColors: { [char: string]: string } = {
   str: "#049524",
   retrievers: "#e6b25a",
   input_output: "#0ea5e9",
-  autogen_roles: '#12a5f8',
+  autogen_roles: '#6366f1',
   unknown: "#9CA3AF",
 };
 
@@ -981,7 +981,7 @@ export function validateNode(
               e.targetHandle.split("|")[2] === n.id
           )
           ? [
-            `${type} 缺失了 ${template.display_name || toNormalCase(template[t].name)}.`,
+            `${type} 缺失了 ${template.display_name || toTitleCase(template[t].name)}.`,
           ]
           : []
       ),
