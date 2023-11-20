@@ -13,8 +13,8 @@ export default function DisclosureComponent({
         <>
           <div>
             <Disclosure.Button className="components-disclosure-arrangement">
-              <div className="flex gap-4">
-                <Icon strokeWidth={1.5} size={22} className="text-primary" />
+              <div className="flex gap-2">
+                <Icon strokeWidth={1.5} size={20} className="text-primary" />
                 <span className="components-disclosure-title">{title}</span>
               </div>
               <div className="components-disclosure-div">

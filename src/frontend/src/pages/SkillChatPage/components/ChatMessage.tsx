@@ -10,6 +10,7 @@ import { alertContext } from "../../../contexts/alertContext";
 import { userContext } from "../../../contexts/userContext";
 import { CodeBlock } from "../../../modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "../../../types/chat";
+import { downloadFile } from "../../../util/utils";
 
 // 颜色列表
 const colorList = [
@@ -56,7 +57,7 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
             <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeMathjax]}
-                className="markdown prose inline-block break-words text-primary dark:prose-invert max-w-[60vw]"
+                className="markdown prose inline-block break-words text-primary dark:prose-invert max-w-full text-sm"
                 components={{
                     code: ({ node, inline, className, children, ...props }) => {
                         if (children.length) {
@@ -92,7 +93,7 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
     const logMkdown = useMemo(
         () => (
             chat.thought && <ReactMarkdown
-                className="markdown prose text-gray-600 inline-block break-words max-w-[60vw]"
+                className="markdown prose text-gray-600 inline-block break-words max-w-full text-sm"
             >
                 {chat.thought.toString()}
             </ReactMarkdown>
@@ -130,9 +131,14 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
         setSuccessData({ title: t('chat.copyTip') })
     }
 
+    // download file
+    const handleDownloadFile = (url) => {
+        url && downloadFile(url, 'result.docx')
+    }
+
     const source = <div className="chat-footer py-1">
         {/* {chat.noAccess && <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>{t('chat.noAccess')}</p>} */}
-        <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent" onClick={onSource}>{t('chat.source')}</button>
+        <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent text-xs" onClick={onSource}>{t('chat.source')}</button>
     </div>
 
     // 日志分析
@@ -171,23 +177,37 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
         <div className="chat chat-end">
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-[rgba(53,126,249,.6)] flex items-center justify-center"><User color="#fff" size={28} /></div></div>
             <div className="chat-header text-gray-400 text-sm">{user.user_name}</div>
-            <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)] dark:text-gray-100">
+            <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)] dark:text-gray-100 whitespace-pre-line text-sm min-h-8">
                 {chat.category === 'loading' && <span className="loading loading-spinner loading-xs mr-4 align-middle"></span>}
                 {chat.message[chat.chatKey]}
             </div>
         </div>
 
     const avatarColor = colorList[(chat.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length]
+    // 模型返回的文件
+    if (chat.files.length) return <div className="chat chat-start">
+        <div className="chat-image avatar">
+            <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center" style={{ background: avatarColor }}><Bot color="#fff" size={28} /></div>
+        </div>
+        {chat.sender && <div className="chat-header text-gray-400 text-sm">{chat.sender}</div>}
+        <Card className={`my-2 w-[200px] relative ${chat.files[0]?.file_url && 'cursor-pointer'}`} onClick={() => handleDownloadFile(chat.files[0]?.file_url)}>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><File />{t('file')}</CardTitle>
+                <CardDescription>{chat.files[0]?.file_name}</CardDescription>
+            </CardHeader>
+        </Card>
+    </div>
+
     // 模型user
     return <div className="chat chat-start">
         <div className="chat-image avatar">
             <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center" style={{ background: avatarColor }}><Bot color="#fff" size={28} /></div>
         </div>
         {chat.sender && <div className="chat-header text-gray-400 text-sm">{chat.sender}</div>}
-        <div ref={textRef} className="chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600">
+        <div ref={textRef} className="chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8">
+            {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {/* @user */}
             {chat.recevier && <p className="text-blue-500 text-sm">@ {chat.recevier.user_name}</p>}
-            {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {/* 光标 */}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
         </div>
