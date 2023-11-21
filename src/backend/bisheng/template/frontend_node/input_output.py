@@ -37,6 +37,8 @@ class InputOutputNode(FrontendNode):
             elif field.name == 'variables':
                 field.show = True
                 field.field_type = 'VariableNode'
+            elif field.name == 'edit':
+                field.show = True
         if name == 'VariableNode':
             if field.name == 'variables':
                 field.show = True

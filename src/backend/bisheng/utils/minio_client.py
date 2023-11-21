@@ -26,17 +26,23 @@ class MinioClient():
             access_key=settings.get_knowledge().get('minio').get('MINIO_ACCESS_KEY'),
             secret_key=settings.get_knowledge().get('minio').get('MINIO_SECRET_KEY'),
             secure=False)
+        self.mkdir(bucket=bucket)
 
     def upload_minio(self, object_name: str, file_path, content_type='application/text'):
         # 初始化minio
-        self.mkdir(bucket=bucket)
         if self.minio_client:
             self.minio_client.fput_object(bucket_name=bucket,
                                           object_name=object_name,
                                           file_path=file_path,
                                           content_type=content_type)
 
-    def get_share_link(self, object_name):
+    def upload_minio_data(self, object_name: str, data, content_type='application/text'):
+        # 初始化minio
+        if self.minio_client:
+            self.minio_client.put_object(bucket_name=bucket, object_name=object_name, data=data,
+                                         content_type=content_type)
+
+    def get_share_link(self, object_name, bucket=bucket):
         # filepath "/" 开头会有nginx问题
         if object_name[0] == '/':
             object_name = object_name[1:]
@@ -51,12 +57,14 @@ class MinioClient():
         except Exception:
             return ''
 
-    def upload_tmp(self, object_name):
+    def upload_tmp(self, object_name, data):
         bucket_name = 'tmp_dir'
         self.mkdir(bucket_name)
         from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
         from minio.commonconfig import Filter
-        lifecycle_conf = LifecycleConfig(
+
+        if self.minio_client and not self.minio_client.get_bucket_lifecycle(bucket_name):
+            lifecycle_conf = LifecycleConfig(
                 [
                     Rule(
                         'ENABLED',
@@ -64,11 +72,13 @@ class MinioClient():
                         rule_id='rule1',
                         expiration=Expiration(days=1),
                     ),
-
                 ],
             )
-        if self.minio_client:
             self.minio_client.set_bucket_lifecycle(bucket_name, lifecycle_conf)
+
+        if self.minio_client:
+            self.minio_client.put_object(bucket_name=bucket_name,
+                                         object_name=object_name, data=data,)
 
     def delete_minio(self, object_name: str):
         if self.minio_client:
