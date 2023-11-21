@@ -17,6 +17,8 @@ class MessageBase(SQLModelSerializable):
     flow_id: UUID = Field(index=True, description='对应的技能id')
     chat_id: Optional[str] = Field(index=True, description='chat_id, 前端生成')
     user_id: Optional[str] = Field(index=True, description='用户id')
+    sender: Optional[str] = Field(index=False, default='', description='autogen 的发送方')
+    receiver: Optional[str] = Field(index=False, default='', description='autogen 的发送方')
     intermediate_steps: Optional[str] = Field(index=False,
                                               sa_column=Column(Text),
                                               description='过程日志')

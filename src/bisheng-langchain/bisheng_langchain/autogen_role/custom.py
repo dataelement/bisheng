@@ -41,7 +41,11 @@ class AutoGenCustomRole(ConversableAgent):
             query = message['content']
             reply = self.func(query)
             if isinstance(reply, dict):
-                reply = reply.values()[0]
+                reply = list(reply.values())
+                if reply:
+                    reply = str(reply[0])
+                else:
+                    reply = ''
             return True, reply
 
         return False, None
@@ -61,7 +65,11 @@ class AutoGenCustomRole(ConversableAgent):
             query = message['content']
             reply = self.func(query)
             if isinstance(reply, dict):
-                reply = reply.values()[0]
+                reply = list(reply.values())
+                if reply:
+                    reply = str(reply[0])
+                else:
+                    reply = ''
             return True, reply
 
         return False, None

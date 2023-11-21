@@ -123,6 +123,7 @@ def instantiate_wrapper(node_type, class_object, params):
         if class_method := getattr(class_object, method, None):
             return class_method(**params)
         raise ValueError(f'Method {method} not found in {class_object}')
+
     return class_object(**params)
 
 

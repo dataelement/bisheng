@@ -80,9 +80,8 @@ class AutoGenChain(Chain):
                                                     global_chat_messages=global_chat_messages,
                                                     run_manager=run_manager)
         # chat_content = io_output.getvalue()
-        chat_content = json.dumps(
-            global_chat_messages, indent=2, ensure_ascii=False)
-        output = {self.output_key: chat_content}
+        output = {self.output_key: global_chat_messages[-1].get('message'),
+                  'intermediate_steps': global_chat_messages[:-1]}
         return output
 
     async def stop(self):

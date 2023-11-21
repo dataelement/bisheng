@@ -16,6 +16,7 @@ from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
+from bisheng_langchain.chains.autogen.auto_gen import AutoGenChain
 from fastapi import WebSocket, status
 from langchain.docstore.document import Document
 from sqlmodel import select
@@ -171,6 +172,9 @@ class ChatManager:
             if hasattr(langchain_object, 'input'):
                 await langchain_object.input(data.get('inputs').get(
                     langchain_object.input_key))
+                # 新的对话开始，
+                start_resp = ChatResponse(type='start')
+                await self.send_json(client_id, chat_id, start_resp)
             else:
                 logger.error(f'act=auto_gen act={action}')
 
@@ -410,24 +414,29 @@ class ChatManager:
                                     user_id=user_id)
             await self.send_json(client_id, chat_id, end_resp, add=False)
 
-        # 最终结果
-        start_resp.category = 'answer'
-        await self.send_json(client_id, chat_id, start_resp)
-
         source = True if source_doucment and chat_id else False
         if source:
             for doc in source_doucment:
                 # 确保每个chunk 都可溯源
                 if 'bbox' not in doc.metadata or not doc.metadata['bbox']:
                     source = False
-
-        response = ChatResponse(message=result if not is_bot else '',
-                                type='end',
-                                intermediate_steps=result if is_bot else '',
-                                category='answer',
-                                user_id=user_id,
-                                source=source)
-        await self.send_json(client_id, chat_id, response)
+        # 最终结果
+        if isinstance(langchain_object, AutoGenChain):
+            # 群聊，最后一条消息重复，不进行返回
+            start_resp.category = 'divider'
+            await self.send_json(client_id, chat_id, start_resp)
+            response = ChatResponse(message='本轮结束', type='end', category='divider')
+            await self.send_json(client_id, chat_id, response)
+        else:
+            start_resp.category = 'answer'
+            await self.send_json(client_id, chat_id, start_resp)
+            response = ChatResponse(message=result if not is_bot else '',
+                                    type='end',
+                                    intermediate_steps=result if is_bot else '',
+                                    category='answer',
+                                    user_id=user_id,
+                                    source=source)
+            await self.send_json(client_id, chat_id, response)
 
         # 循环结束
         close_resp = ChatResponse(message=None,

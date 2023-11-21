@@ -7,8 +7,7 @@ from bisheng.template.frontend_node.base import FrontendNode
 class AutogenRoleFrontNode(FrontendNode):
 
     def add_extra_base_classes(self) -> None:
-        self.base_classes = ['ConversableAgent']
-        self.output_types = ['ConversableAgent']
+        self.base_classes.append('ConversableAgent')
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:

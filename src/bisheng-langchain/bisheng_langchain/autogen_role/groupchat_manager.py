@@ -5,6 +5,8 @@ from typing import List, Optional
 import openai
 from autogen import Agent, GroupChat, GroupChatManager
 
+from .user import AutoGenUser
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,6 +25,9 @@ class AutoGenGroupChatManager(GroupChatManager):
         system_message: Optional[str] = 'Group chat manager.',
         **kwargs,
     ):
+        if not any(isinstance(agent, AutoGenUser) for agent in agents):
+            raise Exception('chat_manager must contains AutoGenUser')
+
         groupchat = GroupChat(agents=agents, messages=[], max_round=max_round)
 
         if openai_proxy:

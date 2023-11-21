@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, Dict, List, Union
 
 from bisheng.api.v1.schemas import ChatResponse
+from bisheng.chat.manager import ChatHistory
 from bisheng.utils.logger import logger
 from fastapi import WebSocket
 from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
@@ -9,6 +10,8 @@ from langchain.schema import AgentFinish, LLMResult
 from langchain.schema.agent import AgentAction
 from langchain.schema.document import Document
 from langchain.schema.messages import BaseMessage
+
+chat_history = ChatHistory()
 
 
 # https://github.com/hwchase17/chat-langchain/blob/master/callback.py
