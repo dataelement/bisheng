@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from bisheng.interface.initialize import loading
 from bisheng.interface.listing import ALL_TYPES_DICT
-from bisheng.utils.constants import DIRECT_TYPES, NODE_ID_DICT
+from bisheng.utils.constants import DIRECT_TYPES, NODE_ID_DICT, PRESET_QUESTION
 from bisheng.utils.logger import logger
 from bisheng.utils.util import sync_to_async
 
@@ -92,6 +92,15 @@ class Vertex:
                 elif edge.target.id == self.id:
                     params[param_key] = edge.source
 
+            # for report, should get the source of source
+            for inner_edge in edge.source.edges:
+                source_type = inner_edge.target_param
+                if source_type == 'input_node' and inner_edge.target != self:
+                    if inner_edge.source.vertex_type == 'InputNode':
+                        # for extra params,
+                        params[PRESET_QUESTION] = {inner_edge.target.id:
+                                                   inner_edge.source}
+
         for key, value in template_dict.items():
             if key == '_type' or not value.get('show'):
                 continue
@@ -140,6 +149,8 @@ class Vertex:
                 self._build_node_and_update_params(key, value)
             elif isinstance(value, list) and self._is_list_of_nodes(value):
                 self._build_list_of_nodes_and_update_params(key, value)
+            elif isinstance(value, dict) and self._is_dict_of_nodes(value):
+                self._build_dict_of_nodes_and_update_params(key, value)
 
     def _is_node(self, value):
         """
@@ -152,6 +163,9 @@ class Vertex:
         Checks if the provided value is a list of Vertex instances.
         """
         return all(self._is_node(node) for node in value)
+
+    def _is_dict_of_nodes(self, value):
+        return all(self._is_node(node) for node in value.values())
 
     def _build_node_and_update_params(self, key, node):
         """
@@ -178,6 +192,11 @@ class Vertex:
             else:
                 self.params[key].append(built)
         self.params[NODE_ID_DICT].update({key: key_list})
+
+    def _build_dict_of_nodes_and_update_params(self, key, dicts):
+        self.params[key] = {}
+        for k, v in dicts.items():
+            self.params[key][k] = v.build()
 
     def _handle_func(self, key, result):
         """

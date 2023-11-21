@@ -7,25 +7,26 @@ from bisheng.template.template.base import Template
 
 class InputOutputNode(FrontendNode):
     name: str = 'InputOutputNode'
+    base_classes: list[str] = ['input', 'output']
 
     def add_extra_fields(self) -> None:
         if self.template.type_name == 'Report':
-            self.template.add_field(
-                TemplateField(
-                    field_type='BaseChatMemory',
-                    required=True,
+            self.template.add_field(TemplateField(
+                    field_type='button',
+                    required=False,
                     show=True,
-                    name='memory',
-                    advanced=False,
+                    name='edit',
+                    value='',
                 ))
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
         FrontendNode.format_field(field, name)
         if name == 'Report':
-            if field.name == 'agents':
-                field.show = True
-                field.field_type = 'AgentExecutor'
+            if field.name == 'memory':
+                field.show = False
+            elif field.name == 'input_node':
+                field.show = False
             elif field.name == 'chains':
                 field.show = True
                 field.field_type = 'Chain'
@@ -81,7 +82,7 @@ class InputFileNode(FrontendNode):
                 show=True,
                 name='file_type',
                 placeholder='提示上传文件类型',
-                value='',
+                display_name='Name'
             ),
         ],
     )

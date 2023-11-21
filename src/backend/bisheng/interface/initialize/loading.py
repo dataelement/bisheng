@@ -16,7 +16,7 @@ from bisheng.interface.utils import load_file_into_dict
 from bisheng.interface.wrappers.base import wrapper_creator
 from bisheng.settings import settings
 from bisheng.utils import validate
-from bisheng.utils.constants import NODE_ID_DICT
+from bisheng.utils.constants import NODE_ID_DICT, PRESET_QUESTION
 from langchain.agents import ZeroShotAgent
 from langchain.agents import agent as agent_module
 from langchain.agents.agent import AgentExecutor
@@ -32,7 +32,8 @@ from pydantic import ValidationError
 # from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoaderV0
 
 
-def instantiate_class(node_type: str, base_type: str, params: Dict) -> Any:
+def instantiate_class(node_type: str, base_type: str,
+                      params: Dict) -> Any:
     """Instantiate class from module type and key, and params"""
     params = convert_params_to_sets(params)
     params = convert_kwargs(params)
@@ -104,27 +105,30 @@ def instantiate_based_on_type(class_object, base_type, node_type, params, param_
         return instantiate_memory(node_type, class_object, params)
     elif base_type == 'wrappers':
         return instantiate_wrapper(node_type, class_object, params)
-    elif base_type == 'input_output':
+    elif base_type == 'inputOutput':
         return instantiate_input_output(node_type, class_object, params, param_id_dict)
     else:
         return class_object(**params)
 
 
 def instantiate_input_output(node_type, class_object, params, id_dict):
-    # if node_type == 'InputNode':
-    # elif node_type == 'Report':
-    #     chains = params['chains']
-    #     chains_idlist = id_dict['chains']
-    #     # 需要对chains对象进行丰富处理
-    #     chain_list = []
-    #     for index, id in enumerate(chains_idlist):
-    #         chain_obj = {}
-    #         chain_obj['object'] = chains[index]
-    #         chain_obj['node_id'] = id
-    #         chain_obj['input'] =
-    #         chain_list.append(chain_obj)
-    #     # variables
-    #     return class_object(**params)
+    if node_type == 'Report':
+        preset_question = {}
+        if PRESET_QUESTION in params:
+            preset_question = params.pop(PRESET_QUESTION)
+        chains = params['chains']
+        chains_idlist = id_dict['chains']
+        # 需要对chains对象进行丰富处理
+        chain_list = []
+        for index, id in enumerate(chains_idlist):
+            chain_obj = {}
+            chain_obj['object'] = chains[index]
+            chain_obj['node_id'] = id
+            if id in preset_question:
+                chain_obj['input'] = {chains[index].input_keys[0]: preset_question[id]}
+            chain_list.append(chain_obj)
+        # variables
+        return class_object(**chain_list)
 
     return class_object(**params).text()
 

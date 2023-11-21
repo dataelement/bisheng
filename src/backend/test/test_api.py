@@ -45,5 +45,13 @@ def _test_uns():
     print(resp)
 
 
+def test_input():
+    from bisheng_langchain.input_output import InputNode
+    param = {'input': [1]}
+    a = InputNode(**param)
+    print(a)
+
+
 # _test_python_code()
-_test_uns()
+# _test_uns()
+test_input()

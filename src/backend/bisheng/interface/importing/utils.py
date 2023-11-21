@@ -52,6 +52,7 @@ def import_by_type(_type: str, name: str) -> Any:
         'utilities': import_utility,
         'output_parsers': import_output_parser,
         'retrievers': import_retriever,
+        'inputOutput': import_inputoutput,
     }
     if _type == 'llms':
         key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(
@@ -61,6 +62,11 @@ def import_by_type(_type: str, name: str) -> Any:
         loaded_func = func_dict[_type]
 
     return loaded_func(name)
+
+
+def import_inputoutput(input_output: str) -> Any:
+    """Import output parser from output parser name"""
+    return import_module(f'from bisheng_langchain.input_output import {input_output}')
 
 
 def import_output_parser(output_parser: str) -> Any:

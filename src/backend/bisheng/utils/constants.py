@@ -40,3 +40,6 @@ DIRECT_TYPES = ['str', 'bool', 'code', 'int', 'float', 'Any', 'prompt']
 
 # 新增用来记录node_id 和 对象之间关系的key
 NODE_ID_DICT = 'node_id_dict'
+
+# 用来记录 preset questions
+PRESET_QUESTION = 'preset_question'
