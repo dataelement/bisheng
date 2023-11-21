@@ -1,5 +1,5 @@
 
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 from autogen import Agent, ConversableAgent
 
@@ -12,6 +12,7 @@ class AutoGenCustomRole(ConversableAgent):
         name: str,
         system_message: str,
         func: Callable[..., str],
+        coroutine: Optional[Callable[..., Awaitable[str]]] = None,
         **kwargs,
     ):
         super().__init__(
@@ -23,6 +24,7 @@ class AutoGenCustomRole(ConversableAgent):
             **kwargs,
         )
         self.func = func
+        self.coroutine = coroutine
         self.register_reply(Agent, AutoGenCustomRole.generate_custom_reply)
         self.register_reply(Agent, AutoGenCustomRole.a_generate_custom_reply, is_async=True)
 
@@ -50,7 +52,7 @@ class AutoGenCustomRole(ConversableAgent):
 
         return False, None
 
-    def a_generate_custom_reply(
+    async def a_generate_custom_reply(
         self,
         messages: Optional[List[Dict]] = None,
         sender: Optional[Agent] = None,
@@ -63,7 +65,10 @@ class AutoGenCustomRole(ConversableAgent):
 
         if 'content' in message:
             query = message['content']
-            reply = self.func(query)
+            if self.coroutine:
+                reply = await self.coroutine(query)
+            else:
+                reply = self.func(query)
             if isinstance(reply, dict):
                 reply = list(reply.values())
                 if reply:
