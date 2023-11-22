@@ -14,7 +14,7 @@ import SkillTemps from "../SkillPage/components/SkillTemps";
 import ChatPanne from "./components/ChatPanne";
 import { Trash2 } from "lucide-react";
 import { bsconfirm } from "../../alerts/confirm";
-import ChatReportForm from "./components/ChatReportForm";
+// import ChatReportForm from "./components/ChatReportForm";
 
 export default function SkillChatPage() {
     const [open, setOpen] = useState(false)
@@ -118,6 +118,15 @@ export default function SkillChatPage() {
         })
     }
 
+    // sendmsg user name
+    const sendUserName = useMemo(() => {
+        if (flow) {
+            const node = flow.data.nodes.find(el => el.data.type === 'AutoGenUser')
+            return node?.data.node.template['name'].value || ''
+        }
+        return ''
+    }, [flow])
+
     return <div className="flex">
         <div className="h-screen w-[200px] relative border-r">
             <div className="absolute flex pt-2 ml-[20px] bg-[#fff] dark:bg-gray-950">
@@ -154,12 +163,13 @@ export default function SkillChatPage() {
                     flowName={chatList.find(chat => chat.chat_id === chatId)?.flow_name}
                     changeHistoryByScroll={changeHistoryByScroll.current}
                     stopState={stopState}
+                    sendUserName={sendUserName}
                     onStopClick={stopClick}
                     onSendMsg={sendMsg}
                     onNextPageClick={loadNextPage}
                     onUploadFile={uploadFile}
                 />
-                {isReport && !chatHistory.length && <ChatReportForm flow={flow} onStart={sendReport} />}
+                {/* {isReport && !chatHistory.length && <ChatReportForm flow={flow} onStart={sendReport} />} */}
             </div>}
         {/* 选择对话技能 */}
         <SkillTemps
@@ -686,8 +696,8 @@ const useWebsocketChat = (chatIdRef) => {
 
     // 是否报表表单
     const isReport = useMemo(() => {
-        // 如果有 inputfilenode  inputnode 就属于
-        return !!flow.current?.data.nodes.find(node => ["InputFileNode1", "InputNode1"].includes(node.data.type))
+        // 如果有 VariableNode  inputnode 就属于
+        return !!flow.current?.data.nodes.find(node => ["VariableNode", "InputFileNode1"].includes(node.data.type))
     }, [flow.current])
 
     // 停止状态
@@ -720,7 +730,6 @@ const useWebsocketChat = (chatIdRef) => {
         sendReport,
         stopClick: () => {
             setIsStop(true)
-            // sendAll() // TODO ws stop
             try {
                 if (ws) {
                     ws.current.send(JSON.stringify({

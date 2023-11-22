@@ -55,26 +55,26 @@ export default function InputFileComponent({
 
       // Check if the file type is correct
       // if (file && checkFileType(file.name)) {
-        // Upload the file
-        uploadFile(file, tabId)
-          .then((res) => res.data)
-          .then((data) => {
-            console.log("File uploaded successfully");
-            // Get the file name from the response
-            const { file_path } = data;
+      // Upload the file
+      uploadFile(file, tabId)
+        .then((res) => res.data)
+        .then((data) => {
+          console.log("File uploaded successfully");
+          // Get the file name from the response
+          const { file_path } = data;
 
-            // Update the state and callback with the name of the file
-            // sets the value to the user
-            setMyValue(file.name);
-            onChange(file.name);
-            // sets the value that goes to the backend
-            onFileChange(file_path);
-            setLoading(false);
-          })
-          .catch(() => {
-            console.error("Error occurred while uploading file");
-            setLoading(false);
-          });
+          // Update the state and callback with the name of the file
+          // sets the value to the user
+          setMyValue(file.name);
+          onChange(file.name);
+          // sets the value that goes to the backend
+          onFileChange(file_path);
+          setLoading(false);
+        })
+        .catch(() => {
+          console.error("Error occurred while uploading file");
+          setLoading(false);
+        });
       // } else {
       //   // Show an error if the file type is not allowed
       //   setErrorData({
@@ -99,8 +99,8 @@ export default function InputFileComponent({
             editNode
               ? "input-edit-node input-dialog text-muted-foreground"
               : disabled
-              ? "input-disable input-dialog input-primary"
-              : "input-dialog input-primary text-muted-foreground"
+                ? "input-disable input-dialog input-primary"
+                : "input-dialog input-primary text-muted-foreground"
           }
         >
           {myValue !== "" ? myValue : "The current file is empty"}

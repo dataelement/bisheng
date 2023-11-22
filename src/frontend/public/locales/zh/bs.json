@@ -119,7 +119,8 @@
         "downloadOriginalTooltip": "下载原文件",
         "noMatchedFilesMessage": "无匹配的源文件",
         "fileStorageFailure": "文件存储故障!",
-        "confirmDeleteChat": "确认删除该会话？"
+        "confirmDeleteChat": "确认删除该会话？",
+        "roundOver": "本轮结束"
     },
     "model": {
         "modelConfiguration": "模型配置",

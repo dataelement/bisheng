@@ -154,7 +154,7 @@ export default function App() {
         : user ? <div className="loading"></div>
           : <LoginPage></LoginPage>}
       <div></div>
-      <div className="app-div" style={{ zIndex: 999 }}>
+      <div className="app-div" style={{ zIndex: 1000 }}>
         {alertsList.map((alert) => (
           <div key={alert.id}>
             {alert.type === "error" ? (

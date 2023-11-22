@@ -8,6 +8,7 @@ import { ChatMessage } from "./ChatMessage";
 import ResouceModal from "./ResouceModal";
 
 interface Iprops {
+    sendUserName: string
     chatId: string
     inputState: any
     fileInputs: any[]
@@ -24,7 +25,7 @@ interface Iprops {
 }
 
 export default forwardRef(function ChatPanne({
-    chatId, messages, inputState, fileInputs, changeHistoryByScroll, flowName, stopState, isRoom, isReport,
+    chatId, messages, inputState, fileInputs, changeHistoryByScroll, flowName, stopState, isRoom, isReport,sendUserName,
     onSendMsg, onUploadFile, onNextPageClick, onStopClick
 }: Iprops, inputRef: any) {
 
@@ -85,9 +86,9 @@ export default forwardRef(function ChatPanne({
     return <div className="h-screen overflow-hidden relative">
         <div className="absolute px-2 py-2 bg-[#fff] z-10 dark:bg-gray-950 text-sm text-gray-400 font-bold">{flowName}</div>
         <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
-            <div ref={messagesRef} className="chat-panne h-full overflow-y-scroll no-scrollbar px-4 pb-20">
+            <div ref={messagesRef} className={`chat-panne h-full overflow-y-scroll no-scrollbar px-4 ${isRoom || isReport ? 'pb-40' : 'pb-20'}`}>
                 {
-                    messages.map((c, i) => <ChatMessage key={c.id || i} chat={c} onSource={() => setSouce(c)}></ChatMessage>)
+                    messages.map((c, i) => <ChatMessage key={c.id || i} userName={sendUserName} chat={c} onSource={() => setSouce(c)}></ChatMessage>)
                 }
             </div>
             <div className="absolute w-full bottom-0 bg-gradient-to-t from-[#fff] to-[rgba(255,255,255,0.8)] px-8 dark:bg-gradient-to-t dark:from-[#000] dark:to-[rgba(0,0,0,0.8)]">

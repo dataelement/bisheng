@@ -7,7 +7,6 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { alertContext } from "../../../contexts/alertContext";
-import { userContext } from "../../../contexts/userContext";
 import { CodeBlock } from "../../../modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "../../../types/chat";
 import { downloadFile } from "../../../util/utils";
@@ -27,8 +26,8 @@ const colorList = [
     "#95A5A6"
 ]
 
-export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSource: () => void }) => {
-    const { user } = useContext(userContext);
+export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageType, userName: string, onSource: () => void }) => {
+    // const { user } = useContext(userContext);
 
     const textRef = useRef(null)
     const { t } = useTranslation()
@@ -153,7 +152,7 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
 
     if (chat.category === 'divider') {
         // 轮次分割线
-        return <div className="divider text-gray-500 text-sm">本轮结束</div>
+        return <div className="divider text-gray-500 text-sm">{t('chat.roundOver')}</div>
     }
 
 
@@ -161,7 +160,7 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
         {/* 文件 */}
         <div className="chat chat-end">
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-sky-500 flex items-center justify-center"><User color="#fff" size={28} /></div></div>
-            <div className="chat-header text-gray-400 text-sm">{user.user_name}</div>
+            <div className="chat-header text-gray-400 text-sm">{userName}</div>
             <Card className="my-2 w-[200px] relative">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><File />{t('file')}</CardTitle>
@@ -176,7 +175,7 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
         // 发送消息
         <div className="chat chat-end">
             <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-[rgba(53,126,249,.6)] flex items-center justify-center"><User color="#fff" size={28} /></div></div>
-            <div className="chat-header text-gray-400 text-sm">{user.user_name}</div>
+            <div className="chat-header text-gray-400 text-sm">{userName}</div>
             <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)] dark:text-gray-100 whitespace-pre-line text-sm min-h-8">
                 {chat.category === 'loading' && <span className="loading loading-spinner loading-xs mr-4 align-middle"></span>}
                 {chat.message[chat.chatKey]}
@@ -207,7 +206,7 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
         <div ref={textRef} className="chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8">
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {/* @user */}
-            {chat.recevier && <p className="text-blue-500 text-sm">@ {chat.recevier.user_name}</p>}
+            {chat.receiver && <p className="text-blue-500 text-sm">@ {chat.receiver.user_name}</p>}
             {/* 光标 */}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
         </div>
