@@ -52,6 +52,7 @@ import { SupabaseIcon } from "./icons/supabase";
 import { APITemplateType } from "./types/api";
 import { IVarHighlightType } from "./types/components";
 import { FlowType, NodeType } from "./types/flow";
+import i18next from "i18next";
 
 export function classNames(...classes: Array<string>) {
   return classes.filter(Boolean).join(" ");
@@ -135,7 +136,7 @@ export const nodeColors: { [char: string]: string } = {
   unknown: "#9CA3AF",
 };
 
-export const nodeNames: { [char: string]: string } = {
+const nodeNames: { [char: string]: string } = {
   prompts: "提示词/Prompts",
   llms: "语言模型/LLMs",
   chains: "工作链/Chains",
@@ -157,6 +158,33 @@ export const nodeNames: { [char: string]: string } = {
   autogen_roles: '多智能体角色/AutogenRole',
   unknown: "Unknown",
 };
+
+const nodeEnNames: { [char: string]: string } = {
+  prompts: "Prompts",
+  llms: "LLMs",
+  chains: "Chains",
+  agents: "Agents",
+  tools: "Tools",
+  memories: "Memories",
+  advanced: "Advanced",
+  chat: "Chat",
+  embeddings: "Embeddings",
+  documentloaders: "Loaders",
+  vectorstores: "VectorStores",
+  toolkits: "Toolkits",
+  wrappers: "Wrappers",
+  textsplitters: "TextSplitters",
+  retrievers: "Retrievers",
+  input_output: "input",
+  utilities: "Utilities",
+  output_parsers: "OutputParsers",
+  autogen_roles: 'AutogenRole',
+  unknown: "Unknown",
+};
+
+export function getNodeNames() {
+  return i18next.language === 'en' ? nodeEnNames : nodeNames
+}
 
 export const nodeIconsLucide: {
   [char: string]: React.ForwardRefExoticComponent<
