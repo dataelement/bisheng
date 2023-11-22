@@ -44,21 +44,13 @@ def transpdf2png(pdf_file):
     return pdf_images
 
 
-class UniversalKVLoader(BaseLoader):
+class CustomKVLoader(BaseLoader):
     """Extract key-value from pdf or image.
     """
-    def __init__(self,
-                 file_path: str,
-                 ellm_model_url: str = None,
-                 schema='',
-                 max_pages=30,
-                 verbose: bool = False) -> None:
-        """Initialize with a file path."""
-        self.file_path = file_path
-        self.schema = schema
-        self.max_pages = max_pages
-        self.ellm_model = ELLMClient(ellm_model_url)
-        super().__init__()
+    file_path: str
+    ellm_api_base_url: str
+    schema: str
+    max_pages: int
 
     def load(self) -> List[Document]:
         """Load given path as pages."""
