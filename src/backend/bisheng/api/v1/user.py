@@ -39,7 +39,7 @@ async def regist(*, session: Session = Depends(get_session), user: UserCreate):
         raise HTTPException(status_code=500, detail='账号已存在')
     else:
         try:
-            user.password = md5_hash(user.password)
+            db_user.password = md5_hash(user.password)
             session.add(db_user)
             session.flush()
             session.refresh(db_user)
