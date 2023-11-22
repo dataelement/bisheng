@@ -13,6 +13,7 @@ import { userContext } from "./contexts/userContext";
 import { LoginPage } from "./pages/login";
 import router from "./routes";
 import { useTranslation } from "react-i18next";
+import i18next from "i18next";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -141,6 +142,13 @@ export default function App() {
   useEffect(() => {
     document.title = t('title')
   }, [t])
+  // init language
+  useEffect(() => {
+    const lang = user.user_id ? localStorage.getItem('language-' + user.user_id) : null
+    if (lang) {
+      i18next.changeLanguage(lang)
+    }
+  }, [user])
 
   // 免登录列表
   const noAuthPages = ['chat']

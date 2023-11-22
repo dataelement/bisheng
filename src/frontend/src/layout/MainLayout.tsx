@@ -159,7 +159,6 @@ const useLanguage = (user: User) => {
         const lang = user.user_id ? localStorage.getItem('language-' + user.user_id) : null
         if (lang) {
             setLanguage(lang)
-            i18next.changeLanguage(lang)
         }
     }, [user])
 
