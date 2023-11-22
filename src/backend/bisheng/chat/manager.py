@@ -170,8 +170,7 @@ class ChatManager:
         elif action.lower() == 'continue':
             # autgen_user 对话的时候，进程 wait() 需要换新
             if hasattr(langchain_object, 'input'):
-                await langchain_object.input(data.get('inputs').get(
-                    langchain_object.input_key))
+                await langchain_object.input(data.get('inputs'))
                 # 新的对话开始，
                 start_resp = ChatResponse(type='start')
                 await self.send_json(client_id, chat_id, start_resp)
@@ -374,9 +373,11 @@ class ChatManager:
             # autogen produce multi dialog
             for message in intermediate_steps:
                 content = message.get('message')
-                msg = ChatResponse(message=content, sender=message.get('sender'),
-                                   receiver=message.get('receiver'),
-                                   type='end', user_id=user_id)
+                sender = message.get('sender')
+                receiver = message.get('receiver')
+                is_bot = False if receiver.get('is_bot') else True
+                msg = ChatResponse(message=content, sender=sender, receiver=receiver,
+                                   type='end', user_id=user_id, is_bot=is_bot)
                 steps.append(msg)
         else:
             # agent model will produce the steps log

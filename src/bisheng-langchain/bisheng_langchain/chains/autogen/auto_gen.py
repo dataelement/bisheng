@@ -86,6 +86,8 @@ class AutoGenChain(Chain):
 
     async def stop(self):
         self.recipient.stop = True
+        self.user_proxy_agent.event.set()
+        self.user_proxy_agent.event.clear()
 
     async def reset(self):
         if isinstance(self.recipient, AutoGenGroupChatManager):
