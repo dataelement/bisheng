@@ -375,7 +375,7 @@ class ChatManager:
                 content = message.get('message')
                 sender = message.get('sender')
                 receiver = message.get('receiver')
-                is_bot = False if receiver.get('is_bot') else True
+                is_bot = False if receiver and receiver.get('is_bot') else True
                 msg = ChatResponse(message=content, sender=sender, receiver=receiver,
                                    type='end', user_id=user_id, is_bot=is_bot)
                 steps.append(msg)
