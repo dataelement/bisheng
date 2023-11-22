@@ -52,7 +52,7 @@ class ChainFrontendNode(FrontendNode):
                               value='[]'))
         elif self.template.type_name == 'MultiPromptChain':
             self.template.add_field(
-                TemplateField(field_type='LLMChain',
+                TemplateField(field_type='Chain',
                               required=True,
                               show=True,
                               is_list=True,
