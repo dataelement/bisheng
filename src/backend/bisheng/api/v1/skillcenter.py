@@ -22,7 +22,7 @@ def create_template(*, session: Session = Depends(get_session), template: Templa
     # 校验name
     name_repeat = session.exec(select(Template).where(Template.name == db_template.name)).first()
     if name_repeat:
-        raise HTTPException(status_code=500, detail='模板名称重复，请重新检查')
+        raise HTTPException(status_code=500, detail='Repeat name, please choose another name')
     # 增加 order_num  x,x+65535
     max_order = session.exec(select(Template).order_by(Template.order_num.desc()).limit(1)).first()
     # 如果没有数据，就从 65535 开始
