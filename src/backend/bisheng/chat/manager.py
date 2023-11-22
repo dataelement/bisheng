@@ -339,7 +339,8 @@ class ChatManager:
             # 群聊，最后一条消息重复，不进行返回
             start_resp.category = 'divider'
             await self.send_json(client_id, chat_id, start_resp)
-            response = ChatResponse(message='本轮结束', type='end', category='divider')
+            response = ChatResponse(message='本轮结束', type='end',
+                                    category='divider', user_id=user_id)
             await self.send_json(client_id, chat_id, response)
         else:
             start_resp.category = 'answer'
