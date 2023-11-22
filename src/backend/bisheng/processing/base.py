@@ -1,4 +1,5 @@
 import asyncio
+from ast import Tuple
 from typing import Union
 
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler, StreamingLLMCallbackHandler
@@ -50,7 +51,10 @@ async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwa
         result = (output.get(langchain_object.output_keys[0])
                   if isinstance(output, dict) else output)
         try:
-            thought = format_actions(intermediate_steps) if intermediate_steps else ''
+            if intermediate_steps and isinstance(intermediate_steps[0], Tuple):
+                thought = format_actions(intermediate_steps)
+            else:
+                thought = intermediate_steps
         except Exception as exc:
             logger.exception(exc)
             thought = ''

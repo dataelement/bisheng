@@ -91,8 +91,8 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         receiver = kwargs.get('receiver')
         if kwargs.get('sender'):
             log = ChatResponse(message=text, type='end',
-                               sender=sender, recevier=receiver)
-            start = ChatResponse(type='start', sender=sender, recevier=receiver)
+                               sender=sender, receiver=receiver)
+            start = ChatResponse(type='start', sender=sender, receiver=receiver)
 
             if receiver and receiver.get('is_self'):
                 await self.websocket.send_json(log.dict())
