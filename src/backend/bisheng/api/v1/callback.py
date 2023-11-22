@@ -104,7 +104,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
             end = ChatResponse(type='end', intermediate_steps=text, category=kwargs.get('type'))
             await self.websocket.send_json(start.dict())
             await self.websocket.send_json(end.dict())
-        else:
+        elif 'category' in kwargs:
             log = ChatResponse(message=text, type='stream')
             await self.websocket.send_json(log.dict())
 
