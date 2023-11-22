@@ -114,11 +114,16 @@ async def process_knowledge(*,
     for path in file_path:
         filepath, file_name = path.split('_', 1)
         md5_ = filepath.rsplit('/', 1)[1]
-        db_file = KnowledgeFile(knowledge_id=knowledge_id,
-                                file_name=file_name,
-                                status=1,
-                                md5=md5_,
+        # 是否包含重复文件
+        repeat = session.exec(select(KnowledgeFile
+                                     ).where(KnowledgeFile.md5 == md5_, KnowledgeFile.status == 2,
+                                             KnowledgeFile.knowledge_id == knowledge_id)).all()
+        status = 3 if repeat else 1
+        remark = 'file repeat' if repeat else ''
+        db_file = KnowledgeFile(knowledge_id=knowledge_id, file_name=file_name,
+                                status=status, md5=md5_, remark=remark,
                                 user_id=payload.get('user_id'))
+
         session.add(db_file)
         session.commit()
         session.refresh(db_file)
@@ -126,14 +131,15 @@ async def process_knowledge(*,
         file_paths.append(filepath)
         logger.info(f'fileName={file_name} col={collection_name}')
 
-    asyncio.create_task(
-        addEmbedding(collection_name=collection_name,
-                     model=knowledge.model,
-                     chunk_size=chunk_size,
-                     separator=separator,
-                     chunk_overlap=chunk_overlap,
-                     file_paths=file_paths,
-                     knowledge_files=files))
+    if not repeat:
+        asyncio.create_task(
+            addEmbedding(collection_name=collection_name,
+                         model=knowledge.model,
+                         chunk_size=chunk_size,
+                         separator=separator,
+                         chunk_overlap=chunk_overlap,
+                         file_paths=file_paths,
+                         knowledge_files=files))
 
     knowledge.update_time = db_file.create_time
     session.add(knowledge)
@@ -383,7 +389,6 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             setattr(db_file, 'remark', str(e)[:500])
             session.add(db_file)
             session.commit()
-            raise e
 
 
 def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
