@@ -67,7 +67,7 @@ class ChatMessage(BaseModel):
     """Chat message schema."""
 
     is_bot: bool = False
-    message: Union[str, None, dict] = None
+    message: Union[str, None, dict] = ''
     type: str = 'human'
     category: str = 'processing'
     intermediate_steps: str = None
@@ -75,12 +75,14 @@ class ChatMessage(BaseModel):
     user_id: int = None
     message_id: int = None
     source: bool = False
+    sender: str = None
+    receiver: dict = None
 
 
 class ChatResponse(ChatMessage):
     """Chat response schema."""
 
-    intermediate_steps: str
+    intermediate_steps: str = ''
     type: str
     is_bot: bool = True
     files: list = []

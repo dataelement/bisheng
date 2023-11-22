@@ -38,7 +38,7 @@ export type sendAllProps = {
   inputs: any;
   id?: string;
   file_path?: string;
-
+  action?: string;
   chatHistory: { message: string | object; isSend: boolean }[];
 };
 export type errorsTypeAPI = {

@@ -96,7 +96,6 @@
         "sendTooltip": "发送",
         "skillTempsTitle": "技能选择",
         "skillTempsDesc": "选择一个您想使用的线上技能",
-        "skillDeleted": "该技能已被删除",
         "networkError": "网络连接出现错误,请尝试以下方法",
         "networkErrorList1": "操作不要过快",
         "networkErrorList2": "刷新页面",
@@ -118,7 +117,10 @@
         "downloadPDFTooltip": "下载双层PDF",
         "downloadOriginalTooltip": "下载原文件",
         "noMatchedFilesMessage": "无匹配的源文件",
-        "fileStorageFailure": "文件存储故障!"
+        "fileStorageFailure": "文件存储故障!",
+        "confirmDeleteChat": "确认删除该会话？",
+        "roundOver": "本轮结束",
+        "chatDialogTip": "设置提示模板中定义的输入变量。与代理和链互动"
     },
     "model": {
         "modelConfiguration": "模型配置",
@@ -238,7 +240,13 @@
         "fileSizeExceedsLimit": "文件不能超50M",
         "file": "文件",
         "sizeExceedsLimit": "超过50M",
-        "editDictionary": "编辑词典"
+        "editDictionary": "编辑词典",
+        "exportCodeDialogTip": "生成代码，将流程集成到外部应用程序中 (打开此页面前请先build技能)。"
+    },
+    "status": {
+        "1004": "该技能已被删除",
+        "1008": "当前技能未上线，无法直接对话",
+        "1005": ""
     },
     "confirmButton": "确定",
     "add": "添加",

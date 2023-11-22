@@ -62,7 +62,7 @@ export default function RTConfig({ open, onChange }) {
                 </Table>
             </div>
             <div className="flex justify-end gap-4 mt-4">
-                <Button variant="ghost" className="h-8 rounded-full" onClick={() => setShowAdd(true)}><PlusCircle className="pr-1" />创建</Button>
+                <Button variant="ghost" className="h-8 rounded-full" onClick={() => setShowAdd(true)}><PlusCircle className="pr-1" />{t('create')}</Button>
             </div>
         </div>
     </dialog>

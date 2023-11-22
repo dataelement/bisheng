@@ -26,7 +26,7 @@ import {
   isValidConnection,
   nodeColors,
   nodeIconsLucide,
-  nodeNames,
+  getNodeNames
 } from "../../../../utils";
 import DictComponent from "../../../../components/dictComponent";
 import KeypairListComponent from "../../../../components/keypairListComponent";
@@ -152,7 +152,7 @@ export default function ParameterComponent({
             /> */}
           </div>
           <span className="ps-2 text-xs text-foreground">
-            {nodeNames[item.family] ?? ""}{" "}
+            {getNodeNames()[item.family] ?? ""}{" "}
             <span className="text-xs">
               {" "}
               {item.type === "" ? "" : " - "}

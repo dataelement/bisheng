@@ -71,7 +71,7 @@ class CacheManager(Subject):
         previous_client_id = self.current_client_id
         previous_chat_id = self.current_chat_id
         self.current_client_id = client_id
-        self.current_chat_id= chat_id
+        self.current_chat_id = chat_id
         self.current_cache = self._cache.setdefault(get_cache_key(client_id, chat_id), {})
         try:
             yield

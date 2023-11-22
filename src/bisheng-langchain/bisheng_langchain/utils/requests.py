@@ -1,6 +1,6 @@
 """Lightweight wrapper around requests library, with async support."""
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional, Tuple, Union
 
 import aiohttp
 import requests
@@ -17,7 +17,7 @@ class Requests(BaseModel):
     headers: Optional[Dict[str, str]] = None
     aiosession: Optional[aiohttp.ClientSession] = None
     auth: Optional[Any] = None
-    request_timeout: int = 120
+    request_timeout: Union[float, Tuple[float, float]] = 120
 
     class Config:
         """Configuration for this pydantic object."""

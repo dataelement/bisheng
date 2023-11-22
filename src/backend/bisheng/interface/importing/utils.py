@@ -52,6 +52,7 @@ def import_by_type(_type: str, name: str) -> Any:
         'utilities': import_utility,
         'output_parsers': import_output_parser,
         'retrievers': import_retriever,
+        'autogenRoles': import_autogenRoles,
     }
     if _type == 'llms':
         key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(
@@ -84,6 +85,10 @@ def import_retriever(retriever: str) -> Any:
         return retriever_creator.type_to_loader_dict[retriever]
     """Import retriever from retriever name"""
     return import_module(f'from langchain.retrievers import {retriever}')
+
+
+def import_autogenRoles(autogen: str) -> Any:
+    return import_module(f'from bisheng_langchain.autogen_role import {autogen}')
 
 
 def import_memory(memory: str) -> Any:

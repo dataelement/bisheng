@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     utilities: dict = {}
     input_output: dict = {}
     output_parsers: dict = {}
+    autogen_roles: dict = {}
     dev: bool = False
     environment: Union[dict, str] = 'dev'
     database_url: Optional[str] = None
@@ -150,6 +151,7 @@ class Settings(BaseSettings):
         self.retrievers = new_settings.retrievers or {}
         self.output_parsers = new_settings.output_parsers or {}
         self.input_output = new_settings.input_output or {}
+        self.autogen_roles = new_settings.autogen_roles or {}
         self.admin = new_settings.admin or {}
         self.bisheng_rt = new_settings.bisheng_rt or {}
         self.default_llm = new_settings.default_llm or {}

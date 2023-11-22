@@ -188,7 +188,10 @@ class Vertex:
         """
         if key == 'func':
             if not isinstance(result, types.FunctionType):
-                if hasattr(result, 'run'):
+                if hasattr(result, 'arun'):
+                    self.params['coroutine'] = result.arun
+                    result = result.run
+                elif hasattr(result, 'run'):
                     result = result.run  # type: ignore
                 elif hasattr(result, 'get_function'):
                     result = result.get_function()  # type: ignore
@@ -215,6 +218,7 @@ class Vertex:
                 node_type=self.vertex_type,
                 base_type=self.base_type,
                 params=self.params,
+                data=self._data
             )
             self._update_built_object_and_artifacts(result)
         except Exception as exc:

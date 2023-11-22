@@ -9,7 +9,7 @@ i18n.use(Backend)
     .init({
         partialBundledLanguages: true,
         ns: ['bs'],
-        lng: localStorage.getItem('language') || 'zh',
+        lng: 'en',
         backend: {
             loadPath: '/locales/{{lng}}/{{ns}}.json'
         },

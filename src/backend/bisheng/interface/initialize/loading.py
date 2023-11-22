@@ -31,7 +31,7 @@ from pydantic import ValidationError
 # from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoaderV0
 
 
-def instantiate_class(node_type: str, base_type: str, params: Dict) -> Any:
+def instantiate_class(node_type: str, base_type: str, params: Dict, data: Dict) -> Any:
     """Instantiate class from module type and key, and params"""
     params = convert_params_to_sets(params)
     params = convert_kwargs(params)
@@ -42,7 +42,7 @@ def instantiate_class(node_type: str, base_type: str, params: Dict) -> Any:
             return custom_node(**params)
 
     class_object = import_by_type(_type=base_type, name=node_type)
-    return instantiate_based_on_type(class_object, base_type, node_type, params)
+    return instantiate_based_on_type(class_object, base_type, node_type, params, data)
 
 
 def convert_params_to_sets(params):
@@ -66,7 +66,7 @@ def convert_kwargs(params):
     return params
 
 
-def instantiate_based_on_type(class_object, base_type, node_type, params):
+def instantiate_based_on_type(class_object, base_type, node_type, params, data):
     if base_type == 'agents':
         return instantiate_agent(node_type, class_object, params)
     elif base_type == 'prompts':
@@ -90,7 +90,7 @@ def instantiate_based_on_type(class_object, base_type, node_type, params):
     elif base_type == 'utilities':
         return instantiate_utility(node_type, class_object, params)
     elif base_type == 'chains':
-        return instantiate_chains(node_type, class_object, params)
+        return instantiate_chains(node_type, class_object, params, data)
     elif base_type == 'output_parsers':
         return instantiate_output_parser(node_type, class_object, params)
     elif base_type == 'llms':
@@ -103,8 +103,14 @@ def instantiate_based_on_type(class_object, base_type, node_type, params):
         return instantiate_wrapper(node_type, class_object, params)
     elif base_type == 'input_output':
         return instantiate_input_output(node_type, class_object, params)
+    elif base_type == 'autogenRoles':
+        return instantiate_autogen_roles(node_type, class_object, params)
     else:
         return class_object(**params)
+
+
+def instantiate_autogen_roles(node_type, class_object, params):
+    return class_object(**params)
 
 
 def instantiate_input_output(node_type, class_object, params):
@@ -117,6 +123,7 @@ def instantiate_wrapper(node_type, class_object, params):
         if class_method := getattr(class_object, method, None):
             return class_method(**params)
         raise ValueError(f'Method {method} not found in {class_object}')
+
     return class_object(**params)
 
 
@@ -154,7 +161,7 @@ def instantiate_llm(node_type, class_object, params: Dict):
 
     # 支持request_timeout & max_retries
     if hasattr(llm, 'request_timeout') and 'request_timeout' in llm_config:
-        if isinstance(llm.request_timeout, str):
+        if isinstance(llm_config.get('request_timeout'), str):
             llm.request_timeout = eval(llm_config.get('request_timeout'))
         else:
             llm.request_timeout = llm_config.get('request_timeout')
@@ -201,7 +208,7 @@ def instantiate_retriever(node_type, class_object, params):
     return class_object(**params)
 
 
-def instantiate_chains(node_type, class_object: Type[Chain], params: Dict):
+def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, data: Dict):
     if 'retriever' in params and hasattr(params['retriever'], 'as_retriever'):
         params['retriever'] = params['retriever'].as_retriever()
     # dict 转换
@@ -212,6 +219,18 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict):
         params['combine_docs_chain_kwargs'] = {
             'prompt': params.pop('combine_docs_chain_kwargs', None)
         }
+    # 人工组装MultiPromptChain
+    if node_type == 'MultiPromptChain':
+        destination_chain_name = eval(params['destination_chain_name'])
+        llm_chains = params['LLMChains']
+        destination_chain = {}
+        i = 0
+        for k, name in destination_chain_name.items():
+            destination_chain[name] = llm_chains[i]
+            i = i+1
+        params.pop('LLMChains')
+        params.pop('destination_chain_name')
+        params['destination_chains'] = destination_chain
     if node_type in chain_creator.from_method_nodes:
         method = chain_creator.from_method_nodes[node_type]
         if class_method := getattr(class_object, method, None):
@@ -234,6 +253,7 @@ def instantiate_agent(node_type, class_object: Type[agent_module.Agent], params:
 
 
 def instantiate_prompt(node_type, class_object, params: Dict):
+
     if node_type == 'ZeroShotPrompt':
         if 'tools' not in params:
             params['tools'] = []
@@ -291,6 +311,8 @@ def instantiate_prompt(node_type, class_object, params: Dict):
                 # Add the handle_keys to the list
                 format_kwargs['handle_keys'].append(input_variable)
 
+    from langchain.chains.router.llm_router import RouterOutputParser
+    prompt.output_parser = RouterOutputParser()
     return prompt, format_kwargs
 
 
