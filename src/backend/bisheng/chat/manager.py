@@ -210,7 +210,7 @@ class ChatManager:
         except Exception as e:
             logger.exception(e)
             step_resp = ChatResponse(type='end',
-                                     intermediate_steps='文件解析失败',
+                                     intermediate_steps='File is parsed fail',
                                      category='system',
                                      user_id=user_id)
             await self.send_json(client_id, chat_id, step_resp)
@@ -228,7 +228,7 @@ class ChatManager:
         input = next((node for node in graph.nodes if node.vertex_type == 'InputNode'), None)
         if not input:
             step_resp = ChatResponse(type='end',
-                                     intermediate_steps='文件解析完成',
+                                     intermediate_steps='File parsing complete',
                                      category='system',
                                      user_id=user_id)
             await self.send_json(client_id, chat_id, step_resp)
@@ -237,7 +237,7 @@ class ChatManager:
             return
         questions = input._built_object
         step_resp = ChatResponse(type='end',
-                                 intermediate_steps='文件解析完成，分析开始',
+                                 intermediate_steps='File parsing complete, analysis starting',
                                  category='system',
                                  user_id=user_id)
         await self.send_json(client_id, chat_id, step_resp)

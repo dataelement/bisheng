@@ -14,7 +14,7 @@ import L2ParamsModal from "../../../../modals/L2ParamsModal";
 import ExportModal from "../../../../modals/exportModal";
 import { APIClassType, APIObjectType } from "../../../../types/api";
 import { FlowType } from "../../../../types/flow";
-import { classNames, nodeColors, nodeIconsLucide, nodeNames, } from "../../../../utils";
+import { classNames, nodeColors, nodeIconsLucide, getNodeNames, } from "../../../../utils";
 import DisclosureComponent from "../DisclosureComponent";
 
 export default function ExtraSidebar({ flow }: { flow: FlowType }) {
@@ -67,6 +67,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
   }
 
   const navgate = useNavigate()
+  const nodeNames = getNodeNames()
   return (
     <div className="side-bar-arrangement">
       <div className="flex absolute right-[80px] top-4 z-10">
