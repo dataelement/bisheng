@@ -25,7 +25,7 @@ interface Iprops {
 }
 
 export default forwardRef(function ChatPanne({
-    chatId, messages, inputState, fileInputs, changeHistoryByScroll, flowName, stopState, isRoom, isReport,sendUserName,
+    chatId, messages, inputState, fileInputs, changeHistoryByScroll, flowName, stopState, isRoom, isReport, sendUserName,
     onSendMsg, onUploadFile, onNextPageClick, onStopClick
 }: Iprops, inputRef: any) {
 
@@ -110,7 +110,7 @@ export default forwardRef(function ChatPanne({
                             <button disabled={isReport || inputEmpty || inputDisable} className=" disabled:text-gray-400" onClick={handleSend}><Send /></button>
                         </ShadTooltip>
                     </div>
-                    {inputState.error && <div className="bg-gray-200 absolute top-0 left-0 w-full h-full text-center text-gray-400 align-middle pt-4">{inputState.error}</div>}
+                    {inputState.errorCode && <div className="bg-gray-200 absolute top-0 left-0 w-full h-full text-center text-gray-400 align-middle pt-4">{t(`status.${inputState.errorCode}`)}</div>}
                 </div>
             </div>
         </div>

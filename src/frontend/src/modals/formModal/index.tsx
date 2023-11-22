@@ -29,6 +29,7 @@ import {
 import { Textarea } from "../../components/ui/textarea";
 import { CHAT_FORM_DIALOG_SUBTITLE, THOUGHTS_ICON } from "../../constants";
 import { TabsContext } from "../../contexts/tabsContext";
+import { useTranslation } from "react-i18next";
 
 export default function FormModal({
   flow,
@@ -417,6 +418,8 @@ export default function FormModal({
     return tabsState[flow.id].formKeysData.input_keys.find((el: any) => !el.type)
   }, [tabsState])
 
+  const { t } = useTranslation()
+
   return (
     <Dialog open={open} onOpenChange={setModalOpen}>
       <DialogTrigger className="hidden"></DialogTrigger>
@@ -430,7 +433,7 @@ export default function FormModal({
                 aria-hidden="true"
               />
             </DialogTitle>
-            <DialogDescription>{CHAT_FORM_DIALOG_SUBTITLE}</DialogDescription>
+            <DialogDescription>{t('chat.chatDialogTip')}</DialogDescription>
           </DialogHeader>
 
           <div className="form-modal-iv-box ">

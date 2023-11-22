@@ -81,7 +81,7 @@ export default function SkillChatPage() {
         let flow = flows.find(flow => flow.id === chat.flow_id) || await getFlowFromDatabase(chat.flow_id)
 
         if (!flow) {
-            setInputState({ lock: true, error: t('chat.skillDeleted') })
+            setInputState({ lock: true, errorCode: '1004' })
             clearHistory()
             return setFace(false)
         }
@@ -193,7 +193,7 @@ const useWebsocketChat = (chatIdRef) => {
     const { tabsState } = useContext(TabsContext);
     const [inputState, setInputState] = useState({
         lock: false,
-        error: ''
+        errorCode: ''
     })
 
     const build = useBuild() // build
@@ -267,7 +267,7 @@ const useWebsocketChat = (chatIdRef) => {
                 );
                 const newWs = new WebSocket(urlWs);
                 newWs.onopen = () => {
-                    setInputState({ lock: false, error: '' });
+                    setInputState({ lock: false, errorCode: '' });
                     console.log("WebSocket connection established!");
                     res('ok')
                     // heartbeat()
@@ -277,8 +277,8 @@ const useWebsocketChat = (chatIdRef) => {
                     handleWsMessage(data);
                     // get chat history
                     // 群聊@自己时，开启input
-                    if (data.type === 'end' && data.recevier?.is_self) {
-                        setInputState({ lock: false, error: '' })
+                    if (data.type === 'end' && data.receiver?.is_self) {
+                        setInputState({ lock: false, errorCode: '' })
                     }
                 };
                 newWs.onclose = (event) => {
@@ -315,7 +315,7 @@ const useWebsocketChat = (chatIdRef) => {
 
     // send
     const sendMsg = async (msg) => {
-        setInputState({ lock: true, error: '' });
+        setInputState({ lock: true, errorCode: '' });
         let inputs = tabsState[flow.current.id].formKeysData.input_keys;
         const input = inputs.find((el: any) => !el.type)
         const inputKey = Object.keys(input)[0];
@@ -427,7 +427,7 @@ const useWebsocketChat = (chatIdRef) => {
         if (data.type === "close") {
             setBegin(false)
             setIsStop(true)
-            setInputState({ lock: false, error: '' });
+            setInputState({ lock: false, errorCode: '' });
             changeHistoryByScroll.current = true
             // TODO 分割线  群聊情况下
         }
@@ -540,7 +540,7 @@ const useWebsocketChat = (chatIdRef) => {
         setBegin(false)
 
         if ([1005, 1008].includes(event.code)) {
-            setInputState({ lock: true, error: event.reason });
+            setInputState({ lock: true, errorCode: String(event.code) });
         } else {
             if (event.reason) {
                 setErrorData({ title: event.reason });
@@ -553,7 +553,7 @@ const useWebsocketChat = (chatIdRef) => {
                     return newChat
                 })
             }
-            setInputState({ lock: false, error: '' });
+            setInputState({ lock: false, errorCode: '' });
         }
 
         ws.current?.close()
@@ -609,7 +609,7 @@ const useWebsocketChat = (chatIdRef) => {
             }]
         });
         await checkReLinkWs()
-        setInputState({ lock: true, error: '' });
+        setInputState({ lock: true, errorCode: '' });
         uploadFileWithProgress(file, (count) => { }).then(data => {
             setChatHistory((old) => {
                 let newChat = [...old];
@@ -617,7 +617,7 @@ const useWebsocketChat = (chatIdRef) => {
                 return newChat;
             })
 
-            if (!data) return setInputState({ lock: false, error: '' });
+            if (!data) return setInputState({ lock: false, errorCode: '' });
             // setFilePaths
             sendAll({
                 ...flow.current.data,
