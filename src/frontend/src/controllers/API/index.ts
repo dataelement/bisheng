@@ -31,6 +31,8 @@ axios.interceptors.response.use(function (response) {
   }
   return Promise.reject(error);
 })
+
+export default axios
 /**
  * Fetches all objects from the API endpoint.
  *

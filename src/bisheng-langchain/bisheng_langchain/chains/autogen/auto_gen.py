@@ -19,6 +19,7 @@ class AutoGenChain(Chain):
     recipient: ConversableAgent
 
     input_key: str = 'chat_topic'  #: :meta private:
+
     output_key: str = 'chat_content'  #: :meta private:
 
     @staticmethod
@@ -79,13 +80,14 @@ class AutoGenChain(Chain):
                                                     global_chat_messages=global_chat_messages,
                                                     run_manager=run_manager)
         # chat_content = io_output.getvalue()
-        chat_content = json.dumps(
-            global_chat_messages, indent=2, ensure_ascii=False)
-        output = {self.output_key: chat_content}
+        output = {self.output_key: global_chat_messages[-1].get('message'),
+                  'intermediate_steps': global_chat_messages}
         return output
 
     async def stop(self):
         self.recipient.stop = True
+        self.user_proxy_agent.event.set()
+        self.user_proxy_agent.event.clear()
 
     async def reset(self):
         if isinstance(self.recipient, AutoGenGroupChatManager):

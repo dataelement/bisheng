@@ -57,6 +57,7 @@ def extract_answer_keys(answer, extract_model, host_base_url):
                            host_base_url=host_base_url,
                            max_tokens=8192,
                            temperature=0,
+                           top_p=1,
                            verbose=True)
         llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
     try:

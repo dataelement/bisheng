@@ -14,6 +14,7 @@ import SkillTemps from "../SkillPage/components/SkillTemps";
 import ChatPanne from "./components/ChatPanne";
 import { Trash2 } from "lucide-react";
 import { bsconfirm } from "../../alerts/confirm";
+// import ChatReportForm from "./components/ChatReportForm";
 
 export default function SkillChatPage() {
     const [open, setOpen] = useState(false)
@@ -22,6 +23,7 @@ export default function SkillChatPage() {
     const { t } = useTranslation()
 
     const { flows } = useContext(TabsContext);
+    const [flow, setFlow] = useState<FlowType>(null)
     const [onlineFlows, setOnlineFlows] = useState([])
     useEffect(() => {
         readOnlineFlows().then(res => setOnlineFlows(res))
@@ -30,6 +32,7 @@ export default function SkillChatPage() {
     const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat } = useChatList()
     const chatIdRef = useRef('')
     const {
+        isReport,
         isRoom,
         inputState,
         fileInputs,
@@ -43,6 +46,7 @@ export default function SkillChatPage() {
         clearHistory,
         initChat,
         sendMsg,
+        sendReport,
         loadNextPage
     } = useWebsocketChat(chatIdRef) // talk
     // select flow
@@ -50,6 +54,7 @@ export default function SkillChatPage() {
         // 会话ID
         chatIdRef.current = generateUUID(32)
         setOpen(false)
+        setFlow(node)
         await initChat(node)
         setFace(false)
         // add list
@@ -62,9 +67,9 @@ export default function SkillChatPage() {
             "update_time": "-"
         })
 
-        inputRef.current.value = ''
+        if (inputRef.current) inputRef.current.value = ''
         setTimeout(() => {
-            inputRef.current.focus()
+            inputRef.current?.focus()
         }, 500);
     }
 
@@ -74,11 +79,13 @@ export default function SkillChatPage() {
         setChatId(chat.chat_id)
         chatIdRef.current = chat.chat_id
         let flow = flows.find(flow => flow.id === chat.flow_id) || await getFlowFromDatabase(chat.flow_id)
+
         if (!flow) {
-            setInputState({ lock: true, error: t('chat.skillDeleted') })
+            setInputState({ lock: true, errorCode: '1004' })
             clearHistory()
             return setFace(false)
         }
+        setFlow(flow)
         await initChat(flow)
         setFace(false)
 
@@ -111,18 +118,27 @@ export default function SkillChatPage() {
         })
     }
 
+    // sendmsg user name
+    const sendUserName = useMemo(() => {
+        if (flow) {
+            const node = flow.data.nodes.find(el => el.data.type === 'AutoGenUser')
+            return node?.data.node.template['name'].value || ''
+        }
+        return ''
+    }, [flow])
+
     return <div className="flex">
         <div className="h-screen w-[200px] relative border-r">
             <div className="absolute flex pt-2 ml-[20px] bg-[#fff] dark:bg-gray-950">
-                <div className="border rounded-lg px-4 py-2 text-center cursor-pointer w-[160px] hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setOpen(true)}>{t('chat.newChat')}</div>
+                <div className="border rounded-lg px-4 py-2 text-center text-sm cursor-pointer w-[160px] bg-gray-50 hover:bg-gray-100 dark:hover:bg-gray-800 relative z-10" onClick={() => setOpen(true)}>{t('chat.newChat')}</div>
             </div>
             <div ref={chatsRef} className="scroll p-4 h-full overflow-y-scroll no-scrollbar pt-12">
                 {
                     chatList.map((chat, i) => (
                         <div key={chat.chat_id}
-                            className={`group item rounded-xl mt-2 p-2 relative hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-gray-100 dark:bg-gray-800'}`}
+                            className={` group item rounded-xl mt-2 p-2 relative hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-gray-100 dark:bg-gray-800'}`}
                             onClick={() => handleSelectChat(chat)}>
-                            <p className="break-words">{chat.flow_name}</p>
+                            <p className="break-words text-sm font-bold text-gray-600">{chat.flow_name}</p>
                             <span className="text-xs text-gray-500">{chat.flow_description}</span>
                             <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
                         </div>
@@ -133,23 +149,28 @@ export default function SkillChatPage() {
         {/* chat */}
         {face
             ? <div className="flex-1 chat-box h-screen overflow-hidden relative">
-                <p className="text-center mt-[100px]">{t('chat.selectChat')}</p>
+                <p className="text-center mt-[100px] text-sm text-gray-600">{t('chat.selectChat')}</p>
             </div>
-            : <ChatPanne
-                ref={inputRef}
-                isRoom={isRoom}
-                fileInputs={fileInputs}
-                inputState={inputState}
-                chatId={chatId}
-                messages={chatHistory}
-                flowName={chatList.find(chat => chat.chat_id === chatId)?.flow_name}
-                changeHistoryByScroll={changeHistoryByScroll.current}
-                stopState={stopState}
-                onStopClick={stopClick}
-                onSendMsg={sendMsg}
-                onNextPageClick={loadNextPage}
-                onUploadFile={uploadFile}
-            />}
+            : <div className="flex-1 chat-box h-screen relative">
+                <ChatPanne
+                    ref={inputRef}
+                    isRoom={isRoom}
+                    isReport={isReport}
+                    fileInputs={fileInputs}
+                    inputState={inputState}
+                    chatId={chatId}
+                    messages={chatHistory}
+                    flowName={chatList.find(chat => chat.chat_id === chatId)?.flow_name}
+                    changeHistoryByScroll={changeHistoryByScroll.current}
+                    stopState={stopState}
+                    sendUserName={sendUserName}
+                    onStopClick={stopClick}
+                    onSendMsg={sendMsg}
+                    onNextPageClick={loadNextPage}
+                    onUploadFile={uploadFile}
+                />
+                {/* {isReport && !chatHistory.length && <ChatReportForm flow={flow} onStart={sendReport} />} */}
+            </div>}
         {/* 选择对话技能 */}
         <SkillTemps
             flows={onlineFlows}
@@ -172,7 +193,7 @@ const useWebsocketChat = (chatIdRef) => {
     const { tabsState } = useContext(TabsContext);
     const [inputState, setInputState] = useState({
         lock: false,
-        error: ''
+        errorCode: ''
     })
 
     const build = useBuild() // build
@@ -246,7 +267,7 @@ const useWebsocketChat = (chatIdRef) => {
                 );
                 const newWs = new WebSocket(urlWs);
                 newWs.onopen = () => {
-                    setInputState({ lock: false, error: '' });
+                    setInputState({ lock: false, errorCode: '' });
                     console.log("WebSocket connection established!");
                     res('ok')
                     // heartbeat()
@@ -256,8 +277,8 @@ const useWebsocketChat = (chatIdRef) => {
                     handleWsMessage(data);
                     // get chat history
                     // 群聊@自己时，开启input
-                    if (data.type === 'end' && data.recevier?.is_self) {
-                        setInputState({ lock: false, error: '' })
+                    if (data.type === 'end' && data.receiver?.is_self) {
+                        setInputState({ lock: false, errorCode: '' })
                     }
                 };
                 newWs.onclose = (event) => {
@@ -294,7 +315,7 @@ const useWebsocketChat = (chatIdRef) => {
 
     // send
     const sendMsg = async (msg) => {
-        setInputState({ lock: true, error: '' });
+        setInputState({ lock: true, errorCode: '' });
         let inputs = tabsState[flow.current.id].formKeysData.input_keys;
         const input = inputs.find((el: any) => !el.type)
         const inputKey = Object.keys(input)[0];
@@ -314,6 +335,26 @@ const useWebsocketChat = (chatIdRef) => {
                 name: flow.current.name,
                 description: flow.current.description,
             });
+    }
+
+    // 报表请求 TODO
+    const sendReport = (obj, str) => {
+        let inputs = tabsState[flow.current.id].formKeysData.input_keys;
+        const input = inputs.find((el: any) => !el.type)
+        const inputKey = Object.keys(input)[0];
+        addChatHistory({
+            isSend: true,
+            message: { ...input, [inputKey]: str },
+            chatKey: inputKey
+        })
+
+        addChatHistory({
+            isSend: false,
+            files: [{
+                file_name: '报表结果.docx',
+                file_url: 'http://192.168.2.15:3001/new.docx'
+            }]
+        })
     }
 
     // 发送ws
@@ -386,7 +427,7 @@ const useWebsocketChat = (chatIdRef) => {
         if (data.type === "close") {
             setBegin(false)
             setIsStop(true)
-            setInputState({ lock: false, error: '' });
+            setInputState({ lock: false, errorCode: '' });
             changeHistoryByScroll.current = true
             // TODO 分割线  群聊情况下
         }
@@ -496,9 +537,10 @@ const useWebsocketChat = (chatIdRef) => {
     function handleOnClose(event: CloseEvent) {
         console.error('链接断开 event :>> ', event);
         setIsStop(true)
+        setBegin(false)
 
         if ([1005, 1008].includes(event.code)) {
-            setInputState({ lock: true, error: event.reason });
+            setInputState({ lock: true, errorCode: String(event.code) });
         } else {
             if (event.reason) {
                 setErrorData({ title: event.reason });
@@ -511,7 +553,7 @@ const useWebsocketChat = (chatIdRef) => {
                     return newChat
                 })
             }
-            setInputState({ lock: false, error: '' });
+            setInputState({ lock: false, errorCode: '' });
         }
 
         ws.current?.close()
@@ -567,7 +609,7 @@ const useWebsocketChat = (chatIdRef) => {
             }]
         });
         await checkReLinkWs()
-        setInputState({ lock: true, error: '' });
+        setInputState({ lock: true, errorCode: '' });
         uploadFileWithProgress(file, (count) => { }).then(data => {
             setChatHistory((old) => {
                 let newChat = [...old];
@@ -575,7 +617,7 @@ const useWebsocketChat = (chatIdRef) => {
                 return newChat;
             })
 
-            if (!data) return setInputState({ lock: false, error: '' });
+            if (!data) return setInputState({ lock: false, errorCode: '' });
             // setFilePaths
             sendAll({
                 ...flow.current.data,
@@ -652,10 +694,17 @@ const useWebsocketChat = (chatIdRef) => {
         return !!flow.current?.data.nodes.find(node => node.data.type === "AutoGenChain")
     }, [flow.current])
 
+    // 是否报表表单
+    const isReport = useMemo(() => {
+        // 如果有 VariableNode  inputnode 就属于
+        return !!flow.current?.data.nodes.find(node => ["VariableNode", "InputFileNode1"].includes(node.data.type))
+    }, [flow.current])
+
     // 停止状态
     const [isStop, setIsStop] = useState(true)
     return {
         isRoom,
+        isReport,
         chating: begin,
         inputState,
         fileInputs,
@@ -678,9 +727,9 @@ const useWebsocketChat = (chatIdRef) => {
             setChatHistory([])
         },
         stopState: isStop,
+        sendReport,
         stopClick: () => {
             setIsStop(true)
-            // sendAll() // TODO ws stop
             try {
                 if (ws) {
                     ws.current.send(JSON.stringify({

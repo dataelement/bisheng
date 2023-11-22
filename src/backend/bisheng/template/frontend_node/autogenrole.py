@@ -7,65 +7,53 @@ from bisheng.template.frontend_node.base import FrontendNode
 class AutogenRoleFrontNode(FrontendNode):
 
     def add_extra_base_classes(self) -> None:
-        self.base_classes = ['ConversableAgent']
-        self.output_types = ['ConversableAgent']
+        self.base_classes.append('ConversableAgent')
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
         FrontendNode.format_field(field, name)
-        if field.name == 'metadata':
-            field.show = True
-            field.advanced = False
         field.show = True
-        if field.name == 'unstructured_api_url':
-            field.show = True
-            field.advanced = False
 
     def add_extra_fields(self) -> None:
-        self.template.add_field(
-                TemplateField(
-                    field_type='int',
-                    required=True,
-                    show=True,
-                    name='temperature',
-                    advanced=False,
-                    value=0
-                ))
-        self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=True,
-                    show=True,
-                    name='model_name',
-                    value='gpt-4-0613',
-                    advanced=False,
-                ))
+        if self.name in {'AutoGenAssistant',
+                         'AutoGenGroupChatManager',
+                         }:
+            self.template.add_field(
+                    TemplateField(
+                        field_type='float',
+                        required=True,
+                        show=True,
+                        name='temperature',
+                        advanced=False,
+                        value=0
+                    ))
+            self.template.add_field(
+                    TemplateField(
+                        field_type='str',
+                        required=True,
+                        show=True,
+                        name='model_name',
+                        value='gpt-4-0613',
+                        advanced=False,
+                    ))
 
-        self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=False,
-                    show=True,
-                    name='openai_api_key',
-                    value='',
-                    advanced=False,
-                ))
-        self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=False,
-                    show=True,
-                    name='openai_proxy',
-                    advanced=False,
-                ))
-        self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=False,
-                    show=True,
-                    name='system_message',
-                    advanced=False,
-                ))
+            self.template.add_field(
+                    TemplateField(
+                        field_type='str',
+                        required=False,
+                        show=True,
+                        name='openai_api_key',
+                        value='',
+                        advanced=False,
+                    ))
+            self.template.add_field(
+                    TemplateField(
+                        field_type='str',
+                        required=False,
+                        show=True,
+                        name='openai_proxy',
+                        advanced=False,
+                    ))
 
         if self.name == 'AutoGenGroupChatManager':
             self.template.add_field(
@@ -89,12 +77,20 @@ class AutogenRoleFrontNode(FrontendNode):
             self.template.add_field(
                 TemplateField(
                     field_type='str',
-                    multiline=True,
                     required=False,
                     show=True,
-                    name='messages',
+                    name='system_message',
                     advanced=False,
-                    value='[]'
+                    value='Group chat manager.'
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='name',
+                    value='chat_manage',
+                    advanced=False,
                 ))
         else:
             self.template.add_field(
@@ -106,16 +102,24 @@ class AutogenRoleFrontNode(FrontendNode):
                     value='',
                     advanced=False,
                 ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='system_message',
+                    advanced=False,
+                ))
 
         if self.name == 'AutoGenUser':
             self.template.add_field(
                 TemplateField(
-                    field_type='bool',
-                    required=True,
+                    field_type='int',
+                    required=False,
                     show=True,
-                    name='code_execution_flag',
+                    name='max_consecutive_auto_reply',
                     advanced=False,
-                    value=False
+                    value=10
                 ))
             self.template.add_field(
                 TemplateField(
@@ -124,5 +128,14 @@ class AutogenRoleFrontNode(FrontendNode):
                     show=True,
                     name='human_input_mode',
                     advanced=False,
-                    value='NEVER'
+                    value='ALWAYS'
+                ))
+        if self.name == 'AutoGenCustomRole':
+            self.template.add_field(
+                TemplateField(
+                    field_type='function',
+                    required=True,
+                    show=True,
+                    name='func',
+                    advanced=False,
                 ))

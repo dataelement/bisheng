@@ -32,19 +32,21 @@ async def regist(*, session: Session = Depends(get_session), user: UserCreate):
     if not admin:
         db_user_role = UserRole(user_id=db_user.user_id, role_id=1)
         db_user.user_id = 1
-    else:
-        # 默认加入普通用户
-        db_user_role = UserRole(user_id=db_user.user_id, role_id=2)
+
     # check if user already exist
-    db_user = session.exec(select(User).where(User.user_name == user.user_name)).all()
-    if db_user:
+    name_user = session.exec(select(User).where(User.user_name == user.user_name)).all()
+    if name_user:
         raise HTTPException(status_code=500, detail='账号已存在')
     else:
         try:
             user.password = md5_hash(user.password)
             session.add(db_user)
             session.flush()
-            session.add(db_user_role)
+            session.refresh(db_user)
+            # 默认加入普通用户
+            if db_user != 1:
+                db_user_role = UserRole(user_id=db_user.user_id, role_id=2)
+                session.add(db_user_role)
             session.commit()
         except Exception as e:
             session.rollback()

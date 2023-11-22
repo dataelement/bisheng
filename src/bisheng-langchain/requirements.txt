@@ -1,5 +1,4 @@
 langchain
-openai
 zhipuai
 websocket-client
 elasticsearch

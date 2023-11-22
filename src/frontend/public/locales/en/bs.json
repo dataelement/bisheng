@@ -1,6 +1,6 @@
 {
     "title": "BISHENG",
-    "prompt": "Prompt",
+    "prompt": "Confirmation",
     "login": {
         "slogen": "Convenient, Flexible, Reliable Enterprise-Level Large Model Application Development Platform",
         "account": "Account",
@@ -122,7 +122,9 @@
         "downloadOriginalTooltip": "Download Original File",
         "noMatchedFilesMessage": "No matched source files",
         "fileStorageFailure": "File storage failure!",
-        "confirmDeleteChat": "Confirm deletion of this chat？"
+        "confirmDeleteChat": "Confirm deletion of this chat？",
+        "roundOver": "This round is over",
+        "chatDialogTip": "Set the input variables defined in the prompt template. Interact with agents and chains."
     },
     "model": {
         "modelConfiguration": "Model Configuration",
@@ -242,8 +244,13 @@
         "fileSizeExceedsLimit": "File size cannot exceed 50MB",
         "file": "File",
         "sizeExceedsLimit": "Size exceeds 50MB",
-        "editDictionary": "Edit Dictionary"
-
+        "editDictionary": "Edit Dictionary",
+        "exportCodeDialogTip": "Generate code to integrate the workflow into an external application (please make sure to build the skill before opening this page)."
+    },
+    "status": {
+        "1004": "This skill has been deleted",
+        "1008": "The current skill is not online, and direct conversation is not possible.",
+        "1005": ""
     },
     "confirmButton": "Confirm",
     "add": "Add",

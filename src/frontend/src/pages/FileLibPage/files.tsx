@@ -23,7 +23,6 @@ import ShadTooltip from "../../components/ShadTooltipComponent";
 import { locationContext } from "../../contexts/locationContext";
 import { deleteFile, readFileByLibDatabase } from "../../controllers/API";
 import UploadModal from "../../modals/UploadModal";
-import { locationContext } from "../../contexts/locationContext";
 
 export default function FilesPage() {
     const { t } = useTranslation()
@@ -41,8 +40,6 @@ export default function FilesPage() {
 
     const [hasPermission, setHasPermission] = useState(true)
     const { appConfig } = useContext(locationContext)
-
-    const { appConfig } = useContext(locationContext);
 
     const loadPage = (_page) => {
         setLoading(true)
