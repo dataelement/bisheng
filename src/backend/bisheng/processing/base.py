@@ -33,10 +33,7 @@ async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwa
             # make the error message more informative
             logger.exception(exc)
             asyc = False
-            step = ChatResponse(message='',
-                                intermediate_steps='分析中',
-                                type='stream',
-                                category='processing')
+            step = ChatResponse(intermediate_steps='分析中', type='stream',)
             await kwargs['websocket'].send_json(step.dict())
             sync_callbacks = [StreamingLLMCallbackHandler(**kwargs)]
             output = langchain_object(inputs, callbacks=sync_callbacks)
