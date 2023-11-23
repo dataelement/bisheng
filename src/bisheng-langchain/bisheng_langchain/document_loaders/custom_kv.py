@@ -1,20 +1,23 @@
 # flake8: noqa
 """Loads PDF with semantic splilter."""
 import base64
-import json
+import logging
 import os
-from collections import defaultdict
-from typing import List
+import tempfile
+from pathlib import Path
+from time import sleep
+from typing import Iterator, List, Tuple, Union
 
 import cv2
-import filetype
 import fitz
 import numpy as np
-from bisheng_langchain.document_loaders.parsers import ELLMClient
+import requests
 from langchain.docstore.document import Document
 from langchain.document_loaders.base import BaseLoader
+from langchain.load.serializable import Serializable
 from PIL import Image
 
+logger = logging.getLogger(__name__)
 
 def convert_base64(image):
     image_binary = cv2.imencode('.jpg', image)[1].tobytes()
@@ -44,68 +47,111 @@ def transpdf2png(pdf_file):
     return pdf_images
 
 
-class CustomKVLoader(BaseLoader):
+class CustomKVLoader(BaseLoader, Serializable):
     """Extract key-value from pdf or image.
     """
-    file_path: str
-    ellm_api_base_url: str
-    schema: str
-    max_pages: int
+    elm_api_base_url: str
+    elm_api_key: str
+    elem_server_id: str
+    task_type: str
+    schemas: str
+
+    def __init__(self, file_path:str,
+                 elm_api_base_url: str,
+                 elm_api_key: str,
+                 schemas: str,
+                 elem_server_id: str,
+                 task_type: str,
+                 request_timeout: Union[float, Tuple[float, float]]) -> None:
+        """Initialize with a file path."""
+        self.file_path = file_path
+        self.elm_api_base_url = elm_api_base_url
+        self.elm_api_key = elm_api_key
+        self.elem_server_id = elem_server_id
+        self.task_type = task_type
+        self.schemas = schemas
+        self.headers = {'Authorization': f'Bearer {elm_api_key}'}
+        self.timeout = request_timeout
+        if '~' in self.file_path:
+            self.file_path = os.path.expanduser(self.file_path)
+
+        # If the file is a web path, download it to a temporary file, and use that
+        if not os.path.isfile(self.file_path) and self._is_valid_url(self.file_path):
+            r = self.request.get(self.file_path)
+
+            if r.status_code != 200:
+                raise ValueError(
+                    'Check the url of your file; returned status code %s'
+                    % r.status_code
+                )
+
+            self.temp_dir = tempfile.TemporaryDirectory()
+            temp_file = Path(self.temp_dir.name) / 'tmp.pdf'
+            with open(temp_file, mode='wb') as f:
+                f.write(r.content)
+            self.file_path = str(temp_file)
+        elif not os.path.isfile(self.file_path):
+            raise ValueError('File path %s is not a valid file or url' % self.file_path)
+        super().__init__()
+
 
     def load(self) -> List[Document]:
         """Load given path as pages."""
-        mime_type = filetype.guess(self.file_path).mime
-        if mime_type.endswith('pdf'):
-            file_type = 'pdf'
-        elif mime_type.startswith('image'):
-            file_type = 'img'
-        else:
-            raise ValueError(f'file type {file_type} is not support.')
+        return list(self.lazy_load())
 
-        if file_type == 'img':
-            bytes_data = open(self.file_path, 'rb').read()
-            b64data = base64.b64encode(bytes_data).decode()
-            payload = {'b64_image': b64data, 'keys': self.schema}
-            resp = self.ellm_model.predict(payload)
+    def lazy_load(
+        self,
+    ) -> Iterator[Document]:
+        """Lazy load given path as pages."""
 
-            if 'code' in resp and resp['code'] == 200:
-                key_values = resp['result']['ellm_result']
+        blob = Blob.from_path(self.file_path)
+        yield from self.parser.parse(blob)
+
+
+    def load(self) -> List[Document]:
+        """Load given path as pages."""
+        # mime_type = filetype.guess(self.file_path).mime
+        # if mime_type.endswith('pdf'):
+        #     file_type = 'pdf'
+        # elif mime_type.startswith('image'):
+        #     file_type = 'img'
+
+        # else:
+        #     raise ValueError(f'file type {file_type} is not support.')
+        file = {'file': open(self.file_path, 'rb')}
+        if self.task_type == 'task':
+            url = self.elm_api_base_url + '/task'
+            # 创建task
+            body = {'scene_id': self.elem_server_id}
+            resp = requests.post(url=url, data=body, files=file, headers=self.headers)
+            if resp.status_code == 200:
+                task_id = resp.json.get('task_id')
+                # get status
+                status_url = self.elm_api_base_url + f'/task/status?task_id={task_id}'
+                count = 0
+                while True:
+                    status = requests.get(status_url, headers=self.headers).json()
+                    if 1 == status.get('data').get('status') and count <10:
+                        count += 1
+                        sleep(2)
+                    else:
+                        break
+                # get result
+                result_url = self.elm_api_base_url + f'/task/result?task_id={task_id}'
+                result = requests.get(status_url, headers=self.headers).json()
+
             else:
-                raise ValueError(f'universal kv load failed: {resp}')
+                logger.error(f'custom_kv=create_task resp={resp.text}')
+                raise Exception('custom_kv create task file')
 
-            kv_results = defaultdict(list)
-            for key, value in key_values.items():
-                kv_results[key] = value['text']
 
-            content = json.dumps(kv_results, indent=2, ensure_ascii=False)
-            file_name = os.path.basename(self.file_path)
-            meta = {'source': file_name}
-            doc = Document(page_content=content, metadata=meta)
-            return [doc]
 
-        elif file_type == 'pdf':
-            pdf_images = transpdf2png(self.file_path)
 
-            kv_results = defaultdict(list)
-            for pdf_name in pdf_images:
-                page = int(pdf_name.split('page_')[-1])
-                if page > self.max_pages:
-                    continue
+        elif self.task_type == 'logic-job':
+            url = self.ellm_api_base_url + '/logic-job'
+            body = {'logic_service_id': self.elem_server_id}
 
-                b64data = convert_base64(pdf_images[pdf_name])
-                payload = {'b64_image': b64data, 'keys': self.schema}
-                resp = self.ellm_model.predict(payload)
 
-                if 'code' in resp and resp['code'] == 200:
-                    key_values = resp['result']['ellm_result']
-                else:
-                    raise ValueError(f'universal kv load failed: {resp}')
-
-                for key, value in key_values.items():
-                    kv_results[key].extend(value['text'])
-
-            content = json.dumps(kv_results, indent=2, ensure_ascii=False)
-            file_name = os.path.basename(self.file_path)
-            meta = {'source': file_name}
-            doc = Document(page_content=content, metadata=meta)
-            return [doc]
+        resp = requests.post(url=url, data=body, files=file, headers=self.headers)
+        doc = Document(page_content=content, metadata=meta)
+        return [doc]

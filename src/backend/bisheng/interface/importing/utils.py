@@ -53,6 +53,7 @@ def import_by_type(_type: str, name: str) -> Any:
         'output_parsers': import_output_parser,
         'retrievers': import_retriever,
         'autogenRoles': import_autogenRoles,
+        'inputOutput': import_inputoutput,
     }
     if _type == 'llms':
         key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(

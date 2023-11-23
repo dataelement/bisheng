@@ -1,6 +1,5 @@
 import asyncio
-from ast import Tuple
-from typing import Union
+from typing import Tuple, Union
 
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler, StreamingLLMCallbackHandler
 from bisheng.api.v1.schemas import ChatResponse

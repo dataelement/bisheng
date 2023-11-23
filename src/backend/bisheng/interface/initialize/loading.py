@@ -44,7 +44,8 @@ def instantiate_class(node_type: str, base_type: str, params: Dict, data: Dict) 
             return custom_node(**params)
 
     class_object = import_by_type(_type=base_type, name=node_type)
-    return instantiate_based_on_type(class_object, base_type, node_type, params, data)
+    return instantiate_based_on_type(class_object, base_type, node_type,
+                                     params, params_node_id_dict)
 
 
 def convert_params_to_sets(params):
@@ -68,7 +69,7 @@ def convert_kwargs(params):
     return params
 
 
-def instantiate_based_on_type(class_object, base_type, node_type, params, data):
+def instantiate_based_on_type(class_object, base_type, node_type, params, param_id_dict):
     if base_type == 'agents':
         return instantiate_agent(node_type, class_object, params)
     elif base_type == 'prompts':
@@ -92,7 +93,7 @@ def instantiate_based_on_type(class_object, base_type, node_type, params, data):
     elif base_type == 'utilities':
         return instantiate_utility(node_type, class_object, params)
     elif base_type == 'chains':
-        return instantiate_chains(node_type, class_object, params, data)
+        return instantiate_chains(node_type, class_object, params, param_id_dict)
     elif base_type == 'output_parsers':
         return instantiate_output_parser(node_type, class_object, params)
     elif base_type == 'llms':
@@ -103,20 +104,37 @@ def instantiate_based_on_type(class_object, base_type, node_type, params, data):
         return instantiate_memory(node_type, class_object, params)
     elif base_type == 'wrappers':
         return instantiate_wrapper(node_type, class_object, params)
-    elif base_type == 'input_output':
-        return instantiate_input_output(node_type, class_object, params)
+    elif base_type == 'inputOutput':
+        return instantiate_input_output(node_type, class_object, params, param_id_dict)
     elif base_type == 'autogenRoles':
         return instantiate_autogen_roles(node_type, class_object, params)
     else:
         return class_object(**params)
 
 
+def instantiate_input_output(node_type, class_object, params, id_dict):
+    if node_type == 'Report':
+        preset_question = {}
+        if PRESET_QUESTION in params:
+            preset_question = params.pop(PRESET_QUESTION)
+        chains = params['chains']
+        chains_idlist = id_dict['chains']
+        # 需要对chains对象进行丰富处理
+        chain_list = []
+        for index, id in enumerate(chains_idlist):
+            chain_obj = {}
+            chain_obj['object'] = chains[index]
+            chain_obj['node_id'] = id
+            if id in preset_question:
+                chain_obj['input'] = {chains[index].input_keys[0]: preset_question[id]}
+            chain_list.append(chain_obj)
+        # variables
+        return class_object(**chain_list)
+    return class_object(**params).text()
+
+
 def instantiate_autogen_roles(node_type, class_object, params):
     return class_object(**params)
-
-
-def instantiate_input_output(node_type, class_object, params):
-    return class_object(**params).text()
 
 
 def instantiate_wrapper(node_type, class_object, params):
@@ -210,7 +228,7 @@ def instantiate_retriever(node_type, class_object, params):
     return class_object(**params)
 
 
-def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, data: Dict):
+def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_dict: Dict):
     if 'retriever' in params and hasattr(params['retriever'], 'as_retriever'):
         params['retriever'] = params['retriever'].as_retriever()
     # sequence chain
