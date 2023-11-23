@@ -21,11 +21,13 @@ async def callback(data: dict, session: Session = Depends(get_session)):
     file_url = data.get('url')
     key = data.get('key')
     logger.debug(f'calback={data}')
-    if 2 == status:
+    if status in {2, 6}:
         # 保存回掉
-        file = await Requests().aget(url=file_url)
-        object_name = mino_prefix+key
-        minio_client.MinioClient().upload_minio_data(object_name, file)
+        file = Requests().get(url=file_url)
+        object_name = mino_prefix+key+'.docx'
+        minio_client.MinioClient().upload_minio_data(object_name, file._content,
+                                                     len(file._content),
+                                                     'application/vnd.openxmlformats-officedocument.wordprocessingml.document') # noqa
         db_report = Report(version_key=key, object_name=object_name)
         session.add(db_report)
         session.commit()

@@ -1,3 +1,4 @@
+import io
 from datetime import timedelta
 
 import minio
@@ -36,10 +37,13 @@ class MinioClient():
                                           file_path=file_path,
                                           content_type=content_type)
 
-    def upload_minio_data(self, object_name: str, data, content_type='application/text'):
+    def upload_minio_data(self, object_name: str, data, length, content_type):
         # 初始化minio
         if self.minio_client:
-            self.minio_client.put_object(bucket_name=bucket, object_name=object_name, data=data,
+            self.minio_client.put_object(bucket_name=bucket,
+                                         object_name=object_name,
+                                         data=io.BytesIO(data),
+                                         length=length,
                                          content_type=content_type)
 
     def get_share_link(self, object_name, bucket=bucket):

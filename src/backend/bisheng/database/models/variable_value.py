@@ -10,7 +10,8 @@ class VariableBase(SQLModelSerializable):
     flow_id: str = Field(index=True, description='所属的技能')
     node_id: str = Field(index=True, description='所属的node')
     variable_name: str = Field(index=True, description='变量名')
-    value_type: int = Field(index=False, description='变量类型，1=文本 2=list')
+    value_type: int = Field(index=False, description='变量类型，1=文本 2=list 3=file')
+    is_option: int = Field(index=False, default=1, description='是否必填 1=必填 0=非必填')
     value: str = Field(index=False, default=0, description='变量值，当文本的时候，传入文本长度')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))

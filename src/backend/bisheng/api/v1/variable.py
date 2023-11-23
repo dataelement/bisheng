@@ -43,11 +43,14 @@ def get_variables(*, flow_id: str, node_id: str, variable_name: Optional[str] = 
         if variable_name:
             query = query.where(Variable.variable_name == variable_name)
 
-        res = session.exec(query).all()
+        res = session.exec(query.order_by(Variable.id.desc())).all()
         res_list = [{'id': r.id,
+                     'node_id': r.node_id,
                      'variable_name': r.variable_name,
                      'variable_value': r.value,
-                     'variable_type': r.value_type} for r in res]
+                     'variable_type': r.value_type,
+                     'is_option': r.is_option,
+                     } for r in res]
         return res_list
 
     except Exception as e:
