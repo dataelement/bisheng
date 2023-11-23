@@ -20,9 +20,9 @@ import { ArrowLeft } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ShadTooltip from "../../components/ShadTooltipComponent";
+import { locationContext } from "../../contexts/locationContext";
 import { deleteFile, readFileByLibDatabase } from "../../controllers/API";
 import UploadModal from "../../modals/UploadModal";
-import { locationContext } from "../../contexts/locationContext";
 
 export default function FilesPage() {
     const { t } = useTranslation()

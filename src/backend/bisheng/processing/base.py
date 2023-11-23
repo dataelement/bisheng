@@ -1,4 +1,5 @@
 import asyncio
+from ast import Tuple
 from typing import Union
 
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler, StreamingLLMCallbackHandler
@@ -30,12 +31,9 @@ async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwa
             output = await langchain_object.acall(inputs, callbacks=async_callbacks)
         except Exception as exc:
             # make the error message more informative
-            logger.debug(f'Error: {str(exc)}')
+            logger.exception(exc)
             asyc = False
-            step = ChatResponse(message='',
-                                intermediate_steps='分析中',
-                                type='stream',
-                                category='processing')
+            step = ChatResponse(intermediate_steps='分析中', type='stream',)
             await kwargs['websocket'].send_json(step.dict())
             sync_callbacks = [StreamingLLMCallbackHandler(**kwargs)]
             output = langchain_object(inputs, callbacks=sync_callbacks)
@@ -50,7 +48,10 @@ async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwa
         result = (output.get(langchain_object.output_keys[0])
                   if isinstance(output, dict) else output)
         try:
-            thought = format_actions(intermediate_steps) if intermediate_steps else ''
+            if intermediate_steps and isinstance(intermediate_steps[0], Tuple):
+                thought = format_actions(intermediate_steps)
+            else:
+                thought = intermediate_steps
         except Exception as exc:
             logger.exception(exc)
             thought = ''

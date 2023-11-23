@@ -14,7 +14,7 @@ import L2ParamsModal from "../../../../modals/L2ParamsModal";
 import ExportModal from "../../../../modals/exportModal";
 import { APIClassType, APIObjectType } from "../../../../types/api";
 import { FlowType } from "../../../../types/flow";
-import { classNames, nodeColors, nodeIconsLucide, nodeNames, } from "../../../../utils";
+import { classNames, nodeColors, nodeIconsLucide, getNodeNames, } from "../../../../utils";
 import DisclosureComponent from "../DisclosureComponent";
 
 export default function ExtraSidebar({ flow }: { flow: FlowType }) {
@@ -67,36 +67,39 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
   }
 
   const navgate = useNavigate()
+  const nodeNames = getNodeNames()
   return (
     <div className="side-bar-arrangement">
-      <ShadTooltip content={t('flow.simplifyConfig')} side="bottom">
-        <button className="extra-side-bar-buttons w-[80px] absolute right-[173px] top-4 bg-gray-0 z-10 rounded-l-full rounded-r-none" onClick={() => setOpen(true)}>
-          <Combine strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" color="#34d399"></Combine>{t('flow.simplify')}
-        </button>
-      </ShadTooltip>
-      <ShadTooltip content={t('flow.notifications')} side="bottom">
-        <button
-          className="extra-side-bar-buttons w-[80px] absolute right-[94px] top-4 bg-gray-0 z-10 rounded-none"
-          onClick={(event: React.MouseEvent<HTMLElement>) => {
-            setNotificationCenter(false);
-            const { top, left } = (event.target as Element).getBoundingClientRect();
-            openPopUp(
-              <>
-                <div className="absolute z-10" style={{ top: top + 40, left: left - AlertWidth }} ><AlertDropdown /></div>
-                <div className="header-notifications-box"></div>
-              </>
-            );
-          }}
-        >
-          {notificationCenter && <div className="header-notifications"></div>}
-          <Bell className="side-bar-button-size" aria-hidden="true" />{t('flow.notifications')}
-        </button>
-      </ShadTooltip>
-      <ShadTooltip content={t('flow.exit')} side="bottom">
-        <button className="extra-side-bar-buttons w-[80px] absolute right-4 top-4 bg-gray-0 z-10 rounded-r-full rounded-l-none" onClick={() => navgate('/skill/' + flow.id, { replace: true })} >
-          <LogOut strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" ></LogOut>{t('flow.exit')}
-        </button>
-      </ShadTooltip>
+      <div className="flex absolute right-[80px] top-4 z-10">
+        <ShadTooltip content={t('flow.simplifyConfig')} side="bottom">
+          <button className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-l-full rounded-r-none" onClick={() => setOpen(true)}>
+            <Combine strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" color="#34d399"></Combine>{t('flow.simplify')}
+          </button>
+        </ShadTooltip>
+        <ShadTooltip content={t('flow.notifications')} side="bottom">
+          <button
+            className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-none"
+            onClick={(event: React.MouseEvent<HTMLElement>) => {
+              setNotificationCenter(false);
+              const { top, left } = (event.target as Element).getBoundingClientRect();
+              openPopUp(
+                <>
+                  <div className="absolute z-10" style={{ top: top + 40, left: left - AlertWidth }} ><AlertDropdown /></div>
+                  <div className="header-notifications-box"></div>
+                </>
+              );
+            }}
+          >
+            {notificationCenter && <div className="header-notifications"></div>}
+            <Bell className="side-bar-button-size" aria-hidden="true" />{t('flow.notifications')}
+          </button>
+        </ShadTooltip>
+        <ShadTooltip content={t('flow.exit')} side="bottom">
+          <button className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-r-full rounded-l-none" onClick={() => navgate('/skill/' + flow.id, { replace: true })} >
+            <LogOut strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" ></LogOut>{t('flow.exit')}
+          </button>
+        </ShadTooltip>
+      </div>
       <div className="side-bar-buttons-arrangement">
         <ShadTooltip content={t('flow.import')} side="bottom">
           <button className="extra-side-bar-buttons" onClick={() => { uploadFlow(); }} >

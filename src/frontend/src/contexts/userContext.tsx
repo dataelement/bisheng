@@ -1,9 +1,10 @@
-import { ReactNode, createContext, useEffect, useLayoutEffect, useState } from "react";
+import { ReactNode, createContext, useLayoutEffect, useState } from "react";
 import { getUserInfo } from "../controllers/API/user";
+import { User } from "../types/app";
 
 type userContextType = {
-    user: any;
-    setUser: (newState: any) => void;
+    user: any; // {} loading null login
+    setUser: (newState: User) => void;
 }
 
 // const userInfoLocalStr = localStorage.getItem('UUR_INFO')
@@ -15,13 +16,14 @@ const initialValue = {
 export const userContext = createContext<userContextType>(initialValue);
 
 export function UserProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState(initialValue.user);
+    const [user, setUser] = useState<any>(initialValue.user);
 
     useLayoutEffect(() => {
         // 链接ar参数存cookie（免登录接口）
         const cookie = location.search.match(/(?<=token=)[^&]+/g)?.[0]
         if (cookie) {
             document.cookie = `access_token_cookie=${cookie}`;
+            localStorage.setItem('isLogin', '1')
             location.href = location.origin + location.pathname;
             return
         }

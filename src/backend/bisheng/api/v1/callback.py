@@ -87,6 +87,26 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # This runs when first sending the prompt
         # to the LLM, adding it will send the final prompt
         # to the frontend
+        sender = kwargs.get('sender')
+        receiver = kwargs.get('receiver')
+        if kwargs.get('sender'):
+            log = ChatResponse(message=text, type='end',
+                               sender=sender, receiver=receiver)
+            start = ChatResponse(type='start', sender=sender, receiver=receiver)
+
+            if receiver and receiver.get('is_self'):
+                await self.websocket.send_json(log.dict())
+            else:
+                await self.websocket.send_json(log.dict())
+                await self.websocket.send_json(start.dict())
+        elif kwargs.get('type'):
+            start = ChatResponse(type='start', category=kwargs.get('type'))
+            end = ChatResponse(type='end', intermediate_steps=text, category=kwargs.get('type'))
+            await self.websocket.send_json(start.dict())
+            await self.websocket.send_json(end.dict())
+        elif 'category' in kwargs:
+            log = ChatResponse(message=text, type='stream')
+            await self.websocket.send_json(log.dict())
 
     async def on_agent_action(self, action: AgentAction, **kwargs: Any):
         log = f'Thought: {action.log}'
@@ -121,16 +141,11 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
 
     async def on_chat_model_start(self, serialized: Dict[str, Any],
                                   messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
-        """Run when retriever end running."""
-        sender = kwargs['sender']
-        receiver = kwargs['receiver']
-        receiver = {'user_name': receiver, 'is_self': False}
-        content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
-        end = ChatResponse(message=f'{content}', type='end', sender=sender, recevier=receiver)
-        start = ChatResponse(type='start', sender=sender, recevier=receiver)
-        await self.websocket.send_json(end.dict())
-        await self.websocket.send_json(start.dict())
-        logger.debug(f'retriver_result result={messages}')
+        # """Run when retriever end running."""
+        # content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
+        # stream = ChatResponse(message=f'{content}', type='stream')
+        # await self.websocket.send_json(stream.dict())
+        logger.debug(f'chat_message result={messages}')
 
 
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
@@ -227,3 +242,21 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
     def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
         logger.debug(f'on_chain_end outputs={outputs}')
+
+    def on_chat_model_start(self, serialized: Dict[str, Any],
+                            messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
+        """Run when retriever end running."""
+        sender = kwargs['sender']
+        receiver = kwargs['receiver']
+        content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
+        end = ChatResponse(message=f'{content}', type='end', sender=sender, recevier=receiver)
+        start = ChatResponse(type='start', sender=sender, recevier=receiver)
+        loop = asyncio.get_event_loop()
+        coroutine2 = self.websocket.send_json(end.dict())
+        coroutine3 = self.websocket.send_json(start.dict())
+        asyncio.run_coroutine_threadsafe(coroutine2, loop)
+        asyncio.run_coroutine_threadsafe(coroutine3, loop)
+        logger.debug(f'on_chat result={messages}')
+
+    def on_text(self, text: str, **kwargs) -> Any:
+        logger.info(text)

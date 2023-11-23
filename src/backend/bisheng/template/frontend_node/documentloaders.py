@@ -30,12 +30,12 @@ class DocumentLoaderFrontNode(FrontendNode):
         'ElemUnstructuredLoaderV0':
             build_file_field(
                 suffixes=[
-                    '.html', '.md', '.txt', '.jpg', '.png', '.jpeg', '.csv', '.doc', '.docx',
-                    '.pdf', '.ppt', '.pptx', '.xlsx', '.tiff'
+                    '.html', '.md', '.txt', '.bmp', '.jpg', '.png', '.jpeg', '.doc', '.docx',
+                    '.pdf', '.ppt', '.pptx', '.xls', '.xlsx', '.tsv', '.csv', '.tiff'
                 ],
                 fileTypes=[
-                    'html', 'md', 'txt', 'jpg', 'png', 'jpeg', 'csv', 'doc', 'docx', 'pdf', 'ppt',
-                    'pptx', 'tiff', 'xlsx'
+                    'html', 'md', 'txt', 'bmp', 'jpg', 'png', 'jpeg', 'doc', 'docx',
+                    'pdf', 'ppt', 'pptx', '.xls', 'xlsx', 'tsv', 'csv', 'tiff',
                 ],
             ),
         'AirbyteJSONLoader':

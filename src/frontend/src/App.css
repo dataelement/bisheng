@@ -156,27 +156,36 @@
 	background: transparent;
 }
 
-.flag.active{
-	background: linear-gradient(to right, rgba(53,126,249,.60), transparent);
+.flag.active {
+	background: linear-gradient(to right, rgba(53, 126, 249, .60), transparent);
 }
+
 .flag:after {
 	content: "";
-    position: absolute;
-    width: 23px;
-    height: 2px;
-    right: -3px;
-    top: 7px;
-    background: rgba(53, 126, 249, .60);
-    transform: rotate(-50deg) translate(0, 0);
+	position: absolute;
+	width: 23px;
+	height: 2px;
+	right: -3px;
+	top: 7px;
+	background: rgba(53, 126, 249, .60);
+	transform: rotate(-50deg) translate(0, 0);
 }
 
 .flag::before {
 	content: "";
-    position: absolute;
-    width: 23px;
-    height: 2px;
-    right: -3px;
-    top: 25px;
-    background: rgba(53, 126, 249, .60);
-    transform: rotate(50deg) translate(0, 0);
+	position: absolute;
+	width: 23px;
+	height: 2px;
+	right: -3px;
+	top: 25px;
+	background: rgba(53, 126, 249, .60);
+	transform: rotate(50deg) translate(0, 0);
+}
+
+.chat .chat-image {
+	align-self: start;
+}
+
+.chat-bubble:before {
+	display: none;
 }

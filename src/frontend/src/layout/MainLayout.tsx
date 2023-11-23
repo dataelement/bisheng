@@ -1,6 +1,6 @@
 import i18next from "i18next";
-import { AppWindow, BookOpen, Github, HardDrive, Languages, LayoutDashboard, LogOut, MoonIcon, Puzzle, Settings, SunIcon } from "lucide-react";
-import { useContext, useState } from "react";
+import { AppWindow, BookOpen, Github, HardDrive, Languages, Globe, LayoutDashboard, LogOut, MoonIcon, Puzzle, Settings, SunIcon } from "lucide-react";
+import { useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet } from "react-router-dom";
@@ -10,6 +10,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../com
 import { darkContext } from "../contexts/darkContext";
 import { TabsContext } from "../contexts/tabsContext";
 import { userContext } from "../contexts/userContext";
+import { logoutApi } from "../controllers/API/user";
+import { User } from "../types/app";
 
 export default function MainLayout() {
     const { hardReset } = useContext(TabsContext);
@@ -18,17 +20,13 @@ export default function MainLayout() {
     // 角色
     const { user, setUser } = useContext(userContext);
 
-    const { language, options, changLanguage, t } = useLanguage()
+    const { language, options, changLanguage, t } = useLanguage(user)
 
-    function clearAllCookies() {
-        var cookies = document.cookie.split(";");
-
-        for (var i = 0; i < cookies.length; i++) {
-            var cookie = cookies[i];
-            var eqPos = cookie.indexOf("=");
-            var name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-            document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT";
-        }
+    const handleLogout = () => {
+        logoutApi().then(_ => {
+            setUser(null)
+            localStorage.removeItem('isLogin')
+        })
     }
 
     return <div className="flex">
@@ -37,21 +35,21 @@ export default function MainLayout() {
             <h1 className="text-white font-bold text-xl text-center">{t('title')}</h1>
             <nav className="mt-8">
                 <NavLink to='/' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
-                    <AppWindow /><span className="mx-3">{t('menu.app')}</span>
+                    <AppWindow /><span className="mx-3 max-w-[48px]">{t('menu.app')}</span>
                 </NavLink>
                 <NavLink to='/skills' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
-                    <LayoutDashboard /><span className="mx-3">{t('menu.skills')}</span>
+                    <LayoutDashboard /><span className="mx-3 max-w-[48px]">{t('menu.skills')}</span>
                 </NavLink>
                 <NavLink to='/filelib' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
-                    <HardDrive /><span className="mx-3">{t('menu.knowledge')}</span>
+                    <HardDrive /><span className="mx-3 max-w-[48px]">{t('menu.knowledge')}</span>
                 </NavLink>
                 <NavLink to='/model' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
-                    <Puzzle /><span className="mx-3">{t('menu.models')}</span>
+                    <Puzzle /><span className="mx-3 max-w-[48px]">{t('menu.models')}</span>
                 </NavLink>
                 {
                     user.role === 'admin' && <>
                         <NavLink to='/sys' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
-                            <Settings /><span className="mx-3">{t('menu.system')}</span>
+                            <Settings /><span className="mx-3 max-w-[48px]">{t('menu.system')}</span>
                         </NavLink>
                     </>
                 }
@@ -73,17 +71,19 @@ export default function MainLayout() {
                             <TooltipContent><p>{t('menu.themeSwitch')}</p></TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
-                    {/* <Separator className="mx-1" orientation="vertical" />
+                    <Separator className="mx-1" orientation="vertical" />
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger className="flex-1 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
                                 <div className="" onClick={changLanguage}>
-                                    <Languages className="side-bar-button-size mx-auto" />
+                                    {language === 'en'
+                                        ? <Languages className="side-bar-button-size mx-auto" />
+                                        : <Globe className="side-bar-button-size mx-auto" />}
                                 </div>
                             </TooltipTrigger>
                             <TooltipContent><p>{options[language]}</p></TooltipContent>
                         </Tooltip>
-                    </TooltipProvider> */}
+                    </TooltipProvider>
                     <Separator className="mx-1" orientation="vertical" />
                     <TooltipProvider>
                         <Tooltip>
@@ -112,7 +112,7 @@ export default function MainLayout() {
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger className="flex-1 py-1 rounded-sm hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                                <div className=" flex justify-center gap-2 items-center" onClick={() => { clearAllCookies(); setUser(null);  }}>
+                                <div className=" flex justify-center gap-2 items-center" onClick={handleLogout}>
                                     <LogOut className="side-bar-button-size" />
                                     <span>{t('menu.logout')}</span>
                                 </div>
@@ -153,21 +153,25 @@ export default function MainLayout() {
     </div>
 };
 
-const useLanguage = () => {
-    const [language, setLanguage] = useState(() =>
-        localStorage.getItem('language') || 'en'
-    )
+const useLanguage = (user: User) => {
+    const [language, setLanguage] = useState('en')
+    useEffect(() => {
+        const lang = user.user_id ? localStorage.getItem('language-' + user.user_id) : null
+        if (lang) {
+            setLanguage(lang)
+        }
+    }, [user])
 
     const { t } = useTranslation()
     const changLanguage = () => {
-        const ln = language === 'en' ? 'zh' : 'en'
+        const ln = language === 'zh' ? 'en' : 'zh'
         setLanguage(ln)
-        localStorage.setItem('language', ln)
+        localStorage.setItem('language-' + user.user_id, ln)
         i18next.changeLanguage(ln)
     }
     return {
         language,
-        options: { en: '使用中文', zh: 'use English' },
+        options: { en: '使用中文', zh: 'English' },
         changLanguage,
         t
     }

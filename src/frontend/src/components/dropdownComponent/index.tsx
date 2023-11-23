@@ -44,8 +44,8 @@ export default function Dropdown({
               <Listbox.Button
                 className={
                   editNode
-                    ? "dropdown-component-outline"
-                    : "dropdown-component-false-outline"
+                    ? "dropdown-component-outline min-h-[38px]"
+                    : "dropdown-component-false-outline min-h-[38px]"
                 }
               >
                 <span className="dropdown-component-display">

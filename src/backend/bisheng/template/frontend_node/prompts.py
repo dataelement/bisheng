@@ -2,9 +2,7 @@ from typing import Optional
 
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
-from bisheng.template.frontend_node.constants import (DEFAULT_PROMPT,
-                                                      HUMAN_PROMPT,
-                                                      SYSTEM_PROMPT)
+from bisheng.template.frontend_node.constants import DEFAULT_PROMPT, HUMAN_PROMPT, SYSTEM_PROMPT
 from bisheng.template.template.base import Template
 from langchain.agents.mrkl import prompt
 
@@ -27,7 +25,8 @@ class PromptFrontendNode(FrontendNode):
             field.value = HUMAN_PROMPT if 'Human' in field.name else SYSTEM_PROMPT
         if field.name == 'template' and field.value == '':
             field.value = DEFAULT_PROMPT
-
+        if field.name == 'output_parser':
+            field.show = True
         if field.name in PROMPT_FIELDS:
             field.field_type = 'prompt'
             field.advanced = False

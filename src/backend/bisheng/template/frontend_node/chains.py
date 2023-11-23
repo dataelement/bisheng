@@ -50,6 +50,23 @@ class ChainFrontendNode(FrontendNode):
                               name='chain_order',
                               advanced=False,
                               value='[]'))
+        elif self.template.type_name == 'MultiPromptChain':
+            self.template.add_field(
+                TemplateField(field_type='Chain',
+                              required=True,
+                              show=True,
+                              is_list=True,
+                              name='LLMChains',
+                              advanced=False,
+                              value='[]'))
+            self.template.add_field(
+                TemplateField(field_type='dict',
+                              required=True,
+                              show=True,
+                              is_list=True,
+                              name='destination_chain_name',
+                              advanced=False,
+                              value='{}'))
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
@@ -81,6 +98,9 @@ class ChainFrontendNode(FrontendNode):
             field.required = True
             field.show = True
             field.advanced = False
+        if field.name == 'condense_question_prompt':
+            field.required = False
+            field.show = True
         if field.name == 'memory':
             # field.required = False
             field.show = True
@@ -103,6 +123,10 @@ class ChainFrontendNode(FrontendNode):
             field.show = True
             field.field_type = 'BasePromptTemplate'
             field.display_name = 'prompt'
+        if field.name == 'recipient':
+            field.display_name = 'AutogenRole'
+        if field.name == 'destination_chains':
+            field.show = False
 
 
 class SeriesCharacterChainNode(FrontendNode):

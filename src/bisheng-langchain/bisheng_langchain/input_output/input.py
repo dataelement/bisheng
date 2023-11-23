@@ -1,29 +1,23 @@
 
 from typing import List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra
 
 
-class InputNode(BaseModel):
-    """Input组件，用来控制输入"""
-    input: List[str]
+class Variable(BaseModel):
+    """用来设置变量"""
+    variable_name: str
+    variable_key: str
 
-    def text(self):
-        return self.input
+    class Config:
+        """Configuration for this pydantic object."""
+
+        extra = Extra.forbid
+
+    @classmethod
+    def initialize(cls, input: List[str] = None):
+        return input if input else ''
 
 
-class VariableNode(BaseModel):
-    variables: List[str]
-
-    def text(self):
-        return self.variables
-
-
-class InputFileNode(BaseModel):
-    file_type: str
-    file_path: str
-    file_name: str
-    """Output组件，用来控制输出"""
-
-    def text(self):
-        return [self.file_path, self.file_name] if self.file_path else ''
+class PresetQuestion(BaseModel):
+    pass
