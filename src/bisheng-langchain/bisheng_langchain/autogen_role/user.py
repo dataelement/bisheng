@@ -22,6 +22,7 @@ class AutoGenUserProxyAgent(UserProxyAgent):
         llm_flag: Optional[bool] = False,  # llm call
         model_name: Optional[str] = 'gpt-4-0613',  # when llm_flag=True, need to set
         openai_api_key: Optional[str] = '',  # when llm_flag=True, need to set
+        openai_api_base: Optional[str] = '',  # when llm_flag=True, need to set
         openai_proxy: Optional[str] = '',  # when llm_flag=True, need to set
         temperature: Optional[float] = 0,  # when llm_flag=True, need to set
         system_message: Optional[str] = '',  # agent system message, llm or group chat manage will use
@@ -43,6 +44,8 @@ class AutoGenUserProxyAgent(UserProxyAgent):
         if llm_flag:
             if openai_proxy:
                 openai.proxy = {'https': openai_proxy, 'http': openai_proxy}
+            if openai_api_base:
+                openai.api_base = openai_api_base
             config_list = [
                 {
                     'model': model_name,

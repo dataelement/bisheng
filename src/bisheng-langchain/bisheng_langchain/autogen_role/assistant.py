@@ -30,6 +30,7 @@ Reply "TERMINATE" in the end when everything is done.
         name: str,
         model_name: Optional[str] = 'gpt-4-0613',  # when llm_flag=True, need to set
         openai_api_key: Optional[str] = '',  # when llm_flag=True, need to set
+        openai_api_base: Optional[str] = '',  # when llm_flag=True, need to set
         openai_proxy: Optional[str] = '',  # when llm_flag=True, need to set
         temperature: Optional[float] = 0,  # when llm_flag=True, need to set
         system_message: Optional[str] = DEFAULT_SYSTEM_MESSAGE,  # agent system message, llm or group chat manage will use # noqa
@@ -41,6 +42,8 @@ Reply "TERMINATE" in the end when everything is done.
         )
         if openai_proxy:
             openai.proxy = {'https': openai_proxy, 'http': openai_proxy}
+        if openai_api_base:
+            openai.api_base = openai_api_base
 
         config_list = [
             {
