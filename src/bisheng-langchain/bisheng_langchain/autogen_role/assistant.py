@@ -1,6 +1,6 @@
 """Chain that runs an arbitrary python function."""
 import logging
-from typing import Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import openai
 from autogen import AssistantAgent
@@ -30,14 +30,20 @@ Reply "TERMINATE" in the end when everything is done.
         name: str,
         model_name: Optional[str] = 'gpt-4-0613',  # when llm_flag=True, need to set
         openai_api_key: Optional[str] = '',  # when llm_flag=True, need to set
+        openai_api_base: Optional[str] = '',  # when llm_flag=True, need to set
         openai_proxy: Optional[str] = '',  # when llm_flag=True, need to set
-        temperature: Optional[int] = 0,  # when llm_flag=True, need to set
+        temperature: Optional[float] = 0,  # when llm_flag=True, need to set
         system_message: Optional[str] = DEFAULT_SYSTEM_MESSAGE,  # agent system message, llm or group chat manage will use # noqa
+        is_termination_msg: Optional[Callable[[Dict], bool]] = None,
         **kwargs,
     ):
-
+        is_termination_msg = (
+            is_termination_msg if is_termination_msg is not None else (lambda x: x.get("content") == "TERMINATE")
+        )
         if openai_proxy:
             openai.proxy = {'https': openai_proxy, 'http': openai_proxy}
+        if openai_api_base:
+            openai.api_base = openai_api_base
 
         config_list = [
             {
@@ -55,5 +61,9 @@ Reply "TERMINATE" in the end when everything is done.
         super().__init__(
             name,
             llm_config=llm_config,
-            system_message=system_message
+            system_message=system_message,
+            is_termination_msg=is_termination_msg,
+            max_consecutive_auto_reply=None,
+            human_input_mode="NEVER",
+            code_execution_config=False,
         )
