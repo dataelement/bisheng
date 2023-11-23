@@ -36,7 +36,15 @@ class AutogenRoleFrontNode(FrontendNode):
                         value='gpt-4-0613',
                         advanced=False,
                     ))
-
+            self.template.add_field(
+                    TemplateField(
+                        field_type='str',
+                        required=False,
+                        show=True,
+                        name='openai_api_base',
+                        value='',
+                        advanced=False,
+                    ))
             self.template.add_field(
                     TemplateField(
                         field_type='str',
