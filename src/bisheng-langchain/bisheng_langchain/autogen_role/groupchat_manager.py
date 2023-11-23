@@ -20,7 +20,7 @@ class AutoGenGroupChatManager(GroupChatManager):
         model_name: Optional[str] = 'gpt-4-0613',
         openai_api_key: Optional[str] = '',
         openai_proxy: Optional[str] = '',
-        temperature: Optional[int] = 0,
+        temperature: Optional[float] = 0,
         name: Optional[str] = 'chat_manager',
         system_message: Optional[str] = 'Group chat manager.',
         **kwargs,
