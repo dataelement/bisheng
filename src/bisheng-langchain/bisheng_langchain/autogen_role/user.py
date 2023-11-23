@@ -15,20 +15,23 @@ class AutoGenUserProxyAgent(UserProxyAgent):
     def __init__(
         self,
         name: str,
-        max_consecutive_auto_reply: Optional[int] = 10,
-        human_input_mode: Optional[str] = 'NEVER',  # hmean feedback input
+        max_consecutive_auto_reply: Optional[int] = None,
+        human_input_mode: Optional[str] = 'ALWAYS',  # hmean feedback input
         code_execution_flag: Optional[bool] = True,  # code execution
         function_map: Optional[Dict[str, Callable]] = None,  # function call
         llm_flag: Optional[bool] = False,  # llm call
         model_name: Optional[str] = 'gpt-4-0613',  # when llm_flag=True, need to set
         openai_api_key: Optional[str] = '',  # when llm_flag=True, need to set
+        openai_api_base: Optional[str] = '',  # when llm_flag=True, need to set
         openai_proxy: Optional[str] = '',  # when llm_flag=True, need to set
-        temperature: Optional[int] = 0,  # when llm_flag=True, need to set
+        temperature: Optional[float] = 0,  # when llm_flag=True, need to set
         system_message: Optional[str] = '',  # agent system message, llm or group chat manage will use
+        is_termination_msg: Optional[Callable[[Dict], bool]] = None,
         **kwargs,
     ):
-        def is_termination_msg(x):
-            return x.get('content', '').rstrip().endswith('TERMINATE')
+        is_termination_msg = (
+            is_termination_msg if is_termination_msg is not None else (lambda x: x.get("content") == "TERMINATE")
+        )
 
         if code_execution_flag:
             code_execution_config = {
@@ -41,6 +44,8 @@ class AutoGenUserProxyAgent(UserProxyAgent):
         if llm_flag:
             if openai_proxy:
                 openai.proxy = {'https': openai_proxy, 'http': openai_proxy}
+            if openai_api_base:
+                openai.api_base = openai_api_base
             config_list = [
                 {
                     'model': model_name,

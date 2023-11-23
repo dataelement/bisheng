@@ -19,8 +19,9 @@ class AutoGenGroupChatManager(GroupChatManager):
         max_round: int = 50,
         model_name: Optional[str] = 'gpt-4-0613',
         openai_api_key: Optional[str] = '',
+        openai_api_base: Optional[str] = '',
         openai_proxy: Optional[str] = '',
-        temperature: Optional[int] = 0,
+        temperature: Optional[float] = 0,
         name: Optional[str] = 'chat_manager',
         system_message: Optional[str] = 'Group chat manager.',
         **kwargs,
@@ -32,6 +33,8 @@ class AutoGenGroupChatManager(GroupChatManager):
 
         if openai_proxy:
             openai.proxy = {'https': openai_proxy, 'http': openai_proxy}
+        if openai_api_base:
+            openai.api_base = openai_api_base
 
         config_list = [
             {
