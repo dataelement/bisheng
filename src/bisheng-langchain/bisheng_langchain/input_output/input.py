@@ -28,6 +28,7 @@ class VariableNode(BaseModel):
 class InputFileNode(BaseModel):
     file_path: Optional[str]
     file_name: Optional[str]
+    file_type: Optional[str]  # tips for file
     """Output组件，用来控制输出"""
 
     def text(self):

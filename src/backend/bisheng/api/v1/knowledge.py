@@ -56,6 +56,8 @@ async def upload_file(*, file: UploadFile = File(...)):
         file_name = file.filename
         # 缓存本地
         file_path = save_uploaded_file(file.file, 'bisheng').as_posix()
+        # 上传minio
+
         return UploadFileResponse(file_path=file_path + '_' + file_name,)
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')

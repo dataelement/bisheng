@@ -2,12 +2,13 @@
 from uuid import UUID, uuid4
 
 from bisheng.database.base import get_session
-from bisheng.database.models.report import Report, ReportRead
+from bisheng.database.models.report import Report
 from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
 from bisheng_langchain.utils.requests import Requests
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import or_
 from sqlmodel import Session, select
 
 # build router
@@ -28,40 +29,42 @@ async def callback(data: dict, session: Session = Depends(get_session)):
         minio_client.MinioClient().upload_minio_data(object_name, file._content,
                                                      len(file._content),
                                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document') # noqa
-        db_report = Report(version_key=key, object_name=object_name)
+        # 重复保存，key 不更新
+        db_report = session.exec(select(Report)
+                                 .where(or_(Report.version_key == key,
+                                            Report.newversion_key == key))).first()
+        if not db_report:
+            raise HTTPException(status_code=500, detail='cannot find the flow_id')
+        db_report.object_name = object_name
+        db_report.version_key = key
+        db_report.newversion_key = None
         session.add(db_report)
         session.commit()
     return {'error': 0}
 
 
-@router.post('/save_template', response_model=ReportRead)
-async def save_template(data: dict, session: Session = Depends(get_session)):
-    flow_id = data.get('flow_id')
-    key = data.get('key')
-
-    db_report = session.exec(select(Report).where(Report.version_key == key)).first()
-    if not db_report:
-        raise HTTPException(status_code=500, detail='当前文件未保存，稍后再试')
-    db_report.flow_id = UUID(flow_id).hex
-    session.add(db_report)
-    session.commit()
-
-    return jsonable_encoder(db_report)
-
-
-@router.get('/report_temp', response_model=ReportRead)
+@router.get('/report_temp')
 async def get_template(*, flow_id: str, session: Session = Depends(get_session)):
     flow_id = UUID(flow_id).hex
     db_report = session.exec(select(Report).where(
         Report.flow_id == flow_id,
         Report.del_yn == 0).order_by(Report.update_time.desc())).first()
+    file_url = ''
     if not db_report:
-        raise HTTPException(status_code=500, detail='无模板信息')
-
-    file_url = minio_client.MinioClient().get_share_link(db_report.object_name)
-    version_key = uuid4().hex
+        db_report = Report(flow_id=flow_id)
+    elif db_report.object_name:
+        file_url = minio_client.MinioClient().get_share_link(db_report.object_name)
+    if not db_report.newversion_key:
+        version_key = uuid4().hex
+        db_report.newversion_key = version_key
+        session.add(db_report)
+        session.commit()
+    else:
+        version_key = db_report.newversion_key
     res = {
+        'flow_id': flow_id,
         'temp_url': file_url,
+        'original_version': db_report.version_key,
         'version_key': version_key,
     }
 

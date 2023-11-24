@@ -1,9 +1,14 @@
+from uuid import UUID
+
 from bisheng.api.v1.schemas import StreamData
 from bisheng.database.base import get_session
 from bisheng.database.models.role_access import AccessType, RoleAccess
+from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
-from sqlmodel import select
+from fastapi import Depends
+from sqlalchemy import delete
+from sqlmodel import Session, select
 
 API_WORDS = ['api', 'key', 'token']
 
@@ -214,3 +219,40 @@ def access_check(payload: dict, owner_user_id: int, target_id: int, type: Access
         if owner_user_id != payload.get('user_id') and str(target_id) not in third_ids:
             return False
     return True
+
+
+def get_L2_param_from_flow(flow_data: dict, flow_id: str, session: Session = Depends(get_session)):
+    graph = Graph.from_payload(flow_data)
+    node_id = []
+    file_name = []
+    for node in graph.nodes:
+        if node.vertex_type == 'InputFileNode':
+            node_id.append(node.id)
+            file_name.append(node.params.get('file_type'))
+    flow_id = UUID(flow_id).hex
+    db_variable = session.exec(select(Variable).where(Variable.flow_id == flow_id,
+                                                      Variable.node_id.in_(node_id))).all()
+    old_node_ids = {variable.node_id: variable for variable in db_variable}
+    update = []
+    try:
+        for index, id in enumerate(node_id):
+            if id in old_node_ids:
+                if file_name[index] != old_node_ids.get(id).variable_name:
+                    old_node_ids.get(id).variable_name = file_name[index]
+                    update.append[old_node_ids.get(id)]
+                old_node_ids.pop(id)
+            else:
+                # file type
+                db_new_var = Variable(flow_id, node_id, file_name[index], 3, 1, 0)
+                update.append(db_new_var)
+
+        if update:
+            [session.add(var) for var in update]
+        if old_node_ids:
+            session.exec(delete(Variable).where(Variable.id.in_(list(old_node_ids.keys()))))
+        session.commit()
+        return True
+    except Exception as e:
+        logger.exception(e)
+        session.rollback()
+        return False

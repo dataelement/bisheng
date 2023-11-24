@@ -2,7 +2,8 @@ import json
 from typing import List
 from uuid import UUID
 
-from bisheng.api.utils import access_check, build_flow_no_yield, remove_api_keys
+from bisheng.api.utils import (access_check, build_flow_no_yield, get_L2_param_from_flow,
+                               remove_api_keys)
 from bisheng.api.v1.schemas import FlowListCreate, FlowListRead
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate
@@ -117,7 +118,7 @@ def update_flow(*,
         raise HTTPException(status_code=404, detail='Flow not found')
 
     if not access_check(payload, db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
-        raise HTTPException(status_code=500, detail='没有权限编辑此技能')
+        raise HTTPException(status_code=500, detail='No right access this flow')
 
     flow_data = flow.dict(exclude_unset=True)
 
@@ -140,6 +141,8 @@ def update_flow(*,
     session.add(db_flow)
     session.commit()
     session.refresh(db_flow)
+    if not get_L2_param_from_flow(db_flow.data):
+        logger.error(f'flow_id={db_flow.id} extract file_node fail')
     return db_flow
 
 

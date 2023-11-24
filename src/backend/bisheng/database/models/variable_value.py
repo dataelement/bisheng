@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, text
@@ -7,7 +8,7 @@ from sqlmodel import Field
 
 
 class VariableBase(SQLModelSerializable):
-    flow_id: str = Field(index=True, description='所属的技能')
+    flow_id: UUID = Field(index=True, description='所属的技能')
     node_id: str = Field(index=True, description='所属的node')
     variable_name: str = Field(index=True, description='变量名')
     value_type: int = Field(index=False, description='变量类型，1=文本 2=list 3=file')

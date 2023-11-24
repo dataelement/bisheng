@@ -1,10 +1,11 @@
 
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from bisheng.database.base import get_session
-from bisheng.database.models.variable_value import Variable, VariableRead
+from bisheng.database.models.variable_value import Variable, VariableCreate, VariableRead
 from fastapi import APIRouter, HTTPException
+from fastapi.encoders import jsonable_encoder
 from fastapi.params import Depends
 from sqlmodel import Session, delete, select
 
@@ -22,29 +23,31 @@ def post_variable(variable: Variable, session: Session = Depends(get_session),):
             db_variable.value = variable.value
             db_variable.value_type = variable.value_type
         else:
-            variable.flow_id = UUID(variable.flow_id).hex
             db_variable = Variable.from_orm(variable)
 
         session.add(db_variable)
         session.commit()
         session.refresh(db_variable)
-        return db_variable
+        return jsonable_encoder(db_variable)
     except Exception as e:
         return HTTPException(status_code=500, detail=str(e))
 
 
 @router.get('/list', status_code=200)
-def get_variables(*, flow_id: str, node_id: str, variable_name: Optional[str] = None,
+def get_variables(*, flow_id: str, node_id: Optional[str] = None,
+                  variable_name: Optional[str] = None,
                   session: Session = Depends(get_session),):
     try:
         flow_id = UUID(flow_id).hex
-        query = select(Variable).where(Variable.flow_id == flow_id,
-                                       Variable.node_id == node_id)
+        query = select(Variable).where(Variable.flow_id == flow_id)
+        if node_id:
+            query = query.where(Variable.node_id == node_id)
         if variable_name:
             query = query.where(Variable.variable_name == variable_name)
 
         res = session.exec(query.order_by(Variable.id.desc())).all()
         res_list = [{'id': r.id,
+                     'flow_id': r.flow_id,
                      'node_id': r.node_id,
                      'variable_name': r.variable_name,
                      'variable_value': r.value,
@@ -68,4 +71,22 @@ def del_variables(*, id: int,
         return {'message': 'success'}
 
     except Exception as e:
+        return HTTPException(status_code=500, detail=str(e))
+
+
+@router.post('/save_all', status_code=200)
+def save_all_variables(*, data: List[VariableCreate],
+                       session: Session = Depends(get_session),):
+    try:
+        # delete first
+        flow_id = data[0].flow_id
+        session.exec(delete(Variable).where(Variable.flow_id == flow_id))
+        session.flush()
+        for var in data:
+            db_var = Variable.from_orm(var)
+            session.add(db_var)
+        session.commit()
+        return {'message': 'success'}
+    except Exception as e:
+        session.rollback()
         return HTTPException(status_code=500, detail=str(e))

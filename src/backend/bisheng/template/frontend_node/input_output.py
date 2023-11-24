@@ -84,7 +84,8 @@ class InputFileNode(FrontendNode):
                 show=True,
                 name='file_type',
                 placeholder='提示上传文件类型',
-                display_name='Name'
+                display_name='Name',
+                info='Tips for which file should upload'
             ),
         ],
     )

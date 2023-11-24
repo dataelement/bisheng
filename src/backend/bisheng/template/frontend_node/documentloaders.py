@@ -244,6 +244,9 @@ class DocumentLoaderFrontNode(FrontendNode):
         if name == 'CustomKVLoader' and field.name == 'task_type':
             field.options = ['task', 'logic-job']
             field.value = 'logic-job'
+        if name == 'CustomKVLoader' and field.name == 'schemas':
+            field.field_type = 'str'
+            field.info = "please use ';' seperate"
 
 
 def build_pdf_semantic_loader_fields():

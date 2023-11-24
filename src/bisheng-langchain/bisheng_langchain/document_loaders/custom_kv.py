@@ -1,12 +1,14 @@
 # flake8: noqa
 """Loads PDF with semantic splilter."""
 import base64
+import json
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from time import sleep
-from typing import Iterator, List, Tuple, Union
+from typing import List, Set, Tuple, Union
 
 import cv2
 import fitz
@@ -54,7 +56,7 @@ class CustomKVLoader(BaseLoader, Serializable):
     elm_api_key: str
     elem_server_id: str
     task_type: str
-    schemas: str
+    schemas: Set[str]
 
     def __init__(self, file_path:str,
                  elm_api_base_url: str,
@@ -69,7 +71,7 @@ class CustomKVLoader(BaseLoader, Serializable):
         self.elm_api_key = elm_api_key
         self.elem_server_id = elem_server_id
         self.task_type = task_type
-        self.schemas = schemas
+        self.schemas = set(schemas.split(';'))
         self.headers = {'Authorization': f'Bearer {elm_api_key}'}
         self.timeout = request_timeout
         if '~' in self.file_path:
@@ -97,19 +99,6 @@ class CustomKVLoader(BaseLoader, Serializable):
 
     def load(self) -> List[Document]:
         """Load given path as pages."""
-        return list(self.lazy_load())
-
-    def lazy_load(
-        self,
-    ) -> Iterator[Document]:
-        """Lazy load given path as pages."""
-
-        blob = Blob.from_path(self.file_path)
-        yield from self.parser.parse(blob)
-
-
-    def load(self) -> List[Document]:
-        """Load given path as pages."""
         # mime_type = filetype.guess(self.file_path).mime
         # if mime_type.endswith('pdf'):
         #     file_type = 'pdf'
@@ -119,39 +108,47 @@ class CustomKVLoader(BaseLoader, Serializable):
         # else:
         #     raise ValueError(f'file type {file_type} is not support.')
         file = {'file': open(self.file_path, 'rb')}
+        result = {}
         if self.task_type == 'task':
             url = self.elm_api_base_url + '/task'
             # 创建task
             body = {'scene_id': self.elem_server_id}
-            resp = requests.post(url=url, data=body, files=file, headers=self.headers)
-            if resp.status_code == 200:
-                task_id = resp.json.get('task_id')
-                # get status
-                status_url = self.elm_api_base_url + f'/task/status?task_id={task_id}'
-                count = 0
-                while True:
-                    status = requests.get(status_url, headers=self.headers).json()
-                    if 1 == status.get('data').get('status') and count <10:
-                        count += 1
-                        sleep(2)
-                    else:
-                        break
-                # get result
-                result_url = self.elm_api_base_url + f'/task/result?task_id={task_id}'
-                result = requests.get(status_url, headers=self.headers).json()
-
-            else:
-                logger.error(f'custom_kv=create_task resp={resp.text}')
-                raise Exception('custom_kv create task file')
-
-
-
-
         elif self.task_type == 'logic-job':
-            url = self.ellm_api_base_url + '/logic-job'
+            url = self.elm_api_base_url + '/logic-job'
             body = {'logic_service_id': self.elem_server_id}
 
-
         resp = requests.post(url=url, data=body, files=file, headers=self.headers)
-        doc = Document(page_content=content, metadata=meta)
+        if resp.status_code == 200:
+            task_id = resp.json.get('task_id')
+            # get status
+            status_url = url + f'/status?task_id={task_id}'
+            count = 0
+            while True:
+                status = requests.get(status_url, headers=self.headers).json()
+                if 1 == status.get('data').get('status') and count <10:
+                    count += 1
+                    sleep(2)
+                else:
+                    break
+            # get result
+            job_id = 'job_id' if self.task_type == 'logic-job' else 'task_id'
+            match = re.match(r'^(?:https?:\/\/)?(?:www\.)?([^\/\n]+)', self.elm_api_base_url)
+            host = match.group()
+            result_url = url + f'/result?{job_id}={task_id}&detail_url={host}/logic-job-detail/{task_id}'
+            result = requests.get(result_url, headers=self.headers).json()
+            # only for independent key
+            try:
+                independent = result.get('data').get('result').get('independent_list')
+                for element in independent:
+                    if element.get('element_name') in self.schemas:
+                        result[element.get('element_name')] = [el.get('words')
+                                                                for el in element.get('entity_list')]
+            except Exception as e:
+                logger.error(f'task_result_error scene_id={self.elem_server_id} res={result} except={str(e)}')
+                raise Exception('custom_kv parse_error')
+        else:
+            logger.error(f'custom_kv=create_task resp={resp.text}')
+            raise Exception('custom_kv create task file')
+        content = json.dumps(result)
+        doc = Document(page_content=content)
         return [doc]
