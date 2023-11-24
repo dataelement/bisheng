@@ -1,6 +1,10 @@
 <img src="https://www.dataelem.com/nstatic/bisheng.png" alt="Bisheng banner">
 
 <p align="center">
+  <a href="./README.md">简体中文</a> |
+  <a href="./README_ENG.md">English</a> 
+</p>
+<p align="center">
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
     <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
     <img src="https://img.shields.io/docker/pulls/dataelement/bisheng-frontend" alt="docker-pull-count" />
