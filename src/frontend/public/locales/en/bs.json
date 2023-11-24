@@ -185,7 +185,14 @@
         "noNewNotifications": "No new notifications",
         "skillName": "Skill Name",
         "nameTooLong": "Name is too long",
-        "skillDescription": "Skill Description"
+        "skillDescription": "Skill Description",
+        "enterVarName": "Please enter a variable name.",
+        "varNameExists": "Variable name is already in use",
+        "text": "Text",
+        "dropdown": "Dropdown",
+        "maxLength": "Max Length",
+        "options": "Options",
+        "variableName": "Variable Name"
     },
     "lib": {
         "enterLibraryName": "Enter Knowledge Base Name",
@@ -246,6 +253,15 @@
         "sizeExceedsLimit": "Size exceeds 50MB",
         "editDictionary": "Edit Dictionary",
         "exportCodeDialogTip": "Generate code to integrate the workflow into an external application (please make sure to build the skill before opening this page)."
+    },
+    "report": {
+        "reportTemplate": "Report Template",
+        "reportDescription": "Report generation description...",
+        "newButton": "New",
+        "importButton": "Import",
+        "start": "start",
+        "formSettings": "Form Settings",
+        "requiredLabel": "Required"
     },
     "status": {
         "1004": "This skill has been deleted",

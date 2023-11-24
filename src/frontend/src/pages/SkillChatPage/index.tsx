@@ -14,7 +14,8 @@ import SkillTemps from "../SkillPage/components/SkillTemps";
 import ChatPanne from "./components/ChatPanne";
 import { Trash2 } from "lucide-react";
 import { bsconfirm } from "../../alerts/confirm";
-// import ChatReportForm from "./components/ChatReportForm";
+import { useHasReport } from "../../util/hook";
+import ChatReportForm from "./components/ChatReportForm";
 
 export default function SkillChatPage() {
     const [open, setOpen] = useState(false)
@@ -169,7 +170,7 @@ export default function SkillChatPage() {
                     onNextPageClick={loadNextPage}
                     onUploadFile={uploadFile}
                 />
-                {/* {isReport && !chatHistory.length && <ChatReportForm flow={flow} onStart={sendReport} />} */}
+                {isReport && !chatHistory.length && <ChatReportForm flow={flow} onStart={sendReport} />}
             </div>}
         {/* 选择对话技能 */}
         <SkillTemps
@@ -695,10 +696,7 @@ const useWebsocketChat = (chatIdRef) => {
     }, [flow.current])
 
     // 是否报表表单
-    const isReport = useMemo(() => {
-        // 如果有 VariableNode  inputnode 就属于
-        return !!flow.current?.data.nodes.find(node => ["VariableNode", "InputFileNode1"].includes(node.data.type))
-    }, [flow.current])
+    const isReport = useHasReport(flow.current)
 
     // 停止状态
     const [isStop, setIsStop] = useState(true)

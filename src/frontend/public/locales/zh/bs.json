@@ -181,7 +181,14 @@
         "noNewNotifications": "没有新的通知",
         "skillName": "技能名",
         "nameTooLong": "名称过长",
-        "skillDescription": "技能描述"
+        "skillDescription": "技能描述",
+        "enterVarName": "请输入变量名",
+        "varNameExists": "变量名重复",
+        "text": "文本",
+        "dropdown": "下拉框",
+        "maxLength": "最大长度",
+        "options": "选项",
+        "variableName": "变量名"
     },
     "lib": {
         "enterLibraryName": "请输入知识库名称",
@@ -242,6 +249,15 @@
         "sizeExceedsLimit": "超过50M",
         "editDictionary": "编辑词典",
         "exportCodeDialogTip": "生成代码，将流程集成到外部应用程序中 (打开此页面前请先build技能)。"
+    },
+    "report": {
+        "reportTemplate": "报告模板",
+        "reportDescription": "报告生成描述...",
+        "newButton": "新建",
+        "importButton": "导入",
+        "start": "开始",
+        "formSettings": "表单设置",
+        "requiredLabel": "必填"
     },
     "status": {
         "1004": "该技能已被删除",
