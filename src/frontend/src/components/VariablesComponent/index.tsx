@@ -19,7 +19,7 @@ import { useTranslation } from "react-i18next";
 export default function VariablesComponent({ nodeId, flowId, onChange }: {
     nodeId: string
     flowId: string
-    onChange: (val: string) => void
+    onChange: (val: any) => void
 }) {
 
     const [items, setItems] = useState<Variable[]>([])
@@ -68,9 +68,9 @@ export default function VariablesComponent({ nodeId, flowId, onChange }: {
         }
         const res = await saveVariableApi(param)
         const _items = items.map(item => item.id === _item.id ? { ..._item, id: res.data.id } : item)
-        const hasValue = _items.find(item => item.name)
+        // const hasValue = _items.find(item => item.name)
         // 保存时 id传出去保存，用来校验必填项
-        onChange(hasValue ? nodeId : '')
+        onChange(_items.map(el => el.name))
         setItems(_items)
     }
 
