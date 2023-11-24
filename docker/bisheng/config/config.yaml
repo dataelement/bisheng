@@ -1,19 +1,32 @@
 # 数据库配置
 database_url:
-  "mysql+pymysql://username:password@192.168.106.106:3306/bisheng"
-redis_url:
-  "192.168.106.116:6379"
+  "mysql+pymysql://root:1234@mysql:3306/bisheng?charset=utf8mb4"
 
-# 为知识库的embedding进行模型撇脂
-embedding_config:
-  text-embedding-ada-002:
-    base_url:
-      ""
-  multilingual-e5-large:
-    base_url:
-      ""
+# 缓存配置  redis://[[username]:[password]]@localhost:6379/0
+redis_url: "redis://redis:6379/0"
 
-agents:
+environment:
+  env: dev
+  uns_support: ['png','jpg','jpeg','bmp','doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv', 'tiff']
+
+# admin 用户配置
+admin:
+  user_name: "admin"
+  password: "1234"
+
+autogen_roles:
+  AutoGenAssistant:
+    documentation: ""
+  AutoGenGroupChatManager:
+    documentation: ""
+  AutoGenUser:
+    documentation: ""
+  AutoGenCoder:
+    documentation: ""
+  AutoGenCustomRole:
+    documentation: ""
+
+agents: 
   ZeroShotAgent:
     documentation: "https://python.langchain.com/docs/modules/agents/how_to/custom_mrkl_agent"
   JsonAgent:
@@ -29,6 +42,24 @@ agents:
   SQLAgent:
     documentation: ""
 chains:
+  TransformChain:
+    documentation: ""
+  MultiPromptChain:
+    documentation: ""
+  LLMRouterChain:
+    documentation: ""
+  AutoGenChain:
+    documentation: ""
+  APIChain:
+    documentation: ""
+  TransformChain:
+    documentation: ""
+  MultiRetrievalQA:
+    documentation: ""
+  SimpleSequentialChain:
+    documentation: ""
+  SequentialChain:
+    documentation: ""
   LLMChain:
     documentation: "https://python.langchain.com/docs/modules/chains/foundational/llm_chain"
   LLMMathChain:
@@ -54,14 +85,14 @@ chains:
   CombineDocsChain:
     documentation: ""
 documentloaders:
+  ElemUnstructuredLoaderV0:
+    documentation: ""
   AirbyteJSONLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/airbyte_json"
   CoNLLULoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/conll-u"
   CSVLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/csv"
-  UnstructuredEmailLoader:
-    documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/email"
   EverNoteLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/evernote"
   FacebookChatLoader:
@@ -70,24 +101,16 @@ documentloaders:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/gutenberg"
   BSHTMLLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/how_to/html"
-  UnstructuredHTMLLoader:
-    documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/how_to/html"
-  UnstructuredMarkdownLoader:
-    documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/how_to/markdown"
   PyPDFDirectoryLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/how_to/pdf"
   PyPDFLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/how_to/pdf"
-  UnstructuredPowerPointLoader:
-    documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/microsoft_powerpoint"
   SRTLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/subtitle"
   TelegramChatLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/telegram"
   TextLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/"
-  UnstructuredWordDocumentLoader:
-    documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/microsoft_word"
   WebBaseLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/web_base"
   AZLyricsLoader:
@@ -156,13 +179,15 @@ llms:
     documentation: ""
   ChatXunfeiAI:
     documentation: ""
-  Llama2Chat:
+  HostChatGLM2:
     documentation: ""
-  ChatGLM2Host:
+  HostBaichuanChat:
     documentation: ""
-  BaichuanChat:
+  HostLlama2Chat:
     documentation: ""
-  QwenChat:
+  HostQwenChat:
+    documentation: ""
+  CustomLLMChat:
     documentation: ""
   ###
   # There's a bug in this component deactivating until we get it sorted: _language_models.py", line 804, in send_message
@@ -298,6 +323,8 @@ utilities:
   WolframAlphaAPIWrapper:
     documentation: ""
 retrievers:
+  MixEsVectorRetriever:
+    documentation: ""
   MultiQueryRetriever:
     documentation: "https://python.langchain.com/docs/modules/data_connection/retrievers/how_to/MultiQueryRetriever"
   # https://github.com/supabase-community/supabase-py/issues/482

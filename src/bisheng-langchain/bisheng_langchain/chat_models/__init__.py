@@ -1,4 +1,4 @@
-from .host_llm import BaichuanChat, ChatGLM2Host, Llama2Chat, QwenChat
+from .host_llm import CustomLLMChat, HostBaichuanChat, HostChatGLM2, HostLlama2Chat, HostQwenChat
 from .minimax import ChatMinimaxAI
 from .proxy_llm import ProxyChatLLM
 from .wenxin import ChatWenxin
@@ -7,5 +7,7 @@ from .zhipuai import ChatZhipuAI
 
 __all__ = [
     'ProxyChatLLM', 'ChatMinimaxAI', 'ChatWenxin', 'ChatZhipuAI',
-    'ChatXunfeiAI', 'Llama2Chat', 'ChatGLM2Host', 'BaichuanChat', 'QwenChat'
+    'ChatXunfeiAI',
+    'HostChatGLM2', 'HostBaichuanChat', 'HostLlama2Chat', 'HostQwenChat',
+    'CustomLLMChat'
 ]

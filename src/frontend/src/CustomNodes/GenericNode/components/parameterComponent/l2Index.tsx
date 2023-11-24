@@ -1,18 +1,20 @@
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import CodeAreaComponent from "../../../../components/codeAreaComponent";
+import DictComponent from "../../../../components/dictComponent";
 import Dropdown from "../../../../components/dropdownComponent";
 import FloatComponent from "../../../../components/floatComponent";
 import InputComponent from "../../../../components/inputComponent";
 import InputFileComponent from "../../../../components/inputFileComponent";
 import InputListComponent from "../../../../components/inputListComponent";
 import IntComponent from "../../../../components/intComponent";
+import KeypairListComponent from "../../../../components/keypairListComponent";
 import PromptAreaComponent from "../../../../components/promptComponent";
 import TextAreaComponent from "../../../../components/textAreaComponent";
 import ToggleShadComponent from "../../../../components/toggleShadComponent";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
-import { cleanEdges } from "../../../../util/reactflowUtils";
 import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
+import { cleanEdges, convertObjToArray, convertValuesToNumbers, hasDuplicateKeys } from "../../../../util/reactflowUtils";
 
 export default function L2ParameterComponent({
     // id,
@@ -23,6 +25,8 @@ export default function L2ParameterComponent({
     const { reactFlowInstance } = useContext(typesContext);
     // let disabled = reactFlowInstance?.getEdges().some((e) => e.targetHandle === id) ?? false;
     let disabled = false
+
+    const [errorDuplicateKey, setErrorDuplicateKey] = useState(false);
 
     const { setTabsState, tabId, save } = useContext(TabsContext);
     const handleOnNewValue = (newValue: any) => {
@@ -59,7 +63,7 @@ export default function L2ParameterComponent({
                         value={data.node.template[name].value ?? ""}
                         onChange={handleOnNewValue}
                     />
-                ) : name === 'collection_name' ? (
+                ) : ['index_name', 'collection_name'].includes(name) ? (
                     // 知识库选择
                     <CollectionNameComponent
                         setNodeClass={(nodeClass) => {
@@ -106,7 +110,7 @@ export default function L2ParameterComponent({
                 <Dropdown
                     options={data.node.template[name].options}
                     onSelect={handleOnNewValue}
-                    value={data.node.template[name].value ?? "选一个选项"}
+                    value={data.node.template[name].value ?? "choose option"}
                 ></Dropdown>
             </div>
         ) : type === "code" ? (
@@ -166,7 +170,43 @@ export default function L2ParameterComponent({
                     onChange={handleOnNewValue}
                 />
             </div>
-        ) : (
+        ) : type === "NestedDict" ? (
+            <div className="mt-2 w-full">
+                <DictComponent
+                    disabled={disabled}
+                    editNode={false}
+                    value={
+                        !data.node!.template[name].value ||
+                            data.node!.template[name].value?.toString() === "{}"
+                            ? '{"yourkey": "value"}'
+                            : data.node!.template[name].value
+                    }
+                    onChange={(newValue) => {
+                        data.node!.template[name].value = newValue;
+                        handleOnNewValue(newValue);
+                    }}
+                />
+            </div>
+        ) : type === "dict" ? (
+            <div className="mt-2 w-full">
+                <KeypairListComponent
+                    disabled={disabled}
+                    editNode={false}
+                    value={
+                        data.node!.template[name].value?.length === 0 ||
+                            !data.node!.template[name].value
+                            ? [{ "": "" }]
+                            : convertObjToArray(data.node!.template[name].value)
+                    }
+                    duplicateKey={errorDuplicateKey}
+                    onChange={(newValue) => {
+                        const valueToNumbers = convertValuesToNumbers(newValue);
+                        data.node!.template[name].value = valueToNumbers;
+                        setErrorDuplicateKey(hasDuplicateKeys(valueToNumbers));
+                        handleOnNewValue(valueToNumbers);
+                    }}
+                />
+            </div>) : (
             <></>
         )}
     </div>

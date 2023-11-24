@@ -10,14 +10,19 @@ class ModelDeployBase(SQLModelSerializable):
     endpoint: str = Field(index=False, unique=False)
     server: str = Field(index=True)
     model: str = Field(index=False)
-    config: Optional[str] = Field(index=False, sa_column=(String(length=1024)))
+    config: Optional[str] = Field(index=False, sa_column=Column(String(length=512)))
     status: Optional[str] = Field(index=False)
-    remark: Optional[str] = Field(index=False)
+    remark: Optional[str] = Field(index=False, sa_column=Column(String(length=4096)))
 
     create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(index=True,
+                                            sa_column=Column(
+                                                DateTime,
+                                                nullable=False,
+                                                index=True,
+                                                server_default=text('CURRENT_TIMESTAMP'),
+                                                onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class ModelDeploy(ModelDeployBase, table=True):

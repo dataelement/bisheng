@@ -6,10 +6,9 @@ from uuid import UUID, uuid4
 
 from bisheng.database.models.base import SQLModelSerializable
 # if TYPE_CHECKING:
-from bisheng.database.models.flow_style import FlowStyle, FlowStyleRead
 from pydantic import validator
 from sqlalchemy import Column, DateTime, text
-from sqlmodel import JSON, Field, Relationship
+from sqlmodel import JSON, Field
 
 
 class FlowBase(SQLModelSerializable):
@@ -19,9 +18,14 @@ class FlowBase(SQLModelSerializable):
     data: Optional[Dict] = Field(default=None)
     logo: Optional[str] = Field(index=False)
     status: Optional[int] = Field(index=False, default=1)
-    update_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
-    create_time: Optional[datetime] = Field(default=(datetime.now()).strftime('%Y-%m-%d %H:%M:%S'), index=True)
+    update_time: Optional[datetime] = Field(index=True,
+                                            sa_column=Column(
+                                                DateTime,
+                                                nullable=False,
+                                                server_default=text('CURRENT_TIMESTAMP'),
+                                                onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(default=(datetime.now()).strftime('%Y-%m-%d %H:%M:%S'),
+                                            index=True)
 
     @validator('data')
     def validate_json(v):
@@ -43,11 +47,11 @@ class FlowBase(SQLModelSerializable):
 class Flow(FlowBase, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
     data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
-    style: Optional['FlowStyle'] = Relationship(
-        back_populates='flow',
-        # use "uselist=False" to make it a one-to-one relationship
-        sa_relationship_kwargs={'uselist': False},
-    )
+    # style: Optional['FlowStyle'] = Relationship(
+    #     back_populates='flow',
+    #     # use "uselist=False" to make it a one-to-one relationship
+    #     sa_relationship_kwargs={'uselist': False},
+    # )
 
 
 class FlowCreate(FlowBase):
@@ -60,7 +64,8 @@ class FlowRead(FlowBase):
 
 
 class FlowReadWithStyle(FlowRead):
-    style: Optional['FlowStyleRead'] = None
+    # style: Optional['FlowStyleRead'] = None
+    total: Optional[int] = None
 
 
 class FlowUpdate(SQLModelSerializable):

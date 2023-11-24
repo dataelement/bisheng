@@ -16,8 +16,9 @@ import { MAX_LENGTH_TO_SCROLL_TOOLTIP } from "../../../../constants";
 import { PopUpContext } from "../../../../contexts/popUpContext";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
+import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
 import { ParameterComponentType } from "../../../../types/components";
-import { cleanEdges } from "../../../../util/reactflowUtils";
+import { cleanEdges, convertObjToArray, convertValuesToNumbers, hasDuplicateKeys } from "../../../../util/reactflowUtils";
 import {
   classNames,
   getRandomKeyByssmm,
@@ -25,9 +26,10 @@ import {
   isValidConnection,
   nodeColors,
   nodeIconsLucide,
-  nodeNames,
+  getNodeNames
 } from "../../../../utils";
-import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
+import DictComponent from "../../../../components/dictComponent";
+import KeypairListComponent from "../../../../components/keypairListComponent";
 
 export default function ParameterComponent({
   left,
@@ -41,6 +43,7 @@ export default function ParameterComponent({
   required = false,
   optionalHandle = null,
   info = "",
+  onChange
 }: ParameterComponentType) {
   const ref = useRef(null);
   const refHtml = useRef(null);
@@ -65,17 +68,30 @@ export default function ParameterComponent({
   useEffect(() => { }, [closePopUp, data.node.template]);
 
   const { reactFlowInstance } = useContext(typesContext);
-  let disabled = useMemo(() => {
+  const disabled = useMemo(() => {
     let dis = reactFlowInstance?.getEdges().some((e) => e.targetHandle === id) ?? false;
-    // 特殊处理milvus组件的 disabled
-    if (data.type === "Milvus"
-      && name === 'collection_name'
+    // 特殊处理milvus、ElasticKeywordsSearch组件的 disabled
+    if (((data.type === "Milvus" && name === 'collection_name') || (data.type === "ElasticKeywordsSearch" && name === 'index_name'))
       && reactFlowInstance?.getEdges().some((e) => e.targetHandle.indexOf('documents') !== -1
         && e.targetHandle.indexOf(data.id) !== -1)) {
       dis = true
     }
     return dis
   }, [id, data, reactFlowInstance])
+  // milvus 组件，知识库不为空是 embbeding取消必填限制
+  useEffect(() => {
+    if (data.type === "Milvus" && data.node.template.embedding) {
+      const hidden = disabled ? false : !!data.node.template.collection_name.value
+      data.node.template.embedding.required = !hidden
+      data.node.template.embedding.show = !hidden
+      if (hidden) data.node.template.connection_args.value = ''
+      onChange?.()
+    }
+  }, [data, disabled])
+  const handleRemoveMilvusEmbeddingEdge = () => {
+    const edges = reactFlowInstance.getEdges().filter(edge => edge.targetHandle.indexOf('Embeddings|embedding|Milvus') === -1)
+    reactFlowInstance.setEdges(edges)
+  }
   const [myData, setMyData] = useState(useContext(typesContext).data);
 
   const handleOnNewValue = useCallback((newValue: any) => {
@@ -103,6 +119,8 @@ export default function ParameterComponent({
       </div>
     );
   }, [info]);
+
+  const [errorDuplicateKey, setErrorDuplicateKey] = useState(false);
 
   useEffect(() => {
     const groupedObj = groupByFamily(myData, tooltipTitle, left, data.type);
@@ -134,7 +152,7 @@ export default function ParameterComponent({
             /> */}
           </div>
           <span className="ps-2 text-xs text-foreground">
-            {nodeNames[item.family] ?? ""}{" "}
+            {getNodeNames()[item.family] ?? ""}{" "}
             <span className="text-xs">
               {" "}
               {item.type === "" ? "" : " - "}
@@ -244,7 +262,7 @@ export default function ParameterComponent({
                 value={data.node.template[name].value ?? ""}
                 onChange={handleOnNewValue}
               />
-            ) : name === 'collection_name' ? (
+            ) : ['index_name', 'collection_name'].includes(name) ? (
               // 知识库选择
               <CollectionNameComponent
                 setNodeClass={(nodeClass) => {
@@ -253,7 +271,7 @@ export default function ParameterComponent({
                 nodeClass={data.node}
                 disabled={disabled}
                 value={data.node.template[name].value ?? ""}
-                onChange={handleOnNewValue}
+                onChange={(val) => { handleOnNewValue(val); name === 'collection_name' && val && handleRemoveMilvusEmbeddingEdge() }}
               />
             ) : (
               // 单行输入
@@ -353,6 +371,43 @@ export default function ParameterComponent({
               disabled={disabled}
               value={data.node.template[name].value ?? ""}
               onChange={handleOnNewValue}
+            />
+          </div>
+        ) : left === true && type === "NestedDict" ? (
+          <div className="mt-2 w-full">
+            <DictComponent
+              disabled={disabled}
+              editNode={false}
+              value={
+                !data.node!.template[name].value ||
+                  data.node!.template[name].value?.toString() === "{}"
+                  ? '{"yourkey": "value"}'
+                  : data.node!.template[name].value
+              }
+              onChange={(newValue) => {
+                data.node!.template[name].value = newValue;
+                handleOnNewValue(newValue);
+              }}
+            />
+          </div>
+        ) : left === true && type === "dict" ? (
+          <div className="mt-2 w-full">
+            <KeypairListComponent
+              disabled={disabled}
+              editNode={false}
+              value={
+                data.node!.template[name].value?.length === 0 ||
+                  !data.node!.template[name].value
+                  ? [{ "": "" }]
+                  : convertObjToArray(data.node!.template[name].value)
+              }
+              duplicateKey={errorDuplicateKey}
+              onChange={(newValue) => {
+                const valueToNumbers = convertValuesToNumbers(newValue);
+                data.node!.template[name].value = valueToNumbers;
+                setErrorDuplicateKey(hasDuplicateKeys(valueToNumbers));
+                handleOnNewValue(valueToNumbers);
+              }}
             />
           </div>
         ) : (

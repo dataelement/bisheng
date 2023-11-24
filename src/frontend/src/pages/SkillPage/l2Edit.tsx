@@ -1,5 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import L2ParameterComponent from "../../CustomNodes/GenericNode/components/parameterComponent/l2Index";
 import ShadTooltip from "../../components/ShadTooltipComponent";
@@ -9,13 +10,14 @@ import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
+import { userContext } from "../../contexts/userContext";
 import { getFlowFromDatabase } from "../../controllers/API";
 
 export default function l2Edit() {
 
     const [isL2, setIsL2] = useState(false)
     const navigate = useNavigate()
-
+    const { t } = useTranslation()
     // form 
     const nameRef = useRef(null)
     const descRef = useRef(null)
@@ -32,23 +34,24 @@ export default function l2Edit() {
         setLoading(false)
     }
 
+    const { user } = useContext(userContext);
     const [error, setError] = useState({ name: false, desc: false })
     const isParamError = (name, desc, noError = false) => {
-        const errorlist = []
-        if (!name) errorlist.push('请填写技能名称')
-        if (name.length > 30) errorlist.push('技能名称过长，不要超过30字')
+        const errorlist = [];
+        if (!name) errorlist.push(t('skills.skillNameRequired'));
+        if (name.length > 30) errorlist.push(t('skills.skillNameTooLong'));
 
-        // 重名校验
-        if (flows.find(flow => flow.name === name && flow.id !== id)) errorlist.push('该名称已存在')
-        const nameErrors = errorlist.length
-        if (!desc) errorlist.push('请填写技能描述') // 加些描述能够快速让别人理解您创造的技能')
-        if (desc.length > 200) errorlist.push('技能描述过长，不要超过200字')
+        // Duplicate name validation
+        if (flows.find(flow => flow.name === name && flow.user_id === user.user_id && flow.id !== id)) errorlist.push(t('skills.skillNameExists'));
+        const nameErrors = errorlist.length;
+        if (!desc) errorlist.push(t('skills.skillDescRequired'));
+        if (desc.length > 200) errorlist.push(t('skills.skillDescTooLong'));
         if (errorlist.length && !noError) setErrorData({
-            title: "关键信息有误",
+            title: t('skills.errorTitle'),
             list: errorlist,
         });
-        setError({ name: !!nameErrors, desc: errorlist.length > nameErrors })
-        return !!errorlist.length
+        setError({ name: !!nameErrors, desc: errorlist.length > nameErrors });
+        return !!errorlist.length;
     }
 
     // 编辑回填参数
@@ -57,8 +60,10 @@ export default function l2Edit() {
         const name = nameRef.current.value
         const description = descRef.current.value
         if (isParamError(name, description, true)) return navigate('/flow/' + id, { replace: true })
-        // // 保存在跳
+        // 保存在跳
+        setLoading(true)
         await saveFlow({ ...flow, name, description });
+        setLoading(false)
         navigate('/flow/' + id, { replace: true })
     }
 
@@ -83,19 +88,18 @@ export default function l2Edit() {
         flow.name = nameRef.current.value
         flow.description = descRef.current.value
         if (isParamError(flow.name, flow.description)) return
+        setLoading(true)
         await saveFlow(flow);
-        setSuccessData({ title: "保存成功" });
-        setTimeout(() => {
-            navigate(-1)
-        }, 2000);
+        setLoading(false)
+        setSuccessData({ title: t('success') });
+        setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
     }
 
     return <div className="p-6 h-screen overflow-y-auto">
         <div className="flex justify-between w-full">
-            {/* <button className="extra-side-bar-save-disable" ><ArrowLeft /></button> */}
-            <ShadTooltip content="返回" side="right">
-                <button className="extra-side-bar-buttons w-[36px]" onClick={() => navigate(-1)} >
-                    <ArrowLeft strokeWidth={1.5} className="side-bar-button-size " ></ArrowLeft>
+            <ShadTooltip content={t('back')} side="right">
+                <button className="extra-side-bar-buttons w-[36px]" onClick={() => navigate(-1)}>
+                    <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
                 </button>
             </ShadTooltip>
             {/* <ShadTooltip content="接口信息" side="left">
@@ -106,46 +110,56 @@ export default function l2Edit() {
         </div>
         {/* form */}
         <div className="mt-6">
-            <p className="text-center text-2xl">技能设置</p>
+            <p className="text-center text-2xl">{t('skills.skillSettings')}</p>
             <div className="w-[80%] mx-auto grid gap-4 py-4">
-                <p className="text-center text-gray-400 mt-4">基础信息</p>
+                <p className="text-center text-gray-400 mt-4">{t('skills.basicInfo')}</p>
                 <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="name" className="text-right">技能名称</Label>
-                    <Input ref={nameRef} placeholder="技能名称" className={`col-span-2 ${error.name && 'border-red-400'}`} />
+                    <Label htmlFor="name" className="text-right">{t('skills.skillName')}</Label>
+                    <Input ref={nameRef} placeholder={t('skills.skillName')} className={`col-span-2 ${error.name && 'border-red-400'}`} />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="username" className="text-right">描述</Label>
-                    <Textarea ref={descRef} id="name" placeholder="技能描述" className={`col-span-2 ${error.desc && 'border-red-400'}`} />
+                    <Label htmlFor="username" className="text-right">{t('skills.description')}</Label>
+                    <Textarea ref={descRef} id="name" placeholder={t('skills.description')} className={`col-span-2 ${error.desc && 'border-red-400'}`} />
                 </div>
                 {
                     isL2 && <div className="mt-4">
-                        <p className="text-center pr-2 text-gray-400">参数信息</p>
+                        <p className="text-center pr-2 text-gray-400">{t('skills.parameterInfo')}</p>
                         {flow?.data?.nodes.map(({ data }) => (
-                            Object.keys(data.node.template).map(k => (
-                                data.node.template[k].l2 && <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="name" className="text-right">{data.node.template[k].l2_name}</Label>
-                                    <L2ParameterComponent key={k} data={data} type={data.node.template[k].type} name={k} />
+                            <div key={data.id}>
+                                <div className="only:hidden grid-cols-4 mt-6">
+                                    <span className=" p-2 font-bold text-gray-400 ml-[18%] text-base">
+                                        {data.node.l2_name || data.node.display_name}
+                                    </span>
                                 </div>
-                            ))
+                                {
+                                    Object.keys(data.node.template).map(k => (
+                                        data.node.template[k].l2 && <div className="grid grid-cols-4 items-center gap-4" key={k}>
+                                            <Label htmlFor="name" className="text-right">
+                                                {data.node.template[k].l2_name || data.node.template[k].name}
+                                            </Label>
+                                            <L2ParameterComponent data={data} type={data.node.template[k].type} name={k} />
+                                        </div>
+                                    ))
+                                }
+                            </div>
                         ))}
                     </div>
                 }
                 {
                     isL2 ? <div className="m-10 w-[50%] mx-auto">
-                        {/* <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger><button className="inline-flex text-xs gap-1 text-blue-500" onClick={() => handleJumpFlow()}><Workflow size={16} />高级配置</button></TooltipTrigger>
-                                <TooltipContent className="bg-gray-50 rounded-full"><p>流程图</p></TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider> */}
-                        {/* <Button className="extra-side-bar-save-disable" >技能校验</Button> */}
                         <div className="flex gap-4">
-                            <Button className="extra-side-bar-save-disable w-[70%] rounded-full" onClick={handleSave} >保存</Button>
-                            <Button className="w-[30%] rounded-full" variant="outline" onClick={() => handleJumpFlow()} >高级配置</Button>
+                            <Button disabled={loading} className="extra-side-bar-save-disable w-[70%] rounded-full" onClick={handleSave}>
+                                {t('save')}
+                            </Button>
+                            <Button disabled={loading} className="w-[30%] rounded-full" variant="outline" onClick={() => handleJumpFlow()}>
+                                {t('skills.advancedConfiguration')}
+                            </Button>
                         </div>
                     </div> :
                         <div className="flex justify-center m-4">
-                            <Button disabled={loading} className="extra-side-bar-save-disable w-[50%] mt-8 rounded-full" onClick={handleCreateNewSkill}>下一步，高级配置</Button>
+                            <Button disabled={loading} className="extra-side-bar-save-disable w-[50%] mt-8 rounded-full" onClick={handleCreateNewSkill}>
+                                {t('skills.nextStep')}
+                            </Button>
                         </div>
                 }
             </div>

@@ -1,20 +1,19 @@
 import _ from "lodash";
 import { useContext, useEffect, useState } from "react";
-import { RouterProvider } from "react-router-dom";
+import { RouterProvider, useSearchParams } from "react-router-dom";
 import "reactflow/dist/style.css";
 import "./App.css";
 
-import { ErrorBoundary } from "react-error-boundary";
 import ErrorAlert from "./alerts/error";
 import NoticeAlert from "./alerts/notice";
 import SuccessAlert from "./alerts/success";
-import CrashErrorComponent from "./components/CrashErrorComponent";
 import { alertContext } from "./contexts/alertContext";
 import { locationContext } from "./contexts/locationContext";
-import { TabsContext } from "./contexts/tabsContext";
+import { userContext } from "./contexts/userContext";
 import { LoginPage } from "./pages/login";
 import router from "./routes";
-import { userContext } from "./contexts/userContext";
+import { useTranslation } from "react-i18next";
+import i18next from "i18next";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -24,7 +23,6 @@ export default function App() {
     setShowSideBar(true);
     setIsStackedOpen(true);
   }, [setCurrent, setIsStackedOpen, setShowSideBar]);
-  const { hardReset } = useContext(TabsContext);
   const {
     errorData,
     errorOpen,
@@ -139,23 +137,32 @@ export default function App() {
     };
   }, []);
 
+  // i18n title
+  const { t } = useTranslation()
+  useEffect(() => {
+    document.title = t('title')
+  }, [t])
+  // init language
+  useEffect(() => {
+    const lang = user?.user_id ? localStorage.getItem('language-' + user.user_id) : null
+    if (lang) {
+      i18next.changeLanguage(lang)
+    }
+  }, [user])
+
+  // 免登录列表
+  const noAuthPages = ['chat']
+  const path = location.pathname.split('/')?.[1] || ''
+
   return (
     //need parent component with width and height
     <div className="flex h-full flex-col">
-      <ErrorBoundary
-        onReset={() => {
-          window.localStorage.removeItem("tabsData");
-          // window.localStorage.clear();
-          hardReset();
-          window.location.href = window.location.href;
-        }}
-        FallbackComponent={CrashErrorComponent}
-      >
-        {/* <Header /> */}
-        {user ? <RouterProvider router={router} /> : <LoginPage></LoginPage>}
-      </ErrorBoundary>
+      {/* <Header /> */}
+      {(user?.user_id || noAuthPages.includes(path)) ? <RouterProvider router={router} />
+        : user ? <div className="loading"></div>
+          : <LoginPage></LoginPage>}
       <div></div>
-      <div className="app-div" style={{ zIndex: 999 }}>
+      <div className="app-div" style={{ zIndex: 1000 }}>
         {alertsList.map((alert) => (
           <div key={alert.id}>
             {alert.type === "error" ? (

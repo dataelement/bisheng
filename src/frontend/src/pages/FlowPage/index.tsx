@@ -6,7 +6,7 @@ import Page from "./components/PageComponent";
 import _ from "lodash";
 
 export default function FlowPage() {
-  const { flows, tabId, setTabId } = useContext(TabsContext);
+  const { flows, setTabId } = useContext(TabsContext);
   const { id } = useParams();
   useEffect(() => {
     setTabId(id);
@@ -20,10 +20,10 @@ export default function FlowPage() {
   //   });
   // }, []);
   const flow = useMemo(() => {
-    const _flow = flows.find((flow) => flow.id === tabId)
+    const _flow = flows.find((flow) => flow.id === id)
     const copyFlow = _flow && _.cloneDeep(_flow)
     return [copyFlow, JSON.stringify(copyFlow?.data || null)] as const
-  }, [flows, tabId])
+  }, [flows, id])
 
 
   return (

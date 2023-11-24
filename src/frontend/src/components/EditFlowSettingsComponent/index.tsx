@@ -1,4 +1,5 @@
 import React, { ChangeEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
@@ -18,22 +19,15 @@ export const EditFlowSettings: React.FC<InputProps> = ({
   name,
   description,
   maxLength = 50,
-  flows,
-  tabId,
   setName,
-  setDescription,
-  updateFlow,
+  setDescription
 }) => {
+  const { t } = useTranslation()
   const [isMaxLength, setIsMaxLength] = useState(false);
 
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { value } = event.target;
-    if (value.length >= maxLength) {
-      setIsMaxLength(true);
-    } else {
-      setIsMaxLength(false);
-    }
-
+    setIsMaxLength(value.length >= maxLength);
     setName(value);
   };
 
@@ -45,9 +39,9 @@ export const EditFlowSettings: React.FC<InputProps> = ({
     <>
       <Label>
         <div className="edit-flow-arrangement">
-          <span className="font-medium">技能名</span>{" "}
+          <span className="font-medium">{t('flow.skillName')}</span>{" "}
           {isMaxLength && (
-            <span className="edit-flow-span">名称过长</span>
+            <span className="edit-flow-span">{t('flow.nameTooLong')}</span>
           )}
         </div>
         <Input
@@ -62,7 +56,7 @@ export const EditFlowSettings: React.FC<InputProps> = ({
         />
       </Label>
       <Label>
-        <span className="font-medium">技能描述</span>
+        <span className="font-medium">{t('flow.skillDescription')}</span>
         <Textarea
           name="description"
           id="description"

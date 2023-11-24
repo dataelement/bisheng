@@ -2,10 +2,8 @@ import json
 from typing import List, Optional
 from uuid import UUID
 
-from bisheng.api.utils import (build_flow, build_flow_no_yield,
-                               build_input_keys_response)
-from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatList,
-                                    InitResponse, StreamData)
+from bisheng.api.utils import build_flow, build_flow_no_yield, build_input_keys_response
+from bisheng.api.v1.schemas import BuildStatus, BuiltResponse, ChatList, InitResponse, StreamData
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import get_session
@@ -13,13 +11,12 @@ from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageRead
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
-from fastapi import (APIRouter, HTTPException, WebSocket, WebSocketException,
-                     status)
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketException, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import func
+from sqlalchemy import delete, func
 from sqlmodel import Session, select
 
 router = APIRouter(tags=['Chat'])
@@ -40,7 +37,8 @@ def get_chatmessage(*,
     payload = json.loads(Authorize.get_jwt_subject())
     if not chat_id or not flow_id:
         return {'code': 500, 'message': 'chat_id 和 flow_id 必传参数'}
-    where = select(ChatMessage).where(ChatMessage.flow_id == flow_id, ChatMessage.chat_id == chat_id,
+    where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
+                                      ChatMessage.chat_id == chat_id,
                                       ChatMessage.user_id == payload.get('user_id'))
     if id:
         where = where.where(ChatMessage.id < id)
@@ -48,16 +46,33 @@ def get_chatmessage(*,
     return [jsonable_encoder(message) for message in db_message]
 
 
+@router.delete('/chat/{chat_id}', status_code=200)
+def del_chat_id(*,
+                session: Session = Depends(get_session),
+                chat_id: str,
+                Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+
+    statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id,
+                                          ChatMessage.user_id == payload.get('user_id'))
+
+    session.exec(statement)
+    session.commit()
+    return {'status_code': 200, 'status_message': 'success'}
+
+
 @router.get('/chat/list', response_model=List[ChatList], status_code=200)
 def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
 
-    smt = (select(
-        ChatMessage.flow_id, ChatMessage.chat_id, ChatMessage.chat_id,
-        func.max(ChatMessage.create_time).label('create_time'),
-        func.max(ChatMessage.update_time).label('update_time')).where(ChatMessage.user_id == payload.get('user_id')).group_by(
-            ChatMessage.flow_id).order_by(func.max(ChatMessage.create_time).desc()))
+    smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
+                  func.max(ChatMessage.create_time).label('create_time'),
+                  func.max(ChatMessage.update_time).label('update_time')).where(
+                      ChatMessage.user_id == payload.get('user_id')).group_by(
+                          ChatMessage.flow_id,
+                          ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
     db_message = session.exec(smt).all()
     flow_ids = [message.flow_id for message in db_message]
     db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
@@ -78,12 +93,65 @@ def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: Aut
     return [jsonable_encoder(chat) for chat in chat_list]
 
 
-@router.websocket('/chat/{client_id}')
-async def chat(client_id: str,
+@router.websocket('/chat/{flow_id}')
+async def chat(flow_id: str,
                websocket: WebSocket,
                chat_id: Optional[str] = None,
                type: Optional[str] = None,
                Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required(auth_from='websocket', websocket=websocket)
+    payload = json.loads(Authorize.get_jwt_subject())
+    user_id = payload.get('user_id')
+    """Websocket endpoint for chat."""
+    if type and type == 'L1':
+        with next(get_session()) as session:
+            db_flow = session.get(Flow, flow_id)
+        if not db_flow:
+            await websocket.accept()
+            message = '该技能已被删除'
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=message)
+        if db_flow.status != 2:
+            await websocket.accept()
+            message = '当前技能未上线，无法直接对话'
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=message)
+        graph_data = db_flow.data
+    else:
+        flow_data_key = 'flow_data_' + flow_id
+        if not flow_data_store.exists(flow_data_key) or str(
+                flow_data_store.hget(flow_data_key, 'status'),
+                'utf-8') != BuildStatus.SUCCESS.value:
+            await websocket.accept()
+            message = '当前编译没通过'
+            await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER, reason=message)
+            return
+        graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
+
+    try:
+        process_file = False if chat_id else True
+        graph = build_flow_no_yield(graph_data=graph_data,
+                                    artifacts={},
+                                    process_file=process_file,
+                                    flow_id=UUID(flow_id).hex,
+                                    chat_id=chat_id)
+        langchain_object = graph.build()
+        for node in langchain_object:
+            key_node = get_cache_key(flow_id, chat_id, node.id)
+            chat_manager.set_cache(key_node, node._built_object)
+            chat_manager.set_cache(get_cache_key(flow_id, chat_id), node._built_object)
+        await chat_manager.handle_websocket(flow_id, chat_id, websocket, user_id)
+    except WebSocketException as exc:
+        logger.error(exc)
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))
+    except Exception as e:
+        logger.error(str(e))
+
+
+@router.websocket('/chat/ws/{client_id}')
+async def union_websocket(client_id: str,
+                          websocket: WebSocket,
+                          chat_id: Optional[str] = None,
+                          type: Optional[str] = None,
+                          Authorize: AuthJWT = Depends()):
     Authorize.jwt_required(auth_from='websocket', websocket=websocket)
     payload = json.loads(Authorize.get_jwt_subject())
     user_id = payload.get('user_id')
@@ -109,9 +177,10 @@ async def chat(client_id: str,
         graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
 
     try:
+        process_file = False if chat_id else True
         graph = build_flow_no_yield(graph_data=graph_data,
                                     artifacts={},
-                                    process_file=False,
+                                    process_file=process_file,
                                     flow_id=UUID(client_id).hex,
                                     chat_id=chat_id)
         langchain_object = graph.build()
@@ -200,10 +269,9 @@ async def stream_build(flow_id: str, chat_id: Optional[str] = None):
 
             # L1 用户，采用build流程
             try:
-                process_file = False if chat_id else True
                 graph = build_flow(graph_data=graph_data,
                                    artifacts=artifacts,
-                                   process_file=process_file,
+                                   process_file=False,
                                    flow_id=UUID(flow_id).hex,
                                    chat_id=chat_id)
                 while True:
@@ -212,7 +280,10 @@ async def stream_build(flow_id: str, chat_id: Optional[str] = None):
             except StopIteration as e:
                 graph = e.value
             except Exception as e:
-                flow_data_store.hsetkey(flow_data_key, 'status', BuildStatus.FAILURE.value, expiration=expire)
+                flow_data_store.hsetkey(flow_data_key,
+                                        'status',
+                                        BuildStatus.FAILURE.value,
+                                        expiration=expire)
                 yield str(StreamData(event='error', data={'error': str(e)}))
                 return
 
@@ -231,7 +302,11 @@ async def stream_build(flow_id: str, chat_id: Optional[str] = None):
                     input_keys_response['memory_keys'].extend(input_keys.get('memory_keys'))
                     input_keys_response['handle_keys'].extend(input_keys.get('handle_keys'))
                 elif ('fileNode' in node.output):
-                    input_keys_response['input_keys'].append({'file_path': '', 'type': 'file', 'id': node.id})
+                    input_keys_response['input_keys'].append({
+                        'file_path': '',
+                        'type': 'file',
+                        'id': node.id
+                    })
 
             yield str(StreamData(event='message', data=input_keys_response))
             # We need to reset the chat history

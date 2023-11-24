@@ -8,12 +8,13 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 qdrant_storage
+autogen_coding/
 
 # Mac
 .DS_Store
 
 # VSCode
-.vscode/
+.vscode
 .vscode/settings.json
 .chroma
 .ruff_cache
@@ -131,6 +132,7 @@ build/
 ./third_party
 output/
 develop-eggs/
+config.dev.yaml
 dist/
 downloads/
 eggs/
@@ -256,4 +258,7 @@ dmypy.json
 # docusaurus
 .docusaurus/
 
+sftp-config.json
+
 /tmp/*
+sftp-config.json

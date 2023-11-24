@@ -2,9 +2,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from bisheng.graph import Graph
-from bisheng.interface.run import (build_sorted_vertices_with_caching,
-                                   get_memory_key, update_memory_keys)
+from bisheng.interface.run import (build_sorted_vertices_with_caching, get_memory_key,
+                                   update_memory_keys)
 from bisheng.utils.logger import logger
 from langchain.chains.base import Chain
 from langchain.schema import AgentAction
@@ -20,17 +19,12 @@ def fix_memory_inputs(langchain_object):
     if not hasattr(langchain_object, 'memory') or langchain_object.memory is None:
         return
     try:
-        if (
-            hasattr(langchain_object.memory, 'memory_key')
-            and langchain_object.memory.memory_key in langchain_object.input_variables
-        ):
+        if (hasattr(langchain_object.memory, 'memory_key') and
+                langchain_object.memory.memory_key in langchain_object.input_variables):
             return
     except AttributeError:
-        input_variables = (
-            langchain_object.prompt.input_variables
-            if hasattr(langchain_object, 'prompt')
-            else langchain_object.input_keys
-        )
+        input_variables = (langchain_object.prompt.input_variables if hasattr(
+            langchain_object, 'prompt') else langchain_object.input_keys)
         if langchain_object.memory.memory_key in input_variables:
             return
 
@@ -98,8 +92,8 @@ def process_graph_cached(data_graph: Dict[str, Any], inputs: Optional[dict] = No
     # artifacts can be documents loaded when building
     # the flow
     for (
-        key,
-        value,
+            key,
+            value,
     ) in artifacts.items():
         if key not in inputs or not inputs[key]:
             inputs[key] = value
@@ -120,15 +114,11 @@ def process_graph_cached(data_graph: Dict[str, Any], inputs: Optional[dict] = No
     elif isinstance(langchain_object, VectorStore):
         result = langchain_object.search(**inputs)
     else:
-        raise ValueError(
-            f'Unknown langchain_object type: {type(langchain_object).__name__}'
-        )
+        raise ValueError(f'Unknown langchain_object type: {type(langchain_object).__name__}')
     return result
 
 
-def load_flow_from_json(
-    flow: Union[Path, str, dict], tweaks: Optional[dict] = None, build=True
-):
+def load_flow_from_json(flow: Union[Path, str, dict], tweaks: Optional[dict] = None, build=True):
     """
     Load flow from a JSON file or a JSON object.
 
@@ -145,19 +135,24 @@ def load_flow_from_json(
     elif isinstance(flow, dict):
         flow_graph = flow
     else:
-        raise TypeError(
-            'Input must be either a file path (str) or a JSON object (dict)'
-        )
+        raise TypeError('Input must be either a file path (str) or a JSON object (dict)')
 
     graph_data = flow_graph['data']
     if tweaks is not None:
         graph_data = process_tweaks(graph_data, tweaks)
-    nodes = graph_data['nodes']
-    edges = graph_data['edges']
-    graph = Graph(nodes, edges)
+    from bisheng.api.utils import build_flow_no_yield
+    graph = build_flow_no_yield(graph_data=graph_data,
+                                artifacts={},
+                                process_file=True,
+                                flow_id='tmp',
+                                chat_id=None)
 
     if build:
         langchain_object = graph.build()
+        for object in langchain_object:
+            if hasattr(object._built_object, 'input_keys'):
+                langchain_object = object._built_object
+                break
 
         if hasattr(langchain_object, 'verbose'):
             langchain_object.verbose = True
@@ -173,9 +168,8 @@ def load_flow_from_json(
     return graph
 
 
-def validate_input(
-    graph_data: Dict[str, Any], tweaks: Dict[str, Dict[str, Any]]
-) -> List[Dict[str, Any]]:
+def validate_input(graph_data: Dict[str, Any],
+                   tweaks: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not isinstance(graph_data, dict) or not isinstance(tweaks, dict):
         raise ValueError('graph_data and tweaks should be dictionaries')
 
@@ -193,9 +187,7 @@ def apply_tweaks(node: Dict[str, Any], node_tweaks: Dict[str, Any]) -> None:
     template_data = node.get('data', {}).get('node', {}).get('template')
 
     if not isinstance(template_data, dict):
-        logger.warning(
-            f"Template data for node {node.get('id')} should be a dictionary"
-        )
+        logger.warning(f"Template data for node {node.get('id')} should be a dictionary")
         return
 
     for tweak_name, tweak_value in node_tweaks.items():
@@ -204,9 +196,7 @@ def apply_tweaks(node: Dict[str, Any], node_tweaks: Dict[str, Any]) -> None:
             template_data[tweak_name][key] = tweak_value
 
 
-def process_tweaks(
-    graph_data: Dict[str, Any], tweaks: Dict[str, Dict[str, Any]]
-) -> Dict[str, Any]:
+def process_tweaks(graph_data: Dict[str, Any], tweaks: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     """
     This function is used to tweak the graph data using the node id and the tweaks dict.
 
@@ -227,8 +217,6 @@ def process_tweaks(
             if node_tweaks := tweaks.get(node_id):
                 apply_tweaks(node, node_tweaks)
         else:
-            logger.warning(
-                "Each node should be a dictionary with an 'id' key of type str"
-            )
+            logger.warning("Each node should be a dictionary with an 'id' key of type str")
 
     return graph_data

@@ -2,17 +2,18 @@ import json
 from typing import List
 from uuid import UUID
 
-from bisheng.api.utils import build_flow_no_yield, remove_api_keys
+from bisheng.api.utils import access_check, build_flow_no_yield, remove_api_keys
 from bisheng.api.v1.schemas import FlowListCreate, FlowListRead
 from bisheng.database.base import get_session
-from bisheng.database.models.flow import (Flow, FlowCreate, FlowRead,
-                                          FlowReadWithStyle, FlowUpdate)
-from bisheng.database.models.template import Template
+from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate
+from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.settings import settings
+from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
+from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
 # build router
@@ -20,15 +21,14 @@ router = APIRouter(prefix='/flows', tags=['Flows'])
 
 
 @router.post('/', response_model=FlowRead, status_code=201)
-def create_flow(*, session: Session = Depends(get_session), flow: FlowCreate, Authorize: AuthJWT = Depends()):
+def create_flow(*,
+                session: Session = Depends(get_session),
+                flow: FlowCreate,
+                Authorize: AuthJWT = Depends()):
     """Create a new flow."""
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
 
-    if flow.flow_id:
-        # copy from template
-        temp_flow = session.get(Flow, flow.flow_id)
-        flow.data = temp_flow.data
     flow.user_id = payload.get('user_id')
     db_flow = Flow.from_orm(flow)
     session.add(db_flow)
@@ -37,7 +37,7 @@ def create_flow(*, session: Session = Depends(get_session), flow: FlowCreate, Au
     return db_flow
 
 
-@router.get('/', response_model=list[FlowReadWithStyle], status_code=200)
+@router.get('/', status_code=200)
 def read_flows(*,
                session: Session = Depends(get_session),
                name: str = Query(default=None, description='根据name查找数据库'),
@@ -51,17 +51,31 @@ def read_flows(*,
 
     try:
         sql = select(Flow)
+        count_sql = select(func.count(Flow.id))
         if 'admin' != payload.get('role'):
-            sql = sql.where(Flow.user_id == payload.get('user_id'))
+            rol_flow_id = session.exec(
+                select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')))).all()
+            if rol_flow_id:
+                flow_ids = [
+                    acess.third_id for acess in rol_flow_id if acess.type == AccessType.FLOW.value
+                ]
+                sql = sql.where(or_(Flow.user_id == payload.get('user_id'), Flow.id.in_(flow_ids)))
+                count_sql = count_sql.where(
+                    or_(Flow.user_id == payload.get('user_id'), Flow.id.in_(flow_ids)))
+            else:
+                sql = sql.where(Flow.user_id == payload.get('user_id'))
+                count_sql = count_sql.where(Flow.user_id == payload.get('user_id'))
         if name:
             sql = sql.where(Flow.name.like(f'%{name}%'))
+            count_sql = count_sql.where(Flow.name.like(f'%{name}%'))
         if status:
             sql = sql.where(Flow.status == status)
+            count_sql = count_sql.where(Flow.status == status)
+        total_count = session.scalar(count_sql)
 
         sql = sql.order_by(Flow.update_time.desc())
         if page_num and page_size:
             sql = sql.offset((page_num - 1) * page_size).limit(page_size)
-
         flows = session.exec(sql).all()
 
         res = [jsonable_encoder(flow) for flow in flows]
@@ -71,8 +85,10 @@ def read_flows(*,
             userMap = {user.user_id: user.user_name for user in db_user}
             for r in res:
                 r['user_name'] = userMap[r['user_id']]
+                r['write'] = True if 'admin' == payload.get('role') or r.get(
+                    'user_id') == payload.get('user_id') else False
 
-        return res
+        return {'data': res, 'total': total_count}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -88,7 +104,11 @@ def read_flow(*, session: Session = Depends(get_session), flow_id: UUID):
 
 
 @router.patch('/{flow_id}', response_model=FlowRead, status_code=200)
-def update_flow(*, session: Session = Depends(get_session), flow_id: UUID, flow: FlowUpdate, Authorize: AuthJWT = Depends()):
+def update_flow(*,
+                session: Session = Depends(get_session),
+                flow_id: UUID,
+                flow: FlowUpdate,
+                Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """Update a flow."""
@@ -96,7 +116,7 @@ def update_flow(*, session: Session = Depends(get_session), flow_id: UUID, flow:
     if not db_flow:
         raise HTTPException(status_code=404, detail='Flow not found')
 
-    if 'admin' != payload.get('role') and db_flow.user_id != payload.get('user_id'):
+    if not access_check(payload, db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
         raise HTTPException(status_code=500, detail='没有权限编辑此技能')
 
     flow_data = flow.dict(exclude_unset=True)
@@ -105,9 +125,13 @@ def update_flow(*, session: Session = Depends(get_session), flow_id: UUID, flow:
         # 上线校验
         try:
             art = {}
-            build_flow_no_yield(graph_data=db_flow.data, artifacts=art, process_file=False)
+            build_flow_no_yield(graph_data=db_flow.data,
+                                artifacts=art,
+                                process_file=False,
+                                flow_id=flow_id.hex)
         except Exception as exc:
-            raise HTTPException(status_code=500, detail='Flow 编译不通过') from exc
+            logger.exception(exc)
+            raise HTTPException(status_code=500, detail=f'Flow 编译不通过, {str(exc)}')
 
     if settings.remove_api_keys:
         flow_data = remove_api_keys(flow_data)
@@ -120,7 +144,10 @@ def update_flow(*, session: Session = Depends(get_session), flow_id: UUID, flow:
 
 
 @router.delete('/{flow_id}', status_code=200)
-def delete_flow(*, session: Session = Depends(get_session), flow_id: UUID, Authorize: AuthJWT = Depends()):
+def delete_flow(*,
+                session: Session = Depends(get_session),
+                flow_id: UUID,
+                Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """Delete a flow."""
@@ -130,11 +157,6 @@ def delete_flow(*, session: Session = Depends(get_session), flow_id: UUID, Autho
     if 'admin' != payload.get('role') and flow.user_id != payload.get('user_id'):
         raise HTTPException(status_code=500, detail='没有权限删除此技能')
 
-    # 判断是否属于模板
-    db_template = session.exec(select(Template).where(Template.flow_id == flow_id)).first()
-    if db_template:
-        session.delete(db_template)
-
     session.delete(flow)
     session.commit()
     return {'message': 'Flow deleted successfully'}
@@ -142,7 +164,10 @@ def delete_flow(*, session: Session = Depends(get_session), flow_id: UUID, Autho
 
 # Define a new model to handle multiple flows
 @router.post('/batch/', response_model=List[FlowRead], status_code=201)
-def create_flows(*, session: Session = Depends(get_session), flow_list: FlowListCreate, Authorize: AuthJWT = Depends()):
+def create_flows(*,
+                 session: Session = Depends(get_session),
+                 flow_list: FlowListCreate,
+                 Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """Create multiple new flows."""
@@ -159,7 +184,10 @@ def create_flows(*, session: Session = Depends(get_session), flow_list: FlowList
 
 
 @router.post('/upload/', response_model=List[FlowRead], status_code=201)
-async def upload_file(*, session: Session = Depends(get_session), file: UploadFile = File(...), Authorize: AuthJWT = Depends()):
+async def upload_file(*,
+                      session: Session = Depends(get_session),
+                      file: UploadFile = File(...),
+                      Authorize: AuthJWT = Depends()):
     """Upload flows from a file."""
     contents = await file.read()
     data = json.loads(contents)

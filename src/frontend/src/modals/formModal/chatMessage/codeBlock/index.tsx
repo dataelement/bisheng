@@ -2,7 +2,7 @@ import { IconCheck, IconClipboard, IconDownload } from "@tabler/icons-react";
 import { useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
-import { programmingLanguages } from "../../../../utils";
+import { copyText, programmingLanguages } from "../../../../utils";
 
 interface Props {
   language: string;
@@ -13,17 +13,12 @@ export function CodeBlock({ language, value }) {
   const [isCopied, setIsCopied] = useState<Boolean>(false);
 
   const copyToClipboard = () => {
-    if (!navigator.clipboard || !navigator.clipboard.writeText) {
-      return;
-    }
-
-    navigator.clipboard.writeText(value).then(() => {
-      setIsCopied(true);
-
+    setIsCopied(true);
+    copyText(value).then(() => {
       setTimeout(() => {
         setIsCopied(false);
       }, 2000);
-    });
+    })
   };
   const downloadAsFile = () => {
     const fileExtension = programmingLanguages[language] || ".file";

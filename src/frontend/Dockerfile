@@ -1,4 +1,4 @@
-FROM node:16-alpine as frontend_build
+FROM node:18-alpine as frontend_build
 ARG BACKEND
 WORKDIR /app
 COPY . /app

@@ -1,5 +1,6 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
+import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -10,8 +11,8 @@ import { subUploadLibFile } from "../../controllers/API";
 import { uploadFileWithProgress } from "./upload";
 
 let qid = 1
-export default function UploadModal({ id, open, desc = '', children = null, setOpen }) {
-
+export default function UploadModal({ id, accept, open, desc = '', children = null, setOpen }) {
+    const { t } = useTranslation()
     // const [file, setFile] = useState(null);
     // const [progress, setProgress] = useState(0);
     const { setErrorData, setSuccessData } = useContext(alertContext);
@@ -22,60 +23,76 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
     const chunkType = useRef('smart')
 
     const [progressList, setProgressList] = useState([])
+    const progressCountRef = useRef(0)
 
     useEffect(() => {
         if (!open) {
             setProgressList([])
+            progressCountRef.current = 0
             filePathsRef.current = []
         }
     }, [open])
 
     const onDrop = (acceptedFiles) => {
-        const size = 49900000
-        const errorFile = []
+        const sizeLimit = 49900000;
+        const errorFile = [];
         acceptedFiles.forEach(file => {
-            file.size > size && errorFile.push(file.name)
+            if (file.size > sizeLimit) {
+                errorFile.push(file.name);
+            }
         });
         if (errorFile.length) return setErrorData({
-            title: "文件不能超50M",
-            list: errorFile.map(str => `文件：${str}超过50M`),
-        })
+            title: t('prompt'),
+            list: errorFile.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit')}`),
+        });
         // if (acceptedFiles.length === 1 && acceptedFiles[0].type !== 'application/pdf') {
-        //     return 
+        //     return
         // }
-
-        const _file = acceptedFiles[0]
         setProgressList((list) => {
             return [...list, ...acceptedFiles.map(file => {
                 return {
                     id: qid++,
                     file,
                     await: true,
-                    size: size,
+                    size: sizeLimit,
                     pros: 0,
                     error: false
                 }
-            })]
-        })
-    };
+            })];
+        });
+        progressCountRef.current += acceptedFiles.length;
+    }
+
     // 确定上传文件
     const filePathsRef = useRef([])
     const [loading, setLoading] = useState(false)
     const handleSubmit = async () => {
-        const errorList = []
-        if (!/^\d+$/.test(size)) errorList.push('请设置文件切分大小')
-        if (!filePathsRef.current.length) errorList.push('请先选择文件上传')
-        if (errorList.length) return setErrorData({ title: '提示', list: errorList })
-        setLoading(true)
+        const errorList = [];
+        if (!/^\d+$/.test(size)) errorList.push(t('code.setSplitSize'));
+        if (!filePathsRef.current.length) errorList.push(t('code.selectFileToUpload'));
+        if (errorList.length) return setErrorData({ title: t('prompt'), list: errorList });
+        setLoading(true);
         const params = {
             file_path: filePathsRef.current,
             knowledge_id: Number(id),
-            chunck_size: Number(size)
+            auto: true
+        };
+        if (chunkType.current === 'chunk') {
+            // Split by ;
+            params.separator = symbol.split(/;|；/).map(el => el.replace(/\\([nrtb])/g, function (match, capture) {
+                return {
+                    'n': '\n',
+                    'r': '\r',
+                    't': '\t',
+                    'b': '\b'
+                }[capture];
+            }));
+            params.chunck_size = Number(size);
+            params.auto = false;
         }
-        if (chunkType.current === 'chunk') params.symbol = symbol
-        await subUploadLibFile(params)
-        setOpen(false)
-        setLoading(false)
+        await subUploadLibFile(params);
+        setOpen(false);
+        setLoading(false);
     }
 
     // 上传调度
@@ -123,7 +140,7 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
                         }
                     }))
                     filePathsRef.current.push(data.file_path)
-                    setEnd(filePathsRef.current.length === progressList.length)
+                    setEnd(filePathsRef.current.length === progressCountRef.current)
                 })
             })
         }
@@ -132,67 +149,53 @@ export default function UploadModal({ id, open, desc = '', children = null, setO
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         accept: {
-            // 'application/*': ['.doc']
-            'application/*': ['.doc', '.docx', '.pdf', '.ppt', '.pptx', '.tsv', '.xlsx'],
-            'image/*': ['.jpeg', '.png', '.jpg', '.tiff'],
-            'text/*': ['.csv', '.html', '.json', '.md', '.msg', '.txt', '.xml'],
+            'application/*': accept.map(str => `.${str}`)
         },
+        useFsAccessApi: false,
         onDrop
     });
 
     return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => setOpen(false)}>
-        <form method="dialog" className="max-w-[540px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={e => e.stopPropagation()}>
+        <form method="dialog" className="max-w-[540px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={(e) => e.stopPropagation()}>
             <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={() => setOpen(false)}>✕</button>
-            <h3 className="font-bold text-lg">上传文件</h3>
+            <h3 className="font-bold text-lg">{t('code.uploadFile')}</h3>
             <p className="py-4">{desc}</p>
             <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
                 <div className="w-[440px]">
                     <div {...getRootProps()} className="h-[100px] border border-dashed flex justify-center items-center cursor-pointer">
                         <input {...getInputProps()} />
-                        {isDragActive ? <p>将文件拖拽到这里上传</p> : <p>点击或将文件拖拽到这里上传</p>}
+                        {isDragActive ? <p>{t('code.dropFileHere')}</p> : <p>{t('code.clickOrDragHere')}</p>}
                     </div>
                     <div className=" max-h-[300px] overflow-y-auto no-scrollbar mt-4">
-                        {progressList.map(pros => (
+                        {progressList.map((pros) => (
                             <div key={pros.id}>
-                                <p className={`max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap ${pros.error && 'text-red-400'}`}>{pros.file.name}{pros.file.pros === 1 && <span>完成</span>}</p>
+                                <p className={`max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap ${pros.error && 'text-red-400'}`}>{pros.file.name}{pros.file.pros === 1 && <span>{t('code.complete')}</span>}</p>
                                 <Progress error={pros.error} value={pros.pros} className="w-full" />
                             </div>
                         ))}
                     </div>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="name" className="text-right">文件切分大小</Label>
-                            <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder="切分大小" className="col-span-3" />
-                        </div>
-                    </div>
-                    {/* <Tabs defaultValue="smart" className="w-full" onValueChange={(val) => chunkType.current = val}>
+                    <Tabs defaultValue="smart" className="w-full mt-4" onValueChange={(val) => chunkType.current = val}>
                         <TabsList className="">
-                            <TabsTrigger value="smart" className="roundedrounded-xl">智能语义切分</TabsTrigger>
-                            <TabsTrigger value="chunk">手动切分</TabsTrigger>
+                            <TabsTrigger value="smart" className="roundedrounded-xl">{t('code.smartSplit')}</TabsTrigger>
+                            <TabsTrigger value="chunk">{t('code.manualSplit')}</TabsTrigger>
                         </TabsList>
                         <TabsContent value="smart">
-                            <div className="grid gap-4 py-4">
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="name" className="text-right">文件切分大小</Label>
-                                    <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder="切分大小" className="col-span-3" />
-                                </div>
-                            </div>
                         </TabsContent>
                         <TabsContent value="chunk">
                             <div className="grid gap-4 py-4">
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="name" className="text-right">文件切分大小</Label>
-                                    <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder="切分大小" className="col-span-3" />
-                                    <Label htmlFor="name" className="text-right">切分符号</Label>
-                                    <Input id="name" value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="切分符号" className="col-span-3" />
+                                <div className="grid grid-cols-5 items-center gap-4">
+                                    <Label htmlFor="name" className="text-right col-span-2">{t('code.delimiter')}</Label>
+                                    <Input id="name" value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder={t('code.delimiterPlaceholder')} className="col-span-3" />
+                                    <Label htmlFor="name" className="text-right col-span-2">{t('code.splitLength')}</Label>
+                                    <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder={t('code.splitSizePlaceholder')} className="col-span-3" />
                                 </div>
                             </div>
                         </TabsContent>
-                    </Tabs> */}
+                    </Tabs>
 
                     <div className="flex justify-end gap-4">
-                        <Button variant='outline' className="h-8" onClick={() => setOpen(false)}>取消</Button>
-                        <Button type="submit" className="h-8" disabled={!end} onClick={() => !loading && handleSubmit()}>创建</Button>
+                        <Button variant='outline' className="h-8" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+                        <Button type="submit" className="h-8" disabled={!end} onClick={() => !loading && handleSubmit()}>{t('create')}</Button>
                     </div>
                 </div>
             </div>

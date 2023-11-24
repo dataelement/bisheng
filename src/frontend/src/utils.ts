@@ -19,7 +19,8 @@ import {
   Scissors,
   TerminalSquare,
   Wand2,
-  Wrench
+  Wrench,
+  LayoutPanelLeft
 } from "lucide-react";
 import { ComponentType, SVGProps } from "react";
 import { Connection, Edge, Node, ReactFlowInstance } from "reactflow";
@@ -51,6 +52,7 @@ import { SupabaseIcon } from "./icons/supabase";
 import { APITemplateType } from "./types/api";
 import { IVarHighlightType } from "./types/components";
 import { FlowType, NodeType } from "./types/flow";
+import i18next from "i18next";
 
 export function classNames(...classes: Array<string>) {
   return classes.filter(Boolean).join(" ");
@@ -130,10 +132,11 @@ export const nodeColors: { [char: string]: string } = {
   str: "#049524",
   retrievers: "#e6b25a",
   input_output: "#0ea5e9",
+  autogen_roles: '#6366f1',
   unknown: "#9CA3AF",
 };
 
-export const nodeNames: { [char: string]: string } = {
+const nodeNames: { [char: string]: string } = {
   prompts: "提示词/Prompts",
   llms: "语言模型/LLMs",
   chains: "工作链/Chains",
@@ -152,8 +155,36 @@ export const nodeNames: { [char: string]: string } = {
   input_output: "输入/input",
   utilities: "通用工具/Utilities",
   output_parsers: "输出解析器/OutputParsers",
+  autogen_roles: '多智能体角色/AutogenRole',
   unknown: "Unknown",
 };
+
+const nodeEnNames: { [char: string]: string } = {
+  prompts: "Prompts",
+  llms: "LLMs",
+  chains: "Chains",
+  agents: "Agents",
+  tools: "Tools",
+  memories: "Memories",
+  advanced: "Advanced",
+  chat: "Chat",
+  embeddings: "Embeddings",
+  documentloaders: "Loaders",
+  vectorstores: "VectorStores",
+  toolkits: "Toolkits",
+  wrappers: "Wrappers",
+  textsplitters: "TextSplitters",
+  retrievers: "Retrievers",
+  input_output: "input",
+  utilities: "Utilities",
+  output_parsers: "OutputParsers",
+  autogen_roles: 'AutogenRole',
+  unknown: "Unknown",
+};
+
+export function getNodeNames() {
+  return i18next.language === 'en' ? nodeEnNames : nodeNames
+}
 
 export const nodeIconsLucide: {
   [char: string]: React.ForwardRefExoticComponent<
@@ -312,6 +343,7 @@ export const nodeIconsLucide: {
   >,
   input_output: FileInput,
   // output: FileOutput,
+  autogen_roles: LayoutPanelLeft
 };
 
 export const gradients = [
@@ -668,6 +700,7 @@ export function debounce(func, wait) {
   };
 }
 
+// 从模板中复制template
 export function updateTemplate(
   reference: APITemplateType,
   objectToUpdate: APITemplateType
@@ -692,6 +725,18 @@ export function updateTemplate(
     if (dbParam && !/^_/.test(key)) {
       clonedObject[key].l2 = dbParam.l2 || false
       clonedObject[key].l2_name = dbParam.l2_name || key
+    }
+    // file_path的文件类型不覆盖
+    if (key === 'file_path') {
+      clonedObject[key].fileTypes = objectToUpdate[key].fileTypes
+      clonedObject[key].suffixes = objectToUpdate[key].suffixes
+    }
+    // required与show不覆盖
+    if (clonedObject[key]?.required) {
+      clonedObject[key].required = objectToUpdate[key].required
+    }
+    if (clonedObject[key]?.show) {
+      clonedObject[key].show = objectToUpdate[key]?.show
     }
   }
   return clonedObject;
@@ -916,14 +961,17 @@ export function groupByFamily(data, baseClasses, left, type) {
 }
 
 export function buildInputs(tabsState, id) {
-  return tabsState &&
+  if (tabsState &&
     tabsState[id] &&
     tabsState[id].formKeysData &&
-    tabsState[id].formKeysData.input_keys && tabsState[id].formKeysData.input_keys.length 
-    ? JSON.stringify(tabsState[id].formKeysData.input_keys) : '[{"input": "message"}]';
-    // Object.keys(tabsState[id].formKeysData.input_keys).length > 0
-    // ? JSON.stringify(tabsState[id].formKeysData.input_keys)
-    // : '{"input": "message"}';
+    tabsState[id].formKeysData.input_keys && tabsState[id].formKeysData.input_keys.length) {
+    const input = tabsState[id].formKeysData.input_keys.find(el => el.type !== 'file')
+    return JSON.stringify(input)
+  }
+  return '{"input": "message"}'
+  // Object.keys(tabsState[id].formKeysData.input_keys).length > 0
+  // ? JSON.stringify(tabsState[id].formKeysData.input_keys)
+  // : '{"input": "message"}';
 }
 
 export function buildTweaks(flow) {
@@ -948,6 +996,7 @@ export function validateNode(
   } = n.data;
   return Object.keys(template).reduce(
     (errors: Array<string>, t) =>
+      // （必填 && 显示 && 值为空 && 无连线） 即验证不通过
       errors.concat(
         template[t].required &&
           template[t].show &&
@@ -955,15 +1004,13 @@ export function validateNode(
             template[t].value === null ||
             template[t].value === "") &&
           !(reactFlowInstance?.getEdges?.() || reactFlowInstance).some(
-              (e) =>
-                e.targetHandle.split("|")[1] === t &&
-                e.targetHandle.split("|")[2] === n.id
-            )
+            (e) =>
+              e.targetHandle.split("|")[1] === t &&
+              e.targetHandle.split("|")[2] === n.id
+          )
           ? [
-              `${type} 缺失了 ${
-                template.display_name || toNormalCase(template[t].name)
-              }.`,
-            ]
+            `${type} 缺失了 ${template.display_name || toTitleCase(template[t].name)}.`,
+          ]
           : []
       ),
     [] as string[]
@@ -1061,3 +1108,26 @@ export const generateUUID = (length: number) => {
   })
   return uuid
 }
+
+// 复制到剪切板
+export const copyText = (text: string) => {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text)
+  }
+
+  const areaDom = document.createElement("textarea");
+  return new Promise((res) => {
+    areaDom.value = text
+    document.body.appendChild(areaDom);
+
+    const range = document.createRange();
+    range.selectNode(areaDom);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    document.execCommand('copy');
+    res(text)
+  }).then(() => {
+    window.getSelection().removeAllRanges();
+    document.body.removeChild(areaDom);
+  })
+};

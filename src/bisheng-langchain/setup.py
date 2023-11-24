@@ -1,4 +1,4 @@
-# Copyright (c) 2020 langchain_contrib Authors. All Rights Reserved.
+# Copyright (c) 2020 bisheng_langchain Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,8 +38,7 @@ REQUIRED_PACKAGES = read_requirements_file('requirements.txt')
 
 
 def read(*names, **kwargs):
-    with io.open(os.path.join(os.path.dirname(__file__), *names),
-                 encoding=kwargs.get('encoding', 'utf8')) as fp:
+    with io.open(os.path.join(os.path.dirname(__file__), *names), encoding=kwargs.get('encoding', 'utf8')) as fp:
         return fp.read()
 
 
@@ -74,9 +73,7 @@ setuptools.setup(
     long_description=read('README.md'),
     long_description_content_type='text/markdown',
     url='https://github.com/dataelement/bisheng',
-    packages=setuptools.find_packages(exclude=('examples*', 'tests*',
-                                               'applications*',
-                                               'model_zoo*'), ),
+    packages=setuptools.find_packages(exclude=('examples*', 'tests*', 'applications*', 'model_zoo*'),),
     package_data={},
     setup_requires=[],
     install_requires=REQUIRED_PACKAGES,

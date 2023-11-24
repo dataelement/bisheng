@@ -56,8 +56,7 @@ def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
     if role == 'user':
         return HumanMessage(content=_dict['content'])
     elif role == 'assistant':
-        content = _dict[
-            'content'] or ''  # OpenAI returns None for tool invocations
+        content = _dict['content'] or ''  # OpenAI returns None for tool invocations
         if _dict.get('function_call'):
             additional_kwargs = {'function_call': dict(_dict['function_call'])}
         else:
@@ -79,8 +78,7 @@ def _convert_message_to_dict(message: BaseMessage) -> dict:
     elif isinstance(message, AIMessage):
         message_dict = {'role': 'assistant', 'content': message.content}
         if 'function_call' in message.additional_kwargs:
-            message_dict['function_call'] = message.additional_kwargs[
-                'function_call']
+            message_dict['function_call'] = message.additional_kwargs['function_call']
     elif isinstance(message, SystemMessage):
         message_dict = {'role': 'system', 'content': message.content}
     elif isinstance(message, FunctionMessage):
@@ -118,7 +116,7 @@ class BaseHostChatLLM(BaseChatModel):
 
     request_timeout: Optional[Union[float, Tuple[float, float]]] = None
     """Timeout for requests to OpenAI completion API. Default is 600 seconds."""
-    max_retries: Optional[int] = 6
+    max_retries: Optional[int] = 1
     """Maximum number of retries to make when generating."""
     streaming: Optional[bool] = False
     """Whether to stream the results or not."""
@@ -145,19 +143,18 @@ class BaseHostChatLLM(BaseChatModel):
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
-        values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url',
-                                                       'HostBaseUrl')
+        values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url', 'HostBaseUrl')
         try:
             values['client'] = requests.post
         except AttributeError:
-            raise ValueError(
-                'Try upgrading it with `pip install --upgrade requests`.')
+            raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
         return values
 
     @property
     def _default_params(self) -> Dict[str, Any]:
         """Get the default parameters for calling ChatMinimaxAI API."""
         return {
+            'request_timeout': self.request_timeout,
             'model': self.model_name,
             'temperature': self.temperature,
             'top_p': self.top_p,
@@ -190,9 +187,11 @@ class BaseHostChatLLM(BaseChatModel):
 
             url = f'{self.host_base_url}/{self.model_name}/infer'
             resp = self.client(url=url, json=params).json()
-            if resp['status_code'] != 200:
-                raise ValueError(
-                    f"API returned an error: {resp['status_message']}")
+
+            if not resp.get('choices', []):
+                logger.info(resp)
+                raise ValueError(f'empty choices in llm chat result {resp}')
+
             resp['usage'] = {}
             return resp
 
@@ -213,10 +212,7 @@ class BaseHostChatLLM(BaseChatModel):
                     overall_token_usage[k] += v
                 else:
                     overall_token_usage[k] = v
-        return {
-            'token_usage': overall_token_usage,
-            'model_name': self.model_name
-        }
+        return {'token_usage': overall_token_usage, 'model_name': self.model_name}
 
     def _generate(
         self,
@@ -237,16 +233,15 @@ class BaseHostChatLLM(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return self._generate(messages, stop, run_manager, kwargs)
+        return self._generate(messages, stop, run_manager, **kwargs)
 
     def _create_message_dicts(
-        self, messages: List[BaseMessage], stop: Optional[List[str]]
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+            self, messages: List[BaseMessage],
+            stop: Optional[List[str]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         params = dict(self._client_params)
         if stop is not None:
             if 'stop' in params:
-                raise ValueError(
-                    '`stop` found in both the input and default params.')
+                raise ValueError('`stop` found in both the input and default params.')
             params['stop'] = stop
 
         message_dicts = [_convert_message_to_dict(m) for m in messages]
@@ -255,15 +250,14 @@ class BaseHostChatLLM(BaseChatModel):
 
     def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
         generations = []
+        if 'choices' not in response:
+            raise Exception(f'LLM return error {response}')
         for res in response['choices']:
             message = _convert_dict_to_message(res['message'])
             gen = ChatGeneration(message=message)
             generations.append(gen)
 
-        llm_output = {
-            'token_usage': response['usage'],
-            'model_name': self.model_name
-        }
+        llm_output = {'token_usage': response['usage'], 'model_name': self.model_name}
         return ChatResult(generations=generations, llm_output=llm_output)
 
     @property
@@ -306,8 +300,7 @@ class BaseHostChatLLM(BaseChatModel):
         try:
             encoding = tiktoken_.encoding_for_model(model)
         except KeyError:
-            logger.warning(
-                'Warning: model not found. Using cl100k_base encoding.')
+            logger.warning('Warning: model not found. Using cl100k_base encoding.')
             model = 'cl100k_base'
             encoding = tiktoken_.get_encoding(model)
         return model, encoding
@@ -353,7 +346,7 @@ class BaseHostChatLLM(BaseChatModel):
         return num_tokens
 
 
-class ChatGLM2Host(BaseHostChatLLM):
+class HostChatGLM2(BaseHostChatLLM):
     # chatglm2-12b, chatglm2-6b
     model_name: str = Field('chatglm2-6b', alias='model')
 
@@ -367,7 +360,7 @@ class ChatGLM2Host(BaseHostChatLLM):
         return 'chatglm2'
 
 
-class BaichuanChat(BaseHostChatLLM):
+class HostBaichuanChat(BaseHostChatLLM):
     # Baichuan-7B-Chat, Baichuan-13B-Chat
     model_name: str = Field('Baichuan-13B-Chat', alias='model')
 
@@ -378,10 +371,10 @@ class BaichuanChat(BaseHostChatLLM):
     @property
     def _llm_type(self) -> str:
         """Return type of chat model."""
-        return 'baichang_chat'
+        return 'baichuan_chat'
 
 
-class QwenChat(BaseHostChatLLM):
+class HostQwenChat(BaseHostChatLLM):
     # Qwen-7B-Chat
     model_name: str = Field('Qwen-7B-Chat', alias='model')
 
@@ -395,7 +388,7 @@ class QwenChat(BaseHostChatLLM):
         return 'qwen_chat'
 
 
-class Llama2Chat(BaseHostChatLLM):
+class HostLlama2Chat(BaseHostChatLLM):
     # Llama-2-7b-chat-hf, Llama-2-13b-chat-hf, Llama-2-70b-chat-hf
     model_name: str = Field('Llama-2-7b-chat-hf', alias='model')
 
@@ -407,3 +400,54 @@ class Llama2Chat(BaseHostChatLLM):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return 'llama2_chat'
+
+
+class CustomLLMChat(BaseHostChatLLM):
+    # use custom llm chat api, api should compatiable with openai definition
+    model_name: str = Field('custom-llm-chat', alias='model')
+
+    temperature: float = 0.1
+    top_p: float = 0.1
+    max_tokens: int = 8192
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of chat model."""
+        return 'custom_llm_chat'
+
+    def completion_with_retry(self, **kwargs: Any) -> Any:
+        retry_decorator = _create_retry_decorator(self)
+
+        @retry_decorator
+        def _completion_with_retry(**kwargs: Any) -> Any:
+            messages = kwargs.get('messages')
+            temperature = kwargs.get('temperature')
+            top_p = kwargs.get('top_p')
+            max_tokens = kwargs.get('max_tokens')
+            do_sample = kwargs.get('do_sample')
+            params = {
+                'messages': messages,
+                'model': self.model_name,
+                'top_p': top_p,
+                'temperature': temperature,
+                'max_tokens': max_tokens,
+                'do_sample': do_sample
+            }
+
+            if self.verbose:
+                print('payload', params)
+
+            resp = self.client(url=self.host_base_url, json=params).json()
+            return resp
+
+        return _completion_with_retry(**kwargs)
+
+    def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
+        generations = []
+        for res in response['choices']:
+            message = _convert_dict_to_message(res['message'])
+            gen = ChatGeneration(message=message)
+            generations.append(gen)
+
+        llm_output = {'token_usage': response.get('usage', {}), 'model_name': self.model_name}
+        return ChatResult(generations=generations, llm_output=llm_output)

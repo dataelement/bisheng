@@ -32,6 +32,8 @@ import { typesContext } from "./typesContext";
 const uid = new ShortUniqueId({ length: 5 });
 
 const TabsContextInitialValue: TabsContextType = {
+  page: 1,
+  pages: 1,
   save: () => { },
   tabId: "",
   setTabId: (index: string) => { },
@@ -156,10 +158,13 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   //   }
   // }
 
+  const pagesRef = useRef(0)
   function refreshFlows() {
-    return getTabsDataFromDB(page.current, searchKey.current).then((DbData) => {
+    return getTabsDataFromDB(pageRef.current, searchKey.current).then((res) => {
+      const { data: DbData, pages } = res
       if (DbData && Object.keys(templates).length > 0) {
         try {
+          pagesRef.current = pages;
           processDBData(DbData);
           updateStateWithDbData(DbData);
         } catch (e) {
@@ -179,15 +184,18 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     return readFlowsFromDatabase(page, search);
   }
   // 翻页
-  const page = useRef(1)
+  const [page, setPage] = useState(1)
+  const pageRef = useRef(1)
   const searchKey = useRef('')
   function turnPage(_page) {
-    page.current = _page
+    setPage(_page)
+    pageRef.current = _page
     return refreshFlows()
   }
   // search
   function search(value) {
-    page.current = 1
+    setPage(page)
+    pageRef.current = 1
     searchKey.current = value
     return refreshFlows()
   }
@@ -227,7 +235,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     flow.data.nodes.forEach((node: NodeType) => {
       const template = templates[node.data.type];
       if (!template) {
-        setErrorData({ title: `未知的节点类型: ${node.data.type}` });
+        setErrorData({ title: `Unknown node type: ${node.data.type}` });
         return;
       }
       if (Object.keys(template["template"]).length > 0) {
@@ -655,6 +663,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   return (
     <TabsContext.Provider
       value={{
+        page,
+        pages: pagesRef.current,
         saveFlow,
         lastCopiedSelection,
         setLastCopiedSelection,

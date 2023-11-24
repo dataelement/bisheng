@@ -1,5 +1,6 @@
 import _ from "lodash";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { unstable_useBlocker as useBlocker } from "react-router-dom";
 import ReactFlow, {
   Background,
@@ -114,7 +115,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     };
   }, [position, lastCopiedSelection, lastSelection]);
 
-  const [selectionMenuVisible, setSelectionMenuVisible] = useState(false);
+  // const [selectionMenuVisible, setSelectionMenuVisible] = useState(false);
 
   const { setExtraComponent, setExtraNavigation } = useContext(locationContext);
   const { setErrorData } = useContext(alertContext);
@@ -187,8 +188,12 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   const onConnect = useCallback(
     (params: Connection) => {
       takeSnapshot();
-      setEdges((eds) =>
-        addEdge(
+      let hasInputNodeEdg = false
+      setEdges((eds) => {
+        const moreTarget = eds.find(el => el.source === params.source)
+        hasInputNodeEdg = moreTarget && params.source.indexOf('InputFileNode') === 0
+        // 限制InputFileNode节点只有一个下游
+        return hasInputNodeEdg ? eds : addEdge(
           {
             ...params,
             style: { stroke: "#555" },
@@ -201,9 +206,17 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
           },
           eds
         )
-      );
+      });
       setNodes((x) => {
         let newX = _.cloneDeep(x);
+        // inputFileNode input type类型跟随下游组件
+        const inputNodeId = params.source
+        if (!hasInputNodeEdg && inputNodeId.split('-')[0] === 'InputFileNode') {
+          const inputNode = newX.find(el => el.id === params.source);
+          const targetNode = newX.find(el => el.id === params.target);
+          inputNode.data.node.template.file_path.fileTypes = targetNode.data.node.template.file_path.fileTypes
+          inputNode.data.node.template.file_path.suffixes = targetNode.data.node.template.file_path.suffixes // 上传文件类型；
+        }
         return newX;
       });
     },
@@ -344,13 +357,13 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   }, []);
 
   // Workaround to show the menu only after the selection has ended.
-  useEffect(() => {
-    if (selectionEnded && lastSelection && lastSelection.nodes.length > 1) {
-      setSelectionMenuVisible(true);
-    } else {
-      setSelectionMenuVisible(false);
-    }
-  }, [selectionEnded, lastSelection]);
+  // useEffect(() => {
+  //   if (selectionEnded && lastSelection && lastSelection.nodes.length > 1) {
+  //     setSelectionMenuVisible(true);
+  //   } else {
+  //     setSelectionMenuVisible(false);
+  //   }
+  // }, [selectionEnded, lastSelection]);
 
   const onSelectionChange = useCallback((flow) => {
     setLastSelection(flow);
@@ -358,16 +371,19 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
 
   const { setDisableCopyPaste } = useContext(TabsContext);
 
+  const { t } = useTranslation()
+
   // 离开提示保存
   useEffect(() => {
     const fun = (e) => {
-      var confirmationMessage = '您有未保存的更改，确定要离开吗？';
-      (e || window.event).returnValue = confirmationMessage; // 兼容不同浏览器
+      var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
+      (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
       return confirmationMessage;
     }
     window.addEventListener('beforeunload', fun);
     return () => { window.removeEventListener('beforeunload', fun) }
   }, [])
+
   const hasChange = useMemo(() => {
     if (!flow.data) return false
     const oldFlowData = JSON.parse(preFlow)
@@ -460,12 +476,12 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       {/* 删除确认 */}
       <dialog className={`modal ${blocker.state === "blocked" && 'modal-open'}`}>
         <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-          <h3 className="font-bold text-lg">提示!</h3>
-          <p className="py-4">您有修改未保存，确认离开吗？</p>
+          <h3 className="font-bold text-lg">{t('prompt')}</h3>
+          <p className="py-4">{t('flow.unsavedChangesConfirmation')}</p>
           <div className="modal-action">
-            <Button className="h-8 rounded-full" variant="outline" onClick={() => blocker.reset?.()}>取消</Button>
-            <Button className="h-8 rounded-full" variant="destructive" onClick={() => blocker.proceed?.()}>离开</Button>
-            <Button className="h-8 rounded-full" onClick={handleSaveAndClose}>离开并保存</Button>
+            <Button className="h-8 rounded-full" variant="outline" onClick={() => blocker.reset?.()}>{t('cancel')}</Button>
+            <Button className="h-8 rounded-full" variant="destructive" onClick={() => blocker.proceed?.()}>{t('flow.leave')}</Button>
+            <Button className="h-8 rounded-full" onClick={handleSaveAndClose}>{t('flow.leaveAndSave')}</Button>
           </div>
         </form>
       </dialog>

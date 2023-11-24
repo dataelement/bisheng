@@ -14,11 +14,8 @@ def configure(log_level: str = 'INFO', log_file: Path = None):  # type: ignore
         level=log_level_value,
         format=log_format,
         datefmt='[%X]',
-        handlers=[RichHandler(rich_tracebacks=True)],
+        handlers=[RichHandler(rich_tracebacks=False)],
     )
-
-    console_handler = logging.StreamHandler()
-    logger.addHandler(console_handler)
 
     if log_file:
         log_file = Path(log_file)

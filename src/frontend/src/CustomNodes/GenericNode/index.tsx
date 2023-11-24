@@ -17,46 +17,46 @@ import {
 } from "../../utils";
 import ParameterComponent from "./components/parameterComponent";
 
-export default function GenericNode({ data, selected, }: {
+export default function GenericNode({ data, selected }: {
   data: NodeDataType;
   selected: boolean;
 }) {
+
   const { setErrorData } = useContext(alertContext);
   const showError = useRef(true);
   const { types, deleteNode } = useContext(typesContext);
-  
+
   const { closePopUp, openPopUp } = useContext(PopUpContext);
   // any to avoid type conflict
   const Icon: any =
-  nodeIconsLucide[data.type] || nodeIconsLucide[types[data.type]];
+    nodeIconsLucide[data.type] || nodeIconsLucide[types[data.type]];
   const [validationStatus, setValidationStatus] = useState(null);
   // State for outline color
   const { sseData, isBuilding } = useSSE();
-  const refHtml = useRef(null);
-  
+
   // useEffect(() => {
-    //   if (reactFlowInstance) {
-      //     setParams(Object.values(reactFlowInstance.toObject()));
-      //   }
-      // }, [save]);
-      
-      // New useEffect to watch for changes in sseData and update validation status
-      useEffect(() => {
-        const relevantData = sseData[data.id];
-        if (relevantData) {
-          // Extract validation information from relevantData and update the validationStatus state
-          setValidationStatus(relevantData);
+  //   if (reactFlowInstance) {
+  //     setParams(Object.values(reactFlowInstance.toObject()));
+  //   }
+  // }, [save]);
+
+  // New useEffect to watch for changes in sseData and update validation status
+  useEffect(() => {
+    const relevantData = sseData[data.id];
+    if (relevantData) {
+      // Extract validation information from relevantData and update the validationStatus state
+      setValidationStatus(relevantData);
     } else {
       setValidationStatus(null);
     }
   }, [sseData, data.id]);
-  
+
   if (!Icon) {
     if (showError.current) {
       setErrorData({
         title: data.type
-        ? `无法呈现 ${data.type} 节点，请查看您的 json 文件`
-        : "有一个节点无法呈现，请查看您的 json 文件",
+          ? `can be translated to "Unable to render the ${data.type} node. Please check your JSON file.`
+          : `can be translated to "One node cannot be rendered. Please check your JSON file.`
       });
       showError.current = false;
     }
@@ -64,6 +64,8 @@ export default function GenericNode({ data, selected, }: {
     return;
   }
   useEffect(() => { }, [closePopUp, data.node.template]);
+
+  const [_, fouceUpdateNode] = useState(false)
 
   return (
     <>
@@ -75,7 +77,7 @@ export default function GenericNode({ data, selected, }: {
         ></NodeToolbarComponent>
       </NodeToolbar>
 
-      <div className={classNames("border-4 generic-node-div", selected ? "border-ring" : "")} style={{borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown}}>
+      <div className={classNames("border-4 generic-node-div", selected ? "border-ring" : "")} style={{ borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown }}>
         <div className="generic-node-div-title">
           {/* title */}
           <div className="generic-node-title-arrangement">
@@ -90,7 +92,7 @@ export default function GenericNode({ data, selected, }: {
               <div>
                 <Tooltip
                   title={
-                    isBuilding ? (<span>构建中...</span>) :
+                    isBuilding ? (<span>build...</span>) :
                       !validationStatus ? (
                         <span className="flex">
                           Build{" "} <Zap className="mx-0.5 h-5 fill-build-trigger stroke-build-trigger stroke-1" strokeWidth={1.5} />{" "} flow to validate status.
@@ -191,6 +193,7 @@ export default function GenericNode({ data, selected, }: {
                       left={true}
                       type={data.node.template[t].type}
                       optionalHandle={data.node.template[t].input_types}
+                      onChange={() => fouceUpdateNode(!_)}
                     />
                   ) : (
                     <></>

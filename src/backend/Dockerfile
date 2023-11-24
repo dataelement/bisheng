@@ -5,6 +5,8 @@ WORKDIR /app
 # Install Poetry
 RUN apt-get update && apt-get install gcc g++ curl build-essential postgresql-server-dev-all -y
 RUN apt-get update && apt-get install procps -y
+# opencv
+RUN apt-get install -y libglib2.0-0 libsm6 libxrender1 libxext6 libgl1
 RUN curl -sSL https://install.python-poetry.org | python3 -
 # # Add Poetry to PATH
 ENV PATH="${PATH}:/root/.local/bin"
@@ -14,12 +16,10 @@ COPY poetry.lock pyproject.toml ./
 COPY ./ ./
 
 RUN python -m pip install --upgrade pip && \
-    pip install gunicorn && \
-    pip install shapely==2.0.1 && \
-    pip install langchain_contrib==0.0.1
+    pip install shapely==2.0.1 
 
 # Install dependencies
 RUN poetry config virtualenvs.create false
 RUN poetry install --no-interaction --no-ansi --without dev
 
-CMD ["uvicorn", "bisheng.main:app", "--workers", "20",  "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "bisheng.main:app", "--workers", "2",  "--host", "0.0.0.0", "--port", "7860"]

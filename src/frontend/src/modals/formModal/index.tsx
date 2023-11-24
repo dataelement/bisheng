@@ -29,6 +29,7 @@ import {
 import { Textarea } from "../../components/ui/textarea";
 import { CHAT_FORM_DIALOG_SUBTITLE, THOUGHTS_ICON } from "../../constants";
 import { TabsContext } from "../../contexts/tabsContext";
+import { useTranslation } from "react-i18next";
 
 export default function FormModal({
   flow,
@@ -135,7 +136,7 @@ export default function FormModal({
     setChatHistory((old) => {
       let newChat = [...old];
       let prevChat = newChat[newChat.length - 2]
-      let lastChat = newChat[newChat.length - 1]
+      // let lastChat = newChat[newChat.length - 1]
       // 上一条log时，当前条与上一条合并(确保log在一条中)
       if (end && !prevChat?.message && prevChat?.thought) {
         prevChat.message += str || '';
@@ -145,6 +146,11 @@ export default function FormModal({
       }
       // 最后一条与上一条msg相同，合并处理
       if (end && str && newChat.length > 1 && str === prevChat.message) {
+        newChat.pop()
+        return newChat
+      }
+      // 过滤空消息
+      if (end && !newChat[newChat.length - 1].message && !str) {
         newChat.pop()
         return newChat
       }
@@ -189,42 +195,43 @@ export default function FormModal({
   function handleWsMessage(data: any) {
     if (Array.isArray(data)) {
       //set chat history
-      setChatHistory((_) => {
-        let newChatHistory: ChatMessageType[] = [];
-        data.forEach(
-          (chatItem: {
-            intermediate_steps?: string;
-            is_bot: boolean;
-            message: string;
-            template: string;
-            type: string;
-            chatKey: string;
-            files?: Array<any>;
-          }) => {
-            if (chatItem.message) {
-              newChatHistory.push(
-                chatItem.files
-                  ? {
-                    isSend: !chatItem.is_bot,
-                    message: chatItem.message,
-                    template: chatItem.template,
-                    thought: chatItem.intermediate_steps,
-                    files: chatItem.files,
-                    chatKey: chatItem.chatKey,
-                  }
-                  : {
-                    isSend: !chatItem.is_bot,
-                    message: chatItem.message,
-                    template: chatItem.template,
-                    thought: chatItem.intermediate_steps,
-                    chatKey: chatItem.chatKey,
-                  }
-              );
-            }
-          }
-        );
-        return newChatHistory;
-      });
+      // setChatHistory((_) => {
+      //   let newChatHistory: ChatMessageType[] = [];
+      //   data.forEach(
+      //     (chatItem: {
+      //       intermediate_steps?: string;
+      //       is_bot: boolean;
+      //       message: string;
+      //       template: string;
+      //       type: string;
+      //       chatKey: string;
+      //       files?: Array<any>;
+      //     }) => {
+      //       if (chatItem.message) {
+      //         newChatHistory.push(
+      //           chatItem.files
+      //             ? {
+      //               isSend: !chatItem.is_bot,
+      //               message: chatItem.message,
+      //               template: chatItem.template,
+      //               thought: chatItem.intermediate_steps,
+      //               files: chatItem.files,
+      //               chatKey: chatItem.chatKey,
+      //             }
+      //             : {
+      //               isSend: !chatItem.is_bot,
+      //               message: chatItem.message,
+      //               template: chatItem.template,
+      //               thought: chatItem.intermediate_steps,
+      //               chatKey: chatItem.chatKey,
+      //             }
+      //         );
+      //       }
+      //     }
+      //   );
+      //   return newChatHistory;
+      // });
+      return []
     }
     if (data.type === "start") {
       addChatHistory("", false, chatKey);
@@ -280,11 +287,11 @@ export default function FormModal({
           connectWS();
         } else {
           setErrorData({
-            title: "网络连接出现错误,请尝试以下方法 ",
+            title: "Network connection error, please try the following methods:",
             list: [
-              "刷新页面",
-              "使用新的流程选项卡",
-              "检查后台是否启动"
+              "Refresh the page.",
+              "Use a new flow tab.",
+              "Check if the background is running."
             ],
           });
         }
@@ -354,7 +361,7 @@ export default function FormModal({
       let inputs: any = tabsState[id.current].formKeysData.input_keys;
       inputs = inputs.find((el: any) => !el.type)
       // const chatKey = Object.keys(inputs)[0];
-      
+
       // if (!chatKey) return setErrorData({ title: "提示", list: ["至少选择一个inputkey"] });
       // if (!inputs[chatKey]) return setErrorData({ title: "提示", list: ["所选inputkey的值不能为空"] });
       setLockChat(true);
@@ -411,6 +418,8 @@ export default function FormModal({
     return tabsState[flow.id].formKeysData.input_keys.find((el: any) => !el.type)
   }, [tabsState])
 
+  const { t } = useTranslation()
+
   return (
     <Dialog open={open} onOpenChange={setModalOpen}>
       <DialogTrigger className="hidden"></DialogTrigger>
@@ -424,7 +433,7 @@ export default function FormModal({
                 aria-hidden="true"
               />
             </DialogTitle>
-            <DialogDescription>{CHAT_FORM_DIALOG_SUBTITLE}</DialogDescription>
+            <DialogDescription>{t('chat.chatDialogTip')}</DialogDescription>
           </DialogHeader>
 
           <div className="form-modal-iv-box ">
@@ -554,11 +563,11 @@ export default function FormModal({
                       <br />
                       <div className="bisheng-chat-desc">
                         <span className="bisheng-chat-desc-span">
-                          开始对话并单击agent's的分析过程{" "}
+                          Start the conversation and click on the agent's analysis process{" "}
                           <span>
                             <THOUGHTS_ICON className="mx-1 inline h-5 w-5 animate-bounce " />
                           </span>{" "}
-                          来检查链接过程。
+                          to inspect the linking process.。
                         </span>
                       </div>
                     </div>

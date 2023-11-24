@@ -1,6 +1,5 @@
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import MainLayout from "./layout/MainLayout";
-import CommunityPage from "./pages/CommunityPage";
 import FileLibPage from "./pages/FileLibPage";
 import FilesPage from "./pages/FileLibPage/files";
 import FlowPage from "./pages/FlowPage";
@@ -10,8 +9,9 @@ import SystemPage from "./pages/SystemPage";
 import Doc from "./pages/ModelPage/doc";
 import SkillChatPage from "./pages/SkillChatPage";
 import SkillPage from "./pages/SkillPage";
+import ChatShare from "./pages/SkillChatPage/chatShare";
 import L2Edit from "./pages/SkillPage/l2Edit";
-
+// import Report from "./pages/Report";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -29,7 +29,7 @@ const router = createBrowserRouter([
       { path: "skill", element: <L2Edit /> },
       { path: "skill/:id", element: <L2Edit /> },
       { path: "filelib", element: <FileLibPage /> },
-      { path: "files/:id", element: <FilesPage /> },
+      { path: "filelib/:id", element: <FilesPage /> },
       { path: "skills", element: <SkillPage /> },
       { path: "model", element: <ModelPage /> },
       { path: "sys", element: <SystemPage /> },
@@ -42,9 +42,13 @@ const router = createBrowserRouter([
       { path: "", element: <FlowPage /> }
     ]
   },
+  // 独立会话页
+  { path: "/chat", element: <SkillChatPage /> },
+  { path: "/chat/:id/", element: <ChatShare /> },
+  // { path: "/report/:id/", element: <Report /> },
+  // { path: "/test", element: <Test /> },
   { path: "*", element: <Navigate to="/" replace /> },
-  { path: "/home", element: <HomePage /> },
-  { path: "/community", element: <CommunityPage /> }
+  { path: "/home", element: <HomePage /> }
 ]);
 
 export default router;

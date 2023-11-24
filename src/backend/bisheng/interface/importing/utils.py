@@ -28,15 +28,18 @@ def import_module(module_path: str) -> Any:
 
 
 def import_by_type(_type: str, name: str) -> Any:
-    from langchain_contrib import chat_models
-
+    from bisheng_langchain import chat_models
     """Import class by type and name"""
     if _type is None:
         raise ValueError(f'Type cannot be None. Check if {name} is in the config file.')
     func_dict = {
         'agents': import_agent,
         'prompts': import_prompt,
-        'llms': {'llm': import_llm, 'chat': import_chat_llm, 'contribute': import_chain_contribute_llm},
+        'llms': {
+            'llm': import_llm,
+            'chat': import_chat_llm,
+            'contribute': import_chain_contribute_llm
+        },
         'tools': import_tool,
         'chains': import_chain,
         'toolkits': import_toolkit,
@@ -49,9 +52,11 @@ def import_by_type(_type: str, name: str) -> Any:
         'utilities': import_utility,
         'output_parsers': import_output_parser,
         'retrievers': import_retriever,
+        'autogenRoles': import_autogenRoles,
     }
     if _type == 'llms':
-        key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower() else 'llm'
+        key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(
+        ) else 'llm'
         loaded_func = func_dict[_type][key]  # type: ignore
     else:
         loaded_func = func_dict[_type]
@@ -68,13 +73,22 @@ def import_chat_llm(llm: str) -> BaseChatModel:
     """Import chat llm from llm name"""
     return import_class(f'langchain.chat_models.{llm}')
 
-def import_chain_contribute_llm(llm:str) -> BaseChatModel:
+
+def import_chain_contribute_llm(llm: str) -> BaseChatModel:
     """Import chat llm from llm name"""
-    return import_class(f'langchain_contrib.chat_models.{llm}')
+    return import_class(f'bisheng_langchain.chat_models.{llm}')
+
 
 def import_retriever(retriever: str) -> Any:
+    from bisheng.interface.retrievers.base import retriever_creator
+    if retriever in retriever_creator.type_to_loader_dict:
+        return retriever_creator.type_to_loader_dict[retriever]
     """Import retriever from retriever name"""
     return import_module(f'from langchain.retrievers import {retriever}')
+
+
+def import_autogenRoles(autogen: str) -> Any:
+    return import_module(f'from bisheng_langchain.autogen_role import {autogen}')
 
 
 def import_memory(memory: str) -> Any:
@@ -102,10 +116,7 @@ def import_prompt(prompt: str) -> Type[PromptTemplate]:
 
 def import_wrapper(wrapper: str) -> Any:
     """Import wrapper from wrapper name"""
-    if (
-        isinstance(wrapper_creator.type_dict, dict)
-        and wrapper in wrapper_creator.type_dict
-    ):
+    if (isinstance(wrapper_creator.type_dict, dict) and wrapper in wrapper_creator.type_dict):
         return wrapper_creator.type_dict.get(wrapper)
 
 
@@ -142,31 +153,36 @@ def import_chain(chain: str) -> Type[Chain]:
 
     if chain in CUSTOM_CHAINS:
         return CUSTOM_CHAINS[chain]
+
+    from bisheng_langchain import chains
+    if chain in chains.__all__:
+        return import_class(f'bisheng_langchain.chains.{chain}')
+
     return import_class(f'langchain.chains.{chain}')
 
 
 def import_embedding(embedding: str) -> Any:
     """Import embedding from embedding name"""
-    from langchain_contrib import embeddings
+    from bisheng_langchain import embeddings
     if embedding in embeddings.__all__:
-        return import_class(f'langchain_contrib.embeddings.{embedding}')
+        return import_class(f'bisheng_langchain.embeddings.{embedding}')
     return import_class(f'langchain.embeddings.{embedding}')
 
 
 def import_vectorstore(vectorstore: str) -> Any:
     """Import vectorstore from vectorstore name"""
-    from langchain_contrib import vectorstores
+    from bisheng_langchain import vectorstores
     if vectorstore in vectorstores.__all__:
-        return import_class(f'langchain_contrib.vectorstores.{vectorstore}')
+        return import_class(f'bisheng_langchain.vectorstores.{vectorstore}')
     return import_class(f'langchain.vectorstores.{vectorstore}')
 
 
 def import_documentloader(documentloader: str) -> Any:
     """Import documentloader from documentloader name"""
-    from langchain_contrib import document_loaders
+    from bisheng_langchain import document_loaders
 
     if documentloader in document_loaders.__all__:
-        return import_class(f'langchain_contrib.document_loaders.{documentloader}')
+        return import_class(f'bisheng_langchain.document_loaders.{documentloader}')
     return import_class(f'langchain.document_loaders.{documentloader}')
 
 

@@ -11,6 +11,28 @@ import {
   errorsTypeAPI,
 } from "./../../types/api/index";
 
+
+axios.interceptors.response.use(function (response) {
+  if (response.data.status_code) {
+    return Promise.reject({
+      response: {
+        data: { detail: response.data.status_message }
+      }
+    });
+  }
+  return response;
+}, function (error) {
+  if (error.response.status === 401) {
+    // cookie expires
+    console.error('登录过期 :>> ');
+    const infoStr = localStorage.getItem('UUR_INFO')
+    localStorage.removeItem('UUR_INFO')
+    infoStr && location.reload()
+  }
+  return Promise.reject(error);
+})
+
+export default axios
 /**
  * Fetches all objects from the API endpoint.
  *
@@ -35,6 +57,13 @@ export async function getRepoStars(owner, repo) {
 }
 
 /**
+ * 修改配置
+ */
+export async function getAppConfig() {
+  return await axios.get(`/api/v1/env`);
+}
+
+/**
  * Reads all templates from the database.
  *
  * @returns {Promise<any>} The flows data.
@@ -52,18 +81,46 @@ export async function readTempsDatabase() {
     throw error;
   }
 }
+/**
+ * 创建模板.
+ *
+ * @param data {flow_id name description}
+ * @returns  null.
+ */
+export function createTempApi(params) {
+  return axios.post(`/api/v1/skill/template/create`, params);
+}
+/**
+ * 删除模板.
+ *
+ * @param data {flow_id name description}
+ * @returns  null.
+ */
+export function deleteTempApi(temp_id) {
+  return axios.delete(`/api/v1/skill/template/${temp_id}`);
+}
+/**
+ * 修改模板.
+ *
+ * @param data {flow_id name description}
+ * @returns  null.
+ */
+export function updateTempApi(temp_id, data) {
+  return axios.post(`/api/v1/skill/template/${temp_id}`, data);
+}
 
 /**
  * 获取知识库列表
  *
  */
-export async function readFileLibDatabase() {
+export async function readFileLibDatabase(page = 1, pageSize = 40) {
   try {
-    const response = await axios.get("/api/v1/knowledge/");
+    const response = await axios.get(`/api/v1/knowledge/?page_num=${page}&page_size=${pageSize}`);
     if (response.status !== 200) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.data;
+    const { data, total } = response.data
+    return { data, pages: Math.ceil(total / pageSize) };
   } catch (error) {
     console.error(error);
     throw error;
@@ -74,8 +131,10 @@ export async function readFileLibDatabase() {
  *
  */
 export async function readFileByLibDatabase(id, page) {
-  const response = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=10&page_num=${page}`);
-  return response.data
+  const pageSize = 20
+  const response = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}`);
+  const { data, total, writeable } = response.data
+  return { data, writeable, pages: Math.ceil(total / pageSize) }
 }
 
 /**
@@ -122,6 +181,27 @@ export async function deleteFile(id) {
  */
 export async function getEmbeddingModel() {
   return await axios.get(`/api/v1/knowledge/embedding_param`);
+}
+
+/**
+ * 获取RT服务列表
+ */
+export async function getServicesApi() {
+  return await axios.get(`/api/v1/server/list_server`);
+}
+/**
+ * 获取RT服务列表
+ */
+export async function addServiceApi(name: string, url: string) {
+  return await axios.post(`/api/v1/server/add`,
+    { endpoint: url, server: name, remark: 'RT模块创建' });
+}
+/**
+ * 删除知识库下文件
+ *
+ */
+export async function deleteServiceApi(id) {
+  return await axios.delete(`/api/v1/server/${id}`);
 }
 
 /**
@@ -234,7 +314,6 @@ export async function updataOnlineState(id, updatedFlow, open) {
   try {
     const response = await axios.patch(`/api/v1/flows/${id}`, {
       name: updatedFlow.name,
-      data: updatedFlow.data,
       description: updatedFlow.description,
       status: open ? 2 : 1
     });
@@ -261,7 +340,8 @@ export async function readFlowsFromDatabase(page: number = 1, search: string) {
     if (response.status !== 200) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.data;
+    const { data, total } = response.data
+    return { data, pages: Math.ceil(total / 20) };
   } catch (error) {
     console.error(error);
     throw error;
@@ -279,7 +359,8 @@ export async function readOnlineFlows(page: number = 1) {
     if (response.status !== 200) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.data;
+    const { data, total } = response.data
+    return data;
   } catch (error) {
     console.error(error);
     throw error;
@@ -337,7 +418,16 @@ export async function deleteFlowFromDatabase(flowId: string) {
  * 获取会话列表
  */
 export const getChatsApi = () => {
-  return axios.get(`/api/v1/chat/list`)
+  return axios.get(`/api/v1/chat/list`).then(res =>
+    res.data?.filter(el => el.chat_id) || []
+  )
+};
+
+/**
+ * 获取会话列表
+ */
+export const deleteChatApi = (chatId) => {
+  return axios.delete(`/api/v1/chat/${chatId}`)
 };
 
 
@@ -524,24 +614,46 @@ export async function GPUlistApi() {
   return response.data
 }
 
-
 /**
- * ************************ user
+ * ************************ 溯源
  */
+// 分词
+export async function splitWordApi(word: string, messageId: string) {
+  return await axios.get(`/api/v1/qa/keyword?answer=${word}&message_id=${messageId}`)
+}
 
-// 登录
-export async function loginApi(name, pwd) {
-  return await axios.post(`/api/v1/user/login`, { user_name: name, password: pwd });
-}
-// 注册
-export async function registerApi(name, pwd) {
-  return await axios.post(`/api/v1/user/regist`, { user_name: name, password: pwd });
-}
-// 用户列表
-export async function getUsersApi(name: string, page: number, pageSize: number) {
-  return await axios.get(`/api/v1/user/list?page_num=${page}&page_size=${pageSize}&name=${name || ''}`)
-}
-// 修改用户状态（启\禁用）
-export async function disableUserApi(userid, status) {
-  return await axios.post(`/api/v1/user/update`, { user_id: userid, delete: status });
+// 获取 chunks
+export async function getSourceChunksApi(chatId: string, messageId: number, keys: string) {
+  try {
+    const response = await axios.get(`/api/v1/qa/chunk?chat_id=${chatId}&message_id=${messageId}&keys=${keys}`)
+    if (response.status !== 200) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const fileMap = {}
+    const chunks = response.data.data
+    chunks.forEach(chunk => {
+      const list = fileMap[chunk.file_id]
+      if (list) {
+        fileMap[chunk.file_id].push(chunk)
+      } else {
+        fileMap[chunk.file_id] = [chunk]
+      }
+    });
+
+    return Object.keys(fileMap).map(fileId => {
+      const { file_id: id, source: fileName, source_url: fileUrl, original_url: originUrl } = fileMap[fileId][0]
+
+      const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
+        .map(chunk => ({
+          box: chunk.chunk_bboxes,
+          score: chunk.score
+        }))
+      const score = chunks[0].score
+
+      return { id, fileName, fileUrl, originUrl, chunks, score }
+    }).sort((a, b) => b.score - a.score)
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
 }
