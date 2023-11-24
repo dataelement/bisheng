@@ -1,6 +1,5 @@
 from typing import Any, Dict, List, Optional
 
-from bisheng_langchain.input_output import VariableNode
 from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
 from langchain.chains.base import Chain
 from pydantic import BaseModel, Extra
@@ -34,11 +33,21 @@ class Output(BaseModel):
 
 
 class Report(Chain):
+    # ```
+    # chain Dict:
+    #    object: langchain_object
+    #    node_id: object_key prefix
+    #    input: triger query
+    # variables Dict:
+    #    variable_name: name
+    #    variable_value: value
+    # `
     chains: Optional[List[Dict]]
-    variables: Optional[VariableNode]
+    variables: Optional[List[Dict]]
+    report_name: str
 
     input_key: str = 'report_name'  #: :meta private:
-    output_key: str = 'report_content'  #: :meta private:
+    output_key: str = 'text'  #: :meta private:
 
     class Config:
         """Configuration for this pydantic object."""
@@ -73,8 +82,9 @@ class Report(Chain):
 
     def _call(
         self,
-        verbose: Optional[bool] = None,
+        inputs: Dict[str, Any],
         run_manager: Optional[CallbackManagerForChainRun] = None,
+        verbose: Optional[bool] = None,
     ) -> Dict[str, str]:
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         outputs = {}
@@ -85,29 +95,64 @@ class Report(Chain):
                     raise TypeError(
                         f"{chain['object']} not be runnable Chain object"
                     )
-                chain_outputs = chain['object'](chain['input'], callbacks=_run_manager.get_child(f'step_{i+1}'))
+                preset_question = chain['input']
+                for k, v in preset_question.items():
+                    if isinstance(v, str):
+                        chain_outputs = chain['object'](preset_question,
+                                                        callbacks=_run_manager.get_child(f'step_{i+1}'))
+                        outputs.update({chain['node_id']: chain_outputs.get('text')})
+                    else:
+                        for question in v:
+                            question_dict = {k: question}
+                            chain_outputs = chain['object'](question_dict,
+                                                            callbacks=_run_manager.get_child(f'step_{i+1}'))
+                            outputs.update({chain['node_id'] + '_' + question:
+                                            chain_outputs.get('text')})
+                # log print
                 _run_manager.on_text(
                     chain_outputs, color=color_mapping[str(i)], end='\n', verbose=verbose
                 )
-                outputs.update({chain['node_id']: chain_outputs.get('text')})
-
-        return {self.output_key: outputs}
+            # variables
+            if self.variables:
+                for name, value in self.variables:
+                    outputs.update({'var_'+name: value})
+        return {self.output_key: outputs, self.input_key: self.report_name}
 
     async def _acall(
         self,
-        report_name: str,
-        verbose: Optional[bool] = None,
+        inputs: Dict[str, Any],
         run_manager: Optional[AsyncCallbackManagerForChainRun] = None,
+        verbose: Optional[bool] = None,
     ) -> Dict[str, Any]:
         _run_manager = run_manager or AsyncCallbackManagerForChainRun.get_noop_manager()
         outputs = {}
         color_mapping = get_color_mapping([str(i) for i in range(len(self.chains))])
-        for i, chain in enumerate(self.chains):
-            chain_outputs = await chain['object'].arun(chain['input'],
-                                                       callbacks=_run_manager.get_child(f'step_{i+1}'))
+        if self.chains:
+            for i, chain in enumerate(self.chains):
+                if not isinstance(chain['object'], Chain):
+                    raise TypeError(
+                        f"{chain['object']} not be runnable Chain object"
+                    )
+                preset_question = chain['input']
+                for k, v in preset_question.items():
+                    if isinstance(v, str):
+                        chain_outputs = await chain['object'].arun(preset_question,
+                                                                   callbacks=_run_manager.get_child(f'step_{i+1}'))
+                        outputs.update({chain['node_id']: chain_outputs.get('text')})
+                    else:
+                        for question in v:
+                            question_dict = {k: question}
+                            chain_outputs = await chain['object'].arun(question_dict,
+                                                                       callbacks=_run_manager.get_child(f'step_{i+1}'))
+                            outputs.update({chain['node_id'] + '_' + question:
+                                            chain_outputs.get('text')})
             await _run_manager.on_text(
                 chain_outputs, color=color_mapping[str(i)], end='\n', verbose=verbose
             )
-            outputs.update({chain['node_id']: chain_outputs})
 
-        return {self.output_key: outputs, self.input_key: report_name}
+        # variables
+        if self.variables:
+            for name, value in self.variables:
+                outputs.update({'var_'+name: value})
+
+        return {self.output_key: outputs, self.input_key: self.report_name}

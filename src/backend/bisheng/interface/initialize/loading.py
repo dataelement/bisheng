@@ -127,10 +127,12 @@ def instantiate_input_output(node_type, class_object, params, id_dict):
             chain_obj['node_id'] = id
             if id in preset_question:
                 chain_obj['input'] = {chains[index].input_keys[0]: preset_question[id]}
+            else:
+                # give a default input
+                chain_obj['input'] = {chains[index].input_keys[0]: 'start'}
             chain_list.append(chain_obj)
-        # variables
-
-        return class_object(**chain_list)
+        params['chains'] = chain_list
+        return class_object(**params)
     return class_object(**params).text()
 
 

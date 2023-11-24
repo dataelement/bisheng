@@ -1,5 +1,5 @@
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Extra
 
@@ -14,7 +14,10 @@ class InputNode(BaseModel):
 
 class VariableNode(BaseModel):
     """用来设置变量"""
+    # key
     variables: Optional[List[str]]
+    # vaulues
+    variable_value: Optional[List[Dict]]
 
     class Config:
         """Configuration for this pydantic object."""
@@ -22,7 +25,7 @@ class VariableNode(BaseModel):
         extra = Extra.forbid
 
     def text(self):
-        return self.variables
+        return self.variable_value
 
 
 class InputFileNode(BaseModel):

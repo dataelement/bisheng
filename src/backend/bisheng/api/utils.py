@@ -1,4 +1,3 @@
-from uuid import UUID
 
 from bisheng.api.v1.schemas import StreamData
 from bisheng.database.base import get_session
@@ -6,7 +5,6 @@ from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
-from fastapi import Depends
 from sqlalchemy import delete
 from sqlmodel import Session, select
 
@@ -221,7 +219,7 @@ def access_check(payload: dict, owner_user_id: int, target_id: int, type: Access
     return True
 
 
-def get_L2_param_from_flow(flow_data: dict, flow_id: str, session: Session = Depends(get_session)):
+def get_L2_param_from_flow(flow_data: dict, flow_id: str,):
     graph = Graph.from_payload(flow_data)
     node_id = []
     file_name = []
@@ -229,7 +227,8 @@ def get_L2_param_from_flow(flow_data: dict, flow_id: str, session: Session = Dep
         if node.vertex_type == 'InputFileNode':
             node_id.append(node.id)
             file_name.append(node.params.get('file_type'))
-    flow_id = UUID(flow_id).hex
+
+    session: Session = next(get_session())
     db_variable = session.exec(select(Variable).where(Variable.flow_id == flow_id,
                                                       Variable.node_id.in_(node_id))).all()
     old_node_ids = {variable.node_id: variable for variable in db_variable}
@@ -243,7 +242,8 @@ def get_L2_param_from_flow(flow_data: dict, flow_id: str, session: Session = Dep
                 old_node_ids.pop(id)
             else:
                 # file type
-                db_new_var = Variable(flow_id, node_id, file_name[index], 3, 1, 0)
+                db_new_var = Variable(flow_id=flow_id, node_id=id,
+                                      variable_name=file_name[index], value_type=3)
                 update.append(db_new_var)
 
         if update:

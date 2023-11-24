@@ -23,6 +23,13 @@ def post_variable(variable: Variable, session: Session = Depends(get_session),):
             db_variable.value = variable.value
             db_variable.value_type = variable.value_type
         else:
+            # if exist
+            db_variable = session.exec(select(Variable).where(
+                Variable.node_id == variable.node_id,
+                Variable.variable_name == variable.variable_name
+            )).all()
+            if db_variable:
+                raise HTTPException(status_code=500, detail='name repeat, please choose another')
             db_variable = Variable.from_orm(variable)
 
         session.add(db_variable)
@@ -33,7 +40,7 @@ def post_variable(variable: Variable, session: Session = Depends(get_session),):
         return HTTPException(status_code=500, detail=str(e))
 
 
-@router.get('/list', status_code=200)
+@router.get('/list', response_model=List[VariableRead], status_code=200)
 def get_variables(*, flow_id: str, node_id: Optional[str] = None,
                   variable_name: Optional[str] = None,
                   session: Session = Depends(get_session),):
@@ -45,16 +52,8 @@ def get_variables(*, flow_id: str, node_id: Optional[str] = None,
         if variable_name:
             query = query.where(Variable.variable_name == variable_name)
 
-        res = session.exec(query.order_by(Variable.id.desc())).all()
-        res_list = [{'id': r.id,
-                     'flow_id': r.flow_id,
-                     'node_id': r.node_id,
-                     'variable_name': r.variable_name,
-                     'variable_value': r.value,
-                     'variable_type': r.value_type,
-                     'is_option': r.is_option,
-                     } for r in res]
-        return res_list
+        res = session.exec(query.order_by(Variable.id.asc())).all()
+        return jsonable_encoder(res)
 
     except Exception as e:
         return HTTPException(status_code=500, detail=str(e))
