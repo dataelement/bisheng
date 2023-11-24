@@ -1,11 +1,11 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Dropdown from "../../../components/dropdownComponent";
 import InputComponent from "../../../components/inputComponent";
 import InputFileComponent from "../../../components/inputFileComponent";
 import { Button } from "../../../components/ui/button";
 import { alertContext } from "../../../contexts/alertContext";
-import { getVariablesApi } from "../../../controllers/API/flow";
+import { Variable, getVariablesApi } from "../../../controllers/API/flow";
 
 /**
  * @component 会话报告生成专用表单
@@ -18,7 +18,7 @@ export default function ChatReportForm({ flow, onStart }) {
     const { t } = useTranslation()
 
     // 从 api中获取
-    const [items, setItems] = useState([])
+    const [items, setItems] = useState<Variable[]>([])
     useEffect(() => {
         getVariablesApi({ flow_id: flow.id }).then(
             res => setItems(res)
@@ -30,6 +30,8 @@ export default function ChatReportForm({ flow, onStart }) {
             i === index ? { ...item, value } : item))
     }
 
+    // 文件名 kv关系
+    const fileKindexVpath = useRef({})
     const handleStart = () => {
         // 校验
         const errors = items.reduce((res, el) => {
@@ -47,7 +49,8 @@ export default function ChatReportForm({ flow, onStart }) {
 
         // 组装数据，抛出
         const obj = items
-        const str = items.map(el => `${el.name}：${el.value}\n`)
+        const str = items.map((el, i) => `${el.name}：${el.type === 'file'
+            ? fileKindexVpath.current[i] : el.value}\n`).join('')
         onStart(obj, str)
     }
 
@@ -69,9 +72,10 @@ export default function ChatReportForm({ flow, onStart }) {
                         ></Dropdown> :
                         item.type === 'file' ?
                             <InputFileComponent
+                                isSSO
                                 disabled={false}
-                                value={item.value}
-                                onChange={(e) => console.log('e :>> ', e)}
+                                value={''}
+                                onChange={(e) => fileKindexVpath.current[i] = e}
                                 fileTypes={["pdf"]}
                                 suffixes={[".pdf"]}
                                 onFileChange={(val: string) => handleChange(i, val)}

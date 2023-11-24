@@ -20,13 +20,13 @@ interface Iprops {
     changeHistoryByScroll: boolean
     onStopClick: () => void
     onNextPageClick: () => void
-    onUploadFile: () => void
+    // onUploadFile: () => void
     onSendMsg: (msg: string) => void
 }
 
 export default forwardRef(function ChatPanne({
     chatId, messages, inputState, fileInputs, changeHistoryByScroll, flowName, stopState, isRoom, isReport, sendUserName,
-    onSendMsg, onUploadFile, onNextPageClick, onStopClick
+    onSendMsg, onNextPageClick, onStopClick
 }: Iprops, inputRef: any) {
 
     const { t } = useTranslation()
@@ -103,9 +103,9 @@ export default forwardRef(function ChatPanne({
                             if (event.key === "Enter" && !event.shiftKey) handleSend()
                         }}></textarea>
                     <div className="absolute right-6 bottom-4 flex gap-2">
-                        {!isReport && <ShadTooltip content={t('chat.uploadFileTooltip')}>
+                        {/* {!isReport && <ShadTooltip content={t('chat.uploadFileTooltip')}>
                             <button disabled={inputState.lock || !fileInputs?.length} className="disabled:text-gray-400" onClick={onUploadFile}><FileUp /></button>
-                        </ShadTooltip>}
+                        </ShadTooltip>} */}
                         <ShadTooltip content={t('chat.sendTooltip')}>
                             <button disabled={isReport || inputEmpty || inputDisable} className=" disabled:text-gray-400" onClick={handleSend}><Send /></button>
                         </ShadTooltip>

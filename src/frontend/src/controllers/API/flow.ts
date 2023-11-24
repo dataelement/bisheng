@@ -21,6 +21,7 @@ export interface Variable {
         key: string;
         value: string;
     }[];
+    value?: string;
 }
 /**
  * get组件 variables 变量
@@ -40,7 +41,8 @@ export function getVariablesApi(params) {
                 maxLength: item.value_type === 1 ? item.value : '',
                 options: item.value_type === 2 ? item.value
                     .split(',')
-                    .map((op, i) => ({ key: i, value: op })) : []
+                    .map((op, i) => ({ key: i, value: op })) : [],
+                value: ''
             }
         }) as Variable[]
     });
