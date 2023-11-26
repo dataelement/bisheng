@@ -100,14 +100,17 @@ class Report(Chain):
                     if isinstance(v, str):
                         chain_outputs = chain['object'](preset_question,
                                                         callbacks=_run_manager.get_child(f'step_{i+1}'))
-                        outputs.update({chain['node_id']: chain_outputs.get('text')})
+                        result = (chain_outputs.get(chain['object'].output_keys[0])
+                                  if isinstance(chain_outputs, dict) else chain_outputs)
+                        outputs.update({chain['node_id']: result})
                     else:
                         for question in v:
                             question_dict = {k: question}
                             chain_outputs = chain['object'](question_dict,
                                                             callbacks=_run_manager.get_child(f'step_{i+1}'))
-                            outputs.update({chain['node_id'] + '_' + question:
-                                            chain_outputs.get('text')})
+                            result = (chain_outputs.get(chain['object'].output_keys[0])
+                                      if isinstance(chain_outputs, dict) else chain_outputs)
+                            outputs.update({chain['node_id'] + '_' + question: result})
                 # log print
                 _run_manager.on_text(
                     chain_outputs, color=color_mapping[str(i)], end='\n', verbose=verbose
@@ -138,14 +141,17 @@ class Report(Chain):
                     if isinstance(v, str):
                         chain_outputs = await chain['object'].arun(preset_question,
                                                                    callbacks=_run_manager.get_child(f'step_{i+1}'))
-                        outputs.update({chain['node_id']: chain_outputs.get('text')})
+                        result = (chain_outputs.get(chain['object'].output_keys[0])
+                                  if isinstance(chain_outputs, dict) else chain_outputs)
+                        outputs.update({chain['node_id']: result})
                     else:
                         for question in v:
                             question_dict = {k: question}
                             chain_outputs = await chain['object'].arun(question_dict,
                                                                        callbacks=_run_manager.get_child(f'step_{i+1}'))
-                            outputs.update({chain['node_id'] + '_' + question:
-                                            chain_outputs.get('text')})
+                            result = (chain_outputs.get(chain['object'].output_keys[0])
+                                      if isinstance(chain_outputs, dict) else chain_outputs)
+                            outputs.update({chain['node_id'] + '_' + question: result})
             await _run_manager.on_text(
                 chain_outputs, color=color_mapping[str(i)], end='\n', verbose=verbose
             )

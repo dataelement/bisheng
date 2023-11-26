@@ -247,6 +247,7 @@ class DocumentLoaderFrontNode(FrontendNode):
         if name == 'CustomKVLoader' and field.name == 'schemas':
             field.field_type = 'str'
             field.info = "please use ';' seperate"
+            field.is_list = False
 
 
 def build_pdf_semantic_loader_fields():

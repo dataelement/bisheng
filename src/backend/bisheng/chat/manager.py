@@ -2,12 +2,16 @@ import asyncio
 import json
 from collections import defaultdict
 from typing import Any, Dict, List
+from uuid import UUID
 
-from bisheng.api.v1.schemas import ChatMessage, FileResponse
+from bisheng.api.utils import build_flow_no_yield
+from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
 from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
 from bisheng.cache.manager import Subject
 from bisheng.database.base import get_session
+from bisheng.database.models.flow import Flow
+from bisheng.processing.process import process_tweaks
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
 from fastapi import WebSocket, status
@@ -137,8 +141,8 @@ class ChatManager:
         self.in_memory_cache.set(client_id, langchain_object)
         return client_id in self.in_memory_cache
 
-    async def handle_websocket(self, client_id: str, chat_id: str, websocket: WebSocket,
-                               user_id: int):
+    async def handle_websocket(self, client_id: str, chat_id: str,
+                               websocket: WebSocket, user_id: int):
         await self.connect(client_id, chat_id, websocket)
 
         try:
@@ -155,17 +159,74 @@ class ChatManager:
                 if 'clear_cache' in payload:
                     self.in_memory_cache
 
-                from bisheng.chat.handlers import Handler
+                # set start
                 action = 'default'
-                if 'file_path' in payload:
-                    action = 'auto_file'
+                from bisheng.chat.handlers import Handler
+                is_begin = True
                 if 'action' in payload:
+                    # autogen continue last session,
+                    is_begin = False
                     action = 'autogen'
-                elif 'inputs' in payload:
-                    if 'action' in payload['inputs']:
-                        action = payload.get('handler', 'autogen')
-                asyncio.create_task(Handler().dispatch_task(self, client_id,
-                                                            chat_id, action,
+                    asyncio.create_task(Handler().dispatch_task(self, client_id,
+                                                                chat_id, action,
+                                                                payload, user_id))
+                if is_begin:
+                    start_resp = ChatResponse(type='begin', category='system', user_id=user_id)
+                    await self.send_json(client_id, chat_id, start_resp)
+                    start_resp.type = 'start'
+                    await self.send_json(client_id, chat_id, start_resp)
+
+                # should input data
+                if 'inputs' in payload and 'data' in payload['inputs']:
+                    node_data = payload['inputs']['data']
+                    tweak = {}
+                    for nd in node_data:
+                        if nd.get('id') not in tweak:
+                            tweak[nd.get('id')] = {}
+                        if 'InputFile' in nd.get('id'):
+                            file_path, file_name = nd.get('value').split('_', 1)
+                            tweak[nd.get('id')] = {'file_path': file_path, 'value': file_name}
+                        else:
+                            tweak[nd.get('id')].update({nd.get('name'): nd.get('value')})
+
+                    """upload file to make flow work"""
+                    db_flow = next(get_session()).get(Flow, client_id)
+                    graph_data = process_tweaks(db_flow.data, tweaks=tweak)
+
+                    # build to activate node
+                    artifacts = {}
+                    try:
+                        graph = build_flow_no_yield(graph_data, artifacts, True,
+                                                    UUID(client_id).hex, chat_id)
+                    except Exception as e:
+                        logger.exception(e)
+                        step_resp = ChatResponse(type='end',
+                                                 intermediate_steps='File is parsed fail',
+                                                 category='system', user_id=user_id)
+                        await self.send_json(client_id, chat_id, step_resp)
+                        start_resp.type = 'close'
+                        await self.send_json(client_id, chat_id, start_resp)
+                        # socket close?
+                        return
+
+                    # 更新langchainObject
+                    langchain_object = graph.build()
+                    batch_question = {}
+                    for node in langchain_object:
+                        key_node = get_cache_key(client_id, chat_id, node.id)
+                        self.set_cache(key_node, node._built_object)
+                        self.set_cache(key_node + '_artifacts', artifacts)
+                        if node.base_type != 'inputOutput':
+                            self.set_cache(get_cache_key(client_id, chat_id), node._built_object)
+                            if node.vetext_type == 'Report':
+                                action = 'report'
+                            else:
+                                action = 'auto_file'
+                        else:
+                            batch_question = node._built_object
+                if action == 'auto_file':
+                    payload['inputs']['questions'] = batch_question
+                asyncio.create_task(Handler().dispatch_task(self, client_id, chat_id, action,
                                                             payload, user_id))
 
         except Exception as e:

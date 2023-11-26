@@ -85,6 +85,8 @@ class Vertex:
         for edge in self.edges:
             param_key = edge.target_param
             if param_key in template_dict:
+                if edge.source == self:
+                    continue
                 if template_dict[param_key]['list']:
                     if param_key not in params:
                         params[param_key] = []

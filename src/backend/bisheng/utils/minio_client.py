@@ -21,12 +21,14 @@ class MinioClient():
             endpoint=settings.get_knowledge().get('minio').get('MINIO_ENDPOINT'),
             access_key=settings.get_knowledge().get('minio').get('MINIO_ACCESS_KEY'),
             secret_key=settings.get_knowledge().get('minio').get('MINIO_SECRET_KEY'),
-            secure=False)
+            secure=settings.get_knowledge().get('minio').get('SCHEMA'),
+            cert_check=settings.get_knowledge().get('minio').get('CERT_CHECK'))
         self.minio_share = minio.Minio(
             endpoint=settings.get_knowledge().get('minio').get('MINIO_SHAREPOIN'),
             access_key=settings.get_knowledge().get('minio').get('MINIO_ACCESS_KEY'),
             secret_key=settings.get_knowledge().get('minio').get('MINIO_SECRET_KEY'),
-            secure=False)
+            secure=settings.get_knowledge().get('minio').get('SCHEMA'),
+            cert_check=settings.get_knowledge().get('minio').get('CERT_CHECK'))
         self.mkdir(bucket=bucket)
 
     def upload_minio(self, object_name: str, file_path, content_type='application/text'):

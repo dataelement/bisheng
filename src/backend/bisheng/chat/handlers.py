@@ -1,13 +1,10 @@
 import json
 from typing import Dict, List
-from uuid import UUID
 
-from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.utils import extract_answer_keys, process_graph
 from bisheng.database.base import get_session
-from bisheng.database.models.flow import Flow
 from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils.logger import logger
@@ -23,6 +20,7 @@ class Handler:
         self.handler_dict['default'] = self.process_message
         self.handler_dict['autogen'] = self.process_autogen
         self.handler_dict['auto_file'] = self.process_file
+        self.handler_dict['report'] = self.process_report
 
     async def dispatch_task(self, session: ChatManager,
                             client_id: str, chat_id: str,
@@ -32,8 +30,25 @@ class Handler:
                 raise Exception(f'unknown action {action}')
             await self.handler_dict[action](session, client_id, chat_id, payload, user_id)
 
-    async def process_message(self,
-                              session: ChatManager,
+    async def process_report(self, session: ChatManager,
+                             client_id: str, chat_id: str,
+                             payload: Dict, user_id=None):
+        chat_inputs = payload.pop('inputs', '')
+        chat_inputs.pop('data') if 'data' in chat_inputs else {}
+        chat_inputs.pop('id') if 'id' in chat_inputs else ''
+        key = get_cache_key(client_id, chat_id)
+        artifacts = session.in_memory_cache.get(key + '_artifacts')
+        if artifacts:
+            for k, value in artifacts.items():
+                if k in chat_inputs:
+                    chat_inputs[k] = value
+        chat_inputs = ChatMessage(message=chat_inputs, category='question',
+                                  type='bot', user_id=user_id,)
+        session.chat_history.add_message(client_id, chat_id, chat_inputs)
+        start_resp = ChatResponse(type='start', user_id=user_id)
+        await session.send_json(client_id, chat_id, start_resp)
+
+    async def process_message(self, session: ChatManager,
                               client_id: str, chat_id: str,
                               payload: Dict, user_id=None):
         # Process the graph data and chat message
@@ -105,11 +120,9 @@ class Handler:
         else:
             start_resp.category = 'answer'
             await session.send_json(client_id, chat_id, start_resp)
-            response = ChatResponse(message=result if is_begin else '',
-                                    type='end',
+            response = ChatResponse(message=result if is_begin else '', type='end',
                                     intermediate_steps=result if not is_begin else '',
-                                    category='answer',
-                                    user_id=user_id,
+                                    category='answer', user_id=user_id,
                                     source=source)
             await session.send_json(client_id, chat_id, response)
 
@@ -126,82 +139,39 @@ class Handler:
     async def process_file(self, session: ChatManager,
                            client_id: str, chat_id: str,
                            payload: dict, user_id: int):
-        # 上传文件，需要处理文件逻辑
-        file_path = payload.get('file_path')
-        node_id = payload.get('id')
-        logger.info(f'client_id={client_id} act=process_message user_id={chat_id}')
-
-        """upload file to make flow work"""
-        db_flow = next(get_session()).get(Flow, client_id)
-        graph_data = db_flow.data
-        file_path, file_name = file_path.split('_', 1)
-        for node in graph_data['nodes']:
-            if node.get('id') == node_id:
-                for key, value in node['data']['node']['template'].items():
-                    if isinstance(value, dict) and value.get('type') == 'file':
-                        logger.info(f'key={key} set_filepath={file_path}')
-                        value['file_path'] = file_path
-                        value['value'] = file_name
-
+        _, file_name = payload['inputs']['data'][0]['vaule'].split('_', 1)
+        batch_question = payload['inputs']['questions']
         # 如果L3
         file = ChatMessage(is_bot=False,
                            files=[{'file_name': file_name}],
-                           type='end',
-                           user_id=user_id)
+                           type='end', user_id=user_id)
         session.chat_history.add_message(client_id, chat_id, file)
-        # graph_data = payload
         start_resp = ChatResponse(type='begin', category='system', user_id=user_id)
-        await session.send_json(client_id, chat_id, start_resp)
-        start_resp.type = 'start'
-        await session.send_json(client_id, chat_id, start_resp)
 
-        # build to activate node
-        artifacts = {}
-        try:
-            graph = build_flow_no_yield(graph_data, artifacts, True, UUID(client_id).hex, chat_id)
-        except Exception as e:
-            logger.exception(e)
-            step_resp = ChatResponse(type='end',
-                                     intermediate_steps='File is parsed fail',
-                                     category='system',
-                                     user_id=user_id)
-            await session.send_json(client_id, chat_id, step_resp)
-            start_resp.type = 'close'
-            await session.send_json(client_id, chat_id, start_resp)
-            return
-        # 更新langchainObject
-        langchain_object = graph.build()
-        for node in langchain_object:
-            key_node = get_cache_key(client_id, chat_id, node.id)
-            session.set_cache(key_node, node._built_object)
-            session.set_cache(key_node + '_artifacts', artifacts)
-            session.set_cache(get_cache_key(client_id, chat_id), node._built_object)
-        # 查找nodeid关联的questions
-        input = next((node for node in graph.nodes if node.vertex_type == 'InputNode'), None)
-        if not input:
+        if not batch_question:
+            # no question
             step_resp = ChatResponse(type='end',
                                      intermediate_steps='File parsing complete',
-                                     category='system',
-                                     user_id=user_id)
+                                     category='system', user_id=user_id)
             await session.send_json(client_id, chat_id, step_resp)
             start_resp.type = 'close'
             await session.send_json(client_id, chat_id, start_resp)
             return
-        questions = input._built_object
+
         step_resp = ChatResponse(type='end',
                                  intermediate_steps='File parsing complete, analysis starting',
-                                 category='system',
-                                 user_id=user_id)
+                                 category='system', user_id=user_id)
         await session.send_json(client_id, chat_id, step_resp)
 
-        edge = input.edges[0]
-        input_key = edge.target._built_object.input_keys[0]
+        key = get_cache_key(client_id, chat_id)
+        langchain_object = session.in_memory_cache.get(key)
+        input_key = langchain_object.input_keys[0]
 
         report = ''
-        for question in questions:
+        for question in batch_question:
             if not question:
                 continue
-            payload = {'inputs': {input_key: question, 'id': edge.target.id}}
+            payload = {'inputs': {input_key: question}}
             start_resp.category == 'question'
             await session.send_json(client_id, chat_id, start_resp)
             step_resp = ChatResponse(type='end',

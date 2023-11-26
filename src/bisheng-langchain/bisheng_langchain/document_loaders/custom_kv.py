@@ -8,7 +8,8 @@ import re
 import tempfile
 from pathlib import Path
 from time import sleep
-from typing import List, Set, Tuple, Union
+from typing import List, Optional, Set, Tuple, Union
+from urllib.parse import urlparse
 
 import cv2
 import fitz
@@ -64,7 +65,7 @@ class CustomKVLoader(BaseLoader, Serializable):
                  schemas: str,
                  elem_server_id: str,
                  task_type: str,
-                 request_timeout: Union[float, Tuple[float, float]]) -> None:
+                 request_timeout: Optional[Union[float, Tuple[float, float]]] = 10) -> None:
         """Initialize with a file path."""
         self.file_path = file_path
         self.elm_api_base_url = elm_api_base_url
@@ -79,7 +80,7 @@ class CustomKVLoader(BaseLoader, Serializable):
 
         # If the file is a web path, download it to a temporary file, and use that
         if not os.path.isfile(self.file_path) and self._is_valid_url(self.file_path):
-            r = self.request.get(self.file_path)
+            r = requests.get(self.file_path)
 
             if r.status_code != 200:
                 raise ValueError(
@@ -96,6 +97,11 @@ class CustomKVLoader(BaseLoader, Serializable):
             raise ValueError('File path %s is not a valid file or url' % self.file_path)
         super().__init__()
 
+    @staticmethod
+    def _is_valid_url(url: str) -> bool:
+        """Check if the url is valid."""
+        parsed = urlparse(url)
+        return bool(parsed.netloc) and bool(parsed.scheme)
 
     def load(self) -> List[Document]:
         """Load given path as pages."""

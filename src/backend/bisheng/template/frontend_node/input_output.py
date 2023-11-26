@@ -30,7 +30,7 @@ class InputOutputNode(FrontendNode):
             elif field.name == 'chains':
                 field.show = True
                 field.field_type = 'Chain'
-            elif field.name == 'input_key':
+            elif field.name == 'report_name':
                 field.show = True
                 field.display_name = 'Report Name'
                 field.info = 'the file name we generate'

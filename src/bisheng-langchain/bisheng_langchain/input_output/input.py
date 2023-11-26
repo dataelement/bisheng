@@ -17,7 +17,7 @@ class VariableNode(BaseModel):
     # key
     variables: Optional[List[str]]
     # vaulues
-    variable_value: Optional[List[Dict]]
+    variable_value: Optional[List[Dict]] = {}
 
     class Config:
         """Configuration for this pydantic object."""

@@ -176,6 +176,8 @@ def build_flow_no_yield(graph_data: dict,
             # 聊天窗口等flow 主动生成的vector 需要新建临时collection
             # tmp_{chat_id}
             if vertex.base_type == 'vectorstores':
+                # 注入user_name
+                vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
                 # 知识库通过参数传参
                 if 'collection_name' in kwargs and 'collection_name' in vertex.params:
                     vertex.params['collection_name'] = kwargs['collection_name']
@@ -222,34 +224,47 @@ def access_check(payload: dict, owner_user_id: int, target_id: int, type: Access
 def get_L2_param_from_flow(flow_data: dict, flow_id: str,):
     graph = Graph.from_payload(flow_data)
     node_id = []
+    variable_ids = []
     file_name = []
     for node in graph.nodes:
-        if node.vertex_type == 'InputFileNode':
+        if node.vertex_type in {'InputFileNode'}:
             node_id.append(node.id)
             file_name.append(node.params.get('file_type'))
+        elif node.vertex_type in {'VariableNode'}:
+            variable_ids.append(node.id)
 
     session: Session = next(get_session())
-    db_variable = session.exec(select(Variable).where(Variable.flow_id == flow_id,
-                                                      Variable.node_id.in_(node_id))).all()
-    old_node_ids = {variable.node_id: variable for variable in db_variable}
+    db_variables = session.exec(select(Variable).where(Variable.flow_id == flow_id)).all()
+
+    old_file_ids = {variable.node_id: variable
+                    for variable in db_variables if variable.value_type == 3}
     update = []
+    delete_node_ids = []
     try:
         for index, id in enumerate(node_id):
-            if id in old_node_ids:
-                if file_name[index] != old_node_ids.get(id).variable_name:
-                    old_node_ids.get(id).variable_name = file_name[index]
-                    update.append[old_node_ids.get(id)]
-                old_node_ids.pop(id)
+            if id in old_file_ids:
+                if file_name[index] != old_file_ids.get(id).variable_name:
+                    old_file_ids.get(id).variable_name = file_name[index]
+                    update.append(old_file_ids.get(id))
+                old_file_ids.pop(id)
             else:
                 # file type
                 db_new_var = Variable(flow_id=flow_id, node_id=id,
                                       variable_name=file_name[index], value_type=3)
                 update.append(db_new_var)
+        # delete variable which not delete by edit
+        old_variable_ids = {variable.node_id
+                            for variable in db_variables if variable.value_type != 3}
+
+        if old_file_ids:
+            delete_node_ids.extend(list(old_file_ids.keys()))
+
+        delete_node_ids.extend(old_variable_ids.difference(set(variable_ids)))
 
         if update:
             [session.add(var) for var in update]
-        if old_node_ids:
-            session.exec(delete(Variable).where(Variable.id.in_(list(old_node_ids.keys()))))
+        if delete_node_ids:
+            session.exec(delete(Variable).where(Variable.node_id.in_(delete_node_ids)))
         session.commit()
         return True
     except Exception as e:

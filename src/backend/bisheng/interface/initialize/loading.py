@@ -17,6 +17,7 @@ from bisheng.interface.wrappers.base import wrapper_creator
 from bisheng.settings import settings
 from bisheng.utils import validate
 from bisheng.utils.constants import NODE_ID_DICT, PRESET_QUESTION
+from bisheng_langchain.vectorstores import VectorStoreFilterRetriever
 from langchain.agents import ZeroShotAgent
 from langchain.agents import agent as agent_module
 from langchain.agents.agent import AgentExecutor
@@ -390,6 +391,7 @@ def instantiate_embedding(class_object, params: Dict):
 
 def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
     search_kwargs = params.pop('search_kwargs', {})
+    user_name = params.pop('user_name', '')
     if 'documents' not in params:
         params['documents'] = []
 
@@ -402,7 +404,14 @@ def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
 
     # ! This might not work. Need to test
     if search_kwargs and hasattr(vecstore, 'as_retriever'):
-        vecstore = vecstore.as_retriever(search_kwargs=search_kwargs)
+        if settings.get_from_db('file_access'):
+            # need to verify file access
+            access_url = settings.get_from_db('file_access') + f'?username={user_name}'
+            vecstore = VectorStoreFilterRetriever(vecstore=vecstore,
+                                                  search_kwargs=search_kwargs,
+                                                  access_url=access_url)
+        else:
+            vecstore = vecstore.as_retriever(search_kwargs=search_kwargs)
 
     return vecstore
 
@@ -433,6 +442,7 @@ def instantiate_documentloader(class_object: Type[BaseLoader], params: Dict):
     # make it success when file not present
     if 'file_path' in params and not params['file_path']:
         return []
+
     docs = class_object(**params).load()
     # Now if metadata is an empty dict, we will not add it to the documents
     if metadata:
