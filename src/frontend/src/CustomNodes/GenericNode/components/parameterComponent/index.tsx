@@ -30,6 +30,9 @@ import {
 } from "../../../../utils";
 import DictComponent from "../../../../components/dictComponent";
 import KeypairListComponent from "../../../../components/keypairListComponent";
+import { Button } from "../../../../components/ui/button";
+import { Link, useParams } from "react-router-dom";
+import VariablesComponent from "../../../../components/VariablesComponent";
 
 export default function ParameterComponent({
   left,
@@ -45,6 +48,9 @@ export default function ParameterComponent({
   info = "",
   onChange
 }: ParameterComponentType) {
+  // console.log('data, id :>> ', data.id, id, type);
+  const { id: flowId } = useParams();
+
   const ref = useRef(null);
   const refHtml = useRef(null);
   const refNumberComponents = useRef(0);
@@ -205,7 +211,9 @@ export default function ParameterComponent({
             type === "code" ||
             type === "prompt" ||
             type === "file" ||
-            type === "int") &&
+            type === "int" || 
+            type === "variable" ||
+            type === "button") &&
           !optionalHandle ? (
           <></>
         ) : (
@@ -409,6 +417,17 @@ export default function ParameterComponent({
                 handleOnNewValue(valueToNumbers);
               }}
             />
+          </div>
+        ) : left === true && type === "button" ? (
+          <div className="mt-2 w-full">
+            <Link to={`/report/${flowId}`}><Button variant="outline" className="px-10">Edit</Button></Link>
+          </div>
+        ) : left === true && type === "variable" ? (
+          <div className="mt-2 w-full">
+            <VariablesComponent nodeId={data.id} flowId={flowId} onChange={(newValue) => {
+              data.node!.template[name].value = newValue;
+              handleOnNewValue(newValue);
+            }} />
           </div>
         ) : (
           <></>

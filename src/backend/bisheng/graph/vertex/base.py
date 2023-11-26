@@ -1,11 +1,10 @@
 import inspect
-import json
 import types
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from bisheng.interface.initialize import loading
 from bisheng.interface.listing import ALL_TYPES_DICT
-from bisheng.utils.constants import DIRECT_TYPES
+from bisheng.utils.constants import DIRECT_TYPES, NODE_ID_DICT, PRESET_QUESTION
 from bisheng.utils.logger import logger
 from bisheng.utils.util import sync_to_async
 
@@ -86,12 +85,23 @@ class Vertex:
         for edge in self.edges:
             param_key = edge.target_param
             if param_key in template_dict:
+                if edge.source == self:
+                    continue
                 if template_dict[param_key]['list']:
                     if param_key not in params:
                         params[param_key] = []
                     params[param_key].append(edge.source)
                 elif edge.target.id == self.id:
                     params[param_key] = edge.source
+
+            # for report, should get the source of source
+            for inner_edge in edge.source.edges:
+                source_type = inner_edge.target_param
+                if source_type == 'input_node' and inner_edge.target != self:
+                    if inner_edge.source.vertex_type == 'InputNode':
+                        # for extra params,
+                        params[PRESET_QUESTION] = {inner_edge.target.id:
+                                                   inner_edge.source}
 
         for key, value in template_dict.items():
             if key == '_type' or not value.get('show'):
@@ -121,6 +131,8 @@ class Vertex:
         Initiate the build process.
         """
         logger.debug(f'Building {self.vertex_type}')
+        # keep node_id in params
+        self.params[NODE_ID_DICT] = {}
         self._build_each_node_in_params_dict()
         self._get_and_instantiate_class()
         self._validate_built_object()
@@ -131,14 +143,6 @@ class Vertex:
         """
         Iterates over each node in the params dictionary and builds it.
         """
-        if self.vertex_type == 'SequentialChain':
-            # 改造sequence 支持自定义chain顺序
-            try:
-                chain_order = json.loads(self.params.pop('chain_order'))
-            except Exception:
-                raise Exception('chain_order 不是标准数组')
-            chains_dict = {chain.id: chain for chain in self.params.get('chains')}
-            self.params['chains'] = [chains_dict.get(id) for id in chain_order]
         for key, value in self.params.copy().items():
             if self._is_node(value):
                 if value == self:
@@ -147,6 +151,8 @@ class Vertex:
                 self._build_node_and_update_params(key, value)
             elif isinstance(value, list) and self._is_list_of_nodes(value):
                 self._build_list_of_nodes_and_update_params(key, value)
+            elif isinstance(value, dict) and self._is_dict_of_nodes(value):
+                self._build_dict_of_nodes_and_update_params(key, value)
 
     def _is_node(self, value):
         """
@@ -160,6 +166,9 @@ class Vertex:
         """
         return all(self._is_node(node) for node in value)
 
+    def _is_dict_of_nodes(self, value):
+        return all(self._is_node(node) for node in value.values())
+
     def _build_node_and_update_params(self, key, node):
         """
         Builds a given node and updates the params dictionary accordingly.
@@ -169,18 +178,27 @@ class Vertex:
         if isinstance(result, list):
             self._extend_params_list_with_result(key, result)
         self.params[key] = result
+        self.params[NODE_ID_DICT].update({key: node.id})
 
     def _build_list_of_nodes_and_update_params(self, key, nodes):
         """
         Iterates over a list of nodes, builds each and updates the params dictionary.
         """
         self.params[key] = []
+        key_list = []
         for node in nodes:
+            key_list.append(node.id)
             built = node.build()
             if isinstance(built, list):
                 self.params[key].extend(built)
             else:
                 self.params[key].append(built)
+        self.params[NODE_ID_DICT].update({key: key_list})
+
+    def _build_dict_of_nodes_and_update_params(self, key, dicts):
+        self.params[key] = {}
+        for k, v in dicts.items():
+            self.params[key][k] = v.build()
 
     def _handle_func(self, key, result):
         """

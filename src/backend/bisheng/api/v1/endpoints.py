@@ -97,7 +97,7 @@ async def process_flow(
     """
     Endpoint to process an input with a given flow_id.
     """
-    if inputs and isinstance(inputs, dict):
+    if inputs and isinstance(inputs, dict) and 'id' in inputs:
         inputs.pop('id')
 
     try:

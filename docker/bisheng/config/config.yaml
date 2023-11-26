@@ -13,7 +13,19 @@ environment:
 admin:
   user_name: "admin"
   password: "1234"
-      
+
+autogen_roles:
+  AutoGenAssistant:
+    documentation: ""
+  AutoGenGroupChatManager:
+    documentation: ""
+  AutoGenUser:
+    documentation: ""
+  AutoGenCoder:
+    documentation: ""
+  AutoGenCustomRole:
+    documentation: ""
+
 agents: 
   ZeroShotAgent:
     documentation: "https://python.langchain.com/docs/modules/agents/how_to/custom_mrkl_agent"
@@ -30,7 +42,21 @@ agents:
   SQLAgent:
     documentation: ""
 chains:
+  TransformChain:
+    documentation: ""
+  MultiPromptChain:
+    documentation: ""
+  LLMRouterChain:
+    documentation: ""
+  AutoGenChain:
+    documentation: ""
+  APIChain:
+    documentation: ""
+  TransformChain:
+    documentation: ""
   MultiRetrievalQA:
+    documentation: ""
+  SimpleSequentialChain:
     documentation: ""
   SequentialChain:
     documentation: ""

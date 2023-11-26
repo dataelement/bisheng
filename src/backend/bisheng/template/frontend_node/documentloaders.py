@@ -82,6 +82,11 @@ class DocumentLoaderFrontNode(FrontendNode):
                 suffixes=['.jpg', '.png', '.jpeg', '.pdf'],
                 fileTypes=['jpg', 'png', 'jpeg', 'pdf'],
             ),
+        'CustomKVLoader':
+            build_file_field(
+                suffixes=['.jpg', '.png', '.jpeg', '.pdf'],
+                fileTypes=['jpg', 'png', 'jpeg', 'pdf'],
+            ),
     }
 
     def add_extra_fields(self) -> None:
@@ -236,6 +241,13 @@ class DocumentLoaderFrontNode(FrontendNode):
         if field.name == 'unstructured_api_url':
             field.show = True
             field.advanced = False
+        if name == 'CustomKVLoader' and field.name == 'task_type':
+            field.options = ['task', 'logic-job']
+            field.value = 'logic-job'
+        if name == 'CustomKVLoader' and field.name == 'schemas':
+            field.field_type = 'str'
+            field.info = "please use ';' seperate"
+            field.is_list = False
 
 
 def build_pdf_semantic_loader_fields():

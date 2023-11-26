@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 
 export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): any {
     let timer = useRef<NodeJS.Timeout | null>();
@@ -25,4 +25,11 @@ export function useDebounce(func: any, wait: number, immediate: boolean, callbac
     }
     debounced.cancel = function () { timerCancel(); timer.current = null; };
     return useCallback(debounced, [wait, immediate, timerCancel, func]);
+}
+
+export function useHasReport(flow) {
+    return useMemo(() => {
+        // 如果有 VariableNode  inputnode 就属于
+        return !!flow?.data.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
+    }, [flow])
 }

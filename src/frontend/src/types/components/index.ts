@@ -93,6 +93,7 @@ export type FileComponentType = {
   fileTypes: Array<string>;
   onFileChange: (value: string) => void;
   editNode?: boolean;
+  isSSO?: boolean;
 };
 
 export type DisclosureComponentType = {

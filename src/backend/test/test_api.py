@@ -1,7 +1,6 @@
-from bisheng import load_flow_from_json
-
-
 def _test_python_code():
+    from bisheng import load_flow_from_json
+
     TWEAKS = {
         'PyPDFLoader-RJlDA': {},
         'InputFileNode-hikjJ': {
@@ -25,4 +24,34 @@ def _test_python_code():
     print(flow(inputs))
 
 
-_test_python_code()
+def _test_uns():
+    import base64
+    import requests
+
+    # 使用场景1： 文件到tokens
+    url = 'http://192.168.106.12:10001/v1/etl4llm/predict'
+
+    filename = '/Users/huangly/Downloads/合同(1).pdf'
+    b64_data = base64.b64encode(open(filename, 'rb').read()).decode()
+    filename_type = '合同(1).pdf'
+
+    inp = dict(
+        filename=filename_type,
+        b64_data=[b64_data],
+        mode='partition',
+        parameters={'start': 0, 'n': None})
+
+    resp = requests.post(url, json=inp).json()
+    print(resp)
+
+
+def test_input():
+    from bisheng_langchain.input_output import InputNode
+    param = {'input': [1]}
+    a = InputNode(**param)
+    print(a)
+
+
+# _test_python_code()
+# _test_uns()
+test_input()

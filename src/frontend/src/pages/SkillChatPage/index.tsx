@@ -1,20 +1,21 @@
 import { t } from "i18next";
 import _ from "lodash";
+import { Trash2 } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { bsconfirm } from "../../alerts/confirm";
 import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { deleteChatApi, getChatHistory, getChatsApi, getFlowFromDatabase, postBuildInit, postValidatePrompt, readOnlineFlows } from "../../controllers/API";
-import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
+import { Variable } from "../../controllers/API/flow";
 import { sendAllProps } from "../../types/api";
 import { ChatMessageType } from "../../types/chat";
 import { FlowType, NodeType } from "../../types/flow";
+import { useHasReport } from "../../util/hook";
 import { generateUUID, validateNode } from "../../utils";
 import SkillTemps from "../SkillPage/components/SkillTemps";
 import ChatPanne from "./components/ChatPanne";
-import { Trash2 } from "lucide-react";
-import { bsconfirm } from "../../alerts/confirm";
-// import ChatReportForm from "./components/ChatReportForm";
+import ChatReportForm from "./components/ChatReportForm";
 
 export default function SkillChatPage() {
     const [open, setOpen] = useState(false)
@@ -39,7 +40,7 @@ export default function SkillChatPage() {
         chating,
         stopState,
         stopClick,
-        uploadFile,
+        // uploadFile,
         setInputState,
         changeHistoryByScroll,
         chatHistory,
@@ -167,9 +168,9 @@ export default function SkillChatPage() {
                     onStopClick={stopClick}
                     onSendMsg={sendMsg}
                     onNextPageClick={loadNextPage}
-                    onUploadFile={uploadFile}
+                    // onUploadFile={uploadFile}
                 />
-                {/* {isReport && !chatHistory.length && <ChatReportForm flow={flow} onStart={sendReport} />} */}
+                {isReport && !chatHistory.length && <ChatReportForm flow={flow} onStart={sendReport} />}
             </div>}
         {/* 选择对话技能 */}
         <SkillTemps
@@ -337,8 +338,8 @@ const useWebsocketChat = (chatIdRef) => {
             });
     }
 
-    // 报表请求 TODO
-    const sendReport = (obj, str) => {
+    // 报表请求
+    const sendReport = (items: Variable[], str) => {
         let inputs = tabsState[flow.current.id].formKeysData.input_keys;
         const input = inputs.find((el: any) => !el.type)
         const inputKey = Object.keys(input)[0];
@@ -348,13 +349,31 @@ const useWebsocketChat = (chatIdRef) => {
             chatKey: inputKey
         })
 
-        addChatHistory({
-            isSend: false,
-            files: [{
-                file_name: '报表结果.docx',
-                file_url: 'http://192.168.2.15:3001/new.docx'
-            }]
-        })
+        const data = items.map(item => ({
+            id: item.nodeId,
+            name: item.name,
+            file_path: item.type === 'file' ? item.value : '',
+            value: item.type === 'file' ? '' : item.value
+        }))
+
+        sendAll({
+            ...flow.current.data,
+            inputs: {
+                ...input,
+                [inputKey]: str,
+                data
+            },
+            chatHistory,
+            name: flow.current.name,
+            description: flow.current.description,
+        });
+        // addChatHistory({
+        //     isSend: false,
+        //     files: [{
+        //         file_name: '报表结果.docx',
+        //         file_url: 'http://192.168.2.15:3001/new.docx'
+        //     }]
+        // })
     }
 
     // 发送ws
@@ -580,57 +599,57 @@ const useWebsocketChat = (chatIdRef) => {
     }, [tabsState, flow.current])
 
     // 上传文件
-    const uploadFile = () => {
-        const config = fileInputs?.[0]
-        if (!config) return
-        // 判断上传类型
-        const node = flow.current.data.nodes.find(el => el.id === config.id)
-        const accept = node.data.node.template.file_path.suffixes.join(',')
+    // const uploadFile = () => {
+    //     const config = fileInputs?.[0]
+    //     if (!config) return
+    //     // 判断上传类型
+    //     const node = flow.current.data.nodes.find(el => el.id === config.id)
+    //     const accept = node.data.node.template.file_path.suffixes.join(',')
 
-        var input = document.createElement('input');
-        input.type = 'file';
-        input.accept = accept;
-        input.style.display = 'none';
-        input.addEventListener('change', (e) => handleFileSelect(e, input));
-        document.body.appendChild(input);
-        input.click(); // 触发文件选择对话框
-    }
+    //     var input = document.createElement('input');
+    //     input.type = 'file';
+    //     input.accept = accept;
+    //     input.style.display = 'none';
+    //     input.addEventListener('change', (e) => handleFileSelect(e, input));
+    //     document.body.appendChild(input);
+    //     input.click(); // 触发文件选择对话框
+    // }
 
-    async function handleFileSelect(event, input) {
-        const config: any = fileInputs?.[0]
-        var file = event.target.files[0];
-        // 添加一条记录
-        addChatHistory({
-            isSend: true,
-            files: [{
-                file_name: file.name,
-                data: 'progress',
-                data_type: 'PDF'
-            }]
-        });
-        await checkReLinkWs()
-        setInputState({ lock: true, errorCode: '' });
-        uploadFileWithProgress(file, (count) => { }).then(data => {
-            setChatHistory((old) => {
-                let newChat = [...old];
-                newChat[newChat.length - 1].files[0].data = data ? '' : 'error'
-                return newChat;
-            })
+    // async function handleFileSelect(event, input) {
+    //     const config: any = fileInputs?.[0]
+    //     var file = event.target.files[0];
+    //     // 添加一条记录
+    //     addChatHistory({
+    //         isSend: true,
+    //         files: [{
+    //             file_name: file.name,
+    //             data: 'progress',
+    //             data_type: 'PDF'
+    //         }]
+    //     });
+    //     await checkReLinkWs()
+    //     setInputState({ lock: true, errorCode: '' });
+    //     uploadFileWithProgress(file, (count) => { }).then(data => {
+    //         setChatHistory((old) => {
+    //             let newChat = [...old];
+    //             newChat[newChat.length - 1].files[0].data = data ? '' : 'error'
+    //             return newChat;
+    //         })
 
-            if (!data) return setInputState({ lock: false, errorCode: '' });
-            // setFilePaths
-            sendAll({
-                ...flow.current.data,
-                id: config.id,
-                file_path: data.file_path,
-                inputs: { ...config, file_path: data.file_path },
-                chatHistory,
-                name: flow.current.name,
-                description: flow.current.description,
-            });
-            input.remove()
-        })
-    }
+    //         if (!data) return setInputState({ lock: false, errorCode: '' });
+    //         // setFilePaths
+    //         sendAll({
+    //             ...flow.current.data,
+    //             id: config.id,
+    //             file_path: data.file_path,
+    //             inputs: { ...config, file_path: data.file_path },
+    //             chatHistory,
+    //             name: flow.current.name,
+    //             description: flow.current.description,
+    //         });
+    //         input.remove()
+    //     })
+    // }
 
     const closeWs = () => {
         // close prev connection
@@ -695,10 +714,7 @@ const useWebsocketChat = (chatIdRef) => {
     }, [flow.current])
 
     // 是否报表表单
-    const isReport = useMemo(() => {
-        // 如果有 VariableNode  inputnode 就属于
-        return !!flow.current?.data.nodes.find(node => ["VariableNode", "InputFileNode1"].includes(node.data.type))
-    }, [flow.current])
+    const isReport = useHasReport(flow.current)
 
     // 停止状态
     const [isStop, setIsStop] = useState(true)
@@ -709,7 +725,7 @@ const useWebsocketChat = (chatIdRef) => {
         inputState,
         fileInputs,
         chatHistory,
-        uploadFile,
+        // uploadFile,
         setInputState,
         async initChat(_flow) {
             closeWs()

@@ -9,6 +9,7 @@ from bisheng.chat.manager import ChatManager
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageRead
+from bisheng.database.models.user import User
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketException, status
@@ -102,10 +103,12 @@ async def chat(flow_id: str,
     Authorize.jwt_required(auth_from='websocket', websocket=websocket)
     payload = json.loads(Authorize.get_jwt_subject())
     user_id = payload.get('user_id')
+    db_user = User(user_id=user_id, user_name='')
     """Websocket endpoint for chat."""
-    if type and type == 'L1':
+    if chat_id:
         with next(get_session()) as session:
             db_flow = session.get(Flow, flow_id)
+            db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
         if not db_flow:
             await websocket.accept()
             message = '该技能已被删除'
@@ -132,7 +135,7 @@ async def chat(flow_id: str,
                                     artifacts={},
                                     process_file=process_file,
                                     flow_id=UUID(flow_id).hex,
-                                    chat_id=chat_id)
+                                    chat_id=chat_id, user_name=db_user.user_name)
         langchain_object = graph.build()
         for node in langchain_object:
             key_node = get_cache_key(flow_id, chat_id, node.id)
