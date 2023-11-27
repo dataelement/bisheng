@@ -3,7 +3,7 @@ import { useEffect } from "react"
 
 export default function Word({ data }) {
     const wordUrl = 'http://192.168.106.120:8701'
-    const backUrl = 'http://192.168.106.120:7860/api/v1/report/callback' // 后端服务地址
+    const backUrl = location.origin + '/api/v1/report/callback' // 后端服务地址
 
     const editorConfig = {
         // 编辑器宽度

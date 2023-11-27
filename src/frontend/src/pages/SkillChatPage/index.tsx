@@ -11,7 +11,7 @@ import { Variable } from "../../controllers/API/flow";
 import { sendAllProps } from "../../types/api";
 import { ChatMessageType } from "../../types/chat";
 import { FlowType, NodeType } from "../../types/flow";
-import { useHasReport } from "../../util/hook";
+import { useHasForm, useHasReport } from "../../util/hook";
 import { generateUUID, validateNode } from "../../utils";
 import SkillTemps from "../SkillPage/components/SkillTemps";
 import ChatPanne from "./components/ChatPanne";
@@ -33,6 +33,7 @@ export default function SkillChatPage() {
     const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat } = useChatList()
     const chatIdRef = useRef('')
     const {
+        isForm,
         isReport,
         isRoom,
         inputState,
@@ -156,6 +157,7 @@ export default function SkillChatPage() {
                 <ChatPanne
                     ref={inputRef}
                     isRoom={isRoom}
+                    // isForm={isForm}
                     isReport={isReport}
                     fileInputs={fileInputs}
                     inputState={inputState}
@@ -168,9 +170,9 @@ export default function SkillChatPage() {
                     onStopClick={stopClick}
                     onSendMsg={sendMsg}
                     onNextPageClick={loadNextPage}
-                    // onUploadFile={uploadFile}
+                // onUploadFile={uploadFile}
                 />
-                {isReport && !chatHistory.length && <ChatReportForm flow={flow} onStart={sendReport} />}
+                {isForm && !chatHistory.length && <ChatReportForm flow={flow} onStart={sendReport} />}
             </div>}
         {/* 选择对话技能 */}
         <SkillTemps
@@ -714,12 +716,14 @@ const useWebsocketChat = (chatIdRef) => {
     }, [flow.current])
 
     // 是否报表表单
+    const isForm = useHasForm(flow.current)
     const isReport = useHasReport(flow.current)
 
     // 停止状态
     const [isStop, setIsStop] = useState(true)
     return {
         isRoom,
+        isForm,
         isReport,
         chating: begin,
         inputState,

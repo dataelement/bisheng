@@ -1116,18 +1116,19 @@ export const copyText = (text: string) => {
   }
 
   const areaDom = document.createElement("textarea");
-  return new Promise((res) => {
-    areaDom.value = text
-    document.body.appendChild(areaDom);
+  // 设置样式使其不在屏幕上显示
+  areaDom.style.position = 'absolute';
+  areaDom.style.left = '-9999px';
+  areaDom.value = text;
 
-    const range = document.createRange();
-    range.selectNode(areaDom);
-    window.getSelection().removeAllRanges();
-    window.getSelection().addRange(range);
+  document.body.appendChild(areaDom);
+  areaDom.focus();
+  areaDom.select();
+
+  return new Promise((res) => {
     document.execCommand('copy');
-    res(text)
+    res(text);
   }).then(() => {
-    window.getSelection().removeAllRanges();
     document.body.removeChild(areaDom);
   })
 };

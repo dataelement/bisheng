@@ -13,7 +13,7 @@ import { TabsContext } from "../../contexts/tabsContext";
 import { userContext } from "../../contexts/userContext";
 import { getFlowFromDatabase } from "../../controllers/API";
 import FormSet from "./components/FormSet";
-import { useHasReport } from "../../util/hook";
+import { useHasForm, useHasReport } from "../../util/hook";
 
 export default function l2Edit() {
 
@@ -108,8 +108,8 @@ export default function l2Edit() {
         contentDom.style.maxHeight = contentDom.clientHeight ? 0 : '999px'
     }
 
-    // isreport
-    const isReport = useHasReport(flow)
+    // isForm
+    const isForm = useHasForm(flow)
 
     return <div className="relative box-border">
         <div className="p-6  pb-24 h-screen overflow-y-auto">
@@ -132,14 +132,15 @@ export default function l2Edit() {
                     <p className="text-center text-gray-400 mt-4 cursor-pointer flex justify-center" onClick={showContent}>{t('skills.basicInfo')}
                         <ChevronDown />
                     </p>
-                    <div className="grid gap-4 overflow-hidden transition-all">
-                        <div className="grid grid-cols-4 items-center gap-4">
+                    {/* base form */}
+                    <div className="w-[68%] mx-auto overflow-hidden transition-all">
+                        <div className="mt-4">
                             <Label htmlFor="name" className="text-right">{t('skills.skillName')}</Label>
-                            <Input ref={nameRef} placeholder={t('skills.skillName')} className={`col-span-2 ${error.name && 'border-red-400'}`} />
+                            <Input ref={nameRef} placeholder={t('skills.skillName')} className={`col-span-2 mt-2 ${error.name && 'border-red-400'}`} />
                         </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
+                        <div className="mt-4">
                             <Label htmlFor="username" className="text-right">{t('skills.description')}</Label>
-                            <Textarea ref={descRef} id="name" placeholder={t('skills.description')} className={`col-span-2 ${error.desc && 'border-red-400'}`} />
+                            <Textarea ref={descRef} id="name" placeholder={t('skills.description')} className={`col-span-2 mt-2 ${error.desc && 'border-red-400'}`} />
                         </div>
                     </div>
                     {
@@ -156,8 +157,9 @@ export default function l2Edit() {
                                             </span>
                                         </div>
                                         {
+                                            // 自定义组件
                                             Object.keys(data.node.template).map(k => (
-                                                data.node.template[k].l2 && <div className="grid grid-cols-4 items-center gap-4" key={k}>
+                                                data.node.template[k].l2 && <div className="w-[68%] mx-auto mt-4" key={k}>
                                                     <Label htmlFor="name" className="text-right">
                                                         {data.node.template[k].l2_name || data.node.template[k].name}
                                                     </Label>
@@ -171,7 +173,7 @@ export default function l2Edit() {
                         </div>
                     }
                     {/* 表单设置 */}
-                    {isReport && <FormSet ref={formRef} id={id}></FormSet>}
+                    {isForm && <FormSet ref={formRef} id={id}></FormSet>}
                 </div>
             </div>
         </div>
