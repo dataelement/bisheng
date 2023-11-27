@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 from appdirs import user_cache_dir
+from bisheng.settings import settings
+from bisheng.utils.minio_client import mino_client, tmp_bucket
 
 CACHE: Dict[str, Any] = {}
 
@@ -138,7 +140,7 @@ def save_binary_file(content: str, file_name: str, accepted_types: list[str]) ->
 
 
 @create_cache_folder
-def save_uploaded_file(file, folder_name):
+def save_uploaded_file(file, folder_name, file_name):
     """
     Save an uploaded file to the specified folder with a hash of its content as the file name.
 
@@ -166,15 +168,21 @@ def save_uploaded_file(file, folder_name):
 
     # Use the hex digest of the hash as the file name
     hex_dig = sha256_hash.hexdigest()
-    file_name = hex_dig
+    md5_name = hex_dig
 
     # Reset the file cursor to the beginning of the file
     file.seek(0)
 
     # Save the file with the hash as its name
-    file_path = folder_path / file_name
-    with open(file_path, 'wb') as new_file:
-        while chunk := file.read(8192):
-            new_file.write(chunk)
+    if settings.get_knowledge().get('minio'):
+        # 存储oss
+        file_byte = file.read()
+        mino_client.upload_tmp(file_name, file_byte)
+        file_path = mino_client.get_share_link(file_name, tmp_bucket)
+    else:
+        file_path = folder_path / md5_name
+        with open(file_path, 'wb') as new_file:
+            while chunk := file.read(8192):
+                new_file.write(chunk)
 
     return file_path

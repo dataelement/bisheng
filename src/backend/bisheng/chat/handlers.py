@@ -7,7 +7,10 @@ from bisheng.chat.utils import extract_answer_keys, process_graph
 from bisheng.database.base import get_session
 from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk
+from bisheng.database.models.report import Report
+from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
+from bisheng.utils.minio_client import mino_client
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.chains.autogen.auto_gen import AutoGenChain
 from langchain.docstore.document import Document
@@ -26,14 +29,17 @@ class Handler:
                             client_id: str, chat_id: str,
                             action: str, payload: dict, user_id):
         with session.cache_manager.set_client_id(client_id, chat_id):
+            if not action:
+                action = 'default'
             if action not in self.handler_dict:
                 raise Exception(f'unknown action {action}')
+
             await self.handler_dict[action](session, client_id, chat_id, payload, user_id)
 
     async def process_report(self, session: ChatManager,
                              client_id: str, chat_id: str,
                              payload: Dict, user_id=None):
-        chat_inputs = payload.pop('inputs', '')
+        chat_inputs = payload.pop('inputs', {})
         chat_inputs.pop('data') if 'data' in chat_inputs else {}
         chat_inputs.pop('id') if 'id' in chat_inputs else ''
         key = get_cache_key(client_id, chat_id)
@@ -42,20 +48,40 @@ class Handler:
             for k, value in artifacts.items():
                 if k in chat_inputs:
                     chat_inputs[k] = value
-        chat_inputs = ChatMessage(message=chat_inputs, category='question',
-                                  type='bot', user_id=user_id,)
-        session.chat_history.add_message(client_id, chat_id, chat_inputs)
+        chat_message = ChatMessage(message=chat_inputs, category='question', type='bot',
+                                   user_id=user_id)
+        session.chat_history.add_message(client_id, chat_id, chat_message)
+
+        # process message
+        chat_inputs = {'inputs': chat_inputs, 'is_begin': False}
+        result = await self.process_message(session, client_id, chat_id, chat_inputs, user_id)
+        # build report
+        db_session = next(get_session())
+        template = db_session.exec(select(Report).where(
+            Report.flow_id == client_id).order_by(Report.id.desc())).first()
+        if not template:
+            logger.error('template not support')
+            return
         start_resp = ChatResponse(type='start', user_id=user_id)
         await session.send_json(client_id, chat_id, start_resp)
+        template_muban = mino_client.get_share_link(template.object_name)
+        test_replace_string(template_muban, result, 'report.docx')
+        file = mino_client.get_share_link('report.docx')
+        response = ChatResponse(type='end', intermediate_steps=json.dumps(result),
+                                files=[{'file_url': file, 'file_name': 'report.docx'}],
+                                user_id=user_id)
+        await session.send_json(client_id, chat_id, response)
+        close_resp = ChatResponse(type='close', category='system', user_id=user_id)
+        await session.send_json(client_id, chat_id, close_resp)
 
     async def process_message(self, session: ChatManager,
                               client_id: str, chat_id: str,
                               payload: Dict, user_id=None):
         # Process the graph data and chat message
-        chat_inputs = payload.pop('inputs', '')
-        node_id = chat_inputs.pop('id') if 'id' in chat_inputs else ''
+        chat_inputs = payload.pop('inputs', {})
+        chat_inputs.pop('id') if 'id' in chat_inputs else ''
         is_begin = payload.get('is_begin', True)
-        key = get_cache_key(client_id, chat_id, node_id)
+        key = get_cache_key(client_id, chat_id)
 
         artifacts = session.in_memory_cache.get(key + '_artifacts')
         if artifacts:
@@ -67,8 +93,6 @@ class Handler:
         if is_begin:
             # 从file auto trigger process_message， the question already saved
             session.chat_history.add_message(client_id, chat_id, chat_inputs)
-            start_resp = ChatResponse(type='begin', user_id=user_id)
-            await session.send_json(client_id, chat_id, start_resp)
         start_resp = ChatResponse(type='start', user_id=user_id)
         await session.send_json(client_id, chat_id, start_resp)
 
@@ -102,7 +126,7 @@ class Handler:
         # Send a response back to the frontend, if needed
         intermediate_steps = intermediate_steps or ''
         # history = self.chat_history.get_history(client_id, chat_id, filter_messages=False)
-        await self.intermediate_logs(client_id, chat_id, user_id, intermediate_steps)
+        await self.intermediate_logs(session, client_id, chat_id, user_id, intermediate_steps)
         source = True if source_doucment and chat_id else False
         if source:
             for doc in source_doucment:
@@ -118,35 +142,38 @@ class Handler:
                                     category='divider', user_id=user_id)
             await session.send_json(client_id, chat_id, response)
         else:
-            start_resp.category = 'answer'
-            await session.send_json(client_id, chat_id, start_resp)
-            response = ChatResponse(message=result if is_begin else '', type='end',
-                                    intermediate_steps=result if not is_begin else '',
-                                    category='answer', user_id=user_id,
-                                    source=source)
-            await session.send_json(client_id, chat_id, response)
+            # 正常
+            if is_begin:
+                start_resp.category = 'answer'
+                await session.send_json(client_id, chat_id, start_resp)
+                response = ChatResponse(message=result, type='end',
+                                        category='answer', user_id=user_id,
+                                        source=source)
+                await session.send_json(client_id, chat_id, response)
 
         # 循环结束
-        close_resp = ChatResponse(type='close', user_id=user_id)
-        await session.send_json(client_id, chat_id, close_resp)
+        if is_begin:
+            close_resp = ChatResponse(type='close', user_id=user_id)
+            await session.send_json(client_id, chat_id, close_resp)
 
         if source:
             # 处理召回的chunk
-            await self.process_source_document(source_doucment, chat_id, response.message_id,
-                                               result,)
+            await self.process_source_document(source_doucment, chat_id,
+                                               response.message_id, result,)
         return result
 
     async def process_file(self, session: ChatManager,
                            client_id: str, chat_id: str,
                            payload: dict, user_id: int):
-        _, file_name = payload['inputs']['data'][0]['vaule'].split('_', 1)
+        file_name = payload['inputs']['data'][0]['value']
         batch_question = payload['inputs']['questions']
         # 如果L3
         file = ChatMessage(is_bot=False,
                            files=[{'file_name': file_name}],
                            type='end', user_id=user_id)
         session.chat_history.add_message(client_id, chat_id, file)
-        start_resp = ChatResponse(type='begin', category='system', user_id=user_id)
+        start_resp = ChatResponse(type='start', category='system', user_id=user_id)
+        await session.send_json(client_id, chat_id, start_resp)
 
         if not batch_question:
             # no question
@@ -158,9 +185,8 @@ class Handler:
             await session.send_json(client_id, chat_id, start_resp)
             return
 
-        step_resp = ChatResponse(type='end',
-                                 intermediate_steps='File parsing complete, analysis starting',
-                                 category='system', user_id=user_id)
+        step_resp = ChatResponse(intermediate_steps='File parsing complete, analysis starting',
+                                 type='end', category='system', user_id=user_id)
         await session.send_json(client_id, chat_id, step_resp)
 
         key = get_cache_key(client_id, chat_id)
@@ -171,7 +197,7 @@ class Handler:
         for question in batch_question:
             if not question:
                 continue
-            payload = {'inputs': {input_key: question}}
+            payload = {'inputs': {input_key: question}, 'is_begin': False}
             start_resp.category == 'question'
             await session.send_json(client_id, chat_id, start_resp)
             step_resp = ChatResponse(type='end',
@@ -180,6 +206,11 @@ class Handler:
                                      user_id=user_id)
             await session.send_json(client_id, chat_id, step_resp)
             result = await self.process_message(session, client_id, chat_id, payload, user_id)
+            response_step = ChatResponse(intermediate_steps=result, type='start', category='answer',
+                                         user_id=user_id)
+            await session.send_json(client_id, chat_id, response_step)
+            response_step.type = 'end'
+            await session.send_json(client_id, chat_id, response_step)
             report = f"""{report}### {question} \n {result} \n """
 
         start_resp.category = 'report'
@@ -195,7 +226,7 @@ class Handler:
         key = get_cache_key(client_id, chat_id)
         langchain_object = session.in_memory_cache.get(key)
         logger.info(f'reciever_human_interactive langchain={langchain_object}')
-        action = payload['inputs'].get('action')
+        action = payload.get('action')
         if action.lower() == 'stop':
             if hasattr(langchain_object, 'stop'):
                 logger.info('reciever_human_interactive langchain_objct')

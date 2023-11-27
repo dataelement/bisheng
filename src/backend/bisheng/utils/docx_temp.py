@@ -1,3 +1,11 @@
+import os
+import tempfile
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+import requests
+from bisheng.utils.minio_client import mino_client
+from bisheng.utils.util import _is_valid_url
 from docx import Document
 
 
@@ -22,7 +30,7 @@ class DocxTemplateRender(object):
     def __init__(self, filepath):
         self.filepath = filepath
 
-    def render(self, template_def, output_file):
+    def render(self, template_def):
         doc = Document(self.filepath)
         # Logics:
         # key_text: "yy{{请输入公司1的完整名称}}xxx""
@@ -96,23 +104,40 @@ class DocxTemplateRender(object):
                     print('new paras:', [p.text])
                     print('<<<<<<<<<<<<<<<<\n\n')
 
-        doc.save(output_file)
+        return doc
 
 
-def test_replace_string():
-    template_def = [
-        ['{{请输入公司的完整名称}}', '北京数据项素智能科技有限公司'],
-        ['{{召开会议地点}}', '会议室1'],
-        ['{{Inpunode_Inputnode-dfsdf5_召开会议日期}}', '2023.11.20'],
-        ['{{本次会议出席人}}', 'Yao,Shang,Qin'],
-        ['{{会议召集人.}}', 'Qin'],
-        ['{{会议主持人.}}', 'Qin'],
-        ['{{请依次输入议案的名称}}', '议案1,议案2'],
-    ]
-    input_file = './examples/docs/1. 股东会-会议通知.docx'
-    output_file = './data/股东会-会议通知_temp1.docx'
-    doc = DocxTemplateRender(input_file)
-    doc.render(template_def, output_file)
+def test_replace_string(template_file, kv_dict: dict, file_name: str):
+    # If the file is a web path, download it to a temporary file, and use that
+    if not os.path.isfile(template_file) and _is_valid_url(template_file):
+        r = requests.get(template_file)
 
+        if r.status_code != 200:
+            raise ValueError(
+                'Check the url of your file; returned status code %s'
+                % r.status_code
+            )
 
-test_replace_string()
+        temp_dir = tempfile.TemporaryDirectory()
+        temp_file = Path(temp_dir.name) / unquote(urlparse(template_file
+                                                           ).path.split('/')[-1])
+        with open(temp_file, mode='wb') as f:
+            f.write(r.content)
+
+        template_file = temp_file
+    elif not os.path.isfile(template_file):
+        raise ValueError('File path %s is not a valid file or url' % template_file)
+
+    template_dict = []
+    for k, v in kv_dict.items():
+        template_dict.append([k, v])
+
+    doc = DocxTemplateRender(str(template_file))
+    output = doc.render(template_dict)
+
+    temp_dir = tempfile.TemporaryDirectory()
+    temp_file = Path(temp_dir.name) / 'report.docx'
+    output.save(temp_file)
+    mino_client.upload_minio(file_name, temp_file)
+
+    return file_name

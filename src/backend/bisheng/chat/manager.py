@@ -1,7 +1,9 @@
 import asyncio
 import json
 from collections import defaultdict
+from email.utils import unquote
 from typing import Any, Dict, List
+from urllib.parse import urlparse
 from uuid import UUID
 
 from bisheng.api.utils import build_flow_no_yield
@@ -10,7 +12,7 @@ from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
 from bisheng.cache.manager import Subject
 from bisheng.database.base import get_session
-from bisheng.database.models.flow import Flow
+from bisheng.database.models.user import User
 from bisheng.processing.process import process_tweaks
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
@@ -141,8 +143,8 @@ class ChatManager:
         self.in_memory_cache.set(client_id, langchain_object)
         return client_id in self.in_memory_cache
 
-    async def handle_websocket(self, client_id: str, chat_id: str,
-                               websocket: WebSocket, user_id: int):
+    async def handle_websocket(self, client_id: str, chat_id: str, websocket: WebSocket,
+                               user_id: int, gragh_data: dict = None,):
         await self.connect(client_id, chat_id, websocket)
 
         try:
@@ -155,77 +157,52 @@ class ChatManager:
                 if 'clear_history' in payload:
                     self.chat_history.history[client_id] = []
                     continue
-
                 if 'clear_cache' in payload:
                     self.in_memory_cache
 
                 # set start
-                action = 'default'
                 from bisheng.chat.handlers import Handler
                 is_begin = True
                 if 'action' in payload:
                     # autogen continue last session,
-                    is_begin = False
-                    action = 'autogen'
-                    asyncio.create_task(Handler().dispatch_task(self, client_id,
-                                                                chat_id, action,
-                                                                payload, user_id))
+                    action, is_begin = 'autogen', False
+
                 if is_begin:
                     start_resp = ChatResponse(type='begin', category='system', user_id=user_id)
                     await self.send_json(client_id, chat_id, start_resp)
-                    start_resp.type = 'start'
-                    await self.send_json(client_id, chat_id, start_resp)
-
                 # should input data
+                langchain_obj_key = get_cache_key(client_id, chat_id)
                 if 'inputs' in payload and 'data' in payload['inputs']:
                     node_data = payload['inputs']['data']
-                    tweak = {}
-                    for nd in node_data:
-                        if nd.get('id') not in tweak:
-                            tweak[nd.get('id')] = {}
-                        if 'InputFile' in nd.get('id'):
-                            file_path, file_name = nd.get('value').split('_', 1)
-                            tweak[nd.get('id')] = {'file_path': file_path, 'value': file_name}
-                        else:
-                            tweak[nd.get('id')].update({nd.get('name'): nd.get('value')})
+                    gragh_data = self.refresh_graph_data(gragh_data, node_data)
+                    self.set_cache(langchain_obj_key, None)  # rebuild object
 
-                    """upload file to make flow work"""
-                    db_flow = next(get_session()).get(Flow, client_id)
-                    graph_data = process_tweaks(db_flow.data, tweaks=tweak)
-
-                    # build to activate node
-                    artifacts = {}
+                batch_question = []
+                if not self.in_memory_cache.get(langchain_obj_key):
                     try:
-                        graph = build_flow_no_yield(graph_data, artifacts, True,
-                                                    UUID(client_id).hex, chat_id)
+                        gragh = self.init_langchain_object(client_id, chat_id, user_id, gragh_data)
+                        if 'data' in payload['inputs']:
+                            action = 'auto_file'   # has input data, default is file process
+                        for node in gragh.nodes:
+                            if node.vertex_type == 'Report':
+                                action = 'report'
+                                break
+                            if node.vertex_type == 'InputNode':
+                                # preset question  only use for auto_file
+                                batch_question = node._built_object
                     except Exception as e:
                         logger.exception(e)
-                        step_resp = ChatResponse(type='end',
-                                                 intermediate_steps='File is parsed fail',
-                                                 category='system', user_id=user_id)
+                        step_resp = ChatResponse(intermediate_steps='input data is parsed fail',
+                                                 type='end', category='system', user_id=user_id)
                         await self.send_json(client_id, chat_id, step_resp)
                         start_resp.type = 'close'
                         await self.send_json(client_id, chat_id, start_resp)
                         # socket close?
                         return
 
-                    # 更新langchainObject
-                    langchain_object = graph.build()
-                    batch_question = {}
-                    for node in langchain_object:
-                        key_node = get_cache_key(client_id, chat_id, node.id)
-                        self.set_cache(key_node, node._built_object)
-                        self.set_cache(key_node + '_artifacts', artifacts)
-                        if node.base_type != 'inputOutput':
-                            self.set_cache(get_cache_key(client_id, chat_id), node._built_object)
-                            if node.vetext_type == 'Report':
-                                action = 'report'
-                            else:
-                                action = 'auto_file'
-                        else:
-                            batch_question = node._built_object
                 if action == 'auto_file':
                     payload['inputs']['questions'] = batch_question
+
                 asyncio.create_task(Handler().dispatch_task(self, client_id, chat_id, action,
                                                             payload, user_id))
 
@@ -240,12 +217,47 @@ class ChatManager:
             )
         finally:
             try:
-                await self.close_connection(
-                    client_id=client_id,
-                    chat_id=chat_id,
-                    code=status.WS_1000_NORMAL_CLOSURE,
-                    reason='Client disconnected',
-                )
+                await self.close_connection(client_id=client_id, chat_id=chat_id,
+                                            code=status.WS_1000_NORMAL_CLOSURE,
+                                            reason='Client disconnected')
             except Exception as e:
                 logger.error(e)
             self.disconnect(client_id, chat_id)
+
+    def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
+        session = next(get_session())
+        db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
+        artifacts = {}
+        graph = build_flow_no_yield(graph_data=graph_data,
+                                    artifacts=artifacts, process_file=True,
+                                    flow_id=UUID(flow_id).hex,
+                                    chat_id=chat_id, user_name=db_user.user_name)
+        langchain_object = graph.build()
+        for node in langchain_object:
+            # 只存储chain
+            if node.base_type == 'inputOutput' and node.vertex_type != 'Report':
+                continue
+            key_node = get_cache_key(flow_id, chat_id)
+            self.set_cache(key_node, node._built_object)
+            self.set_cache(key_node + '_artifacts', artifacts)
+        return graph
+
+    def refresh_graph_data(self, graph_data: dict, node_data: List[dict]):
+        tweak = {}
+        for nd in node_data:
+            if nd.get('id') not in tweak:
+                tweak[nd.get('id')] = {}
+            if 'InputFile' in nd.get('id'):
+                file_path = nd.get('file_path')
+                url_path = urlparse(file_path)
+                if url_path.netloc:
+                    file_name = unquote(url_path.path.split('/')[-1])
+                else:
+                    file_path, file_name = file_path.split('_', 1)
+                nd['value'] = file_name
+                tweak[nd.get('id')] = {'file_path': file_path, 'value': file_name}
+            else:
+                tweak[nd.get('id')].update({nd.get('name'): nd.get('value')})
+
+        """upload file to make flow work"""
+        return process_tweaks(graph_data, tweaks=tweak)

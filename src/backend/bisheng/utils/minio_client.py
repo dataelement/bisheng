@@ -5,6 +5,7 @@ import minio
 from bisheng.settings import settings
 
 bucket = 'bisheng'
+tmp_bucket = 'tmp-dir'
 
 
 class MinioClient():
@@ -64,27 +65,27 @@ class MinioClient():
             return ''
 
     def upload_tmp(self, object_name, data):
-        bucket_name = 'tmp_dir'
-        self.mkdir(bucket_name)
+        self.mkdir(tmp_bucket)
         from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
         from minio.commonconfig import Filter
 
-        if self.minio_client and not self.minio_client.get_bucket_lifecycle(bucket_name):
+        if self.minio_client and not self.minio_client.get_bucket_lifecycle(tmp_bucket):
             lifecycle_conf = LifecycleConfig(
                 [
                     Rule(
-                        'ENABLED',
+                        'Enabled',
                         rule_filter=Filter(prefix='documents/'),
                         rule_id='rule1',
                         expiration=Expiration(days=1),
                     ),
                 ],
             )
-            self.minio_client.set_bucket_lifecycle(bucket_name, lifecycle_conf)
+            self.minio_client.set_bucket_lifecycle(tmp_bucket, lifecycle_conf)
 
         if self.minio_client:
-            self.minio_client.put_object(bucket_name=bucket_name,
-                                         object_name=object_name, data=data,)
+            self.minio_client.put_object(bucket_name=tmp_bucket,
+                                         object_name=object_name, data=io.BytesIO(data),
+                                         length=len(data))
 
     def delete_minio(self, object_name: str):
         if self.minio_client:
@@ -94,3 +95,6 @@ class MinioClient():
         if self.minio_client:
             if not self.minio_client.bucket_exists(bucket):
                 self.minio_client.make_bucket(bucket)
+
+
+mino_client = MinioClient()
