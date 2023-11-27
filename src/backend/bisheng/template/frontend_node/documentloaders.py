@@ -181,6 +181,68 @@ class DocumentLoaderFrontNode(FrontendNode):
                     advanced=False,
                 ))
             self.template.add_field(self.file_path_templates[self.template.type_name])
+        elif self.template.type_name in {'CustomKVLoader'}:
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='schemas',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='elm_api_base_url',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='elm_api_key',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='elem_server_id',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='task_type',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='schemas',
+                    value='',
+                    display_name='schemas',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='schemas',
+                    value='',
+                    display_name='schemas',
+                    advanced=False,
+                ))
+            self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in self.file_path_templates:
             self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in {

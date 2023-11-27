@@ -3,6 +3,7 @@ import inspect
 import re
 from functools import wraps
 from typing import Dict, Optional
+from urllib.parse import urlparse
 
 from bisheng.template.frontend_node.constants import FORCE_SHOW_FIELDS
 from bisheng.utils import constants
@@ -326,3 +327,9 @@ def sync_to_async(func):
 
 def get_cache_key(flow_id: str, chat_id: str, vertex_id: str = None):
     return f'{flow_id}_{chat_id}_{vertex_id}'
+
+
+def _is_valid_url(url: str) -> bool:
+    """Check if the url is valid."""
+    parsed = urlparse(url)
+    return bool(parsed.netloc) and bool(parsed.scheme)

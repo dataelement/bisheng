@@ -17,7 +17,7 @@ knowledges: # 知识库相关配置
     #   elasticsearch_url: ''
     #   ssl_verify: "{'ca_certs': False, 'basic_auth': ('elastic', 'password'), 'verify_certs': False}"
   # minio: # 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储
-  #   SCHEMA: "https"
+  #   SCHEMA: true
   #   CERT_CHECK: false
   #   MINIO_ENDPOINT: ""
   #   MINIO_SHAREPOIN: ""

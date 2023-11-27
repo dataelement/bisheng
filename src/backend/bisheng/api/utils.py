@@ -86,14 +86,14 @@ def build_flow(graph_data: dict,
             }
             yield str(StreamData(event='log', data=log_dict))
             # # 如果存在文件，当前不操作文件，避免重复操作
-            if not process_file and chat_id is not None:
+            if not process_file and vertex.base_type == 'documentloaders':
                 template_dict = {
                     key: value
                     for key, value in vertex.data['node']['template'].items()
                     if isinstance(value, dict)
                 }
                 for key, value in template_dict.items():
-                    if value.get('type') == 'file':
+                    if value.get('type') == 'fileNode':
                         # 过滤掉文件
                         vertex.params[key] = ''
 

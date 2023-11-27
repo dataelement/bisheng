@@ -125,8 +125,9 @@ async def process_flow(
 async def create_upload_file(file: UploadFile, flow_id: str):
     # Cache file
     try:
-        file_path = save_uploaded_file(file.file, folder_name=flow_id)
-
+        file_path = save_uploaded_file(file.file, folder_name=flow_id, file_name=file.filename)
+        if not isinstance(file_path, str):
+            file_path = str(file_path)
         return UploadFileResponse(
             flowId=flow_id,
             file_path=file_path,

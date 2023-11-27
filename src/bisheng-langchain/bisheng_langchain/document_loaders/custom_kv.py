@@ -8,8 +8,8 @@ import re
 import tempfile
 from pathlib import Path
 from time import sleep
-from typing import List, Optional, Set, Tuple, Union
-from urllib.parse import urlparse
+from typing import List, Optional, Tuple, Union
+from urllib.parse import quote_plus, unquote, urlparse
 
 import cv2
 import fitz
@@ -17,7 +17,6 @@ import numpy as np
 import requests
 from langchain.docstore.document import Document
 from langchain.document_loaders.base import BaseLoader
-from langchain.load.serializable import Serializable
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -50,15 +49,9 @@ def transpdf2png(pdf_file):
     return pdf_images
 
 
-class CustomKVLoader(BaseLoader, Serializable):
+class CustomKVLoader(BaseLoader):
     """Extract key-value from pdf or image.
     """
-    elm_api_base_url: str
-    elm_api_key: str
-    elem_server_id: str
-    task_type: str
-    schemas: Set[str]
-
     def __init__(self, file_path:str,
                  elm_api_base_url: str,
                  elm_api_key: str,
@@ -89,7 +82,8 @@ class CustomKVLoader(BaseLoader, Serializable):
                 )
 
             self.temp_dir = tempfile.TemporaryDirectory()
-            temp_file = Path(self.temp_dir.name) / 'tmp.pdf'
+            temp_file = Path(self.temp_dir.name) / unquote(urlparse(self.file_path
+                                                                    ).path.split('/')[-1])
             with open(temp_file, mode='wb') as f:
                 f.write(r.content)
             self.file_path = str(temp_file)
@@ -125,7 +119,10 @@ class CustomKVLoader(BaseLoader, Serializable):
 
         resp = requests.post(url=url, data=body, files=file, headers=self.headers)
         if resp.status_code == 200:
-            task_id = resp.json.get('task_id')
+            task_id = resp.json().get('data').get('task_id')
+            if not task_id:
+                logger.error(f'task_create_fail res={resp.text}')
+                return
             # get status
             status_url = url + f'/status?task_id={task_id}'
             count = 0
@@ -139,16 +136,20 @@ class CustomKVLoader(BaseLoader, Serializable):
             # get result
             job_id = 'job_id' if self.task_type == 'logic-job' else 'task_id'
             match = re.match(r'^(?:https?:\/\/)?(?:www\.)?([^\/\n]+)', self.elm_api_base_url)
-            host = match.group()
-            result_url = url + f'/result?{job_id}={task_id}&detail_url={host}/logic-job-detail/{task_id}'
+            detail_url = quote_plus(match.group()+f'/logic-job-detail/{task_id}')
+            result_url = url + f'/result?{job_id}={task_id}&detail_url={detail_url}'
+            result = requests.get(result_url, headers=self.headers).json()
             result = requests.get(result_url, headers=self.headers).json()
             # only for independent key
+            document_result = {}
             try:
-                independent = result.get('data').get('result').get('independent_list')
-                for element in independent:
-                    if element.get('element_name') in self.schemas:
-                        result[element.get('element_name')] = [el.get('words')
-                                                                for el in element.get('entity_list')]
+                file_reuslt = result.get('data')
+                for result in file_reuslt:
+                    independent = result.get('result').get('independent_list')
+                    for element in independent:
+                        if element.get('element_name') in self.schemas:
+                            document_result[element.get('element_name')] = [el.get('words')
+                                                                    for el in element.get('entity_list')]
             except Exception as e:
                 logger.error(f'task_result_error scene_id={self.elem_server_id} res={result} except={str(e)}')
                 raise Exception('custom_kv parse_error')

@@ -116,7 +116,7 @@ class Report(Chain):
                     chain_outputs, color=color_mapping[str(i)], end='\n', verbose=verbose
                 )
             # variables
-            if self.variables:
+            if self.variables and self.variables[0]:
                 for name, value in self.variables:
                     outputs.update({'var_'+name: value})
         return {self.output_key: outputs, self.input_key: self.report_name}
@@ -157,7 +157,7 @@ class Report(Chain):
             )
 
         # variables
-        if self.variables:
+        if self.variables and self.variables[0]:
             for name, value in self.variables:
                 outputs.update({'var_'+name: value})
 
