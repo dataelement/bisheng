@@ -156,6 +156,6 @@ class CustomKVLoader(BaseLoader):
         else:
             logger.error(f'custom_kv=create_task resp={resp.text}')
             raise Exception('custom_kv create task file')
-        content = json.dumps(result)
+        content = json.dumps(document_result)
         doc = Document(page_content=content)
         return [doc]
