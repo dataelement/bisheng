@@ -5,28 +5,25 @@ from langchain.chains.router.base import Route, RouterChain
 
 
 class RuleBasedRouter(RouterChain):
+    input_variables: List[str]
     rule_function: Callable
 
     @property
     def input_keys(self):
-        return self.rule_function.__code__.co_varnames[: self.rule_function.__code__.co_argcount]
+        return self.input_variables
 
-    def prep_outputs(
-        self,
-        inputs: Dict[str, str],
-        outputs: Dict[str, Any],
-        return_only_outputs: bool = False,
-    ) -> Route:
-        missing_keys = set(self.output_keys).difference(outputs._asdict().keys())
-        if missing_keys:
-            raise ValueError(f"Missing some output keys: {missing_keys}")
-        return outputs
+    def _validate_outputs(self, outputs: Dict[str, Any]) -> None:
+        super()._validate_outputs(outputs)
+        if not isinstance(outputs["next_inputs"], dict):
+            raise ValueError
 
     def _call(
         self,
         inputs: Union[Dict[str, Any], Any],
     ) -> Route:
-        result = self.rule_function(**inputs)
+        result = self.rule_function(inputs)
+        if not result.get('destination'):
+            return Route(None, result["next_inputs"])
         return Route(result["destination"], result["next_inputs"])
 
     def route(
@@ -34,7 +31,9 @@ class RuleBasedRouter(RouterChain):
         inputs: Union[Dict[str, Any], Any],
         callbacks: Callbacks = None,
     ) -> Route:
-        result = self.rule_function(**inputs)
+        result = self.rule_function(inputs)
+        if not result.get('destination'):
+            return Route(None, result["next_inputs"])
         return Route(result["destination"], result["next_inputs"])
 
     async def aroute(
@@ -42,5 +41,7 @@ class RuleBasedRouter(RouterChain):
         inputs: Union[Dict[str, Any], Any],
         callbacks: Callbacks = None,
     ) -> Route:
-        result = await self.rule_function(**inputs)
+        result = await self.rule_function(inputs)
+        if not result.get('destination'):
+            return Route(None, result["next_inputs"])
         return Route(result["destination"], result["next_inputs"])
