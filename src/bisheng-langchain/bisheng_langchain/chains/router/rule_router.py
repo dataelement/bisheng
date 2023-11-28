@@ -2,6 +2,7 @@ from typing import Any, Callable, Dict, List, Union
 
 from langchain.callbacks.manager import Callbacks
 from langchain.chains.router.base import Route, RouterChain
+from langchain.chains.router import MultiPromptChain
 
 
 class RuleBasedRouter(RouterChain):
