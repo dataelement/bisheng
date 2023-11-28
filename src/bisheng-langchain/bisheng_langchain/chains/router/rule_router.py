@@ -2,12 +2,11 @@ from typing import Any, Callable, Dict, List, Union
 
 from langchain.callbacks.manager import Callbacks
 from langchain.chains.router.base import Route, RouterChain
-from langchain.chains.router import MultiPromptChain
 
 
 class RuleBasedRouter(RouterChain):
-    input_variables: List[str]
     rule_function: Callable
+    input_variables: List[str]
 
     @property
     def input_keys(self):
