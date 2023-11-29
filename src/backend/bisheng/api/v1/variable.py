@@ -19,11 +19,11 @@ def post_variable(variable: Variable, session: Session = Depends(get_session),):
         if variable.id:
             # 更新，采用全量替换
             db_variable = session.get(Variable, variable.id)
-            db_variable.variable_name = variable.variable_name
+            db_variable.variable_name = variable.variable_name[:50]
             db_variable.value = variable.value
             db_variable.value_type = variable.value_type
         else:
-            # if exist
+            # if name exist
             db_variable = session.exec(select(Variable).where(
                 Variable.node_id == variable.node_id,
                 Variable.variable_name == variable.variable_name

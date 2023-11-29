@@ -127,6 +127,8 @@ class ChainFrontendNode(FrontendNode):
             field.display_name = 'AutogenRole'
         if field.name == 'destination_chains':
             field.show = False
+        if name == 'TransformChain' and field.name == 'input_variables':
+            field.show = True
 
 
 class SeriesCharacterChainNode(FrontendNode):

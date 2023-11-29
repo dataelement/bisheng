@@ -222,26 +222,6 @@ class DocumentLoaderFrontNode(FrontendNode):
                     name='task_type',
                     advanced=False,
                 ))
-            self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=True,
-                    show=True,
-                    name='schemas',
-                    value='',
-                    display_name='schemas',
-                    advanced=False,
-                ))
-            self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=True,
-                    show=True,
-                    name='schemas',
-                    value='',
-                    display_name='schemas',
-                    advanced=False,
-                ))
             self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in self.file_path_templates:
             self.template.add_field(self.file_path_templates[self.template.type_name])
@@ -304,11 +284,11 @@ class DocumentLoaderFrontNode(FrontendNode):
             field.show = True
             field.advanced = False
         if name == 'CustomKVLoader' and field.name == 'task_type':
-            field.options = ['task', 'logic-job']
+            field.options = ['extraction-job', 'logic-job']
             field.value = 'logic-job'
         if name == 'CustomKVLoader' and field.name == 'schemas':
             field.field_type = 'str'
-            field.info = "please use ';' seperate"
+            field.info = "please use '|' seperate"
             field.is_list = False
 
 

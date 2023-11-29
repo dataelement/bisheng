@@ -8,7 +8,7 @@ from uuid import uuid4
 import requests
 from bisheng.api.utils import access_check
 from bisheng.api.v1.schemas import UploadFileResponse
-from bisheng.cache.utils import save_uploaded_file
+from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import get_session
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
 from bisheng.database.models.knowledge_file import KnowledgeFile
@@ -113,8 +113,9 @@ async def process_knowledge(*,
     collection_name = knowledge.collection_name
     files = []
     file_paths = []
+    result = []
     for path in file_path:
-        filepath, file_name = path.split('_', 1)
+        filepath, file_name = file_download(path)
         md5_ = filepath.rsplit('/', 1)[1]
         # 是否包含重复文件
         repeat = session.exec(select(KnowledgeFile
@@ -132,6 +133,7 @@ async def process_knowledge(*,
         files.append(db_file)
         file_paths.append(filepath)
         logger.info(f'fileName={file_name} col={collection_name}')
+        result.append(db_file)
 
     if not repeat:
         asyncio.create_task(
@@ -146,7 +148,7 @@ async def process_knowledge(*,
     knowledge.update_time = db_file.create_time
     session.add(knowledge)
     session.commit()
-    return {'code': 200, 'message': 'success'}
+    return {'code': 200, 'message': 'success', 'data': result}
 
 
 @router.post('/create', response_model=KnowledgeRead, status_code=201)

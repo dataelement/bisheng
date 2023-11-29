@@ -97,14 +97,28 @@ class Vertex:
             # for report, should get the source of source
             for inner_edge in edge.source.edges:
                 source_type = inner_edge.target_param
-                if source_type == 'input_node' and inner_edge.target != self:
+                if (source_type == 'input_node' and inner_edge.source != self
+                        and inner_edge.target != self):
                     if inner_edge.source.vertex_type == 'InputNode':
                         # for extra params,
-                        params[PRESET_QUESTION] = {inner_edge.target.id:
-                                                   inner_edge.source}
+                        if PRESET_QUESTION not in params:
+                            params[PRESET_QUESTION] = {}
+                        params[PRESET_QUESTION].update({inner_edge.target.id:
+                                                        (inner_edge.source.id, inner_edge.source)})
+                elif (source_type == 'documents' and inner_edge.source != self
+                        and inner_edge.target != self
+                        and inner_edge.target.vertex_type == 'LoaderOutputChain'):
+                    if inner_edge.source.vertex_type in {'UniversalKVLoader', 'CustomKVLoader'}:
+                        for key, value in inner_edge.source.data['node']['template'].items():
+                            if key in {'schemas', 'schema'}:
+                                schema = value['value'].split('|')
+                                if PRESET_QUESTION not in params:
+                                    params[PRESET_QUESTION] = {}
+                                params[PRESET_QUESTION].update({inner_edge.target.id:
+                                                                (inner_edge.source.id, schema)})
 
         for key, value in template_dict.items():
-            if key == '_type' or not value.get('show'):
+            if key == '_type' or (not value.get('show') and not value.get('value')):
                 continue
             # If the type is not transformable to a python base class
             # then we need to get the edge that connects to this node
@@ -167,7 +181,11 @@ class Vertex:
         return all(self._is_node(node) for node in value)
 
     def _is_dict_of_nodes(self, value):
-        return all(self._is_node(node) for node in value.values())
+        nodes = [node for node in value.values() if isinstance(node, tuple)]
+        if nodes:
+            return any(self._is_node(node[1])for node in nodes)
+        else:
+            return False
 
     def _build_node_and_update_params(self, key, node):
         """
@@ -198,7 +216,10 @@ class Vertex:
     def _build_dict_of_nodes_and_update_params(self, key, dicts):
         self.params[key] = {}
         for k, v in dicts.items():
-            self.params[key][k] = v.build()
+            if self._is_node(v[1]):
+                self.params[key][k] = (v[0], v[1].build())
+            else:
+                self.params[key][k] = (v[0], v[1])
 
     def _handle_func(self, key, result):
         """

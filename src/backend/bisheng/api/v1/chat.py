@@ -127,7 +127,9 @@ async def chat(flow_id: str,
         graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
 
     try:
-        chat_manager.set_cache(get_cache_key(flow_id, chat_id), None)
+        if not chat_id:
+            # 调试时，每次都初始化对象
+            chat_manager.set_cache(get_cache_key(flow_id, chat_id), None)
         await chat_manager.handle_websocket(flow_id, chat_id, websocket, user_id,
                                             gragh_data=graph_data)
     except WebSocketException as exc:
