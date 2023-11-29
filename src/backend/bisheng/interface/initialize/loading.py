@@ -2,6 +2,7 @@ import contextlib
 import json
 from typing import Any, Callable, Dict, List, Sequence, Type
 
+from bisheng.cache.utils import file_download
 from bisheng.chat.config import ChatConfig
 from bisheng.interface.agents.base import agent_creator
 from bisheng.interface.chains.base import chain_creator
@@ -118,22 +119,39 @@ def instantiate_input_output(node_type, class_object, params, id_dict):
         preset_question = {}
         if PRESET_QUESTION in params:
             preset_question = params.pop(PRESET_QUESTION)
-        chains = params['chains']
-        chains_idlist = id_dict['chains']
+        chains = params.get('chains', [])
+        chains_idlist = id_dict.get('chains', [])
         # 需要对chains对象进行丰富处理
         chain_list = []
         for index, id in enumerate(chains_idlist):
             chain_obj = {}
             chain_obj['object'] = chains[index]
-            chain_obj['node_id'] = id
             if id in preset_question:
-                chain_obj['input'] = {chains[index].input_keys[0]: preset_question[id]}
+                chain_obj['node_id'] = preset_question[id][0]
+            elif 'LoaderOutputChain' in id:
+                chain_obj['node_id'] = id
+            if id in preset_question:
+                chain_obj['input'] = {chains[index].input_keys[0]: preset_question[id][1]}
             else:
                 # give a default input
                 chain_obj['input'] = {chains[index].input_keys[0]: 'start'}
             chain_list.append(chain_obj)
+        # variable
+        variable = params.get('variables')
+        variable_node_id = id_dict.get('variables')
+        if variable:
+            params['variables'] = [{'node_id': variable_node_id[0],
+                                   'name': variable}]
+
         params['chains'] = chain_list
         return class_object(**params)
+    if node_type == 'InputFileNode':
+        file_path = class_object(**params).text()
+        if file_path:
+            file_path, file_name2 = file_download(file_path[0])
+            return [file_path, file_name2 if file_name2 else file_path[1]]
+        else:
+            return ''
     return class_object(**params).text()
 
 
@@ -234,7 +252,15 @@ def instantiate_retriever(node_type, class_object, params):
 
 def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_dict: Dict):
     if 'retriever' in params and hasattr(params['retriever'], 'as_retriever'):
-        params['retriever'] = params['retriever'].as_retriever()
+        user_name = params.pop('user_name', '')
+        if settings.get_from_db('file_access'):
+            # need to verify file access
+            access_url = settings.get_from_db('file_access') + f'?username={user_name}'
+            vectorstore = VectorStoreFilterRetriever(vectorstore=params['retriever'],
+                                                     access_url=access_url)
+        else:
+            vectorstore = params['retriever'].as_retriever()
+        params['retriever'] = vectorstore
     # sequence chain
     if node_type == 'SequentialChain':
         # 改造sequence 支持自定义chain顺序

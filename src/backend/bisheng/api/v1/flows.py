@@ -134,6 +134,9 @@ def update_flow(*,
             logger.exception(exc)
             raise HTTPException(status_code=500, detail=f'Flow 编译不通过, {str(exc)}')
 
+    if db_flow.status == 2 and ('status' not in flow_data or flow_data['status'] != 1):
+        raise HTTPException(status_code=500, detail='上线中技能，不支持修改')
+
     if settings.remove_api_keys:
         flow_data = remove_api_keys(flow_data)
     for key, value in flow_data.items():

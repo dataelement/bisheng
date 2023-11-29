@@ -65,7 +65,7 @@ class CustomKVLoader(BaseLoader):
         self.elm_api_key = elm_api_key
         self.elem_server_id = elem_server_id
         self.task_type = task_type
-        self.schemas = set(schemas.split(';'))
+        self.schemas = set(schemas.split('|'))
         self.headers = {'Authorization': f'Bearer {elm_api_key}'}
         self.timeout = request_timeout
         if '~' in self.file_path:
@@ -109,7 +109,7 @@ class CustomKVLoader(BaseLoader):
         #     raise ValueError(f'file type {file_type} is not support.')
         file = {'file': open(self.file_path, 'rb')}
         result = {}
-        if self.task_type == 'task':
+        if self.task_type == 'extraction-job':
             url = self.elm_api_base_url + '/task'
             # 创建task
             body = {'scene_id': self.elem_server_id}
@@ -156,6 +156,6 @@ class CustomKVLoader(BaseLoader):
         else:
             logger.error(f'custom_kv=create_task resp={resp.text}')
             raise Exception('custom_kv create task file')
-        content = json.dumps(result)
+        content = json.dumps(document_result)
         doc = Document(page_content=content)
         return [doc]

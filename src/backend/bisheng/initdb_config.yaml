@@ -36,4 +36,3 @@ llm_request:
   max_retries: 6
   stream: true
 
-file_access: http://localhost:8088/v1/file/checkPre

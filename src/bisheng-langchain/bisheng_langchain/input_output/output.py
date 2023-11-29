@@ -159,6 +159,6 @@ class Report(Chain):
         # variables
         if self.variables and self.variables[0]:
             for name, value in self.variables:
-                outputs.update({'var_'+name: value})
+                outputs.update({chain['node_id']+'_'+name: value})
 
         return {self.output_key: outputs, self.input_key: self.report_name}

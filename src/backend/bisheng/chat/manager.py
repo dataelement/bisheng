@@ -163,6 +163,7 @@ class ChatManager:
                 # set start
                 from bisheng.chat.handlers import Handler
                 is_begin = True
+                action = None
                 if 'action' in payload:
                     # autogen continue last session,
                     action, is_begin = 'autogen', False
@@ -256,8 +257,18 @@ class ChatManager:
                     file_path, file_name = file_path.split('_', 1)
                 nd['value'] = file_name
                 tweak[nd.get('id')] = {'file_path': file_path, 'value': file_name}
-            else:
-                tweak[nd.get('id')].update({nd.get('name'): nd.get('value')})
+            elif 'VariableNode' in nd.get('id'):
+                variables = nd.get('name')
+                variable_value = nd.get('value')
+                # key
+                variables_list = tweak[nd.get('id')].get('variables', [])
+                if not variables_list:
+                    tweak[nd.get('id')]['variables'] = variables_list
+                    tweak[nd.get('id')]['variable_value'] = []
+                variables_list.append(variables)
+                # value
+                variables_value_list = tweak[nd.get('id')].get('variable_value', [])
+                variables_value_list.append(variable_value)
 
         """upload file to make flow work"""
         return process_tweaks(graph_data, tweaks=tweak)

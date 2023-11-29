@@ -194,6 +194,9 @@ def build_flow_no_yield(graph_data: dict,
                     # es
                     vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
 
+            if vertex.base_type == 'chains' and 'retriever' in vertex.params:
+                vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
+
             vertex.build()
             params = vertex._built_object_repr()
             logger.debug(

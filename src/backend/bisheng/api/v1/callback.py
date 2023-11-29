@@ -246,16 +246,16 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
     def on_chat_model_start(self, serialized: Dict[str, Any],
                             messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
         """Run when retriever end running."""
-        sender = kwargs['sender']
-        receiver = kwargs['receiver']
-        content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
-        end = ChatResponse(message=f'{content}', type='end', sender=sender, recevier=receiver)
-        start = ChatResponse(type='start', sender=sender, recevier=receiver)
-        loop = asyncio.get_event_loop()
-        coroutine2 = self.websocket.send_json(end.dict())
-        coroutine3 = self.websocket.send_json(start.dict())
-        asyncio.run_coroutine_threadsafe(coroutine2, loop)
-        asyncio.run_coroutine_threadsafe(coroutine3, loop)
+        # sender = kwargs['sender']
+        # receiver = kwargs['receiver']
+        # content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
+        # end = ChatResponse(message=f'{content}', type='end', sender=sender, recevier=receiver)
+        # start = ChatResponse(type='start', sender=sender, recevier=receiver)
+        # loop = asyncio.get_event_loop()
+        # coroutine2 = self.websocket.send_json(end.dict())
+        # coroutine3 = self.websocket.send_json(start.dict())
+        # asyncio.run_coroutine_threadsafe(coroutine2, loop)
+        # asyncio.run_coroutine_threadsafe(coroutine3, loop)
         logger.debug(f'on_chat result={messages}')
 
     def on_text(self, text: str, **kwargs) -> Any:

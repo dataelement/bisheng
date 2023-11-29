@@ -77,7 +77,8 @@ export default function ChatReportForm({ flow, onStart }) {
                                 value={''}
                                 onChange={(e) => fileKindexVpath.current[i] = e}
                                 fileTypes={["pdf"]}
-                                suffixes={[".pdf"]}
+                                suffixes={flow.current?.data.nodes.find(el => el.id === item.nodeId)
+                                    ?.node.data.node.template.file_path.suffixes || ['xxx']}
                                 onFileChange={(val: string) => handleChange(i, val)}
                             ></InputFileComponent> : <></>
                 }

@@ -3,6 +3,8 @@ from typing import Optional
 from uuid import UUID
 
 from bisheng.database.models.base import SQLModelSerializable
+# if TYPE_CHECKING:
+from pydantic import validator
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field
 
@@ -21,6 +23,25 @@ class VariableBase(SQLModelSerializable):
                          nullable=False,
                          server_default=text('CURRENT_TIMESTAMP'),
                          onupdate=text('CURRENT_TIMESTAMP')))
+
+    @validator('variable_name')
+    def validate_length(v):
+        # dict_keys(['description', 'name', 'id', 'data'])
+        if not v:
+            return v
+        if len(v) > 50:
+            v = v[:50]
+
+        return v
+
+    @validator('value')
+    def validate_value(v):
+        # dict_keys(['description', 'name', 'id', 'data'])
+        if not v:
+            return v
+
+        v = ','.join(set(v.split(',')))
+        return v
 
 
 class Variable(VariableBase, table=True):

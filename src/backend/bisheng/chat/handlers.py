@@ -67,7 +67,7 @@ class Handler:
         template_muban = mino_client.get_share_link(template.object_name)
         test_replace_string(template_muban, result, 'report.docx')
         file = mino_client.get_share_link('report.docx')
-        response = ChatResponse(type='end', intermediate_steps=json.dumps(result),
+        response = ChatResponse(type='end',
                                 files=[{'file_url': file, 'file_name': 'report.docx'}],
                                 user_id=user_id)
         await session.send_json(client_id, chat_id, response)
