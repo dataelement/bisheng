@@ -22,7 +22,7 @@ class RuleBasedRouter(RouterChain):
         inputs: Union[Dict[str, Any], Any],
     ) -> Route:
         result = self.rule_function(inputs)
-        if not result.get('destination'):
+        if not result.get('destination') or not result:
             return Route(None, result["next_inputs"])
         return Route(result["destination"], result["next_inputs"])
 
@@ -32,7 +32,7 @@ class RuleBasedRouter(RouterChain):
         callbacks: Callbacks = None,
     ) -> Route:
         result = self.rule_function(inputs)
-        if not result.get('destination'):
+        if not result.get('destination') or not result:
             return Route(None, result["next_inputs"])
         return Route(result["destination"], result["next_inputs"])
 
@@ -42,6 +42,6 @@ class RuleBasedRouter(RouterChain):
         callbacks: Callbacks = None,
     ) -> Route:
         result = await self.rule_function(inputs)
-        if not result.get('destination'):
+        if not result.get('destination') or not result:
             return Route(None, result["next_inputs"])
         return Route(result["destination"], result["next_inputs"])
