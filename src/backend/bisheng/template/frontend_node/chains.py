@@ -129,6 +129,9 @@ class ChainFrontendNode(FrontendNode):
             field.show = False
         if name == 'TransformChain' and field.name == 'input_variables':
             field.show = True
+        if name == 'TransformChain' and field.name == 'transform':
+            field.show = True
+            field.field_type = 'function'
 
 
 class SeriesCharacterChainNode(FrontendNode):
