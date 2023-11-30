@@ -5,7 +5,7 @@ from langchain.chains.router.base import Route, RouterChain
 
 
 class RuleBasedRouter(RouterChain):
-    rule_function: Callable
+    rule_function: Callable[..., str]
     input_variables: List[str]
 
     @property
@@ -14,7 +14,7 @@ class RuleBasedRouter(RouterChain):
 
     def _validate_outputs(self, outputs: Dict[str, Any]) -> None:
         super()._validate_outputs(outputs)
-        if not isinstance(outputs["next_inputs"], dict):
+        if not isinstance(outputs['next_inputs'], dict):
             raise ValueError
 
     def _call(
@@ -23,8 +23,8 @@ class RuleBasedRouter(RouterChain):
     ) -> Route:
         result = self.rule_function(inputs)
         if not result.get('destination') or not result:
-            return Route(None, result["next_inputs"])
-        return Route(result["destination"], result["next_inputs"])
+            return Route(None, result['next_inputs'])
+        return Route(result['destination'], result['next_inputs'])
 
     def route(
         self,
@@ -33,8 +33,8 @@ class RuleBasedRouter(RouterChain):
     ) -> Route:
         result = self.rule_function(inputs)
         if not result.get('destination') or not result:
-            return Route(None, result["next_inputs"])
-        return Route(result["destination"], result["next_inputs"])
+            return Route(None, result['next_inputs'])
+        return Route(result['destination'], result['next_inputs'])
 
     async def aroute(
         self,
@@ -43,5 +43,5 @@ class RuleBasedRouter(RouterChain):
     ) -> Route:
         result = await self.rule_function(inputs)
         if not result.get('destination') or not result:
-            return Route(None, result["next_inputs"])
-        return Route(result["destination"], result["next_inputs"])
+            return Route(None, result['next_inputs'])
+        return Route(result['destination'], result['next_inputs'])

@@ -300,7 +300,7 @@ def test_replace_string(template_file, kv_dict: dict, file_name: str):
     output = doc.render(template_dict)
 
     temp_dir = tempfile.TemporaryDirectory()
-    temp_file = Path(temp_dir.name) / 'report.docx'
+    temp_file = Path(temp_dir.name) / file_name
     output.save(temp_file)
     mino_client.upload_minio(file_name, temp_file)
 

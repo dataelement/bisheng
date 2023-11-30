@@ -10,14 +10,7 @@ class InputOutputNode(FrontendNode):
     base_classes: list[str] = ['input', 'output']
 
     def add_extra_fields(self) -> None:
-        if self.template.type_name == 'Report':
-            self.template.add_field(TemplateField(
-                    field_type='button',
-                    required=False,
-                    show=True,
-                    name='edit',
-                    value='',
-                ))
+        pass
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
@@ -37,8 +30,6 @@ class InputOutputNode(FrontendNode):
             elif field.name == 'variables':
                 field.show = True
                 field.field_type = 'VariableNode'
-            elif field.name == 'edit':
-                field.show = True
         if name == 'VariableNode':
             if field.name == 'variables':
                 field.show = True

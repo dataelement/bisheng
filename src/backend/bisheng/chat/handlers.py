@@ -64,11 +64,15 @@ class Handler:
             return
         start_resp = ChatResponse(type='start', user_id=user_id)
         await session.send_json(client_id, chat_id, start_resp)
+
+        langchain_object = session.in_memory_cache.get(key)
         template_muban = mino_client.get_share_link(template.object_name)
-        test_replace_string(template_muban, result, 'report.docx')
-        file = mino_client.get_share_link('report.docx')
+        report_name = langchain_object.report_name
+        report_name = report_name if report_name.endswith('.docx') else f'{report_name}.docx'
+        test_replace_string(template_muban, result, report_name)
+        file = mino_client.get_share_link(report_name)
         response = ChatResponse(type='end',
-                                files=[{'file_url': file, 'file_name': 'report.docx'}],
+                                files=[{'file_url': file, 'file_name': report_name}],
                                 user_id=user_id)
         await session.send_json(client_id, chat_id, response)
         close_resp = ChatResponse(type='close', category='system', user_id=user_id)

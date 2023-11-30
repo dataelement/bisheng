@@ -183,12 +183,13 @@ class ChatManager:
                     self.set_cache(langchain_obj_key, None)  # rebuild object
                     has_file = any(['InputFile' in nd.get('id') for nd in node_data])
                 if has_file:
-                    logger.info('input_file start_log')
                     step_resp = ChatResponse(intermediate_steps='File upload complete and begin to parse',  # noqa
                                              type='end', category='system', user_id=user_id)
                     await self.send_json(client_id, chat_id, start_resp)
-                    await self.send_json(client_id, chat_id, step_resp)
+                    await self.send_json(client_id, chat_id, step_resp, add=False)
                     await self.send_json(client_id, chat_id, start_resp)
+                    logger.info('input_file start_log')
+                    await asyncio.sleep(1)  # why frontend not recieve imediately
 
                 batch_question = []
                 if not self.in_memory_cache.get(langchain_obj_key):
@@ -232,7 +233,7 @@ class ChatManager:
                             continue
                     step_resp = ChatResponse(intermediate_steps='File parsing complete. Analysis starting',  # noqa
                                              type='end', category='system', user_id=user_id)
-                    await self.send_json(client_id, chat_id, step_resp)
+                    await self.send_json(client_id, chat_id, step_resp, add=False)
                     if action == 'auto_file':
                         payload['inputs']['questions'] = [question for question in batch_question]
 

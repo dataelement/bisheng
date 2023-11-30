@@ -32,7 +32,7 @@ class VariableNode(BaseModel):
 
             return text
         else:
-            return []
+            return {}
 
 
 class InputFileNode(BaseModel):
