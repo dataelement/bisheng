@@ -37,17 +37,19 @@ def data_loader():
         index_name="zhaogushuglx_keyword_chunk500",
         ssl_verify=ssl_verify,
     )
-    keyword_retriever = es_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+    # keyword_retriever = es_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+    keyword_retriever = es_store.as_retriever(search_type="similarity_score_threshold", search_kwargs={"k": 4, "score_threshold": 0.0})
     print('keyword store time:', time.time() - start_time)
 
-    return keyword_retriever
+    return keyword_retriever, es_store
 
 
 def retrieval(query, keyword_retriever):
+    print('---------------------------------------------')
     print(keyword_retriever.get_relevant_documents(query))
 
-keyword_retriever = data_loader()
+keyword_retriever, es_store = data_loader()
 retrieval("达梦公司聘请了哪些券商作为主要保荐机构?", keyword_retriever)
 retrieval("公司所聘请的会计师事务所是哪家？该会计师事务所是否具有丰富的上市公司审计经验?", keyword_retriever)
 retrieval("公司是否有债务或其他财务义务?", keyword_retriever)
-
+es_store.delete()
