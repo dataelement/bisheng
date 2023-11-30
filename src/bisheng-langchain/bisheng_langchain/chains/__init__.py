@@ -5,4 +5,5 @@ from bisheng_langchain.chains.router.rule_router import RuleBasedRouter
 
 from .loader_output import LoaderOutputChain
 
-__all__ = ['StuffDocumentsChain', 'LoaderOutputChain', 'AutoGenChain', 'RuleBasedRouter', 'MultiRuleChain']
+__all__ = ['StuffDocumentsChain', 'LoaderOutputChain', 'AutoGenChain',
+           'RuleBasedRouter', 'MultiRuleChain']

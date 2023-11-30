@@ -86,7 +86,7 @@ class Handler:
         artifacts = session.in_memory_cache.get(key + '_artifacts')
         if artifacts:
             for k, value in artifacts.items():
-                if k in chat_inputs:
+                if k in chat_inputs and value:
                     chat_inputs[k] = value
         chat_inputs = ChatMessage(message=chat_inputs, category='question',
                                   is_bot=not is_begin, type='bot', user_id=user_id,)
@@ -173,21 +173,6 @@ class Handler:
                            type='end', user_id=user_id)
         session.chat_history.add_message(client_id, chat_id, file)
         start_resp = ChatResponse(type='start', category='system', user_id=user_id)
-        await session.send_json(client_id, chat_id, start_resp)
-
-        if not batch_question:
-            # no question
-            step_resp = ChatResponse(type='end',
-                                     intermediate_steps='File parsing complete',
-                                     category='system', user_id=user_id)
-            await session.send_json(client_id, chat_id, step_resp)
-            start_resp.type = 'close'
-            await session.send_json(client_id, chat_id, start_resp)
-            return
-
-        step_resp = ChatResponse(intermediate_steps='File parsing complete, analysis starting',
-                                 type='end', category='system', user_id=user_id)
-        await session.send_json(client_id, chat_id, step_resp)
 
         key = get_cache_key(client_id, chat_id)
         langchain_object = session.in_memory_cache.get(key)
