@@ -229,7 +229,7 @@ def save_download_file(file_byte, folder_name, filename):
 def file_download(file_path: str):
     """download file and return path"""
     if not os.path.isfile(file_path) and _is_valid_url(file_path):
-        r = requests.get(file_path)
+        r = requests.get(file_path, verify=False)
 
         if r.status_code != 200:
             raise ValueError(

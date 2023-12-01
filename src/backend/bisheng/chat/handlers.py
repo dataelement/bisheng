@@ -53,8 +53,19 @@ class Handler:
         session.chat_history.add_message(client_id, chat_id, chat_message)
 
         # process message
+        langchain_object = session.in_memory_cache.get(key)
         chat_inputs = {'inputs': chat_inputs, 'is_begin': False}
         result = await self.process_message(session, client_id, chat_id, chat_inputs, user_id)
+        # judge end type
+        start_resp = ChatResponse(type='start', user_id=user_id)
+        await session.send_json(client_id, chat_id, start_resp)
+
+        if langchain_object.stop_status():
+            start_resp.category = 'divider'
+            response = ChatResponse(message='主动退出', type='end',
+                                    category='divider', user_id=user_id)
+            await session.send_json(client_id, chat_id, response)
+
         # build report
         db_session = next(get_session())
         template = db_session.exec(select(Report).where(
@@ -62,10 +73,7 @@ class Handler:
         if not template:
             logger.error('template not support')
             return
-        start_resp = ChatResponse(type='start', user_id=user_id)
-        await session.send_json(client_id, chat_id, start_resp)
 
-        langchain_object = session.in_memory_cache.get(key)
         template_muban = mino_client.get_share_link(template.object_name)
         report_name = langchain_object.report_name
         report_name = report_name if report_name.endswith('.docx') else f'{report_name}.docx'

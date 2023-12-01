@@ -169,8 +169,9 @@ class ChatManager:
                     # autogen continue last session,
                     action, is_begin = 'autogen', False
 
+                start_resp = ChatResponse(type='begin', category='system', user_id=user_id)
+                step_resp = ChatResponse(type='end', category='system', user_id=user_id)
                 if is_begin:
-                    start_resp = ChatResponse(type='begin', category='system', user_id=user_id)
                     await self.send_json(client_id, chat_id, start_resp)
                 start_resp.type = 'start'
 
@@ -183,8 +184,7 @@ class ChatManager:
                     self.set_cache(langchain_obj_key, None)  # rebuild object
                     has_file = any(['InputFile' in nd.get('id') for nd in node_data])
                 if has_file:
-                    step_resp = ChatResponse(intermediate_steps='File upload complete and begin to parse',  # noqa
-                                             type='end', category='system', user_id=user_id)
+                    step_resp.intermediate_steps = 'File upload complete and begin to parse'
                     await self.send_json(client_id, chat_id, start_resp)
                     await self.send_json(client_id, chat_id, step_resp, add=False)
                     await self.send_json(client_id, chat_id, start_resp)
@@ -199,10 +199,9 @@ class ChatManager:
                                                            user_id, gragh_data)
                     except Exception as e:
                         logger.exception(e)
-                        step_resp = ChatResponse(intermediate_steps='Input data is parsed fail',
-                                                 type='end', category='system', user_id=user_id)
+                        step_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
                         if has_file:
-                            step_resp.intermediate_steps = 'File is parsed fail'
+                            step_resp.intermediate_steps = f'File is parsed fail. error={str(e)}'
                         await self.send_json(client_id, chat_id, step_resp)
                         start_resp.type = 'close'
                         await self.send_json(client_id, chat_id, start_resp)
@@ -216,7 +215,7 @@ class ChatManager:
                 langchain_obj = self.in_memory_cache.get(langchain_obj_key)
                 if isinstance(langchain_obj, Report):
                     action = 'report'
-                elif 'data' in payload['inputs']:
+                elif action != 'autogen' and 'data' in payload['inputs']:
                     action = 'auto_file'   # has input data, default is file process
                 # default not set, for autogen set before
 
@@ -224,15 +223,12 @@ class ChatManager:
                     if not batch_question:
                         if action == 'auto_file':
                             # no question
-                            step_resp = ChatResponse(type='end',
-                                                     intermediate_steps='File parsing complete',
-                                                     category='system', user_id=user_id)
+                            step_resp.intermediate_steps = 'File parsing complete'
                             await self.send_json(client_id, chat_id, step_resp)
                             start_resp.type = 'close'
                             await self.send_json(client_id, chat_id, start_resp)
                             continue
-                    step_resp = ChatResponse(intermediate_steps='File parsing complete. Analysis starting',  # noqa
-                                             type='end', category='system', user_id=user_id)
+                    step_resp.intermediate_steps = 'File parsing complete. Analysis starting'
                     await self.send_json(client_id, chat_id, step_resp, add=False)
                     if action == 'auto_file':
                         payload['inputs']['questions'] = [question for question in batch_question]

@@ -116,7 +116,7 @@ async def process_knowledge(*,
     result = []
     for path in file_path:
         filepath, file_name = file_download(path)
-        md5_ = filepath.rsplit('/', 1)[1]
+        md5_ = filepath.rsplit('/', 1)[1].split('.')[0]
         # 是否包含重复文件
         repeat = session.exec(select(KnowledgeFile
                                      ).where(KnowledgeFile.md5 == md5_, KnowledgeFile.status == 2,
