@@ -34,6 +34,7 @@ async def callback(data: dict, session: Session = Depends(get_session)):
                                  .where(or_(Report.version_key == key,
                                             Report.newversion_key == key))).first()
         if not db_report:
+            logger.error(f'report_callback cannot find the flow_id flow_id={key}')
             raise HTTPException(status_code=500, detail='cannot find the flow_id')
         db_report.object_name = object_name
         db_report.version_key = key

@@ -1,5 +1,6 @@
 import json
 from typing import Any, Dict, List, Optional
+from venv import logger
 
 from bisheng_langchain.chains import LoaderOutputChain
 from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
@@ -108,8 +109,10 @@ class Report(Chain):
             result = json.loads(result)
             for key in schema:
                 if result.get(key):
-                    outputs.update({node_id+'_'+key:
-                                    json.dumps(result.get(key), ensure_ascii=False)})
+                    result_str = ('；'.join(result.get(key))
+                                  if isinstance(result.get(key), list)
+                                  else result.get(key))
+                    outputs.update({node_id+'_'+key: result_str})
             result = json.dumps(result, ensure_ascii=False)
         else:
             outputs.update({node_id: result})
@@ -123,9 +126,9 @@ class Report(Chain):
                          intermedia_stop: list,
                          chain: Chain,
                          node_id: str,
-                         run_manager: Optional[CallbackManagerForChainRun] = None,):
+                         run_manager: Optional[AsyncCallbackManagerForChainRun] = None,):
         question = list(inputs.values())[0]
-        _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
+        _run_manager = run_manager or AsyncCallbackManagerForChainRun.get_noop_manager()
 
         if isinstance(chain, LoaderOutputChain):
             question = 'Get' + ','.join(question)
@@ -136,7 +139,16 @@ class Report(Chain):
         intermedia_stop.append(message_reply)
 
         # process
-        chain_outputs = await chain.arun(inputs, callbacks=_run_manager.get_child())
+        try:
+            chain_outputs = await chain.arun(inputs, callbacks=_run_manager.get_child())
+        except Exception as e:
+            logger.exception(e)
+            try:
+                chain_outputs = chain(inputs)
+            except Exception as e2:
+                logger.exception(e2)
+                chain_outputs = ''
+
         result = (chain_outputs.get(chain.output_keys[0])
                   if isinstance(chain_outputs, dict) else chain_outputs)
         if isinstance(chain, LoaderOutputChain):
@@ -144,8 +156,10 @@ class Report(Chain):
             result = json.loads(result)
             for key in schema:
                 if result.get(key):
-                    outputs.update({node_id+'_'+key:
-                                    json.dumps(result.get(key), ensure_ascii=False)})
+                    result_str = ('；'.join(result.get(key))
+                                  if isinstance(result.get(key), list)
+                                  else result.get(key))
+                    outputs.update({node_id+'_'+key: result_str})
             result = json.dumps(result, ensure_ascii=False)
         else:
             outputs.update({node_id: result})

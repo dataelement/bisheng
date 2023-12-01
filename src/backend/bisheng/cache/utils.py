@@ -182,7 +182,8 @@ def save_uploaded_file(file, folder_name, file_name):
         mino_client.upload_tmp(file_name, file_byte)
         file_path = mino_client.get_share_link(file_name, tmp_bucket)
     else:
-        file_path = folder_path / md5_name
+        file_type = md5_name.split('.')[-1]
+        file_path = folder_path / f'{md5_name}.{file_type}'
         with open(file_path, 'wb') as new_file:
             while chunk := file.read(8192):
                 new_file.write(chunk)

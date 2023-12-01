@@ -294,7 +294,7 @@ def test_replace_string(template_file, kv_dict: dict, file_name: str):
 
     template_dict = []
     for k, v in kv_dict.items():
-        template_dict.append([k, v])
+        template_dict.append(['{{'+k+'}}', v])
 
     doc = DocxTemplateRender(str(template_file))
     output = doc.render(template_dict)

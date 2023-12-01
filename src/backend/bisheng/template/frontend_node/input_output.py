@@ -22,7 +22,8 @@ class InputOutputNode(FrontendNode):
                 field.show = False
             elif field.name == 'chains':
                 field.show = True
-                field.field_type = 'Chain'
+                field.field_type = 'function'
+                field.display_name = 'functions'
             elif field.name == 'report_name':
                 field.show = True
                 field.display_name = 'Report Name'
@@ -34,6 +35,7 @@ class InputOutputNode(FrontendNode):
             if field.name == 'variables':
                 field.show = True
                 field.field_type = 'variable'
+                field.required = True
 
 
 class InputNode(FrontendNode):

@@ -247,8 +247,10 @@ class Handler:
                 sender = message.get('sender')
                 receiver = message.get('receiver')
                 is_bot = False if receiver and receiver.get('is_bot') else True
+                category = message.get('category', 'processing')
                 msg = ChatResponse(message=content, sender=sender, receiver=receiver,
-                                   type='end', user_id=user_id, is_bot=is_bot)
+                                   type='end', user_id=user_id, is_bot=is_bot,
+                                   category=category)
                 steps.append(msg)
         else:
             # agent model will produce the steps log

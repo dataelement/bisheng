@@ -251,16 +251,17 @@ def instantiate_retriever(node_type, class_object, params):
 
 
 def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_dict: Dict):
-    if 'retriever' in params and hasattr(params['retriever'], 'as_retriever'):
+    if 'retriever' in params:
         user_name = params.pop('user_name', '')
-        if settings.get_from_db('file_access'):
-            # need to verify file access
-            access_url = settings.get_from_db('file_access') + f'?username={user_name}'
-            vectorstore = VectorStoreFilterRetriever(vectorstore=params['retriever'],
-                                                     access_url=access_url)
-        else:
-            vectorstore = params['retriever'].as_retriever()
-        params['retriever'] = vectorstore
+        if hasattr(params['retriever'], 'as_retriever'):
+            if settings.get_from_db('file_access'):
+                # need to verify file access
+                access_url = settings.get_from_db('file_access') + f'?username={user_name}'
+                vectorstore = VectorStoreFilterRetriever(vectorstore=params['retriever'],
+                                                         access_url=access_url)
+            else:
+                vectorstore = params['retriever'].as_retriever()
+            params['retriever'] = vectorstore
     # sequence chain
     if node_type == 'SequentialChain':
         # 改造sequence 支持自定义chain顺序
