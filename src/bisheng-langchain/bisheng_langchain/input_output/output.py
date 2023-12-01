@@ -175,8 +175,12 @@ class Report(Chain):
     ) -> Dict[str, str]:
         intermedia_steps = []
         outputs = {}
+        self.stop_flag = False
         if self.chains:
             for i, chain in enumerate(self.chains):
+                if 'node_id' not in chain:
+                    logger.info(f"report_skip_nonsence_chain chain={chain['object']}")
+                    continue
                 if not isinstance(chain['object'], Chain):
                     raise TypeError(
                         f"{chain['object']} not be runnable Chain object"
@@ -217,8 +221,14 @@ class Report(Chain):
         intermedia_steps = []
         outputs = {}
         await run_manager.on_text(text='', log='', type='end', category='processing')  # end father start
+        self.stop_flag = False
         if self.chains:
             for i, chain in enumerate(self.chains):
+                if 'node_id' not in chain:
+                    logger.info(f"report_skip_nonsence_chain chain={chain['object']}")
+                    continue
+                if self.stop_flag:
+                    break
                 if not isinstance(chain['object'], Chain):
                     raise TypeError(
                         f"{chain['object']} not be runnable Chain object"
@@ -251,3 +261,9 @@ class Report(Chain):
         await run_manager.on_text(text='', log='', type='start', category='processing')
         return {self.output_key: outputs, self.input_key: self.report_name,
                 'intermediate_steps': intermedia_steps}
+
+    def stop(self):
+        self.stop_flag = True
+
+    def stop_status(self):
+        return self.stop_flag

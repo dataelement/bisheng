@@ -114,6 +114,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
                 log = ChatResponse(message=text, intermediate_steps=kwargs['log'],
                                    type=kwargs['type'], category=kwargs['category'])
                 await self.websocket.send_json(log.dict())
+        logger.debug(f'on_text text={text} kwargs={kwargs}')
 
     async def on_agent_action(self, action: AgentAction, **kwargs: Any):
         log = f'Thought: {action.log}'
