@@ -152,7 +152,7 @@ const nodeNames: { [char: string]: string } = {
   wrappers: "Wrappers",
   textsplitters: "文本分割/TextSplitters",
   retrievers: "检索器/Retrievers",
-  input_output: "输入-输出/input-output",
+  input_output: "输入输出/inputOutput",
   utilities: "通用工具/Utilities",
   output_parsers: "输出解析器/OutputParsers",
   autogen_roles: '多智能体角色/AutogenRole',
@@ -995,9 +995,9 @@ export function validateNode(
     node: { template },
   } = n.data;
   return Object.keys(template).reduce(
-    (errors: Array<string>, t) =>
+    (errors: Array<string>, t) => {
       // （必填 && 显示 && 值为空 && 无连线） 即验证不通过
-      errors.concat(
+      return errors.concat(
         template[t].required &&
           template[t].show &&
           (template[t].value === undefined ||
@@ -1009,14 +1009,15 @@ export function validateNode(
               e.targetHandle.split("|")[2] === n.id
           )
           ? [
-            `${type} 缺失了 ${template.display_name || toTitleCase(template[t].name)}.`,
+            `${type} ${i18next.language === 'en' ? 'lost' : '缺少参数'} ${template.display_name || toTitleCase(template[t].name)}.`,
           ]
           : []
-      ),
-    [] as string[]
+      )
+    }, [] as string[]
   );
 }
 
+// 校验技能节点有效性
 export function validateNodes(reactFlowInstance: ReactFlowInstance) {
   if (reactFlowInstance.getNodes().length === 0) {
     return [

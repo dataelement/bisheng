@@ -1,9 +1,9 @@
 import _ from "lodash";
-import { Plus, Settings, X } from "lucide-react";
+import { ExternalLink, Plus, Settings, X } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { alertContext } from "../../contexts/alertContext";
 import { PopUpContext } from "../../contexts/popUpContext";
-import { Variable, delVariableApi, getVariablesApi, saveVariableApi } from "../../controllers/API/flow";
+import { Variable, VariableType, delVariableApi, getVariablesApi, saveVariableApi } from "../../controllers/API/flow";
 import { generateUUID } from "../../utils";
 import VarDialog from "./VarDialog";
 import { useTranslation } from "react-i18next";
@@ -60,8 +60,8 @@ export default function VariablesComponent({ nodeId, flowId, onChange }: {
             "flow_id": flowId,
             "node_id": nodeId,
             "variable_name": _item.name,
-            "value_type": Number(_item.type === 'select') + 1,
-            "value": _item.type === 'text' ? _item.maxLength : _item.options.map(el => el.value).join(',')
+            "value_type": Number(_item.type === VariableType.Select) + 1,
+            "value": _item.type === VariableType.Text ? _item.maxLength : _item.options.map(el => el.value).join(',')
         }
         if (_item.update) {
             param.id = _item.id
@@ -94,7 +94,7 @@ export default function VariablesComponent({ nodeId, flowId, onChange }: {
                         >{item.name}</div>
                         <button
                             onClick={() => { openPopUp(<VarDialog data={item} onSave={handleSave} onClose={closePopUp} />) }}
-                        ><Settings className={"h-4 w-4 hover:text-accent-foreground"} /></button>
+                        ><ExternalLink className={"h-4 w-4 hover:text-accent-foreground"} /></button>
                         <button onClick={() => handleDelClick(idx)} >
                             <X className={"h-4 w-4 hover:text-accent-foreground"} />
                         </button>
@@ -109,12 +109,14 @@ export default function VariablesComponent({ nodeId, flowId, onChange }: {
                             id: generateUUID(8),
                             name: "",
                             maxLength: 50,
-                            type: "text",
+                            type: VariableType.Text,
                             update: false,
                             options: [{
                                 key: generateUUID(4),
                                 value: ""
-                            }]
+                            }],
+                            nodeId,
+                            required: false
                         });
                         return newItems;
                     });

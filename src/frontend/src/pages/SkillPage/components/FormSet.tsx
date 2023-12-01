@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronsUpDown, FolderUp, GripVertical } from "lucide-react";
+import { ChevronUp, ChevronsUpDown, FolderUp, GripVertical } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from "react-i18next";
@@ -59,7 +59,7 @@ export default forwardRef(function FormSet({ id }: any, ref) {
     }
 
     return <div className="mt-4">
-        <p className="text-center text-gray-400 mt-4 cursor-pointer flex justify-center" onClick={showContent}>{t('report.formSettings')}<ChevronDown /></p>
+        <p className="text-center text-gray-400 mt-4 cursor-pointer flex justify-center" onClick={showContent}>{t('report.formSettings')}<ChevronUp /></p>
         <div className="w-[68%] mx-auto overflow-hidden transition-all pl-8">
             <DragDropContext onDragEnd={handleDragEnd}>
                 <Droppable droppableId={'list'} direction="vertical">
@@ -84,15 +84,15 @@ export default forwardRef(function FormSet({ id }: any, ref) {
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <label className="text-xs">{t('report.requiredLabel')}</label>
-                                                    <Switch checked={item.required} onCheckedChange={e =>
-                                                        setItems(old => {
+                                                    <Switch checked={item.type === 'file' || item.required} onCheckedChange={e => {
+                                                        item.type !== 'file' && setItems(old => {
                                                             const _items = old.map(el => {
                                                                 return el.id === item.id ? { ...el, required: e } : el
                                                             })
                                                             handleSave(_items)
                                                             return _items
-                                                        }
-                                                        )}></Switch>
+                                                        })
+                                                    }}></Switch>
                                                 </div>
                                             </div>
                                             <div className="mt-2">

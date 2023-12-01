@@ -5,13 +5,12 @@ import InputComponent from "../../../components/inputComponent";
 import InputFileComponent from "../../../components/inputFileComponent";
 import { Button } from "../../../components/ui/button";
 import { alertContext } from "../../../contexts/alertContext";
-import { Variable, getVariablesApi } from "../../../controllers/API/flow";
+import { Variable, VariableType, getVariablesApi } from "../../../controllers/API/flow";
 
 /**
  * @component 会话报告生成专用表单
  * @description
  * 表单项数据由组件的参数信息和单独接口获取的必填信息及排序信息而来。
- * 
  */
 export default function ChatReportForm({ flow, onStart }) {
     const { setErrorData } = useContext(alertContext);
@@ -26,7 +25,7 @@ export default function ChatReportForm({ flow, onStart }) {
     }, [])
 
     const handleChange = (index, value) => {
-        setItems(items.map((item, i) =>
+        setItems((_items) => _items.map((item, i) =>
             i === index ? { ...item, value } : item))
     }
 
@@ -36,7 +35,10 @@ export default function ChatReportForm({ flow, onStart }) {
         // 校验
         const errors = items.reduce((res, el) => {
             if (el.required && !el.value) {
-                res.push(`${el.name} is null`)
+                res.push(`${el.name} ${t('report.isRequired')}`)
+            }
+            if (el.type === VariableType.Text && el.value.length > Number(el.maxLength)) {
+                res.push(`${el.name} ${t('report.varLength')} ${el.maxLength}`)
             }
             return res
         }, [])
@@ -49,7 +51,7 @@ export default function ChatReportForm({ flow, onStart }) {
 
         // 组装数据，抛出
         const obj = items
-        const str = items.map((el, i) => `${el.name}：${el.type === 'file'
+        const str = items.map((el, i) => `${el.name || ''}：${el.type === VariableType.File
             ? fileKindexVpath.current[i] : el.value}\n`).join('')
         onStart(obj, str)
     }
@@ -59,26 +61,27 @@ export default function ChatReportForm({ flow, onStart }) {
             {item.name}
             <span className="text-status-red">{item.required ? " *" : ""}</span>
             <div className="mt-2">
-                {item.type === 'text' ? <InputComponent
+                {item.type === VariableType.Text ? <InputComponent
                     password={false}
                     value={item.value}
                     onChange={(val) => handleChange(i, val)}
                 /> :
-                    item.type === 'select' ?
+                    item.type === VariableType.Select ?
                         <Dropdown
                             options={item.options.map(e => e.value)}
                             onSelect={(val) => handleChange(i, val)}
                             value={item.value}
                         ></Dropdown> :
-                        item.type === 'file' ?
+                        item.type === VariableType.File ?
                             <InputFileComponent
                                 isSSO
                                 disabled={false}
+                                placeholder={t('report.fileRequired')}
                                 value={''}
                                 onChange={(e) => fileKindexVpath.current[i] = e}
                                 fileTypes={["pdf"]}
-                                suffixes={flow.current?.data.nodes.find(el => el.id === item.nodeId)
-                                    ?.node.data.node.template.file_path.suffixes || ['xxx']}
+                                suffixes={flow.data.nodes.find(el => el.id === item.nodeId)
+                                    ?.data.node.template.file_path.suffixes || ['xxx']}
                                 onFileChange={(val: string) => handleChange(i, val)}
                             ></InputFileComponent> : <></>
                 }

@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { ArrowLeft, ChevronUp } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -31,8 +31,12 @@ export default function l2Edit() {
     const handleCreateNewSkill = async () => {
         if (isParamError(nameRef.current.value, descRef.current.value)) return
         setLoading(true)
-        const id = await addFlow({ id: '', data: null, name: nameRef.current.value, description: descRef.current.value, status: 1 }, true)
-        navigate("/flow/" + id, { replace: true });
+        const id = await addFlow({
+            id: '', data: null, name: nameRef.current.value, description: descRef.current.value, status: 1,
+            user_name: user.user_name,
+            write: true
+        }, true)
+        navigate("/flow/" + id, { replace: true }); // l3
         setLoading(false)
     }
 
@@ -74,6 +78,7 @@ export default function l2Edit() {
 
     const [flow, setFlow] = useState(null)
     useEffect(() => {
+        // 回填flow
         if (!id || flows.length === 0) return
         const loadFlow = async () => {
             let flow = flows.find(_flow => _flow.id === id)
@@ -130,7 +135,7 @@ export default function l2Edit() {
                 <p className="text-center text-2xl">{t('skills.skillSettings')}</p>
                 <div className="group w-[80%] mx-auto grid gap-4 py-4">
                     <p className="text-center text-gray-400 mt-4 cursor-pointer flex justify-center" onClick={showContent}>{t('skills.basicInfo')}
-                        <ChevronDown />
+                        <ChevronUp />
                     </p>
                     {/* base form */}
                     <div className="w-[68%] mx-auto overflow-hidden transition-all">
@@ -146,7 +151,7 @@ export default function l2Edit() {
                     {
                         isL2 && <div className="mt-4">
                             <p className="text-center pr-2 text-gray-400 cursor-pointer flex justify-center" onClick={showContent}>{t('skills.parameterInfo')}
-                                <ChevronDown />
+                                <ChevronUp />
                             </p>
                             <div className="grid gap-4 overflow-hidden transition-all">
                                 {flow?.data?.nodes.map(({ data }) => (

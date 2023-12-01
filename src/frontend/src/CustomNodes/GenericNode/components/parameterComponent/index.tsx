@@ -1,14 +1,18 @@
 import { Info } from "lucide-react";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 import { Handle, Position, useUpdateNodeInternals } from "reactflow";
 import ShadTooltip from "../../../../components/ShadTooltipComponent";
+import VariablesComponent from "../../../../components/VariablesComponent";
 import CodeAreaComponent from "../../../../components/codeAreaComponent";
+import DictComponent from "../../../../components/dictComponent";
 import Dropdown from "../../../../components/dropdownComponent";
 import FloatComponent from "../../../../components/floatComponent";
 import InputComponent from "../../../../components/inputComponent";
 import InputFileComponent from "../../../../components/inputFileComponent";
 import InputListComponent from "../../../../components/inputListComponent";
 import IntComponent from "../../../../components/intComponent";
+import KeypairListComponent from "../../../../components/keypairListComponent";
 import PromptAreaComponent from "../../../../components/promptComponent";
 import TextAreaComponent from "../../../../components/textAreaComponent";
 import ToggleShadComponent from "../../../../components/toggleShadComponent";
@@ -21,18 +25,13 @@ import { ParameterComponentType } from "../../../../types/components";
 import { cleanEdges, convertObjToArray, convertValuesToNumbers, hasDuplicateKeys } from "../../../../util/reactflowUtils";
 import {
   classNames,
+  getNodeNames,
   getRandomKeyByssmm,
   groupByFamily,
   isValidConnection,
   nodeColors,
-  nodeIconsLucide,
-  getNodeNames
+  nodeIconsLucide
 } from "../../../../utils";
-import DictComponent from "../../../../components/dictComponent";
-import KeypairListComponent from "../../../../components/keypairListComponent";
-import { Button } from "../../../../components/ui/button";
-import { Link, useParams } from "react-router-dom";
-import VariablesComponent from "../../../../components/VariablesComponent";
 
 export default function ParameterComponent({
   left,
@@ -211,7 +210,7 @@ export default function ParameterComponent({
             type === "code" ||
             type === "prompt" ||
             type === "file" ||
-            type === "int" || 
+            type === "int" ||
             type === "variable" ||
             type === "button") &&
           !optionalHandle ? (
@@ -417,10 +416,6 @@ export default function ParameterComponent({
                 handleOnNewValue(valueToNumbers);
               }}
             />
-          </div>
-        ) : left === true && type === "button" ? (
-          <div className="mt-2 w-full">
-            <Link to={`/report/${flowId}`}><Button variant="outline" className="px-10">Edit</Button></Link>
           </div>
         ) : left === true && type === "variable" ? (
           <div className="mt-2 w-full">

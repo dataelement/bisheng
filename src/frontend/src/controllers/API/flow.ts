@@ -8,13 +8,21 @@ export function saveVariableApi(data) {
     return axios.post(`/api/v1/variable/`, data);
 }
 
+export const enum VariableType {
+    /** 文本 */
+    Text = "text",
+    /** 下拉框 */
+    Select = "select",
+    /** 文件 */
+    File = "file"
+}
 
 export interface Variable {
     id: string | number;
     update: boolean;
     name: string;
     maxLength: number;
-    type: string;
+    type: VariableType;
     nodeId: string;
     required: boolean;
     options: {
@@ -30,7 +38,7 @@ export interface Variable {
 export function getVariablesApi(params) {
     return axios.get(`/api/v1/variable/list`, { params }).then(res => {
         return res.data.map((item) => {
-            const types = ['', 'text', 'select', 'file']
+            const types = ['', VariableType.Text, VariableType.Select, VariableType.File]
             return {
                 id: item.id,
                 update: true,
@@ -63,9 +71,9 @@ export function saveReportFormApi(flowId, data: Variable[]) {
     const _data = data.map((item) => {
         const { id, maxLength, name: variable_name, nodeId: node_id, options, required, type } = item
         const types = {
-            'text': () => ({ type: 1, value: maxLength }),
-            'select': () => ({ type: 2, value: options.map((op) => op.value).join(',') }),
-            'file': () => ({ type: 3, value: "0" }),
+            [VariableType.Text]: () => ({ type: 1, value: maxLength }),
+            [VariableType.Select]: () => ({ type: 2, value: options.map((op) => op.value).join(',') }),
+            [VariableType.File]: () => ({ type: 3, value: "0" }),
         }
         const typeInfo = types[type]()
         return {

@@ -70,7 +70,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     getAppConfig().then(res => {
       setAppConfig({
         isDev: res.data.data.env === 'dev',
-        libAccepts: res.data.data.uns_support
+        libAccepts: res.data.data.uns_support,
+        officeUrl: res.data.data.office_url
       })
     })
   }, [])
