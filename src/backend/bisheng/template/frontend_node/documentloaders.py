@@ -79,13 +79,15 @@ class DocumentLoaderFrontNode(FrontendNode):
             build_file_field(suffixes=['.pdf'], fileTypes=['pdf']),
         'UniversalKVLoader':
             build_file_field(
-                suffixes=['.jpg', '.png', '.jpeg', '.pdf'],
-                fileTypes=['jpg', 'png', 'jpeg', 'pdf'],
+                suffixes=['.jpg', '.png', '.jpeg', '.bmp', '.pdf'],
+                fileTypes=['jpg', 'png', 'jpeg', 'bmp', 'pdf'],
             ),
         'CustomKVLoader':
             build_file_field(
-                suffixes=['.jpg', '.png', '.jpeg', '.pdf'],
-                fileTypes=['jpg', 'png', 'jpeg', 'pdf'],
+                suffixes=['.jpg', '.png', '.jpeg', '.pdf', '.txt', '.docx',
+                          '.doc', '.bmp', '.tif', '.tiff', '.xls', '.xlsx'],
+                fileTypes=['jpg', 'png', 'jpeg', 'pdf', 'txt', 'docx',
+                           'doc', 'bmp', 'tif', 'tiff', 'xls', 'xlsx'],
             ),
     }
 

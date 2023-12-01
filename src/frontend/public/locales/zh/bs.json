@@ -188,7 +188,9 @@
         "dropdown": "下拉框",
         "maxLength": "最大长度",
         "options": "选项",
-        "variableName": "变量名"
+        "variableName": "变量名",
+        "varOptionRequired": "请输入选项内容",
+        "optionRepeated": "选项重复"
     },
     "lib": {
         "enterLibraryName": "请输入知识库名称",
@@ -257,7 +259,11 @@
         "importButton": "导入",
         "start": "开始",
         "formSettings": "表单设置",
-        "requiredLabel": "必填"
+        "requiredLabel": "必填",
+        "isRequired": "是必填项",
+        "fileRequired": "当前文件为空",
+        "selectComponent": "选择一个组件",
+        "varLength": "长度不能超过"
     },
     "status": {
         "1004": "该技能已被删除",

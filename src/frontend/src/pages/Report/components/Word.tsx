@@ -1,8 +1,11 @@
 import i18next from "i18next"
-import { useEffect } from "react"
+import { useEffect, useContext } from "react"
+import { locationContext } from "../../../contexts/locationContext"
 
 export default function Word({ data }) {
-    const wordUrl = 'http://192.168.106.120:8701'
+    const { appConfig } = useContext(locationContext)
+
+    const wordUrl = appConfig.officeUrl
     const backUrl = location.origin + '/api/v1/report/callback' // 后端服务地址
 
     const editorConfig = {
@@ -45,13 +48,17 @@ export default function Word({ data }) {
                 help: false,
                 chat: false,
                 about: false,
-                autosave: true,
                 features: { spellcheck: false },
                 forcesave: true,
                 hideRightMenu: true,
                 rightMenu: true,
                 unit: "cm",
-                uiTheme: "theme-dark"
+                uiTheme: "theme-dark",
+                logo: {
+                    "image": location.origin + "/logo.jpeg",
+                    "imageDark": location.origin + "/logo.jpeg",
+                    "url": "https://example.com"
+                }
             },
             plugins: {
                 autostart: ['asc.{D2A0F3BE-CC8D-4956-BCD9-6CBEA6E8960E}']

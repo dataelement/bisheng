@@ -182,7 +182,8 @@ def save_uploaded_file(file, folder_name, file_name):
         mino_client.upload_tmp(file_name, file_byte)
         file_path = mino_client.get_share_link(file_name, tmp_bucket)
     else:
-        file_path = folder_path / md5_name
+        file_type = md5_name.split('.')[-1]
+        file_path = folder_path / f'{md5_name}.{file_type}'
         with open(file_path, 'wb') as new_file:
             while chunk := file.read(8192):
                 new_file.write(chunk)
@@ -191,7 +192,7 @@ def save_uploaded_file(file, folder_name, file_name):
 
 
 @create_cache_folder
-def save_download_file(file_byte, folder_name):
+def save_download_file(file_byte, folder_name, filename):
     """
     Save an uploaded file to the specified folder with a hash of its content as the file name.
 
@@ -218,8 +219,8 @@ def save_download_file(file_byte, folder_name):
     # Use the hex digest of the hash as the file name
     hex_dig = sha256_hash.hexdigest()
     md5_name = hex_dig
-
-    file_path = folder_path / md5_name
+    file_type = filename.split('.')[-1]
+    file_path = folder_path / f'{md5_name}.{file_type}'
     with open(file_path, 'wb') as new_file:
         new_file.write(file_byte)
     return str(file_path)
@@ -235,10 +236,15 @@ def file_download(file_path: str):
                 'Check the url of your file; returned status code %s'
                 % r.status_code
             )
-
-        file_name = unquote(urlparse(file_path).path.split('/')[-1])
-        file_path = save_download_file(r.content, 'bisheng')
-        return file_path, file_name
+        # 检查Content-Disposition头来找出文件名
+        content_disposition = r.headers.get('Content-Disposition')
+        filename = ''
+        if content_disposition:
+            filename = content_disposition.split('filename=')[-1].strip("\"'")
+        if not filename:
+            filename = unquote(urlparse(file_path).path.split('/')[-1])
+        file_path = save_download_file(r.content, 'bisheng', filename)
+        return file_path, filename
     elif not os.path.isfile(file_path):
         raise ValueError('File path %s is not a valid file or url' % file_path)
     return file_path, ''

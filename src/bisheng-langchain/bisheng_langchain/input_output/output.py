@@ -1,5 +1,8 @@
+import json
 from typing import Any, Dict, List, Optional
+from venv import logger
 
+from bisheng_langchain.chains import LoaderOutputChain
 from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
 from langchain.chains.base import Chain
 from pydantic import BaseModel, Extra
@@ -80,46 +83,130 @@ class Report(Chain):
                     )
             return values
 
+    def func_call(self,
+                  inputs: Dict[str, Any],
+                  outputs: Dict[str, Any],
+                  intermedia_stop: list,
+                  chain: Chain,
+                  node_id: str,
+                  run_manager: Optional[CallbackManagerForChainRun] = None,):
+        question = list(inputs.values())[0]
+        _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
+
+        if isinstance(chain, LoaderOutputChain):
+            question = 'Get' + ','.join(question)
+        _run_manager.on_text(text='', log='', type='start', category='question')
+        _run_manager.on_text(text='', log=question, type='end', category='question')
+        _run_manager.on_text(text='', log='', type='start', category='answer')
+        message_reply = {'message': question, 'category': 'question'}
+        intermedia_stop.append(message_reply)
+
+        chain_outputs = chain(inputs, callbacks=_run_manager.get_child())
+        result = (chain_outputs.get(chain.output_keys[0])
+                  if isinstance(chain_outputs, dict) else chain_outputs)
+        if isinstance(chain, LoaderOutputChain):
+            schema = list(inputs.values())[0]
+            result = json.loads(result)
+            for key in schema:
+                if result.get(key):
+                    result_str = ('；'.join(result.get(key))
+                                  if isinstance(result.get(key), list)
+                                  else result.get(key))
+                    outputs.update({node_id+'_'+key: result_str})
+            result = json.dumps(result, ensure_ascii=False)
+        else:
+            outputs.update({node_id: result})
+            message_reply = {'message': result, 'category': 'answer'}
+            intermedia_stop.append(message_reply)
+            _run_manager.on_text(text='', log=result, type='end', category='answer')
+
+    async def func_acall(self,
+                         inputs: Dict[str, Any],
+                         outputs: Dict[str, Any],
+                         intermedia_stop: list,
+                         chain: Chain,
+                         node_id: str,
+                         run_manager: Optional[AsyncCallbackManagerForChainRun] = None,):
+        question = list(inputs.values())[0]
+        _run_manager = run_manager or AsyncCallbackManagerForChainRun.get_noop_manager()
+
+        if isinstance(chain, LoaderOutputChain):
+            question = 'Get' + ','.join(question)
+        await _run_manager.on_text(text='', log='', type='start', category='question')
+        await _run_manager.on_text(text='', log=question, type='end', category='question')
+        await _run_manager.on_text(text='', log='', type='start', category='answer')
+        message_reply = {'message': question, 'category': 'question'}
+        intermedia_stop.append(message_reply)
+
+        # process
+        try:
+            chain_outputs = await chain.arun(inputs, callbacks=_run_manager.get_child())
+        except Exception as e:
+            logger.exception(e)
+            try:
+                chain_outputs = chain(inputs)
+            except Exception as e2:
+                logger.exception(e2)
+                chain_outputs = ''
+
+        result = (chain_outputs.get(chain.output_keys[0])
+                  if isinstance(chain_outputs, dict) else chain_outputs)
+        if isinstance(chain, LoaderOutputChain):
+            schema = list(inputs.values())[0]
+            result = json.loads(result)
+            for key in schema:
+                if result.get(key):
+                    result_str = ('；'.join(result.get(key))
+                                  if isinstance(result.get(key), list)
+                                  else result.get(key))
+                    outputs.update({node_id+'_'+key: result_str})
+            result = json.dumps(result, ensure_ascii=False)
+        else:
+            outputs.update({node_id: result})
+            message_reply = {'message': result, 'category': 'answer'}
+            intermedia_stop.append(message_reply)
+        await _run_manager.on_text(text='', log=result, type='end', category='answer')
+
     def _call(
         self,
         inputs: Dict[str, Any],
         run_manager: Optional[CallbackManagerForChainRun] = None,
         verbose: Optional[bool] = None,
     ) -> Dict[str, str]:
-        _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
+        intermedia_steps = []
         outputs = {}
-        color_mapping = get_color_mapping([str(i) for i in range(len(self.chains))])
         if self.chains:
             for i, chain in enumerate(self.chains):
                 if not isinstance(chain['object'], Chain):
                     raise TypeError(
                         f"{chain['object']} not be runnable Chain object"
                     )
+                if isinstance(chain['object'], LoaderOutputChain):
+                    # loaderchain questions use new parse
+                    self.func_call(chain['input'], outputs, intermedia_steps,
+                                   chain['object'], chain['node_id'], run_manager)
+                    continue
+
                 preset_question = chain['input']
                 for k, v in preset_question.items():
+                    # log print
                     if isinstance(v, str):
-                        chain_outputs = chain['object'](preset_question,
-                                                        callbacks=_run_manager.get_child(f'step_{i+1}'))
-                        result = (chain_outputs.get(chain['object'].output_keys[0])
-                                  if isinstance(chain_outputs, dict) else chain_outputs)
-                        outputs.update({chain['node_id']: result})
+                        self.func_call(preset_question, outputs, intermedia_steps,
+                                       chain['object'], chain['node_id']+'_'+v, run_manager)
                     else:
                         for question in v:
                             question_dict = {k: question}
-                            chain_outputs = chain['object'](question_dict,
-                                                            callbacks=_run_manager.get_child(f'step_{i+1}'))
-                            result = (chain_outputs.get(chain['object'].output_keys[0])
-                                      if isinstance(chain_outputs, dict) else chain_outputs)
-                            outputs.update({chain['node_id'] + '_' + question: result})
-                # log print
-                _run_manager.on_text(
-                    chain_outputs, color=color_mapping[str(i)], end='\n', verbose=verbose
-                )
-            # variables
-            if self.variables and self.variables[0]:
-                for name, value in self.variables:
-                    outputs.update({'var_'+name: value})
-        return {self.output_key: outputs, self.input_key: self.report_name}
+                            self.func_call(question_dict, outputs, intermedia_steps,
+                                           chain['object'], chain['node_id']+'_'+question,
+                                           run_manager)
+        # variables
+        if self.variables and self.variables[0]:
+            for variable in self.variables:
+                variable_kv = variable['input'][0]
+                for k, v in variable_kv.items():
+                    outputs.update({variable['node_id']+'_'+k: v})
+        return {self.output_key: outputs, self.input_key: self.report_name,
+                'intermediate_steps': intermedia_steps}
 
     async def _acall(
         self,
@@ -127,38 +214,40 @@ class Report(Chain):
         run_manager: Optional[AsyncCallbackManagerForChainRun] = None,
         verbose: Optional[bool] = None,
     ) -> Dict[str, Any]:
-        _run_manager = run_manager or AsyncCallbackManagerForChainRun.get_noop_manager()
+        intermedia_steps = []
         outputs = {}
-        color_mapping = get_color_mapping([str(i) for i in range(len(self.chains))])
+        await run_manager.on_text(text='', log='', type='end', category='processing')  # end father start
         if self.chains:
             for i, chain in enumerate(self.chains):
                 if not isinstance(chain['object'], Chain):
                     raise TypeError(
                         f"{chain['object']} not be runnable Chain object"
                     )
+                if isinstance(chain['object'], LoaderOutputChain):
+                    # loaderchain questions use new parse
+                    await self.func_acall(chain['input'], outputs, intermedia_steps,
+                                          chain['object'], chain['node_id'], run_manager)
+                    continue
+                # normal chain
                 preset_question = chain['input']
                 for k, v in preset_question.items():
                     if isinstance(v, str):
-                        chain_outputs = await chain['object'].arun(preset_question,
-                                                                   callbacks=_run_manager.get_child(f'step_{i+1}'))
-                        result = (chain_outputs.get(chain['object'].output_keys[0])
-                                  if isinstance(chain_outputs, dict) else chain_outputs)
-                        outputs.update({chain['node_id']: result})
+                        await self.func_acall(preset_question, outputs, intermedia_steps,
+                                              chain['object'], chain['node_id']+'_'+v, run_manager)
                     else:
                         for question in v:
                             question_dict = {k: question}
-                            chain_outputs = await chain['object'].arun(question_dict,
-                                                                       callbacks=_run_manager.get_child(f'step_{i+1}'))
-                            result = (chain_outputs.get(chain['object'].output_keys[0])
-                                      if isinstance(chain_outputs, dict) else chain_outputs)
-                            outputs.update({chain['node_id'] + '_' + question: result})
-            await _run_manager.on_text(
-                chain_outputs, color=color_mapping[str(i)], end='\n', verbose=verbose
-            )
-
+                            await self.func_acall(question_dict, outputs, intermedia_steps,
+                                                  chain['object'], chain['node_id']+'_'+question,
+                                                  run_manager)
         # variables
         if self.variables and self.variables[0]:
-            for name, value in self.variables:
-                outputs.update({chain['node_id']+'_'+name: value})
+            for variable in self.variables:
+                variable_kv = variable['input'][0]
+                for k, v in variable_kv.items():
+                    outputs.update({variable['node_id']+'_'+k: v})
 
-        return {self.output_key: outputs, self.input_key: self.report_name}
+        # keep whole process paired
+        await run_manager.on_text(text='', log='', type='start', category='processing')
+        return {self.output_key: outputs, self.input_key: self.report_name,
+                'intermediate_steps': intermedia_steps}

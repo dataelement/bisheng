@@ -12,6 +12,7 @@ export default function InputFileComponent({
   disabled,
   suffixes,
   fileTypes,
+  placeholder = 'The current file is empty',
   onFileChange,
   editNode = false,
   isSSO = false
@@ -112,7 +113,7 @@ export default function InputFileComponent({
                 : "input-dialog input-primary text-muted-foreground"
           }
         >
-          {myValue !== "" ? myValue : "The current file is empty"}
+          {myValue !== "" ? myValue : placeholder}
         </span>
         <button onClick={handleButtonClick}>
           {!editNode && !loading && (

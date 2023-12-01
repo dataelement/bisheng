@@ -53,7 +53,7 @@ export default function InputListComponent({
                 });
               }}
             />
-            {idx === inputList.length - 1 ? (
+            {idx === inputList.length - 1 && (
               <button
                 onClick={() => {
                   setInputList((old) => {
@@ -66,8 +66,9 @@ export default function InputListComponent({
               >
                 <Plus className={"h-4 w-4 hover:text-accent-foreground"} />
               </button>
-            ) : (
-              <button
+            )}
+            {
+              inputList.length !== 1 && <button
                 onClick={() => {
                   setInputList((old) => {
                     let newInputList = _.cloneDeep(old);
@@ -79,7 +80,7 @@ export default function InputListComponent({
               >
                 <X className="h-4 w-4 hover:text-status-red" />
               </button>
-            )}
+            }
           </div>
         );
       })}

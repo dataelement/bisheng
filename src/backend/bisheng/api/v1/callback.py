@@ -99,14 +99,21 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
             else:
                 await self.websocket.send_json(log.dict())
                 await self.websocket.send_json(start.dict())
-        elif kwargs.get('type'):
-            start = ChatResponse(type='start', category=kwargs.get('type'))
-            end = ChatResponse(type='end', intermediate_steps=text, category=kwargs.get('type'))
-            await self.websocket.send_json(start.dict())
-            await self.websocket.send_json(end.dict())
         elif 'category' in kwargs:
-            log = ChatResponse(message=text, type='stream')
-            await self.websocket.send_json(log.dict())
+            if 'autogen' == kwargs['category']:
+                log = ChatResponse(message=text, type='stream')
+                await self.websocket.send_json(log.dict())
+                if kwargs.get('type'):
+                    # 兼容下
+                    start = ChatResponse(type='start', category=kwargs.get('type'))
+                    end = ChatResponse(type='end', intermediate_steps=text,
+                                       category=kwargs.get('type'))
+                    await self.websocket.send_json(start.dict())
+                    await self.websocket.send_json(end.dict())
+            else:
+                log = ChatResponse(message=text, intermediate_steps=kwargs['log'],
+                                   type=kwargs['type'], category=kwargs['category'])
+                await self.websocket.send_json(log.dict())
 
     async def on_agent_action(self, action: AgentAction, **kwargs: Any):
         log = f'Thought: {action.log}'

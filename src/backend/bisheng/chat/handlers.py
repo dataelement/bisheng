@@ -64,11 +64,15 @@ class Handler:
             return
         start_resp = ChatResponse(type='start', user_id=user_id)
         await session.send_json(client_id, chat_id, start_resp)
+
+        langchain_object = session.in_memory_cache.get(key)
         template_muban = mino_client.get_share_link(template.object_name)
-        test_replace_string(template_muban, result, 'report.docx')
-        file = mino_client.get_share_link('report.docx')
+        report_name = langchain_object.report_name
+        report_name = report_name if report_name.endswith('.docx') else f'{report_name}.docx'
+        test_replace_string(template_muban, result, report_name)
+        file = mino_client.get_share_link(report_name)
         response = ChatResponse(type='end',
-                                files=[{'file_url': file, 'file_name': 'report.docx'}],
+                                files=[{'file_url': file, 'file_name': report_name}],
                                 user_id=user_id)
         await session.send_json(client_id, chat_id, response)
         close_resp = ChatResponse(type='close', category='system', user_id=user_id)
@@ -86,7 +90,7 @@ class Handler:
         artifacts = session.in_memory_cache.get(key + '_artifacts')
         if artifacts:
             for k, value in artifacts.items():
-                if k in chat_inputs:
+                if k in chat_inputs and value:
                     chat_inputs[k] = value
         chat_inputs = ChatMessage(message=chat_inputs, category='question',
                                   is_bot=not is_begin, type='bot', user_id=user_id,)
@@ -173,21 +177,6 @@ class Handler:
                            type='end', user_id=user_id)
         session.chat_history.add_message(client_id, chat_id, file)
         start_resp = ChatResponse(type='start', category='system', user_id=user_id)
-        await session.send_json(client_id, chat_id, start_resp)
-
-        if not batch_question:
-            # no question
-            step_resp = ChatResponse(type='end',
-                                     intermediate_steps='File parsing complete',
-                                     category='system', user_id=user_id)
-            await session.send_json(client_id, chat_id, step_resp)
-            start_resp.type = 'close'
-            await session.send_json(client_id, chat_id, start_resp)
-            return
-
-        step_resp = ChatResponse(intermediate_steps='File parsing complete, analysis starting',
-                                 type='end', category='system', user_id=user_id)
-        await session.send_json(client_id, chat_id, step_resp)
 
         key = get_cache_key(client_id, chat_id)
         langchain_object = session.in_memory_cache.get(key)
@@ -258,8 +247,10 @@ class Handler:
                 sender = message.get('sender')
                 receiver = message.get('receiver')
                 is_bot = False if receiver and receiver.get('is_bot') else True
+                category = message.get('category', 'processing')
                 msg = ChatResponse(message=content, sender=sender, receiver=receiver,
-                                   type='end', user_id=user_id, is_bot=is_bot)
+                                   type='end', user_id=user_id, is_bot=is_bot,
+                                   category=category)
                 steps.append(msg)
         else:
             # agent model will produce the steps log

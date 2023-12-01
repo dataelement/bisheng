@@ -192,7 +192,9 @@
         "dropdown": "Dropdown",
         "maxLength": "Max Length",
         "options": "Options",
-        "variableName": "Variable Name"
+        "variableName": "Variable Name",
+        "varOptionRequired": "options are required",
+        "optionRepeated": "Option repeated"
     },
     "lib": {
         "enterLibraryName": "Enter Knowledge Base Name",
@@ -261,7 +263,11 @@
         "importButton": "Import",
         "start": "start",
         "formSettings": "Form Settings",
-        "requiredLabel": "Required"
+        "requiredLabel": "Required",
+        "isRequired": "is Required",
+        "fileRequired": "The current file is empty",
+        "selectComponent": "Select a component",
+        "varLength": "Length cannot exceed"
     },
     "status": {
         "1004": "This skill has been deleted",

@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { TabsContext } from "../../../contexts/tabsContext";
 import { useDebounce } from "../../../util/hook";
 import { getVariablesApi } from "../../../controllers/API/flow";
+import { useTranslation } from "react-i18next";
 
 export default function Label({ onInset }) {
     const { id: flowId } = useParams();
@@ -16,7 +17,7 @@ export default function Label({ onInset }) {
         if (!_flow) return [];
         // 提取报表变量
         return _flow.data.nodes.reduce((res, node) => {
-            if (["InputNode", "VariableNode", "UniversalKVLoader", ""].includes(node.data.type)) {
+            if (["InputNode", "VariableNode", "UniversalKVLoader", "CustomKVLoader"].includes(node.data.type)) {
                 res.push({
                     id: node.id,
                     nodeName: node.data.type,
@@ -29,12 +30,13 @@ export default function Label({ onInset }) {
 
     // labels
     const { selectChange, labels, onSearch } = useLabels(flowId, nodes)
+    const { t } = useTranslation()
 
     return <div className="flex flex-col gap-4">
         {/* Select component */}
         <Select onValueChange={selectChange}>
             <SelectTrigger className="">
-                <SelectValue placeholder="Select a component" />
+                <SelectValue placeholder={t('report.selectComponent')} />
             </SelectTrigger>
             <SelectContent className="">
                 <SelectGroup>
@@ -53,7 +55,7 @@ export default function Label({ onInset }) {
                     key={label.label}
                     onClick={() => onInset(label.value)}
                     className="flex items-center gap-2 pl-2 py-2 text-[#8285a6] cursor-pointer hover:bg-gray-100 rounded-sm text-sm"
-                ><Braces size={16} />{label.label}</div>
+                ><Braces size={16} className="min-w-[20px]" /><span className="truncate">{label.label}</span></div>
             )}
         </div>
     </div>
@@ -66,19 +68,30 @@ const useLabels = (flowId, nodes) => {
     const [keyWord, setKeyWord] = useState([])
     const handleSelect = (index) => {
         const { id, nodeName, node } = nodes[Number(index)];
+        // inputnode 提取 变量
         if (nodeName === "InputNode") {
             return setLabels(node.template.input.value.map(el => ({
-                label: el, value: `${nodeName}_${id}_${el}`
+                label: el, value: `${id}_${el}`
             })))
         }
-        if (nodeName === "UniversalKVLoader") { // CustomKVLoader
+        // UniversalKVLoader 提取 变量
+        if (nodeName === "UniversalKVLoader") {
             const schema = node.template.schema.value
             if (!schema) return setLabels([])
             return setLabels(schema.split('|').map(el => {
-                return { label: el, value: `${nodeName}_${id}_${el}` }
+                return { label: el, value: `${id}_${el}` }
+            }))
+        }
+        // CustomKVLoader 提取 变量
+        if (nodeName === "CustomKVLoader") {
+            const schemas = node.template.schemas.value || ''
+            if (!schemas) return setLabels([])
+            return setLabels(schemas.split('|').map(el => {
+                return { label: el, value: `${id}_${el}` }
             }))
         }
         // api
+        // Variable 提取 变量
         getVariablesApi({
             flow_id: flowId,
             node_id: id
@@ -86,7 +99,7 @@ const useLabels = (flowId, nodes) => {
             setLabels(arr.map(item => {
                 return {
                     label: item.name,
-                    value: `${nodeName}_${id}_${item.name}`
+                    value: `${id}_${item.name}`
                 }
             }))
         })

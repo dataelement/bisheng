@@ -33,13 +33,13 @@ export function useDebounce(func: any, wait: number, immediate: boolean, callbac
 export function useHasForm(flow) {
     return useMemo(() => {
         // 如果有 VariableNode  inputnode 就属于
-        return !!flow?.data.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
+        return !!flow?.data?.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
     }, [flow])
 }
 
 export function useHasReport(flow) {
     return useMemo(() =>
-        !!flow?.data.nodes.find(node => "Report" === node.data.type)
+        !!flow?.data?.nodes.find(node => "Report" === node.data.type)
         , [flow])
 }
 

@@ -16,6 +16,7 @@ from bisheng.database.models.user import User
 from bisheng.processing.process import process_tweaks
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
+from bisheng_langchain.input_output.output import Report
 from fastapi import WebSocket, status
 
 
@@ -171,38 +172,70 @@ class ChatManager:
                 if is_begin:
                     start_resp = ChatResponse(type='begin', category='system', user_id=user_id)
                     await self.send_json(client_id, chat_id, start_resp)
+                start_resp.type = 'start'
+
                 # should input data
                 langchain_obj_key = get_cache_key(client_id, chat_id)
+                has_file = False
                 if 'inputs' in payload and 'data' in payload['inputs']:
                     node_data = payload['inputs']['data']
                     gragh_data = self.refresh_graph_data(gragh_data, node_data)
                     self.set_cache(langchain_obj_key, None)  # rebuild object
+                    has_file = any(['InputFile' in nd.get('id') for nd in node_data])
+                if has_file:
+                    step_resp = ChatResponse(intermediate_steps='File upload complete and begin to parse',  # noqa
+                                             type='end', category='system', user_id=user_id)
+                    await self.send_json(client_id, chat_id, start_resp)
+                    await self.send_json(client_id, chat_id, step_resp, add=False)
+                    await self.send_json(client_id, chat_id, start_resp)
+                    logger.info('input_file start_log')
+                    await asyncio.sleep(1)  # why frontend not recieve imediately
 
                 batch_question = []
                 if not self.in_memory_cache.get(langchain_obj_key):
+                    logger.info(f"init_langchain key={langchain_obj_key} input={payload['inputs']}")
                     try:
-                        gragh = self.init_langchain_object(client_id, chat_id, user_id, gragh_data)
-                        if 'data' in payload['inputs']:
-                            action = 'auto_file'   # has input data, default is file process
-                        for node in gragh.nodes:
-                            if node.vertex_type == 'Report':
-                                action = 'report'
-                                break
-                            if node.vertex_type == 'InputNode':
-                                # preset question  only use for auto_file
-                                batch_question = node._built_object
+                        gragh = self.init_langchain_object(client_id, chat_id,
+                                                           user_id, gragh_data)
                     except Exception as e:
                         logger.exception(e)
-                        step_resp = ChatResponse(intermediate_steps='input data is parsed fail',
+                        step_resp = ChatResponse(intermediate_steps='Input data is parsed fail',
                                                  type='end', category='system', user_id=user_id)
+                        if has_file:
+                            step_resp.intermediate_steps = 'File is parsed fail'
                         await self.send_json(client_id, chat_id, step_resp)
                         start_resp.type = 'close'
                         await self.send_json(client_id, chat_id, start_resp)
                         # socket close?
                         return
+                    if has_file:
+                        batch_question = [node._built_object
+                                          for node in gragh.nodes
+                                          if node.vertex_type == 'InputNode']
 
-                if action == 'auto_file':
-                    payload['inputs']['questions'] = batch_question
+                langchain_obj = self.in_memory_cache.get(langchain_obj_key)
+                if isinstance(langchain_obj, Report):
+                    action = 'report'
+                elif 'data' in payload['inputs']:
+                    action = 'auto_file'   # has input data, default is file process
+                # default not set, for autogen set before
+
+                if has_file:
+                    if not batch_question:
+                        if action == 'auto_file':
+                            # no question
+                            step_resp = ChatResponse(type='end',
+                                                     intermediate_steps='File parsing complete',
+                                                     category='system', user_id=user_id)
+                            await self.send_json(client_id, chat_id, step_resp)
+                            start_resp.type = 'close'
+                            await self.send_json(client_id, chat_id, start_resp)
+                            continue
+                    step_resp = ChatResponse(intermediate_steps='File parsing complete. Analysis starting',  # noqa
+                                             type='end', category='system', user_id=user_id)
+                    await self.send_json(client_id, chat_id, step_resp, add=False)
+                    if action == 'auto_file':
+                        payload['inputs']['questions'] = [question for question in batch_question]
 
                 asyncio.create_task(Handler().dispatch_task(self, client_id, chat_id, action,
                                                             payload, user_id))
