@@ -95,7 +95,7 @@ async def process_knowledge(*,
     file_path = data.get('file_path')
     auto_p = data.get('auto')
     separator = data.get('separator')
-    chunk_overlap = 0
+    chunk_overlap = data.get('chunk_overlap')
 
     if auto_p:
         separator = ['\n\n', '\n', ' ', '']

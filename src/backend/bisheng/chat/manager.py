@@ -215,7 +215,8 @@ class ChatManager:
                 langchain_obj = self.in_memory_cache.get(langchain_obj_key)
                 if isinstance(langchain_obj, Report):
                     action = 'report'
-                elif action != 'autogen' and 'data' in payload['inputs']:
+                elif action != 'autogen' and ('data' in payload['inputs'] or
+                                              'file_path' in payload['inputs']):
                     action = 'auto_file'   # has input data, default is file process
                 # default not set, for autogen set before
 
