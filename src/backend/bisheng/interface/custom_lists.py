@@ -13,7 +13,7 @@ from langchain.agents import agent_toolkits
 from langchain.chat_models import AzureChatOpenAI, ChatAnthropic, ChatOpenAI, ChatVertexAI
 
 # LLMs
-llm_type_to_cls_dict = llms.type_to_cls_dict
+llm_type_to_cls_dict = llms.get_type_to_cls_dict()
 llm_type_to_cls_dict['anthropic-chat'] = ChatAnthropic  # type: ignore
 llm_type_to_cls_dict['azure-chat'] = AzureChatOpenAI  # type: ignore
 llm_type_to_cls_dict['openai-chat'] = ChatOpenAI  # type: ignore
