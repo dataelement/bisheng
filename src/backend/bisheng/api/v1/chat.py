@@ -103,7 +103,7 @@ async def chat(flow_id: str,
     payload = json.loads(Authorize.get_jwt_subject())
     user_id = payload.get('user_id')
     """Websocket endpoint for chat."""
-    if type and type == 'L1':
+    if chat_id:
         with next(get_session()) as session:
             db_flow = session.get(Flow, flow_id)
         if not db_flow:
@@ -127,18 +127,11 @@ async def chat(flow_id: str,
         graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
 
     try:
-        process_file = False if chat_id else True
-        graph = build_flow_no_yield(graph_data=graph_data,
-                                    artifacts={},
-                                    process_file=process_file,
-                                    flow_id=UUID(flow_id).hex,
-                                    chat_id=chat_id)
-        langchain_object = graph.build()
-        for node in langchain_object:
-            key_node = get_cache_key(flow_id, chat_id, node.id)
-            chat_manager.set_cache(key_node, node._built_object)
-            chat_manager.set_cache(get_cache_key(flow_id, chat_id), node._built_object)
-        await chat_manager.handle_websocket(flow_id, chat_id, websocket, user_id)
+        if not chat_id:
+            # 调试时，每次都初始化对象
+            chat_manager.set_cache(get_cache_key(flow_id, chat_id), None)
+        await chat_manager.handle_websocket(flow_id, chat_id, websocket, user_id,
+                                            gragh_data=graph_data)
     except WebSocketException as exc:
         logger.error(exc)
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))
@@ -311,6 +304,7 @@ async def stream_build(flow_id: str, chat_id: Optional[str] = None):
             yield str(StreamData(event='message', data=input_keys_response))
             # We need to reset the chat history
             chat_manager.chat_history.empty_history(flow_id, chat_id)
+            chat_manager.set_cache(get_cache_key(flow_id=flow_id, chat_id=chat_id), None)
             flow_data_store.hsetkey(flow_data_key, 'status', BuildStatus.SUCCESS.value, expire)
         except Exception as exc:
             logger.exception(exc)

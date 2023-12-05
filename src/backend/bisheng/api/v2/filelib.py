@@ -148,7 +148,7 @@ async def upload_file(*,
 
     file_name = file.filename
     # 缓存本地
-    file_path = save_uploaded_file(file.file, 'bisheng').as_posix()
+    file_path = save_uploaded_file(file.file, 'bisheng', file_name).as_posix()
     auto_p = True
     if auto_p:
         separator = ['\n\n', '\n', ' ', '']

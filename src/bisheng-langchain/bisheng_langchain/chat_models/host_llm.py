@@ -379,7 +379,7 @@ class HostQwenChat(BaseHostChatLLM):
     model_name: str = Field('Qwen-7B-Chat', alias='model')
 
     temperature: float = 0
-    top_p: float = 0.5
+    top_p: float = 1
     max_tokens: int = 8192
 
     @property

@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional
+from venv import logger
 
 from bisheng.api import router, router_rpc
 from bisheng.database.base import create_db_and_tables
@@ -15,6 +16,7 @@ from fastapi_jwt_auth.exceptions import AuthJWTException
 
 def handle_http_exception(req: Request, exc: HTTPException) -> ORJSONResponse:
     msg = {'status_code': exc.status_code, 'status_message': exc.detail}
+    logger.error(msg)
     return ORJSONResponse(content=msg)
 
 

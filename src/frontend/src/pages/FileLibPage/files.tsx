@@ -131,6 +131,7 @@ export default function FilesPage() {
             </TabsContent>
             <TabsContent value="password"></TabsContent>
         </Tabs>
+        {/* upload modal */}
         <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen}></UploadModal>
         {/* Delete confirmation */}
         <dialog className={`modal ${delShow && 'modal-open'}`}>

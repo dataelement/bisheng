@@ -4,6 +4,9 @@ database_url:
 
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
 redis_url: "redis://redis:6379/0"
+redis_host: [("redis")]
+redis_master:
+redis_password:
 
 environment:
   env: dev
@@ -25,8 +28,7 @@ autogen_roles:
     documentation: ""
   AutoGenCustomRole:
     documentation: ""
-
-agents: 
+agents:
   ZeroShotAgent:
     documentation: "https://python.langchain.com/docs/modules/agents/how_to/custom_mrkl_agent"
   JsonAgent:
@@ -42,6 +44,10 @@ agents:
   SQLAgent:
     documentation: ""
 chains:
+  RuleBasedRouter:
+    documentation: ""
+  MultiRuleChain:
+    documentation: ""
   TransformChain:
     documentation: ""
   MultiPromptChain:
@@ -53,8 +59,6 @@ chains:
   APIChain:
     documentation: ""
   TransformChain:
-    documentation: ""
-  MultiRetrievalQA:
     documentation: ""
   SimpleSequentialChain:
     documentation: ""
@@ -84,7 +88,15 @@ chains:
     documentation: "https://python.langchain.com/docs/modules/chains/popular/chat_vector_db"
   CombineDocsChain:
     documentation: ""
+  # SummarizeDocsChain:
+  #   documentation: ""
+  LoaderOutputChain:
+    documentation: ""
 documentloaders:
+  CustomKVLoader:
+    documentation: ""
+  UniversalKVLoader:
+    documentation: ""
   ElemUnstructuredLoaderV0:
     documentation: ""
   AirbyteJSONLoader:
@@ -138,6 +150,8 @@ documentloaders:
   PDFWithSemanticLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/git"
 embeddings:
+  OpenAIProxyEmbedding:
+    documentation: ""
   OpenAIEmbeddings:
     documentation: "https://python.langchain.com/docs/modules/data_connection/text_embedding/integrations/openai"
   HuggingFaceEmbeddings:
@@ -362,13 +376,15 @@ output_parsers:
     documentation: "https://python.langchain.com/docs/modules/model_io/output_parsers/structured"
   ResponseSchema:
     documentation: "https://python.langchain.com/docs/modules/model_io/output_parsers/structured"
-  
+  RouterOutputParser:
+    documentation: ""
+
 input_output:
-  Input:
+  VariableNode:
+    documentation: ""
+  InputNode:
     documentation: ""
   Output:
     documentation: ""
-  InputFile:
+  InputFileNode:
     documentation: ""
-
-

@@ -1,7 +1,9 @@
 import contextlib
 import json
 from typing import Any, Callable, Dict, List, Sequence, Type
+from venv import logger
 
+from bisheng.cache.utils import file_download
 from bisheng.chat.config import ChatConfig
 from bisheng.interface.agents.base import agent_creator
 from bisheng.interface.chains.base import chain_creator
@@ -16,6 +18,8 @@ from bisheng.interface.utils import load_file_into_dict
 from bisheng.interface.wrappers.base import wrapper_creator
 from bisheng.settings import settings
 from bisheng.utils import validate
+from bisheng.utils.constants import NODE_ID_DICT, PRESET_QUESTION
+from bisheng_langchain.vectorstores import VectorStoreFilterRetriever
 from langchain.agents import ZeroShotAgent
 from langchain.agents import agent as agent_module
 from langchain.agents.agent import AgentExecutor
@@ -35,6 +39,7 @@ def instantiate_class(node_type: str, base_type: str, params: Dict, data: Dict) 
     """Instantiate class from module type and key, and params"""
     params = convert_params_to_sets(params)
     params = convert_kwargs(params)
+    params_node_id_dict = params.pop(NODE_ID_DICT)
     if node_type in CUSTOM_NODES:
         if custom_node := CUSTOM_NODES.get(node_type):
             if hasattr(custom_node, 'initialize'):
@@ -42,7 +47,8 @@ def instantiate_class(node_type: str, base_type: str, params: Dict, data: Dict) 
             return custom_node(**params)
 
     class_object = import_by_type(_type=base_type, name=node_type)
-    return instantiate_based_on_type(class_object, base_type, node_type, params, data)
+    return instantiate_based_on_type(class_object, base_type, node_type,
+                                     params, params_node_id_dict)
 
 
 def convert_params_to_sets(params):
@@ -66,7 +72,7 @@ def convert_kwargs(params):
     return params
 
 
-def instantiate_based_on_type(class_object, base_type, node_type, params, data):
+def instantiate_based_on_type(class_object, base_type, node_type, params, param_id_dict):
     if base_type == 'agents':
         return instantiate_agent(node_type, class_object, params)
     elif base_type == 'prompts':
@@ -90,7 +96,7 @@ def instantiate_based_on_type(class_object, base_type, node_type, params, data):
     elif base_type == 'utilities':
         return instantiate_utility(node_type, class_object, params)
     elif base_type == 'chains':
-        return instantiate_chains(node_type, class_object, params, data)
+        return instantiate_chains(node_type, class_object, params, param_id_dict)
     elif base_type == 'output_parsers':
         return instantiate_output_parser(node_type, class_object, params)
     elif base_type == 'llms':
@@ -101,20 +107,55 @@ def instantiate_based_on_type(class_object, base_type, node_type, params, data):
         return instantiate_memory(node_type, class_object, params)
     elif base_type == 'wrappers':
         return instantiate_wrapper(node_type, class_object, params)
-    elif base_type == 'input_output':
-        return instantiate_input_output(node_type, class_object, params)
+    elif base_type == 'inputOutput':
+        return instantiate_input_output(node_type, class_object, params, param_id_dict)
     elif base_type == 'autogenRoles':
         return instantiate_autogen_roles(node_type, class_object, params)
     else:
         return class_object(**params)
 
 
+def instantiate_input_output(node_type, class_object, params, id_dict):
+    if node_type == 'Report':
+        preset_question = {}
+        if PRESET_QUESTION in params:
+            preset_question = params.pop(PRESET_QUESTION)
+        chains = params.get('chains', [])
+        chains_idlist = id_dict.get('chains', [])
+        # 需要对chains对象进行丰富处理
+        chain_list = []
+        for index, id in enumerate(chains_idlist):
+            chain_obj = {}
+            chain_obj['object'] = chains[index]
+            if id in preset_question:
+                chain_obj['node_id'] = preset_question[id][0]
+                chain_obj['input'] = {chains[index].input_keys[0]: preset_question[id][1]}
+            else:
+                # give a default input
+                logger.error(f'Report has no question id={id}')
+                chain_obj['input'] = {chains[index].input_keys[0]: 'start'}
+            chain_list.append(chain_obj)
+        params['chains'] = chain_list
+        # variable
+        variable = params.get('variables')
+        variable_node_id = id_dict.get('variables')
+        params['variables'] = []
+        for index, id in enumerate(variable_node_id):
+            params['variables'].append({'node_id': id,
+                                        'input': variable[index]})
+        return class_object(**params)
+    if node_type == 'InputFileNode':
+        file_path = class_object(**params).text()
+        if file_path:
+            file_path, file_name2 = file_download(file_path[0])
+            return [file_path, file_name2 if file_name2 else file_path[1]]
+        else:
+            return ''
+    return class_object(**params).text()
+
+
 def instantiate_autogen_roles(node_type, class_object, params):
     return class_object(**params)
-
-
-def instantiate_input_output(node_type, class_object, params):
-    return class_object(**params).text()
 
 
 def instantiate_wrapper(node_type, class_object, params):
@@ -208,9 +249,28 @@ def instantiate_retriever(node_type, class_object, params):
     return class_object(**params)
 
 
-def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, data: Dict):
-    if 'retriever' in params and hasattr(params['retriever'], 'as_retriever'):
-        params['retriever'] = params['retriever'].as_retriever()
+def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_dict: Dict):
+    if 'retriever' in params:
+        user_name = params.pop('user_name', '')
+        if hasattr(params['retriever'], 'as_retriever'):
+            if settings.get_from_db('file_access'):
+                # need to verify file access
+                access_url = settings.get_from_db('file_access') + f'?username={user_name}'
+                vectorstore = VectorStoreFilterRetriever(vectorstore=params['retriever'],
+                                                         access_url=access_url)
+            else:
+                vectorstore = params['retriever'].as_retriever()
+            params['retriever'] = vectorstore
+    # sequence chain
+    if node_type == 'SequentialChain':
+        # 改造sequence 支持自定义chain顺序
+        try:
+            chain_order = json.loads(params.pop('chain_order'))
+        except Exception:
+            raise Exception('chain_order 不是标准数组')
+        chains_origin = params.get('chains')
+        chains_dict = {id: index for index, id in enumerate(id_dict.get('chains'))}
+        params['chains'] = [chains_origin[chains_dict.get(id)] for id in chain_order]
     # dict 转换
     if 'headers' in params and isinstance(params['headers'], str):
         params['headers'] = eval(params['headers'])
@@ -220,7 +280,7 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, data:
             'prompt': params.pop('combine_docs_chain_kwargs', None)
         }
     # 人工组装MultiPromptChain
-    if node_type == 'MultiPromptChain':
+    if node_type in {'MultiPromptChain', 'MultiRuleChain'}:
         destination_chain_name = eval(params['destination_chain_name'])
         llm_chains = params['LLMChains']
         destination_chain = {}
@@ -357,6 +417,7 @@ def instantiate_embedding(class_object, params: Dict):
 
 def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
     search_kwargs = params.pop('search_kwargs', {})
+    user_name = params.pop('user_name', '')
     if 'documents' not in params:
         params['documents'] = []
 
@@ -369,7 +430,14 @@ def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
 
     # ! This might not work. Need to test
     if search_kwargs and hasattr(vecstore, 'as_retriever'):
-        vecstore = vecstore.as_retriever(search_kwargs=search_kwargs)
+        if settings.get_from_db('file_access'):
+            # need to verify file access
+            access_url = settings.get_from_db('file_access') + f'?username={user_name}'
+            vecstore = VectorStoreFilterRetriever(vecstore=vecstore,
+                                                  search_kwargs=search_kwargs,
+                                                  access_url=access_url)
+        else:
+            vecstore = vecstore.as_retriever(search_kwargs=search_kwargs)
 
     return vecstore
 
@@ -400,6 +468,7 @@ def instantiate_documentloader(class_object: Type[BaseLoader], params: Dict):
     # make it success when file not present
     if 'file_path' in params and not params['file_path']:
         return []
+
     docs = class_object(**params).load()
     # Now if metadata is an empty dict, we will not add it to the documents
     if metadata:

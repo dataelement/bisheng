@@ -118,10 +118,10 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
         </ShadTooltip>
 
         <ShadTooltip content={t('save')} side="bottom">
-          <button className="extra-side-bar-buttons" onClick={(event) => {
-            saveFlow(flow);
-            setSuccessData({ title: t('success') });
-          }}
+          <button className="extra-side-bar-buttons" onClick={(event) =>
+            saveFlow(flow).then(_ =>
+              setSuccessData({ title: t('success') }))
+          }
             disabled={!isPending}
           >
             <Save strokeWidth={1.5} className={"side-bar-button-size" + (isPending ? " " : " extra-side-bar-save-disable")} ></Save>

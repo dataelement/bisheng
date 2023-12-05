@@ -8,7 +8,7 @@ from uuid import uuid4
 import requests
 from bisheng.api.utils import access_check
 from bisheng.api.v1.schemas import UploadFileResponse
-from bisheng.cache.utils import save_uploaded_file
+from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import get_session
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
 from bisheng.database.models.knowledge_file import KnowledgeFile
@@ -55,8 +55,10 @@ async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
         # 缓存本地
-        file_path = save_uploaded_file(file.file, 'bisheng').as_posix()
-        return UploadFileResponse(file_path=file_path + '_' + file_name,)
+        file_path = save_uploaded_file(file.file, 'bisheng', file_name)
+        if not isinstance(file_path, str):
+            file_path = str(file_path) + '_' + file_name
+        return UploadFileResponse(file_path=file_path)
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -93,7 +95,7 @@ async def process_knowledge(*,
     file_path = data.get('file_path')
     auto_p = data.get('auto')
     separator = data.get('separator')
-    chunk_overlap = 0
+    chunk_overlap = data.get('chunk_overlap')
 
     if auto_p:
         separator = ['\n\n', '\n', ' ', '']
@@ -111,13 +113,15 @@ async def process_knowledge(*,
     collection_name = knowledge.collection_name
     files = []
     file_paths = []
+    result = []
     for path in file_path:
-        filepath, file_name = path.split('_', 1)
-        md5_ = filepath.rsplit('/', 1)[1]
+        filepath, file_name = file_download(path)
+        md5_ = filepath.rsplit('/', 1)[1].split('.')[0]
         # 是否包含重复文件
-        repeat = session.exec(select(KnowledgeFile
-                                     ).where(KnowledgeFile.md5 == md5_, KnowledgeFile.status == 2,
-                                             KnowledgeFile.knowledge_id == knowledge_id)).all()
+        repeat = session.exec(select(KnowledgeFile)
+                              .where(KnowledgeFile.md5 == md5_,
+                                     KnowledgeFile.status == 2,
+                                     KnowledgeFile.knowledge_id == knowledge_id)).all()
         status = 3 if repeat else 1
         remark = 'file repeat' if repeat else ''
         db_file = KnowledgeFile(knowledge_id=knowledge_id, file_name=file_name,
@@ -130,6 +134,7 @@ async def process_knowledge(*,
         files.append(db_file)
         file_paths.append(filepath)
         logger.info(f'fileName={file_name} col={collection_name}')
+        result.append(db_file.copy())
 
     if not repeat:
         asyncio.create_task(
@@ -144,7 +149,7 @@ async def process_knowledge(*,
     knowledge.update_time = db_file.create_time
     session.add(knowledge)
     session.commit()
-    return {'code': 200, 'message': 'success'}
+    return {'code': 200, 'message': 'success', 'data': result}
 
 
 @router.post('/create', response_model=KnowledgeRead, status_code=201)
@@ -364,7 +369,8 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             session.add(db_file)
             session.flush()
             # 原文件
-            minio_client.MinioClient().upload_minio(knowledge_file.file_name, path)
+            object_name_original = f'original/{db_file.id}'
+            minio_client.MinioClient().upload_minio(object_name_original, path)
 
             texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
                                                 chunk_overlap, separator)
@@ -412,11 +418,13 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             b64_data = base64.b64encode(open(input_file, 'rb').read()).decode()
             inp = dict(filename=file_name, b64_data=[b64_data], mode='topdf')
             resp = requests.post(settings.get_knowledge().get('unstructured_api_url'),
-                                 json=inp).json()
-            if not resp or resp['status_code'] != 200:
-                logger.error(f'file_pdf=not_success resp={resp}')
+                                 json=inp)
+            if not resp or resp.status_code != 200:
+                logger.error(f'file_pdf=not_success resp={resp.text}')
                 raise Exception(f"当前文件无法解析， {resp['status_message']}")
-            b64_data = resp['b64_pdf']
+            if len(resp.text) < 200:
+                logger.error(f'file_pdf=not_success resp={resp.text}')
+            b64_data = resp.json()['b64_pdf']
             # 替换历史文件
             with open(input_file, 'wb') as fout:
                 fout.write(base64.b64decode(b64_data))

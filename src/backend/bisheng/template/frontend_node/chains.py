@@ -50,7 +50,7 @@ class ChainFrontendNode(FrontendNode):
                               name='chain_order',
                               advanced=False,
                               value='[]'))
-        elif self.template.type_name == 'MultiPromptChain':
+        elif self.template.type_name in {'MultiPromptChain', 'MultiRuleChain'}:
             self.template.add_field(
                 TemplateField(field_type='Chain',
                               required=True,
@@ -66,13 +66,21 @@ class ChainFrontendNode(FrontendNode):
                               is_list=True,
                               name='destination_chain_name',
                               advanced=False,
+                              info='{chain_id: name}',
                               value='{}'))
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
         FrontendNode.format_field(field, name)
+        if name == 'RuleBasedRouter' and field.name == 'rule_function':
+            field.field_type = 'function'
+        if name == 'RuleBasedRouter' and field.name == 'input_variables':
+            field.show = True
 
-        if 'name' == 'RetrievalQA' and field.name == 'memory':
+        if name == 'LoaderOutputChain' and field.name == 'documents':
+            field.is_list = False
+
+        if name == 'RetrievalQA' and field.name == 'memory':
             field.show = False
             field.required = False
 
@@ -127,6 +135,11 @@ class ChainFrontendNode(FrontendNode):
             field.display_name = 'AutogenRole'
         if field.name == 'destination_chains':
             field.show = False
+        if name == 'TransformChain' and field.name == 'input_variables':
+            field.show = True
+        if name == 'TransformChain' and field.name == 'transform':
+            field.show = True
+            field.field_type = 'function'
 
 
 class SeriesCharacterChainNode(FrontendNode):

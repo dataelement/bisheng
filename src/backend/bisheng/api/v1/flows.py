@@ -2,7 +2,8 @@ import json
 from typing import List
 from uuid import UUID
 
-from bisheng.api.utils import access_check, build_flow_no_yield, remove_api_keys
+from bisheng.api.utils import (access_check, build_flow_no_yield, get_L2_param_from_flow,
+                               remove_api_keys)
 from bisheng.api.v1.schemas import FlowListCreate, FlowListRead
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate
@@ -117,7 +118,7 @@ def update_flow(*,
         raise HTTPException(status_code=404, detail='Flow not found')
 
     if not access_check(payload, db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
-        raise HTTPException(status_code=500, detail='没有权限编辑此技能')
+        raise HTTPException(status_code=500, detail='No right access this flow')
 
     flow_data = flow.dict(exclude_unset=True)
 
@@ -133,6 +134,9 @@ def update_flow(*,
             logger.exception(exc)
             raise HTTPException(status_code=500, detail=f'Flow 编译不通过, {str(exc)}')
 
+    if db_flow.status == 2 and ('status' not in flow_data or flow_data['status'] != 1):
+        raise HTTPException(status_code=500, detail='上线中技能，不支持修改')
+
     if settings.remove_api_keys:
         flow_data = remove_api_keys(flow_data)
     for key, value in flow_data.items():
@@ -140,6 +144,11 @@ def update_flow(*,
     session.add(db_flow)
     session.commit()
     session.refresh(db_flow)
+    try:
+        if not get_L2_param_from_flow(db_flow.data, db_flow.id):
+            logger.error(f'flow_id={db_flow.id} extract file_node fail')
+    except Exception:
+        pass
     return db_flow
 
 

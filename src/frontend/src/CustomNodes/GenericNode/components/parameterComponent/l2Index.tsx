@@ -42,7 +42,7 @@ export default function L2ParameterComponent({
             };
         });
     };
-    return <div className="flex w-full flex-wrap items-center justify-between px-5 py-2 col-span-2" >
+    return <div className="flex w-full flex-wrap items-center justify-between py-2 col-span-2" >
         {type === "str" &&
             !data.node.template[name].options ? (
             <div className="mt-2 w-full">
