@@ -58,7 +58,7 @@ class CustomKVLoader(BaseLoader):
                  schemas: str,
                  elem_server_id: str,
                  task_type: str,
-                 request_timeout: Optional[Union[float, Tuple[float, float]]] = 10) -> None:
+                 request_timeout: Optional[Union[float, Tuple[float, float]]] = 30) -> None:
         """Initialize with a file path."""
         self.file_path = file_path
         self.elm_api_base_url = elm_api_base_url

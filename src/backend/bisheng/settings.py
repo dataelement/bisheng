@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     environment: Union[dict, str] = 'dev'
     database_url: Optional[str] = None
     redis_url: Optional[str] = None
+    redis: Optional[dict] = None
     admin: dict = {}
     cache: str = 'InMemoryCache'
     remove_api_keys: bool = False

@@ -1,6 +1,7 @@
 import contextlib
 import json
 from typing import Any, Callable, Dict, List, Sequence, Type
+from venv import logger
 
 from bisheng.cache.utils import file_download
 from bisheng.chat.config import ChatConfig
@@ -128,22 +129,20 @@ def instantiate_input_output(node_type, class_object, params, id_dict):
             chain_obj['object'] = chains[index]
             if id in preset_question:
                 chain_obj['node_id'] = preset_question[id][0]
-            elif 'LoaderOutputChain' in id:
-                chain_obj['node_id'] = id
-            if id in preset_question:
                 chain_obj['input'] = {chains[index].input_keys[0]: preset_question[id][1]}
             else:
                 # give a default input
+                logger.error(f'Report has no question id={id}')
                 chain_obj['input'] = {chains[index].input_keys[0]: 'start'}
             chain_list.append(chain_obj)
+        params['chains'] = chain_list
         # variable
         variable = params.get('variables')
         variable_node_id = id_dict.get('variables')
-        if variable:
-            params['variables'] = [{'node_id': variable_node_id[0],
-                                   'input': variable}]
-
-        params['chains'] = chain_list
+        params['variables'] = []
+        for index, id in enumerate(variable_node_id):
+            params['variables'].append({'node_id': id,
+                                        'input': variable[index]})
         return class_object(**params)
     if node_type == 'InputFileNode':
         file_path = class_object(**params).text()

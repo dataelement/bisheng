@@ -114,8 +114,12 @@ class Vertex:
                                 schema = value['value'].split('|')
                                 if PRESET_QUESTION not in params:
                                     params[PRESET_QUESTION] = {}
-                                params[PRESET_QUESTION].update({inner_edge.target.id:
-                                                                (inner_edge.source.id, schema)})
+                                if inner_edge.target.id in params[PRESET_QUESTION]:
+                                    params[PRESET_QUESTION][inner_edge.target.id].append(
+                                        (inner_edge.source.id, schema))
+                                else:
+                                    params[PRESET_QUESTION].update({inner_edge.target.id:
+                                                                    [(inner_edge.source.id, schema)]})
 
         for key, value in template_dict.items():
             if key == '_type' or (not value.get('show') and not value.get('value')):
@@ -216,7 +220,14 @@ class Vertex:
     def _build_dict_of_nodes_and_update_params(self, key, dicts):
         self.params[key] = {}
         for k, v in dicts.items():
-            if self._is_node(v[1]):
+            if isinstance(v, list):
+                # loaderOutput
+                for k1, v1 in v:
+                    if self._is_node(v1):
+                        self.params[key][k] = (k1, v1.build())
+                    else:
+                        self.params[key][k] = (k1, v1)
+            elif self._is_node(v[1]):
                 self.params[key][k] = (v[0], v[1].build())
             else:
                 self.params[key][k] = (v[0], v[1])

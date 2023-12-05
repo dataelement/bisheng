@@ -48,6 +48,7 @@ class Report(Chain):
     chains: Optional[List[Dict]]
     variables: Optional[List[Dict]]
     report_name: str
+    stop_flag: bool = False
 
     input_key: str = 'report_name'  #: :meta private:
     output_key: str = 'text'  #: :meta private:
@@ -98,27 +99,27 @@ class Report(Chain):
         _run_manager.on_text(text='', log='', type='start', category='question')
         _run_manager.on_text(text='', log=question, type='end', category='question')
         _run_manager.on_text(text='', log='', type='start', category='answer')
-        message_reply = {'message': question, 'category': 'question'}
+        message_reply = {'log': question, 'category': 'question'}
         intermedia_stop.append(message_reply)
 
         chain_outputs = chain(inputs, callbacks=_run_manager.get_child())
         result = (chain_outputs.get(chain.output_keys[0])
                   if isinstance(chain_outputs, dict) else chain_outputs)
         if isinstance(chain, LoaderOutputChain):
-            schema = list(inputs.values())[0]
-            result = json.loads(result)
-            for key in schema:
-                if result.get(key):
-                    result_str = ('；'.join(result.get(key))
-                                  if isinstance(result.get(key), list)
-                                  else result.get(key))
-                    outputs.update({node_id+'_'+key: result_str})
+            for schema in inputs.values():
+                result = json.loads(result)
+                for key in schema:
+                    if result.get(key):
+                        result_str = ('；'.join([str(x) for x in result.get(key)])
+                                      if isinstance(result.get(key), list)
+                                      else result.get(key))
+                        outputs.update({node_id+'_'+key: result_str})
             result = json.dumps(result, ensure_ascii=False)
         else:
             outputs.update({node_id: result})
-            message_reply = {'message': result, 'category': 'answer'}
-            intermedia_stop.append(message_reply)
-            _run_manager.on_text(text='', log=result, type='end', category='answer')
+        message_reply = {'log': result, 'category': 'answer'}
+        intermedia_stop.append(message_reply)
+        _run_manager.on_text(text='', log=result, type='end', category='answer')
 
     async def func_acall(self,
                          inputs: Dict[str, Any],
@@ -135,7 +136,7 @@ class Report(Chain):
         await _run_manager.on_text(text='', log='', type='start', category='question')
         await _run_manager.on_text(text='', log=question, type='end', category='question')
         await _run_manager.on_text(text='', log='', type='start', category='answer')
-        message_reply = {'message': question, 'category': 'question'}
+        message_reply = {'log': question, 'category': 'question'}
         intermedia_stop.append(message_reply)
 
         # process
@@ -143,28 +144,30 @@ class Report(Chain):
             chain_outputs = await chain.arun(inputs, callbacks=_run_manager.get_child())
         except Exception as e:
             logger.exception(e)
+            await _run_manager.on_text(text='', log=str(e), type='stream', category='processing')
             try:
                 chain_outputs = chain(inputs)
             except Exception as e2:
                 logger.exception(e2)
+                await _run_manager.on_text(text='', log=str(e2), type='stream', category='processing')
                 chain_outputs = ''
 
         result = (chain_outputs.get(chain.output_keys[0])
                   if isinstance(chain_outputs, dict) else chain_outputs)
         if isinstance(chain, LoaderOutputChain):
-            schema = list(inputs.values())[0]
-            result = json.loads(result)
-            for key in schema:
-                if result.get(key):
-                    result_str = ('；'.join(result.get(key))
-                                  if isinstance(result.get(key), list)
-                                  else result.get(key))
-                    outputs.update({node_id+'_'+key: result_str})
+            for schema in inputs.values():
+                result = json.loads(result)
+                for key in schema:
+                    if result.get(key):
+                        result_str = ('；'.join([str(x) for x in result.get(key)])
+                                      if isinstance(result.get(key), list)
+                                      else result.get(key))
+                        outputs.update({node_id+'_'+key: result_str})
             result = json.dumps(result, ensure_ascii=False)
         else:
             outputs.update({node_id: result})
-            message_reply = {'message': result, 'category': 'answer'}
-            intermedia_stop.append(message_reply)
+        message_reply = {'log': result, 'category': 'answer'}
+        intermedia_stop.append(message_reply)
         await _run_manager.on_text(text='', log=result, type='end', category='answer')
 
     def _call(
@@ -176,6 +179,13 @@ class Report(Chain):
         intermedia_steps = []
         outputs = {}
         self.stop_flag = False
+        # variables
+        if self.variables and self.variables[0]:
+            for variable in self.variables:
+                variable_kv = variable['input']
+                for k, v in variable_kv.items():
+                    outputs.update({variable['node_id']+'_'+k: v})
+
         if self.chains:
             for i, chain in enumerate(self.chains):
                 if 'node_id' not in chain:
@@ -203,12 +213,7 @@ class Report(Chain):
                             self.func_call(question_dict, outputs, intermedia_steps,
                                            chain['object'], chain['node_id']+'_'+question,
                                            run_manager)
-        # variables
-        if self.variables and self.variables[0]:
-            for variable in self.variables:
-                variable_kv = variable['input'][0]
-                for k, v in variable_kv.items():
-                    outputs.update({variable['node_id']+'_'+k: v})
+
         return {self.output_key: outputs, self.input_key: self.report_name,
                 'intermediate_steps': intermedia_steps}
 
@@ -222,6 +227,14 @@ class Report(Chain):
         outputs = {}
         await run_manager.on_text(text='', log='', type='end', category='processing')  # end father start
         self.stop_flag = False
+        # variables
+        if self.variables and self.variables[0]:
+            for variable in self.variables:
+                variable_kv = variable['input']
+                for k, v in variable_kv.items():
+                    outputs.update({variable['node_id']+'_'+k: v})
+
+        # functions
         if self.chains:
             for i, chain in enumerate(self.chains):
                 if 'node_id' not in chain:
@@ -250,12 +263,6 @@ class Report(Chain):
                             await self.func_acall(question_dict, outputs, intermedia_steps,
                                                   chain['object'], chain['node_id']+'_'+question,
                                                   run_manager)
-        # variables
-        if self.variables and self.variables[0]:
-            for variable in self.variables:
-                variable_kv = variable['input'][0]
-                for k, v in variable_kv.items():
-                    outputs.update({variable['node_id']+'_'+k: v})
 
         # keep whole process paired
         await run_manager.on_text(text='', log='', type='start', category='processing')

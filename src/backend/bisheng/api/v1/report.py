@@ -24,6 +24,7 @@ async def callback(data: dict, session: Session = Depends(get_session)):
     logger.debug(f'calback={data}')
     if status in {2, 6}:
         # 保存回掉
+        logger.info(f'office_callback url={file_url}')
         file = Requests().get(url=file_url)
         object_name = mino_prefix+key+'.docx'
         minio_client.MinioClient().upload_minio_data(object_name, file._content,
@@ -55,7 +56,7 @@ async def get_template(*, flow_id: str, session: Session = Depends(get_session))
         db_report = Report(flow_id=flow_id)
     elif db_report.object_name:
         file_url = minio_client.MinioClient().get_share_link(db_report.object_name)
-    if not db_report.newversion_key:
+    if not db_report.newversion_key or not db_report.object_name:
         version_key = uuid4().hex
         db_report.newversion_key = version_key
         session.add(db_report)
