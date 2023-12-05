@@ -14,7 +14,7 @@ from urllib.parse import quote_plus, unquote, urlparse
 import cv2
 import fitz
 import numpy as np
-import requests
+from bisheng_langchain.utils.requests import Requests
 from langchain.docstore.document import Document
 from langchain.document_loaders.base import BaseLoader
 from PIL import Image
@@ -58,7 +58,7 @@ class CustomKVLoader(BaseLoader):
                  schemas: str,
                  elem_server_id: str,
                  task_type: str,
-                 request_timeout: Optional[Union[float, Tuple[float, float]]] = 10) -> None:
+                 request_timeout: Optional[Union[float, Tuple[float, float]]] = 30) -> None:
         """Initialize with a file path."""
         self.file_path = file_path
         self.elm_api_base_url = elm_api_base_url
@@ -67,13 +67,14 @@ class CustomKVLoader(BaseLoader):
         self.task_type = task_type
         self.schemas = set(schemas.split('|'))
         self.headers = {'Authorization': f'Bearer {elm_api_key}'}
-        self.timeout = request_timeout
+        self.requests = Requests(headers=self.headers,
+                                 request_timeout=request_timeout)
         if '~' in self.file_path:
             self.file_path = os.path.expanduser(self.file_path)
 
         # If the file is a web path, download it to a temporary file, and use that
         if not os.path.isfile(self.file_path) and self._is_valid_url(self.file_path):
-            r = requests.get(self.file_path)
+            r = self.requests.get(self.file_path)
 
             if r.status_code != 200:
                 raise ValueError(
@@ -117,7 +118,7 @@ class CustomKVLoader(BaseLoader):
             url = self.elm_api_base_url + '/logic-job'
             body = {'logic_service_id': self.elem_server_id}
 
-        resp = requests.post(url=url, data=body, files=file, headers=self.headers)
+        resp = self.requests.post(url=url, json={}, data=body, files=file)
         if resp.status_code == 200:
             task_id = resp.json().get('data').get('task_id')
             if not task_id:
@@ -127,10 +128,14 @@ class CustomKVLoader(BaseLoader):
             status_url = url + f'/status?task_id={task_id}'
             count = 0
             while True:
-                status = requests.get(status_url, headers=self.headers).json()
-                if 1 == status.get('data').get('status') and count <10:
+                status = self.requests.get(status_url).json()
+                if 1 == status.get('data').get('status'):
                     count += 1
                     sleep(2)
+                elif 3 == status.get('data').get('status'):
+                    # 失败
+                    logger.error(f'custom_kv type={self.task_type} resp={status}')
+                    return []
                 else:
                     break
             # get result
@@ -138,11 +143,11 @@ class CustomKVLoader(BaseLoader):
             match = re.match(r'^(?:https?:\/\/)?(?:www\.)?([^\/\n]+)', self.elm_api_base_url)
             detail_url = quote_plus(match.group()+f'/logic-job-detail/{task_id}')
             result_url = url + f'/result?{job_id}={task_id}&detail_url={detail_url}'
-            result = requests.get(result_url, headers=self.headers).json()
-            result = requests.get(result_url, headers=self.headers).json()
+            result = self.requests.get(result_url).json()
             # only for independent key
             document_result = {}
             try:
+                result = self.requests.get(result_url).json()
                 file_reuslt = result.get('data')
                 for result in file_reuslt:
                     independent = result.get('result').get('independent_list')

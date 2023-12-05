@@ -191,6 +191,7 @@ class Handler:
         input_key = langchain_object.input_keys[0]
 
         report = ''
+        logger.info(f'process_file batch_question={batch_question}')
         for question in batch_question:
             if not question:
                 continue
@@ -252,11 +253,13 @@ class Handler:
             # autogen produce multi dialog
             for message in intermediate_steps:
                 content = message.get('message')
+                log = message.get('log', '')
                 sender = message.get('sender')
                 receiver = message.get('receiver')
                 is_bot = False if receiver and receiver.get('is_bot') else True
                 category = message.get('category', 'processing')
-                msg = ChatResponse(message=content, sender=sender, receiver=receiver,
+                msg = ChatResponse(message=content, intermediate_steps=log,
+                                   sender=sender, receiver=receiver,
                                    type='end', user_id=user_id, is_bot=is_bot,
                                    category=category)
                 steps.append(msg)

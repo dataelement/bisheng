@@ -63,6 +63,7 @@ class ChatManager:
         self.cache_manager = cache_manager
         self.cache_manager.attach(self.update)
         self.in_memory_cache = InMemoryCache()
+        self.task_manager: List[asyncio.Task] = []
 
     # def on_chat_history_update(self):
     #     """Send the last chat message to the client."""
@@ -150,11 +151,13 @@ class ChatManager:
 
         try:
             while True:
+
                 json_payload = await websocket.receive_json()
                 try:
                     payload = json.loads(json_payload)
                 except TypeError:
                     payload = json_payload
+
                 if 'clear_history' in payload:
                     self.chat_history.history[client_id] = []
                     continue
@@ -178,8 +181,9 @@ class ChatManager:
                 # should input data
                 langchain_obj_key = get_cache_key(client_id, chat_id)
                 has_file = False
-                if 'inputs' in payload and 'data' in payload['inputs']:
-                    node_data = payload['inputs']['data']
+                if 'inputs' in payload and ('data' in payload['inputs']
+                                            or 'file_path' in payload['inputs']):
+                    node_data = payload['inputs'].get('data') or [payload['inputs']]
                     gragh_data = self.refresh_graph_data(gragh_data, node_data)
                     self.set_cache(langchain_obj_key, None)  # rebuild object
                     has_file = any(['InputFile' in nd.get('id') for nd in node_data])
@@ -215,7 +219,8 @@ class ChatManager:
                 langchain_obj = self.in_memory_cache.get(langchain_obj_key)
                 if isinstance(langchain_obj, Report):
                     action = 'report'
-                elif action != 'autogen' and 'data' in payload['inputs']:
+                elif action != 'autogen' and ('data' in payload['inputs'] or
+                                              'file_path' in payload['inputs']):
                     action = 'auto_file'   # has input data, default is file process
                 # default not set, for autogen set before
 
@@ -231,10 +236,12 @@ class ChatManager:
                     step_resp.intermediate_steps = 'File parsing complete. Analysis starting'
                     await self.send_json(client_id, chat_id, step_resp, add=False)
                     if action == 'auto_file':
-                        payload['inputs']['questions'] = [question for question in batch_question]
+                        question = []
+                        [question.extend(q) for q in batch_question]
+                        payload['inputs']['questions'] = question
 
-                asyncio.create_task(Handler().dispatch_task(self, client_id, chat_id, action,
-                                                            payload, user_id))
+                asyncio.create_task(Handler().dispatch_task(self, client_id, chat_id,
+                                                            action, payload, user_id))
 
         except Exception as e:
             # Handle any exceptions that might occur

@@ -75,6 +75,9 @@ class ChainFrontendNode(FrontendNode):
         if name == 'RuleBasedRouter' and field.name == 'rule_function':
             field.field_type = 'function'
 
+        if name == 'LoaderOutputChain' and field.name == 'documents':
+            field.is_list = False
+
         if name == 'RetrievalQA' and field.name == 'memory':
             field.show = False
             field.required = False

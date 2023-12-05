@@ -224,6 +224,15 @@ class DocumentLoaderFrontNode(FrontendNode):
                     name='task_type',
                     advanced=False,
                 ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='int',
+                    required=True,
+                    show=True,
+                    name='request_timeout',
+                    advanced=True,
+                    value=10
+                ))
             self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in self.file_path_templates:
             self.template.add_field(self.file_path_templates[self.template.type_name])
