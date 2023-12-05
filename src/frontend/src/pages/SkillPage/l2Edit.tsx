@@ -64,16 +64,19 @@ export default function l2Edit() {
 
     // 编辑回填参数
     const { id } = useParams()
-    const handleJumpFlow = async () => {
+    const handleJumpFlow = () => {
         const name = nameRef.current.value
         const description = descRef.current.value
         if (isParamError(name, description, true)) return navigate('/flow/' + id, { replace: true })
         // 保存在跳
         setLoading(true)
         formRef.current?.save()
-        await saveFlow({ ...flow, name, description });
-        setLoading(false)
-        navigate('/flow/' + id, { replace: true })
+        saveFlow({ ...flow, name, description }).then(_ => {
+            setLoading(false)
+            navigate('/flow/' + id, { replace: true })
+        }).catch(e => {
+            setLoading(false)
+        });
     }
 
     const [flow, setFlow] = useState(null)
@@ -100,10 +103,13 @@ export default function l2Edit() {
         if (isParamError(flow.name, flow.description)) return
         setLoading(true)
         formRef.current?.save()
-        await saveFlow(flow);
-        setLoading(false)
-        setSuccessData({ title: t('success') });
-        setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
+        saveFlow(flow).then(_ => {
+            setLoading(false)
+            setSuccessData({ title: t('success') });
+            setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
+        }).catch(e => {
+            setLoading(false)
+        });
     }
 
     const showContent = (e) => {
@@ -138,7 +144,7 @@ export default function l2Edit() {
                         <ChevronUp />
                     </p>
                     {/* base form */}
-                    <div className="w-[68%] mx-auto overflow-hidden transition-all">
+                    <div className="w-[68%] mx-auto overflow-hidden transition-all px-1">
                         <div className="mt-4">
                             <Label htmlFor="name" className="text-right">{t('skills.skillName')}</Label>
                             <Input ref={nameRef} placeholder={t('skills.skillName')} className={`col-span-2 mt-2 ${error.name && 'border-red-400'}`} />
@@ -164,7 +170,7 @@ export default function l2Edit() {
                                         {
                                             // 自定义组件
                                             Object.keys(data.node.template).map(k => (
-                                                data.node.template[k].l2 && <div className="w-[68%] mx-auto mt-4" key={k}>
+                                                data.node.template[k].l2 && <div className="w-[68%] mx-auto mt-4 px-1" key={k}>
                                                     <Label htmlFor="name" className="text-right">
                                                         {data.node.template[k].l2_name || data.node.template[k].name}
                                                     </Label>
