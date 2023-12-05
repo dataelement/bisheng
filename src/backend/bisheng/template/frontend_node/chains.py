@@ -74,6 +74,8 @@ class ChainFrontendNode(FrontendNode):
         FrontendNode.format_field(field, name)
         if name == 'RuleBasedRouter' and field.name == 'rule_function':
             field.field_type = 'function'
+        if name == 'RuleBasedRouter' and field.name == 'input_variables':
+            field.show = True
 
         if name == 'LoaderOutputChain' and field.name == 'documents':
             field.is_list = False
