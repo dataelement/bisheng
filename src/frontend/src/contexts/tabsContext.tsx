@@ -656,7 +656,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         });
       }
     } catch (err) {
-      setErrorData(err);
+      setErrorData({ title: `Error`, list: [err.response.data.detail] });
+      throw err
     }
   }
 

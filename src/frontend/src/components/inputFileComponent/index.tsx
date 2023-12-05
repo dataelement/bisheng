@@ -60,12 +60,13 @@ export default function InputFileComponent({
       // if (file && checkFileType(file.name)) {
       // Upload the file
       isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
+        setLoading(false);
+        if (typeof res === 'string') return setErrorData({title: "Error", list: [res]})
         const { file_path } = res;
         setMyValue(file.name);
         onChange(file.name);
         // sets the value that goes to the backend
         onFileChange(file_path);
-        setLoading(false);
       }) : uploadFile(file, tabId)
         .then((res) => res.data)
         .then((data) => {

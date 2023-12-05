@@ -56,7 +56,6 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId }: Iprops) {
     useEffect(() => {
         initChat()
         return () => {
-            console.log('销毁， 没销毁要在 initChat 销毁 :>> ');
             closeWs()
             setChatHistory([])
         }
@@ -69,7 +68,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId }: Iprops) {
     }, [flow])
 
     const handleSend = async () => {
-        const val = inputRef.current?.value
+        const msg = inputRef.current?.value
         setTimeout(() => {
             if (inputRef.current) {
                 inputRef.current.value = ''
@@ -78,17 +77,17 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId }: Iprops) {
             setInputEmpty(true)
         }, 100);
 
-        if (val.trim() === '') return
+        if (msg.trim() === '') return
 
         setInputState({ lock: true, errorCode: '' });
         let inputs = tabsState[flow.id].formKeysData.input_keys;
         const input = inputs.find((el: any) => !el.type)
-        const inputKey = Object.keys(input)[0];
+        const inputKey = input ? Object.keys(input)[0] : '';
         setChatHistory((old) => {
             let newChat = _.cloneDeep(old);
             newChat.push({
                 isSend: true,
-                message: { ...input, [inputKey]: val },
+                message: { ...input, [inputKey]: msg },
                 chatKey: inputKey,
                 thought: '',
                 category: '',
@@ -108,7 +107,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId }: Iprops) {
         isRoom && chating ? sendAll({ action: "continue", "inputs": { ...input, [inputKey]: msg } })
             : sendAll({
                 ...flow.data,
-                inputs: { ...input, [inputKey]: val },
+                inputs: { ...input, [inputKey]: msg },
                 chatHistory: messages,
                 name: flow.name,
                 description: flow.description
@@ -120,7 +119,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId }: Iprops) {
     const sendReport = (items: Variable[], str) => {
         let inputs = tabsState[flow.id].formKeysData.input_keys;
         const input = inputs.find((el: any) => !el.type)
-        const inputKey = Object.keys(input)[0];
+        const inputKey = input ? Object.keys(input)[0] : '';
         setChatHistory((old) => {
             let newChat = _.cloneDeep(old);
             newChat.push({
@@ -257,11 +256,11 @@ const useInputState = ({ flow, chatId, chating, messages, isReport }) => {
 const useFlowState = (flow: FlowType) => {
     const flowSate = useMemo(() => {
         // 是否群聊
-        const isRoom = !!flow.data.nodes.find(node => node.data.type === "AutoGenChain")
+        const isRoom = !!flow.data?.nodes.find(node => node.data.type === "AutoGenChain")
         // 是否展示表单
-        const isForm = !!flow?.data?.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
+        const isForm = !!flow.data?.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
         // 是否报表
-        const isReport = !!flow?.data?.nodes.find(node => "Report" === node.data.type)
+        const isReport = !!flow.data?.nodes.find(node => "Report" === node.data.type)
         return { isRoom, isForm, isReport }
     }, [flow])
 

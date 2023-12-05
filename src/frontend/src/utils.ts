@@ -615,6 +615,7 @@ export function getConnectedNodes(edge: Edge, nodes: Array<Node>): Array<Node> {
   return nodes.filter((node) => node.id === targetId || node.id === sourceId);
 }
 
+// 控制节点链接的验证，false 不可连
 export function isValidConnection(
   { source, target, sourceHandle, targetHandle }: Connection,
   reactFlowInstance: ReactFlowInstance
