@@ -128,8 +128,16 @@ def instantiate_input_output(node_type, class_object, params, id_dict):
             chain_obj = {}
             chain_obj['object'] = chains[index]
             if id in preset_question:
-                chain_obj['node_id'] = preset_question[id][0]
-                chain_obj['input'] = {chains[index].input_keys[0]: preset_question[id][1]}
+                if isinstance(preset_question[id], list):
+                    for node_id in preset_question[id]:
+                        chain_ = chain_obj.copy()
+                        chain_['node_id'] = node_id[0]
+                        chain_['input'] = {chains[index].input_keys[0]: node_id[1]}
+                        chain_list.append(chain_)
+                    continue
+                else:
+                    chain_obj['node_id'] = preset_question[id][0]
+                    chain_obj['input'] = {chains[index].input_keys[0]: preset_question[id][1]}
             else:
                 # give a default input
                 logger.error(f'Report has no question id={id}')
