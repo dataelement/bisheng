@@ -379,8 +379,8 @@ def instantiate_prompt(node_type, class_object, params: Dict):
                 # Add the handle_keys to the list
                 format_kwargs['handle_keys'].append(input_variable)
 
-    from langchain.chains.router.llm_router import RouterOutputParser
-    prompt.output_parser = RouterOutputParser()
+    # from langchain.chains.router.llm_router import RouterOutputParser
+    # prompt.output_parser = RouterOutputParser()
     return prompt, format_kwargs
 
 
