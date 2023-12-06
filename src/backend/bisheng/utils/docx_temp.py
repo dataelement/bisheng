@@ -168,7 +168,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 import requests
-from bisheng.utils.minio_client import mino_client
+from bisheng.utils.minio_client import MinioClient
 from bisheng.utils.util import _is_valid_url
 from docx import Document
 
@@ -302,6 +302,6 @@ def test_replace_string(template_file, kv_dict: dict, file_name: str):
     temp_dir = tempfile.TemporaryDirectory()
     temp_file = Path(temp_dir.name) / file_name
     output.save(temp_file)
-    mino_client.upload_minio(file_name, temp_file)
+    MinioClient().upload_minio(file_name, temp_file)
 
     return file_name
