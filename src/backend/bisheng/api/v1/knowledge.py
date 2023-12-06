@@ -17,8 +17,8 @@ from bisheng.database.models.user import User
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
-from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
+from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoader
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
@@ -310,8 +310,9 @@ def delete_knowledge_file(*,
         logger.info(f'act=delete_vector file_id={file_id} res={res}')
 
     # minio
-    minio_client.MinioClient().delete_minio(str(knowledge_file.id))
-    minio_client.MinioClient().delete_minio(str(knowledge_file.object_name))
+    minio_client = MinioClient()
+    minio_client.delete_minio(str(knowledge_file.id))
+    minio_client.delete_minio(str(knowledge_file.object_name))
     # elastic
     esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
     if esvectore_client:
@@ -360,6 +361,7 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
     except Exception as e:
         logger.exception(e)
 
+    minio_client = MinioClient()
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
         session = next(get_session())
@@ -373,13 +375,13 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             session.add(db_file)
             session.flush()
 
-            minio_client.MinioClient().upload_minio(object_name_original, path)
+            minio_client.upload_minio(object_name_original, path)
 
             texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
                                                 chunk_overlap, separator)
 
             # 溯源必须依赖minio, 后期替换更通用的oss
-            minio_client.MinioClient().upload_minio(str(db_file.id), path)
+            minio_client.upload_minio(str(db_file.id), path)
 
             logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
             [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]
