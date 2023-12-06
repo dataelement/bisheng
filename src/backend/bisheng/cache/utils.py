@@ -13,7 +13,7 @@ from urllib.parse import unquote, urlparse
 import requests
 from appdirs import user_cache_dir
 from bisheng.settings import settings
-from bisheng.utils.minio_client import mino_client, tmp_bucket
+from bisheng.utils.minio_client import MinioClient, tmp_bucket
 
 CACHE: Dict[str, Any] = {}
 
@@ -177,10 +177,11 @@ def save_uploaded_file(file, folder_name, file_name):
 
     # Save the file with the hash as its name
     if settings.get_knowledge().get('minio'):
+        minio_client = MinioClient()
         # 存储oss
         file_byte = file.read()
-        mino_client.upload_tmp(file_name, file_byte)
-        file_path = mino_client.get_share_link(file_name, tmp_bucket)
+        minio_client.upload_tmp(file_name, file_byte)
+        file_path = minio_client.get_share_link(file_name, tmp_bucket)
     else:
         file_type = md5_name.split('.')[-1]
         file_path = folder_path / f'{md5_name}.{file_type}'

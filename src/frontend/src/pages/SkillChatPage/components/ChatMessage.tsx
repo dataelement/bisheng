@@ -10,6 +10,7 @@ import { alertContext } from "../../../contexts/alertContext";
 import { CodeBlock } from "../../../modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "../../../types/chat";
 import { downloadFile } from "../../../util/utils";
+import { checkSassUrl } from "./FileView";
 
 // 颜色列表
 const colorList = [
@@ -133,7 +134,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
     // download file
     const handleDownloadFile = (file) => {
         const url = file?.file_url
-        url && downloadFile(url, file?.file_name)
+        url && downloadFile(checkSassUrl(url), file?.file_name)
     }
 
     const source = <div className="chat-footer py-1">

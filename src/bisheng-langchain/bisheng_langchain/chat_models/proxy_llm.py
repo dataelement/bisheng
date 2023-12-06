@@ -195,6 +195,8 @@ class ProxyChatLLM(BaseChatModel):
                 'functions': kwargs.get('functions', [])
             }
             response = self.client.post(self.elemai_base_url, json=params)
+            if response.status_code != 200:
+                raise
             return response.json()
 
         return _completion_with_retry(**kwargs)

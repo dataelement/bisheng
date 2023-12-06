@@ -60,7 +60,6 @@ def create_app():
     app.include_router(router_rpc)
     app.on_event('startup')(create_db_and_tables)
     app.on_event('startup')(setup_llm_caching)
-
     return app
 
 
