@@ -131,8 +131,9 @@ async def process_knowledge(*,
         session.add(db_file)
         session.commit()
         session.refresh(db_file)
-        files.append(db_file)
-        file_paths.append(filepath)
+        if not repeat:
+            files.append(db_file)
+            file_paths.append(filepath)
         logger.info(f'fileName={file_name} col={collection_name}')
         result.append(db_file.copy())
 
@@ -310,6 +311,7 @@ def delete_knowledge_file(*,
 
     # minio
     minio_client.MinioClient().delete_minio(str(knowledge_file.id))
+    minio_client.MinioClient().delete_minio(str(knowledge_file.object_name))
     # elastic
     esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
     if esvectore_client:
@@ -365,11 +367,12 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             # 存储 mysql
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 2)
-            setattr(db_file, 'object_name', knowledge_file.file_name)
-            session.add(db_file)
-            session.flush()
             # 原文件
             object_name_original = f'original/{db_file.id}'
+            setattr(db_file, 'object_name', object_name_original)
+            session.add(db_file)
+            session.flush()
+
             minio_client.MinioClient().upload_minio(object_name_original, path)
 
             texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,

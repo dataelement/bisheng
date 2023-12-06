@@ -301,7 +301,14 @@ class CombineDocsChainNode(FrontendNode):
                           name='prompt',
                           display_name='prompt',
                           advanced=False,
-                          info='只对Stuff类型生效')
+                          info='只对Stuff类型生效'),
+            TemplateField(
+                field_type='BasePromptTemplate',
+                required=False,
+                show=True,
+                name='document_prompt',
+                advanced=False,
+            )
         ],
     )
 
