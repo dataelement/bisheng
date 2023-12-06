@@ -10,7 +10,7 @@ from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.database.models.report import Report
 from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import mino_client
+from bisheng.utils.minio_client import MinioClient
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.chains.autogen.auto_gen import AutoGenChain
 from langchain.docstore.document import Document
@@ -73,12 +73,12 @@ class Handler:
         if not template:
             logger.error('template not support')
             return
-
-        template_muban = mino_client.get_share_link(template.object_name)
+        minio_client = MinioClient()
+        template_muban = minio_client.get_share_link(template.object_name)
         report_name = langchain_object.report_name
         report_name = report_name if report_name.endswith('.docx') else f'{report_name}.docx'
         test_replace_string(template_muban, result, report_name)
-        file = mino_client.get_share_link(report_name)
+        file = minio_client.get_share_link(report_name)
         response = ChatResponse(type='end',
                                 files=[{'file_url': file, 'file_name': report_name}],
                                 user_id=user_id)
