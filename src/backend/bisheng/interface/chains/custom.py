@@ -109,8 +109,12 @@ class CombineDocsChain(CustomChain):
                    document_prompt: BasePromptTemplate = None,
                    token_max: str = -1):
         if chain_type == 'stuff':
-            return load_qa_chain(llm=llm, chain_type=chain_type, prompt=prompt,
-                                 token_max=token_max, document_prompt=document_prompt)
+            if document_prompt:
+                return load_qa_chain(llm=llm, chain_type=chain_type, prompt=prompt,
+                                     token_max=token_max, document_prompt=document_prompt)
+            else:
+                return load_qa_chain(llm=llm, chain_type=chain_type, prompt=prompt,
+                                     token_max=token_max)
         else:
             return load_qa_chain(llm=llm, chain_type=chain_type)
 

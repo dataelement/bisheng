@@ -183,8 +183,7 @@ def save_uploaded_file(file, folder_name, file_name):
         minio_client.upload_tmp(file_name, file_byte)
         file_path = minio_client.get_share_link(file_name, tmp_bucket)
     else:
-        file_type = md5_name.split('.')[-1]
-        file_path = folder_path / f'{md5_name}.{file_type}'
+        file_path = folder_path / f'{md5_name}_{file_name}'
         with open(file_path, 'wb') as new_file:
             while chunk := file.read(8192):
                 new_file.write(chunk)
@@ -248,7 +247,7 @@ def file_download(file_path: str):
         return file_path, filename
     elif not os.path.isfile(file_path):
         raise ValueError('File path %s is not a valid file or url' % file_path)
-    return file_path, ''
+    return file_path, file_path.split('_', 1)[1] if '_' in file_path else ''
 
 
 def _is_valid_url(url: str):

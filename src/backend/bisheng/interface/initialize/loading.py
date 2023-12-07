@@ -76,7 +76,7 @@ def instantiate_based_on_type(class_object, base_type, node_type, params, param_
     if base_type == 'agents':
         return instantiate_agent(node_type, class_object, params)
     elif base_type == 'prompts':
-        return instantiate_prompt(node_type, class_object, params)
+        return instantiate_prompt(node_type, class_object, params, param_id_dict)
     elif base_type == 'tools':
         tool = instantiate_tool(node_type, class_object, params)
         if hasattr(tool, 'name') and isinstance(tool, BaseTool):
@@ -320,7 +320,7 @@ def instantiate_agent(node_type, class_object: Type[agent_module.Agent], params:
     return load_agent_executor(class_object, params)
 
 
-def instantiate_prompt(node_type, class_object, params: Dict):
+def instantiate_prompt(node_type, class_object, params: Dict, param_id_dict: Dict):
 
     if node_type == 'ZeroShotPrompt':
         if 'tools' not in params:
@@ -339,6 +339,10 @@ def instantiate_prompt(node_type, class_object, params: Dict):
     else:
         prompt = class_object(**params)
 
+    no_human_input = set(param_id_dict.keys())
+    human_input = set(prompt.input_variables).difference(no_human_input)
+    order_input = list(human_input) + list(set(prompt.input_variables) & no_human_input)
+    prompt.input_variables = order_input
     format_kwargs: Dict[str, Any] = {}
     for input_variable in prompt.input_variables:
         if input_variable in params:
@@ -348,6 +352,14 @@ def instantiate_prompt(node_type, class_object, params: Dict):
             elif isinstance(variable, BaseOutputParser) and hasattr(variable,
                                                                     'get_format_instructions'):
                 format_kwargs[input_variable] = variable.get_format_instructions()
+            elif isinstance(variable, dict):
+                # variable node
+                if len(variable) == 0:
+                    format_kwargs[input_variable] = ''
+                    continue
+                elif len(variable) != 1:
+                    raise ValueError(f'VariableNode contains multi-key {variable.keys()}')
+                format_kwargs[input_variable] = list(variable.values())[0]
             elif isinstance(variable, List) and all(
                     isinstance(item, Document) for item in variable):
                 # Format document to contain page_content and metadata
