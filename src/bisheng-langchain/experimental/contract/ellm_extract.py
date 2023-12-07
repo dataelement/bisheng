@@ -6,6 +6,7 @@ import fitz
 import numpy as np
 import cv2
 import logging
+import filetype
 from collections import defaultdict
 from PIL import Image
 from typing import Any, Iterator, List, Mapping, Optional, Union
@@ -43,7 +44,7 @@ def transpdf2png(pdf_file):
 
 
 class EllmExtract(object):
-    def __init__(self, api_base_url: Optional[str] = None):
+    def __init__(self, api_base_url: str = 'http://192.168.106.20:3502/v2/idp/idp_app/infer'):
         self.ep = api_base_url
         self.client = requests.Session()
         self.timeout = 10000
@@ -84,17 +85,23 @@ class EllmExtract(object):
         except Exception as e:
             return {'status_code': 400, 'status_message': str(e)}
 
-    def predict(self, pdf_path, schema):
+    def predict(self, file_path, schema):
         """
         pdf
         """
         logging.info('ellm extract phase1: ellm extract')
-        pdf_images = transpdf2png(pdf_path)
-        kv_results = defaultdict(list)
-        for pdf_name in pdf_images:
-            page = int(pdf_name.split('page_')[-1])
+        mime_type = filetype.guess(file_path).mime
+        if mime_type.endswith('pdf'):
+            file_type = 'pdf'
+        elif mime_type.startswith('image'):
+            file_type = 'img'
+        else:
+            raise ValueError(f"file type {file_type} is not support.")
 
-            b64data = convert_base64(pdf_images[pdf_name])
+        if file_type == 'img':
+            kv_results = defaultdict(list)
+            bytes_data = open(file_path, 'rb').read()
+            b64data = base64.b64encode(bytes_data).decode()
             payload = {'b64_image': b64data, 'keys': schema}
             resp = self.predict_single_img(payload)
 
@@ -104,12 +111,30 @@ class EllmExtract(object):
                 raise ValueError(f"ellm kv extract failed: {resp}")
 
             for key, value in key_values.items():
-                # text_info = [{'value': text, 'page': int(page)} for text in value['text']]
-                # kv_results[key].extend(text_info)
+                kv_results[key] = value['text']
 
-                for text in value['text']:
-                    if text not in kv_results[key]:
-                        kv_results[key].append(text)
+        elif file_type == 'pdf':
+            pdf_images = transpdf2png(file_path)
+            kv_results = defaultdict(list)
+            for pdf_name in pdf_images:
+                page = int(pdf_name.split('page_')[-1])
+
+                b64data = convert_base64(pdf_images[pdf_name])
+                payload = {'b64_image': b64data, 'keys': schema}
+                resp = self.predict_single_img(payload)
+
+                if 'code' in resp and resp['code'] == 200:
+                    key_values = resp['result']['ellm_result']
+                else:
+                    raise ValueError(f"ellm kv extract failed: {resp}")
+
+                for key, value in key_values.items():
+                    # text_info = [{'value': text, 'page': int(page)} for text in value['text']]
+                    # kv_results[key].extend(text_info)
+
+                    for text in value['text']:
+                        if text not in kv_results[key]:
+                            kv_results[key].append(text)
 
         logging.info(f'ellm kv results: {kv_results}')
         return kv_results
