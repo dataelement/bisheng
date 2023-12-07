@@ -5,9 +5,13 @@ import requests
 import fitz
 import numpy as np
 import cv2
+import logging
 from collections import defaultdict
 from PIL import Image
 from typing import Any, Iterator, List, Mapping, Optional, Union
+
+
+logging.getLogger().setLevel(logging.INFO)
 
 
 def convert_base64(image):
@@ -84,6 +88,7 @@ class EllmExtract(object):
         """
         pdf
         """
+        logging.info('ellm extract phase1: ellm extract')
         pdf_images = transpdf2png(pdf_path)
         kv_results = defaultdict(list)
         for pdf_name in pdf_images:
@@ -99,9 +104,14 @@ class EllmExtract(object):
                 raise ValueError(f"ellm kv extract failed: {resp}")
 
             for key, value in key_values.items():
-                text_info = [{'value': text, 'page': int(page)} for text in value['text']]
-                kv_results[key].extend(text_info)
+                # text_info = [{'value': text, 'page': int(page)} for text in value['text']]
+                # kv_results[key].extend(text_info)
 
+                for text in value['text']:
+                    if text not in kv_results[key]:
+                        kv_results[key].append(text)
+
+        logging.info(f'ellm kv results: {kv_results}')
         return kv_results
 
 
