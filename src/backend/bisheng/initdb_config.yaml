@@ -11,18 +11,18 @@ knowledges: # 知识库相关配置
   vectorstores:
     # Milvus 最低要求cpu 4C 8G 推荐4C 16G
     Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
-      connection_args: {'host': 'milvus', 'port': '19530', 'user': '', 'password': '', 'secure': False}
+      connection_args: {'host': '110.16.193.170', 'port': '50032', 'user': '', 'password': '', 'secure': False}
     # 可选配置，有些类型的场景使用ES可以提高召回效果
-    ElasticKeywordsSearch:
-      elasticsearch_url: 'http://elasticsearch:9200'
-      ssl_verify: "{'basic_auth': ('elastic', 'password')}"
-  minio: # 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储
-    SCHEMA: true
-    CERT_CHECK: false
-    MINIO_ENDPOINT: "milvus:9001"
-    MINIO_SHAREPOIN: "milvus:9001"
-    MINIO_ACCESS_KEY: "minioadmin"
-    MINIO_SECRET_KEY: "minioadmin"
+    # ElasticKeywordsSearch:
+    #   elasticsearch_url: 'http://elasticsearch:9200'
+    #   ssl_verify: "{'basic_auth': ('elastic', 'password')}"
+  # minio: # 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储
+  #   SCHEMA: false         # 是否支持 https
+  #   CERT_CHECK: false         # 是否校验 http证书
+  #   MINIO_ENDPOINT: "milvus:9001"       # 这个地址用来写请求
+  #   MINIO_SHAREPOIN: "milvus:9001"      # 为保证外网和内网隔离。 浏览器获取连接是这个域名
+  #   MINIO_ACCESS_KEY: "minioadmin"
+  #   MINIO_SECRET_KEY: "minioadmin"
   #
 
 # 全局配置大模型    

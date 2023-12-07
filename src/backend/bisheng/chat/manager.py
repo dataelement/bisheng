@@ -290,7 +290,7 @@ class ChatManager:
                 if url_path.netloc:
                     file_name = unquote(url_path.path.split('/')[-1])
                 else:
-                    file_path, file_name = file_path.split('_', 1)
+                    file_name = file_path.split('_', 1)[1] if '_' in file_path else ''
                 nd['value'] = file_name
                 tweak[nd.get('id')] = {'file_path': file_path, 'value': file_name}
             elif 'VariableNode' in nd.get('id'):

@@ -57,7 +57,7 @@ async def upload_file(*, file: UploadFile = File(...)):
         # 缓存本地
         file_path = save_uploaded_file(file.file, 'bisheng', file_name)
         if not isinstance(file_path, str):
-            file_path = str(file_path) + '_' + file_name
+            file_path = str(file_path)
         return UploadFileResponse(file_path=file_path)
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
@@ -116,7 +116,7 @@ async def process_knowledge(*,
     result = []
     for path in file_path:
         filepath, file_name = file_download(path)
-        md5_ = filepath.rsplit('/', 1)[1].split('.')[0]
+        md5_ = filepath.rsplit('/', 1)[1].split('.')[0].split('_')[0]
         # 是否包含重复文件
         repeat = session.exec(select(KnowledgeFile)
                               .where(KnowledgeFile.md5 == md5_,
