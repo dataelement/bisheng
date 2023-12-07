@@ -31,14 +31,18 @@ DEFAULT_PROMPT = PromptTemplate(
 #     template="""现在你需要帮我完成信息抽取的任务，你需要帮我抽取出原文中相关字段信息，如果没找到对应的值，则设为空，并按照JSON的格式输出。
 
 # Examples:
-# 原文：'| 买卖合同 |  | 日期 2021.01.01-2022.12.31 |  |\n| --- | --- | --- | --- |\n| 客户编号 55652246 |  |  | 目的地国家 China |\n| 联系人 chen xu | 电话 862138623097 |  | 传真 |\n| 买方 浙江峻和科技股份有限公司 余姚市远东工业城CE-11 浙江省余姚市 315400 联系人 : 电话 : 传真 |  | 卖方 杜邦贸易 (上海) 有限公司 DuPont Trading (Shanghai) Co., Ltd. 中国《上海》自由贸易试验区港澳路239号一幢楼5层5 27室 Room 527, Floor 5, Building 1, No, 239, Gangao Road .China (Shanghai) Pilot F ree Trade Zone Shanghai 200131.PRC |\n| 付款条件 MET 30 DAYS EOM |\n|  | 运输方式 |  | 销售条款 CPT YUYAO CITY |\n| 1、买方以采购订单的形式。列明需求传送给卖方。 2、卖方负责提供合理报价、依买方采购订单内容生产交货。 3、本合同所附的"买卖条件"为本合同一个明确的组成部分。 4、若本合同任何其他规定与下列附加条件有冲突、则以附加条件为准。 |\n| 卖方银行账 汇丰银行 开户账号 SWIFT代码 |  |\n| 代表实力 浙江岭和科技股份有 (组) For and on behalf (seal) Zhejiang Junke Trehaning 签署 by: 姓名 Now Of Title: 日期 Pate: | 代表表示 杜斯汀 (图) For and configure of SELLER: (seal) Durent 监测制 乌鲁木齐市 日期 late: |'
-# 问题： 提取上述文本中以下字段信息：{schema}，并按照json的格式输出，如果没找到对应的值，则设为空。
+# 原文：
+# | 买卖合同 |  | 日期 2021.01.01-2022.12.31 |  |\n| --- | --- | --- | --- |\n| 客户编号 55652246 |  |  | 目的地国家 China |\n| 联系人 chen xu | 电话 862138623097 |  | 传真 |\n| 买方 浙江峻和科技股份有限公司 余姚市远东工业城CE-11 浙江省余姚市 315400 联系人 : 电话 : 传真 |  | 卖方 杜邦贸易 (上海) 有限公司 DuPont Trading (Shanghai) Co., Ltd. 中国《上海》自由贸易试验区港澳路239号一幢楼5层5 27室 Room 527, Floor 5, Building 1, No, 239, Gangao Road .China (Shanghai) Pilot F ree Trade Zone Shanghai 200131.PRC |\n| 付款条件 MET 30 DAYS EOM |\n|  | 运输方式 |  | 销售条款 CPT YUYAO CITY |\n| 1、买方以采购订单的形式。列明需求传送给卖方。 2、卖方负责提供合理报价、依买方采购订单内容生产交货。 3、本合同所附的"买卖条件"为本合同一个明确的组成部分。 4、若本合同任何其他规定与下列附加条件有冲突、则以附加条件为准。 |\n| 卖方银行账 汇丰银行 开户账号 SWIFT代码 |  |\n| 代表实力 浙江岭和科技股份有 (组) For and on behalf (seal) Zhejiang Junke Trehaning 签署 by: 姓名 Now Of Title: 日期 Pate: | 代表表示 杜斯汀 (图) For and configure of SELLER: (seal) Durent 监测制 乌鲁木齐市 日期 late: |
+
+# 问题： 提取上述文本中以下字段信息：{keywords}，并按照json的格式输出，如果没找到对应的值，则设为空。
 # 回答：```json\n{{\n    "买方": "浙江峻和科技股份有限公司",\n    "卖方": "杜邦贸易 (上海) 有限公司",\n    "合同期限": "2021.01.01-2022.12.31",\n    "结算条款": "MET 30 DAYS EOM",\n    "售后条款": "本合同所附的\'买卖条件\'为本合同一个明确的组成部分。",\n    "金额总金额": ""\n}}\n```
 
 # ----------------------------------
 
-# 原文：{context}
-# 问题： 提取上述文本中以下字段信息：{schema}，并按照json的格式输出，如果没找到对应的值，则设为空。
+# 原文：
+# {context}
+
+# 问题： 提取上述文本中以下字段信息：{keywords}，并按照json的格式输出，如果没找到对应的值，则设为空。
 # 回答：
 # """
 # )
