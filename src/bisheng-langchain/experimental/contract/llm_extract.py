@@ -16,7 +16,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 DEFAULT_PROMPT = PromptTemplate(
     input_variables=["context", "keywords"],
-    template="""现在你需要帮我完成信息抽取的任务，你需要帮我抽取出原文中相关字段信息，如果没找到对应的值，则设为空，并按照JSON的格式输出.
+    template="""现在你需要帮我完成信息抽取的任务，你需要帮我抽取出原文中相关字段信息，如果没找到对应的值，则设为空，并按照JSON的格式输出。请保证输出的JSON格式正确。
 
 原文：
 {context}
