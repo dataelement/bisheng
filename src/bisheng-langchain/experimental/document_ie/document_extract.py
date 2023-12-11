@@ -1,15 +1,15 @@
 import os
 import json
-import logging
 from tqdm import tqdm
 from ellm_extract import EllmExtract
 from llm_extract import LlmExtract
 from collections import defaultdict
+from llm_extract import init_logger
 
-logging.getLogger().setLevel(logging.INFO)
+logger = init_logger(__name__)
 
 
-class ContractExtract(object):
+class DocumentExtract(object):
     def __init__(self,
                 ellm_api_base_url: str = 'http://192.168.106.20:3502/v2/idp/idp_app/infer',
                 llm_model_name: str = 'Qwen-14B-Chat',
@@ -30,6 +30,30 @@ class ContractExtract(object):
         self.ensemble_method = ensemble_method
         self.replace_ellm_cache = replace_ellm_cache
         self.replace_llm_cache = replace_llm_cache
+
+    def ensemble(self, ellm_kv_results, llm_kv_results):
+        """
+        1. 如果当前字段llm有结果，以llm为准，丢掉ellm的提取结果
+        2. 如果ellm还有剩余字段，归到最终结果中
+        """
+        final_kv_results = defaultdict(list)
+        if self.ensemble_method == 'llm_first':
+            for key in llm_kv_results:
+                final_kv_results[key] = llm_kv_results[key]
+                if key in ellm_kv_results:
+                    ellm_kv_results.pop(key)
+            for key in ellm_kv_results:
+                final_kv_results[key] = ellm_kv_results[key]
+        elif self.ensemble_method == 'ellm_first':
+            for key in ellm_kv_results:
+                final_kv_results[key] = ellm_kv_results[key]
+                if key in llm_kv_results:
+                    llm_kv_results.pop(key)
+            for key in llm_kv_results:
+                final_kv_results[key] = llm_kv_results[key]
+
+        logger.info(f'ensemble final kv results: {final_kv_results}')
+        return final_kv_results
 
     def predict_one_pdf(self, pdf_path, schema, save_folder=''):
         pdf_name_prefix = os.path.splitext(os.path.basename(pdf_path))[0]
@@ -74,41 +98,12 @@ class ContractExtract(object):
 
         return ellm_kv_results, llm_kv_results, final_kv_results
 
-    def ensemble(self, ellm_kv_results, llm_kv_results):
-        """
-        1. 如果当前字段llm有结果，以llm为准，丢掉ellm的提取结果
-        2. 如果ellm还有剩余字段，归到最终结果中
-        """
-        final_kv_results = defaultdict(list)
-        if self.ensemble_method == 'llm_first':
-            for key in llm_kv_results:
-                final_kv_results[key] = llm_kv_results[key]
-                if key in ellm_kv_results:
-                    ellm_kv_results.pop(key)
-            for key in ellm_kv_results:
-                final_kv_results[key] = ellm_kv_results[key]
-        elif self.ensemble_method == 'ellm_first':
-            for key in ellm_kv_results:
-                final_kv_results[key] = ellm_kv_results[key]
-                if key in llm_kv_results:
-                    llm_kv_results.pop(key)
-            for key in llm_kv_results:
-                final_kv_results[key] = llm_kv_results[key]
-
-        return final_kv_results
-
     def predict_all_pdf(self, pdf_folder, schema, save_folder):
         if not os.path.exists(save_folder):
             os.makedirs(save_folder)
         pdf_names = os.listdir(pdf_folder)
-        # invalid_pdf_names = ['供货合同_W26.pdf',
-        #                      '框架协议_主供货协议_J28.pdf',
-        #                      '保密条款_L1.pdf',
-        #                      '价格协议_J3.pdf']
         for pdf_name in tqdm(pdf_names):
-            # if pdf_name in invalid_pdf_names:
-            #     continue
-            logging.info(f'process pdf: {pdf_name}')
+            logger.info(f'process pdf: {pdf_name}')
             pdf_path = os.path.join(pdf_folder, pdf_name)
             ellm_kv_results, llm_kv_results, final_kv_results = self.predict_one_pdf(
                 pdf_path, schema, save_folder)
@@ -117,7 +112,7 @@ class ContractExtract(object):
 if __name__ == '__main__':
     # llm_model_name = 'Qwen-14B-Chat'
     llm_model_name = 'Qwen-72B-Chat-Int4'
-    client = ContractExtract(llm_model_name=llm_model_name)
+    client = DocumentExtract(llm_model_name=llm_model_name)
     schema = '合同标题|借款合同编号|担保合同编号|借款人|贷款人|借款金额'
     pdf_folder = '/home/gulixin/workspace/datasets/huatai/流动资金借款合同_pdf'
     save_folder = '/home/gulixin/workspace/datasets/huatai/流动资金借款合同_pdf_qwen72B_res'

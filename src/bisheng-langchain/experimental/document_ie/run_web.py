@@ -5,18 +5,18 @@ import requests
 import gradio as gr
 import time
 import tempfile
-from contract_extract import ContractExtract
+from document_extract import DocumentExtract
 
 tmpdir = './tmp/extract_files'
 if not os.path.exists(tmpdir):
   os.makedirs(tmpdir)
 
 
-ellm_client = ContractExtract(do_ellm=True, do_llm=False, llm_model_name='Qwen-72B-Chat-Int4')
-llm_client = ContractExtract(do_ellm=False, do_llm=True, llm_model_name='Qwen-72B-Chat-Int4')
-ensemble_llm_first_client = ContractExtract(do_ellm=True, do_llm=True,
+ellm_client = DocumentExtract(do_ellm=True, do_llm=False, llm_model_name='Qwen-72B-Chat-Int4')
+llm_client = DocumentExtract(do_ellm=False, do_llm=True, llm_model_name='Qwen-72B-Chat-Int4')
+ensemble_llm_first_client = DocumentExtract(do_ellm=True, do_llm=True,
     ensemble_method='llm_first', llm_model_name='Qwen-72B-Chat-Int4')
-ensemble_ellm_first_client = ContractExtract(do_ellm=True, do_llm=True,
+ensemble_ellm_first_client = DocumentExtract(do_ellm=True, do_llm=True,
     ensemble_method='ellm_first', llm_model_name='Qwen-72B-Chat-Int4')
 
 
@@ -71,15 +71,16 @@ with tempfile.TemporaryDirectory(dir='./tmp/extract_files') as tmpdir:
                 btn1 = gr.Button('Run LLM')
                 btn1.click(fn=llm_run, inputs=[intput_file, schema], outputs=llm_kv_results)
 
+        with gr.Row():
             with gr.Column():
-                ensemble1_kv_results = gr.Textbox(label='ensemble1抽取结果', value='', interactive=True, lines=1)
-                btn2 = gr.Button('Run ensemble1')
-                btn2.click(fn=ensemble_llm_first_run, inputs=[intput_file, schema], outputs=ensemble1_kv_results)
+                ensemble2_kv_results = gr.Textbox(label='ensemble_ellm_first抽取结果', value='', interactive=True, lines=1)
+                btn3 = gr.Button('Run ensemble_ellm_first')
+                btn3.click(fn=ensemble_ellm_first_run, inputs=[intput_file, schema], outputs=ensemble2_kv_results)
 
-            # with gr.Row():
-            #     ensemble2_kv_results = gr.Textbox(label='ensemble2抽取结果', value='', interactive=True, lines=1)
-            #     btn3 = gr.Button('Run ensemble2')
-            #     btn3.click(fn=ensemble_ellm_first_run, inputs=[intput_file, schema], outputs=ensemble2_kv_results)
+            with gr.Column():
+                ensemble1_kv_results = gr.Textbox(label='ensemble_llm_first抽取结果', value='', interactive=True, lines=1)
+                btn2 = gr.Button('Run ensemble_llm_first')
+                btn2.click(fn=ensemble_llm_first_run, inputs=[intput_file, schema], outputs=ensemble1_kv_results)
 
         demo.launch(server_name='192.168.106.12', server_port=9118, share=True)
 

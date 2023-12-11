@@ -4,6 +4,7 @@ import requests
 import json
 import time
 import logging
+import colorlog
 import re
 from collections import defaultdict
 from langchain.prompts import PromptTemplate
@@ -11,7 +12,28 @@ from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 
 
-logging.getLogger().setLevel(logging.INFO)
+def init_logger(name):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    if not logger.handlers:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(logging.DEBUG)
+        fmt_string = '%(log_color)s[%(asctime)s][%(name)s][%(levelname)s]%(message)s'
+        # black red green yellow blue purple cyan and white
+        log_colors = {
+            'DEBUG': 'cyan',
+            'INFO': 'green',
+            'WARNING': 'yellow',
+            'ERROR': 'red',
+            'CRITICAL': 'purple'
+        }
+        fmt = colorlog.ColoredFormatter(fmt_string, log_colors=log_colors)
+        stream_handler.setFormatter(fmt)
+        logger.addHandler(stream_handler)
+    return logger
+
+
+logger = init_logger(__name__)
 
 
 DEFAULT_PROMPT = PromptTemplate(
@@ -69,7 +91,7 @@ def parse_json(json_string: str) -> dict:
     if json_str.startswith('{\n{'):
         json_str = json_str.replace('{\n{', '{', 1)
 
-    logging.info(f'llm response after parse: {json_str}')
+    logger.info(f'llm response after parse: {json_str}')
     extract_res = json.loads(json_str)
 
     return extract_res
@@ -105,18 +127,18 @@ class LlmExtract(object):
             assert response['status_code'] == 200, response
         except Exception as e:
             # llm request error
-            logging.error(f'llm predict fail: {str(e)}')
-            logging.error(f'raw_response: {raw_response.text}')
+            logger.error(f'llm predict fail: {str(e)}')
+            logger.error(f'raw_response: {raw_response.text}')
             return {}, len(raw_response.text)
 
         choices = response.get('choices', [])
-        logging.info(f'llm response: {response}')
+        logger.info(f'llm response: {response}')
         json_string = choices[0]['message']['content']
         try:
             extract_res = parse_json(json_string)
         except Exception as e:
             # json parse error
-            logging.error(f'json parse fail: {str(e)}')
+            logger.error(f'json parse fail: {str(e)}')
             extract_res = {}
 
         return extract_res, len(json_string)
@@ -138,7 +160,7 @@ class LlmExtract(object):
                                                   chunk_overlap=chunk_overlap,
                                                   separators=separators)
         split_docs = text_splitter.split_documents(docs)
-        logging.info(f'pdf content len: {len(pdf_content)}, docs num: {len(docs)}, split_docs num: {len(split_docs)}')
+        logger.info(f'pdf content len: {len(pdf_content)}, docs num: {len(docs)}, split_docs num: {len(split_docs)}')
         return split_docs, docs
 
     def post_extract_res(self, split_docs_extract, split_docs_content, schema):
@@ -159,17 +181,17 @@ class LlmExtract(object):
         return kv_results
 
     def predict(self, pdf_path, schema):
-        logging.info('llm extract phase1: pdf parsing')
+        logger.info('llm extract phase1: pdf parsing')
         schema = schema.split('|')
         keywords = '、'.join(schema)
         try:
             split_docs, docs = self.parse_pdf(pdf_path)
         except Exception as e:
             # pdf parse error
-            logging.error(f'pdf parse fail: {str(e)}')
+            logger.error(f'pdf parse fail: {str(e)}')
             return {}
 
-        logging.info('llm extract phase2: llm extract')
+        logger.info('llm extract phase2: llm extract')
         split_docs_extract = []
         split_docs_content = []
         avg_generate_num = 0
@@ -184,9 +206,9 @@ class LlmExtract(object):
             split_docs_content.append(pdf_content)
         avg_generate_num = avg_generate_num / len(split_docs)
 
-        logging.info('llm extract phase3: post extract result')
+        logger.info('llm extract phase3: post extract result')
         kv_results = self.post_extract_res(split_docs_extract, split_docs_content, schema)
-        logging.info(f'llm kv results: {kv_results}, avg generate char num: {avg_generate_num}')
+        logger.info(f'llm kv results: {kv_results}, avg generate char num: {avg_generate_num} char/s')
 
         return kv_results
 

@@ -5,14 +5,14 @@ import requests
 import fitz
 import numpy as np
 import cv2
-import logging
 import filetype
 from collections import defaultdict
 from PIL import Image
 from typing import Any, Iterator, List, Mapping, Optional, Union
+from llm_extract import init_logger
 
 
-logging.getLogger().setLevel(logging.INFO)
+logger = init_logger(__name__)
 
 
 def convert_base64(image):
@@ -89,7 +89,7 @@ class EllmExtract(object):
         """
         pdf
         """
-        logging.info('ellm extract phase1: ellm extract')
+        logger.info('ellm extract phase1: ellm extract')
         mime_type = filetype.guess(file_path).mime
         if mime_type.endswith('pdf'):
             file_type = 'pdf'
@@ -136,7 +136,7 @@ class EllmExtract(object):
                         if text not in kv_results[key]:
                             kv_results[key].append(text)
 
-        logging.info(f'ellm kv results: {kv_results}')
+        logger.info(f'ellm kv results: {kv_results}')
         return kv_results
 
 
