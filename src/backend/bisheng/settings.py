@@ -92,13 +92,14 @@ class Settings(BaseSettings):
         cache = redis_client.get(redis_key)
         if cache:
             return yaml.safe_load(cache)
-        session = next(get_session())
-        knowledge_config = session.exec(select(Config).where(Config.key == 'knowledges')).first()
-        if knowledge_config:
-            redis_client.set(redis_key, knowledge_config.value, 100)
-            return yaml.safe_load(knowledge_config.value)
-        else:
-            return {}
+        with next(get_session()) as session:
+            knowledge_config = session.exec(select(Config)
+                                            .where(Config.key == 'knowledges')).first()
+            if knowledge_config:
+                redis_client.set(redis_key, knowledge_config.value, 100)
+                return yaml.safe_load(knowledge_config.value)
+            else:
+                return {}
 
     def get_default_llm(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
@@ -108,13 +109,14 @@ class Settings(BaseSettings):
         cache = redis_client.get(redis_key)
         if cache:
             return yaml.safe_load(cache)
-        session = next(get_session())
-        llm_config = session.exec(select(Config).where(Config.key == 'default_llm')).first()
-        if llm_config:
-            redis_client.set(redis_key, llm_config.value, 100)
-            return yaml.safe_load(llm_config.value)
-        else:
-            return {}
+        with next(get_session()) as session:
+            llm_config = session.exec(select(Config)
+                                      .where(Config.key == 'default_llm')).first()
+            if llm_config:
+                redis_client.set(redis_key, llm_config.value, 100)
+                return yaml.safe_load(llm_config.value)
+            else:
+                return {}
 
     def get_from_db(self, key: str):
         # 直接从db中添加配置
@@ -124,13 +126,13 @@ class Settings(BaseSettings):
         cache = redis_client.get(redis_key)
         if cache:
             return yaml.safe_load(cache)
-        session = next(get_session())
-        llm_config = session.exec(select(Config).where(Config.key == key)).first()
-        if llm_config:
-            redis_client.set(redis_key, llm_config.value, 100)
-            return yaml.safe_load(llm_config.value)
-        else:
-            return {}
+        with next(get_session()) as session:
+            llm_config = session.exec(select(Config).where(Config.key == key)).first()
+            if llm_config:
+                redis_client.set(redis_key, llm_config.value, 100)
+                return yaml.safe_load(llm_config.value)
+            else:
+                return {}
 
     def update_from_yaml(self, file_path: str, dev: bool = False):
         new_settings = load_settings_from_yaml(file_path)

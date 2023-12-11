@@ -346,7 +346,7 @@ class BaseHostChatLLM(BaseChatModel):
         return num_tokens
 
 
-class HostChatGLM2(BaseHostChatLLM):
+class HostChatGLM(BaseHostChatLLM):
     # chatglm2-12b, chatglm2-6b
     model_name: str = Field('chatglm2-6b', alias='model')
 

@@ -6,7 +6,7 @@ from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
 from sqlalchemy import delete
-from sqlmodel import Session, select
+from sqlmodel import select
 
 API_WORDS = ['api', 'key', 'token']
 
@@ -214,10 +214,10 @@ def build_flow_no_yield(graph_data: dict,
 def access_check(payload: dict, owner_user_id: int, target_id: int, type: AccessType) -> bool:
     if payload.get('role') != 'admin':
         # role_access
-        session = next(get_session())
-        role_access = session.exec(
-            select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
-                                     RoleAccess.type == type.value)).all()
+        with next(get_session()) as session:
+            role_access = session.exec(
+                select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
+                                         RoleAccess.type == type.value)).all()
         third_ids = [access.third_id for access in role_access]
         if owner_user_id != payload.get('user_id') and str(target_id) not in third_ids:
             return False
@@ -236,41 +236,41 @@ def get_L2_param_from_flow(flow_data: dict, flow_id: str,):
         elif node.vertex_type in {'VariableNode'}:
             variable_ids.append(node.id)
 
-    session: Session = next(get_session())
-    db_variables = session.exec(select(Variable).where(Variable.flow_id == flow_id)).all()
+    with next(get_session()) as session:
+        db_variables = session.exec(select(Variable).where(Variable.flow_id == flow_id)).all()
 
-    old_file_ids = {variable.node_id: variable
-                    for variable in db_variables if variable.value_type == 3}
-    update = []
-    delete_node_ids = []
-    try:
-        for index, id in enumerate(node_id):
-            if id in old_file_ids:
-                if file_name[index] != old_file_ids.get(id).variable_name:
-                    old_file_ids.get(id).variable_name = file_name[index]
-                    update.append(old_file_ids.get(id))
-                old_file_ids.pop(id)
-            else:
-                # file type
-                db_new_var = Variable(flow_id=flow_id, node_id=id,
-                                      variable_name=file_name[index], value_type=3)
-                update.append(db_new_var)
-        # delete variable which not delete by edit
-        old_variable_ids = {variable.node_id
-                            for variable in db_variables if variable.value_type != 3}
+        old_file_ids = {variable.node_id: variable
+                        for variable in db_variables if variable.value_type == 3}
+        update = []
+        delete_node_ids = []
+        try:
+            for index, id in enumerate(node_id):
+                if id in old_file_ids:
+                    if file_name[index] != old_file_ids.get(id).variable_name:
+                        old_file_ids.get(id).variable_name = file_name[index]
+                        update.append(old_file_ids.get(id))
+                    old_file_ids.pop(id)
+                else:
+                    # file type
+                    db_new_var = Variable(flow_id=flow_id, node_id=id,
+                                          variable_name=file_name[index], value_type=3)
+                    update.append(db_new_var)
+            # delete variable which not delete by edit
+            old_variable_ids = {variable.node_id
+                                for variable in db_variables if variable.value_type != 3}
 
-        if old_file_ids:
-            delete_node_ids.extend(list(old_file_ids.keys()))
+            if old_file_ids:
+                delete_node_ids.extend(list(old_file_ids.keys()))
 
-        delete_node_ids.extend(old_variable_ids.difference(set(variable_ids)))
+            delete_node_ids.extend(old_variable_ids.difference(set(variable_ids)))
 
-        if update:
-            [session.add(var) for var in update]
-        if delete_node_ids:
-            session.exec(delete(Variable).where(Variable.node_id.in_(delete_node_ids)))
-        session.commit()
-        return True
-    except Exception as e:
-        logger.exception(e)
-        session.rollback()
-        return False
+            if update:
+                [session.add(var) for var in update]
+            if delete_node_ids:
+                session.exec(delete(Variable).where(Variable.node_id.in_(delete_node_ids)))
+            session.commit()
+            return True
+        except Exception as e:
+            logger.exception(e)
+            session.rollback()
+            return False

@@ -18,6 +18,7 @@ from sqlmodel import select
 
 
 class Handler:
+
     def __init__(self) -> None:
         self.handler_dict = {}
         self.handler_dict['default'] = self.process_message
@@ -25,20 +26,23 @@ class Handler:
         self.handler_dict['auto_file'] = self.process_file
         self.handler_dict['report'] = self.process_report
 
-    async def dispatch_task(self, session: ChatManager,
-                            client_id: str, chat_id: str,
-                            action: str, payload: dict, user_id):
+    async def dispatch_task(self, session: ChatManager, client_id: str,
+                            chat_id: str, action: str, payload: dict, user_id):
         with session.cache_manager.set_client_id(client_id, chat_id):
             if not action:
                 action = 'default'
             if action not in self.handler_dict:
                 raise Exception(f'unknown action {action}')
 
-            await self.handler_dict[action](session, client_id, chat_id, payload, user_id)
+            await self.handler_dict[action](session, client_id, chat_id,
+                                            payload, user_id)
 
-    async def process_report(self, session: ChatManager,
-                             client_id: str, chat_id: str,
-                             payload: Dict, user_id=None):
+    async def process_report(self,
+                             session: ChatManager,
+                             client_id: str,
+                             chat_id: str,
+                             payload: Dict,
+                             user_id=None):
         chat_inputs = payload.pop('inputs', {})
         chat_inputs.pop('data') if 'data' in chat_inputs else {}
         chat_inputs.pop('id') if 'id' in chat_inputs else ''
@@ -48,47 +52,62 @@ class Handler:
             for k, value in artifacts.items():
                 if k in chat_inputs:
                     chat_inputs[k] = value
-        chat_message = ChatMessage(message=chat_inputs, category='question', type='bot',
+        chat_message = ChatMessage(message=chat_inputs,
+                                   category='question',
+                                   type='bot',
                                    user_id=user_id)
         session.chat_history.add_message(client_id, chat_id, chat_message)
 
         # process message
         langchain_object = session.in_memory_cache.get(key)
         chat_inputs = {'inputs': chat_inputs, 'is_begin': False}
-        result = await self.process_message(session, client_id, chat_id, chat_inputs, user_id)
+        result = await self.process_message(session, client_id, chat_id,
+                                            chat_inputs, user_id)
         # judge end type
         start_resp = ChatResponse(type='start', user_id=user_id)
         await session.send_json(client_id, chat_id, start_resp)
 
         if langchain_object.stop_status():
             start_resp.category = 'divider'
-            response = ChatResponse(message='主动退出', type='end',
-                                    category='divider', user_id=user_id)
+            response = ChatResponse(message='主动退出',
+                                    type='end',
+                                    category='divider',
+                                    user_id=user_id)
             await session.send_json(client_id, chat_id, response)
 
         # build report
-        db_session = next(get_session())
-        template = db_session.exec(select(Report).where(
-            Report.flow_id == client_id).order_by(Report.id.desc())).first()
-        if not template:
-            logger.error('template not support')
-            return
+        with next(get_session()) as db_session:
+            template = db_session.exec(
+                select(Report).where(Report.flow_id == client_id).order_by(
+                    Report.id.desc())).first()
+            if not template:
+                logger.error('template not support')
+                return
 
-        template_muban = mino_client.get_share_link(template.object_name)
-        report_name = langchain_object.report_name
-        report_name = report_name if report_name.endswith('.docx') else f'{report_name}.docx'
-        test_replace_string(template_muban, result, report_name)
-        file = mino_client.get_share_link(report_name)
-        response = ChatResponse(type='end',
-                                files=[{'file_url': file, 'file_name': report_name}],
-                                user_id=user_id)
-        await session.send_json(client_id, chat_id, response)
-        close_resp = ChatResponse(type='close', category='system', user_id=user_id)
-        await session.send_json(client_id, chat_id, close_resp)
+            template_muban = mino_client.get_share_link(template.object_name)
+            report_name = langchain_object.report_name
+            report_name = report_name if report_name.endswith(
+                '.docx') else f'{report_name}.docx'
+            test_replace_string(template_muban, result, report_name)
+            file = mino_client.get_share_link(report_name)
+            response = ChatResponse(type='end',
+                                    files=[{
+                                        'file_url': file,
+                                        'file_name': report_name
+                                    }],
+                                    user_id=user_id)
+            await session.send_json(client_id, chat_id, response)
+            close_resp = ChatResponse(type='close',
+                                      category='system',
+                                      user_id=user_id)
+            await session.send_json(client_id, chat_id, close_resp)
 
-    async def process_message(self, session: ChatManager,
-                              client_id: str, chat_id: str,
-                              payload: Dict, user_id=None):
+    async def process_message(self,
+                              session: ChatManager,
+                              client_id: str,
+                              chat_id: str,
+                              payload: Dict,
+                              user_id=None):
         # Process the graph data and chat message
         chat_inputs = payload.pop('inputs', {})
         chat_inputs.pop('id') if 'id' in chat_inputs else ''
@@ -100,8 +119,13 @@ class Handler:
             for k, value in artifacts.items():
                 if k in chat_inputs and value:
                     chat_inputs[k] = value
-        chat_inputs = ChatMessage(message=chat_inputs, category='question',
-                                  is_bot=not is_begin, type='bot', user_id=user_id,)
+        chat_inputs = ChatMessage(
+            message=chat_inputs,
+            category='question',
+            is_bot=not is_begin,
+            type='bot',
+            user_id=user_id,
+        )
         if is_begin:
             # 从file auto trigger process_message， the question already saved
             session.chat_history.add_message(client_id, chat_id, chat_inputs)
@@ -116,7 +140,8 @@ class Handler:
             result, intermediate_steps, source_doucment = await process_graph(
                 langchain_object=langchain_object,
                 chat_inputs=chat_inputs,
-                websocket=session.active_connections[get_cache_key(client_id, chat_id)],
+                websocket=session.active_connections[get_cache_key(
+                    client_id, chat_id)],
             )
         except Exception as e:
             # Log stack trace
@@ -138,7 +163,8 @@ class Handler:
         # Send a response back to the frontend, if needed
         intermediate_steps = intermediate_steps or ''
         # history = self.chat_history.get_history(client_id, chat_id, filter_messages=False)
-        await self.intermediate_logs(session, client_id, chat_id, user_id, intermediate_steps)
+        await self.intermediate_logs(session, client_id, chat_id, user_id,
+                                     intermediate_steps)
         source = True if source_doucment and chat_id else False
         if source:
             for doc in source_doucment:
@@ -150,16 +176,20 @@ class Handler:
             # 群聊，最后一条消息重复，不进行返回
             start_resp.category = 'divider'
             await session.send_json(client_id, chat_id, start_resp)
-            response = ChatResponse(message='本轮结束', type='end',
-                                    category='divider', user_id=user_id)
+            response = ChatResponse(message='本轮结束',
+                                    type='end',
+                                    category='divider',
+                                    user_id=user_id)
             await session.send_json(client_id, chat_id, response)
         else:
             # 正常
             if is_begin:
                 start_resp.category = 'answer'
                 await session.send_json(client_id, chat_id, start_resp)
-                response = ChatResponse(message=result, type='end',
-                                        category='answer', user_id=user_id,
+                response = ChatResponse(message=result,
+                                        type='end',
+                                        category='answer',
+                                        user_id=user_id,
                                         source=source)
                 await session.send_json(client_id, chat_id, response)
 
@@ -170,21 +200,29 @@ class Handler:
 
         if source:
             # 处理召回的chunk
-            await self.process_source_document(source_doucment, chat_id,
-                                               response.message_id, result,)
+            await self.process_source_document(
+                source_doucment,
+                chat_id,
+                response.message_id,
+                result,
+            )
         return result
 
-    async def process_file(self, session: ChatManager,
-                           client_id: str, chat_id: str,
-                           payload: dict, user_id: int):
+    async def process_file(self, session: ChatManager, client_id: str,
+                           chat_id: str, payload: dict, user_id: int):
         file_name = payload['inputs']['data'][0]['value']
         batch_question = payload['inputs']['questions']
         # 如果L3
         file = ChatMessage(is_bot=False,
-                           files=[{'file_name': file_name}],
-                           type='end', user_id=user_id)
+                           files=[{
+                               'file_name': file_name
+                           }],
+                           type='end',
+                           user_id=user_id)
         session.chat_history.add_message(client_id, chat_id, file)
-        start_resp = ChatResponse(type='start', category='system', user_id=user_id)
+        start_resp = ChatResponse(type='start',
+                                  category='system',
+                                  user_id=user_id)
 
         key = get_cache_key(client_id, chat_id)
         langchain_object = session.in_memory_cache.get(key)
@@ -202,8 +240,11 @@ class Handler:
                                      category='question',
                                      user_id=user_id)
             await session.send_json(client_id, chat_id, step_resp)
-            result = await self.process_message(session, client_id, chat_id, payload, user_id)
-            response_step = ChatResponse(intermediate_steps=result, type='start', category='answer',
+            result = await self.process_message(session, client_id, chat_id,
+                                                payload, user_id)
+            response_step = ChatResponse(intermediate_steps=result,
+                                         type='start',
+                                         category='answer',
                                          user_id=user_id)
             await session.send_json(client_id, chat_id, response_step)
             response_step.type = 'end'
@@ -212,14 +253,18 @@ class Handler:
 
         start_resp.category = 'report'
         await session.send_json(client_id, chat_id, start_resp)
-        response = ChatResponse(type='end', intermediate_steps=report,
-                                category='report', user_id=user_id)
+        response = ChatResponse(type='end',
+                                intermediate_steps=report,
+                                category='report',
+                                user_id=user_id)
         await session.send_json(client_id, chat_id, response)
-        close_resp = ChatResponse(type='close', category='system', user_id=user_id)
+        close_resp = ChatResponse(type='close',
+                                  category='system',
+                                  user_id=user_id)
         await session.send_json(client_id, chat_id, close_resp)
 
-    async def process_autogen(self, session: ChatManager,
-                              client_id: str, chat_id: str, payload: dict, user_id: int):
+    async def process_autogen(self, session: ChatManager, client_id: str,
+                              chat_id: str, payload: dict, user_id: int):
         key = get_cache_key(client_id, chat_id)
         langchain_object = session.in_memory_cache.get(key)
         logger.info(f'reciever_human_interactive langchain={langchain_object}')
@@ -240,11 +285,14 @@ class Handler:
             else:
                 logger.error(f'act=auto_gen act={action}')
 
-    async def intermediate_logs(self, session: ChatManager,
-                                client_id, chat_id, user_id, intermediate_steps):
+    async def intermediate_logs(self, session: ChatManager, client_id, chat_id,
+                                user_id, intermediate_steps):
         end_resp = ChatResponse(type='end', user_id=user_id)
         if not intermediate_steps:
-            return await session.send_json(client_id, chat_id, end_resp, add=False)
+            return await session.send_json(client_id,
+                                           chat_id,
+                                           end_resp,
+                                           add=False)
 
         # 将最终的分析过程存数据库
         steps = []
@@ -256,8 +304,12 @@ class Handler:
                 receiver = message.get('receiver')
                 is_bot = False if receiver and receiver.get('is_bot') else True
                 category = message.get('category', 'processing')
-                msg = ChatResponse(message=content, sender=sender, receiver=receiver,
-                                   type='end', user_id=user_id, is_bot=is_bot,
+                msg = ChatResponse(message=content,
+                                   sender=sender,
+                                   receiver=receiver,
+                                   type='end',
+                                   user_id=user_id,
+                                   is_bot=is_bot,
                                    category=category)
                 steps.append(msg)
         else:
@@ -268,7 +320,9 @@ class Handler:
                         answer = eval(s.split(':', 1)[1])
                         if 'result' in answer:
                             s = 'Answer: ' + answer.get('result')
-                    msg = ChatResponse(intermediate_steps=s, type='end', user_id=user_id)
+                    msg = ChatResponse(intermediate_steps=s,
+                                       type='end',
+                                       user_id=user_id)
                     steps.append(msg)
             else:
                 # 只有L3用户给出详细的log
@@ -279,8 +333,13 @@ class Handler:
             # save chate message
             session.chat_history.add_message(client_id, chat_id, step)
 
-    async def process_source_document(self, source_document: List[Document], chat_id, message_id,
-                                      answer):
+    async def process_source_document(
+        self,
+        source_document: List[Document],
+        chat_id,
+        message_id,
+        answer,
+    ):
         if not source_document:
             return
 
@@ -289,29 +348,29 @@ class Handler:
         keyword_conf = settings.get_default_llm() or {}
         host_base_url = keyword_conf.get('host_base_url')
         model = keyword_conf.get('model')
+        with next(get_session()) as db_session:
+            if model and not host_base_url:
+                model_deploy = db_session.exec(
+                    select(ModelDeploy).where(
+                        ModelDeploy.model == model)).first()
+                if model_deploy:
+                    model = model if model_deploy.status == '已上线' else None
+                    host_base_url = model_deploy.endpoint
+                else:
+                    logger.error('不能使用配置模型进行关键词抽取，配置不正确')
 
-        if model and not host_base_url:
-            db_session = next(get_session())
-            model_deploy = db_session.exec(
-                select(ModelDeploy).where(ModelDeploy.model == model)).first()
-            if model_deploy:
-                model = model if model_deploy.status == '已上线' else None
-                host_base_url = model_deploy.endpoint
-            else:
-                logger.error('不能使用配置模型进行关键词抽取，配置不正确')
-
-        answer_keywords = extract_answer_keys(answer, model, host_base_url)
-        for doc in source_document:
-            if 'bbox' in doc.metadata:
-                # 表示支持溯源
-                db_session = next(get_session())
-                content = doc.page_content
-                recall_chunk = RecallChunk(chat_id=chat_id,
-                                           keywords=json.dumps(answer_keywords),
-                                           chunk=content,
-                                           file_id=doc.metadata.get('file_id'),
-                                           meta_data=json.dumps(doc.metadata),
-                                           message_id=message_id)
-                db_session.add(recall_chunk)
-                db_session.commit()
-                db_session.refresh(recall_chunk)
+            answer_keywords = extract_answer_keys(answer, model, host_base_url)
+            for doc in source_document:
+                if 'bbox' in doc.metadata:
+                    # 表示支持溯源
+                    content = doc.page_content
+                    recall_chunk = RecallChunk(
+                        chat_id=chat_id,
+                        keywords=json.dumps(answer_keywords),
+                        chunk=content,
+                        file_id=doc.metadata.get('file_id'),
+                        meta_data=json.dumps(doc.metadata),
+                        message_id=message_id)
+                    db_session.add(recall_chunk)
+                    db_session.commit()
+                    db_session.refresh(recall_chunk)

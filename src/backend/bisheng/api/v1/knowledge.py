@@ -39,15 +39,15 @@ from sqlmodel import Session, select
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Skills'])
 filetype_load_map = {
-        'txt': TextLoader,
-        'pdf': PyPDFLoader,
-        'html': BSHTMLLoader,
-        'md': UnstructuredMarkdownLoader,
-        'doc': UnstructuredWordDocumentLoader,
-        'docx': UnstructuredWordDocumentLoader,
-        'ppt': UnstructuredPowerPointLoader,
-        'pptx': UnstructuredPowerPointLoader,
-    }
+    'txt': TextLoader,
+    'pdf': PyPDFLoader,
+    'html': BSHTMLLoader,
+    'md': UnstructuredMarkdownLoader,
+    'doc': UnstructuredWordDocumentLoader,
+    'docx': UnstructuredWordDocumentLoader,
+    'ppt': UnstructuredPowerPointLoader,
+    'pptx': UnstructuredPowerPointLoader,
+}
 
 
 @router.post('/upload', response_model=UploadFileResponse, status_code=201)
@@ -102,7 +102,8 @@ async def process_knowledge(*,
         chunk_size = 500
         chunk_overlap = 50
 
-    knowledge = session.exec(select(Knowledge).where(Knowledge.id == knowledge_id)).one()
+    knowledge = session.exec(
+        select(Knowledge).where(Knowledge.id == knowledge_id)).one()
 
     if not access_check(payload=payload,
                         owner_user_id=knowledge.user_id,
@@ -118,13 +119,17 @@ async def process_knowledge(*,
         filepath, file_name = file_download(path)
         md5_ = filepath.rsplit('/', 1)[1].split('.')[0]
         # 是否包含重复文件
-        repeat = session.exec(select(KnowledgeFile
-                                     ).where(KnowledgeFile.md5 == md5_, KnowledgeFile.status == 2,
-                                             KnowledgeFile.knowledge_id == knowledge_id)).all()
+        repeat = session.exec(
+            select(KnowledgeFile).where(
+                KnowledgeFile.md5 == md5_, KnowledgeFile.status == 2,
+                KnowledgeFile.knowledge_id == knowledge_id)).all()
         status = 3 if repeat else 1
         remark = 'file repeat' if repeat else ''
-        db_file = KnowledgeFile(knowledge_id=knowledge_id, file_name=file_name,
-                                status=status, md5=md5_, remark=remark,
+        db_file = KnowledgeFile(knowledge_id=knowledge_id,
+                                file_name=file_name,
+                                status=status,
+                                md5=md5_,
+                                remark=remark,
                                 user_id=payload.get('user_id'))
 
         session.add(db_file)
@@ -161,8 +166,9 @@ def create_knowledge(*,
     """创建知识库."""
     db_knowldge = Knowledge.from_orm(knowledge)
     know = session.exec(
-        select(Knowledge).where(Knowledge.name == knowledge.name,
-                                knowledge.user_id == payload.get('user_id'))).all()
+        select(Knowledge).where(
+            Knowledge.name == knowledge.name,
+            knowledge.user_id == payload.get('user_id'))).all()
     if know:
         raise HTTPException(status_code=500, detail='知识库名称重复')
     if not db_knowldge.collection_name:
@@ -190,20 +196,23 @@ def get_knowledge(*,
         count_sql = select(func.count(Knowledge.id))
         if 'admin' != payload.get('role'):
             role_third_id = session.exec(
-                select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')))).all()
+                select(RoleAccess).where(
+                    RoleAccess.role_id.in_(payload.get('role')))).all()
             if role_third_id:
                 third_ids = [
-                    acess.third_id
-                    for acess in role_third_id
+                    acess.third_id for acess in role_third_id
                     if acess.type == AccessType.KNOWLEDGE.value
                 ]
                 sql = sql.where(
-                    or_(Knowledge.user_id == payload.get('user_id'), Knowledge.id.in_(third_ids)))
+                    or_(Knowledge.user_id == payload.get('user_id'),
+                        Knowledge.id.in_(third_ids)))
                 count_sql = count_sql.where(
-                    or_(Knowledge.user_id == payload.get('user_id'), Knowledge.id.in_(third_ids)))
+                    or_(Knowledge.user_id == payload.get('user_id'),
+                        Knowledge.id.in_(third_ids)))
             else:
                 sql = sql.where(Knowledge.user_id == payload.get('user_id'))
-                count_sql = count_sql.where(Knowledge.user_id == payload.get('user_id'))
+                count_sql = count_sql.where(
+                    Knowledge.user_id == payload.get('user_id'))
         sql = sql.order_by(Knowledge.update_time.desc())
         total_count = session.scalar(count_sql)
 
@@ -215,7 +224,8 @@ def get_knowledge(*,
         res = [jsonable_encoder(flow) for flow in knowledges]
         if knowledges:
             db_user_ids = {flow.user_id for flow in knowledges}
-            db_user = session.exec(select(User).where(User.user_id.in_(db_user_ids))).all()
+            db_user = session.exec(
+                select(User).where(User.user_id.in_(db_user_ids))).all()
             userMap = {user.user_id: user.user_name for user in db_user}
             for r in res:
                 r['user_name'] = userMap[r['user_id']]
@@ -253,11 +263,13 @@ def get_filelist(*,
 
     # 查找上传的文件信息
     total_count = session.scalar(
-        select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
+        select(func.count(KnowledgeFile.id)).where(
+            KnowledgeFile.knowledge_id == knowledge_id))
     files = session.exec(
-        select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id).order_by(
-            KnowledgeFile.update_time.desc()).offset(page_size *
-                                                     (page_num - 1)).limit(page_size)).all()
+        select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == knowledge_id).order_by(
+                KnowledgeFile.update_time.desc()).offset(
+                    page_size * (page_num - 1)).limit(page_size)).all()
     return {
         'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
         'total': total_count,
@@ -276,7 +288,8 @@ def delete_knowledge(*,
     knowledge = session.get(Knowledge, knowledge_id)
     if not knowledge:
         raise HTTPException(status_code=404, detail='knowledge not found')
-    if not access_check(payload, knowledge.user_id, knowledge_id, AccessType.KNOWLEDGE_WRITE):
+    if not access_check(payload, knowledge.user_id, knowledge_id,
+                        AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
     session.delete(knowledge)
     session.commit()
@@ -296,25 +309,30 @@ def delete_knowledge_file(*,
         raise HTTPException(status_code=404, detail='文件不存在')
 
     knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
-    if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
+    if not access_check(payload, knowledge.user_id, knowledge.id,
+                        AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
     # 处理vectordb
     collection_name = knowledge.collection_name
     embeddings = decide_embeddings(knowledge.model)
     vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
     if isinstance(vectore_client, Milvus) and vectore_client.col:
-        pk = vectore_client.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])
+        pk = vectore_client.col.query(expr=f'file_id == {file_id}',
+                                      output_fields=['pk'])
         res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
         logger.info(f'act=delete_vector file_id={file_id} res={res}')
 
     # minio
     minio_client.MinioClient().delete_minio(str(knowledge_file.id))
     # elastic
-    esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+    esvectore_client = decide_vectorstores(collection_name,
+                                           'ElasticKeywordsSearch', embeddings)
     if esvectore_client:
-        res = esvectore_client.client.delete_by_query(index=collection_name,
-                                                      query={'match': {
-                                                          'metadata.file_id': file_id}})
+        res = esvectore_client.client.delete_by_query(
+            index=collection_name,
+            query={'match': {
+                'metadata.file_id': file_id
+            }})
         logger.info(f'act=delete_es file_id={file_id} res={res}')
 
     session.delete(knowledge_file)
@@ -332,7 +350,8 @@ def decide_embeddings(model: str) -> Embeddings:
 
 def decide_vectorstores(collection_name: str, vector_store: str,
                         embedding: Embeddings) -> VectorStore:
-    vector_config = settings.get_knowledge().get('vectorstores').get(vector_store)
+    vector_config = settings.get_knowledge().get('vectorstores').get(
+        vector_store)
     if not vector_config:
         # 无相关配置
         return None
@@ -347,51 +366,62 @@ def decide_vectorstores(collection_name: str, vector_store: str,
     return instantiate_vectorstore(class_object=class_obj, params=param)
 
 
-async def addEmbedding(collection_name, model: str, chunk_size: int, separator: str,
-                       chunk_overlap: int, file_paths: List[str],
+async def addEmbedding(collection_name, model: str, chunk_size: int,
+                       separator: str, chunk_overlap: int,
+                       file_paths: List[str],
                        knowledge_files: List[KnowledgeFile]):
     try:
         embeddings = decide_embeddings(model)
-        vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-        es_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+        vectore_client = decide_vectorstores(collection_name, 'Milvus',
+                                             embeddings)
+        es_client = decide_vectorstores(collection_name,
+                                        'ElasticKeywordsSearch', embeddings)
     except Exception as e:
         logger.exception(e)
 
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
-        session = next(get_session())
-        try:
-            # 存储 mysql
-            db_file = session.get(KnowledgeFile, knowledge_file.id)
-            setattr(db_file, 'status', 2)
-            setattr(db_file, 'object_name', knowledge_file.file_name)
-            session.add(db_file)
-            session.flush()
-            # 原文件
-            minio_client.MinioClient().upload_minio(knowledge_file.file_name, path)
+        with next(get_session()) as session:
+            try:
+                # 存储 mysql
+                db_file = session.get(KnowledgeFile, knowledge_file.id)
+                setattr(db_file, 'status', 2)
+                setattr(db_file, 'object_name', knowledge_file.file_name)
+                session.add(db_file)
+                session.flush()
+                # 原文件
+                minio_client.MinioClient().upload_minio(
+                    knowledge_file.file_name, path)
 
-            texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
-                                                chunk_overlap, separator)
+                texts, metadatas = _read_chunk_text(path,
+                                                    knowledge_file.file_name,
+                                                    chunk_size, chunk_overlap,
+                                                    separator)
 
-            # 溯源必须依赖minio, 后期替换更通用的oss
-            minio_client.MinioClient().upload_minio(str(db_file.id), path)
+                # 溯源必须依赖minio, 后期替换更通用的oss
+                minio_client.MinioClient().upload_minio(str(db_file.id), path)
 
-            logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
-            [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]
-            vectore_client.add_texts(texts=texts, metadatas=metadatas)
+                logger.info(
+                    f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}'
+                )
+                [
+                    metadata.update({'file_id': knowledge_file.id})
+                    for metadata in metadatas
+                ]
+                vectore_client.add_texts(texts=texts, metadatas=metadatas)
 
-            # 存储es
-            if es_client:
-                es_client.add_texts(texts=texts, metadatas=metadatas)
-            session.commit()
-            session.refresh(db_file)
-        except Exception as e:
-            logger.exception(e)
-            db_file = session.get(KnowledgeFile, knowledge_file.id)
-            setattr(db_file, 'status', 3)
-            setattr(db_file, 'remark', str(e)[:500])
-            session.add(db_file)
-            session.commit()
+                # 存储es
+                if es_client:
+                    es_client.add_texts(texts=texts, metadatas=metadatas)
+                session.commit()
+                session.refresh(db_file)
+            except Exception as e:
+                logger.exception(e)
+                db_file = session.get(KnowledgeFile, knowledge_file.id)
+                setattr(db_file, 'status', 3)
+                setattr(db_file, 'remark', str(e)[:500])
+                session.add(db_file)
+                session.commit()
 
 
 def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
@@ -400,7 +430,8 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         if file_type not in filetype_load_map:
             raise Exception('Unsupport file type')
         loader = filetype_load_map[file_type](file_path=input_file)
-        separator = separator[0] if separator and isinstance(separator, list) else separator
+        separator = separator[0] if separator and isinstance(
+            separator, list) else separator
         text_splitter = CharacterTextSplitter(separator=separator,
                                               chunk_size=size,
                                               chunk_overlap=chunk_overlap,
@@ -415,8 +446,9 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         if file_name.rsplit('.', 1)[-1] != 'pdf':
             b64_data = base64.b64encode(open(input_file, 'rb').read()).decode()
             inp = dict(filename=file_name, b64_data=[b64_data], mode='topdf')
-            resp = requests.post(settings.get_knowledge().get('unstructured_api_url'),
-                                 json=inp).json()
+            resp = requests.post(
+                settings.get_knowledge().get('unstructured_api_url'),
+                json=inp).json()
             if not resp or resp['status_code'] != 200:
                 logger.error(f'file_pdf=not_success resp={resp}')
                 raise Exception(f"当前文件无法解析， {resp['status_message']}")
@@ -429,7 +461,8 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         loader = ElemUnstructuredLoader(
             file_name,
             input_file,
-            unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
+            unstructured_api_url=settings.get_knowledge().get(
+                'unstructured_api_url'))
         documents = loader.load()
         text_splitter = ElemCharacterTextSplitter(separators=separator,
                                                   chunk_size=size,

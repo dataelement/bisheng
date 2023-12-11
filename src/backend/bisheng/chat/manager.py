@@ -26,25 +26,25 @@ class ChatHistory(Subject):
         super().__init__()
         self.history: Dict[str, List[ChatMessage]] = defaultdict(list)
 
-    def add_message(self, client_id: str, chat_id: str, message: ChatMessage):
+    def add_message(self, client_id: str, chat_id: str, message: ChatMessage,):
         """Add a message to the chat history."""
 
         if chat_id and (message.message or message.intermediate_steps or
                         message.files) and message.type != 'stream':
-            with next(get_session()) as seesion:
-                from bisheng.database.models.message import ChatMessage
-                msg = message.copy()
-                msg.message = str(msg.message) if isinstance(msg.message, dict) else msg.message
-                files = json.dumps(msg.files) if msg.files else ''
-                msg.__dict__.pop('files')
-                db_message = ChatMessage(flow_id=client_id,
-                                         chat_id=chat_id,
-                                         files=files,
-                                         **msg.__dict__)
-                logger.info(f'chat={db_message}')
-                seesion.add(db_message)
-                seesion.commit()
-                seesion.refresh(db_message)
+            from bisheng.database.models.message import ChatMessage
+            msg = message.copy()
+            msg.message = str(msg.message) if isinstance(msg.message, dict) else msg.message
+            files = json.dumps(msg.files) if msg.files else ''
+            msg.__dict__.pop('files')
+            db_message = ChatMessage(flow_id=client_id,
+                                     chat_id=chat_id,
+                                     files=files,
+                                     **msg.__dict__)
+            logger.info(f'chat={db_message}')
+            with next(get_session()) as session:
+                session.add(db_message)
+                session.commit()
+                session.refresh(db_message)
                 message.message_id = db_message.id
 
         if not isinstance(message, FileResponse):
@@ -256,8 +256,8 @@ class ChatManager:
             self.disconnect(client_id, chat_id)
 
     def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
-        session = next(get_session())
-        db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
+        with next(get_session()) as session:
+            db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
         artifacts = {}
         graph = build_flow_no_yield(graph_data=graph_data,
                                     artifacts=artifacts, process_file=True,

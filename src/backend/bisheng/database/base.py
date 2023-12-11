@@ -1,46 +1,21 @@
 import hashlib
-import sys
+from contextlib import contextmanager
+from typing import Generator
 
 from bisheng.database.init_config import init_config
 from bisheng.database.models.role import Role
 from bisheng.database.models.user import User
 from bisheng.database.models.user_role import UserRole
+from bisheng.database.service import DatabaseService
 from bisheng.settings import settings
-from bisheng.utils.logger import logger
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlmodel import Session, select
 
-if settings.database_url and settings.database_url.startswith('sqlite'):
-    connect_args = {'check_same_thread': False}
-else:
-    connect_args = {}
-if not settings.database_url:
-    raise RuntimeError('No database_url provided')
-engine = create_engine(settings.database_url, connect_args=connect_args, pool_pre_ping=True)
+db_service = DatabaseService(settings.database_url)
 
 
-def create_db_and_tables():
-    logger.debug('Creating database and tables')
-    try:
-        SQLModel.metadata.create_all(engine)
-    except Exception as exc:
-        logger.error(f'Error creating database and tables: {exc}')
-        sys.exit(-1)
-
-    # Now check if the table Flow exists, if not, something went wrong
-    # and we need to create the tables again.
-    from sqlalchemy import inspect
-
-    inspector = inspect(engine)
-    if 'flow' not in inspector.get_table_names():
-        logger.error('Something went wrong creating the database and tables.')
-        logger.error('Please check your database settings.')
-
-        raise RuntimeError('Something went wrong creating the database and tables.')
-    else:
-        logger.debug('Database and tables created successfully')
-
+def init_default_data():
     # 写入默认数据
-    with Session(engine) as session:
+    with session_getter() as session:
         db_role = session.exec(select(Role).limit(1)).all()
         if not db_role:
             # 初始化系统配置, 管理员拥有所有权限
@@ -69,6 +44,18 @@ def create_db_and_tables():
     init_config()
 
 
-def get_session():
-    with Session(engine) as session:
+def get_session() -> Generator['Session', None, None]:
+    yield from db_service.get_session()
+
+
+@contextmanager
+def session_getter(db_service: DatabaseService):
+    try:
+        session = Session(db_service.engine)
         yield session
+    except Exception as e:
+        print('Session rollback because of exception:', e)
+        session.rollback()
+        raise
+    finally:
+        session.close()
