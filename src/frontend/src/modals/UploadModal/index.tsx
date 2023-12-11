@@ -21,6 +21,7 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
     // 符号
     const [symbol, setSymbol] = useState('\\n\\n')
     const chunkType = useRef('smart')
+    const [overlap, setOverlap] = useState('100')
 
     const [progressList, setProgressList] = useState([])
     const progressCountRef = useRef(0)
@@ -68,11 +69,11 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
     const [loading, setLoading] = useState(false)
     const handleSubmit = async () => {
         const errorList = [];
-        if (!/^\d+$/.test(size)) errorList.push(t('code.setSplitSize'));
+        // if (!/^\d+$/.test(size)) errorList.push(t('code.setSplitSize'));
         if (!filePathsRef.current.length) errorList.push(t('code.selectFileToUpload'));
         if (errorList.length) return setErrorData({ title: t('prompt'), list: errorList });
         setLoading(true);
-        const params = {
+        const params: any = {
             file_path: filePathsRef.current,
             knowledge_id: Number(id),
             auto: true
@@ -87,8 +88,9 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
                     'b': '\b'
                 }[capture];
             }));
-            params.chunck_size = Number(size);
+            params.chunck_size = Number(/^\d+$/.test(size) ? size : '1000');
             params.auto = false;
+            // params.overlap = /^\d+$/.test(overlap) ? overlap : '100' // 异常值使用默认值
         }
         await subUploadLibFile(params);
         setOpen(false);
@@ -161,7 +163,7 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
             <h3 className="font-bold text-lg">{t('code.uploadFile')}</h3>
             <p className="py-4">{desc}</p>
             <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
-                <div className="w-[440px]">
+                <div className="w-[460px]">
                     <div {...getRootProps()} className="h-[100px] border border-dashed flex justify-center items-center cursor-pointer">
                         <input {...getInputProps()} />
                         {isDragActive ? <p>{t('code.dropFileHere')}</p> : <p>{t('code.clickOrDragHere')}</p>}
@@ -188,6 +190,8 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
                                     <Input id="name" value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder={t('code.delimiterPlaceholder')} className="col-span-3" />
                                     <Label htmlFor="name" className="text-right col-span-2">{t('code.splitLength')}</Label>
                                     <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder={t('code.splitSizePlaceholder')} className="col-span-3" />
+                                    <Label htmlFor="name" className="text-right col-span-2">{t('code.chunkOverlap')}</Label>
+                                    <Input id="name" value={overlap} onChange={(e) => setOverlap(e.target.value)} placeholder={t('code.chunkOverlap')} className="col-span-3" />
                                 </div>
                             </div>
                         </TabsContent>

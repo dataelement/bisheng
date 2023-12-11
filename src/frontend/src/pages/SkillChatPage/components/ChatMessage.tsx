@@ -11,6 +11,7 @@ import { CodeBlock } from "../../../modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "../../../types/chat";
 import { downloadFile } from "../../../util/utils";
 import { checkSassUrl } from "./FileView";
+import Thumbs from "./Thumbs";
 
 // 颜色列表
 const colorList = [
@@ -29,6 +30,7 @@ const colorList = [
 
 export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageType, userName: string, onSource: () => void }) => {
     // const { user } = useContext(userContext);
+    console.log('chat :>> ', chat);
 
     const textRef = useRef(null)
     const { t } = useTranslation()
@@ -205,12 +207,14 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
             <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center" style={{ background: avatarColor }}><Bot color="#fff" size={28} /></div>
         </div>
         {chat.sender && <div className="chat-header text-gray-400 text-sm">{chat.sender}</div>}
-        <div ref={textRef} className="chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8">
+        <div ref={textRef} className="chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8 relative">
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {/* @user */}
             {chat.receiver && <p className="text-blue-500 text-sm">@ {chat.receiver.user_name}</p>}
             {/* 光标 */}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
+            {/* 赞 踩 */}
+            {chat.chat_id && <Thumbs id={chat.chat_id} data={1} className="absolute right-4 bottom-[-28px]"></Thumbs>}
         </div>
         {chat.source && source}
     </div>

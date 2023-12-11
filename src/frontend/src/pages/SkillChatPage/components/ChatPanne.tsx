@@ -385,12 +385,12 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
         setTimeout(heartbeat, 30000);
     }
 
-    function getWebSocketUrl(_chatId, isDevelopment = false) {
+    function getWebSocketUrl(flowId, isDevelopment = false) {
         const isSecureProtocol = window.location.protocol === "https:";
         const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
         const host = window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
-        const chatEndpoint = version === 'v1' ? `/api/v1/chat/${_chatId}?type=L1&chat_id=${_chatId}`
-            : `/api/v2/chat/ws/${_chatId}?type=L1&chat_id=${_chatId}${libId ? '&knowledge_id=' + libId : ''}`
+        const chatEndpoint = version === 'v1' ? `/api/v1/chat/${flowId}?type=L1&chat_id=${chatId}`
+            : `/api/v2/chat/ws/${flowId}?type=L1&chat_id=${chatId}${libId ? '&knowledge_id=' + libId : ''}`
 
         return `${webSocketProtocol}://${host}${chatEndpoint}`;
     }
