@@ -13,7 +13,7 @@ class DocumentExtract(object):
     def __init__(self,
                 ellm_api_base_url: str = 'http://192.168.106.20:3502/v2/idp/idp_app/infer',
                 llm_model_name: str = 'Qwen-14B-Chat',
-                llm_model_api_url: str = 'https://bisheng.dataelem.com/api/v1/models/{}/infer',
+                llm_model_api_url: str = 'http://192.168.106.20:7001/v2.1/models/{}/infer',
                 unstructured_api_url: str = "https://bisheng.dataelem.com/api/v1/etl4llm/predict",
                 do_ellm: bool = True,
                 do_llm: bool = True,
