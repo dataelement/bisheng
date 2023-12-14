@@ -26,6 +26,7 @@ import { alertContext } from "../../contexts/alertContext";
 import { locationContext } from "../../contexts/locationContext";
 import { userContext } from "../../contexts/userContext";
 import { serverListApi, switchOnLineApi, updateConfigApi } from "../../controllers/API";
+import { useCopyText } from "../../util/hook";
 import RTConfig from "./components/RTConfig";
 import { CpuDetail } from "./cpuInfo";
 
@@ -201,6 +202,8 @@ export default function FileLibPage() {
         setRTOpen(false)
     }
 
+    const copyText = useCopyText()
+
     return <div className="w-full h-screen p-6 overflow-y-auto">
         <Tabs defaultValue="account" className="w-full">
             <TabsList className="">
@@ -229,7 +232,9 @@ export default function FileLibPage() {
                             <TableRow key={el.id}>
                                 <TableCell className="font-medium">{el.server}</TableCell>
                                 <TableCell>{el.model}</TableCell>
-                                <TableCell>{el.endpoint}</TableCell>
+                                <TableCell>
+                                    <p className="cursor-pointer" onClick={() => copyText(el.endpoint)}>{el.endpoint}</p>
+                                </TableCell>
                                 <TableCell>
                                     {statusComponets(el.status, el.remark)}
                                 </TableCell>

@@ -1,30 +1,19 @@
 # flake8: noqa
 """Loads PDF with semantic splilter."""
 import base64
-import io
 import json
-import logging
 import os
-import re
-import tempfile
-import time
-import filetype
-import cv2
 from collections import defaultdict
-from abc import ABC
-from collections import Counter
-from copy import deepcopy
-from pathlib import Path
-from typing import Any, Iterator, List, Mapping, Optional, Union
-from urllib.parse import urlparse
-from PIL import Image
+from typing import List
 
+import cv2
+import filetype
 import fitz
 import numpy as np
-import requests
+from bisheng_langchain.document_loaders.parsers import ELLMClient
 from langchain.docstore.document import Document
 from langchain.document_loaders.base import BaseLoader
-from bisheng_langchain.document_loaders.parsers import ELLMClient, OCRClient
+from PIL import Image
 
 
 def convert_base64(image):
@@ -45,11 +34,11 @@ def transpdf2png(pdf_file):
             pix = page.get_pixmap(dpi=dpi)
             if min(pix.width, pix.height) >= 1600: break
 
-        mode = "RGBA" if pix.alpha else "RGB"
+        mode = 'RGBA' if pix.alpha else 'RGB'
         img = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
         # RGB to BGR
         img = np.array(img)[:, :, ::-1]
-        img_name = "page_{:03d}".format(page.number)
+        img_name = 'page_{:03d}'.format(page.number)
         pdf_images[img_name] = img
 
     return pdf_images
@@ -79,7 +68,7 @@ class UniversalKVLoader(BaseLoader):
         elif mime_type.startswith('image'):
             file_type = 'img'
         else:
-            raise ValueError(f"file type {file_type} is not support.")
+            raise ValueError(f'file type {file_type} is not support.')
 
         if file_type == 'img':
             bytes_data = open(self.file_path, 'rb').read()
@@ -90,7 +79,7 @@ class UniversalKVLoader(BaseLoader):
             if 'code' in resp and resp['code'] == 200:
                 key_values = resp['result']['ellm_result']
             else:
-                raise ValueError(f"universal kv load failed: {resp}")
+                raise ValueError(f'universal kv load failed: {resp}')
 
             kv_results = defaultdict(list)
             for key, value in key_values.items():
@@ -118,7 +107,7 @@ class UniversalKVLoader(BaseLoader):
                 if 'code' in resp and resp['code'] == 200:
                     key_values = resp['result']['ellm_result']
                 else:
-                    raise ValueError(f"universal kv load failed: {resp}")
+                    raise ValueError(f'universal kv load failed: {resp}')
 
                 for key, value in key_values.items():
                     kv_results[key].extend(value['text'])
@@ -128,4 +117,3 @@ class UniversalKVLoader(BaseLoader):
             meta = {'source': file_name}
             doc = Document(page_content=content, metadata=meta)
             return [doc]
-

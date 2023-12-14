@@ -10,6 +10,7 @@ import { alertContext } from "../../../contexts/alertContext";
 import { CodeBlock } from "../../../modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "../../../types/chat";
 import { downloadFile } from "../../../util/utils";
+import { checkSassUrl } from "./FileView";
 
 // 颜色列表
 const colorList = [
@@ -131,8 +132,9 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
     }
 
     // download file
-    const handleDownloadFile = (url) => {
-        url && downloadFile(url, 'result.docx')
+    const handleDownloadFile = (file) => {
+        const url = file?.file_url
+        url && downloadFile(checkSassUrl(url), file?.file_name)
     }
 
     const source = <div className="chat-footer py-1">
@@ -170,7 +172,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
                 {chat.files[0]?.data === 'error' && <div className="flex w-4 h-4 justify-center items-center absolute left-[-24px] bottom-0 bg-red-500 text-gray-50 rounded-full">!</div>}
             </Card>
         </div>
-        {!chat.files[0]?.data && <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 ${color['system']} ${border['system']}`}>{t('chat.filePrsing')}</div>}
+        {/* {!chat.files[0]?.data && <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 ${color['system']} ${border['system']}`}>{t('chat.filePrsing')}</div>} */}
     </> :
         // 发送消息
         <div className="chat chat-end">
@@ -189,7 +191,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
             <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center" style={{ background: avatarColor }}><Bot color="#fff" size={28} /></div>
         </div>
         {chat.sender && <div className="chat-header text-gray-400 text-sm">{chat.sender}</div>}
-        <Card className={`my-2 w-[200px] relative ${chat.files[0]?.file_url && 'cursor-pointer'}`} onClick={() => handleDownloadFile(chat.files[0]?.file_url)}>
+        <Card className={`my-2 w-[200px] relative ${chat.files[0]?.file_url && 'cursor-pointer'}`} onClick={() => handleDownloadFile(chat.files[0])}>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><File />{t('file')}</CardTitle>
                 <CardDescription>{chat.files[0]?.file_name}</CardDescription>

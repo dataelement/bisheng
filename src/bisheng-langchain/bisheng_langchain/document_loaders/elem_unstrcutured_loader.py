@@ -1,31 +1,15 @@
 # flake8: noqa
 """Loads PDF with semantic splilter."""
 import base64
-import io
-import json
 import logging
 import os
-import re
-import tempfile
-import time
-from abc import ABC
-from collections import Counter
-from copy import deepcopy
-from pathlib import Path
-from typing import Any, Iterator, List, Mapping, Optional, Union
-from urllib.parse import urlparse
+from typing import List
 
-import fitz
-import numpy as np
-import pypdfium2
 import requests
-from bisheng_langchain.document_loaders.parsers import LayoutParser
 from langchain.docstore.document import Document
-from langchain.document_loaders.blob_loaders import Blob
 from langchain.document_loaders.pdf import BasePDFLoader
-from shapely import Polygon
-from shapely import box as Rect
 
+logger = logging.getLogger(__name__)
 
 def merge_partitions(partitions):
     text_elem_sep = '\n'
@@ -112,9 +96,7 @@ class ElemUnstructuredLoader(BasePDFLoader):
 
 
 class ElemUnstructuredLoaderV0(BasePDFLoader):
-    """Loads a PDF with pypdf and chunks at character level. dummy version
-
-    Loader also stores page numbers in metadata.
+    """The appropriate parser is automatically selected based on the file format and OCR is supported
     """
     def __init__(self,
                  file_name : str,
@@ -142,6 +124,9 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
             self.unstructured_api_url,
             headers=self.headers,
             json=payload).json()
+
+        if 200!=resp.get('status_code'):
+            logger.info(f'not return resp={resp}')
 
         page_content = resp['text']
         meta = {'source': self.file_name}

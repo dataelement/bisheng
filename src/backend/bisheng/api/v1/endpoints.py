@@ -43,6 +43,8 @@ def getn_env():
             env['uns_support'] = uns_support
     else:
         env['uns_support'] = list(knowledge.filetype_load_map.keys())
+    if settings.settings.get_from_db('office_url'):
+        env['office_url'] = settings.settings.get_from_db('office_url')
     return {'data': env}
 
 
@@ -97,7 +99,7 @@ async def process_flow(
     """
     Endpoint to process an input with a given flow_id.
     """
-    if inputs and isinstance(inputs, dict):
+    if inputs and isinstance(inputs, dict) and 'id' in inputs:
         inputs.pop('id')
 
     try:
@@ -125,8 +127,9 @@ async def process_flow(
 async def create_upload_file(file: UploadFile, flow_id: str):
     # Cache file
     try:
-        file_path = save_uploaded_file(file.file, folder_name=flow_id)
-
+        file_path = save_uploaded_file(file.file, folder_name=flow_id, file_name=file.filename)
+        if not isinstance(file_path, str):
+            file_path = str(file_path)
         return UploadFileResponse(
             flowId=flow_id,
             file_path=file_path,

@@ -11,7 +11,7 @@ RUN curl -sSL https://install.python-poetry.org | python3 -
 # # Add Poetry to PATH
 ENV PATH="${PATH}:/root/.local/bin"
 # # Copy the pyproject.toml and poetry.lock files
-COPY poetry.lock pyproject.toml ./
+# COPY poetry.lock pyproject.toml ./
 # Copy the rest of the application codes
 COPY ./ ./
 

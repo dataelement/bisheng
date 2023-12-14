@@ -1,7 +1,6 @@
 import json
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
@@ -130,7 +129,7 @@ class UploadFileResponse(BaseModel):
     """Upload file response schema."""
 
     flowId: Optional[str]
-    file_path: Path
+    file_path: str
 
 
 class StreamData(BaseModel):

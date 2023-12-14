@@ -6,7 +6,6 @@ from bisheng.graph.vertex.base import Vertex
 from bisheng.graph.vertex.types import FileToolVertex, LLMVertex, ToolkitVertex
 from bisheng.interface.tools.constants import FILE_TOOLS
 from bisheng.utils import payload
-from bisheng.utils.logger import logger
 from langchain.chains.base import Chain
 
 
@@ -20,6 +19,7 @@ class Graph:
     ) -> None:
         self._nodes = nodes
         self._edges = edges
+        self._param_public = {}  # for some node should store in graph scope
         self._build_graph()
 
     @classmethod
@@ -136,7 +136,7 @@ class Graph:
     def generator_build(self) -> Generator:
         """Builds each vertex in the graph and yields it."""
         sorted_vertices = self.topological_sort()
-        logger.debug('Sorted vertices: %s', sorted_vertices)
+        # logger.debug('Sorted vertices: %s', sorted_vertices)
         yield from sorted_vertices
 
     def get_node_neighbors(self, node: Vertex) -> Dict[Vertex, int]:
