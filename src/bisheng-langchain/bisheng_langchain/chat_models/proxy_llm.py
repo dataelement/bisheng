@@ -197,7 +197,11 @@ class ProxyChatLLM(BaseChatModel):
             response = self.client.post(self.elemai_base_url, json=params)
             return response.json()
 
-        return _completion_with_retry(**kwargs)
+        rsp_dict = _completion_with_retry(**kwargs)
+        if 200 != rsp_dict.get('status_code'):
+            logger.error(f'proxy_llm_error resp={rsp_dict}')
+            raise Exception(rsp_dict)
+        return rsp_dict
 
     def _combine_llm_outputs(self, llm_outputs: List[Optional[dict]]) -> dict:
         overall_token_usage: dict = {}

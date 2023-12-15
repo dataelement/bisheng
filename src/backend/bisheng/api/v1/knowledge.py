@@ -17,8 +17,8 @@ from bisheng.database.models.user import User
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
-from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
+from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoader
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
@@ -57,7 +57,7 @@ async def upload_file(*, file: UploadFile = File(...)):
         # 缓存本地
         file_path = save_uploaded_file(file.file, 'bisheng', file_name)
         if not isinstance(file_path, str):
-            file_path = str(file_path) + '_' + file_name
+            file_path = str(file_path)
         return UploadFileResponse(file_path=file_path)
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
@@ -116,7 +116,7 @@ async def process_knowledge(*,
     result = []
     for path in file_path:
         filepath, file_name = file_download(path)
-        md5_ = filepath.rsplit('/', 1)[1].split('.')[0]
+        md5_ = filepath.rsplit('/', 1)[1].split('.')[0].split('_')[0]
         # 是否包含重复文件
         repeat = session.exec(select(KnowledgeFile)
                               .where(KnowledgeFile.md5 == md5_,
@@ -131,8 +131,9 @@ async def process_knowledge(*,
         session.add(db_file)
         session.commit()
         session.refresh(db_file)
-        files.append(db_file)
-        file_paths.append(filepath)
+        if not repeat:
+            files.append(db_file)
+            file_paths.append(filepath)
         logger.info(f'fileName={file_name} col={collection_name}')
         result.append(db_file.copy())
 
@@ -309,7 +310,9 @@ def delete_knowledge_file(*,
         logger.info(f'act=delete_vector file_id={file_id} res={res}')
 
     # minio
-    minio_client.MinioClient().delete_minio(str(knowledge_file.id))
+    minio_client = MinioClient()
+    minio_client.delete_minio(str(knowledge_file.id))
+    minio_client.delete_minio(str(knowledge_file.object_name))
     # elastic
     esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
     if esvectore_client:
@@ -358,6 +361,7 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
     except Exception as e:
         logger.exception(e)
 
+    minio_client = MinioClient()
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
         session = next(get_session())
@@ -365,18 +369,19 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             # 存储 mysql
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 2)
-            setattr(db_file, 'object_name', knowledge_file.file_name)
-            session.add(db_file)
-            session.flush()
             # 原文件
             object_name_original = f'original/{db_file.id}'
-            minio_client.MinioClient().upload_minio(object_name_original, path)
+            setattr(db_file, 'object_name', object_name_original)
+            session.add(db_file)
+            session.flush()
+
+            minio_client.upload_minio(object_name_original, path)
 
             texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
                                                 chunk_overlap, separator)
 
             # 溯源必须依赖minio, 后期替换更通用的oss
-            minio_client.MinioClient().upload_minio(str(db_file.id), path)
+            minio_client.upload_minio(str(db_file.id), path)
 
             logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
             [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]

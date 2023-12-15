@@ -23,6 +23,13 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
       - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
 
+  office:
+    image: onlyoffice/documentserver:7.1.1
+    ports:
+      - "8701:80"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
+      
   backend:
     image: dataelement/bisheng-backend:latest
     healthcheck:
@@ -42,6 +49,7 @@ services:
     restart: on-failure
     depends_on:
       - "mysql"
+      - "office"
       - "redis"
 
   nginx:

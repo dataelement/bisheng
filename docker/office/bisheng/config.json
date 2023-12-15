@@ -1,0 +1,35 @@
+{
+  "name": "文档自动化",
+  "guid": "asc.{D2A0F3BE-CC8D-4956-BCD9-6CBEA6E8960E}",
+  "variations": [
+    {
+      "description": "插入label-配置",
+      "url": "index.html",
+      "icons": [
+        "icon.png",
+        "icon.png",
+        "icon.png",
+        "icon.png"
+      ],
+      "EditorsSupport": [
+        "word",
+        "cell",
+        "slide"
+      ],
+      "isViewer": false,
+      "isVisual": false,
+      "isModal": true,
+      "isInsideMode": false,
+      "isSystem": false,
+      "initOnSelectionChanged": true,
+      "hideClose": true,
+      "initDataType": "text",
+      "isDisplayedInViewer": true,
+      "isUpdateOleOnResize": true,
+      "events": [
+        "onClick",
+        "onTargetPositionChanged"
+      ]
+    }
+  ]
+}
