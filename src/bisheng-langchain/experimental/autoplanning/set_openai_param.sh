@@ -1,0 +1,2 @@
+export OPENAI_API_KEY='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'
+export OPENAI_PROXY='http://118.195.232.223:39995'
