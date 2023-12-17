@@ -140,7 +140,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
     }
 
     const source = <div className="chat-footer py-1">
-        {/* {chat.noAccess && <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>{t('chat.noAccess')}</p>} */}
+        {chat.source === 2 && <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>{t('chat.noAccess')}</p>}
         <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent text-xs" onClick={onSource}>{t('chat.source')}</button>
     </div>
 
@@ -151,7 +151,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
             {chat.category === 'report' && <Copy size={20} className=" absolute right-4 top-2 cursor-pointer" onClick={handleCopy}></Copy>}
         </div>
         {!chat.end && <span className="loading loading-ring loading-md"></span>}
-        {chat.source && source}
+        {chat.source !== 0 && chat.end && source}
     </>
 
     if (chat.category === 'divider') {
@@ -207,15 +207,15 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
             <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center" style={{ background: avatarColor }}><Bot color="#fff" size={28} /></div>
         </div>
         {chat.sender && <div className="chat-header text-gray-400 text-sm">{chat.sender}</div>}
-        <div ref={textRef} className="chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8 relative">
+        <div ref={textRef} className={`chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8 relative ${chat.id && chat.source === 0 && 'mb-8'}`}>
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {/* @user */}
             {chat.receiver && <p className="text-blue-500 text-sm">@ {chat.receiver.user_name}</p>}
             {/* 光标 */}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
             {/* 赞 踩 */}
-            {chat.chat_id && <Thumbs id={chat.chat_id} data={1} className="absolute right-4 bottom-[-28px]"></Thumbs>}
+            {chat.id && chat.end && <Thumbs id={chat.id} data={chat.liked} className="absolute right-4 bottom-[-28px]"></Thumbs>}
         </div>
-        {chat.source && source}
+        {chat.source !== 0 && chat.end && source}
     </div>
 };

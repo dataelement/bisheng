@@ -90,7 +90,7 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
             }));
             params.chunck_size = Number(/^\d+$/.test(size) ? size : '1000');
             params.auto = false;
-            // params.overlap = /^\d+$/.test(overlap) ? overlap : '100' // 异常值使用默认值
+            params.chunk_overlap = Number(/^\d+$/.test(overlap) ? overlap : '100') // 异常值使用默认值
         }
         await subUploadLibFile(params);
         setOpen(false);

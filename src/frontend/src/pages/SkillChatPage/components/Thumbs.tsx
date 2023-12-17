@@ -1,5 +1,6 @@
 import { ThumbsDown, ThumbsUp } from "lucide-react";
 import { useState } from "react";
+import { likeChatApi } from "../../../controllers/API";
 import { classNames } from "../../../utils";
 
 const enum ThumbsState {
@@ -16,7 +17,7 @@ export default function Thumbs({ id, className, data }) {
         setState(_type => {
             const newType = type === _type ? ThumbsState.Default : type
             // api
-            console.log('newType :>> ', newType);
+            likeChatApi(id, newType);
             return newType
         })
     }

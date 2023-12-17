@@ -490,6 +490,7 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
                 cate: data.category || '',
                 messageId: data.message_id,
                 noAccess: false,
+                liked: 0
             });
 
             isStream = false;
