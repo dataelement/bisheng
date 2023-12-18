@@ -344,7 +344,7 @@ const useMessages = (chatId, flow) => {
     // 消息滚动
     const messagesRef = useRef(null);
     useEffect(() => {
-        if (messagesRef.current && !changeHistoryByScroll) { // 滚动加载不触发
+        if (messagesRef.current && !changeHistoryByScroll.current) { // 滚动加载不触发
             messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
         }
     }, [chatHistory, changeHistoryByScroll]);

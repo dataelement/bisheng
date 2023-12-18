@@ -141,7 +141,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
 
     const source = <div className="chat-footer py-1">
         {chat.source === 2 && <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>{t('chat.noAccess')}</p>}
-        <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent text-xs" onClick={onSource}>{t('chat.source')}</button>
+        <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent text-xs relative" onClick={onSource}>{t('chat.source')}</button>
     </div>
 
     // 日志分析
@@ -214,7 +214,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
             {/* 光标 */}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
             {/* 赞 踩 */}
-            {chat.id && chat.end && <Thumbs id={chat.id} data={chat.liked} className="absolute right-4 bottom-[-28px]"></Thumbs>}
+            {chat.id !== 0 && chat.end && <Thumbs id={chat.id} data={chat.liked} className={`absolute w-full left-0 bottom-[-28px] justify-end min-w-[240px] ${chat.source === 2 && 'bottom-[-54px]'}`}></Thumbs>}
         </div>
         {chat.source !== 0 && chat.end && source}
     </div>
