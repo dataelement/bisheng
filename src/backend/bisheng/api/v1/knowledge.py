@@ -491,6 +491,7 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         metadatas = [{
             'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
             'page': t.metadata.get('chunk_bboxes')[0].get('page'),
-            'source': t.metadata.get('source', '')
+            'source': t.metadata.get('source', ''),
+            'extra': {},
         } for t in texts]
     return (raw_texts, metadatas)

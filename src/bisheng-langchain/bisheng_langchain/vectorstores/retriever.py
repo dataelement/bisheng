@@ -82,9 +82,8 @@ class VectorStoreFilterRetriever(VectorStoreRetriever):
         if file_ids:
             res = requests.get(self.access_url, json=file_ids)
             if res.status_code == 200:
-                doc_res = res.json().get('data')
-
-                doc_right = {doc.get('docid') for doc in doc_res if doc.get('result') == 0}
+                doc_res = res.json().get('data') or []
+                doc_right = {doc.get('docid') for doc in doc_res if doc.get('result') == 1}
                 for doc in docs:
                     if doc.metadata.get('file_id') not in doc_right:
                         doc.page_content = ''
