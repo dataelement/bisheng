@@ -38,8 +38,15 @@ def format_tool_to_chatglm_function(tool: BaseTool):
         if tool.args:
             properties = tool.args
             for key in properties.keys():
-                value = properties[key].pop('title')
-                properties[key]['description'] = value
+                if 'title' in properties[key]:
+                    value = properties[key].pop('title')
+                    properties[key]['description'] = value
+                else:
+                    properties[key]['description'] = key
+
+                if 'type' not in properties[key]:
+                    properties[key]['type'] = 'string'
+
             parameters = {
                 'type': 'object',
                 'properties': properties,
