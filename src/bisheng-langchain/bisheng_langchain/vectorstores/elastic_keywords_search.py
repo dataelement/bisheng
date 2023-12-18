@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple, Callable
 
 import jieba.analyse
 from langchain.docstore.document import Document
@@ -182,6 +182,29 @@ class ElasticKeywordsSearch(VectorStore, ABC):
                           query_strategy: str = 'match_phrase',
                           must_or_should: str = 'should',
                           **kwargs: Any) -> List[Document]:
+        docs_and_scores = self.similarity_search_with_score(query,
+                                                            k=k,
+                                                            query_strategy=query_strategy,
+                                                            must_or_should=must_or_should,
+                                                            **kwargs)
+        documents = [d[0] for d in docs_and_scores]
+        return documents
+
+    @staticmethod
+    def _relevance_score_fn(distance: float) -> float:
+        """Normalize the distance to a score on a scale [0, 1]."""
+        # Todo: normalize the es score on a scale [0, 1]
+        return distance
+
+    def _select_relevance_score_fn(self) -> Callable[[float], float]:
+        return self._relevance_score_fn
+
+    def similarity_search_with_score(self,
+                                     query: str,
+                                     k: int = 4,
+                                     query_strategy: str = 'match_phrase',
+                                     must_or_should: str = 'should',
+                                     **kwargs: Any) -> List[Tuple[Document, float]]:
         assert must_or_should in ['must', 'should'], 'only support must and should.'
         # llm or jiaba extract keywords
         if self.llm_chain:
@@ -199,12 +222,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         match_query = {'bool': {must_or_should: []}}
         for key in keywords:
             match_query['bool'][must_or_should].append({query_strategy: {'text': key}})
-        docs_and_scores = self.similarity_search_with_score(match_query, k)
-        documents = [d[0] for d in docs_and_scores]
-        return documents
-
-    def similarity_search_with_score(self, query: str, k: int = 4, **kwargs: Any) -> List[Tuple[Document, float]]:
-        response = self.client_search(self.client, self.index_name, query, size=k)
+        response = self.client_search(self.client, self.index_name, match_query, size=k)
         hits = [hit for hit in response['hits']['hits']]
         docs_and_scores = [(
             Document(
@@ -213,6 +231,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
             ),
             hit['_score'],
         ) for hit in hits]
+
         return docs_and_scores
 
     @classmethod
@@ -278,16 +297,6 @@ class ElasticKeywordsSearch(VectorStore, ABC):
             response = client.search(index=index_name, body={'query': script_query, 'size': size})
         return response
 
-    def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> None:
-        """Delete by vector IDs.
-
-        Args:
-            ids: List of ids to delete.
-        """
-
-        if ids is None:
-            raise ValueError('No ids provided to delete.')
-
+    def delete(self, **kwargs: Any) -> None:
         # TODO: Check if this can be done in bulk
-        for id in ids:
-            self.client.delete(index=self.index_name, id=id)
+        self.client.indices.delete(index=self.index_name)
