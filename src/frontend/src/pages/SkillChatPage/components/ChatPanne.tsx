@@ -20,9 +20,10 @@ interface Iprops {
     chatId: string
     flow: FlowType
     libId?: string
+    version?: string
 }
 
-export default forwardRef(function ChatPanne({ chatId, flow, libId }: Iprops) {
+export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v1' }: Iprops) {
     const { t } = useTranslation()
     const { tabsState } = useContext(TabsContext);
 
@@ -33,7 +34,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId }: Iprops) {
     // 消息列表
     const { messages, messagesRef, loadHistory, setChatHistory, changeHistoryByScroll } = useMessages(chatId, flow)
     // ws通信
-    const { stop, connectWS, closeWs, begin: chating, checkReLinkWs, sendAll } = useWebsocket(chatId, flow, setChatHistory, libId)
+    const { stop, connectWS, closeWs, begin: chating, checkReLinkWs, sendAll } = useWebsocket(chatId, flow, setChatHistory, libId, version)
     // 停止状态
     const [isStop, setIsStop] = useState(true)
     // 输入框状态
@@ -343,7 +344,7 @@ const useMessages = (chatId, flow) => {
     // 消息滚动
     const messagesRef = useRef(null);
     useEffect(() => {
-        if (messagesRef.current && !changeHistoryByScroll) { // 滚动加载不触发
+        if (messagesRef.current && !changeHistoryByScroll.current) { // 滚动加载不触发
             messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
         }
     }, [chatHistory, changeHistoryByScroll]);
@@ -370,7 +371,7 @@ const useMessages = (chatId, flow) => {
  * 建立连接、重连、断开、接收、发送
  * @returns 
  */
-const useWebsocket = (chatId, flow, setChatHistory, libId) => {
+const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
     const ws = useRef<WebSocket | null>(null);
     // 接收ws状态
     const [begin, setBegin] = useState(false)
@@ -384,11 +385,12 @@ const useWebsocket = (chatId, flow, setChatHistory, libId) => {
         setTimeout(heartbeat, 30000);
     }
 
-    function getWebSocketUrl(_chatId, isDevelopment = false) {
+    function getWebSocketUrl(flowId, isDevelopment = false) {
         const isSecureProtocol = window.location.protocol === "https:";
         const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
         const host = window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
-        const chatEndpoint = `/api/v1/chat/${_chatId}?type=L1&chat_id=${chatId}${libId ? '&knowledge_id=' + libId : ''}`;
+        const chatEndpoint = version === 'v1' ? `/api/v1/chat/${flowId}?type=L1&chat_id=${chatId}`
+            : `/api/v2/chat/ws/${flowId}?type=L1&chat_id=${chatId}${libId ? '&knowledge_id=' + libId : ''}`
 
         return `${webSocketProtocol}://${host}${chatEndpoint}`;
     }
@@ -488,6 +490,7 @@ const useWebsocket = (chatId, flow, setChatHistory, libId) => {
                 cate: data.category || '',
                 messageId: data.message_id,
                 noAccess: false,
+                liked: 0
             });
 
             isStream = false;

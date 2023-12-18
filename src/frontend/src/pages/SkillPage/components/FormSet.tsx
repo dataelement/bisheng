@@ -58,9 +58,9 @@ export default forwardRef(function FormSet({ id }: any, ref) {
         }
     }
 
-    return <div className="mt-4">
+    return <div className="mt-8">
         <p className="text-center text-gray-400 mt-4 cursor-pointer flex justify-center" onClick={showContent}>{t('report.formSettings')}<ChevronUp /></p>
-        <div className="w-[68%] mx-auto overflow-hidden transition-all pl-8 px-1">
+        <div className="overflow-hidden transition-all pl-8 px-1">
             <DragDropContext onDragEnd={handleDragEnd}>
                 <Droppable droppableId={'list'} direction="vertical">
                     {(provided) => (
