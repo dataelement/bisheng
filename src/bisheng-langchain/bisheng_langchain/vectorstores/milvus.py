@@ -502,7 +502,10 @@ class Milvus(MilvusLangchain):
             # Insert into the collection.
             try:
                 res: Collection
-                res = self.col.insert(insert_list, timeout=timeout, **kwargs)
+                res = self.col.insert(insert_list,
+                                      partition_name=self._partition_field,
+                                      timeout=timeout,
+                                      **kwargs)
                 pks.extend(res.primary_keys)
             except MilvusException as e:
                 logger.error('Failed to insert batch starting at entity: %s/%s', i, total_count)

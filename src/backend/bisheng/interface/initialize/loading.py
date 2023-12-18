@@ -284,7 +284,12 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_di
     if node_type == 'ConversationalRetrievalChain':
         params['get_chat_history'] = str
         params['combine_docs_chain_kwargs'] = {
-            'prompt': params.pop('combine_docs_chain_kwargs', None)
+            'prompt': params.pop('combine_docs_chain_kwargs', None),
+            'source_document': params.pop('source_document', None)
+        }
+        params['combine_docs_chain_kwargs'] = {
+            k: v
+            for k, v in params['combine_docs_chain_kwargs'].items() if v is not None
         }
     # 人工组装MultiPromptChain
     if node_type in {'MultiPromptChain', 'MultiRuleChain'}:

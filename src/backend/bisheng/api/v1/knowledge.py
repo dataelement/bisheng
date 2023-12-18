@@ -300,7 +300,7 @@ def delete_knowledge(*,
         if knowledge.collection_name.startswith('col'):
             vectore_client.col.drop()
         else:
-            pk = vectore_client.col.query(expr=f'knowledge_id=={knowledge.id}',
+            pk = vectore_client.col.query(expr=f'knowledge_id=="{knowledge.id}"',
                                           output_fields=['pk'])
             vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}",
                                       partition_name='knowledge_id')
