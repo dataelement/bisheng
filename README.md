@@ -89,7 +89,7 @@ Bisheng 基于 [Apache 2.0 License](https://github.com/dataelement/bisheng/blob/
 
 ### 源码编译 Bisheng
 
-- [编译Bisheng](https://dataelem.feishu.cn/wiki/EKdDw0IkyiNSAEkzc29cqKnmn7c)
+Todo: 待补充
 
 获取更多内容，请阅读 [开发者文档](https://m7a7tqsztt.feishu.cn/wiki/ITmJwMXVliBnzpkW3nkcqPVrnse)。
 

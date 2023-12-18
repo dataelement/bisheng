@@ -16,8 +16,8 @@ from sqlmodel import select
 def docs_in_params(params: dict) -> bool:
     """Check if params has documents OR texts and one of them is not an empty list,
     If any of them is not an empty list, return True, else return False"""
-    return ('documents' in params and params['documents']) or ('texts' in params and
-                                                               params['texts'])
+    return ('documents' in params and params['documents']) or ('texts' in params
+                                                               and params['texts'])
 
 
 def initialize_mongodb(class_object: Type[MongoDBAtlasVectorSearch], params: dict):
@@ -227,7 +227,8 @@ def initial_milvus(class_object: Type[Milvus], params: dict):
         else:
             embedding = HostEmbeddings(**model_param)
         params['embedding'] = embedding
-
+        if knowledge.collection_name.startswith('partiton'):
+            params['partition_key'] = knowledge.id
     return class_object.from_documents(**params)
 
 

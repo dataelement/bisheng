@@ -254,7 +254,8 @@
         "file": "File",
         "sizeExceedsLimit": "Size exceeds 50MB",
         "editDictionary": "Edit Dictionary",
-        "exportCodeDialogTip": "Generate code to integrate the workflow into an external application (please make sure to build the skill before opening this page)."
+        "exportCodeDialogTip": "Generate code to integrate the workflow into an external application (please make sure to build the skill before opening this page).",
+        "chunkOverlap": "Chunk Overlap"
     },
     "report": {
         "reportTemplate": "Report Template",

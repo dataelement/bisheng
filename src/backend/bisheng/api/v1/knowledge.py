@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import json
 import time
@@ -22,7 +21,7 @@ from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoader
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
 from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
@@ -39,15 +38,15 @@ from sqlmodel import Session, select
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Skills'])
 filetype_load_map = {
-        'txt': TextLoader,
-        'pdf': PyPDFLoader,
-        'html': BSHTMLLoader,
-        'md': UnstructuredMarkdownLoader,
-        'doc': UnstructuredWordDocumentLoader,
-        'docx': UnstructuredWordDocumentLoader,
-        'ppt': UnstructuredPowerPointLoader,
-        'pptx': UnstructuredPowerPointLoader,
-    }
+    'txt': TextLoader,
+    'pdf': PyPDFLoader,
+    'html': BSHTMLLoader,
+    'md': UnstructuredMarkdownLoader,
+    'doc': UnstructuredWordDocumentLoader,
+    'docx': UnstructuredWordDocumentLoader,
+    'ppt': UnstructuredPowerPointLoader,
+    'pptx': UnstructuredPowerPointLoader,
+}
 
 
 @router.post('/upload', response_model=UploadFileResponse, status_code=201)
@@ -81,8 +80,9 @@ async def get_embedding():
 
 @router.post('/process', status_code=201)
 async def process_knowledge(*,
-                            session: Session = Depends(get_session),
                             data: dict,
+                            background_tasks: BackgroundTasks,
+                            session: Session = Depends(get_session),
                             Authorize: AuthJWT = Depends()):
     """上传文件到知识库.
     使用flowchain来处理embeding的流程
@@ -96,6 +96,7 @@ async def process_knowledge(*,
     auto_p = data.get('auto')
     separator = data.get('separator')
     chunk_overlap = data.get('chunk_overlap')
+    callback_url = data.get('callback_url')
 
     if auto_p:
         separator = ['\n\n', '\n', ' ', '']
@@ -118,14 +119,16 @@ async def process_knowledge(*,
         filepath, file_name = file_download(path)
         md5_ = filepath.rsplit('/', 1)[1].split('.')[0].split('_')[0]
         # 是否包含重复文件
-        repeat = session.exec(select(KnowledgeFile)
-                              .where(KnowledgeFile.md5 == md5_,
-                                     KnowledgeFile.status == 2,
-                                     KnowledgeFile.knowledge_id == knowledge_id)).all()
+        repeat = session.exec(
+            select(KnowledgeFile).where(KnowledgeFile.md5 == md5_, KnowledgeFile.status == 2,
+                                        KnowledgeFile.knowledge_id == knowledge_id)).all()
         status = 3 if repeat else 1
         remark = 'file repeat' if repeat else ''
-        db_file = KnowledgeFile(knowledge_id=knowledge_id, file_name=file_name,
-                                status=status, md5=md5_, remark=remark,
+        db_file = KnowledgeFile(knowledge_id=knowledge_id,
+                                file_name=file_name,
+                                status=status,
+                                md5=md5_,
+                                remark=remark,
                                 user_id=payload.get('user_id'))
 
         session.add(db_file)
@@ -138,14 +141,18 @@ async def process_knowledge(*,
         result.append(db_file.copy())
 
     if not repeat:
-        asyncio.create_task(
-            addEmbedding(collection_name=collection_name,
-                         model=knowledge.model,
-                         chunk_size=chunk_size,
-                         separator=separator,
-                         chunk_overlap=chunk_overlap,
-                         file_paths=file_paths,
-                         knowledge_files=files))
+        background_tasks.add_task(
+            addEmbedding,
+            collection_name=collection_name,
+            knowledge_id=knowledge_id,
+            model=knowledge.model,
+            chunk_size=chunk_size,
+            separator=separator,
+            chunk_overlap=chunk_overlap,
+            file_paths=file_paths,
+            knowledge_files=files,
+            callback=callback_url,
+        )
 
     knowledge.update_time = db_file.create_time
     session.add(knowledge)
@@ -168,8 +175,14 @@ def create_knowledge(*,
     if know:
         raise HTTPException(status_code=500, detail='知识库名称重复')
     if not db_knowldge.collection_name:
-        # 默认collectionName
-        db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
+        if knowledge.is_partition:
+            embedding = knowledge.model.replace('-', '')
+            id = settings.get_knowledge().get('vectorstores').get('Milvus',
+                                                                  {}).get('partition_suffix', 1)
+            db_knowldge.collection_name = f'partition_{embedding}_knowledge_{id}'
+        else:
+            # 默认collectionName
+            db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
     db_knowldge.user_id = payload.get('user_id')
     session.add(db_knowldge)
     session.commit()
@@ -195,8 +208,7 @@ def get_knowledge(*,
                 select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')))).all()
             if role_third_id:
                 third_ids = [
-                    acess.third_id
-                    for acess in role_third_id
+                    acess.third_id for acess in role_third_id
                     if acess.type == AccessType.KNOWLEDGE.value
                 ]
                 sql = sql.where(
@@ -280,6 +292,21 @@ def delete_knowledge(*,
         raise HTTPException(status_code=404, detail='knowledge not found')
     if not access_check(payload, knowledge.user_id, knowledge_id, AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
+    # 处理vector
+    embeddings = decide_embeddings(knowledge.model)
+    vectore_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
+    if vectore_client.col:
+        logger.info(f'drop_vectore col={knowledge.collection_name}')
+        if knowledge.collection_name.startswith('col'):
+            vectore_client.col.drop()
+        else:
+            pk = vectore_client.col.query(expr=f'knowledge_id=="{knowledge.id}"',
+                                          output_fields=['pk'])
+            vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}",
+                                      partition_name='knowledge_id')
+    # 处理 es
+    # todo
+
     session.delete(knowledge)
     session.commit()
     return {'message': 'knowledge deleted successfully'}
@@ -316,9 +343,10 @@ def delete_knowledge_file(*,
     # elastic
     esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
     if esvectore_client:
-        res = esvectore_client.client.delete_by_query(index=collection_name,
-                                                      query={'match': {
-                                                          'metadata.file_id': file_id}})
+        res = esvectore_client.client.delete_by_query(
+            index=collection_name, query={'match': {
+                'metadata.file_id': file_id
+            }})
         logger.info(f'act=delete_es file_id={file_id} res={res}')
 
     session.delete(knowledge_file)
@@ -351,9 +379,9 @@ def decide_vectorstores(collection_name: str, vector_store: str,
     return instantiate_vectorstore(class_object=class_obj, params=param)
 
 
-async def addEmbedding(collection_name, model: str, chunk_size: int, separator: str,
-                       chunk_overlap: int, file_paths: List[str],
-                       knowledge_files: List[KnowledgeFile]):
+def addEmbedding(collection_name, knowledge_id: int, model: str, chunk_size: int, separator: str,
+                 chunk_overlap: int, file_paths: List[str], knowledge_files: List[KnowledgeFile],
+                 callback: str):
     try:
         embeddings = decide_embeddings(model)
         vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
@@ -362,6 +390,7 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
         logger.exception(e)
 
     minio_client = MinioClient()
+    callback_obj = {}
     for index, path in enumerate(file_paths):
         knowledge_file = knowledge_files[index]
         session = next(get_session())
@@ -376,7 +405,6 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             session.flush()
 
             minio_client.upload_minio(object_name_original, path)
-
             texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
                                                 chunk_overlap, separator)
 
@@ -384,7 +412,12 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
             minio_client.upload_minio(str(db_file.id), path)
 
             logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
-            [metadata.update({'file_id': knowledge_file.id}) for metadata in metadatas]
+            [
+                metadata.update({
+                    'file_id': knowledge_file.id,
+                    'knowledge_id': f'{knowledge_id}'
+                }) for metadata in metadatas
+            ]
             vectore_client.add_texts(texts=texts, metadatas=metadatas)
 
             # 存储es
@@ -392,13 +425,24 @@ async def addEmbedding(collection_name, model: str, chunk_size: int, separator: 
                 es_client.add_texts(texts=texts, metadatas=metadatas)
             session.commit()
             session.refresh(db_file)
+            callback_obj = db_file.copy()
         except Exception as e:
             logger.exception(e)
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)
             setattr(db_file, 'remark', str(e)[:500])
             session.add(db_file)
+            callback_obj = db_file.copy()
             session.commit()
+    if callback:
+        # asyn
+        inp = {
+            'file_name': callback_obj.file_name,
+            'file_status': callback_obj.status,
+            'file_id': callback_obj.id,
+            'error_msg': callback_obj.remark
+        }
+        requests.post(url=callback, json=inp, timeout=3)
 
 
 def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
@@ -415,19 +459,18 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         documents = loader.load()
         texts = text_splitter.split_documents(documents)
         raw_texts = [t.page_content for t in texts]
-        metadatas = [t.metadata.update({'bbox': ''}) for t in texts]
+        metadatas = [t.metadata.update({'bbox': '', 'source': file_name}) for t in texts]
         metadatas = [t.metadata for t in texts]
     else:
         # 如果文件不是pdf 需要内部转pdf
         if file_name.rsplit('.', 1)[-1] != 'pdf':
             b64_data = base64.b64encode(open(input_file, 'rb').read()).decode()
             inp = dict(filename=file_name, b64_data=[b64_data], mode='topdf')
-            resp = requests.post(settings.get_knowledge().get('unstructured_api_url'),
-                                 json=inp)
+            resp = requests.post(settings.get_knowledge().get('unstructured_api_url'), json=inp)
             if not resp or resp.status_code != 200:
                 logger.error(f'file_pdf=not_success resp={resp.text}')
                 raise Exception(f"当前文件无法解析， {resp['status_message']}")
-            if len(resp.text) < 200:
+            if len(resp.text) < 300:
                 logger.error(f'file_pdf=not_success resp={resp.text}')
             b64_data = resp.json()['b64_pdf']
             # 替换历史文件
@@ -445,5 +488,9 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
                                                   chunk_overlap=0)
         texts = text_splitter.split_documents(documents)
         raw_texts = [t.page_content for t in texts]
-        metadatas = [{'bbox': json.dumps(t.metadata)} for t in texts]
+        metadatas = [{
+            'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
+            'page': t.metadata.get('chunk_bboxes')[0].get('page'),
+            'source': t.metadata.get('source', '')
+        } for t in texts]
     return (raw_texts, metadatas)

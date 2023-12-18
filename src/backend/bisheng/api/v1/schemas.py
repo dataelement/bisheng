@@ -73,9 +73,10 @@ class ChatMessage(BaseModel):
     files: list = []
     user_id: int = None
     message_id: int = None
-    source: bool = False
+    source: int = 0
     sender: str = None
     receiver: dict = None
+    liked: int = 0
 
 
 class ChatResponse(ChatMessage):

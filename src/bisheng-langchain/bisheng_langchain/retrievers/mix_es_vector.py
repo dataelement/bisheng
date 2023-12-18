@@ -1,10 +1,7 @@
-from typing import Any, Dict, List
+from typing import List
 
-from langchain.callbacks.manager import (
-    AsyncCallbackManagerForRetrieverRun,
-    CallbackManagerForRetrieverRun,
-)
-
+from langchain.callbacks.manager import (AsyncCallbackManagerForRetrieverRun,
+                                         CallbackManagerForRetrieverRun)
 from langchain.schema import BaseRetriever, Document
 
 
@@ -52,7 +49,7 @@ class MixEsVectorRetriever(BaseRetriever):
         elif self.combine_strategy == 'vector_front':
             return vector_docs + keyword_docs
         elif self.combine_strategy == 'mix':
-            combine_docs = []
+            combine_docs = set()
             min_len = min(len(keyword_docs), len(vector_docs))
             for i in range(min_len):
                 combine_docs.append(keyword_docs[i])
@@ -64,8 +61,6 @@ class MixEsVectorRetriever(BaseRetriever):
             raise ValueError(f'Expected combine_strategy to be one of '
                              f'(keyword_front, vector_front, mix),'
                              f'instead found {self.combine_strategy}')
-
-        return combine_docs
 
     async def _aget_relevant_documents(
         self,
@@ -93,7 +88,7 @@ class MixEsVectorRetriever(BaseRetriever):
         elif self.combine_strategy == 'vector_front':
             return vector_docs + keyword_docs
         elif self.combine_strategy == 'mix':
-            combine_docs = []
+            combine_docs = set()
             min_len = min(len(keyword_docs), len(vector_docs))
             for i in range(min_len):
                 combine_docs.append(keyword_docs[i])
@@ -105,5 +100,3 @@ class MixEsVectorRetriever(BaseRetriever):
             raise ValueError(f'Expected combine_strategy to be one of '
                              f'(keyword_front, vector_front, mix),'
                              f'instead found {self.combine_strategy}')
-
-        return combine_docs

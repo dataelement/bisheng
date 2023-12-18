@@ -66,6 +66,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
             })
         }, 200);
     }
+    // console.log('files :>> ', files);
 
     useEffect(() => {
         loadFiles()
@@ -105,7 +106,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
             <div className="mt-4">
                 <p className="mb-4 text-sm font-bold">{t('chat.sourceDocumentsLabel')}</p>
                 {files.map(_file =>
-                    _file ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
+                    _file.right ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
                         <p className="text-sm">{_file.fileName}</p>
                         <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
                             {

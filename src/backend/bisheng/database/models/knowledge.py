@@ -37,4 +37,4 @@ class KnowledgeUpdate(KnowledgeBase):
 
 
 class KnowledgeCreate(KnowledgeBase):
-    pass
+    is_partition: bool = True

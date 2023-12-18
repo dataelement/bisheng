@@ -123,7 +123,7 @@ export default function l2Edit() {
     const isForm = useHasForm(flow)
 
     return <div className="relative box-border">
-        <div className="p-6  pb-24 h-screen overflow-y-auto">
+        <div className="p-6 pb-48 h-screen overflow-y-auto">
             <div className="flex justify-between w-full">
                 <ShadTooltip content={t('back')} side="right">
                     <button className="extra-side-bar-buttons w-[36px]" onClick={() => navigate(-1)}>
@@ -137,40 +137,43 @@ export default function l2Edit() {
             </ShadTooltip> */}
             </div>
             {/* form */}
-            <div className="mt-6">
+            <div className="pt-6">
                 <p className="text-center text-2xl">{t('skills.skillSettings')}</p>
-                <div className="group w-[80%] mx-auto grid gap-4 py-4">
-                    <p className="text-center text-gray-400 mt-4 cursor-pointer flex justify-center" onClick={showContent}>{t('skills.basicInfo')}
+                <div className="w-[50%] max-w-2xl mx-auto">
+                    <p className="text-center text-gray-400 mt-4 cursor-pointer flex justify-center" onClick={showContent}>
+                        {t('skills.basicInfo')}
                         <ChevronUp />
                     </p>
                     {/* base form */}
-                    <div className="w-[68%] mx-auto overflow-hidden transition-all px-1">
+                    <div className="w-full overflow-hidden transition-all px-1">
                         <div className="mt-4">
-                            <Label htmlFor="name" className="text-right">{t('skills.skillName')}</Label>
-                            <Input ref={nameRef} placeholder={t('skills.skillName')} className={`col-span-2 mt-2 ${error.name && 'border-red-400'}`} />
+                            <Label htmlFor="name">{t('skills.skillName')}</Label>
+                            <Input ref={nameRef} placeholder={t('skills.skillName')} className={`mt-2 ${error.name && 'border-red-400'}`} />
                         </div>
                         <div className="mt-4">
-                            <Label htmlFor="username" className="text-right">{t('skills.description')}</Label>
-                            <Textarea ref={descRef} id="name" placeholder={t('skills.description')} className={`col-span-2 mt-2 ${error.desc && 'border-red-400'}`} />
+                            <Label htmlFor="username">{t('skills.description')}</Label>
+                            <Textarea ref={descRef} id="name" placeholder={t('skills.description')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
                         </div>
                     </div>
                     {
-                        isL2 && <div className="mt-4">
-                            <p className="text-center pr-2 text-gray-400 cursor-pointer flex justify-center" onClick={showContent}>{t('skills.parameterInfo')}
+                        // L2 form
+                        isL2 && <div className="w-full mt-8">
+                            <p className="text-center text-gray-400 cursor-pointer flex justify-center" onClick={showContent}>
+                                {t('skills.parameterInfo')}
                                 <ChevronUp />
                             </p>
-                            <div className="grid gap-4 overflow-hidden transition-all">
+                            <div className="w-full overflow-hidden transition-all px-1">
                                 {flow?.data?.nodes.map(({ data }) => (
-                                    <div key={data.id}>
-                                        <div className="only:hidden grid-cols-4 mt-6">
-                                            <span className=" p-2 font-bold text-gray-400 ml-[18%] text-base">
+                                    <div key={data.id} className="w-full">
+                                        <div className="only:hidden mt-6">
+                                            <span className="p-2 font-bold text-gray-400 text-base">
                                                 {data.node.l2_name || data.node.display_name}
                                             </span>
                                         </div>
                                         {
                                             // 自定义组件
                                             Object.keys(data.node.template).map(k => (
-                                                data.node.template[k].l2 && <div className="w-[68%] mx-auto mt-4 px-1" key={k}>
+                                                data.node.template[k].l2 && <div className="w-full mt-4 px-1" key={k}>
                                                     <Label htmlFor="name" className="text-right">
                                                         {data.node.template[k].l2_name || data.node.template[k].name}
                                                     </Label>
