@@ -16,6 +16,7 @@ class OpenAIProxyEmbedding(Embeddings):
         """Embed search docs."""
         texts = [text for text in texts if text]
         data = {'texts': texts}
+
         resp = self.request.post(url='http://43.133.35.137:8080/chunks_embed', json=data)
         logger.info(f'texts={texts}')
         return json.loads(resp).get('data')

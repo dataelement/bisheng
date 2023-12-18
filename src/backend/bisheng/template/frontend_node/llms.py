@@ -74,7 +74,7 @@ class LLMFrontendNode(FrontendNode):
     @staticmethod
     def format_azure_field(field: TemplateField):
         if field.name == 'model_name':
-            field.show = False  # Azure uses deployment_name instead of model_name.
+            field.show = True  # Azure uses deployment_name instead of model_name.
         elif field.name == 'openai_api_type':
             field.show = False
             field.password = False

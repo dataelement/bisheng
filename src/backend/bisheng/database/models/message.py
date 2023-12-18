@@ -10,13 +10,14 @@ from sqlmodel import Field
 
 class MessageBase(SQLModelSerializable):
     is_bot: bool = Field(index=False, description='聊天角色')
-    source: Optional[bool] = Field(index=False, description='是否支持溯源')
+    source: Optional[int] = Field(index=False, description='是否支持溯源')
     message: Optional[str] = Field(index=False, sa_column=Column(Text), description='聊天消息')
     type: str = Field(index=False, description='消息类型')
     category: str = Field(index=False, description='消息类别， question等')
     flow_id: UUID = Field(index=True, description='对应的技能id')
     chat_id: Optional[str] = Field(index=True, description='chat_id, 前端生成')
     user_id: Optional[str] = Field(index=True, description='用户id')
+    liked: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 喜欢/2 不喜欢')
     sender: Optional[str] = Field(index=False, default='', description='autogen 的发送方')
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
     intermediate_steps: Optional[str] = Field(index=False,

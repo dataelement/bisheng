@@ -15,9 +15,10 @@ from bisheng.database.base import get_session
 from bisheng.database.models.user import User
 from bisheng.processing.process import process_tweaks
 from bisheng.utils.logger import logger
+from bisheng.utils.threadpool import ThreadPoolManager
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.input_output.output import Report
-from fastapi import WebSocket, status
+from fastapi import WebSocket
 
 
 class ChatHistory(Subject):
@@ -29,8 +30,8 @@ class ChatHistory(Subject):
     def add_message(self, client_id: str, chat_id: str, message: ChatMessage):
         """Add a message to the chat history."""
 
-        if chat_id and (message.message or message.intermediate_steps or
-                        message.files) and message.type != 'stream':
+        if chat_id and (message.message or message.intermediate_steps
+                        or message.files) and message.type != 'stream':
             with next(get_session()) as seesion:
                 from bisheng.database.models.message import ChatMessage
                 msg = message.copy()
@@ -145,18 +146,30 @@ class ChatManager:
         self.in_memory_cache.set(client_id, langchain_object)
         return client_id in self.in_memory_cache
 
-    async def handle_websocket(self, client_id: str, chat_id: str, websocket: WebSocket,
-                               user_id: int, gragh_data: dict = None,):
+    async def handle_websocket(
+        self,
+        client_id: str,
+        chat_id: str,
+        websocket: WebSocket,
+        user_id: int,
+        gragh_data: dict = None,
+    ):
         await self.connect(client_id, chat_id, websocket)
-
+        thread_pool_local = ThreadPoolManager(max_workers=2)
+        status = 'init'  # 创建锁
+        payload = {}
         try:
             while True:
-
-                json_payload = await websocket.receive_json()
                 try:
-                    payload = json.loads(json_payload)
+                    json_payload_receive = await asyncio.wait_for(websocket.receive_json(),
+                                                                  timeout=2.0)
+                except asyncio.TimeoutError:
+                    json_payload_receive = ''
+                    pass
+                try:
+                    payload = json.loads(json_payload_receive) if json_payload_receive else payload
                 except TypeError:
-                    payload = json_payload
+                    payload = json_payload_receive
 
                 if 'clear_history' in payload:
                     self.chat_history.history[client_id] = []
@@ -166,7 +179,7 @@ class ChatManager:
 
                 # set start
                 from bisheng.chat.handlers import Handler
-                is_begin = True
+                is_begin = True if payload else False
                 action = None
                 if 'action' in payload:
                     # autogen continue last session,
@@ -180,69 +193,46 @@ class ChatManager:
 
                 # should input data
                 langchain_obj_key = get_cache_key(client_id, chat_id)
-                has_file = False
-                if 'inputs' in payload and ('data' in payload['inputs']
-                                            or 'file_path' in payload['inputs']):
-                    node_data = payload['inputs'].get('data') or [payload['inputs']]
-                    gragh_data = self.refresh_graph_data(gragh_data, node_data)
-                    self.set_cache(langchain_obj_key, None)  # rebuild object
-                    has_file = any(['InputFile' in nd.get('id') for nd in node_data])
-                if has_file:
-                    step_resp.intermediate_steps = 'File upload complete and begin to parse'
-                    await self.send_json(client_id, chat_id, start_resp)
-                    await self.send_json(client_id, chat_id, step_resp, add=False)
-                    await self.send_json(client_id, chat_id, start_resp)
-                    logger.info('input_file start_log')
-                    await asyncio.sleep(1)  # why frontend not recieve imediately
+                if payload and status == 'init':
+                    has_file, graph_data = await self.preper_payload(payload, gragh_data,
+                                                                     langchain_obj_key, client_id,
+                                                                     chat_id, start_resp, step_resp)
+                    status = 'init_object'
 
-                batch_question = []
-                if not self.in_memory_cache.get(langchain_obj_key):
-                    logger.info(f"init_langchain key={langchain_obj_key} input={payload['inputs']}")
-                    try:
-                        gragh = self.init_langchain_object(client_id, chat_id,
-                                                           user_id, gragh_data)
-                    except Exception as e:
-                        logger.exception(e)
-                        step_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
-                        if has_file:
-                            step_resp.intermediate_steps = f'File is parsed fail. error={str(e)}'
-                        await self.send_json(client_id, chat_id, step_resp)
-                        start_resp.type = 'close'
-                        await self.send_json(client_id, chat_id, start_resp)
-                        # socket close?
-                        return
-                    if has_file:
-                        batch_question = [node._built_object
-                                          for node in gragh.nodes
-                                          if node.vertex_type == 'InputNode']
+                # build in thread
+                if payload and not self.in_memory_cache.get(
+                        langchain_obj_key) and status == 'init_object':
+                    thread_pool_local.submit(self.init_langchain_object, client_id, chat_id,
+                                             user_id, graph_data)
+                    status = 'waiting_object'
 
-                langchain_obj = self.in_memory_cache.get(langchain_obj_key)
-                if isinstance(langchain_obj, Report):
-                    action = 'report'
-                elif action != 'autogen' and ('data' in payload['inputs'] or
-                                              'file_path' in payload['inputs']):
-                    action = 'auto_file'   # has input data, default is file process
-                # default not set, for autogen set before
+                # run in thread
+                if payload and self.in_memory_cache.get(langchain_obj_key):
+                    logger.info(f"processing_message message={payload['inputs']}")
+                    action = await self.preper_action(client_id, chat_id, langchain_obj_key,
+                                                      payload, start_resp, step_resp)
+                    thread_pool_local.submit(Handler().dispatch_task, self, client_id, chat_id,
+                                             action, payload, user_id)
+                    status = 'init'
+                    payload = {}  # clean message
 
-                if has_file:
-                    if not batch_question:
-                        if action == 'auto_file':
-                            # no question
-                            step_resp.intermediate_steps = 'File parsing complete'
+                # 处理任务状态
+                complete = thread_pool_local.as_completed()
+                if complete:
+                    for future in complete:
+                        try:
+                            result = future.result()
+                            logger.debug(f'task_complete result={result}')
+                        except Exception as e:
+                            logger.exception(e)
+                            step_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
+                            if has_file:
+                                step_resp.intermediate_steps = f'File is parsed fail. error={str(e)}'
                             await self.send_json(client_id, chat_id, step_resp)
                             start_resp.type = 'close'
                             await self.send_json(client_id, chat_id, start_resp)
-                            continue
-                    step_resp.intermediate_steps = 'File parsing complete. Analysis starting'
-                    await self.send_json(client_id, chat_id, step_resp, add=False)
-                    if action == 'auto_file':
-                        question = []
-                        [question.extend(q) for q in batch_question]
-                        payload['inputs']['questions'] = question
-
-                asyncio.create_task(Handler().dispatch_task(self, client_id, chat_id,
-                                                            action, payload, user_id))
-
+                            # socket close?
+                            return
         except Exception as e:
             # Handle any exceptions that might occur
             logger.exception(e)
@@ -254,27 +244,78 @@ class ChatManager:
             )
         finally:
             try:
-                await self.close_connection(client_id=client_id, chat_id=chat_id,
+                await self.close_connection(client_id=client_id,
+                                            chat_id=chat_id,
                                             code=status.WS_1000_NORMAL_CLOSURE,
                                             reason='Client disconnected')
             except Exception as e:
                 logger.error(e)
             self.disconnect(client_id, chat_id)
 
+    async def preper_payload(self, payload, graph_data, langchain_obj_key, client_id, chat_id,
+                             start_resp: ChatResponse, step_resp: ChatResponse):
+        has_file = False
+        if 'inputs' in payload and ('data' in payload['inputs']
+                                    or 'file_path' in payload['inputs']):
+            node_data = payload['inputs'].get('data', '') or [payload['inputs']]
+            graph_data = self.refresh_graph_data(graph_data, node_data)
+            self.set_cache(langchain_obj_key, None)  # rebuild object
+            has_file = any(['InputFile' in nd.get('id') for nd in node_data])
+        if has_file:
+            step_resp.intermediate_steps = 'File upload complete and begin to parse'
+            await self.send_json(client_id, chat_id, start_resp)
+            await self.send_json(client_id, chat_id, step_resp, add=False)
+            await self.send_json(client_id, chat_id, start_resp)
+            logger.info('input_file start_log')
+            await asyncio.sleep(1)  # why frontend not recieve imediately
+        return has_file, graph_data
+
+    async def preper_action(self, client_id, chat_id, langchain_obj_key, payload,
+                            start_resp: ChatResponse, step_resp: ChatResponse):
+        langchain_obj = self.in_memory_cache.get(langchain_obj_key)
+        batch_question = []
+        action = ''
+        if isinstance(langchain_obj, Report):
+            action = 'report'
+        elif 'data' in payload['inputs'] or 'file_path' in payload['inputs']:
+            action = 'auto_file'
+            batch_question = self.in_memory_cache.get(langchain_obj_key + '_question')
+            payload['inputs']['questions'] = batch_question
+            if not batch_question:
+                # no question
+                step_resp.intermediate_steps = 'File parsing complete'
+                await self.send_json(client_id, chat_id, step_resp)
+                start_resp.type = 'close'
+                await self.send_json(client_id, chat_id, start_resp)
+            else:
+                step_resp.intermediate_steps = 'File parsing complete. Analysis starting'
+                await self.send_json(client_id, chat_id, step_resp, add=False)
+        return action
+
     def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
+        key_node = get_cache_key(flow_id, chat_id)
+        logger.info(f'init_langchain key={key_node}')
         session = next(get_session())
         db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
         artifacts = {}
         graph = build_flow_no_yield(graph_data=graph_data,
-                                    artifacts=artifacts, process_file=True,
+                                    artifacts=artifacts,
+                                    process_file=True,
                                     flow_id=UUID(flow_id).hex,
-                                    chat_id=chat_id, user_name=db_user.user_name)
+                                    chat_id=chat_id,
+                                    user_name=db_user.user_name)
         langchain_object = graph.build()
+        question = []
+        [
+            question.extend(node._built_object) for node in graph.nodes
+            if node.vertex_type == 'InputNode'
+        ]
+
+        self.set_cache(key_node + '_question', question)
         for node in langchain_object:
             # 只存储chain
             if node.base_type == 'inputOutput' and node.vertex_type != 'Report':
                 continue
-            key_node = get_cache_key(flow_id, chat_id)
             self.set_cache(key_node, node._built_object)
             self.set_cache(key_node + '_artifacts', artifacts)
         return graph
@@ -305,6 +346,5 @@ class ChatManager:
                 # value
                 variables_value_list = tweak[nd.get('id')].get('variable_value', [])
                 variables_value_list.append(variable_value)
-
         """upload file to make flow work"""
         return process_tweaks(graph_data, tweaks=tweak)

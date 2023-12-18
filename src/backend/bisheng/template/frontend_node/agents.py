@@ -7,8 +7,7 @@ from langchain.agents import types
 
 NON_CHAT_AGENTS = {
     agent_type: agent_class
-    for agent_type, agent_class in types.AGENT_TO_CLASS.items()
-    if 'chat' not in agent_type.value
+    for agent_type, agent_class in types.AGENT_TO_CLASS.items() if 'chat' not in agent_type.value
 }
 
 
