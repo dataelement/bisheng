@@ -427,7 +427,7 @@ def addEmbedding(collection_name, knowledge_id: int, model: str, chunk_size: int
             session.refresh(db_file)
             callback_obj = db_file.copy()
         except Exception as e:
-            logger.exception(e)
+            logger.error(e)
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)
             setattr(db_file, 'remark', str(e)[:500])

@@ -502,10 +502,7 @@ class Milvus(MilvusLangchain):
             # Insert into the collection.
             try:
                 res: Collection
-                res = self.col.insert(insert_list,
-                                      partition_name=self._partition_field,
-                                      timeout=timeout,
-                                      **kwargs)
+                res = self.col.insert(insert_list, timeout=timeout, **kwargs)
                 pks.extend(res.primary_keys)
             except MilvusException as e:
                 logger.error('Failed to insert batch starting at entity: %s/%s', i, total_count)
@@ -667,9 +664,9 @@ class Milvus(MilvusLangchain):
         if 'partition_key' in kwargs:
             # add parttion
             if expr:
-                expr = f"{expr} and {self._partition_field}==${kwargs['partition_key']}"
+                expr = f"{expr} and {self._partition_field}==\"{kwargs['partition_key']}\""
             else:
-                expr = f"{self._partition_field}==${kwargs['partition_key']}"
+                expr = f"{self._partition_field}==\"{kwargs['partition_key']}\""
 
         # Perform the search.
         res = self.col.search(
