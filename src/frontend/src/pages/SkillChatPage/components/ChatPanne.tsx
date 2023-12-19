@@ -767,7 +767,6 @@ const useHelpful=(messages,chatId,chating,onReload)=>{
            
             try {
                 await chatResolved({chatId,solved})
-                await new Promise(r=>setTimeout(r,1000,{chatId,solved}))
                 await onReload()
 
             } catch (error) {
