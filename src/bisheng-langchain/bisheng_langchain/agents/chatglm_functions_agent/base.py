@@ -40,7 +40,7 @@ def format_tool_to_chatglm_function(tool: BaseTool):
             parameters = {
                 'type': 'object',
                 'properties': schema_['properties'],
-                'required': list(schema_['properties'].keys),
+                'required': list(schema_['properties'].keys()),
             }
         else:
             parameters = {
