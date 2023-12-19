@@ -35,22 +35,12 @@ def format_tool_to_chatglm_function(tool: BaseTool):
             },
         }
     else:
-        if tool.args:
-            properties = tool.args
-            for key in properties.keys():
-                if 'title' in properties[key]:
-                    value = properties[key].pop('title')
-                    properties[key]['description'] = value
-                else:
-                    properties[key]['description'] = key
-
-                if 'type' not in properties[key]:
-                    properties[key]['type'] = 'string'
-
+        if tool.args_schema:
+            schema_ = tool.args_schema.schema()
             parameters = {
                 'type': 'object',
-                'properties': properties,
-                'required': list(properties.keys()),
+                'properties': schema_['properties'],
+                'required': list(schema_['properties'].keys),
             }
         else:
             parameters = {
@@ -63,7 +53,7 @@ def format_tool_to_chatglm_function(tool: BaseTool):
                 'properties': {
                     '__arg1': {
                         'type': 'string',
-                        'description': '__arg1'
+                        'title': '__arg1'
                     },
                 },
                 'required': ['__arg1'],
