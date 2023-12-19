@@ -190,9 +190,9 @@ class ProxyChatLLM(BaseChatModel):
                 'top_p': top_p,
                 'temperature': temperature,
                 'max_tokens': max_tokens,
-                'stop': kwargs.get('stop', None),
-                'function_call': kwargs.get('function_call', None),
-                'functions': kwargs.get('functions', [])
+                **({'stop': kwargs.get('stop')} if kwargs.get('stop', None) is not None else {}),
+                **({'function_call': kwargs.get('function_call')} if kwargs.get('function_call', None) is not None else {}),
+                **({'functions': kwargs.get('functions')} if kwargs.get('functions', None) is not None else {})
             }
             response = self.client.post(self.elemai_base_url, json=params)
             return response.json()

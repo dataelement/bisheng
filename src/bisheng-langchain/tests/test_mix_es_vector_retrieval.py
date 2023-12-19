@@ -13,8 +13,6 @@ from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from bisheng_langchain.retrievers import MixEsVectorRetriever
 
 
-os.environ['OPENAI_API_KEY'] =  'xxxxx'
-os.environ['OPENAI_PROXY'] =  'xxxx'
 embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
 llm = ChatOpenAI(model="gpt-3.5-turbo-16k-0613", temperature=0.0)
 
