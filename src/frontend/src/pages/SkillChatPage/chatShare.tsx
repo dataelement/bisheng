@@ -1,5 +1,5 @@
 // 嵌iframe、适配移动端
-import { useEffect, useState } from "react";
+import { useEffect, useState ,useCallback} from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { getFlowFromDatabase } from "../../controllers/API";
 import { FlowType } from "../../types/flow";
@@ -25,8 +25,19 @@ export default function chatShare() {
             }, 200);
         })
     }, [flowId])
-
+    
+    const handleReload = useCallback(()=>{
+        flowId && getFlowFromDatabase(flowId).then(node => {
+            setFlow(null)
+            // 会话ID
+            // 预留 websoket 重连时间
+            node && setTimeout(() => {
+                setFlow(node)
+                setChatId(generateUUID(32))
+            }, 200);
+        })
+    },[flowId])
     if (!flowId) return <div>请选择技能</div>
 
-    return flow ? <ChatPanne version='v2' libId={libId} chatId={chatId} flow={flow} /> : null
+    return flow ? <ChatPanne version='v2' libId={libId} chatId={chatId} flow={flow}  onReload={handleReload}/> : null
 };
