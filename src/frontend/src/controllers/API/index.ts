@@ -669,7 +669,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
 /**
  * 
  * @param { object } options  - 参数对象
- * @param { string } options.chat_id  - 会话 id
+ * @param { string } options.chatId  - 会话 id
  * @param { number } options.solved  状态    0 初始值， 1  解决, 2 未解决
  * @returns 
  */
