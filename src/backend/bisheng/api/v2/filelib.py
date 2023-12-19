@@ -13,7 +13,7 @@ from bisheng.database.models.user import User
 from bisheng.settings import settings
 from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from langchain.vectorstores import Milvus
 from sqlalchemy import func, or_
@@ -32,10 +32,9 @@ def create_knowledge(
     """创建知识库."""
     db_knowldge = Knowledge.from_orm(knowledge)
     know = session.exec(
-        select(Knowledge).where(Knowledge.name == knowledge.name,
-                                knowledge.user_id == settings.get_from_db(
-                                    'default_operator').get('user'))
-                                ).all()
+        select(Knowledge).where(
+            Knowledge.name == knowledge.name,
+            knowledge.user_id == settings.get_from_db('default_operator').get('user'))).all()
     if know:
         raise HTTPException(status_code=500, detail='知识库名称重复')
     if not db_knowldge.collection_name:
@@ -61,10 +60,9 @@ def update_knowledge(
         raise HTTPException(status_code=500, detail='无知识库')
 
     know = session.exec(
-        select(Knowledge).where(Knowledge.name == knowledge.name,
-                                knowledge.user_id == settings.get_from_db(
-                                    'default_operator').get('user')
-                                )).all()
+        select(Knowledge).where(
+            Knowledge.name == knowledge.name,
+            knowledge.user_id == settings.get_from_db('default_operator').get('user'))).all()
     if know:
         raise HTTPException(status_code=500, detail='知识库名称重复')
 
@@ -88,12 +86,11 @@ def get_knowledge(
         sql = select(Knowledge)
         count_sql = select(func.count(Knowledge.id))
         if True:
-            role_third_id = session.exec(select(RoleAccess
-                                                ).where(RoleAccess.role_id.in_([1]))).all()
+            role_third_id = session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(
+                [1]))).all()
             if role_third_id:
                 third_ids = [
-                    acess.third_id
-                    for acess in role_third_id
+                    acess.third_id for acess in role_third_id
                     if acess.type == AccessType.KNOWLEDGE.value
                 ]
                 sql = sql.where(
@@ -140,10 +137,12 @@ def delete_knowledge(
     return {'message': 'knowledge deleted successfully'}
 
 
-@router.post('/file/{knowledge_id}', status_code=201)
+@router.post('/file/{knowledge_id}', status_code=200)
 async def upload_file(*,
                       knowledge_id: int,
+                      callback_url: Optional[str] = Form(None),
                       file: UploadFile = File(...),
+                      background_tasks: BackgroundTasks,
                       session: Session = Depends(get_session)):
 
     file_name = file.filename
@@ -169,15 +168,16 @@ async def upload_file(*,
     session.refresh(db_file)
 
     logger.info(f'fileName={file_name} col={collection_name} file_id={db_file.id}')
-
     try:
-        await addEmbedding(collection_name=collection_name,
-                           model=knowledge.model,
-                           chunk_size=chunk_size,
-                           separator=separator,
-                           chunk_overlap=chunk_overlap,
-                           file_paths=[file_path],
-                           knowledge_files=[db_file])
+        background_tasks.add_task(addEmbedding,
+                                  collection_name=collection_name,
+                                  model=knowledge.model,
+                                  chunk_size=chunk_size,
+                                  separator=separator,
+                                  chunk_overlap=chunk_overlap,
+                                  file_paths=[file_path],
+                                  knowledge_files=[db_file],
+                                  callback=callback_url)
     except Exception:
         # 失败，需要删除数据
         logger.info(f'delete file_id={db_file.id} status={db_file.status} reason={db_file.remark}')

@@ -6,7 +6,6 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { PopUpContext } from "../../contexts/popUpContext";
 // import "ace-builds/webpack-resolver";
 import { Check, Clipboard, Code2 } from "lucide-react";
-import { useTranslation } from "react-i18next";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import AccordionComponent from "../../components/AccordionComponent";
@@ -44,9 +43,10 @@ import {
   TabsTrigger,
 } from "../../components/ui/tabs";
 import {
+  EXPORT_CODE_DIALOG,
   getCurlCode,
   getPythonApiCode,
-  getPythonCode
+  getPythonCode,
 } from "../../constants";
 import { darkContext } from "../../contexts/darkContext";
 import { TabsContext } from "../../contexts/tabsContext";
@@ -259,8 +259,6 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
     });
   }
 
-  const { t } = useTranslation()
-
   return (
     <Dialog open={true} onOpenChange={setModalOpen}>
       <DialogTrigger></DialogTrigger>
@@ -273,7 +271,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
               aria-hidden="true"
             />
           </DialogTitle>
-          <DialogDescription>{t('code.exportCodeDialogTip')}</DialogDescription>
+          <DialogDescription>{EXPORT_CODE_DIALOG}</DialogDescription>
         </DialogHeader>
 
         <Tabs

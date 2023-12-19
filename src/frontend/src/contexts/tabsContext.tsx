@@ -520,7 +520,6 @@ export function TabsProvider({ children }: { children: ReactNode }) {
 
       // Create a new flow with a default name if no flow is provided.
       const newFlow = createNewFlow(flowData, flow); // random name
-
       processFlowEdges(newFlow);
       processFlowNodes(newFlow);
 
@@ -528,8 +527,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         const { id } = await saveFlowToDatabase(newFlow);
         // Change the id to the new id.
         newFlow.id = id;
-        newFlow.write = flow.write;
-        newFlow.user_name = flow.user_name;
+
         // Add the new flow to the list of flows.
         addFlowToLocalState(newFlow);
 
@@ -607,7 +605,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
 
   const addFlowToLocalState = (newFlow) => {
     setFlows((prevState) => {
-      return [newFlow, ...prevState];
+      return [...prevState, newFlow];
     });
   };
 
@@ -656,8 +654,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         });
       }
     } catch (err) {
-      setErrorData({ title: `Error`, list: [err.response.data.detail] });
-      throw err
+      setErrorData(err);
     }
   }
 

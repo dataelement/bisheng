@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any, Callable, Dict, Type
 
-from bisheng.database.base import get_session
+from bisheng.database.base import db_service, session_getter
 from bisheng.database.models.knowledge import Knowledge
 from bisheng.settings import settings
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
@@ -217,10 +217,10 @@ def initial_milvus(class_object: Type[Milvus], params: dict):
     if 'embedding' not in params:
         # 匹配知识库的embedding
         col = params['collection_name']
-        session = next(get_session())
-        knowledge = session.exec(select(Knowledge).where(Knowledge.collection_name == col)).first()
-        if not knowledge:
-            raise Exception(f'不能找到知识库collection={col}')
+        with session_getter(db_service) as session:
+            knowledge = session.exec(select(Knowledge).where(Knowledge.collection_name == col)).first()
+            if not knowledge:
+                raise Exception(f'不能找到知识库collection={col}')
         model_param = settings.get_knowledge().get('embeddings').get(knowledge.model)
         if knowledge.model == 'text-embedding-ada-002':
             embedding = OpenAIEmbeddings(**model_param)

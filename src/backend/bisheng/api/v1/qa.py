@@ -4,7 +4,7 @@ from typing import List
 from bisheng.database.base import get_session
 from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.recall_chunk import RecallChunk
-from bisheng.utils.minio_client import MinioClient
+from bisheng.utils import minio_client
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 
@@ -39,12 +39,11 @@ def get_original_file(*, message_id: int, keys: str, session: Session = Depends(
     # keywords
     keywords = keys.split(';') if keys else []
     result = []
-    minio_client = MinioClient()
     for index, chunk in enumerate(chunks):
         file = id2file.get(chunk.file_id)
         chunk_res = json.loads(json.loads(chunk.meta_data).get('bbox'))
-        chunk_res['source_url'] = minio_client.get_share_link(str(chunk.file_id))
-        chunk_res['original_url'] = minio_client.get_share_link(
+        chunk_res['source_url'] = minio_client.MinioClient().get_share_link(str(chunk.file_id))
+        chunk_res['original_url'] = minio_client.MinioClient().get_share_link(
             file.object_name if file.object_name else str(file.id))
         chunk_res['score'] = round(match_score(chunk.chunk, keywords),
                                    2) if len(keywords) > 0 else 0

@@ -5,6 +5,7 @@ from bisheng.interface.agents.custom import CUSTOM_AGENTS
 from bisheng.interface.chains.custom import CUSTOM_CHAINS
 from bisheng.interface.embeddings.custom import CUSTOM_EMBEDDING
 from bisheng.interface.importing.utils import import_class
+from bisheng.interface.inputoutput.custom import CUSTOM_INPUTOUTPUT
 from bisheng_langchain import chat_models
 from bisheng_langchain import document_loaders as contribute_loader
 from bisheng_langchain import embeddings as contribute_embeddings
@@ -82,4 +83,5 @@ CUSTOM_NODES = {
     **CUSTOM_AGENTS,
     **CUSTOM_CHAINS,
     **CUSTOM_EMBEDDING,
+    **CUSTOM_INPUTOUTPUT
 }  # type: ignore

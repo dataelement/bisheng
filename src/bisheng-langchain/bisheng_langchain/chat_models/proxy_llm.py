@@ -194,14 +194,10 @@ class ProxyChatLLM(BaseChatModel):
                 'function_call': kwargs.get('function_call', None),
                 'functions': kwargs.get('functions', [])
             }
-            response = self.client.post(self.elemai_base_url, json=params)
+            response = self.client.post(self.elemai_base_url, data=params)
             return response.json()
 
-        rsp_dict = _completion_with_retry(**kwargs)
-        if 200 != rsp_dict.get('status_code'):
-            logger.error(f'proxy_llm_error resp={rsp_dict}')
-            raise Exception(rsp_dict)
-        return rsp_dict
+        return _completion_with_retry(**kwargs)
 
     def _combine_llm_outputs(self, llm_outputs: List[Optional[dict]]) -> dict:
         overall_token_usage: dict = {}
@@ -237,7 +233,7 @@ class ProxyChatLLM(BaseChatModel):
         @retry_decorator
         async def _acompletion_with_retry(**kwargs: Any) -> Any:
             # Use OpenAI's async api https://github.com/openai/openai-python#async-api
-            async with self.client.apost(url=self.elemai_base_url, json=kwargs) as response:
+            async with self.client.apost(url=self.elemai_base_url, data=kwargs) as response:
                 async for txt in response.content.iter_any():
                     if b'\n' in txt:
                         for txt_ in txt.split(b'\n'):

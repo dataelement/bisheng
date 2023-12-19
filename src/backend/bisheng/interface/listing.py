@@ -1,5 +1,4 @@
 from bisheng.interface.agents.base import agent_creator
-from bisheng.interface.autogenRole.base import autogenrole_creator
 from bisheng.interface.chains.base import chain_creator
 from bisheng.interface.document_loaders.base import documentloader_creator
 from bisheng.interface.embeddings.base import embedding_creator
@@ -35,7 +34,6 @@ def get_type_dict():
         'outputParsers': output_parser_creator.to_list(),
         'retrievers': retriever_creator.to_list(),
         'inputOutput': input_output_creator.to_list(),
-        'autogenRoles': autogenrole_creator.to_list(),
     }
 
 

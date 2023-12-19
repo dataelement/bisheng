@@ -10,7 +10,6 @@ export default function InputComponent({
   disableCopyPaste = false,
   disabled,
   password,
-  maxLength = 100,
   editNode = false,
 }: InputComponentType) {
   const [myValue, setMyValue] = useState(value ?? "");
@@ -33,7 +32,6 @@ export default function InputComponent({
     <div className={disabled ? "input-component-div" : "relative"}>
       <input
         value={myValue}
-        // maxLength={maxLength}
         onFocus={() => {
           if (disableCopyPaste) setDisableCopyPaste(true);
         }}

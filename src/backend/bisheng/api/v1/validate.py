@@ -1,4 +1,5 @@
-from bisheng.api.v1.base import (Code, CodeValidationResponse, PromptValidationResponse,
+from bisheng.api.v1.base import (Code, CodeValidationResponse,
+                                 PromptValidationResponse,
                                  ValidatePromptRequest, validate_prompt)
 from bisheng.template.field.base import TemplateField
 from bisheng.utils.logger import logger
@@ -66,7 +67,7 @@ def add_new_variables_to_template(input_variables, prompt_request):
                 show=True,
                 advanced=False,
                 multiline=True,
-                input_types=['Document', 'BaseOutputParser', 'VariableNode'],
+                input_types=['Document', 'BaseOutputParser'],
                 value='',  # Set the value to empty string
             )
             if variable in prompt_request.frontend_node.template:

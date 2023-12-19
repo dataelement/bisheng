@@ -1,5 +1,4 @@
 from bisheng.interface.agents.base import agent_creator
-from bisheng.interface.autogenRole.base import autogenrole_creator
 from bisheng.interface.chains.base import chain_creator
 from bisheng.interface.document_loaders.base import documentloader_creator
 from bisheng.interface.embeddings.base import embedding_creator
@@ -51,7 +50,6 @@ def build_langchain_types_dict():  # sourcery skip: dict-assign-update-to-union
         output_parser_creator,
         retriever_creator,
         input_output_creator,
-        autogenrole_creator,
     ]
 
     all_types = {}

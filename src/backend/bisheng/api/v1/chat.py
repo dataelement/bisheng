@@ -6,7 +6,7 @@ from bisheng.api.utils import build_flow, build_flow_no_yield, build_input_keys_
 from bisheng.api.v1.schemas import BuildStatus, BuiltResponse, ChatList, InitResponse, StreamData
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
-from bisheng.database.base import get_session
+from bisheng.database.base import db_service, get_session, session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageRead
 from bisheng.utils.logger import logger
@@ -16,7 +16,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import delete, func
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 router = APIRouter(tags=['Chat'])
@@ -44,22 +44,6 @@ def get_chatmessage(*,
         where = where.where(ChatMessage.id < id)
     db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
     return [jsonable_encoder(message) for message in db_message]
-
-
-@router.delete('/chat/{chat_id}', status_code=200)
-def del_chat_id(*,
-                session: Session = Depends(get_session),
-                chat_id: str,
-                Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-
-    statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id,
-                                          ChatMessage.user_id == payload.get('user_id'))
-
-    session.exec(statement)
-    session.commit()
-    return {'status_code': 200, 'status_message': 'success'}
 
 
 @router.get('/chat/list', response_model=List[ChatList], status_code=200)
@@ -103,8 +87,8 @@ async def chat(flow_id: str,
     payload = json.loads(Authorize.get_jwt_subject())
     user_id = payload.get('user_id')
     """Websocket endpoint for chat."""
-    if chat_id:
-        with next(get_session()) as session:
+    if type and type == 'L1':
+        with session_getter(db_service) as session:
             db_flow = session.get(Flow, flow_id)
         if not db_flow:
             await websocket.accept()
@@ -127,11 +111,18 @@ async def chat(flow_id: str,
         graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
 
     try:
-        if not chat_id:
-            # 调试时，每次都初始化对象
-            chat_manager.set_cache(get_cache_key(flow_id, chat_id), None)
-        await chat_manager.handle_websocket(flow_id, chat_id, websocket, user_id,
-                                            gragh_data=graph_data)
+        process_file = False if chat_id else True
+        graph = build_flow_no_yield(graph_data=graph_data,
+                                    artifacts={},
+                                    process_file=process_file,
+                                    flow_id=UUID(flow_id).hex,
+                                    chat_id=chat_id)
+        langchain_object = graph.build()
+        for node in langchain_object:
+            key_node = get_cache_key(flow_id, chat_id, node.id)
+            chat_manager.set_cache(key_node, node._built_object)
+            chat_manager.set_cache(get_cache_key(flow_id, chat_id), node._built_object)
+        await chat_manager.handle_websocket(flow_id, chat_id, websocket, user_id)
     except WebSocketException as exc:
         logger.error(exc)
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))
@@ -150,7 +141,7 @@ async def union_websocket(client_id: str,
     user_id = payload.get('user_id')
     """Websocket endpoint for chat."""
     if type and type == 'L1':
-        with next(get_session()) as session:
+        with session_getter(db_service) as session:
             db_flow = session.get(Flow, client_id)
         if not db_flow:
             await websocket.accept()
@@ -304,7 +295,6 @@ async def stream_build(flow_id: str, chat_id: Optional[str] = None):
             yield str(StreamData(event='message', data=input_keys_response))
             # We need to reset the chat history
             chat_manager.chat_history.empty_history(flow_id, chat_id)
-            chat_manager.set_cache(get_cache_key(flow_id=flow_id, chat_id=chat_id), None)
             flow_data_store.hsetkey(flow_data_key, 'status', BuildStatus.SUCCESS.value, expire)
         except Exception as exc:
             logger.exception(exc)

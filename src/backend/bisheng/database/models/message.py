@@ -1,10 +1,10 @@
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Optional
 from uuid import UUID
 
 from bisheng.database.models.base import SQLModelSerializable
 from pydantic import BaseModel
-from sqlalchemy import JSON, Column, DateTime, String, Text, text
+from sqlalchemy import Column, DateTime, Text, text
 from sqlmodel import Field
 
 
@@ -17,12 +17,10 @@ class MessageBase(SQLModelSerializable):
     flow_id: UUID = Field(index=True, description='对应的技能id')
     chat_id: Optional[str] = Field(index=True, description='chat_id, 前端生成')
     user_id: Optional[str] = Field(index=True, description='用户id')
-    sender: Optional[str] = Field(index=False, default='', description='autogen 的发送方')
-    receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
     intermediate_steps: Optional[str] = Field(index=False,
                                               sa_column=Column(Text),
                                               description='过程日志')
-    files: Optional[str] = Field(sa_column=Column(String(length=4096)), description='上传的文件等')
+    files: Optional[str] = Field(index=False, description='上传的文件等')
     # file_access: Optional[bool] = Field(index=False, default=True, description='召回文件是否可以访问')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
@@ -37,7 +35,6 @@ class MessageBase(SQLModelSerializable):
 
 class ChatMessage(MessageBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    receiver: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
 
 
 class ChatMessageRead(MessageBase):

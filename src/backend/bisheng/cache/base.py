@@ -1,5 +1,8 @@
 import abc
 
+from bisheng import settings
+from fastapi import logger
+
 
 class BaseCache(abc.ABC):
     """

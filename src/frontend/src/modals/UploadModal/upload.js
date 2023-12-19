@@ -25,7 +25,7 @@ export const uploadFileWithProgress = async (file, callback) => {
     // Handle the response data as needed
   } catch (error) {
     console.error('Error uploading file:', error);
-    return error.response.statusText || 'Upload error'
+    return false
     // Handle errors
   }
 };

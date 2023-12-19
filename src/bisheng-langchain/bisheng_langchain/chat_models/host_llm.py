@@ -189,8 +189,8 @@ class BaseHostChatLLM(BaseChatModel):
             resp = self.client(url=url, json=params).json()
 
             if not resp.get('choices', []):
-                logger.info(resp)
-                raise ValueError(f'empty choices in llm chat result {resp}')
+                logger.error(f'host_llm_response response={resp}')
+                raise ValueError('empty choices in llm chat result')
 
             resp['usage'] = {}
             return resp
@@ -379,7 +379,7 @@ class HostQwenChat(BaseHostChatLLM):
     model_name: str = Field('Qwen-7B-Chat', alias='model')
 
     temperature: float = 0
-    top_p: float = 1
+    top_p: float = 0.5
     max_tokens: int = 8192
 
     @property

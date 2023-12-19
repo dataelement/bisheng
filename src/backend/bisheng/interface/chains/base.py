@@ -26,7 +26,6 @@ class ChainCreator(LangChainTypeCreator):
         'ConversationalRetrievalChain': 'from_llm',
         'LLMCheckerChain': 'from_llm',
         'SQLDatabaseChain': 'from_llm',
-        'LLMRouterChain': 'from_llm',
     }
 
     @property

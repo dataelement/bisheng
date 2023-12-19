@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
@@ -66,7 +67,7 @@ class ChatMessage(BaseModel):
     """Chat message schema."""
 
     is_bot: bool = False
-    message: Union[str, None, dict] = ''
+    message: Union[str, None, dict] = None
     type: str = 'human'
     category: str = 'processing'
     intermediate_steps: str = None
@@ -74,14 +75,12 @@ class ChatMessage(BaseModel):
     user_id: int = None
     message_id: int = None
     source: bool = False
-    sender: str = None
-    receiver: dict = None
 
 
 class ChatResponse(ChatMessage):
     """Chat response schema."""
 
-    intermediate_steps: str = ''
+    intermediate_steps: str
     type: str
     is_bot: bool = True
     files: list = []
@@ -129,7 +128,7 @@ class UploadFileResponse(BaseModel):
     """Upload file response schema."""
 
     flowId: Optional[str]
-    file_path: str
+    file_path: Path
 
 
 class StreamData(BaseModel):

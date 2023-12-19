@@ -16,15 +16,11 @@ import {
   toTitleCase,
 } from "../../utils";
 import ParameterComponent from "./components/parameterComponent";
-import { Link, useParams } from "react-router-dom";
-import { Button } from "../../components/ui/button";
 
 export default function GenericNode({ data, selected }: {
   data: NodeDataType;
   selected: boolean;
 }) {
-  const { id: flowId } = useParams();
-  // console.log('data :>> ', data);
 
   const { setErrorData } = useContext(alertContext);
   const showError = useRef(true);
@@ -212,6 +208,9 @@ export default function GenericNode({ data, selected }: {
             >
               {" "}
             </div>
+            {/* <div className="px-5 py-2 mt-2 text-center">
+                  Output
+              </div> */}
             {/* 输出节点 */}
             <ParameterComponent
               data={data}
@@ -226,9 +225,6 @@ export default function GenericNode({ data, selected }: {
               type={data.node.base_classes.join("|")}
               left={false}
             />
-            {data.type === 'Report' && <div className="w-full bg-muted px-5 py-2">
-              <Link to={`/report/${flowId}`}><Button variant="outline" className="px-10">Edit</Button></Link>
-            </div>}
           </>
         </div>
       </div>

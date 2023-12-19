@@ -73,7 +73,7 @@ export default function Users(params) {
             <TableBody>
                 {users.map((el) => (
                     <TableRow key={el.id}>
-                        <TableCell className="font-medium max-w-md truncate">{el.user_name}</TableCell>
+                        <TableCell className="font-medium">{el.user_name}</TableCell>
                         {/* <TableCell>{el.role}</TableCell> */}
                         <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                         <TableCell className="text-right">

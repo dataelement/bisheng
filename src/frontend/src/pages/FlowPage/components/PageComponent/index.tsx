@@ -33,7 +33,6 @@ import { FlowType, NodeType } from "../../../../types/flow";
 import { isValidConnection } from "../../../../utils";
 import ConnectionLineComponent from "../ConnectionLineComponent";
 import ExtraSidebar from "../extraSidebarComponent";
-import { intersectArrays } from "../../../../util/utils";
 
 const nodeTypes = {
   genericNode: GenericNode,
@@ -191,11 +190,10 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       takeSnapshot();
       let hasInputNodeEdg = false
       setEdges((eds) => {
-        // const moreTarget = eds.find(el => el.source === params.source)
-        // hasInputNodeEdg = moreTarget && params.source.indexOf('InputFileNode') === 0
+        const moreTarget = eds.find(el => el.source === params.source)
+        hasInputNodeEdg = moreTarget && params.source.indexOf('InputFileNode') === 0
         // 限制InputFileNode节点只有一个下游
-        // hasInputNodeEdg ? eds : 
-        return addEdge(
+        return hasInputNodeEdg ? eds : addEdge(
           {
             ...params,
             style: { stroke: "#555" },
@@ -209,20 +207,15 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
           eds
         )
       });
-
       setNodes((x) => {
         let newX = _.cloneDeep(x);
-        // inputFileNode类型跟随下游组件决定上传文件类型
+        // inputFileNode input type类型跟随下游组件
         const inputNodeId = params.source
-        if (inputNodeId.split('-')[0] === 'InputFileNode') {
+        if (!hasInputNodeEdg && inputNodeId.split('-')[0] === 'InputFileNode') {
           const inputNode = newX.find(el => el.id === params.source);
-          const nextEdgs = [...edges, params].filter(el => el.source === params.source);
-          const targetNodes = newX.filter(el => nextEdgs.find(edg => edg.target === el.id));
-          // 取下游节点交集
-          let result = intersectArrays(...targetNodes.map(el => el.data.node.template.file_path.fileTypes))
-          result = result.length ? result : ['xxx'] // 无效后缀
-          inputNode.data.node.template.file_path.fileTypes = result
-          inputNode.data.node.template.file_path.suffixes = result.map(el => `.${el}`) // 上传文件类型；
+          const targetNode = newX.find(el => el.id === params.target);
+          inputNode.data.node.template.file_path.fileTypes = targetNode.data.node.template.file_path.fileTypes
+          inputNode.data.node.template.file_path.suffixes = targetNode.data.node.template.file_path.suffixes // 上传文件类型；
         }
         return newX;
       });

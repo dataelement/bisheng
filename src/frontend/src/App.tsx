@@ -13,7 +13,6 @@ import { userContext } from "./contexts/userContext";
 import { LoginPage } from "./pages/login";
 import router from "./routes";
 import { useTranslation } from "react-i18next";
-import i18next from "i18next";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -142,17 +141,12 @@ export default function App() {
   useEffect(() => {
     document.title = t('title')
   }, [t])
-  // init language
-  useEffect(() => {
-    const lang = user?.user_id ? localStorage.getItem('language-' + user.user_id) : null
-    if (lang) {
-      i18next.changeLanguage(lang)
-    }
-  }, [user])
 
   // 免登录列表
   const noAuthPages = ['chat']
   const path = location.pathname.split('/')?.[1] || ''
+
+  console.log('user :>> ', user);
 
   return (
     //need parent component with width and height
@@ -162,7 +156,7 @@ export default function App() {
         : user ? <div className="loading"></div>
           : <LoginPage></LoginPage>}
       <div></div>
-      <div className="app-div" style={{ zIndex: 1000 }}>
+      <div className="app-div" style={{ zIndex: 999 }}>
         {alertsList.map((alert) => (
           <div key={alert.id}>
             {alert.type === "error" ? (

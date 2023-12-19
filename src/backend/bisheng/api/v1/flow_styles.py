@@ -1,8 +1,8 @@
 from uuid import UUID
 
 from bisheng.database.base import get_session
-from bisheng.database.models.flow_style import (FlowStyle, FlowStyleCreate,
-                                                FlowStyleRead, FlowStyleUpdate)
+from bisheng.database.models.flow_style import (FlowStyle, FlowStyleCreate, FlowStyleRead,
+                                                FlowStyleUpdate)
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 

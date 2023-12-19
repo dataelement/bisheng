@@ -1,41 +1,6 @@
-from typing import Optional
-
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
 from bisheng.template.template.base import Template
-
-
-class InputOutputNode(FrontendNode):
-    name: str = 'InputOutputNode'
-    base_classes: list[str] = ['input', 'output']
-
-    def add_extra_fields(self) -> None:
-        pass
-
-    @staticmethod
-    def format_field(field: TemplateField, name: Optional[str] = None) -> None:
-        FrontendNode.format_field(field, name)
-        if name == 'Report':
-            if field.name == 'memory':
-                field.show = False
-            elif field.name == 'input_node':
-                field.show = False
-            elif field.name == 'chains':
-                field.show = True
-                field.field_type = 'function'
-                field.display_name = 'functions'
-            elif field.name == 'report_name':
-                field.show = True
-                field.display_name = 'Report Name'
-                field.info = 'the file name we generate'
-            elif field.name == 'variables':
-                field.show = True
-                field.field_type = 'VariableNode'
-        if name == 'VariableNode':
-            if field.name == 'variables':
-                field.show = True
-                field.field_type = 'variable'
-                field.required = True
 
 
 class InputNode(FrontendNode):
@@ -71,24 +36,14 @@ class InputFileNode(FrontendNode):
                 show=True,
                 name='file_path',
                 value='',
-            ),
-            TemplateField(
-                field_type='str',
-                show=True,
-                name='file_type',
-                placeholder='提示上传文件类型',
-                display_name='Name',
-                info='Tips for which file should upload'
+                display_name='输入内容',
+                suffixes=['.pdf'],
+                fileTypes=['pdf'],
             ),
         ],
     )
     description: str = """输入节点，用来自动对接输入"""
     base_classes: list[str] = ['fileNode']
-
-    @staticmethod
-    def format_field(field: TemplateField, name: Optional[str] = None) -> None:
-        FrontendNode.format_field(field, name)
-        field.show = True
 
     def to_dict(self):
         return super().to_dict()

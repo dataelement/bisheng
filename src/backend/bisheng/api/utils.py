@@ -1,12 +1,9 @@
-
 from bisheng.api.v1.schemas import StreamData
-from bisheng.database.base import get_session
+from bisheng.database.base import db_service, session_getter
 from bisheng.database.models.role_access import AccessType, RoleAccess
-from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
-from sqlalchemy import delete
-from sqlmodel import Session, select
+from sqlmodel import select
 
 API_WORDS = ['api', 'key', 'token']
 
@@ -86,14 +83,14 @@ def build_flow(graph_data: dict,
             }
             yield str(StreamData(event='log', data=log_dict))
             # # 如果存在文件，当前不操作文件，避免重复操作
-            if not process_file and vertex.base_type == 'documentloaders':
+            if not process_file and chat_id is not None:
                 template_dict = {
                     key: value
                     for key, value in vertex.data['node']['template'].items()
                     if isinstance(value, dict)
                 }
                 for key, value in template_dict.items():
-                    if value.get('type') == 'fileNode':
+                    if value.get('type') == 'file':
                         # 过滤掉文件
                         vertex.params[key] = ''
 
@@ -176,8 +173,6 @@ def build_flow_no_yield(graph_data: dict,
             # 聊天窗口等flow 主动生成的vector 需要新建临时collection
             # tmp_{chat_id}
             if vertex.base_type == 'vectorstores':
-                # 注入user_name
-                vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
                 # 知识库通过参数传参
                 if 'collection_name' in kwargs and 'collection_name' in vertex.params:
                     vertex.params['collection_name'] = kwargs['collection_name']
@@ -193,9 +188,6 @@ def build_flow_no_yield(graph_data: dict,
                 elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
                     # es
                     vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
-
-            if vertex.base_type == 'chains' and 'retriever' in vertex.params:
-                vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
 
             vertex.build()
             params = vertex._built_object_repr()
@@ -214,63 +206,11 @@ def build_flow_no_yield(graph_data: dict,
 def access_check(payload: dict, owner_user_id: int, target_id: int, type: AccessType) -> bool:
     if payload.get('role') != 'admin':
         # role_access
-        session = next(get_session())
-        role_access = session.exec(
-            select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
-                                     RoleAccess.type == type.value)).all()
+        with session_getter(db_service) as session:
+            role_access = session.exec(
+                select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
+                                         RoleAccess.type == type.value)).all()
         third_ids = [access.third_id for access in role_access]
         if owner_user_id != payload.get('user_id') and str(target_id) not in third_ids:
             return False
     return True
-
-
-def get_L2_param_from_flow(flow_data: dict, flow_id: str,):
-    graph = Graph.from_payload(flow_data)
-    node_id = []
-    variable_ids = []
-    file_name = []
-    for node in graph.nodes:
-        if node.vertex_type in {'InputFileNode'}:
-            node_id.append(node.id)
-            file_name.append(node.params.get('file_type'))
-        elif node.vertex_type in {'VariableNode'}:
-            variable_ids.append(node.id)
-
-    session: Session = next(get_session())
-    db_variables = session.exec(select(Variable).where(Variable.flow_id == flow_id)).all()
-
-    old_file_ids = {variable.node_id: variable
-                    for variable in db_variables if variable.value_type == 3}
-    update = []
-    delete_node_ids = []
-    try:
-        for index, id in enumerate(node_id):
-            if id in old_file_ids:
-                if file_name[index] != old_file_ids.get(id).variable_name:
-                    old_file_ids.get(id).variable_name = file_name[index]
-                    update.append(old_file_ids.get(id))
-                old_file_ids.pop(id)
-            else:
-                # file type
-                db_new_var = Variable(flow_id=flow_id, node_id=id,
-                                      variable_name=file_name[index], value_type=3)
-                update.append(db_new_var)
-        # delete variable which not delete by edit
-        old_variable_ids = {variable.node_id
-                            for variable in db_variables if variable.value_type != 3}
-
-        if old_file_ids:
-            delete_node_ids.extend(list(old_file_ids.keys()))
-
-        delete_node_ids.extend(old_variable_ids.difference(set(variable_ids)))
-
-        if update:
-            [session.add(var) for var in update]
-        if delete_node_ids:
-            session.exec(delete(Variable).where(Variable.node_id.in_(delete_node_ids)))
-        session.commit()
-        return True
-    except Exception as e:
-        logger.exception(e)
-        session.rollback()
-        return False
