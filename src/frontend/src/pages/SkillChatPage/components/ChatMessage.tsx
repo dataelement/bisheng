@@ -12,6 +12,7 @@ import { ChatMessageType } from "../../../types/chat";
 import { downloadFile } from "../../../util/utils";
 import { checkSassUrl } from "./FileView";
 import Thumbs from "./Thumbs";
+import { Button } from "../../../components/ui/button";
 
 // 颜色列表
 const colorList = [
@@ -30,7 +31,7 @@ const colorList = [
 
 export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageType, userName: string, onSource: () => void }) => {
     // const { user } = useContext(userContext);
-    console.log('chat :>> ', chat);
+    // console.log('chat :>> ', chat);
 
     const textRef = useRef(null)
     const { t } = useTranslation()
@@ -121,8 +122,8 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
     const color = { system: 'bg-slate-50', question: 'bg-slate-50', processing: 'bg-slate-50', answer: 'bg-slate-50', report: 'bg-slate-50' }
 
     const { setSuccessData } = useContext(alertContext);
-    const handleCopy = (e) => {
-        const copyText = e.target.parentNode
+    const handleCopy = (copyText) => {
+        // const copyText = e.target.parentNode
         const range = document.createRange();
         range.selectNode(copyText);
         window.getSelection().removeAllRanges();
@@ -141,14 +142,29 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
 
     const source = <div className="chat-footer py-1">
         {chat.source === 2 && <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>{t('chat.noAccess')}</p>}
-        <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent text-xs relative" onClick={onSource}>{t('chat.source')}</button>
+        <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>本答案来源于已有问答库: 板蓝根是什么性状</p>
+        {/* <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent text-xs relative" onClick={onSource}>{t('chat.source')}</button> */}
+        <div className="mt-6 flex flex-col items-start gap-0">
+            <Button variant="link" size="sm" className="text-blue-500 h-6 p-0">
+                <span className=" truncate max-w-[400px]">百度文章</span>
+            </Button>
+            <Button variant="link" size="sm" className="text-blue-500 h-6 p-0">
+                <span className=" truncate max-w-[400px]">百度文章百度文章</span>
+            </Button>
+            <Button variant="link" size="sm" className="text-blue-500 h-6 p-0">
+                <span className=" truncate max-w-[400px]">百度文章百度文章百度文章</span>
+            </Button>
+            <Button variant="link" size="sm" className="text-blue-500 h-6 p-0">
+                <span className=" truncate max-w-[400px]">百度文章百度文章百度文章百度文章百度文章百度文章百度文章百度文章</span>
+            </Button>
+        </div>
     </div>
 
     // 日志分析
     if (chat.thought) return <>
         <div className={`log border-[3px] rounded-xl whitespace-pre-wrap mt-4 p-4 relative ${color[chat.category || 'system']} ${border[chat.category || 'system']}`}>
             {logMkdown}
-            {chat.category === 'report' && <Copy size={20} className=" absolute right-4 top-2 cursor-pointer" onClick={handleCopy}></Copy>}
+            {chat.category === 'report' && <Copy size={20} className=" absolute right-4 top-2 cursor-pointer" onClick={(e) => handleCopy(e.target.parentNode)}></Copy>}
         </div>
         {!chat.end && <span className="loading loading-ring loading-md"></span>}
         {chat.source !== 0 && chat.end && source}
@@ -214,7 +230,12 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
             {/* 光标 */}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
             {/* 赞 踩 */}
-            {chat.id !== 0 && chat.end && <Thumbs id={chat.id} data={chat.liked} className={`absolute w-full left-0 bottom-[-28px] justify-end min-w-[240px] ${chat.source === 2 && 'bottom-[-54px]'}`}></Thumbs>}
+            {chat.id !== 0 && chat.end && <Thumbs
+                id={chat.id}
+                data={chat.liked}
+                onCopy={handleCopy}
+                className={`absolute w-full left-0 bottom-[-28px] justify-end min-w-[240px] ${chat.source === 2 && 'bottom-[-54px]'}`
+                }></Thumbs>}
         </div>
         {chat.source !== 0 && chat.end && source}
     </div>

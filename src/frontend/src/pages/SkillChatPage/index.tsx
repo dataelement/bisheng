@@ -111,7 +111,7 @@ export default function SkillChatPage() {
                 <p className="text-center mt-[100px] text-sm text-gray-600">{t('chat.selectChat')}</p>
             </div>
             : <div className="flex-1 chat-box h-screen relative">
-                {flow && <ChatPanne chatId={chatId} flow={flow} />}
+                {flow && <ChatPanne chatId={chatId} flow={flow} onReload={handlerSelectFlow} />}
             </div>}
         {/* 选择对话技能 */}
         <SkillTemps

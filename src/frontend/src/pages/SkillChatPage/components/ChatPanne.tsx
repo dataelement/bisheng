@@ -21,9 +21,10 @@ interface Iprops {
     flow: FlowType
     libId?: string
     version?: string
+    onReload: (flow: FlowType) => void
 }
 
-export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v1' }: Iprops) {
+export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v1', onReload }: Iprops) {
     const { t } = useTranslation()
     const { tabsState } = useContext(TabsContext);
 
@@ -161,6 +162,12 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
     // 溯源
     const [souce, setSouce] = useState<ChatMessageType>(null)
 
+    const handleHelpful = (helpful) => {
+        // api todo
+        
+        onReload(flow)
+    }
+
     return <div className="h-screen overflow-hidden relative">
         <div className="absolute px-2 py-2 bg-[#fff] z-10 dark:bg-gray-950 text-sm text-gray-400 font-bold">{flow.name}</div>
         <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
@@ -193,6 +200,11 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
         {(isRoom || isReport) && <div className=" absolute w-full flex justify-center bottom-32">
             <Button className="rounded-full" variant="outline" disabled={isStop} onClick={() => { setIsStop(true); stop(); }}><StopCircle className="mr-2" />Stop</Button>
         </div>}
+        {/* 有没有帮助 */}
+        <div className=" absolute w-full flex justify-center bottom-32">
+            <Button className="rounded-full" variant="outline" onClick={() => handleHelpful(true)}><StopCircle className="mr-2" />有帮助</Button>
+            <Button className="rounded-full" variant="outline" onClick={() => handleHelpful(false)}><StopCircle className="mr-2" />没帮助</Button>
+        </div>
         {/* 源文件类型 */}
         <ResouceModal chatId={chatId} open={!!souce} data={souce} setOpen={() => setSouce(null)}></ResouceModal>
         {/* 表单 */}
