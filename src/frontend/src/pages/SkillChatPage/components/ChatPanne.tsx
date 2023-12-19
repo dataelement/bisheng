@@ -770,8 +770,9 @@ const useHelpful=(messages,chatId,chating,onReload)=>{
            
             try {
                 await chatResolved({chatId,solved})
-                await onReload()
                 setSuccessData({title: t('chat.resoledSuccess')})
+                await new Promise(r=>setTimeout(r,1000))
+                 onReload()
             } catch (error) {
                 console.error("Error:", error);
                 setErrorData({
@@ -787,7 +788,6 @@ const useHelpful=(messages,chatId,chating,onReload)=>{
     },[chatId,onReload,t])
 
     const show = useMemo(()=>{
-        return true
         /* 
             何时展示 有帮助/没有帮助
             1、没有对话内容  不展示
