@@ -120,7 +120,10 @@
         "fileStorageFailure": "文件存储故障!",
         "confirmDeleteChat": "确认删除该会话？",
         "roundOver": "本轮结束",
-        "chatDialogTip": "设置提示模板中定义的输入变量。与代理和链互动"
+        "chatDialogTip": "设置提示模板中定义的输入变量。与代理和链互动",
+        "helpful":"有帮助",
+        "helpless":"没帮助",
+        "resoledSuccess":"评论成功"
     },
     "model": {
         "modelConfiguration": "模型配置",

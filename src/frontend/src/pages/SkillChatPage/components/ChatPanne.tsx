@@ -762,25 +762,32 @@ const useBuild = (flow: FlowType, chatId: string) => {
 
 // 有帮助 没有帮助
 const useHelpful=(messages,chatId,chating,onReload)=>{
-    const {helpful,noHelpful} = useMemo(()=>{
+    const { setErrorData, setSuccessData } = useContext(alertContext);
+    const { t } = useTranslation()
+    
+    const {helpful,helpless} = useMemo(()=>{
         const handle=async(solved)=>{
            
             try {
                 await chatResolved({chatId,solved})
                 await onReload()
-
+                setSuccessData({title: t('chat.resoledSuccess')})
             } catch (error) {
                 console.error("Error:", error);
+                setErrorData({
+                    title:error.message
+                })
             }
           
         }
         return {
             helpful:()=>handle(1),
-            noHelpful:()=>handle(2),
+            helpless:()=>handle(2),
         }
-    },[chatId,onReload])
+    },[chatId,onReload,t])
 
     const show = useMemo(()=>{
+        return true
         /* 
             何时展示 有帮助/没有帮助
             1、没有对话内容  不展示
@@ -801,15 +808,15 @@ const useHelpful=(messages,chatId,chating,onReload)=>{
                 variant="outline" 
                 onClick={helpful}>
                     <StopCircle className="mr-2" />
-                    有帮助
+                    {t('chat.helpful')}
                 </Button>
 
                 <Button 
                 className="rounded-full" 
                 variant="outline" 
-                onClick={noHelpful}>
+                onClick={helpless}>
                     <StopCircle className="mr-2" />
-                    没帮助
+                    {t('chat.helpless')}
                 </Button>
             </div>
 }
