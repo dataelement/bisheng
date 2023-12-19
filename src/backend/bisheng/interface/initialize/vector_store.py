@@ -217,8 +217,15 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
     if 'embedding' not in params:
         # 匹配知识库的embedding
         col = params['collection_name']
+        collection_id = params.pop('collection_id', '')
         session = next(get_session())
-        knowledge = session.exec(select(Knowledge).where(Knowledge.collection_name == col)).first()
+        if collection_id:
+            knowledge = session.get(Knowledge, collection_id)
+            params['collection_name'] = knowledge.collection_name
+        else:
+            knowledge = session.exec(
+                select(Knowledge).where(Knowledge.collection_name == col)).first()
+
         if not knowledge:
             raise Exception(f'不能找到知识库collection={col}')
         model_param = settings.get_knowledge().get('embeddings').get(knowledge.model)

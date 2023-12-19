@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import requests
 from bisheng.api.utils import access_check
-from bisheng.api.v1.schemas import UploadFileResponse
+from bisheng.api.v1.schemas import ChunkInput, UploadFileResponse
 from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import get_session
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
@@ -495,3 +495,52 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             'extra': {},
         } for t in texts]
     return (raw_texts, metadatas)
+
+
+def text_knowledge(
+        db_knowledge: Knowledge,
+        documents: ChunkInput,
+        session: Session = Depends(get_session),
+):
+    try:
+        embeddings = decide_embeddings(db_knowledge.model)
+        vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
+        es_client = decide_vectorstores(db_knowledge.collection_name, 'ElasticKeywordsSearch',
+                                        embeddings)
+    except Exception as e:
+        logger.exception(e)
+
+    documents_list = documents.documents
+    for document in documents_list:
+        metadata = document.metadata
+        # 存储 mysql
+        db_file = KnowledgeFile(knowledge_id=db_knowledge.id,
+                                file_name=metadata.get('source'),
+                                status=1,
+                                object_name=metadata.get('url'))
+        try:
+            session.add(db_file)
+            session.flush()
+
+            logger.info(
+                f'chunk_split file_name={db_file.file_name} size={len(document.page_content)}')
+            metadata = {
+                'file_id': db_file.id,
+                'knowledge_id': f'{db_knowledge.id}',
+                'bbox': '',
+                'extra': json.dumps(metadata)
+            }
+            vectore_client.add_texts(texts=[document.page_content], metadatas=[metadata])
+
+            # 存储es
+            if es_client:
+                es_client.add_texts(texts=[document.page_content], metadatas=[metadata])
+            db_file.status = 2
+            session.commit()
+
+        except Exception as e:
+            logger.error(e)
+            setattr(db_file, 'status', 3)
+            setattr(db_file, 'remark', str(e)[:500])
+            session.add(db_file)
+            session.commit()
