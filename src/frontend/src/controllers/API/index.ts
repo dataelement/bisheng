@@ -665,3 +665,18 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
     throw error;
   }
 }
+
+/**
+ * 
+ * @param { object } options  - 参数对象
+ * @param { string } options.chatId  - 会话 id
+ * @param { number } options.solved  状态    0 初始值， 1  解决, 2 未解决
+ * @returns 
+ */
+export async function chatResolved(options) {
+  const { chatId, solved = 0 } = options || {}
+  return axios.post('/api/v2/chat/solved', {
+      chat_id:chatId,
+      solved
+  })
+}
