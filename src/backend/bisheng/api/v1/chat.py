@@ -62,6 +62,23 @@ def del_chat_id(*,
     return {'status_code': 200, 'status_message': 'success'}
 
 
+@router.post('/liked', status_code=200)
+def like_response(*,
+                  data: dict,
+                  session: Session = Depends(get_session),
+                  Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    message_id = data.get('message_id')
+    liked = data.get('liked')
+    message = session.get(ChatMessage, message_id)
+    if message and message.user_id == payload.get('user_id'):
+        message.liked = liked
+    session.add(message)
+    session.commit()
+    return {'status_code': 200, 'status_message': 'success'}
+
+
 @router.get('/chat/list', response_model=List[ChatList], status_code=200)
 def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
@@ -130,7 +147,10 @@ async def chat(flow_id: str,
         if not chat_id:
             # 调试时，每次都初始化对象
             chat_manager.set_cache(get_cache_key(flow_id, chat_id), None)
-        await chat_manager.handle_websocket(flow_id, chat_id, websocket, user_id,
+        await chat_manager.handle_websocket(flow_id,
+                                            chat_id,
+                                            websocket,
+                                            user_id,
                                             gragh_data=graph_data)
     except WebSocketException as exc:
         logger.error(exc)
@@ -224,7 +244,7 @@ async def build_status(flow_id: str):
     try:
         flow_data_key = 'flow_data_' + flow_id
         built = (flow_data_store.hget(flow_data_key, 'status') == BuildStatus.SUCCESS.value)
-        return BuiltResponse(built=built,)
+        return BuiltResponse(built=built, )
 
     except Exception as exc:
         logger.error(exc)

@@ -51,7 +51,7 @@ def read_flows(*,
     payload = json.loads(Authorize.get_jwt_subject())
 
     try:
-        sql = select(Flow)
+        sql = select(Flow.id)
         count_sql = select(func.count(Flow.id))
         if 'admin' != payload.get('role'):
             rol_flow_id = session.exec(
@@ -78,6 +78,9 @@ def read_flows(*,
         if page_num and page_size:
             sql = sql.offset((page_num - 1) * page_size).limit(page_size)
         flows = session.exec(sql).all()
+        # get flow data
+        if flows:
+            flows = session.exec(select(Flow).where(Flow.id.in_(flows))).all()
 
         res = [jsonable_encoder(flow) for flow in flows]
         if flows:

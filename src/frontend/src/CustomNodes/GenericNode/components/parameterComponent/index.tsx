@@ -113,6 +113,22 @@ export default function ParameterComponent({
     });
   }, [data, tabId]);
 
+  // 临时处理知识库保存方法, 类似方法多了需要抽象
+  const handleOnNewLibValue = (newValue: string, collectionId: number | '') => {
+    data.node.template[name].value = newValue;
+    data.node.template[name].collection_id = collectionId;
+    // Set state to pending
+    setTabsState((prev) => {
+      return {
+        ...prev,
+        [tabId]: {
+          ...prev[tabId],
+          isPending: true,
+        },
+      };
+    });
+  };
+
   useEffect(() => {
     infoHtml.current = (
       <div className="h-full w-full break-words">
@@ -277,8 +293,10 @@ export default function ParameterComponent({
                 }}
                 nodeClass={data.node}
                 disabled={disabled}
+                id={data.node.template[name].id ?? ""}
                 value={data.node.template[name].value ?? ""}
-                onChange={(val) => { handleOnNewValue(val); name === 'collection_name' && val && handleRemoveMilvusEmbeddingEdge() }}
+                onSelect={(val, id) => { handleOnNewLibValue(val, id); val && handleRemoveMilvusEmbeddingEdge() }}
+                onChange={() => { }}
               />
             ) : (
               // 单行输入
