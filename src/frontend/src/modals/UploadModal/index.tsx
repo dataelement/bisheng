@@ -136,6 +136,7 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
                 }).then(data => {
                     console.log('item.file, end :>> ', item.file, 'end');
                     console.log('filePathsRef.current.length, progressCountRef.current :>> ', filePathsRef.current.length, progressCountRef.current);
+
                     // setFilePaths
                     if (!data) return setProgressList((oldState) => oldState.map(el => {
                         return el.id !== item.id ? el : {

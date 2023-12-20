@@ -1,8 +1,9 @@
+
 """Wrapper around the Milvus vector database."""
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, List, Optional, Tuple, Union
+from typing import Any, Iterable, List, Optional, Tuple, Union, Callable
 from uuid import uuid4
 
 import numpy as np
@@ -502,10 +503,7 @@ class Milvus(MilvusLangchain):
             # Insert into the collection.
             try:
                 res: Collection
-                res = self.col.insert(insert_list,
-                                      partition_name=self._partition_field,
-                                      timeout=timeout,
-                                      **kwargs)
+                res = self.col.insert(insert_list, timeout=timeout, **kwargs)
                 pks.extend(res.primary_keys)
             except MilvusException as e:
                 logger.error('Failed to insert batch starting at entity: %s/%s', i, total_count)
@@ -667,9 +665,9 @@ class Milvus(MilvusLangchain):
         if 'partition_key' in kwargs:
             # add parttion
             if expr:
-                expr = f"{expr} and {self._partition_field}==${kwargs['partition_key']}"
+                expr = f"{expr} and {self._partition_field}==\"{kwargs['partition_key']}\""
             else:
-                expr = f"{self._partition_field}==${kwargs['partition_key']}"
+                expr = f"{self._partition_field}==\"{kwargs['partition_key']}\""
 
         # Perform the search.
         res = self.col.search(
@@ -882,3 +880,12 @@ class Milvus(MilvusLangchain):
         )
         vector_db.add_texts(texts=texts, metadatas=metadatas)
         return vector_db
+    
+    @staticmethod
+    def _relevance_score_fn(distance: float) -> float:
+        """Normalize the distance to a score on a scale [0, 1]."""
+        # Todo: normalize the es score on a scale [0, 1]
+        return 1 - distance
+
+    def _select_relevance_score_fn(self) -> Callable[[float], float]:
+        return self._relevance_score_fn

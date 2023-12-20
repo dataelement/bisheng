@@ -52,6 +52,7 @@ def get_original_file(*, message_id: int, keys: str, session: Session = Depends(
         chunk_res['score'] = round(match_score(chunk.chunk, keywords),
                                    2) if len(keywords) > 0 else 0
         chunk_res['file_id'] = chunk.file_id
+        chunk_res['source'] = file.file_name
 
         result.append(chunk_res)
 

@@ -16,7 +16,7 @@ class AgentFrontendNode(FrontendNode):
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
         if field.name in ['suffix', 'prefix', 'format_instructions', 'input_variables']:
-            field.show = True
+            field.show = False if name == 'ChatglmFunctionsAgent' else True
         if field.name == 'Tools' and name == 'ZeroShotAgent':
             field.field_type = 'BaseTool'
             field.is_list = True

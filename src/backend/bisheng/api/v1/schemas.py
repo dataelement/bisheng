@@ -5,7 +5,13 @@ from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
 from bisheng.database.models.flow import FlowCreate, FlowRead
+from langchain.docstore.document import Document
 from pydantic import BaseModel, Field, validator
+
+
+class ChunkInput(BaseModel):
+    knowledge_id: int
+    documents: List[Document]
 
 
 class BuildStatus(Enum):
@@ -77,6 +83,7 @@ class ChatMessage(BaseModel):
     sender: str = None
     receiver: dict = None
     liked: int = 0
+    extra: str = '{}'
 
 
 class ChatResponse(ChatMessage):

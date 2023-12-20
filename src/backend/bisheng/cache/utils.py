@@ -21,6 +21,7 @@ CACHE_DIR = user_cache_dir('bisheng', 'bisheng')
 
 
 def create_cache_folder(func):
+
     def wrapper(*args, **kwargs):
         # Get the destination folder
         cache_path = Path(CACHE_DIR) / PREFIX
@@ -37,6 +38,7 @@ def memoize_dict(maxsize=128):
     cache = OrderedDict()
 
     def decorator(func):
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             hashed = compute_dict_hash(args[0])
@@ -69,9 +71,9 @@ def clear_old_cache_files(max_cache_size: int = 3):
     cache_files = list(cache_dir.glob('*.dill'))
 
     if len(cache_files) > max_cache_size:
-        cache_files_sorted_by_mtime = sorted(
-            cache_files, key=lambda x: x.stat().st_mtime, reverse=True
-        )
+        cache_files_sorted_by_mtime = sorted(cache_files,
+                                             key=lambda x: x.stat().st_mtime,
+                                             reverse=True)
 
         for cache_file in cache_files_sorted_by_mtime[max_cache_size:]:
             with contextlib.suppress(OSError):
@@ -232,15 +234,12 @@ def file_download(file_path: str):
         r = requests.get(file_path, verify=False)
 
         if r.status_code != 200:
-            raise ValueError(
-                'Check the url of your file; returned status code %s'
-                % r.status_code
-            )
+            raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
         # 检查Content-Disposition头来找出文件名
         content_disposition = r.headers.get('Content-Disposition')
         filename = ''
         if content_disposition:
-            filename = content_disposition.split('filename=')[-1].strip("\"'")
+            filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
         if not filename:
             filename = unquote(urlparse(file_path).path.split('/')[-1])
         file_path = save_download_file(r.content, 'bisheng', filename)

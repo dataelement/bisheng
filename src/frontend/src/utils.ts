@@ -721,6 +721,7 @@ export function updateTemplate(
     ) {
       clonedObject[key].advanced = objectToUpdate[key].advanced;
     }
+
     // file_path的文件类型不覆盖
     if (key === 'file_path') {
       clonedObject[key].fileTypes = objectToUpdate[key].fileTypes

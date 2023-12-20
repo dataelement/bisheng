@@ -92,9 +92,7 @@ async def login(*,
 
 
 @router.get('/user/info', response_model=UserRead, status_code=201)
-async def get_info(
-                session: Session = Depends(get_session),
-                Authorize: AuthJWT = Depends()):
+async def get_info(session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
     # check if user already exist
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
@@ -102,8 +100,7 @@ async def get_info(
         user_id = payload.get('user_id')
         user = session.get(User, user_id)
         # 查询角色
-        db_user_role = session.exec(
-            select(UserRole).where(UserRole.user_id == user_id)).all()
+        db_user_role = session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
         if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
             # 是管理员，忽略其他的角色
             role = 'admin'
@@ -265,7 +262,7 @@ async def user_addrole(*,
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无设置权限')
 
-    db_role = session.exec(select(UserRole).where(UserRole.user_id == userRole.user_id,)).all()
+    db_role = session.exec(select(UserRole).where(UserRole.user_id == userRole.user_id, )).all()
     role_ids = {role.role_id for role in db_role}
     for role_id in userRole.role_id:
         if role_id not in role_ids:
@@ -401,7 +398,8 @@ async def knowledge_list(*,
     user_dict = {user.user_id: user.user_name for user in db_users}
 
     return {
-        'msg': 'success',
+        'msg':
+        'success',
         'data': [{
             'name': access[0].name,
             'user_name': user_dict.get(access[0].user_id),
@@ -409,7 +407,8 @@ async def knowledge_list(*,
             'update_time': access[0].update_time,
             'id': access[0].id
         } for access in db_role_access],
-        'total': total_count
+        'total':
+        total_count
     }
 
 
@@ -425,11 +424,12 @@ async def flow_list(*,
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无查看权限')
 
-    statment = select(Flow, RoleAccess).join(RoleAccess,
-                                             and_(RoleAccess.role_id == role_id,
-                                                  RoleAccess.type == AccessType.FLOW.value,
-                                                  RoleAccess.third_id == Flow.id),
-                                             isouter=True)
+    statment = select(Flow.id, Flow.name, Flow.user_id, Flow.update_time,
+                      RoleAccess).join(RoleAccess,
+                                       and_(RoleAccess.role_id == role_id,
+                                            RoleAccess.type == AccessType.FLOW.value,
+                                            RoleAccess.third_id == Flow.id),
+                                       isouter=True)
     count_sql = select(func.count(Flow.id))
 
     if name:
@@ -444,19 +444,21 @@ async def flow_list(*,
     total_count = session.scalar(count_sql)
 
     # 补充用户名
-    user_ids = [access[0].user_id for access in db_role_access]
+    user_ids = [access[2] for access in db_role_access]
     db_users = session.query(User).filter(User.user_id.in_(user_ids)).all()
     user_dict = {user.user_id: user.user_name for user in db_users}
     return {
-        'msg': 'success',
+        'msg':
+        'success',
         'data': [{
-            'name': access[0].name,
-            'user_name': user_dict.get(access[0].user_id),
-            'user_id': access[0].user_id,
-            'update_time': access[0].update_time,
-            'id': access[0].id
+            'name': access[1],
+            'user_name': user_dict.get(access[2]),
+            'user_id': access[2],
+            'update_time': access[3],
+            'id': access[0]
         } for access in db_role_access],
-        'total': total_count
+        'total':
+        total_count
     }
 
 

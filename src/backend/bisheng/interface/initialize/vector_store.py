@@ -20,7 +20,7 @@ def docs_in_params(params: dict) -> bool:
                                                                and params['texts'])
 
 
-def initialize_mongodb(class_object: Type[MongoDBAtlasVectorSearch], params: dict):
+def initialize_mongodb(class_object: Type[MongoDBAtlasVectorSearch], params: dict, search: dict):
     """Initialize mongodb and return the class object"""
 
     MONGODB_ATLAS_CLUSTER_URI = params.pop('mongodb_atlas_cluster_uri')
@@ -59,7 +59,7 @@ def initialize_mongodb(class_object: Type[MongoDBAtlasVectorSearch], params: dic
     return class_object.from_documents(**params)
 
 
-def initialize_supabase(class_object: Type[SupabaseVectorStore], params: dict):
+def initialize_supabase(class_object: Type[SupabaseVectorStore], params: dict, search: dict):
     """Initialize supabase and return the class object"""
     from supabase.client import Client, create_client
 
@@ -83,7 +83,7 @@ def initialize_supabase(class_object: Type[SupabaseVectorStore], params: dict):
     return class_object.from_documents(client=supabase, **params)
 
 
-def initialize_weaviate(class_object: Type[Weaviate], params: dict):
+def initialize_weaviate(class_object: Type[Weaviate], params: dict, search: dict):
     """Initialize weaviate and return the class object"""
     if not docs_in_params(params):
         import weaviate  # type: ignore
@@ -109,7 +109,7 @@ def initialize_weaviate(class_object: Type[Weaviate], params: dict):
     return class_object.from_documents(**params)
 
 
-def initialize_faiss(class_object: Type[FAISS], params: dict):
+def initialize_faiss(class_object: Type[FAISS], params: dict, search: dict):
     """Initialize faiss and return the class object"""
 
     if not docs_in_params(params):
@@ -122,7 +122,7 @@ def initialize_faiss(class_object: Type[FAISS], params: dict):
     return faiss_index
 
 
-def initialize_pinecone(class_object: Type[Pinecone], params: dict):
+def initialize_pinecone(class_object: Type[Pinecone], params: dict, search: dict):
     """Initialize pinecone and return the class object"""
 
     import pinecone  # type: ignore
@@ -163,7 +163,7 @@ def initialize_pinecone(class_object: Type[Pinecone], params: dict):
     return class_object.from_documents(**params)
 
 
-def initialize_chroma(class_object: Type[Chroma], params: dict):
+def initialize_chroma(class_object: Type[Chroma], params: dict, search: dict):
     """Initialize a ChromaDB object from the params"""
     persist = params.pop('persist', False)
     if not docs_in_params(params):
@@ -186,7 +186,7 @@ def initialize_chroma(class_object: Type[Chroma], params: dict):
     return chromadb
 
 
-def initialize_qdrant(class_object: Type[Qdrant], params: dict):
+def initialize_qdrant(class_object: Type[Qdrant], params: dict, search: dict):
     if not docs_in_params(params):
         if 'location' not in params and 'api_key' not in params:
             raise ValueError('Location and API key must be provided in the params')
@@ -207,7 +207,7 @@ def initialize_qdrant(class_object: Type[Qdrant], params: dict):
     return class_object.from_documents(**params)
 
 
-def initial_milvus(class_object: Type[Milvus], params: dict):
+def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict):
     if not params['connection_args'] and settings.get_knowledge().get('vectorstores').get('Milvus'):
         params['connection_args'] = settings.get_knowledge().get('vectorstores').get('Milvus').get(
             'connection_args')
@@ -217,8 +217,15 @@ def initial_milvus(class_object: Type[Milvus], params: dict):
     if 'embedding' not in params:
         # 匹配知识库的embedding
         col = params['collection_name']
+        collection_id = params.pop('collection_id', '')
         session = next(get_session())
-        knowledge = session.exec(select(Knowledge).where(Knowledge.collection_name == col)).first()
+        if collection_id:
+            knowledge = session.get(Knowledge, collection_id)
+            params['collection_name'] = knowledge.collection_name
+        else:
+            knowledge = session.exec(
+                select(Knowledge).where(Knowledge.collection_name == col)).first()
+
         if not knowledge:
             raise Exception(f'不能找到知识库collection={col}')
         model_param = settings.get_knowledge().get('embeddings').get(knowledge.model)
@@ -227,12 +234,12 @@ def initial_milvus(class_object: Type[Milvus], params: dict):
         else:
             embedding = HostEmbeddings(**model_param)
         params['embedding'] = embedding
-        if knowledge.collection_name.startswith('partiton'):
-            params['partition_key'] = knowledge.id
+        if knowledge.collection_name.startswith('partition'):
+            search_kwargs.update({'partition_key': knowledge.id})
     return class_object.from_documents(**params)
 
 
-def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict):
+def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, search: dict):
     if not params['elasticsearch_url'] and settings.get_knowledge().get('vectorstores').get(
             'ElasticKeywordsSearch'):
         params['elasticsearch_url'] = settings.get_knowledge().get('vectorstores').get(
@@ -245,6 +252,12 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict):
     elif isinstance(params.get('ssl_verify'), str):
         params['ssl_verify'] = eval(params['ssl_verify'])
 
+    collection_id = params.pop('collection_id', '')
+    session = next(get_session())
+    if collection_id:
+        knowledge = session.get(Knowledge, collection_id)
+        index_name = knowledge.index_name or knowledge.collection_name
+        params['index_name'] = index_name
     params['embedding'] = ''
     return class_object.from_documents(**params)
 

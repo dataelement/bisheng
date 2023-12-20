@@ -113,7 +113,7 @@ export default function ParameterComponent({
     });
   }, [data, tabId]);
 
-  // 临时处理知识库保存方法
+  // 临时处理知识库保存方法, 类似方法多了需要抽象
   const handleOnNewLibValue = (newValue: string, collectionId: number | '') => {
     data.node.template[name].value = newValue;
     data.node.template[name].collection_id = collectionId;

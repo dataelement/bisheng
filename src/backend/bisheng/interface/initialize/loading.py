@@ -285,7 +285,7 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_di
         params['get_chat_history'] = str
         params['combine_docs_chain_kwargs'] = {
             'prompt': params.pop('combine_docs_chain_kwargs', None),
-            'source_document': params.pop('source_document', None)
+            'document_prompt': params.pop('document_prompt', None)
         }
         params['combine_docs_chain_kwargs'] = {
             k: v
@@ -440,13 +440,14 @@ def instantiate_embedding(class_object, params: Dict):
 
 
 def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
-    search_kwargs = params.pop('search_kwargs', {})
     user_name = params.pop('user_name', '')
+    search_kwargs = params.pop('search_kwargs', {})
+    search_type = params.pop('search_type', {})
     if 'documents' not in params:
         params['documents'] = []
 
     if initializer := vecstore_initializer.get(class_object.__name__):
-        vecstore = initializer(class_object, params)
+        vecstore = initializer(class_object, params, search_kwargs)
     else:
         if 'texts' in params:
             params['documents'] = params.pop('texts')
@@ -458,10 +459,11 @@ def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
             # need to verify file access
             access_url = settings.get_from_db('file_access') + f'?username={user_name}'
             vecstore = VectorStoreFilterRetriever(vectorstore=vecstore,
+                                                  search_type=search_type,
                                                   search_kwargs=search_kwargs,
                                                   access_url=access_url)
         else:
-            vecstore = vecstore.as_retriever(search_kwargs=search_kwargs)
+            vecstore = vecstore.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
 
     return vecstore
 

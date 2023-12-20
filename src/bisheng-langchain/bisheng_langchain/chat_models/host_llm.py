@@ -185,10 +185,12 @@ class BaseHostChatLLM(BaseChatModel):
                 'do_sample': do_sample
             }
 
+            # print('messages:', messages)
             if self.verbose:
                 print('payload', params)
             url = f'{self.host_base_url}/{self.model_name}/infer'
             resp = self.client(url=url, json=params).json()
+            # print('resp:', resp)
 
             if not resp.get('choices', []):
                 logger.info(resp)
