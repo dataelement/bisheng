@@ -111,7 +111,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                         <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
                             {
                                 _file.fileUrl && <div className="tooltip" data-tip={t('chat.downloadPDFTooltip')}>
-                                    <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.fileUrl), _file.fileName); event.stopPropagation() }} >
+                                    <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
                                         <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                     </a>
                                 </div>

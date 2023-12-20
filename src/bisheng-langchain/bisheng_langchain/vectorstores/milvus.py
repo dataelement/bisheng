@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, List, Optional, Tuple, Union
+from typing import Any, Iterable, List, Optional, Tuple, Union, Callable
 from uuid import uuid4
 
 import numpy as np
@@ -880,3 +880,12 @@ class Milvus(MilvusLangchain):
         )
         vector_db.add_texts(texts=texts, metadatas=metadatas)
         return vector_db
+    
+    @staticmethod
+    def _relevance_score_fn(distance: float) -> float:
+        """Normalize the distance to a score on a scale [0, 1]."""
+        # Todo: normalize the es score on a scale [0, 1]
+        return 1 - distance
+
+    def _select_relevance_score_fn(self) -> Callable[[float], float]:
+        return self._relevance_score_fn

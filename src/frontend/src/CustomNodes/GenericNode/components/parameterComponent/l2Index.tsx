@@ -87,7 +87,7 @@ export default function L2ParameterComponent({
                         }}
                         nodeClass={data.node}
                         disabled={disabled}
-                        id={data.node.template[name].id ?? ""}
+                        id={data.node.template[name].collection_id ?? ""}
                         value={data.node.template[name].value ?? ""}
                         onSelect={handleOnNewLibValue}
                         onChange={() => {}}

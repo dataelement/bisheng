@@ -12,6 +12,7 @@ class MessageBase(SQLModelSerializable):
     is_bot: bool = Field(index=False, description='聊天角色')
     source: Optional[int] = Field(index=False, description='是否支持溯源')
     message: Optional[str] = Field(index=False, sa_column=Column(Text), description='聊天消息')
+    extra: Optional[str] = Field(sa_column=Column(String(length=4096)), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
     category: str = Field(index=False, description='消息类别， question等')
     flow_id: UUID = Field(index=True, description='对应的技能id')

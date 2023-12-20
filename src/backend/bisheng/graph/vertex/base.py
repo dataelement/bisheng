@@ -120,7 +120,7 @@ class Vertex:
         for key, value in template_dict.items():
             if key == '_type' or (not value.get('show') and not value.get('value')):
                 continue
-            if 'collection_id' in value:
+            if value.get('collection_id'):
                 params['collection_id'] = value.get('collection_id')
             # If the type is not transformable to a python base class
             # then we need to get the edge that connects to this node
