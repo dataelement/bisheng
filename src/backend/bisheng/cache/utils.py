@@ -17,6 +17,7 @@ CACHE_DIR = user_cache_dir('bisheng', 'bisheng')
 
 
 def create_cache_folder(func):
+
     def wrapper(*args, **kwargs):
         # Get the destination folder
         cache_path = Path(CACHE_DIR) / PREFIX
@@ -33,6 +34,7 @@ def memoize_dict(maxsize=128):
     cache = OrderedDict()
 
     def decorator(func):
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             hashed = compute_dict_hash(args[0])
@@ -65,9 +67,9 @@ def clear_old_cache_files(max_cache_size: int = 3):
     cache_files = list(cache_dir.glob('*.dill'))
 
     if len(cache_files) > max_cache_size:
-        cache_files_sorted_by_mtime = sorted(
-            cache_files, key=lambda x: x.stat().st_mtime, reverse=True
-        )
+        cache_files_sorted_by_mtime = sorted(cache_files,
+                                             key=lambda x: x.stat().st_mtime,
+                                             reverse=True)
 
         for cache_file in cache_files_sorted_by_mtime[max_cache_size:]:
             with contextlib.suppress(OSError):
