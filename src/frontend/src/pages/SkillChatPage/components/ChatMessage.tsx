@@ -29,6 +29,19 @@ const colorList = [
     "#95A5A6"
 ]
 
+const enum SourceType {
+    /** 无溯源 */
+    NONE = 0,
+    /** 文件 */
+    FILE = 1,
+    /** 无权限 */
+    NO_PERMISSION = 2,
+    /** 链接s */
+    LINK = 3,
+    /** 已命中的QA */
+    HAS_QA = 4,
+}
+
 export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageType, userName: string, onSource: () => void }) => {
     // const { user } = useContext(userContext);
     // console.log('chat :>> ', chat);
@@ -140,25 +153,42 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
         url && downloadFile(checkSassUrl(url), file?.file_name)
     }
 
-    const source = <div className="chat-footer py-1">
-        {chat.source === 2 && <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>{t('chat.noAccess')}</p>}
-        <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>本答案来源于已有问答库: 板蓝根是什么性状</p>
-        {/* <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent text-xs relative" onClick={onSource}>{t('chat.source')}</button> */}
-        <div className="mt-6 flex flex-col items-start gap-0">
-            <Button variant="link" size="sm" className="text-blue-500 h-6 p-0">
-                <span className=" truncate max-w-[400px]">百度文章</span>
-            </Button>
-            <Button variant="link" size="sm" className="text-blue-500 h-6 p-0">
-                <span className=" truncate max-w-[400px]">百度文章百度文章</span>
-            </Button>
-            <Button variant="link" size="sm" className="text-blue-500 h-6 p-0">
-                <span className=" truncate max-w-[400px]">百度文章百度文章百度文章</span>
-            </Button>
-            <Button variant="link" size="sm" className="text-blue-500 h-6 p-0">
-                <span className=" truncate max-w-[400px]">百度文章百度文章百度文章百度文章百度文章百度文章百度文章百度文章</span>
-            </Button>
-        </div>
-    </div>
+    const sourceContent = (source: SourceType) => {
+        const extra = chat.extra ? JSON.parse(chat.extra) : null
+        const renderContent = () => {
+            switch (source) {
+                case SourceType.FILE:
+                    return (
+                        <button className="btn btn-outline btn-info btn-xs text-[rgba(53,126,249,.85)] hover:bg-transparent text-xs relative" onClick={onSource}>
+                            {t('chat.source')}
+                        </button>
+                    );
+                case SourceType.NO_PERMISSION:
+                    return (
+                        <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>{t('chat.noAccess')}</p>
+                    );
+                case SourceType.LINK:
+                    return <div className="mt-6 flex flex-col items-start gap-0">
+                        {
+                            extra.doc?.map(el =>
+                                <Button variant="link" size="sm" className="text-blue-500 h-6 p-0">
+                                    <a href={el.url} target="_blank" className="truncate max-w-[400px]">{el.title}</a>
+                                </Button>)
+                        }
+                    </div>;
+                case SourceType.HAS_QA:
+                    return <p className="flex items-center text-gray-400 pb-2">本答案来源于已有问答库:{extra.qa}</p>;
+                default:
+                    return null;
+            }
+        };
+
+        return (
+            <div className="chat-footer py-1">
+                {renderContent()}
+            </div>
+        );
+    };
 
     // 日志分析
     if (chat.thought) return <>
@@ -167,7 +197,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
             {chat.category === 'report' && <Copy size={20} className=" absolute right-4 top-2 cursor-pointer" onClick={(e) => handleCopy(e.target.parentNode)}></Copy>}
         </div>
         {!chat.end && <span className="loading loading-ring loading-md"></span>}
-        {chat.source !== 0 && chat.end && source}
+        {chat.source !== SourceType.NONE && chat.end && sourceContent(chat.source)}
     </>
 
     if (chat.category === 'divider') {
@@ -223,20 +253,20 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
             <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center" style={{ background: avatarColor }}><Bot color="#fff" size={28} /></div>
         </div>
         {chat.sender && <div className="chat-header text-gray-400 text-sm">{chat.sender}</div>}
-        <div ref={textRef} className={`chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8 relative ${chat.id && chat.source === 0 && 'mb-8'}`}>
+        <div ref={textRef} className={`chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8 relative ${chat.id && chat.source === SourceType.NONE && 'mb-8'}`}>
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {/* @user */}
             {chat.receiver && <p className="text-blue-500 text-sm">@ {chat.receiver.user_name}</p>}
             {/* 光标 */}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
             {/* 赞 踩 */}
-            {chat.id !== 0 && chat.end && <Thumbs
+            {!!chat.id && chat.end && <Thumbs
                 id={chat.id}
                 data={chat.liked}
                 onCopy={handleCopy}
-                className={`absolute w-full left-0 bottom-[-28px] justify-end min-w-[240px] ${chat.source === 2 && 'bottom-[-54px]'}`
+                className={`absolute w-full left-0 bottom-[-28px] justify-end min-w-[240px] ${chat.source === SourceType.NO_PERMISSION && 'bottom-[-54px]'}`
                 }></Thumbs>}
         </div>
-        {chat.source !== 0 && chat.end && source}
+        {chat.source !== SourceType.NONE && chat.end && sourceContent(chat.source)}
     </div>
 };

@@ -245,7 +245,7 @@
         "clickOrDragHere": "Click or drag a file here to upload",
         "dropFileHere": "Drop file here to upload",
         "delimiter": "Delimiter (multiple with ;)",
-        "splitLength": "Split Text Length",
+        "splitLength": "Chunk Size",
         "smartSplit": "Smart Semantic Split",
         "manualSplit": "Manually Set Split",
         "delimiterPlaceholder": "Delimiter symbol",
