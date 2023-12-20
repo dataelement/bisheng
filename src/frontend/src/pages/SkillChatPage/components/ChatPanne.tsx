@@ -166,7 +166,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
     return <div className="h-screen overflow-hidden relative">
         <div className="absolute px-2 py-2 bg-[#fff] z-10 dark:bg-gray-950 text-sm text-gray-400 font-bold">{flow.name}</div>
         <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
-            <div ref={messagesRef} className={`chat-panne h-full overflow-y-scroll no-scrollbar px-4 ${isRoom || isReport ? 'pb-40' : 'pb-20'}`}>
+            <div ref={messagesRef} className={`chat-panne h-full overflow-y-scroll no-scrollbar px-4 pb-36`}>
                 {
                     messages.map((c, i) => <ChatMessage key={c.id || i} userName={sendUserName} chat={c} onSource={() => setSouce(c)}></ChatMessage>)
                 }

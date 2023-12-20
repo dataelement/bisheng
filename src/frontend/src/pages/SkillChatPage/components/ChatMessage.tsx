@@ -177,7 +177,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
                         }
                     </div>;
                 case SourceType.HAS_QA:
-                    return <p className="flex items-center text-gray-400 pb-2">本答案来源于已有问答库:{extra.qa}</p>;
+                    return <p className="flex items-center text-gray-400 pb-2">{extra.qa}</p>;
                 default:
                     return null;
             }
