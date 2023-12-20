@@ -252,6 +252,12 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, sea
     elif isinstance(params.get('ssl_verify'), str):
         params['ssl_verify'] = eval(params['ssl_verify'])
 
+    collection_id = params.pop('collection_id', '')
+    session = next(get_session())
+    if collection_id:
+        knowledge = session.get(Knowledge, collection_id)
+        index_name = knowledge.index_name or knowledge.collection_name
+        params['index_name'] = index_name
     params['embedding'] = ''
     return class_object.from_documents(**params)
 

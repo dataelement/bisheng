@@ -83,6 +83,7 @@ class ChatMessage(BaseModel):
     sender: str = None
     receiver: dict = None
     liked: int = 0
+    extra: str = '{}'
 
 
 class ChatResponse(ChatMessage):

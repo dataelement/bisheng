@@ -155,8 +155,28 @@ class Handler:
         # history = self.chat_history.get_history(client_id, chat_id, filter_messages=False)
         await self.intermediate_logs(session, client_id, chat_id, user_id, intermediate_steps)
         source = 0
-        if source_doucment and chat_id:
-            source = 2 if any(not doc.metadata.get('right', True) for doc in source_doucment) else 1
+        extra = {}
+        if isinstance(result, Document):
+            # 返回的是Document
+            metadata = result.metadata
+            question = result.page_content
+            result = eval(metadata.get('extra', '{}')).get('answer')
+            source = 4
+            extra = {'qa': f'本答案来源于已有问答库: {question}'}
+        elif source_doucment and chat_id:
+            if any(not doc.metadata.get('right', True) for doc in source_doucment):
+                source = 2
+            elif all(
+                    doc.metadata.get('extra') and eval(doc.metadata.get('extra')).get('url')
+                    for doc in source_doucment):
+                source = 3
+                doc = [{
+                    'title': doc.metadata.get('source'),
+                    'url': eval(doc.metadata.get('extra', '{}')).get('url')
+                } for doc in source_doucment]
+                extra = {'doc': [dict(s) for s in set(frozenset(d.items()) for d in doc)]}
+            else:
+                source = 1
 
         if source:
             for doc in source_doucment:
@@ -176,6 +196,7 @@ class Handler:
                 start_resp.category = 'answer'
                 await session.send_json(client_id, chat_id, start_resp)
                 response = ChatResponse(message=result,
+                                        extra=json.dumps(extra),
                                         type='end',
                                         category='answer',
                                         user_id=user_id,

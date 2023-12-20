@@ -442,6 +442,7 @@ def instantiate_embedding(class_object, params: Dict):
 def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
     user_name = params.pop('user_name', '')
     search_kwargs = params.pop('search_kwargs', {})
+    search_type = params.pop('search_type', {})
     if 'documents' not in params:
         params['documents'] = []
 
@@ -458,10 +459,11 @@ def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
             # need to verify file access
             access_url = settings.get_from_db('file_access') + f'?username={user_name}'
             vecstore = VectorStoreFilterRetriever(vectorstore=vecstore,
+                                                  search_type=search_type,
                                                   search_kwargs=search_kwargs,
                                                   access_url=access_url)
         else:
-            vecstore = vecstore.as_retriever(search_kwargs=search_kwargs)
+            vecstore = vecstore.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
 
     return vecstore
 
