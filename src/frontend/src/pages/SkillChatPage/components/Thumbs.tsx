@@ -32,12 +32,12 @@ export default function Thumbs({ id, className, onCopy, data }) {
     }
 
     return <div className={classNames('flex gap-2', className)}>
-        {/* {copied ? <ClipboardCheck size={18} className="text-blue-400"></ClipboardCheck> :
+        {copied ? <ClipboardCheck size={18} className="text-blue-400"></ClipboardCheck> :
             <Clipboard
                 size={18}
                 className={`cursor-pointer hover:text-blue-400 text-gray-300`}
                 onClick={handleCopy} />
-        } */}
+        }
         <ThumbsUp
             size={18}
             className={`cursor-pointer hover:text-blue-400 ${state === ThumbsState.ThumbsUp ? 'text-blue-400' : 'text-gray-300'}`}
