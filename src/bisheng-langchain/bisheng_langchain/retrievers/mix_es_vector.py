@@ -49,7 +49,7 @@ class MixEsVectorRetriever(BaseRetriever):
         elif self.combine_strategy == 'vector_front':
             return vector_docs + keyword_docs
         elif self.combine_strategy == 'mix':
-            combine_docs = set()
+            combine_docs = []
             min_len = min(len(keyword_docs), len(vector_docs))
             for i in range(min_len):
                 combine_docs.append(keyword_docs[i])
@@ -88,7 +88,7 @@ class MixEsVectorRetriever(BaseRetriever):
         elif self.combine_strategy == 'vector_front':
             return vector_docs + keyword_docs
         elif self.combine_strategy == 'mix':
-            combine_docs = set()
+            combine_docs = []
             min_len = min(len(keyword_docs), len(vector_docs))
             for i in range(min_len):
                 combine_docs.append(keyword_docs[i])
