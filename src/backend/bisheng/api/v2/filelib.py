@@ -142,7 +142,7 @@ def delete_knowledge(
 @router.post('/file/{knowledge_id}', status_code=200)
 async def upload_file(*,
                       knowledge_id: int,
-                      callback_url: str = Form(...),
+                      callback_url: Optional[str] = Form(None),
                       file: UploadFile = File(...),
                       background_tasks: BackgroundTasks,
                       session: Session = Depends(get_session)):

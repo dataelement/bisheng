@@ -574,7 +574,7 @@ def text_knowledge(
     except Exception as e:
         logger.exception(e)
 
-    separator = ['\n\n', '\n', ' ', '']
+    separator = '\n\n'
     chunk_size = 500
     chunk_overlap = 50
 
