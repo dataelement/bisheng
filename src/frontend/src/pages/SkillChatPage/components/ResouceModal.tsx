@@ -118,7 +118,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                             }
                             {
                                 _file.originUrl && <div className="tooltip tooltip-left" data-tip={t('chat.downloadOriginalTooltip')}>
-                                    <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.originUrl), _file.fileName.replace(/\.[\w\d]+$/, '') + _file.originUrl.match(/(\.\w+)\?/)?.[1]); event.stopPropagation() }} >
+                                    <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.originUrl), _file.fileName); event.stopPropagation() }} >
                                         <Download color="rgba(53,126,249,1)" size={20} strokeWidth={1.5}></Download>
                                     </a>
                                 </div>

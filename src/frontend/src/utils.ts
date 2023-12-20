@@ -722,11 +722,6 @@ export function updateTemplate(
       clonedObject[key].advanced = objectToUpdate[key].advanced;
     }
 
-    // L2 信息不覆盖
-    if (objectToUpdate[key]?.l2) {
-      clonedObject[key].l2 = objectToUpdate[key].l2
-      clonedObject[key].l2_name = objectToUpdate[key].l2_name
-    }
     // file_path的文件类型不覆盖
     if (key === 'file_path') {
       clonedObject[key].fileTypes = objectToUpdate[key].fileTypes
@@ -739,7 +734,12 @@ export function updateTemplate(
     if (clonedObject[key]?.show) {
       clonedObject[key].show = objectToUpdate[key]?.show
     }
-    if (clonedObject[key]?.collection_id) {
+    // L2 覆盖
+    if (objectToUpdate[key]?.l2) {
+      clonedObject[key].l2 = objectToUpdate[key].l2
+      clonedObject[key].l2_name = objectToUpdate[key].l2_name
+    }
+    if (objectToUpdate[key]?.collection_id) {
       clonedObject[key].collection_id = objectToUpdate[key]?.collection_id
     }
   }
