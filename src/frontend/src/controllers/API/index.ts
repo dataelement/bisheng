@@ -13,7 +13,7 @@ import {
 
 
 axios.interceptors.response.use(function (response) {
-  if (response.data.status_code) {
+  if (response.data.status_code && response.data.status_code!==200) {
     return Promise.reject({
       response: {
         data: { detail: response.data.status_message }

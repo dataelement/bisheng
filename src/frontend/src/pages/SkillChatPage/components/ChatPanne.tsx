@@ -162,7 +162,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
     // 溯源
     const [souce, setSouce] = useState<ChatMessageType>(null)
 
-    const helpful=useHelpful(messages,chatId,chating,onReload)
+    const helpful=useHelpful(messages,chatId,chating,inputState,onReload,setInputState)
     return <div className="h-screen overflow-hidden relative">
         <div className="absolute px-2 py-2 bg-[#fff] z-10 dark:bg-gray-950 text-sm text-gray-400 font-bold">{flow.name}</div>
         <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
@@ -761,24 +761,39 @@ const useBuild = (flow: FlowType, chatId: string) => {
 
 
 // 有帮助 没有帮助
-const useHelpful=(messages,chatId,chating,onReload)=>{
-    const {helpful,noHelpful} = useMemo(()=>{
+const useHelpful=(messages,chatId,chating,inputState,onReload,setInputState)=>{
+    const { setErrorData, setSuccessData } = useContext(alertContext);
+    const { t } = useTranslation()
+    
+    const {helpful,helpless} = useMemo(()=>{
         const handle=async(solved)=>{
            
             try {
+                setInputState({
+                    lock:true,
+                    errorCode:""
+                })
                 await chatResolved({chatId,solved})
-                await onReload()
-
+                setSuccessData({title: t('chat.resoledSuccess')})
+                 onReload()
             } catch (error) {
                 console.error("Error:", error);
+                setErrorData({
+                    title:error.message
+                })
+            }finally{
+                setInputState({
+                    lock:false,
+                    errorCode:""
+                })
             }
           
         }
         return {
             helpful:()=>handle(1),
-            noHelpful:()=>handle(2),
+            helpless:()=>handle(2),
         }
-    },[chatId,onReload])
+    },[chatId,onReload,t,setInputState])
 
     const show = useMemo(()=>{
         /* 
@@ -799,17 +814,19 @@ const useHelpful=(messages,chatId,chating,onReload)=>{
                 <Button 
                 className="rounded-full"
                 variant="outline" 
+                disabled={inputState?.lock}
                 onClick={helpful}>
                     <StopCircle className="mr-2" />
-                    有帮助
+                    {t('chat.helpful')}
                 </Button>
 
                 <Button 
                 className="rounded-full" 
                 variant="outline" 
-                onClick={noHelpful}>
+                disabled={inputState?.lock}
+                onClick={helpless}>
                     <StopCircle className="mr-2" />
-                    没帮助
+                    {t('chat.helpless')}
                 </Button>
             </div>
 }
