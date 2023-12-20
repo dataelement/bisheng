@@ -10,13 +10,13 @@ export default function CollectionNameComponent({
     onChange,
     onSelect,
     disabled,
-}: TextAreaComponentType & { onSelect: (name: string, id: any) => void }) {
+}: TextAreaComponentType & { onSelect: (name: string, collectionId: any) => void }) {
     const [myValue, setMyValue] = useState(value);
-    const [collectionId, setCollectionId] = useState<number | ''>("")
+    // const [collectionId, setCollectionId] = useState<number | ''>("")
     useEffect(() => {
         setMyValue(value);
-        setCollectionId(id)
-    }, [id, value]);
+        // setCollectionId(id)
+    }, [value]);
 
     const { openPopUp, closePopUp } = useContext(PopUpContext);
     useEffect(() => {
@@ -39,7 +39,7 @@ export default function CollectionNameComponent({
                     <dialog className={`modal bg-blur-shared modal-open`}>
                         <form method="dialog" className="max-w-[400px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={e => e.stopPropagation()}>
                             <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={closePopUp}>✕</button>
-                            <SelectCollection collectionId={collectionId} onChange={handleChange}></SelectCollection>
+                            <SelectCollection collectionId={id} onChange={handleChange}></SelectCollection>
                         </form>
                     </dialog>
                 )
