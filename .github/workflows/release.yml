@@ -3,11 +3,11 @@ name: release
 on:
   push:
     # Sequence of patterns matched against refs/tags
-    branches:
-      - "release"
+    tags:
+      - "v*"
 
 env:
-  DOCKERHUB_REPO: dataelement/
+  DOCKERHUB_REPO: project/
   PY_NEXUS: 110.16.193.170:50083
   DOCKER_NEXUS: 110.16.193.170:50080
 
@@ -34,16 +34,7 @@ jobs:
         with:
           python-version: 3.8
 
-      - name: Build PyPi bisheng-langchain and push
-        id: pypi_build_bisheng_langchain
-        run: |
-          pip install Cython
-          pip install wheel
-          pip install twine
-          cd ./src/bisheng-langchain
-          python setup.py bdist_wheel
-          repo="http://${{ env.PY_NEXUS }}/repository/pypi-hosted/"
-          twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl
+      
 
       # 发布到 私有仓库
       - name: set insecure registry
@@ -51,9 +42,7 @@ jobs:
           echo "{ \"insecure-registries\": [\"http://${{ env.DOCKER_NEXUS }}\"] }" | sudo tee /etc/docker/daemon.json
           sudo service docker restart
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
-
+    
       - name: Login Nexus Container Registry
         uses: docker/login-action@v2
         with:
@@ -107,16 +96,4 @@ jobs:
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
             ${{ env.DOCKER_NEXUS }}/${{ env.DOCKERHUB_REPO }}bisheng-frontend:release
-      # deploy
-      - name: notify feishu
-        uses: fjogeleit/http-request-action@v1
-        with:
-          url: ' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b'
-          method: 'POST'
-          data: '{"msg_type":"text","content":{"text":"release 编译成功, 准备部署"}}'
-
-      - name: Deploy Stage
-        uses: fjogeleit/http-request-action@v1
-        with:
-          url: 'http://110.16.193.170:50055/cgi-bin/delpoy.py'
-          method: 'GET'
+      
