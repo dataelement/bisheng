@@ -442,7 +442,7 @@ def instantiate_embedding(class_object, params: Dict):
 def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
     user_name = params.pop('user_name', '')
     search_kwargs = params.pop('search_kwargs', {})
-    search_type = params.pop('search_type', {})
+    search_type = params.pop('search_type', 'similarity')
     if 'documents' not in params:
         params['documents'] = []
 

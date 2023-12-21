@@ -17,7 +17,8 @@ class ThreadPoolManager:
                 future = self.executor.submit(self.run_in_event_loop, fn, *args, **kwargs)
             else:
                 future = self.executor.submit(fn, *args, **kwargs)
-                self.futures.append(future)
+
+            self.futures.append(future)
             return future
 
     def run_in_event_loop(self, coro, *args, **kwargs):
