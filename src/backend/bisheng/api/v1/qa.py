@@ -4,7 +4,7 @@ from typing import List
 from bisheng.database.base import get_session
 from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.recall_chunk import RecallChunk
-from bisheng.utils import minio_client
+from bisheng.utils.minio_client import MinioClient
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 
@@ -39,6 +39,7 @@ def get_original_file(*, message_id: int, keys: str, session: Session = Depends(
     # keywords
     keywords = keys.split(';') if keys else []
     result = []
+    minio_client = MinioClient()
     for index, chunk in enumerate(chunks):
         file = id2file.get(chunk.file_id)
         chunk_res = json.loads(json.loads(chunk.meta_data).get('bbox'))

@@ -2,10 +2,12 @@ from typing import Dict, List, Optional, Type
 
 from bisheng.custom.customs import get_custom_nodes
 from bisheng.interface.base import LangChainTypeCreator
-from bisheng.interface.inputoutput.custom import CUSTOM_INPUTOUTPUT
+from bisheng.interface.importing.utils import import_class
 from bisheng.template.frontend_node.base import FrontendNode
+from bisheng.template.frontend_node.input_output import InputOutputNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class
+from bisheng_langchain import input_output
 
 
 class IOutputCreator(LangChainTypeCreator):
@@ -13,15 +15,18 @@ class IOutputCreator(LangChainTypeCreator):
 
     @property
     def frontend_node_class(self) -> Type[FrontendNode]:
-        return FrontendNode
+        return InputOutputNode
 
     @property
     def type_to_loader_dict(self) -> Dict:
         if self.type_dict is None:
             self.type_dict = {}
-            for name, agent in CUSTOM_INPUTOUTPUT.items():
-                # TODO: validate AgentType
-                self.type_dict[name] = agent  # type: ignore
+            # bisheng-langchain
+            bisheng = {
+                node_name: import_class(f'bisheng_langchain.input_output.{node_name}')
+                for node_name in input_output.__all__
+            }
+            self.type_dict.update(bisheng)
         return self.type_dict
 
     def get_signature(self, name: str) -> Optional[Dict]:

@@ -1,36 +1,28 @@
-import json
 from typing import List
 
-import requests
-from bisheng.utils.logger import logger
+from bisheng.settings import settings
 from langchain.embeddings.base import Embeddings
+from langchain.embeddings.openai import OpenAIEmbeddings
 
 
 class OpenAIProxyEmbedding(Embeddings):
+
+    def __init__(self) -> None:
+        param = settings.get_knowledge().get('embeddings').get('text-embedding-ada-002')
+        self.embd = OpenAIEmbeddings(**param)
+        super().__init__()
 
     @classmethod
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         if not texts:
             return []
         """Embed search docs."""
-        texts = [text for text in texts if text]
-        data = {'texts': texts}
-<<<<<<< HEAD
-        resp = requests.post('http://43.133.35.137:8080/chunks_embed', json=data)
-=======
-
-        resp = self.request.post(url='http://43.133.35.137:8080/chunks_embed', json=data)
->>>>>>> upstream/feat/0.2.1
-        logger.info(f'texts={texts}')
-        return json.loads(resp.text).get('data')
+        return self.embd.embed_documents(texts)
 
     @classmethod
     def embed_query(self, text: str) -> List[float]:
         """Embed query text."""
-        data = {'query': [text]}
-        resp = requests.post('http://43.133.35.137:8080/query_embed', json=data)
-        logger.info(f'texts={data}')
-        return json.loads(resp.text).get('data')[0]
+        return self.embed_query(text)
 
 
 CUSTOM_EMBEDDING = {

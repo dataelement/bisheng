@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 import requests
-from bisheng.database.base import db_service, get_session, session_getter
+from bisheng.database.base import get_session
 from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployQuery, ModelDeployRead,
                                                   ModelDeployUpdate)
 from bisheng.database.models.server import Server, ServerCreate, ServerRead
@@ -176,7 +176,8 @@ async def get_gpu(*, session=Depends(get_session)):
         resp = []
         for service in db_service:
             ip = service.endpoint.split(':')[0]
-            url = f'http://{ip}:9002/metrics'
+            port = int(service.endpoint.split(':')[1]) + 1
+            url = f'http://{ip}:{port}/metrics'
             gpu = await queryGPU(url)
             if gpu:
                 [g.update({'server': service.server}) for g in gpu]
@@ -196,14 +197,14 @@ def load_model(url: str, data: str, deploy_id: int):
         logger.info(f'load_model={url} result=success')
     else:
         logger.error(f'load_model=fail code={response.status_code}, return={response.text}')
-        with session_getter(db_service) as session:
-            db_deploy = session.get(ModelDeploy, deploy_id)
-            db_deploy.status = '异常'
-            reason = json.loads(response.text).get('error')
-            db_deploy.remark = error_translate(reason)
-            session.add(db_deploy)
-            session.commit()
-            session.refresh(db_deploy)
+        session = next(get_session())
+        db_deploy = session.get(ModelDeploy, deploy_id)
+        db_deploy.status = '异常'
+        reason = json.loads(response.text).get('error')
+        db_deploy.remark = error_translate(reason)
+        session.add(db_deploy)
+        session.commit()
+        session.refresh(db_deploy)
 
 
 pattern = r'gpu_uuid="([^"]+)"'
@@ -269,43 +270,43 @@ async def update_model(endpoint: str, server_id: int):
         logger.error(f'{str(e)}')
         return []
 
-    with session_getter(db_service) as session:
-        db_deploy = session.exec(select(ModelDeploy).where(ModelDeploy.server == str(server_id))).all()
-        model_dict = {deploy.model: deploy for deploy in db_deploy}
-        model_delete = {model.id for key, model in model_dict.items()}
-        for model in models:
-            model_name = model['name']
-            status = model.get('state')
-            reason = model.get('reason')
-            if model_name in model_dict:
-                db_model = model_dict.get(model_name)
-                # 依然存在
-                model_delete.remove(db_model.id)
-            else:
-                db_model = ModelDeploy(server=str(server_id),
-                                       endpoint=f'http://{endpoint}/v2.1/models',
-                                       model=model_name)
-            # 当前是上下线中，需要判断
-            if status == 'READY':
-                db_model.status = '已上线'
-            if status == 'UNAVAILABLE':
-                if reason == 'unloaded':
-                    db_model.status = '未上线'
-                elif reason != 'unloaded':
-                    db_model.status = '异常'
-                    db_model.remark = error_translate(reason)
-            if not db_model.status or not status:
+    session = next(get_session())
+    db_deploy = session.exec(select(ModelDeploy).where(ModelDeploy.server == str(server_id))).all()
+    model_dict = {deploy.model: deploy for deploy in db_deploy}
+    model_delete = {model.id for key, model in model_dict.items()}
+    for model in models:
+        model_name = model['name']
+        status = model.get('state')
+        reason = model.get('reason')
+        if model_name in model_dict:
+            db_model = model_dict.get(model_name)
+            # 依然存在
+            model_delete.remove(db_model.id)
+        else:
+            db_model = ModelDeploy(server=str(server_id),
+                                   endpoint=f'http://{endpoint}/v2.1/models',
+                                   model=model_name)
+        # 当前是上下线中，需要判断
+        if status == 'READY':
+            db_model.status = '已上线'
+        if status == 'UNAVAILABLE':
+            if reason == 'unloaded':
                 db_model.status = '未上线'
+            elif reason != 'unloaded':
+                db_model.status = '异常'
+                db_model.remark = error_translate(reason)
+        if not db_model.status or not status:
+            db_model.status = '未上线'
 
-            if not db_model.config:
-                # 初始化config
-                config_url = f'http://{endpoint}/v2/repository/models/{model_name}/config'
-                resp = requests.post(config_url)
-                db_model.config = resp.text
-            session.add(db_model)
-        if model_delete:
-            session.exec(delete(ModelDeploy).where(ModelDeploy.id.in_(model_delete)))
-        session.commit()
+        if not db_model.config:
+            # 初始化config
+            config_url = f'http://{endpoint}/v2/repository/models/{model_name}/config'
+            resp = requests.post(config_url)
+            db_model.config = resp.text
+        session.add(db_model)
+    if model_delete:
+        session.exec(delete(ModelDeploy).where(ModelDeploy.id.in_(model_delete)))
+    session.commit()
 
 
 def error_translate(err: str):

@@ -30,12 +30,12 @@ class DocumentLoaderFrontNode(FrontendNode):
         'ElemUnstructuredLoaderV0':
             build_file_field(
                 suffixes=[
-                    '.html', '.md', '.txt', '.jpg', '.png', '.jpeg', '.csv', '.doc', '.docx',
-                    '.pdf', '.ppt', '.pptx', '.xlsx', '.tiff'
+                    '.html', '.md', '.txt', '.bmp', '.jpg', '.png', '.jpeg', '.doc', '.docx',
+                    '.pdf', '.ppt', '.pptx', '.xls', '.xlsx', '.tsv', '.csv', '.tiff'
                 ],
                 fileTypes=[
-                    'html', 'md', 'txt', 'jpg', 'png', 'jpeg', 'csv', 'doc', 'docx', 'pdf', 'ppt',
-                    'pptx', 'tiff', 'xlsx'
+                    'html', 'md', 'txt', 'bmp', 'jpg', 'png', 'jpeg', 'doc', 'docx',
+                    'pdf', 'ppt', 'pptx', '.xls', 'xlsx', 'tsv', 'csv', 'tiff',
                 ],
             ),
         'AirbyteJSONLoader':
@@ -79,8 +79,15 @@ class DocumentLoaderFrontNode(FrontendNode):
             build_file_field(suffixes=['.pdf'], fileTypes=['pdf']),
         'UniversalKVLoader':
             build_file_field(
-                suffixes=['.jpg', '.png', '.jpeg', '.pdf'],
-                fileTypes=['jpg', 'png', 'jpeg', 'pdf'],
+                suffixes=['.jpg', '.png', '.jpeg', '.bmp', '.pdf'],
+                fileTypes=['jpg', 'png', 'jpeg', 'bmp', 'pdf'],
+            ),
+        'CustomKVLoader':
+            build_file_field(
+                suffixes=['.jpg', '.png', '.jpeg', '.pdf', '.txt', '.docx',
+                          '.doc', '.bmp', '.tif', '.tiff', '.xls', '.xlsx'],
+                fileTypes=['jpg', 'png', 'jpeg', 'pdf', 'txt', 'docx',
+                           'doc', 'bmp', 'tif', 'tiff', 'xls', 'xlsx'],
             ),
     }
 
@@ -176,6 +183,57 @@ class DocumentLoaderFrontNode(FrontendNode):
                     advanced=False,
                 ))
             self.template.add_field(self.file_path_templates[self.template.type_name])
+        elif self.template.type_name in {'CustomKVLoader'}:
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='schemas',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='elm_api_base_url',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='elm_api_key',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='elem_server_id',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='task_type',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='int',
+                    required=True,
+                    show=True,
+                    name='request_timeout',
+                    advanced=True,
+                    value=10
+                ))
+            self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in self.file_path_templates:
             self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in {
@@ -236,6 +294,13 @@ class DocumentLoaderFrontNode(FrontendNode):
         if field.name == 'unstructured_api_url':
             field.show = True
             field.advanced = False
+        if name == 'CustomKVLoader' and field.name == 'task_type':
+            field.options = ['extraction-job', 'logic-job']
+            field.value = 'logic-job'
+        if name == 'CustomKVLoader' and field.name == 'schemas':
+            field.field_type = 'str'
+            field.info = "please use '|' seperate"
+            field.is_list = False
 
 
 def build_pdf_semantic_loader_fields():

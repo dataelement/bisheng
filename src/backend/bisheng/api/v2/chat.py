@@ -59,7 +59,6 @@ async def union_websocket(flow_id: str,
         for node in langchain_object:
             key_node = get_cache_key(flow_id, chat_id, node.id)
             chat_manager.set_cache(key_node, node._built_object)
-            logger.debug(key_node + f'node_id={node.id}')
             chat_manager.set_cache(get_cache_key(flow_id, chat_id), node._built_object)
         await chat_manager.handle_websocket(flow_id, chat_id, websocket,
                                             settings.get_from_db('default_operator').get('user'))

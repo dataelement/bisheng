@@ -8,7 +8,7 @@ from xml.dom.minidom import Document
 import requests
 from bisheng.api.utils import access_check
 from bisheng.api.v1.schemas import UploadFileResponse
-from bisheng.cache.utils import save_uploaded_file
+from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import get_session
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
 from bisheng.database.models.knowledge_file import KnowledgeFile
@@ -17,8 +17,8 @@ from bisheng.database.models.user import User
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
-from bisheng.utils.minio_client import MinioClient
 from bisheng.utils.logger import logger
+from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoader
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
@@ -55,8 +55,10 @@ async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
         # 缓存本地
-        file_path = save_uploaded_file(file.file, 'bisheng').as_posix()
-        return UploadFileResponse(file_path=file_path + '_' + file_name, )
+        file_path = save_uploaded_file(file.file, 'bisheng', file_name)
+        if not isinstance(file_path, str):
+            file_path = str(file_path)
+        return UploadFileResponse(file_path=file_path)
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -113,6 +115,7 @@ async def process_knowledge(*,
     collection_name = knowledge.collection_name
     files = []
     file_paths = []
+    result = []
     for path in file_path:
         filepath, file_name = file_download(path)
         md5_ = filepath.rsplit('/', 1)[1].split('.')[0].split('_')[0]
@@ -128,12 +131,15 @@ async def process_knowledge(*,
                                 md5=md5_,
                                 remark=remark,
                                 user_id=payload.get('user_id'))
+
         session.add(db_file)
         session.commit()
         session.refresh(db_file)
-        files.append(db_file)
-        file_paths.append(filepath)
+        if not repeat:
+            files.append(db_file)
+            file_paths.append(filepath)
         logger.info(f'fileName={file_name} col={collection_name}')
+        result.append(db_file.copy())
 
     if not repeat:
         background_tasks.add_task(
@@ -153,7 +159,7 @@ async def process_knowledge(*,
     knowledge.update_time = db_file.create_time
     session.add(knowledge)
     session.commit()
-    return {'code': 200, 'message': 'success'}
+    return {'code': 200, 'message': 'success', 'data': result}
 
 
 @router.post('/create', response_model=KnowledgeRead, status_code=201)
@@ -333,7 +339,9 @@ def delete_knowledge_file(*,
         logger.info(f'act=delete_vector file_id={file_id} res={res}')
 
     # minio
-    MinioClient().delete_minio(str(knowledge_file.id))
+    minio_client = MinioClient()
+    minio_client.delete_minio(str(knowledge_file.id))
+    minio_client.delete_minio(str(knowledge_file.object_name))
     # elastic
     esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
     if esvectore_client:

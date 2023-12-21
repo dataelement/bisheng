@@ -57,12 +57,37 @@ class ChainFrontendNode(FrontendNode):
                               name='chain_order',
                               advanced=False,
                               value='[]'))
+        elif self.template.type_name in {'MultiPromptChain', 'MultiRuleChain'}:
+            self.template.add_field(
+                TemplateField(field_type='Chain',
+                              required=True,
+                              show=True,
+                              is_list=True,
+                              name='LLMChains',
+                              advanced=False,
+                              value='[]'))
+            self.template.add_field(
+                TemplateField(field_type='dict',
+                              required=True,
+                              show=True,
+                              is_list=True,
+                              name='destination_chain_name',
+                              advanced=False,
+                              info='{chain_id: name}',
+                              value='{}'))
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
         FrontendNode.format_field(field, name)
+        if name == 'RuleBasedRouter' and field.name == 'rule_function':
+            field.field_type = 'function'
+        if name == 'RuleBasedRouter' and field.name == 'input_variables':
+            field.show = True
 
-        if 'name' == 'RetrievalQA' and field.name == 'memory':
+        if name == 'LoaderOutputChain' and field.name == 'documents':
+            field.is_list = False
+
+        if name == 'RetrievalQA' and field.name == 'memory':
             field.show = False
             field.required = False
 
@@ -113,6 +138,15 @@ class ChainFrontendNode(FrontendNode):
             field.show = True
             field.field_type = 'BasePromptTemplate'
             field.display_name = 'prompt'
+        if field.name == 'recipient':
+            field.display_name = 'AutogenRole'
+        if field.name == 'destination_chains':
+            field.show = False
+        if name == 'TransformChain' and field.name == 'input_variables':
+            field.show = True
+        if name == 'TransformChain' and field.name == 'transform':
+            field.show = True
+            field.field_type = 'function'
 
 
 class SeriesCharacterChainNode(FrontendNode):
@@ -274,7 +308,14 @@ class CombineDocsChainNode(FrontendNode):
                           name='prompt',
                           display_name='prompt',
                           advanced=False,
-                          info='只对Stuff类型生效')
+                          info='只对Stuff类型生效'),
+            TemplateField(
+                field_type='BasePromptTemplate',
+                required=False,
+                show=True,
+                name='document_prompt',
+                advanced=False,
+            )
         ],
     )
 

@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any, Callable, Dict, Type
 
-from bisheng.database.base import db_service, session_getter
+from bisheng.database.base import get_session
 from bisheng.database.models.knowledge import Knowledge
 from bisheng.settings import settings
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings

@@ -1,9 +1,11 @@
 from bisheng.api.v1.schemas import StreamData
-from bisheng.database.base import db_service, session_getter
+from bisheng.database.base import get_session
 from bisheng.database.models.role_access import AccessType, RoleAccess
+from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
-from sqlmodel import select
+from sqlalchemy import delete
+from sqlmodel import Session, select
 
 API_WORDS = ['api', 'key', 'token']
 
@@ -84,14 +86,14 @@ def build_flow(graph_data: dict,
             }
             yield str(StreamData(event='log', data=log_dict))
             # # 如果存在文件，当前不操作文件，避免重复操作
-            if not process_file and chat_id is not None:
+            if not process_file and vertex.base_type == 'documentloaders':
                 template_dict = {
                     key: value
                     for key, value in vertex.data['node']['template'].items()
                     if isinstance(value, dict)
                 }
                 for key, value in template_dict.items():
-                    if value.get('type') == 'file':
+                    if value.get('type') == 'fileNode':
                         # 过滤掉文件
                         vertex.params[key] = ''
 
@@ -174,6 +176,8 @@ def build_flow_no_yield(graph_data: dict,
             # 聊天窗口等flow 主动生成的vector 需要新建临时collection
             # tmp_{chat_id}
             if vertex.base_type == 'vectorstores':
+                # 注入user_name
+                vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
                 # 知识库通过参数传参
                 if 'collection_name' in kwargs and 'collection_name' in vertex.params:
                     vertex.params['collection_name'] = kwargs['collection_name']
@@ -189,6 +193,9 @@ def build_flow_no_yield(graph_data: dict,
                 elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
                     # es
                     vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
+
+            if vertex.base_type == 'chains' and 'retriever' in vertex.params:
+                vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
 
             vertex.build()
             params = vertex._built_object_repr()
@@ -207,10 +214,10 @@ def build_flow_no_yield(graph_data: dict,
 def access_check(payload: dict, owner_user_id: int, target_id: int, type: AccessType) -> bool:
     if payload.get('role') != 'admin':
         # role_access
-        with session_getter(db_service) as session:
-            role_access = session.exec(
-                select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
-                                         RoleAccess.type == type.value)).all()
+        session = next(get_session())
+        role_access = session.exec(
+            select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
+                                     RoleAccess.type == type.value)).all()
         third_ids = [access.third_id for access in role_access]
         if owner_user_id != payload.get('user_id') and str(target_id) not in third_ids:
             return False

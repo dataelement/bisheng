@@ -58,7 +58,6 @@ def create_app():
     app.include_router(router_rpc)
     app.on_event('startup')(init_default_data)
     app.on_event('startup')(setup_llm_caching)
-
     return app
 
 
