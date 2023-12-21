@@ -14,10 +14,16 @@ from bisheng.database.models.flow import Flow
 from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils.logger import logger
+from bisheng.utils.threadpool import ThreadPoolManager
 from bisheng.utils.util import get_cache_key
+<<<<<<< HEAD
 from fastapi import WebSocket, status
 from langchain.docstore.document import Document
 from sqlmodel import select
+=======
+from bisheng_langchain.input_output.output import Report
+from fastapi import WebSocket
+>>>>>>> upstream/feat/0.2.1
 
 
 class ChatHistory(Subject):
@@ -29,9 +35,15 @@ class ChatHistory(Subject):
     def add_message(self, client_id: str, chat_id: str, message: ChatMessage):
         """Add a message to the chat history."""
 
+<<<<<<< HEAD
         if chat_id and (message.message or message.intermediate_steps or
                         message.files) and message.type != 'stream':
             with session_getter(db_service) as session:
+=======
+        if chat_id and (message.message or message.intermediate_steps
+                        or message.files) and message.type != 'stream':
+            with next(get_session()) as seesion:
+>>>>>>> upstream/feat/0.2.1
                 from bisheng.database.models.message import ChatMessage
                 msg = message.copy()
                 msg.message = str(msg.message) if isinstance(msg.message, dict) else msg.message
@@ -418,17 +430,31 @@ class ChatManager:
         self.in_memory_cache.set(client_id, langchain_object)
         return client_id in self.in_memory_cache
 
-    async def handle_websocket(self, client_id: str, chat_id: str, websocket: WebSocket,
-                               user_id: int):
+    async def handle_websocket(
+        self,
+        client_id: str,
+        chat_id: str,
+        websocket: WebSocket,
+        user_id: int,
+        gragh_data: dict = None,
+    ):
         await self.connect(client_id, chat_id, websocket)
-
+        thread_pool_local = ThreadPoolManager(max_workers=2)
+        status = 'init'  # 创建锁
+        payload = {}
         try:
             while True:
-                json_payload = await websocket.receive_json()
                 try:
-                    payload = json.loads(json_payload)
+                    json_payload_receive = await asyncio.wait_for(websocket.receive_json(),
+                                                                  timeout=2.0)
+                except asyncio.TimeoutError:
+                    json_payload_receive = ''
+                    pass
+                try:
+                    payload = json.loads(json_payload_receive) if json_payload_receive else payload
                 except TypeError:
-                    payload = json_payload
+                    payload = json_payload_receive
+
                 if 'clear_history' in payload:
                     self.chat_history.history[client_id] = []
                     continue
@@ -436,22 +462,62 @@ class ChatManager:
                 if 'clear_cache' in payload:
                     self.in_memory_cache
 
-                if 'file_path' in payload:
-                    # 上传文件，需要处理文件逻辑
-                    file_path = payload.get('file_path')
-                    node_id = payload.get('id')
-                    with self.cache_manager.set_client_id(client_id, chat_id):
-                        logger.info(f'client_id={client_id} act=process_message user_id={chat_id}')
-                        await self.process_file(file_path=file_path,
-                                                chat_id=chat_id,
-                                                client_id=client_id,
-                                                id=node_id,
-                                                user_id=user_id)
-                    continue
-                with self.cache_manager.set_client_id(client_id, chat_id):
-                    logger.info(f'client_id={client_id} act=process_message user_id={chat_id}')
-                    await self.process_message(client_id, chat_id, payload, None, False, user_id)
+                # set start
+                from bisheng.chat.handlers import Handler
+                is_begin = True if payload else False
+                action = None
+                if 'action' in payload:
+                    # autogen continue last session,
+                    action, is_begin = 'autogen', False
 
+                start_resp = ChatResponse(type='begin', category='system', user_id=user_id)
+                step_resp = ChatResponse(type='end', category='system', user_id=user_id)
+                if is_begin:
+                    await self.send_json(client_id, chat_id, start_resp)
+                start_resp.type = 'start'
+
+                # should input data
+                langchain_obj_key = get_cache_key(client_id, chat_id)
+                if payload and status == 'init':
+                    has_file, graph_data = await self.preper_payload(payload, gragh_data,
+                                                                     langchain_obj_key, client_id,
+                                                                     chat_id, start_resp, step_resp)
+                    status = 'init_object'
+
+                # build in thread
+                if payload and not self.in_memory_cache.get(
+                        langchain_obj_key) and status == 'init_object':
+                    thread_pool_local.submit(self.init_langchain_object, client_id, chat_id,
+                                             user_id, graph_data)
+                    status = 'waiting_object'
+
+                # run in thread
+                if payload and self.in_memory_cache.get(langchain_obj_key):
+                    logger.info(f"processing_message message={payload['inputs']}")
+                    action = await self.preper_action(client_id, chat_id, langchain_obj_key,
+                                                      payload, start_resp, step_resp)
+                    thread_pool_local.submit(Handler().dispatch_task, self, client_id, chat_id,
+                                             action, payload, user_id)
+                    status = 'init'
+                    payload = {}  # clean message
+
+                # 处理任务状态
+                complete = thread_pool_local.as_completed()
+                if complete:
+                    for future in complete:
+                        try:
+                            result = future.result()
+                            logger.debug(f'task_complete result={result}')
+                        except Exception as e:
+                            logger.exception(e)
+                            step_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
+                            if has_file:
+                                step_resp.intermediate_steps = f'File is parsed fail. error={str(e)}'
+                            await self.send_json(client_id, chat_id, step_resp)
+                            start_resp.type = 'close'
+                            await self.send_json(client_id, chat_id, start_resp)
+                            # socket close?
+                            return
         except Exception as e:
             # Handle any exceptions that might occur
             logger.exception(e)
@@ -463,49 +529,107 @@ class ChatManager:
             )
         finally:
             try:
-                await self.close_connection(
-                    client_id=client_id,
-                    chat_id=chat_id,
-                    code=status.WS_1000_NORMAL_CLOSURE,
-                    reason='Client disconnected',
-                )
+                await self.close_connection(client_id=client_id,
+                                            chat_id=chat_id,
+                                            code=status.WS_1000_NORMAL_CLOSURE,
+                                            reason='Client disconnected')
             except Exception as e:
                 logger.error(e)
             self.disconnect(client_id, chat_id)
 
-    async def process_source_document(self, source_document: List[Document], chat_id, message_id,
-                                      answer):
-        if not source_document:
-            return
+    async def preper_payload(self, payload, graph_data, langchain_obj_key, client_id, chat_id,
+                             start_resp: ChatResponse, step_resp: ChatResponse):
+        has_file = False
+        if 'inputs' in payload and ('data' in payload['inputs']
+                                    or 'file_path' in payload['inputs']):
+            node_data = payload['inputs'].get('data', '') or [payload['inputs']]
+            graph_data = self.refresh_graph_data(graph_data, node_data)
+            self.set_cache(langchain_obj_key, None)  # rebuild object
+            has_file = any(['InputFile' in nd.get('id') for nd in node_data])
+        if has_file:
+            step_resp.intermediate_steps = 'File upload complete and begin to parse'
+            await self.send_json(client_id, chat_id, start_resp)
+            await self.send_json(client_id, chat_id, step_resp, add=False)
+            await self.send_json(client_id, chat_id, start_resp)
+            logger.info('input_file start_log')
+            await asyncio.sleep(1)  # why frontend not recieve imediately
+        return has_file, graph_data
 
-        from bisheng.settings import settings
-        # 使用大模型进行关键词抽取，模型配置临时方案
-        keyword_conf = settings.get_default_llm() or {}
-        host_base_url = keyword_conf.get('host_base_url')
-        model = keyword_conf.get('model')
-
-        if model and not host_base_url:
-            with session_getter(db_service) as db_session:
-                model_deploy = db_session.exec(
-                    select(ModelDeploy).where(ModelDeploy.model == model)).first()
-            if model_deploy:
-                model = model if model_deploy.status == '已上线' else None
-                host_base_url = model_deploy.endpoint
+    async def preper_action(self, client_id, chat_id, langchain_obj_key, payload,
+                            start_resp: ChatResponse, step_resp: ChatResponse):
+        langchain_obj = self.in_memory_cache.get(langchain_obj_key)
+        batch_question = []
+        action = ''
+        if isinstance(langchain_obj, Report):
+            action = 'report'
+        elif 'data' in payload['inputs'] or 'file_path' in payload['inputs']:
+            action = 'auto_file'
+            batch_question = self.in_memory_cache.get(langchain_obj_key + '_question')
+            payload['inputs']['questions'] = batch_question
+            if not batch_question:
+                # no question
+                step_resp.intermediate_steps = 'File parsing complete'
+                await self.send_json(client_id, chat_id, step_resp)
+                start_resp.type = 'close'
+                await self.send_json(client_id, chat_id, start_resp)
             else:
-                logger.error('不能使用配置模型进行关键词抽取，配置不正确')
+                step_resp.intermediate_steps = 'File parsing complete. Analysis starting'
+                await self.send_json(client_id, chat_id, step_resp, add=False)
+        return action
 
-        answer_keywords = extract_answer_keys(answer, model, host_base_url)
-        for doc in source_document:
-            if 'bbox' in doc.metadata:
-                # 表示支持溯源
-                with session_getter(db_service) as db_session:
-                    content = doc.page_content
-                    recall_chunk = RecallChunk(chat_id=chat_id,
-                                               keywords=json.dumps(answer_keywords),
-                                               chunk=content,
-                                               file_id=doc.metadata.get('file_id'),
-                                               meta_data=json.dumps(doc.metadata),
-                                               message_id=message_id)
-                    db_session.add(recall_chunk)
-                    db_session.commit()
-                    db_session.refresh(recall_chunk)
+    def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
+        key_node = get_cache_key(flow_id, chat_id)
+        logger.info(f'init_langchain key={key_node}')
+        session = next(get_session())
+        db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
+        artifacts = {}
+        graph = build_flow_no_yield(graph_data=graph_data,
+                                    artifacts=artifacts,
+                                    process_file=True,
+                                    flow_id=UUID(flow_id).hex,
+                                    chat_id=chat_id,
+                                    user_name=db_user.user_name)
+        langchain_object = graph.build()
+        question = []
+        [
+            question.extend(node._built_object) for node in graph.nodes
+            if node.vertex_type == 'InputNode'
+        ]
+
+        self.set_cache(key_node + '_question', question)
+        for node in langchain_object:
+            # 只存储chain
+            if node.base_type == 'inputOutput' and node.vertex_type != 'Report':
+                continue
+            self.set_cache(key_node, node._built_object)
+            self.set_cache(key_node + '_artifacts', artifacts)
+        return graph
+
+    def refresh_graph_data(self, graph_data: dict, node_data: List[dict]):
+        tweak = {}
+        for nd in node_data:
+            if nd.get('id') not in tweak:
+                tweak[nd.get('id')] = {}
+            if 'InputFile' in nd.get('id'):
+                file_path = nd.get('file_path')
+                url_path = urlparse(file_path)
+                if url_path.netloc:
+                    file_name = unquote(url_path.path.split('/')[-1])
+                else:
+                    file_name = file_path.split('_', 1)[1] if '_' in file_path else ''
+                nd['value'] = file_name
+                tweak[nd.get('id')] = {'file_path': file_path, 'value': file_name}
+            elif 'VariableNode' in nd.get('id'):
+                variables = nd.get('name')
+                variable_value = nd.get('value')
+                # key
+                variables_list = tweak[nd.get('id')].get('variables', [])
+                if not variables_list:
+                    tweak[nd.get('id')]['variables'] = variables_list
+                    tweak[nd.get('id')]['variable_value'] = []
+                variables_list.append(variables)
+                # value
+                variables_value_list = tweak[nd.get('id')].get('variable_value', [])
+                variables_value_list.append(variable_value)
+        """upload file to make flow work"""
+        return process_tweaks(graph_data, tweaks=tweak)

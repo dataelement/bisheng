@@ -19,8 +19,8 @@ def remove_api_keys(flow: dict):
             node_data = node.get('data').get('node')
             template = node_data.get('template')
             for value in template.values():
-                if (isinstance(value, dict) and has_api_terms(value['name']) and
-                        value.get('password')):
+                if (isinstance(value, dict) and has_api_terms(value['name'])
+                        and value.get('password')):
                     value['value'] = None
 
     return flow
@@ -31,7 +31,8 @@ def build_input_keys_response(langchain_object, artifacts):
 
     input_keys_response = {
         'input_keys': {
-            key: '' for key in langchain_object.input_keys
+            key: ''
+            for key in langchain_object.input_keys
         },
         'memory_keys': [],
         'handle_keys': artifacts.get('handle_keys', []),
@@ -69,7 +70,7 @@ def build_flow(graph_data: dict,
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
     except Exception as exc:
-        logger.exception(exc)
+        logger.error(exc)
         error_message = str(exc)
         yield str(StreamData(event='error', data={'error': error_message}))
         return
@@ -214,3 +215,64 @@ def access_check(payload: dict, owner_user_id: int, target_id: int, type: Access
         if owner_user_id != payload.get('user_id') and str(target_id) not in third_ids:
             return False
     return True
+
+
+def get_L2_param_from_flow(
+    flow_data: dict,
+    flow_id: str,
+):
+    graph = Graph.from_payload(flow_data)
+    node_id = []
+    variable_ids = []
+    file_name = []
+    for node in graph.nodes:
+        if node.vertex_type in {'InputFileNode'}:
+            node_id.append(node.id)
+            file_name.append(node.params.get('file_type'))
+        elif node.vertex_type in {'VariableNode'}:
+            variable_ids.append(node.id)
+
+    session: Session = next(get_session())
+    db_variables = session.exec(select(Variable).where(Variable.flow_id == flow_id)).all()
+
+    old_file_ids = {
+        variable.node_id: variable
+        for variable in db_variables if variable.value_type == 3
+    }
+    update = []
+    delete_node_ids = []
+    try:
+        for index, id in enumerate(node_id):
+            if id in old_file_ids:
+                if file_name[index] != old_file_ids.get(id).variable_name:
+                    old_file_ids.get(id).variable_name = file_name[index]
+                    update.append(old_file_ids.get(id))
+                old_file_ids.pop(id)
+            else:
+                # file type
+                db_new_var = Variable(flow_id=flow_id,
+                                      node_id=id,
+                                      variable_name=file_name[index],
+                                      value_type=3)
+                update.append(db_new_var)
+        # delete variable which not delete by edit
+        old_variable_ids = {
+            variable.node_id
+            for variable in db_variables if variable.value_type != 3
+        }
+
+        if old_file_ids:
+            delete_node_ids.extend(list(old_file_ids.keys()))
+
+        delete_node_ids.extend(old_variable_ids.difference(set(variable_ids)))
+
+        if update:
+            [session.add(var) for var in update]
+        if delete_node_ids:
+            session.exec(delete(Variable).where(Variable.node_id.in_(delete_node_ids)))
+        session.commit()
+        return True
+    except Exception as e:
+        logger.exception(e)
+        session.rollback()
+        return False

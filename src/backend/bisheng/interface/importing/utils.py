@@ -123,7 +123,9 @@ def import_toolkit(toolkit: str) -> Any:
 def import_agent(agent: str) -> Agent:
     """Import agent from agent name"""
     # check for custom agent
-
+    from bisheng_langchain import agents
+    if agent in agents.__all__:
+        return import_class(f'bisheng_langchain.agents.{agent}')
     return import_class(f'langchain.agents.{agent}')
 
 

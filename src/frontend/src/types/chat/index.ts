@@ -12,6 +12,6 @@ export type ChatMessageType = {
   chatKey: string;
   end: boolean;
   id?: number;
-  source?: boolean;
+  source?: number;
   noAccess?: boolean;
 };

@@ -5,26 +5,30 @@ import { TextAreaComponentType } from "../../../../types/components";
 import SelectCollection from "./selectCollection";
 
 export default function CollectionNameComponent({
+    id,
     value,
     onChange,
+    onSelect,
     disabled,
-}: TextAreaComponentType) {
+}: TextAreaComponentType & { onSelect: (name: string, collectionId: any) => void }) {
     const [myValue, setMyValue] = useState(value);
+    // const [collectionId, setCollectionId] = useState<number | ''>("")
     useEffect(() => {
         setMyValue(value);
+        // setCollectionId(id)
     }, [value]);
 
     const { openPopUp, closePopUp } = useContext(PopUpContext);
     useEffect(() => {
         if (disabled) {
             setMyValue("");
-            onChange("");
+            onSelect("", "");
         }
-    }, [disabled, onChange]);
+    }, [disabled, onSelect]);
 
-    const handleChange = (id: string) => {
-        setMyValue(id);
-        onChange(id);
+    const handleChange = (obj) => {
+        setMyValue(obj.name);
+        onSelect(obj.name, obj.id);
         closePopUp();
     }
 
@@ -35,7 +39,7 @@ export default function CollectionNameComponent({
                     <dialog className={`modal bg-blur-shared modal-open`}>
                         <form method="dialog" className="max-w-[400px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={e => e.stopPropagation()}>
                             <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={closePopUp}>✕</button>
-                            <SelectCollection collectionId={myValue} onChange={handleChange}></SelectCollection>
+                            <SelectCollection collectionId={id} onChange={handleChange}></SelectCollection>
                         </form>
                     </dialog>
                 )

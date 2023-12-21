@@ -66,6 +66,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
             })
         }, 200);
     }
+    // console.log('files :>> ', files);
 
     useEffect(() => {
         loadFiles()
@@ -105,19 +106,19 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
             <div className="mt-4">
                 <p className="mb-4 text-sm font-bold">{t('chat.sourceDocumentsLabel')}</p>
                 {files.map(_file =>
-                    _file ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
+                    _file.right ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
                         <p className="text-sm">{_file.fileName}</p>
                         <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
                             {
                                 _file.fileUrl && <div className="tooltip" data-tip={t('chat.downloadPDFTooltip')}>
-                                    <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.fileUrl), _file.fileName); event.stopPropagation() }} >
+                                    <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
                                         <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                     </a>
                                 </div>
                             }
                             {
                                 _file.originUrl && <div className="tooltip tooltip-left" data-tip={t('chat.downloadOriginalTooltip')}>
-                                    <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.originUrl), _file.fileName.replace(/\.[\w\d]+$/, '') + _file.originUrl.match(/(\.\w+)\?/)?.[1]); event.stopPropagation() }} >
+                                    <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.originUrl), _file.fileName); event.stopPropagation() }} >
                                         <Download color="rgba(53,126,249,1)" size={20} strokeWidth={1.5}></Download>
                                     </a>
                                 </div>

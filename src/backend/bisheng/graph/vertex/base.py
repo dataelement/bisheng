@@ -30,18 +30,15 @@ class Vertex:
         self.output = self.data['node']['base_classes']
         template_dicts = {
             key: value
-            for key, value in self.data['node']['template'].items()
-            if isinstance(value, dict)
+            for key, value in self.data['node']['template'].items() if isinstance(value, dict)
         }
 
         self.required_inputs = [
-            template_dicts[key]['type']
-            for key, value in template_dicts.items()
+            template_dicts[key]['type'] for key, value in template_dicts.items()
             if value['required']
         ]
         self.optional_inputs = [
-            template_dicts[key]['type']
-            for key, value in template_dicts.items()
+            template_dicts[key]['type'] for key, value in template_dicts.items()
             if not value['required']
         ]
         # Add the template_dicts[key]["input_types"] to the optional_inputs
@@ -51,8 +48,8 @@ class Vertex:
         ])
 
         template_dict = self.data['node']['template']
-        self.vertex_type = (self.data['type'] if 'Tool' not in self.output or
-                            template_dict['_type'].islower() else template_dict['_type'])
+        self.vertex_type = (self.data['type'] if 'Tool' not in self.output
+                            or template_dict['_type'].islower() else template_dict['_type'])
 
         if self.base_type is None:
             for base_type, value in ALL_TYPES_DICT.items():
@@ -78,8 +75,7 @@ class Vertex:
         # and use that as the value for the param
         template_dict = {
             key: value
-            for key, value in self.data['node']['template'].items()
-            if isinstance(value, dict)
+            for key, value in self.data['node']['template'].items() if isinstance(value, dict)
         }
         params = {}
 
@@ -93,9 +89,41 @@ class Vertex:
                 elif edge.target.id == self.id:
                     params[param_key] = edge.source
 
+<<<<<<< HEAD
+=======
+            # for report, should get the source of source
+            for inner_edge in edge.source.edges:
+                source_type = inner_edge.target_param
+                if (source_type == 'input_node' and inner_edge.source != self
+                        and inner_edge.target != self):
+                    if inner_edge.source.vertex_type == 'InputNode':
+                        # for extra params,
+                        if PRESET_QUESTION not in params:
+                            params[PRESET_QUESTION] = {}
+                        params[PRESET_QUESTION].update(
+                            {inner_edge.target.id: (inner_edge.source.id, inner_edge.source)})
+                elif (source_type == 'documents' and inner_edge.source != self
+                      and inner_edge.target != self
+                      and inner_edge.target.vertex_type == 'LoaderOutputChain'):
+                    if inner_edge.source.vertex_type in {'UniversalKVLoader', 'CustomKVLoader'}:
+                        for key, value in inner_edge.source.data['node']['template'].items():
+                            if key in {'schemas', 'schema'}:
+                                schema = value['value'].split('|')
+                                if PRESET_QUESTION not in params:
+                                    params[PRESET_QUESTION] = {}
+                                if inner_edge.target.id in params[PRESET_QUESTION]:
+                                    params[PRESET_QUESTION][inner_edge.target.id].append(
+                                        (inner_edge.source.id, schema))
+                                else:
+                                    params[PRESET_QUESTION].update(
+                                        {inner_edge.target.id: [(inner_edge.source.id, schema)]})
+
+>>>>>>> upstream/feat/0.2.1
         for key, value in template_dict.items():
             if key == '_type' or not value.get('show'):
                 continue
+            if value.get('collection_id'):
+                params['collection_id'] = value.get('collection_id')
             # If the type is not transformable to a python base class
             # then we need to get the edge that connects to this node
             if value.get('type') == 'file':
@@ -160,6 +188,16 @@ class Vertex:
         """
         return all(self._is_node(node) for node in value)
 
+<<<<<<< HEAD
+=======
+    def _is_dict_of_nodes(self, value):
+        nodes = [node for node in value.values() if isinstance(node, tuple)]
+        if nodes:
+            return any(self._is_node(node[1]) for node in nodes)
+        else:
+            return False
+
+>>>>>>> upstream/feat/0.2.1
     def _build_node_and_update_params(self, key, node):
         """
         Builds a given node and updates the params dictionary accordingly.
@@ -211,11 +249,18 @@ class Vertex:
         if self.base_type is None:
             raise ValueError(f'Base type for node {self.vertex_type} not found')
         try:
+<<<<<<< HEAD
             result = loading.instantiate_class(
                 node_type=self.vertex_type,
                 base_type=self.base_type,
                 params=self.params,
             )
+=======
+            result = loading.instantiate_class(node_type=self.vertex_type,
+                                               base_type=self.base_type,
+                                               params=self.params,
+                                               data=self._data)
+>>>>>>> upstream/feat/0.2.1
             self._update_built_object_and_artifacts(result)
         except Exception as exc:
             raise ValueError(f'Error building node {self.vertex_type}: {str(exc)}') from exc

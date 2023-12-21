@@ -162,6 +162,7 @@ const useLanguage = () => {
     const changLanguage = () => {
         const ln = language === 'en' ? 'zh' : 'en'
         setLanguage(ln)
+        localStorage.setItem('language-' + user.user_id, ln)
         localStorage.setItem('language', ln)
         i18next.changeLanguage(ln)
     }

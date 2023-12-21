@@ -95,18 +95,84 @@ export default function l2Edit() {
         setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
     }
 
-    return <div className="p-6 h-screen overflow-y-auto">
-        <div className="flex justify-between w-full">
-            <ShadTooltip content={t('back')} side="right">
-                <button className="extra-side-bar-buttons w-[36px]" onClick={() => navigate(-1)}>
-                    <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
-                </button>
-            </ShadTooltip>
-            {/* <ShadTooltip content="接口信息" side="left">
+    const showContent = (e) => {
+        const target = e.target.tagName === 'svg' ? e.target.parentNode : e.target
+        const contentDom = target.nextSibling
+        target.children[0].style.transform = contentDom.clientHeight ? 'rotate(180deg)' : 'rotate(0deg)'
+        contentDom.style.maxHeight = contentDom.clientHeight ? 0 : '999px'
+    }
+
+    // isForm
+    const isForm = useHasForm(flow)
+
+    return <div className="relative box-border">
+        <div className="p-6 pb-48 h-screen overflow-y-auto">
+            <div className="flex justify-between w-full">
+                <ShadTooltip content={t('back')} side="right">
+                    <button className="extra-side-bar-buttons w-[36px]" onClick={() => navigate(-1)}>
+                        <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
+                    </button>
+                </ShadTooltip>
+                {/* <ShadTooltip content="接口信息" side="left">
                 <button className="extra-side-bar-buttons w-[36px]" onClick={() => openPopUp(<ApiModal flow={flows.find((f) => f.id === tabId)} />)} >
                     <TerminalSquare strokeWidth={1.5} className="side-bar-button-size " ></TerminalSquare>
                 </button>
             </ShadTooltip> */}
+            </div>
+            {/* form */}
+            <div className="pt-6">
+                <p className="text-center text-2xl">{t('skills.skillSettings')}</p>
+                <div className="w-[50%] max-w-2xl mx-auto">
+                    <p className="text-center text-gray-400 mt-4 cursor-pointer flex justify-center" onClick={showContent}>
+                        {t('skills.basicInfo')}
+                        <ChevronUp />
+                    </p>
+                    {/* base form */}
+                    <div className="w-full overflow-hidden transition-all px-1">
+                        <div className="mt-4">
+                            <Label htmlFor="name">{t('skills.skillName')}</Label>
+                            <Input ref={nameRef} placeholder={t('skills.skillName')} className={`mt-2 ${error.name && 'border-red-400'}`} />
+                        </div>
+                        <div className="mt-4">
+                            <Label htmlFor="username">{t('skills.description')}</Label>
+                            <Textarea ref={descRef} id="name" placeholder={t('skills.description')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
+                        </div>
+                    </div>
+                    {
+                        // L2 form
+                        isL2 && <div className="w-full mt-8">
+                            <p className="text-center text-gray-400 cursor-pointer flex justify-center" onClick={showContent}>
+                                {t('skills.parameterInfo')}
+                                <ChevronUp />
+                            </p>
+                            <div className="w-full overflow-hidden transition-all px-1">
+                                {flow?.data?.nodes.map(({ data }) => (
+                                    <div key={data.id} className="w-full">
+                                        <div className="only:hidden mt-6">
+                                            <span className="p-2 font-bold text-gray-400 text-base">
+                                                {data.node.l2_name || data.node.display_name}
+                                            </span>
+                                        </div>
+                                        {
+                                            // 自定义组件
+                                            Object.keys(data.node.template).map(k => (
+                                                data.node.template[k].l2 && <div className="w-full mt-4 px-1" key={k}>
+                                                    <Label htmlFor="name" className="text-right">
+                                                        {data.node.template[k].l2_name || data.node.template[k].name}
+                                                    </Label>
+                                                    <L2ParameterComponent data={data} type={data.node.template[k].type} name={k} />
+                                                </div>
+                                            ))
+                                        }
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    }
+                    {/* 表单设置 */}
+                    {isForm && <FormSet ref={formRef} id={id}></FormSet>}
+                </div>
+            </div>
         </div>
         {/* form */}
         <div className="mt-6">

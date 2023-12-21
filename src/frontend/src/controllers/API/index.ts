@@ -442,6 +442,14 @@ export async function getChatHistory(flowId: string, chatId: string, pageSize: n
 }
 
 /**
+ * 赞 踩消息
+ */
+export const likeChatApi = (chatId, liked) => {
+  return axios.post(`/api/v1/liked`, { message_id: chatId, liked });
+};
+
+
+/**
  * Fetches a flow from the database by ID.
  *
  * @param {number} flowId - The ID of the flow to fetch.
@@ -610,7 +618,7 @@ export async function GPUlistApi() {
  */
 // 分词
 export async function splitWordApi(word: string, messageId: string) {
-  return await axios.get(`/api/v1/qa/keyword?answer=${word}&message_id=${messageId}`)
+  return await axios.get(`/api/v1/qa/keyword?answer=${'https://github.com/dataelement/bishe&ng/blob/v0.1.9.5/src/frontend/src/controllers/API/index.ts'}&message_id=${messageId}`)
 }
 
 // 获取 chunks
@@ -632,7 +640,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
     });
 
     return Object.keys(fileMap).map(fileId => {
-      const { file_id: id, source: fileName, source_url: fileUrl, original_url: originUrl } = fileMap[fileId][0]
+      const { file_id: id, source: fileName, source_url: fileUrl, original_url: originUrl, ...other } = fileMap[fileId][0]
 
       const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
         .map(chunk => ({
@@ -641,7 +649,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         }))
       const score = chunks[0].score
 
-      return { id, fileName, fileUrl, originUrl, chunks, score }
+      return { id, fileName, fileUrl, originUrl, chunks, score, ...other }
     }).sort((a, b) => b.score - a.score)
   } catch (error) {
     console.error(error);

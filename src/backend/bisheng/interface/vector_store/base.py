@@ -23,6 +23,7 @@ class VectorstoreCreator(LangChainTypeCreator):
             self.type_dict: dict[str, Any] = {
                 vectorstore_name: import_class(f'langchain.vectorstores.{vectorstore_name}')
                 for vectorstore_name in vectorstores.__all__
+                if vectorstore_name != 'Milvus'  # use bisheng_langchain
             }
             self.type_dict.update({
                 vectorstore_name: import_class(f'bisheng_langchain.vectorstores.{vectorstore_name}')

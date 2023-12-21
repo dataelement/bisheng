@@ -238,7 +238,27 @@
         "fileSizeExceedsLimit": "文件不能超50M",
         "file": "文件",
         "sizeExceedsLimit": "超过50M",
-        "editDictionary": "编辑词典"
+        "editDictionary": "编辑词典",
+        "exportCodeDialogTip": "生成代码，将流程集成到外部应用程序中 (打开此页面前请先build技能)。",
+        "chunkOverlap": "切分文本重叠长度"
+    },
+    "report": {
+        "reportTemplate": "报告模板",
+        "reportDescription": "报告生成描述...",
+        "newButton": "新建",
+        "importButton": "导入",
+        "start": "开始",
+        "formSettings": "表单设置",
+        "requiredLabel": "必填",
+        "isRequired": "是必填项",
+        "fileRequired": "当前文件为空",
+        "selectComponent": "选择一个组件",
+        "varLength": "长度不能超过"
+    },
+    "status": {
+        "1004": "该技能已被删除",
+        "1008": "当前技能未上线，无法直接对话",
+        "1005": ""
     },
     "confirmButton": "确定",
     "add": "添加",

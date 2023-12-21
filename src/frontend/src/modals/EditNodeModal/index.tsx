@@ -83,6 +83,8 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
 
   const handleOnNewValue = (newValue: any, name) => {
     data.node.template[name].value = newValue;
+    // 手动修改知识库，collection_id 清空
+    if (['index_name', 'collection_name'].includes(name)) delete data.node.template[name].collection_id
     // Set state to pending
     setTabsState((prev) => {
       return {

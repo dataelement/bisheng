@@ -3,6 +3,7 @@ import json
 import time
 from typing import List, Optional
 from uuid import uuid4
+from xml.dom.minidom import Document
 
 import requests
 from bisheng.api.utils import access_check
@@ -78,9 +79,9 @@ async def get_embedding():
 
 @router.post('/process', status_code=201)
 async def process_knowledge(*,
+                            data: dict,
                             background_tasks: BackgroundTasks,
                             session: Session = Depends(get_session),
-                            data: dict,
                             Authorize: AuthJWT = Depends()):
     """上传文件到知识库.
     使用flowchain来处理embeding的流程
@@ -93,7 +94,8 @@ async def process_knowledge(*,
     file_path = data.get('file_path')
     auto_p = data.get('auto')
     separator = data.get('separator')
-    chunk_overlap = 0
+    chunk_overlap = data.get('chunk_overlap')
+    callback_url = data.get('callback_url')
 
     if auto_p:
         separator = ['\n\n', '\n', ' ', '']
@@ -112,12 +114,19 @@ async def process_knowledge(*,
     files = []
     file_paths = []
     for path in file_path:
-        filepath, file_name = path.split('_', 1)
-        md5_ = filepath.rsplit('/', 1)[1]
+        filepath, file_name = file_download(path)
+        md5_ = filepath.rsplit('/', 1)[1].split('.')[0].split('_')[0]
+        # 是否包含重复文件
+        repeat = session.exec(
+            select(KnowledgeFile).where(KnowledgeFile.md5 == md5_, KnowledgeFile.status == 2,
+                                        KnowledgeFile.knowledge_id == knowledge_id)).all()
+        status = 3 if repeat else 1
+        remark = 'file repeat' if repeat else ''
         db_file = KnowledgeFile(knowledge_id=knowledge_id,
                                 file_name=file_name,
-                                status=1,
+                                status=status,
                                 md5=md5_,
+                                remark=remark,
                                 user_id=payload.get('user_id'))
         session.add(db_file)
         session.commit()
@@ -126,14 +135,20 @@ async def process_knowledge(*,
         file_paths.append(filepath)
         logger.info(f'fileName={file_name} col={collection_name}')
 
-    background_tasks.add_task(addEmbedding,
-                              collection_name=collection_name,
-                              model=knowledge.model,
-                              chunk_size=chunk_size,
-                              separator=separator,
-                              chunk_overlap=chunk_overlap,
-                              file_paths=file_paths,
-                              knowledge_files=files)
+    if not repeat:
+        background_tasks.add_task(
+            addEmbedding,
+            collection_name=collection_name,
+            index_name=knowledge.index_name or knowledge.collection_name,
+            knowledge_id=knowledge_id,
+            model=knowledge.model,
+            chunk_size=chunk_size,
+            separator=separator,
+            chunk_overlap=chunk_overlap,
+            file_paths=file_paths,
+            knowledge_files=files,
+            callback=callback_url,
+        )
 
     knowledge.update_time = db_file.create_time
     session.add(knowledge)
@@ -156,8 +171,15 @@ def create_knowledge(*,
     if know:
         raise HTTPException(status_code=500, detail='知识库名称重复')
     if not db_knowldge.collection_name:
-        # 默认collectionName
-        db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
+        if knowledge.is_partition:
+            embedding = knowledge.model.replace('-', '')
+            id = settings.get_knowledge().get('vectorstores').get('Milvus',
+                                                                  {}).get('partition_suffix', 1)
+            db_knowldge.collection_name = f'partition_{embedding}_knowledge_{id}'
+        else:
+            # 默认collectionName
+            db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
+    db_knowldge.index_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
     db_knowldge.user_id = payload.get('user_id')
     session.add(db_knowldge)
     session.commit()
@@ -267,6 +289,20 @@ def delete_knowledge(*,
         raise HTTPException(status_code=404, detail='knowledge not found')
     if not access_check(payload, knowledge.user_id, knowledge_id, AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
+    # 处理vector
+    embeddings = decide_embeddings(knowledge.model)
+    vectore_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
+    if vectore_client.col:
+        logger.info(f'drop_vectore col={knowledge.collection_name}')
+        if knowledge.collection_name.startswith('col'):
+            vectore_client.col.drop()
+        else:
+            pk = vectore_client.col.query(expr=f'knowledge_id=="{knowledge.id}"',
+                                          output_fields=['pk'])
+            vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
+    # 处理 es
+    # todo
+
     session.delete(knowledge)
     session.commit()
     return {'message': 'knowledge deleted successfully'}
@@ -301,10 +337,10 @@ def delete_knowledge_file(*,
     # elastic
     esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
     if esvectore_client:
-        esvectore_client.client.delete_by_query(index=collection_name,
-                                                query={'match': {
-                                                    'metadata.file_id': file_id
-                                                }})
+        res = esvectore_client.client.delete_by_query(
+            index=collection_name, query={'match': {
+                'metadata.file_id': file_id
+            }})
         logger.info(f'act=delete_es file_id={file_id} res={res}')
 
     session.delete(knowledge_file)
@@ -332,23 +368,19 @@ def decide_vectorstores(collection_name: str, vector_store: str,
             vector_config['ssl_verify'] = eval(vector_config['ssl_verify'])
     else:
         param = {'collection_name': collection_name, 'embedding': embedding}
+        vector_config.pop('partition_suffix', '')
     param.update(vector_config)
     class_obj = import_vectorstore(vector_store)
     return instantiate_vectorstore(class_object=class_obj, params=param)
 
 
-async def addEmbedding(collection_name,
-                       model: str,
-                       chunk_size: int,
-                       separator: str,
-                       chunk_overlap: int,
-                       file_paths: List[str],
-                       knowledge_files: List[KnowledgeFile],
-                       callback: Optional[str] = None):
+def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chunk_size: int,
+                 separator: str, chunk_overlap: int, file_paths: List[str],
+                 knowledge_files: List[KnowledgeFile], callback: str):
     try:
         embeddings = decide_embeddings(model)
         vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-        es_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
     except Exception as e:
         logger.exception(e)
 
@@ -371,13 +403,18 @@ async def addEmbedding(collection_name,
             texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
                                                 chunk_overlap, separator)
 
+            if len(texts) == 0:
+                raise ValueError('文件解析为空')
             # 溯源必须依赖minio, 后期替换更通用的oss
             minio_client.upload_minio(str(db_file.id), path)
 
             logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
-            [metadata.update({
-                'file_id': knowledge_file.id,
-            }) for metadata in metadatas]
+            [
+                metadata.update({
+                    'file_id': knowledge_file.id,
+                    'knowledge_id': f'{knowledge_id}'
+                }) for metadata in metadatas
+            ]
             vectore_client.add_texts(texts=texts, metadatas=metadatas)
 
             # 存储es
@@ -387,7 +424,7 @@ async def addEmbedding(collection_name,
             session.refresh(db_file)
             callback_obj = db_file.copy()
         except Exception as e:
-            logger.exception(e)
+            logger.error(e)
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)
             setattr(db_file, 'remark', str(e)[:500])
@@ -419,19 +456,25 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         documents = loader.load()
         texts = text_splitter.split_documents(documents)
         raw_texts = [t.page_content for t in texts]
-        metadatas = [t.metadata.update({'bbox': ''}) for t in texts]
+        metadatas = [{
+            'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
+            'page': t.metadata.get('page'),
+            'source': file_name,
+            'extra': ''
+        } for t in texts]
         metadatas = [t.metadata for t in texts]
     else:
         # 如果文件不是pdf 需要内部转pdf
         if file_name.rsplit('.', 1)[-1] != 'pdf':
             b64_data = base64.b64encode(open(input_file, 'rb').read()).decode()
             inp = dict(filename=file_name, b64_data=[b64_data], mode='topdf')
-            resp = requests.post(settings.get_knowledge().get('unstructured_api_url'),
-                                 json=inp).json()
-            if not resp or resp['status_code'] != 200:
-                logger.error(f'file_pdf=not_success resp={resp}')
+            resp = requests.post(settings.get_knowledge().get('unstructured_api_url'), json=inp)
+            if not resp or resp.status_code != 200:
+                logger.error(f'file_pdf=not_success resp={resp.text}')
                 raise Exception(f"当前文件无法解析， {resp['status_message']}")
-            b64_data = resp['b64_pdf']
+            if len(resp.text) < 300:
+                logger.error(f'file_pdf=not_success resp={resp.text}')
+            b64_data = resp.json()['b64_pdf']
             # 替换历史文件
             with open(input_file, 'wb') as fout:
                 fout.write(base64.b64decode(b64_data))
@@ -447,5 +490,124 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
                                                   chunk_overlap=0)
         texts = text_splitter.split_documents(documents)
         raw_texts = [t.page_content for t in texts]
-        metadatas = [{'bbox': json.dumps(t.metadata)} for t in texts]
+        metadatas = [{
+            'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
+            'page': t.metadata.get('chunk_bboxes')[0].get('page'),
+            'source': t.metadata.get('source', ''),
+            'extra': '',
+        } for t in texts]
     return (raw_texts, metadatas)
+
+
+def file_knowledge(
+        db_knowledge: Knowledge,
+        file_path: str,
+        file_name: str,
+        metadata: str,
+        session: Session = Depends(get_session),
+):
+    try:
+        embeddings = decide_embeddings(db_knowledge.model)
+        vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
+        es_client = decide_vectorstores(db_knowledge.collection_name, 'ElasticKeywordsSearch',
+                                        embeddings)
+    except Exception as e:
+        logger.exception(e)
+    separator = ['\n\n', '\n', ' ', '']
+    chunk_size = 500
+    chunk_overlap = 50
+    raw_texts, metadatas = _read_chunk_text(file_path, file_name, chunk_size, chunk_overlap,
+                                            separator)
+    logger.info(f'chunk_split file_name={file_name} size={len(raw_texts)}')
+    metadata_extra = json.loads(metadata)
+    # 存储 mysql
+    db_file = KnowledgeFile(knowledge_id=db_knowledge.id,
+                            file_name=file_name,
+                            status=1,
+                            object_name=metadata_extra.get('url'))
+    session.add(db_file)
+    session.flush()
+
+    try:
+        metadata = [{
+            'file_id': db_file.id,
+            'knowledge_id': f'{db_knowledge.id}',
+            'page': metadata.get('page'),
+            'source': metadata.get('source'),
+            'bbox': metadata.get('bbox'),
+            'extra': json.dumps(metadata_extra)
+        } for metadata in metadatas]
+        vectore_client.add_texts(texts=raw_texts, metadatas=metadata)
+
+        # 存储es
+        if es_client:
+            es_client.add_texts(texts=raw_texts, metadatas=metadata)
+        db_file.status = 2
+        session.commit()
+
+    except Exception as e:
+        logger.error(e)
+        setattr(db_file, 'status', 3)
+        setattr(db_file, 'remark', str(e)[:500])
+        session.add(db_file)
+        session.commit()
+
+
+def text_knowledge(
+        db_knowledge: Knowledge,
+        documents: List[Document],
+        session: Session = Depends(get_session),
+):
+    try:
+        embeddings = decide_embeddings(db_knowledge.model)
+        vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
+        es_client = decide_vectorstores(db_knowledge.collection_name, 'ElasticKeywordsSearch',
+                                        embeddings)
+    except Exception as e:
+        logger.exception(e)
+
+    separator = '\n\n'
+    chunk_size = 500
+    chunk_overlap = 50
+
+    text_splitter = CharacterTextSplitter(separator=separator,
+                                          chunk_size=chunk_size,
+                                          chunk_overlap=chunk_overlap,
+                                          add_start_index=True)
+
+    texts = text_splitter.split_documents(documents)
+
+    logger.info(f'chunk_split knowledge_id={db_knowledge.id} size={len(texts)}')
+
+    # 存储 mysql
+    file_name = documents[0].metadata.get('source')
+    db_file = KnowledgeFile(knowledge_id=db_knowledge.id,
+                            file_name=file_name,
+                            status=1,
+                            object_name=documents[0].metadata.get('url'))
+    session.add(db_file)
+    session.flush()
+
+    try:
+        metadata = [{
+            'file_id': db_file.id,
+            'knowledge_id': f'{db_knowledge.id}',
+            'page': doc.metadata.pop('page', ''),
+            'source': doc.metadata.get('source', ''),
+            'bbox': doc.metadata.get('bbox', ''),
+            'extra': json.dumps(doc.metadata)
+        } for doc in documents]
+        vectore_client.add_texts(texts=[t.page_content for t in texts], metadatas=metadata)
+
+        # 存储es
+        if es_client:
+            es_client.add_texts(texts=[t.page_content for t in texts], metadatas=metadata)
+        db_file.status = 2
+        session.commit()
+
+    except Exception as e:
+        logger.error(e)
+        setattr(db_file, 'status', 3)
+        setattr(db_file, 'remark', str(e)[:500])
+        session.add(db_file)
+        session.commit()

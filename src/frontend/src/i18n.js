@@ -4,12 +4,16 @@ import {
 } from "react-i18next";
 import Backend from 'i18next-http-backend';
 
+const userLanguage = (localStorage.getItem('language') ||
+    navigator.language ||
+    navigator.userLanguage || 'en').substring(0, 2)
+
 i18n.use(Backend)
     .use(initReactI18next)
     .init({
         partialBundledLanguages: true,
         ns: ['bs'],
-        lng: localStorage.getItem('language') || 'zh',
+        lng: userLanguage === 'zh' ? userLanguage : 'en', // 除中文即英文
         backend: {
             loadPath: '/locales/{{lng}}/{{ns}}.json'
         },

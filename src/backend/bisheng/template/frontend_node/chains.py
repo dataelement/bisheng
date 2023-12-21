@@ -42,6 +42,13 @@ class ChainFrontendNode(FrontendNode):
                     name='chain_type',
                     advanced=False,
                 ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='BasePromptTemplate',
+                    show=True,
+                    name='document_prompt',
+                    advanced=False,
+                ))
         elif self.template.type_name == 'SequentialChain':
             self.template.add_field(
                 TemplateField(field_type='str',
@@ -81,7 +88,10 @@ class ChainFrontendNode(FrontendNode):
             field.required = True
             field.show = True
             field.advanced = False
-        if field.name == 'memory':
+        if field.name == 'condense_question_prompt':
+            field.required = False
+            field.show = True
+        if field.name in {'memory', 'document_prompt'}:
             # field.required = False
             field.show = True
             field.advanced = False

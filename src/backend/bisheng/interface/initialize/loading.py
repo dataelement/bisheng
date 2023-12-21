@@ -42,7 +42,12 @@ def instantiate_class(node_type: str, base_type: str, params: Dict) -> Any:
             return custom_node(**params)
 
     class_object = import_by_type(_type=base_type, name=node_type)
+<<<<<<< HEAD
     return instantiate_based_on_type(class_object, base_type, node_type, params)
+=======
+    return instantiate_based_on_type(class_object, base_type, node_type, params,
+                                     params_node_id_dict)
+>>>>>>> upstream/feat/0.2.1
 
 
 def convert_params_to_sets(params):
@@ -107,7 +112,53 @@ def instantiate_based_on_type(class_object, base_type, node_type, params):
         return class_object(**params)
 
 
+<<<<<<< HEAD
 def instantiate_input_output(node_type, class_object, params):
+=======
+def instantiate_input_output(node_type, class_object, params, id_dict):
+    if node_type == 'Report':
+        preset_question = {}
+        if PRESET_QUESTION in params:
+            preset_question = params.pop(PRESET_QUESTION)
+        chains = params.get('chains', [])
+        chains_idlist = id_dict.get('chains', [])
+        # 需要对chains对象进行丰富处理
+        chain_list = []
+        for index, id in enumerate(chains_idlist):
+            chain_obj = {}
+            chain_obj['object'] = chains[index]
+            if id in preset_question:
+                if isinstance(preset_question[id], list):
+                    for node_id in preset_question[id]:
+                        chain_ = chain_obj.copy()
+                        chain_['node_id'] = node_id[0]
+                        chain_['input'] = {chains[index].input_keys[0]: node_id[1]}
+                        chain_list.append(chain_)
+                    continue
+                else:
+                    chain_obj['node_id'] = preset_question[id][0]
+                    chain_obj['input'] = {chains[index].input_keys[0]: preset_question[id][1]}
+            else:
+                # give a default input
+                logger.error(f'Report has no question id={id}')
+                chain_obj['input'] = {chains[index].input_keys[0]: 'start'}
+            chain_list.append(chain_obj)
+        params['chains'] = chain_list
+        # variable
+        variable = params.get('variables')
+        variable_node_id = id_dict.get('variables')
+        params['variables'] = []
+        for index, id in enumerate(variable_node_id):
+            params['variables'].append({'node_id': id, 'input': variable[index]})
+        return class_object(**params)
+    if node_type == 'InputFileNode':
+        file_path = class_object(**params).text()
+        if file_path:
+            file_path, file_name2 = file_download(file_path[0])
+            return [file_path, file_name2 if file_name2 else file_path[1]]
+        else:
+            return ''
+>>>>>>> upstream/feat/0.2.1
     return class_object(**params).text()
 
 
@@ -210,8 +261,28 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict):
     if node_type == 'ConversationalRetrievalChain':
         params['get_chat_history'] = str
         params['combine_docs_chain_kwargs'] = {
-            'prompt': params.pop('combine_docs_chain_kwargs', None)
+            'prompt': params.pop('combine_docs_chain_kwargs', None),
+            'document_prompt': params.pop('document_prompt', None)
         }
+        params['combine_docs_chain_kwargs'] = {
+            k: v
+            for k, v in params['combine_docs_chain_kwargs'].items() if v is not None
+        }
+<<<<<<< HEAD
+=======
+    # 人工组装MultiPromptChain
+    if node_type in {'MultiPromptChain', 'MultiRuleChain'}:
+        destination_chain_name = eval(params['destination_chain_name'])
+        llm_chains = params['LLMChains']
+        destination_chain = {}
+        i = 0
+        for k, name in destination_chain_name.items():
+            destination_chain[name] = llm_chains[i]
+            i = i + 1
+        params.pop('LLMChains')
+        params.pop('destination_chain_name')
+        params['destination_chains'] = destination_chain
+>>>>>>> upstream/feat/0.2.1
     if node_type in chain_creator.from_method_nodes:
         method = chain_creator.from_method_nodes[node_type]
         if class_method := getattr(class_object, method, None):
@@ -281,10 +352,10 @@ def instantiate_prompt(node_type, class_object, params: Dict):
                 # handle_keys will be a list but it does not exist yet
                 # so we need to create it
 
-            if (isinstance(variable, List) and
-                    all(isinstance(item, Document)
-                        for item in variable)) or (isinstance(variable, BaseOutputParser) and
-                                                   hasattr(variable, 'get_format_instructions')):
+            if (isinstance(variable, List) and all(
+                    isinstance(item, Document)
+                    for item in variable)) or (isinstance(variable, BaseOutputParser)
+                                               and hasattr(variable, 'get_format_instructions')):
                 if 'handle_keys' not in format_kwargs:
                     format_kwargs['handle_keys'] = []
 
@@ -334,12 +405,18 @@ def instantiate_embedding(class_object, params: Dict):
 
 
 def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
+<<<<<<< HEAD
     search_kwargs = params.pop('search_kwargs', {})
+=======
+    user_name = params.pop('user_name', '')
+    search_kwargs = params.pop('search_kwargs', {})
+    search_type = params.pop('search_type', 'similarity')
+>>>>>>> upstream/feat/0.2.1
     if 'documents' not in params:
         params['documents'] = []
 
     if initializer := vecstore_initializer.get(class_object.__name__):
-        vecstore = initializer(class_object, params)
+        vecstore = initializer(class_object, params, search_kwargs)
     else:
         if 'texts' in params:
             params['documents'] = params.pop('texts')
@@ -347,7 +424,19 @@ def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
 
     # ! This might not work. Need to test
     if search_kwargs and hasattr(vecstore, 'as_retriever'):
+<<<<<<< HEAD
         vecstore = vecstore.as_retriever(search_kwargs=search_kwargs)
+=======
+        if settings.get_from_db('file_access'):
+            # need to verify file access
+            access_url = settings.get_from_db('file_access') + f'?username={user_name}'
+            vecstore = VectorStoreFilterRetriever(vectorstore=vecstore,
+                                                  search_type=search_type,
+                                                  search_kwargs=search_kwargs,
+                                                  access_url=access_url)
+        else:
+            vecstore = vecstore.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
+>>>>>>> upstream/feat/0.2.1
 
     return vecstore
 
@@ -403,8 +492,8 @@ def instantiate_textsplitter(
         raise ValueError('The source you provided did not load correctly or was empty.'
                          'Try changing the chunk_size of the Text Splitter.') from exc
 
-    if ('separator_type' in params and
-            params['separator_type'] == 'Text') or 'separator_type' not in params:
+    if ('separator_type' in params
+            and params['separator_type'] == 'Text') or 'separator_type' not in params:
         params.pop('separator_type', None)
         # separators might come in as an escaped string like \\n
         # so we need to convert it to a string
@@ -434,8 +523,8 @@ def replace_zero_shot_prompt_with_prompt_template(nodes):
         if node['data']['type'] == 'ZeroShotPrompt':
             # Build Prompt Template
             tools = [
-                tool for tool in nodes if tool['type'] != 'chatOutputNode' and
-                'Tool' in tool['data']['node']['base_classes']
+                tool for tool in nodes if tool['type'] != 'chatOutputNode'
+                and 'Tool' in tool['data']['node']['base_classes']
             ]
             node['data'] = build_prompt_template(prompt=node['data'], tools=tools)
             break

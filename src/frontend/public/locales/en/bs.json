@@ -228,7 +228,7 @@
         "clickOrDragHere": "Click or drag a file here to upload",
         "dropFileHere": "Drop a file here to upload",
         "delimiter": "Delimiter (multiple with ;)",
-        "splitLength": "Split Text Length",
+        "splitLength": "Chunk Size",
         "smartSplit": "Smart Semantic Split",
         "manualSplit": "Manually Set Split",
         "delimiterPlaceholder": "Delimiter",
@@ -238,7 +238,28 @@
         "selectFileToUpload": "Please select a file to upload first",
         "fileSizeExceedsLimit": "File size cannot exceed 50MB",
         "file": "File",
-        "sizeExceedsLimit": "Size exceeds 50MB"
+        "sizeExceedsLimit": "Size exceeds 50MB",
+        "editDictionary": "Edit Dictionary",
+        "exportCodeDialogTip": "Generate code to integrate the workflow into an external application (please make sure to build the skill before opening this page).",
+        "chunkOverlap": "Chunk Overlap"
+    },
+    "report": {
+        "reportTemplate": "Report Template",
+        "reportDescription": "Report generation description...",
+        "newButton": "New",
+        "importButton": "Import",
+        "start": "start",
+        "formSettings": "Form Settings",
+        "requiredLabel": "Required",
+        "isRequired": "is Required",
+        "fileRequired": "The current file is empty",
+        "selectComponent": "Select a component",
+        "varLength": "Length cannot exceed"
+    },
+    "status": {
+        "1004": "This skill has been deleted",
+        "1008": "The current skill is not online, and direct conversation is not possible.",
+        "1005": ""
     },
     "confirmButton": "Confirm",
     "add": "Add",

@@ -57,10 +57,11 @@ def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
         return HumanMessage(content=_dict['content'])
     elif role == 'assistant':
         content = _dict['content'] or ''  # OpenAI returns None for tool invocations
+        additional_kwargs = {}
         if _dict.get('function_call'):
-            additional_kwargs = {'function_call': dict(_dict['function_call'])}
-        else:
-            additional_kwargs = {}
+            additional_kwargs['function_call'] = dict(_dict['function_call'])
+        if 'metadata' in _dict:
+            additional_kwargs['metadata'] = _dict['metadata']
         return AIMessage(content=content, additional_kwargs=additional_kwargs)
     elif role == 'system':
         return SystemMessage(content=_dict['content'])
@@ -73,6 +74,8 @@ def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
 def _convert_message_to_dict(message: BaseMessage) -> dict:
     if isinstance(message, ChatMessage):
         message_dict = {'role': message.role, 'content': message.content}
+        for key in message.additional_kwargs.keys():
+            message_dict[key] = message.additional_kwargs[key]
     elif isinstance(message, HumanMessage):
         message_dict = {'role': 'user', 'content': message.content}
     elif isinstance(message, AIMessage):
@@ -182,11 +185,12 @@ class BaseHostChatLLM(BaseChatModel):
                 'do_sample': do_sample
             }
 
+            # print('messages:', messages)
             if self.verbose:
                 print('payload', params)
-
             url = f'{self.host_base_url}/{self.model_name}/infer'
             resp = self.client(url=url, json=params).json()
+            # print('resp:', resp)
 
             if not resp.get('choices', []):
                 logger.error(f'host_llm_response response={resp}')
@@ -346,7 +350,7 @@ class BaseHostChatLLM(BaseChatModel):
         return num_tokens
 
 
-class HostChatGLM2(BaseHostChatLLM):
+class HostChatGLM(BaseHostChatLLM):
     # chatglm2-12b, chatglm2-6b
     model_name: str = Field('chatglm2-6b', alias='model')
 
@@ -357,7 +361,7 @@ class HostChatGLM2(BaseHostChatLLM):
     @property
     def _llm_type(self) -> str:
         """Return type of chat model."""
-        return 'chatglm2'
+        return 'chatglm'
 
 
 class HostBaichuanChat(BaseHostChatLLM):

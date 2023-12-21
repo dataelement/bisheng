@@ -42,7 +42,23 @@ export default function L2ParameterComponent({
             };
         });
     };
-    return <div className="flex w-full flex-wrap items-center justify-between px-5 py-2 col-span-2" >
+
+    // 临时处理知识库保存方法, 类似方法多了需要抽象
+    const handleOnNewLibValue = (newValue: string, collectionId: number | '') => {
+        data.node.template[name].value = newValue;
+        data.node.template[name].collection_id = collectionId;
+        // Set state to pending
+        setTabsState((prev) => {
+            return {
+                ...prev,
+                [tabId]: {
+                    ...prev[tabId],
+                    isPending: true,
+                },
+            };
+        });
+    };
+    return <div className="flex w-full flex-wrap items-center justify-between py-2 col-span-2" >
         {type === "str" &&
             !data.node.template[name].options ? (
             <div className="mt-2 w-full">
@@ -71,8 +87,10 @@ export default function L2ParameterComponent({
                         }}
                         nodeClass={data.node}
                         disabled={disabled}
+                        id={data.node.template[name].collection_id ?? ""}
                         value={data.node.template[name].value ?? ""}
-                        onChange={handleOnNewValue}
+                        onSelect={handleOnNewLibValue}
+                        onChange={() => {}}
                     />
                 ) : (
                     <InputComponent

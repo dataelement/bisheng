@@ -52,8 +52,7 @@ def merge_partitions(partitions):
                 doc_content.append(text_elem_sep + text)
 
         last_label = label
-        metadata['bboxes'].extend(
-            list(map(lambda x: list(map(int, x)), extra_data['bboxes'])))
+        metadata['bboxes'].extend(list(map(lambda x: list(map(int, x)), extra_data['bboxes'])))
         metadata['pages'].extend(extra_data['pages'])
         metadata['types'].extend(extra_data['types'])
 
@@ -71,6 +70,7 @@ class ElemUnstructuredLoader(BasePDFLoader):
 
     Loader also stores page numbers in metadata.
     """
+
     def __init__(self,
                  file_name: str,
                  file_path: str,
@@ -88,20 +88,25 @@ class ElemUnstructuredLoader(BasePDFLoader):
         self.n = n
         super().__init__(file_path)
 
-
     def load(self) -> List[Document]:
         """Load given path as pages."""
         b64_data = base64.b64encode(open(self.file_path, 'rb').read()).decode()
-        payload = dict(
-            filename=os.path.basename(self.file_name),
-            b64_data=[b64_data],
-            mode='partition',
-            parameters={'start': self.start, 'n': self.n})
+        payload = dict(filename=os.path.basename(self.file_name),
+                       b64_data=[b64_data],
+                       mode='partition',
+                       parameters={
+                           'start': self.start,
+                           'n': self.n
+                       })
 
-        resp = requests.post(
-            self.unstructured_api_url,
-            headers=self.headers,
-            json=payload).json()
+        resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload).json()
+
+        if 200 != resp.get('status_code'):
+            logger.info(f'not return resp={resp}')
+        partitions = resp['partitions']
+        if not partitions:
+            logger.info(f'partition_error resp={resp}')
+        logger.info(f'unstruct_return code={resp.get("status_code")}')
 
         partitions = resp['partitions']
         content, metadata = merge_partitions(partitions)
@@ -116,8 +121,9 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
 
     Loader also stores page numbers in metadata.
     """
+
     def __init__(self,
-                 file_name : str,
+                 file_name: str,
                  file_path: str,
                  unstructured_api_key: str = None,
                  unstructured_api_url: str = None,
@@ -133,15 +139,12 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
 
     def load(self) -> List[Document]:
         b64_data = base64.b64encode(open(self.file_path, 'rb').read()).decode()
-        payload = dict(
-            filename=os.path.basename(self.file_name),
-            b64_data=[b64_data],
-            mode='text')
+        payload = dict(filename=os.path.basename(self.file_name), b64_data=[b64_data], mode='text')
 
-        resp = requests.post(
-            self.unstructured_api_url,
-            headers=self.headers,
-            json=payload).json()
+        resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload).json()
+
+        if 200 != resp.get('status_code'):
+            logger.info(f'not return resp={resp}')
 
         page_content = resp['text']
         meta = {'source': self.file_name}

@@ -2,8 +2,10 @@ import time
 from typing import Optional
 from uuid import uuid4
 
-from bisheng.api.v1.knowledge import addEmbedding, decide_embeddings, decide_vectorstores
-from bisheng.cache.utils import save_uploaded_file
+from bisheng.api.v1.knowledge import (addEmbedding, decide_embeddings, decide_vectorstores,
+                                      file_knowledge, text_knowledge)
+from bisheng.api.v1.schemas import ChunkInput
+from bisheng.cache.utils import save_download_file
 from bisheng.database.base import get_session
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeRead,
                                                KnowledgeUpdate)
@@ -147,7 +149,12 @@ async def upload_file(*,
 
     file_name = file.filename
     # 缓存本地
-    file_path = save_uploaded_file(file.file, 'bisheng').as_posix()
+    file_byte = []
+    file.file.seek(0)
+    # Iterate over the uploaded file in small chunks to conserve memory
+    while chunk := file.file.read(8192):  # Read 8KB at a time (adjust as needed)
+        file_byte.append(chunk)
+    file_path = save_download_file(file_byte, 'bisheng', file_name)
     auto_p = True
     if auto_p:
         separator = ['\n\n', '\n', ' ', '']
@@ -157,7 +164,8 @@ async def upload_file(*,
     knowledge = session.get(Knowledge, knowledge_id)
 
     collection_name = knowledge.collection_name
-    md5_ = file_path.rsplit('/', 1)[1]
+
+    md5_ = file_path.rsplit('/', 1)[1].split('.')[0].split('_')[0]
     db_file = KnowledgeFile(knowledge_id=knowledge_id,
                             file_name=file_name,
                             status=1,
@@ -169,8 +177,10 @@ async def upload_file(*,
 
     logger.info(f'fileName={file_name} col={collection_name} file_id={db_file.id}')
     try:
+        index_name = knowledge.index_name or knowledge.collection_name
         background_tasks.add_task(addEmbedding,
                                   collection_name=collection_name,
+                                  index_name=index_name,
                                   model=knowledge.model,
                                   chunk_size=chunk_size,
                                   separator=separator,
@@ -259,3 +269,41 @@ def get_filelist(
         'total': total_count,
         'writeable': writable
     }
+
+
+@router.post('/chunks', status_code=200)
+async def post_chunks(
+        *,
+        knowledge_id: int = Form(...),
+        metadata: str = Form(...),
+        file: UploadFile = File(...),
+        session: Session = Depends(get_session),
+):
+    """ 获取知识库文件信息. """
+    file_name = file.filename
+    file_byte = await file.read()
+    file_path = save_download_file(file_byte, 'bisheng', file_name)
+
+    db_knowledge = session.get(Knowledge, knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
+
+    file_knowledge(db_knowledge, file_path, file_name, metadata, session)
+
+    return {'status_code': 200, 'message': 'success'}
+
+
+@router.post('/chunks_string', status_code=200)
+async def post_string_chunks(
+        *,
+        document: ChunkInput,
+        session: Session = Depends(get_session),
+):
+    """ 获取知识库文件信息. """
+    db_knowledge = session.get(Knowledge, document.knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
+
+    text_knowledge(db_knowledge, document.documents, session)
+
+    return {'status_code': 200, 'message': 'success'}

@@ -46,6 +46,39 @@ def get_chatmessage(*,
     return [jsonable_encoder(message) for message in db_message]
 
 
+@router.delete('/chat/{chat_id}', status_code=200)
+def del_chat_id(*,
+                session: Session = Depends(get_session),
+                chat_id: str,
+                Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+
+    statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id,
+                                          ChatMessage.user_id == payload.get('user_id'))
+
+    session.exec(statement)
+    session.commit()
+    return {'status_code': 200, 'status_message': 'success'}
+
+
+@router.post('/liked', status_code=200)
+def like_response(*,
+                  data: dict,
+                  session: Session = Depends(get_session),
+                  Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    message_id = data.get('message_id')
+    liked = data.get('liked')
+    message = session.get(ChatMessage, message_id)
+    if message and message.user_id == payload.get('user_id'):
+        message.liked = liked
+    session.add(message)
+    session.commit()
+    return {'status_code': 200, 'status_message': 'success'}
+
+
 @router.get('/chat/list', response_model=List[ChatList], status_code=200)
 def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
@@ -111,18 +144,14 @@ async def chat(flow_id: str,
         graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
 
     try:
-        process_file = False if chat_id else True
-        graph = build_flow_no_yield(graph_data=graph_data,
-                                    artifacts={},
-                                    process_file=process_file,
-                                    flow_id=UUID(flow_id).hex,
-                                    chat_id=chat_id)
-        langchain_object = graph.build()
-        for node in langchain_object:
-            key_node = get_cache_key(flow_id, chat_id, node.id)
-            chat_manager.set_cache(key_node, node._built_object)
-            chat_manager.set_cache(get_cache_key(flow_id, chat_id), node._built_object)
-        await chat_manager.handle_websocket(flow_id, chat_id, websocket, user_id)
+        if not chat_id:
+            # 调试时，每次都初始化对象
+            chat_manager.set_cache(get_cache_key(flow_id, chat_id), None)
+        await chat_manager.handle_websocket(flow_id,
+                                            chat_id,
+                                            websocket,
+                                            user_id,
+                                            gragh_data=graph_data)
     except WebSocketException as exc:
         logger.error(exc)
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))
@@ -215,7 +244,7 @@ async def build_status(flow_id: str):
     try:
         flow_data_key = 'flow_data_' + flow_id
         built = (flow_data_store.hget(flow_data_key, 'status') == BuildStatus.SUCCESS.value)
-        return BuiltResponse(built=built,)
+        return BuiltResponse(built=built, )
 
     except Exception as exc:
         logger.error(exc)
