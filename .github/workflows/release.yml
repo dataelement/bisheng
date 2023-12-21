@@ -71,7 +71,7 @@ jobs:
         run: |
           cd ./src/backend
           poetry source add --priority=supplemental foo http://${{ secrets.NEXUS_PUBLIC }}:${{ secrets.NEXUS_PUBLIC_PASSWORD }}@${{ env.PY_NEXUS }}/repository/pypi-group/simple
-          sed -i 's/^bisheng_langchain.*/bisheng_langchain = "0.0.0"/g' pyproject.toml
+          # sed -i 's/^bisheng_langchain.*/bisheng_langchain = "0.0.0"/g' pyproject.toml
           poetry lock
           cd ../../
 

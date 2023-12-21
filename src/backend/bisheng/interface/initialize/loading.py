@@ -456,7 +456,7 @@ def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
     # ! This might not work. Need to test
     if search_kwargs and hasattr(vecstore, 'as_retriever'):
         if settings.get_from_db('file_access'):
-            # need to verify file access
+            # need to verify file access / 只针对知识库
             access_url = settings.get_from_db('file_access') + f'?username={user_name}'
             vecstore = VectorStoreFilterRetriever(vectorstore=vecstore,
                                                   search_type=search_type,

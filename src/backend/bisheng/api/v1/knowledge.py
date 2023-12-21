@@ -600,7 +600,7 @@ def text_knowledge(
         metadata = [{
             'file_id': db_file.id,
             'knowledge_id': f'{db_knowledge.id}',
-            'page': doc.metadata.pop('page', ''),
+            'page': doc.metadata.pop('page'),
             'source': doc.metadata.get('source', ''),
             'bbox': doc.metadata.get('bbox', ''),
             'extra': json.dumps(doc.metadata)

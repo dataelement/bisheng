@@ -235,7 +235,7 @@ class ChatManager:
                             return
         except Exception as e:
             # Handle any exceptions that might occur
-            logger.exception(e)
+            logger.error()
             await self.close_connection(
                 client_id=client_id,
                 chat_id=chat_id,
