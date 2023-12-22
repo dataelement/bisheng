@@ -26,13 +26,13 @@ class Calculator(BaseTool, abc.ABC):
         # 用例中没有用到 arun 不予具体实现
         pass
 
-    def _run(self, para: str) -> str:
-        para = para.replace("^", "**")
-        if "sqrt" in para:
-            para = para.replace("sqrt", "math.sqrt")
-        elif "log" in para:
-            para = para.replace("log", "math.log")
-        return eval(para)
+    def _run(self, formula: str) -> str:
+        formula = formula.replace("^", "**")
+        if "sqrt" in formula:
+            formula = formula.replace("sqrt", "math.sqrt")
+        elif "log" in formula:
+            formula = formula.replace("log", "math.log")
+        return eval(formula)
 
 
 def init_calculator_by_tool() -> Tool:

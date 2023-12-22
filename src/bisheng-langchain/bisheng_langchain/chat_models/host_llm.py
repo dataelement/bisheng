@@ -182,10 +182,13 @@ class BaseHostChatLLM(BaseChatModel):
                 'top_p': top_p,
                 'temperature': temperature,
                 'max_tokens': max_tokens,
-                'do_sample': do_sample
+                'do_sample': do_sample,
+                'function_call': kwargs.get('function_call', None),
+                'functions': kwargs.get('functions', [])
             }
 
             # print('messages:', messages)
+            # print('functions:', kwargs.get('functions', []))
             if self.verbose:
                 print('payload', params)
             url = f'{self.host_base_url}/{self.model_name}/infer'
