@@ -26,8 +26,10 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks: {
-            acebuilds: ['ace-builds', 'react-syntax-highlighter', 'rehype-mathjax'],
-            pdfjs: ['pdfjs-dist']
+            acebuilds: ['react-ace', 'ace-builds', 'react-syntax-highlighter', 'rehype-mathjax', 'react-markdown'],
+            reactflow: ['reactflow'],
+            pdfjs: ['pdfjs-dist'],
+            reactdrop: ['react-window', 'react-beautiful-dnd', 'react-dropzone']
           }
         }
       }
@@ -46,6 +48,10 @@ export default defineConfig(() => {
               'node_modules/ace-builds/src-min-noconflict/worker-yaml.js'
             ],
             dest: 'node_modules/ace-builds/src-min-noconflict/'
+          },
+          {
+            src: 'node_modules/pdfjs-dist/build/pdf.worker.min.js',
+            dest: './'
           }
         ]
       }),
