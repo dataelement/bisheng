@@ -1,5 +1,5 @@
+import { PlusCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import {
@@ -11,10 +11,10 @@ import {
     TableRow
 } from "../../../components/ui/table";
 import { addServiceApi, deleteServiceApi, getServicesApi } from "../../../controllers/API";
-import { PlusCircle } from "lucide-react";
+import { useCopyText } from "../../../util/hook";
+import { useTranslation } from "react-i18next";
 
 export default function RTConfig({ open, onChange }) {
-    const { t } = useTranslation()
 
     const nameRef = useRef(null)
     const urlRef = useRef(null)
@@ -28,6 +28,9 @@ export default function RTConfig({ open, onChange }) {
         nameRef.current.value = ''
         urlRef.current.value = ''
     }
+
+    const { t } = useTranslation()
+    const copyText = useCopyText()
 
     return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => { }}>
         <div className="max-w-[800px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background">
@@ -46,7 +49,9 @@ export default function RTConfig({ open, onChange }) {
                         {services.map((el) => (
                             <TableRow key={el.id}>
                                 <TableCell className="py-2">{el.name}</TableCell>
-                                <TableCell className="py-2">{el.url}</TableCell>
+                                <TableCell className="py-2">
+                                    <p className="cursor-pointer" onClick={e => copyText(el.url)}>{el.url}</p>
+                                </TableCell>
                                 <TableCell className="py-2"><Button variant="ghost" className="h-8 rounded-full" onClick={() => handleDel(el.id)}>{t('delete')}</Button></TableCell>
                             </TableRow>
                         ))}
@@ -62,7 +67,7 @@ export default function RTConfig({ open, onChange }) {
                 </Table>
             </div>
             <div className="flex justify-end gap-4 mt-4">
-                <Button variant="ghost" className="h-8 rounded-full" onClick={() => setShowAdd(true)}><PlusCircle className="pr-1" />创建</Button>
+                <Button variant="ghost" className="h-8 rounded-full" onClick={() => setShowAdd(true)}><PlusCircle className="pr-1" />{t('create')}</Button>
             </div>
         </div>
     </dialog>

@@ -201,7 +201,7 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
 
                     <div className="flex justify-end gap-4">
                         <Button variant='outline' className="h-8" onClick={() => setOpen(false)}>{t('cancel')}</Button>
-                        <Button type="submit" className="h-8" disabled={!end} onClick={() => !loading && handleSubmit()}>{t('create')}</Button>
+                        <Button type="submit" className="h-8" disabled={loading || !end} onClick={() => !loading && handleSubmit()}>{t('create')}</Button>
                     </div>
                 </div>
             </div>

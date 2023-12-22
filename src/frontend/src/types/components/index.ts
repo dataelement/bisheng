@@ -9,6 +9,7 @@ export type InputComponentType = {
   password: boolean;
   disableCopyPaste?: boolean;
   editNode?: boolean;
+  maxLength?: number;
   onChangePass?: (value: boolean | boolean) => void;
   showPass?: boolean;
 };
@@ -94,6 +95,8 @@ export type FileComponentType = {
   fileTypes: Array<string>;
   onFileChange: (value: string) => void;
   editNode?: boolean;
+  isSSO?: boolean;
+  placeholder?: string;
 };
 
 export type DisclosureComponentType = {

@@ -46,7 +46,6 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
     // const { user } = useContext(userContext);
     console.log('chat :>> ', chat);
 
-export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSource: () => void }) => {
     const textRef = useRef(null)
     const { t } = useTranslation()
     const [cursor, setCursor] = useState({ x: 0, y: 0 })
@@ -74,7 +73,7 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
             <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeMathjax]}
-                className="markdown prose inline-block break-words text-primary dark:prose-invert max-w-[60vw]"
+                className="markdown prose inline-block break-words text-primary dark:prose-invert max-w-full text-sm"
                 components={{
                     code: ({ node, inline, className, children, ...props }) => {
                         if (children.length) {
@@ -110,7 +109,7 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
     const logMkdown = useMemo(
         () => (
             chat.thought && <ReactMarkdown
-                className="markdown prose text-gray-600 inline-block break-words max-w-[60vw]"
+                className="markdown prose text-gray-600 inline-block break-words max-w-full text-sm"
             >
                 {chat.thought.toString()}
             </ReactMarkdown>
@@ -191,28 +190,6 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
         );
     };
 
-    if (chat.isSend) return chat.files.length ? <>
-        <div className="chat chat-end">
-            <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-sky-500 flex items-center justify-center"><User color="#fff" size={28} /></div></div>
-            <Card className="my-2 w-[200px] relative">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><File />{t('file')}</CardTitle>
-                    <CardDescription>{chat.files[0]?.file_name}</CardDescription>
-                </CardHeader>
-                {chat.files[0]?.data === 'progress' && <div className=" absolute top-0 left-0 w-full h-full bg-[rgba(255,255,255,0.8)]"><span className="loading loading-spinner loading-xs mr-4 align-middle absolute left-[-24px] bottom-0"></span></div>}
-                {chat.files[0]?.data === 'error' && <div className="flex w-4 h-4 justify-center items-center absolute left-[-24px] bottom-0 bg-red-500 text-gray-50 rounded-full">!</div>}
-            </Card>
-        </div>
-        {!chat.files[0]?.data && <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 ${color['system']} ${border['system']}`}>{t('chat.filePrsing')}</div>}
-    </> :
-        <div className="chat chat-end">
-            <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-[rgba(53,126,249,.6)] flex items-center justify-center"><User color="#fff" size={28} /></div></div>
-            <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)] dark:text-gray-100">
-                {chat.category === 'loading' && <span className="loading loading-spinner loading-xs mr-4 align-middle"></span>}
-                {chat.message[chat.chatKey]}
-            </div>
-        </div>
-
     // 日志分析
     if (chat.thought) return <>
         <div className={`log border-[3px] rounded-xl whitespace-pre-wrap mt-4 p-4 relative ${color[chat.category || 'system']} ${border[chat.category || 'system']}`}>
@@ -278,6 +255,9 @@ export const ChatMessage = ({ chat, onSource }: { chat: ChatMessageType, onSourc
         {chat.sender && <div className="chat-header text-gray-400 text-sm">{chat.sender}</div>}
         <div ref={textRef} className={`chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8 relative ${chat.id && chat.source === SourceType.NONE && 'mb-8'}`}>
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
+            {/* @user */}
+            {chat.receiver && <p className="text-blue-500 text-sm">@ {chat.receiver.user_name}</p>}
+            {/* 光标 */}
             {chat.message.toString() && !chat.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>}
             {/* 赞 踩 */}
             {!!chat.id && chat.end && <Thumbs

@@ -4,6 +4,7 @@ import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { uploadFile } from "../../controllers/API";
 import { FileComponentType } from "../../types/components";
+import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
 
 export default function InputFileComponent({
   value,
@@ -11,8 +12,10 @@ export default function InputFileComponent({
   disabled,
   suffixes,
   fileTypes,
+  placeholder = 'The current file is empty',
   onFileChange,
   editNode = false,
+  isSSO = false
 }: FileComponentType) {
   const [myValue, setMyValue] = useState(value);
   const [loading, setLoading] = useState(false);
@@ -55,26 +58,34 @@ export default function InputFileComponent({
 
       // Check if the file type is correct
       // if (file && checkFileType(file.name)) {
-        // Upload the file
-        uploadFile(file, tabId)
-          .then((res) => res.data)
-          .then((data) => {
-            console.log("File uploaded successfully");
-            // Get the file name from the response
-            const { file_path } = data;
+      // Upload the file
+      isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
+        setLoading(false);
+        if (typeof res === 'string') return setErrorData({title: "Error", list: [res]})
+        const { file_path } = res;
+        setMyValue(file.name);
+        onChange(file.name);
+        // sets the value that goes to the backend
+        onFileChange(file_path);
+      }) : uploadFile(file, tabId)
+        .then((res) => res.data)
+        .then((data) => {
+          console.log("File uploaded successfully");
+          // Get the file name from the response
+          const { file_path } = data;
 
-            // Update the state and callback with the name of the file
-            // sets the value to the user
-            setMyValue(file.name);
-            onChange(file.name);
-            // sets the value that goes to the backend
-            onFileChange(file_path);
-            setLoading(false);
-          })
-          .catch(() => {
-            console.error("Error occurred while uploading file");
-            setLoading(false);
-          });
+          // Update the state and callback with the name of the file
+          // sets the value to the user
+          setMyValue(file.name);
+          onChange(file.name);
+          // sets the value that goes to the backend
+          onFileChange(file_path);
+          setLoading(false);
+        })
+        .catch(() => {
+          console.error("Error occurred while uploading file");
+          setLoading(false);
+        });
       // } else {
       //   // Show an error if the file type is not allowed
       //   setErrorData({
@@ -99,11 +110,11 @@ export default function InputFileComponent({
             editNode
               ? "input-edit-node input-dialog text-muted-foreground"
               : disabled
-              ? "input-disable input-dialog input-primary"
-              : "input-dialog input-primary text-muted-foreground"
+                ? "input-disable input-dialog input-primary"
+                : "input-dialog input-primary text-muted-foreground"
           }
         >
-          {myValue !== "" ? myValue : "The current file is empty"}
+          {myValue !== "" ? myValue : placeholder}
         </span>
         <button onClick={handleButtonClick}>
           {!editNode && !loading && (

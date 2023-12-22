@@ -19,7 +19,8 @@ import {
   Scissors,
   TerminalSquare,
   Wand2,
-  Wrench
+  Wrench,
+  LayoutPanelLeft
 } from "lucide-react";
 import { ComponentType, SVGProps } from "react";
 import { Connection, Edge, Node, ReactFlowInstance } from "reactflow";
@@ -51,6 +52,7 @@ import { SupabaseIcon } from "./icons/supabase";
 import { APITemplateType } from "./types/api";
 import { IVarHighlightType } from "./types/components";
 import { FlowType, NodeType } from "./types/flow";
+import i18next from "i18next";
 
 export function classNames(...classes: Array<string>) {
   return classes.filter(Boolean).join(" ");
@@ -130,10 +132,11 @@ export const nodeColors: { [char: string]: string } = {
   str: "#049524",
   retrievers: "#e6b25a",
   input_output: "#0ea5e9",
+  autogen_roles: '#6366f1',
   unknown: "#9CA3AF",
 };
 
-export const nodeNames: { [char: string]: string } = {
+const nodeNames: { [char: string]: string } = {
   prompts: "提示词/Prompts",
   llms: "语言模型/LLMs",
   chains: "工作链/Chains",
@@ -149,11 +152,39 @@ export const nodeNames: { [char: string]: string } = {
   wrappers: "Wrappers",
   textsplitters: "文本分割/TextSplitters",
   retrievers: "检索器/Retrievers",
-  input_output: "输入/input",
+  input_output: "输入输出/inputOutput",
   utilities: "通用工具/Utilities",
   output_parsers: "输出解析器/OutputParsers",
+  autogen_roles: '多智能体角色/AutogenRole',
   unknown: "Unknown",
 };
+
+const nodeEnNames: { [char: string]: string } = {
+  prompts: "Prompts",
+  llms: "LLMs",
+  chains: "Chains",
+  agents: "Agents",
+  tools: "Tools",
+  memories: "Memories",
+  advanced: "Advanced",
+  chat: "Chat",
+  embeddings: "Embeddings",
+  documentloaders: "Loaders",
+  vectorstores: "VectorStores",
+  toolkits: "Toolkits",
+  wrappers: "Wrappers",
+  textsplitters: "TextSplitters",
+  retrievers: "Retrievers",
+  input_output: "input/output",
+  utilities: "Utilities",
+  output_parsers: "OutputParsers",
+  autogen_roles: 'AutogenRole',
+  unknown: "Unknown",
+};
+
+export function getNodeNames() {
+  return i18next.language === 'en' ? nodeEnNames : nodeNames
+}
 
 export const nodeIconsLucide: {
   [char: string]: React.ForwardRefExoticComponent<
@@ -312,6 +343,7 @@ export const nodeIconsLucide: {
   >,
   input_output: FileInput,
   // output: FileOutput,
+  autogen_roles: LayoutPanelLeft
 };
 
 export const gradients = [
@@ -583,6 +615,7 @@ export function getConnectedNodes(edge: Edge, nodes: Array<Node>): Array<Node> {
   return nodes.filter((node) => node.id === targetId || node.id === sourceId);
 }
 
+// 控制节点链接的验证，false 不可连
 export function isValidConnection(
   { source, target, sourceHandle, targetHandle }: Connection,
   reactFlowInstance: ReactFlowInstance
@@ -966,9 +999,9 @@ export function validateNode(
     node: { template },
   } = n.data;
   return Object.keys(template).reduce(
-    (errors: Array<string>, t) =>
+    (errors: Array<string>, t) => {
       // （必填 && 显示 && 值为空 && 无连线） 即验证不通过
-      errors.concat(
+      return errors.concat(
         template[t].required &&
           template[t].show &&
           (template[t].value === undefined ||
@@ -980,14 +1013,15 @@ export function validateNode(
               e.targetHandle.split("|")[2] === n.id
           )
           ? [
-            `${type} 缺失了 ${template.display_name || toNormalCase(template[t].name)}.`,
+            `${type} ${i18next.language === 'en' ? 'lost' : '缺少参数'} ${template.display_name || toTitleCase(template[t].name)}.`,
           ]
           : []
-      ),
-    [] as string[]
+      )
+    }, [] as string[]
   );
 }
 
+// 校验技能节点有效性
 export function validateNodes(reactFlowInstance: ReactFlowInstance) {
   if (reactFlowInstance.getNodes().length === 0) {
     return [
@@ -1087,18 +1121,19 @@ export const copyText = (text: string) => {
   }
 
   const areaDom = document.createElement("textarea");
-  return new Promise((res) => {
-    areaDom.value = text
-    document.body.appendChild(areaDom);
+  // 设置样式使其不在屏幕上显示
+  areaDom.style.position = 'absolute';
+  areaDom.style.left = '-9999px';
+  areaDom.value = text;
 
-    const range = document.createRange();
-    range.selectNode(areaDom);
-    window.getSelection().removeAllRanges();
-    window.getSelection().addRange(range);
+  document.body.appendChild(areaDom);
+  areaDom.focus();
+  areaDom.select();
+
+  return new Promise((res) => {
     document.execCommand('copy');
-    res(text)
+    res(text);
   }).then(() => {
-    window.getSelection().removeAllRanges();
     document.body.removeChild(areaDom);
   })
 };

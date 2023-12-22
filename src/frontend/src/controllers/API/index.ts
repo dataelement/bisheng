@@ -31,6 +31,8 @@ axios.interceptors.response.use(function (response) {
   }
   return Promise.reject(error);
 })
+
+export default axios
 /**
  * Fetches all objects from the API endpoint.
  *
@@ -419,6 +421,13 @@ export const getChatsApi = () => {
   return axios.get(`/api/v1/chat/list`).then(res =>
     res.data?.filter(el => el.chat_id) || []
   )
+};
+
+/**
+ * 获取会话列表
+ */
+export const deleteChatApi = (chatId) => {
+  return axios.delete(`/api/v1/chat/${chatId}`)
 };
 
 

@@ -29,6 +29,7 @@ import {
 import { Textarea } from "../../components/ui/textarea";
 import { CHAT_FORM_DIALOG_SUBTITLE, THOUGHTS_ICON } from "../../constants";
 import { TabsContext } from "../../contexts/tabsContext";
+import { useTranslation } from "react-i18next";
 
 export default function FormModal({
   flow,
@@ -46,7 +47,7 @@ export default function FormModal({
       if (!formKeysData) {
         throw new Error("formKeysData is undefined");
       }
-      const inputKeys = formKeysData.input_keys.filter(el => !el.type)[0];
+      const inputKeys = formKeysData.input_keys.filter(el => !el.type)[0] || {};
       const handleKeys = formKeysData.handle_keys;
 
       const keyToUse = Object.keys(inputKeys).find(
@@ -358,7 +359,7 @@ export default function FormModal({
     let nodeValidationErrors = validateNodes(reactFlowInstance);
     if (nodeValidationErrors.length === 0) {
       let inputs: any = tabsState[id.current].formKeysData.input_keys;
-      inputs = inputs.find((el: any) => !el.type)
+      inputs = inputs.find((el: any) => !el.type) || {}
       // const chatKey = Object.keys(inputs)[0];
 
       // if (!chatKey) return setErrorData({ title: "提示", list: ["至少选择一个inputkey"] });
@@ -405,7 +406,7 @@ export default function FormModal({
   function handleOnCheckedChange(checked: boolean, i: string) {
     if (checked === true) {
       setChatKey(i);
-      const input = tabsState[flow.id].formKeysData.input_keys.find((el: any) => !el.type)
+      const input = tabsState[flow.id].formKeysData.input_keys.find((el: any) => !el.type)  || {}
       setChatValue(input[i]);
     } else {
       setChatKey(null);
@@ -414,8 +415,10 @@ export default function FormModal({
   }
 
   const input_keys = useMemo(() => {
-    return tabsState[flow.id].formKeysData.input_keys.find((el: any) => !el.type)
+    return tabsState[flow.id].formKeysData.input_keys.find((el: any) => !el.type) || {}
   }, [tabsState])
+
+  const { t } = useTranslation()
 
   return (
     <Dialog open={open} onOpenChange={setModalOpen}>
@@ -430,7 +433,7 @@ export default function FormModal({
                 aria-hidden="true"
               />
             </DialogTitle>
-            <DialogDescription>{CHAT_FORM_DIALOG_SUBTITLE}</DialogDescription>
+            <DialogDescription>{t('chat.chatDialogTip')}</DialogDescription>
           </DialogHeader>
 
           <div className="form-modal-iv-box ">
@@ -497,7 +500,7 @@ export default function FormModal({
                               onChange={(e) => {
                                 setTabsState((old) => {
                                   let newTabsState = _.cloneDeep(old);
-                                  const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type)
+                                  const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type) || {}
                                   input[i] = e.target.value;
                                   return newTabsState;
                                 });
@@ -582,7 +585,7 @@ export default function FormModal({
                         setChatValue(value);
                         setTabsState((old) => {
                           let newTabsState = _.cloneDeep(old);
-                          const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type)
+                          const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type) || {}
                           input[chatKey] = value;
                           return newTabsState;
                         });

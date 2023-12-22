@@ -33,7 +33,7 @@ const Anwser = ({ id, msg, onInit, onAdd }) => {
         return () => pRef.current?.removeEventListener('click', handleclick)
     }, [])
 
-    return <div className="bg-gray-100 rounded-md py-4 px-2">
+    return <div className="bg-gray-100 rounded-md py-4 px-2 max-h-24 overflow-y-auto">
         <p ref={pRef} className="anwser-souce" dangerouslySetInnerHTML={{ __html: html }}></p>
     </div>
 }
