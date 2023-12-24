@@ -142,7 +142,7 @@ def _parse_ai_message(message: BaseMessage) -> Union[AgentAction, AgentFinish]:
 
 
 class LLMFunctionsAgent(BaseSingleActionAgent):
-    """An Agent driven by OpenAIs function powered API.
+    """An Agent driven by function powered API.
 
     Args:
         llm: This should be an instance of ChatOpenAI, specifically a model
@@ -163,8 +163,11 @@ class LLMFunctionsAgent(BaseSingleActionAgent):
 
     @root_validator
     def validate_llm(cls, values: dict) -> dict:
-        if (not isinstance(values["llm"], ChatOpenAI)) and (not isinstance(values["llm"], HostQwenChat)):
-            raise ValueError("Only supported with ChatOpenAI and HostQwenChat models.")
+        if ((not isinstance(values["llm"], ChatOpenAI)) and
+            (not isinstance(values["llm"], HostQwenChat)) and
+            (not isinstance(values["llm"], ProxyChatLLM))):
+            raise ValueError(
+                "Only supported with ChatOpenAI and HostQwenChat and ProxyChatLLM models.")
         return values
 
     @root_validator
@@ -209,6 +212,7 @@ class LLMFunctionsAgent(BaseSingleActionAgent):
         full_inputs = dict(**selected_inputs, agent_scratchpad=agent_scratchpad)
         prompt = self.prompt.format_prompt(**full_inputs)
         messages = prompt.to_messages()
+        # print(messages)
         if with_functions:
             predicted_message = self.llm.predict_messages(
                 messages,
@@ -329,8 +333,11 @@ class LLMFunctionsAgent(BaseSingleActionAgent):
         **kwargs: Any,
     ) -> BaseSingleActionAgent:
         """Construct an agent from an LLM and tools."""
-        if (not isinstance(llm, ChatOpenAI)) and (not isinstance(llm, HostQwenChat)):
-            raise ValueError("Only supported with ChatOpenAI models.")
+        if ((not isinstance(llm, ChatOpenAI)) and
+            (not isinstance(llm, HostQwenChat)) and
+            (not isinstance(llm, ProxyChatLLM))):
+            raise ValueError(
+                "Only supported with ChatOpenAI and HostQwenChat and ProxyChatLLM models.")
         prompt = cls.create_prompt(
             extra_prompt_messages=extra_prompt_messages,
             system_message=system_message,
