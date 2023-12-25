@@ -176,8 +176,8 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
                                 </Button>)
                         }
                     </div>;
-                case SourceType.HAS_QA:
-                    return <p className="flex items-center text-gray-400 pb-2">{extra.qa}</p>;
+                // case SourceType.HAS_QA:
+                //     return <p className="flex items-center text-gray-400 pb-2">{extra.qa}</p>;
                 default:
                     return null;
             }
@@ -206,31 +206,31 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
     }
 
 
-    if (chat.isSend) return chat.files.length ? <>
-        {/* 文件 */}
-        <div className="chat chat-end">
-            <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-sky-500 flex items-center justify-center"><User color="#fff" size={28} /></div></div>
-            <div className="chat-header text-gray-400 text-sm">{userName}</div>
-            <Card className="my-2 w-[200px] relative">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><File />{t('file')}</CardTitle>
-                    <CardDescription>{decodeURIComponent(chat.files[0]?.file_name || '')}</CardDescription>
-                </CardHeader>
-                {chat.files[0]?.data === 'progress' && <div className=" absolute top-0 left-0 w-full h-full bg-[rgba(255,255,255,0.8)]"><span className="loading loading-spinner loading-xs mr-4 align-middle absolute left-[-24px] bottom-0"></span></div>}
-                {chat.files[0]?.data === 'error' && <div className="flex w-4 h-4 justify-center items-center absolute left-[-24px] bottom-0 bg-red-500 text-gray-50 rounded-full">!</div>}
-            </Card>
+    // if (chat.isSend) return chat.files.length ? <>
+    // 发送消息
+    if (chat.isSend) return <div className="chat chat-end">
+        <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-[rgba(53,126,249,.6)] flex items-center justify-center"><User color="#fff" size={28} /></div></div>
+        <div className="chat-header text-gray-400 text-sm">{userName}</div>
+        <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)] dark:text-gray-100 whitespace-pre-line text-sm min-h-8">
+            {chat.category === 'loading' && <span className="loading loading-spinner loading-xs mr-4 align-middle"></span>}
+            {chat.message[chat.chatKey]}
         </div>
-        {/* {!chat.files[0]?.data && <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 ${color['system']} ${border['system']}`}>{t('chat.filePrsing')}</div>} */}
-    </> :
-        // 发送消息
-        <div className="chat chat-end">
-            <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-[rgba(53,126,249,.6)] flex items-center justify-center"><User color="#fff" size={28} /></div></div>
-            <div className="chat-header text-gray-400 text-sm">{userName}</div>
-            <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)] dark:text-gray-100 whitespace-pre-line text-sm min-h-8">
-                {chat.category === 'loading' && <span className="loading loading-spinner loading-xs mr-4 align-middle"></span>}
-                {chat.message[chat.chatKey]}
-            </div>
-        </div>
+    </div>
+    {/* 文件 */ }
+    // <div className="chat chat-end">
+    //     <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-sky-500 flex items-center justify-center"><User color="#fff" size={28} /></div></div>
+    //     <div className="chat-header text-gray-400 text-sm">{userName}</div>
+    //     <Card className="my-2 w-[200px] relative">
+    //         <CardHeader>
+    //             <CardTitle className="flex items-center gap-2"><File />{t('file')}</CardTitle>
+    //             <CardDescription>{decodeURIComponent(chat.files[0]?.file_name || '')}</CardDescription>
+    //         </CardHeader>
+    //         {chat.files[0]?.data === 'progress' && <div className=" absolute top-0 left-0 w-full h-full bg-[rgba(255,255,255,0.8)]"><span className="loading loading-spinner loading-xs mr-4 align-middle absolute left-[-24px] bottom-0"></span></div>}
+    //         {chat.files[0]?.data === 'error' && <div className="flex w-4 h-4 justify-center items-center absolute left-[-24px] bottom-0 bg-red-500 text-gray-50 rounded-full">!</div>}
+    //     </Card>
+    // </div>
+    {/* {!chat.files[0]?.data && <div className={`log border-[3px] rounded-xl whitespace-pre-wrap my-4 p-4 ${color['system']} ${border['system']}`}>{t('chat.filePrsing')}</div>} */ }
+    // </> :
 
     const avatarColor = colorList[(chat.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length]
     // 模型返回的文件
