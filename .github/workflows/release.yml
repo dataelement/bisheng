@@ -26,7 +26,7 @@ jobs:
       - name: Get version
         id: get_version
         run: |
-          echo ::set-output name=VERSION::${GITHUB_REF/v\//}
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
 
       # 构建 bisheng-langchain
       - name: Set python version 3.8
