@@ -271,7 +271,7 @@ The cursor: default; property value restores the browser's default cursor style 
     @apply bg-muted transition-colors
   }
   .components-disclosure-title {
-    @apply flex items-center text-sm text-primary break-keep
+    @apply flex items-center text-xs text-primary break-keep
   }
   .components-disclosure-div {
     @apply flex gap-2

@@ -21,20 +21,14 @@ import Report from "./pages/Report";
 // const FileViewPage = lazy(() => import(/* webpackChunkName: "FileViewPage" */ "./pages/FileViewPage"));
 
 const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <MainLayout />,
-    children: [
-      { path: "", element: <SkillChatPage /> },
-      { path: "skill", element: <L2Edit /> },
-      { path: "skill/:id", element: <L2Edit /> },
-      { path: "filelib", element: <FileLibPage /> },
-      { path: "filelib/:id", element: <FilesPage /> },
-      { path: "skills", element: <SkillPage /> },
-      { path: "model", element: <ModelPage /> },
-      { path: "sys", element: <SystemPage /> },
-    ],
-  },
+  { path: "", element: <SkillChatPage /> },
+  { path: "skill", element: <L2Edit /> },
+  { path: "skill/:id", element: <L2Edit /> },
+  { path: "filelib", element: <FileLibPage /> },
+  { path: "filelib/:id", element: <FilesPage /> },
+  { path: "skills", element: <SkillPage /> },
+  { path: "model", element: <ModelPage /> },
+  { path: "sys", element: <SystemPage /> },
   { path: "model/doc", element: <Doc /> },
   {
     path: "/flow/:id/",
