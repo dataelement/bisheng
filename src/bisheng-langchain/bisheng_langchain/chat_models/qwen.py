@@ -192,15 +192,20 @@ class ChatQWen(BaseChatModel):
             return self.client.post(url=url, json=inp).json()
 
         rsp_dict = _completion_with_retry(**kwargs)
-        if 200 != rsp_dict.get('status_code'):
+        if 'output' not in rsp_dict:
             logger.error(f'proxy_llm_error resp={rsp_dict}')
-            raise Exception(rsp_dict)
-        return rsp_dict
+            message = rsp_dict['message']
+            raise Exception(message)
+        else:
+            return rsp_dict['output'], rsp_dict.get('usage', '')
 
     async def acompletion_with_retry(self, **kwargs: Any) -> Any:
         """Use tenacity to retry the async completion call."""
         retry_decorator = _create_retry_decorator(self)
-        self.client.headers.update({'Accept': 'text/event-stream'})
+        if self.streaming:
+            self.client.headers.update({'Accept': 'text/event-stream'})
+        else:
+            self.client.headers.pop('Accept', '')
 
         @retry_decorator
         async def _acompletion_with_retry(**kwargs: Any) -> Any:
@@ -211,19 +216,26 @@ class ChatQWen(BaseChatModel):
             inp = {'input': input, 'parameters': params, 'model': self.model_name}
             # Use OpenAI's async api https://github.com/openai/openai-python#async-api
             async with self.client.apost(url=url, json=inp) as response:
-                async for txt in response.content.iter_any():
-                    if b'\n' in txt:
-                        for txt_ in txt.split(b'\n'):
+                async for line in response.content.iter_any():
+                    if b'\n' in line:
+                        for txt_ in line.split(b'\n'):
                             yield txt_.decode('utf-8').strip()
                     else:
-                        yield txt.decode('utf-8').strip()
+                        yield line.decode('utf-8').strip()
 
         async for response in _acompletion_with_retry(**kwargs):
+            is_error = False
             if response:
-                if 'data' in response:
-                    yield json.loads(response.split(':', 1)[1])
+                if response.startswith('event:error'):
+                    is_error = True
+                elif response.startswith('data:'):
+                    yield (is_error, response[len('data:'):])
+                    if is_error:
+                        break
+                elif response.startswith('{'):
+                    yield (is_error, response)
                 else:
-                    yield ''
+                    continue
 
     def _combine_llm_outputs(self, llm_outputs: List[Optional[dict]]) -> dict:
         overall_token_usage: dict = {}
@@ -249,8 +261,8 @@ class ChatQWen(BaseChatModel):
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {**params, **kwargs}
 
-        response = self.completion_with_retry(messages=message_dicts, **params)
-        return self._create_chat_result(response)
+        output, usage = self.completion_with_retry(messages=message_dicts, **params)
+        return self._create_chat_result(output, usage)
 
     async def _agenerate(
         self,
@@ -266,21 +278,29 @@ class ChatQWen(BaseChatModel):
             role = 'assistant'
             params['stream'] = True
             function_call: Optional[dict] = None
-            async for stream_resp in self.acompletion_with_retry(messages=message_dicts, **params):
-                if not stream_resp:
-                    continue
-
-                role = stream_resp['choices'][0]['delta'].get('role', role)
-                token = stream_resp['choices'][0]['delta'].get('content', '')
-                inner_completion += token or ''
-                _function_call = stream_resp['choices'][0]['delta'].get('function_call')
-                if _function_call:
-                    if function_call is None:
-                        function_call = _function_call
-                    else:
-                        function_call['arguments'] += _function_call['arguments']
-                if run_manager:
-                    await run_manager.on_llm_new_token(token)
+            async for is_error, stream_resp in self.acompletion_with_retry(messages=message_dicts,
+                                                                           **params):
+                output = None
+                msg = json.loads(stream_resp)
+                if is_error:
+                    logger.error(stream_resp)
+                    raise ValueError(stream_resp)
+                if 'output' in msg:
+                    output = msg['output']
+                choices = output.get('choices')
+                if choices:
+                    for choice in choices:
+                        role = choice['message'].get('role', role)
+                        token = choice['message'].get('content', '')
+                        inner_completion += token or ''
+                        _function_call = choice['message'].get('function_call')
+                        if run_manager:
+                            await run_manager.on_llm_new_token(token)
+                        if _function_call:
+                            if function_call is None:
+                                function_call = _function_call
+                            else:
+                                function_call['arguments'] += _function_call['arguments']
             message = _convert_dict_to_message({
                 'content': inner_completion,
                 'role': role,
@@ -288,8 +308,13 @@ class ChatQWen(BaseChatModel):
             })
             return ChatResult(generations=[ChatGeneration(message=message)])
         else:
-            response = await self.acompletion_with_retry(messages=message_dicts, **params)
-            return self._create_chat_result(response)
+            response = [
+                response
+                async for _, response in self.acompletion_with_retry(messages=message_dicts,
+                                                                     **params)
+            ]
+            response = json.loads(response[0])
+            return self._create_chat_result(response.get('output'), response.get('usage'))
 
     def _create_message_dicts(
             self, messages: List[BaseMessage],
@@ -304,14 +329,14 @@ class ChatQWen(BaseChatModel):
 
         return message_dicts, params
 
-    def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
+    def _create_chat_result(self, response: Mapping[str, Any], usage) -> ChatResult:
         generations = []
         for res in response['choices']:
             message = _convert_dict_to_message(res['message'])
             gen = ChatGeneration(message=message)
             generations.append(gen)
 
-        llm_output = {'token_usage': response['usage'], 'model_name': self.model_name}
+        llm_output = {'token_usage': usage, 'model_name': self.model_name}
         return ChatResult(generations=generations, llm_output=llm_output)
 
     @property
@@ -414,5 +439,8 @@ class ChatQWen(BaseChatModel):
             if customized_model_id is None:
                 raise ValueError('customized_model_id is required for %s' % model)
             input['customized_model_id'] = customized_model_id
+
+        if 'incremental_output' not in kwargs and kwargs.get('stream'):
+            parameters['incremental_output'] = True
 
         return input, {**parameters, **kwargs}

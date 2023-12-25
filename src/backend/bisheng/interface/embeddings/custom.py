@@ -8,8 +8,7 @@ from langchain.embeddings.openai import OpenAIEmbeddings
 class OpenAIProxyEmbedding(Embeddings):
 
     def __init__(self) -> None:
-        param = settings.get_knowledge().get('embeddings').get('text-embedding-ada-002')
-        self.embd = OpenAIEmbeddings(**param)
+
         super().__init__()
 
     @classmethod
@@ -17,12 +16,16 @@ class OpenAIProxyEmbedding(Embeddings):
         if not texts:
             return []
         """Embed search docs."""
-        return self.embd.embed_documents(texts)
+        params = settings.get_knowledge().get('embeddings').get('text-embedding-ada-002')
+        embedding = OpenAIEmbeddings(**params)
+        return embedding.embed_documents(texts)
 
     @classmethod
     def embed_query(self, text: str) -> List[float]:
         """Embed query text."""
-        return self.embed_query(text)
+        params = settings.get_knowledge().get('embeddings').get('text-embedding-ada-002')
+        embedding = OpenAIEmbeddings(**params)
+        return embedding.embed_query(text)
 
 
 CUSTOM_EMBEDDING = {

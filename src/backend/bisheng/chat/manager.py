@@ -179,7 +179,7 @@ class ChatManager:
 
                 # set start
                 from bisheng.chat.handlers import Handler
-                is_begin = True if payload else False
+                is_begin = True if payload and status == 'init' else False
                 action = None
                 if 'action' in payload:
                     # autogen continue last session,
@@ -196,7 +196,8 @@ class ChatManager:
                 if payload and status == 'init':
                     has_file, graph_data = await self.preper_payload(payload, gragh_data,
                                                                      langchain_obj_key, client_id,
-                                                                     chat_id, start_resp, step_resp)
+                                                                     chat_id, start_resp,
+                                                                     step_resp)
                     status = 'init_object'
 
                 # build in thread
@@ -209,10 +210,11 @@ class ChatManager:
                 # run in thread
                 if payload and self.in_memory_cache.get(langchain_obj_key):
                     logger.info(f"processing_message message={payload['inputs']}")
-                    action = await self.preper_action(client_id, chat_id, langchain_obj_key,
-                                                      payload, start_resp, step_resp)
-                    thread_pool_local.submit(Handler().dispatch_task, self, client_id, chat_id,
-                                             action, payload, user_id)
+                    action, over = await self.preper_action(client_id, chat_id, langchain_obj_key,
+                                                            payload, start_resp, step_resp)
+                    if not over:
+                        thread_pool_local.submit(Handler().dispatch_task, self, client_id, chat_id,
+                                                 action, payload, user_id)
                     status = 'init'
                     payload = {}  # clean message
 
@@ -235,7 +237,7 @@ class ChatManager:
                             return
         except Exception as e:
             # Handle any exceptions that might occur
-            logger.error()
+            logger.error(str(e))
             await self.close_connection(
                 client_id=client_id,
                 chat_id=chat_id,
@@ -275,22 +277,35 @@ class ChatManager:
         langchain_obj = self.in_memory_cache.get(langchain_obj_key)
         batch_question = []
         action = ''
+        over = False
         if isinstance(langchain_obj, Report):
             action = 'report'
+            step_resp.intermediate_steps = 'File parsing complete, generate begin'
+            await self.send_json(client_id, chat_id, step_resp)
         elif 'data' in payload['inputs'] or 'file_path' in payload['inputs']:
             action = 'auto_file'
             batch_question = self.in_memory_cache.get(langchain_obj_key + '_question')
             payload['inputs']['questions'] = batch_question
             if not batch_question:
                 # no question
+                file_msg = payload['inputs']
+                file_msg.pop('id', '')
+                file_msg.pop('data', '')
+                file = ChatMessage(is_bot=False,
+                                   message=file_msg,
+                                   type='end',
+                                   user_id=step_resp.user_id)
+                self.chat_history.add_message(client_id, chat_id, file)
+                step_resp.message = ''
                 step_resp.intermediate_steps = 'File parsing complete'
                 await self.send_json(client_id, chat_id, step_resp)
                 start_resp.type = 'close'
                 await self.send_json(client_id, chat_id, start_resp)
+                over = True
             else:
                 step_resp.intermediate_steps = 'File parsing complete. Analysis starting'
                 await self.send_json(client_id, chat_id, step_resp, add=False)
-        return action
+        return action, over
 
     def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
         key_node = get_cache_key(flow_id, chat_id)
@@ -306,10 +321,9 @@ class ChatManager:
                                     user_name=db_user.user_name)
         langchain_object = graph.build()
         question = []
-        [
-            question.extend(node._built_object) for node in graph.nodes
-            if node.vertex_type == 'InputNode'
-        ]
+        for node in graph.nodes:
+            if node.vertex_type == 'InputNode':
+                question.extend(node._built_object)
 
         self.set_cache(key_node + '_question', question)
         for node in langchain_object:

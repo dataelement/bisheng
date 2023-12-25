@@ -161,7 +161,7 @@ class ChatglmFunctionsAgent(BaseSingleActionAgent):
 
     def _extract_tool(self):
         tool_names = list([t.name for t in self.tools])
-        if len(self.history[-1]['metadata']) > 0:
+        if self.history[-1]['metadata'] and len(self.history[-1]['metadata']) > 0:
             metadata = self.history[-1]['metadata']
             content = self.history[-1]['content']
             if 'tool_call' in content:

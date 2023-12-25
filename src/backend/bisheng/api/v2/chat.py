@@ -1,16 +1,12 @@
 from typing import Optional
-from uuid import UUID
 
-from bisheng.api.utils import build_flow_no_yield
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
-from bisheng.database.models.knowledge import Knowledge
 from bisheng.database.models.message import ChatMessage
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-from bisheng.utils.util import get_cache_key
 from fastapi import APIRouter, Depends, WebSocket, status
 from sqlmodel import Session
 
@@ -41,27 +37,11 @@ async def union_websocket(flow_id: str,
         graph_data = db_flow.data
 
     try:
-        process_file = False if chat_id else True
-        if knowledge_id:
-            knowledge = session.get(Knowledge, knowledge_id)
-        else:
-            knowledge = None
-
-        graph = build_flow_no_yield(
-            graph_data=graph_data,
-            artifacts={},
-            process_file=process_file,
-            flow_id=UUID(flow_id).hex,
-            chat_id=chat_id,
-            collection_name=knowledge.collection_name if knowledge else None,
-        )
-        langchain_object = graph.build()
-        for node in langchain_object:
-            key_node = get_cache_key(flow_id, chat_id, node.id)
-            chat_manager.set_cache(key_node, node._built_object)
-            chat_manager.set_cache(get_cache_key(flow_id, chat_id), node._built_object)
-        await chat_manager.handle_websocket(flow_id, chat_id, websocket,
-                                            settings.get_from_db('default_operator').get('user'))
+        await chat_manager.handle_websocket(flow_id,
+                                            chat_id,
+                                            websocket,
+                                            settings.get_from_db('default_operator').get('user'),
+                                            gragh_data=graph_data)
     except Exception as exc:
         logger.error(exc)
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))

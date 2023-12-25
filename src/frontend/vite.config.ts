@@ -6,8 +6,8 @@ import svgr from "vite-plugin-svgr";
 const apiRoutes = ["^/api/", "/health"];
 
 // Use environment variable to determine the target.
-const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.116:7861";
-//  const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
+// const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.116:7862";
+ const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
 
 const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
   proxyObj[route] = {

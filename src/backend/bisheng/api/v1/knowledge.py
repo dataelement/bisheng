@@ -169,7 +169,7 @@ def create_knowledge(*,
                      Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
-    """创建知识库."""
+    """ 创建知识库. """
     db_knowldge = Knowledge.from_orm(knowledge)
     know = session.exec(
         select(Knowledge).where(Knowledge.name == knowledge.name,
@@ -395,7 +395,10 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
     minio_client = MinioClient()
     callback_obj = {}
     for index, path in enumerate(file_paths):
+        ts1 = time.time()
         knowledge_file = knowledge_files[index]
+        logger.info(
+            f'process_file_begin file_name={knowledge_file.file_name} file_id={knowledge_file.id}')
         session = next(get_session())
         try:
             # 存储 mysql
@@ -431,6 +434,9 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
             session.commit()
             session.refresh(db_file)
             callback_obj = db_file.copy()
+            logger.info(
+                f'process_file_done file_name={knowledge_file.file_name} file_id={knowledge_file.id} time_cost={time.time()-ts1}'  # noqa
+            )
         except Exception as e:
             logger.error(e)
             db_file = session.get(KnowledgeFile, knowledge_file.id)
@@ -447,6 +453,9 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
             'file_id': callback_obj.id,
             'error_msg': callback_obj.remark
         }
+        logger.info(
+            f'add_complete callback={callback} file_name={callback_obj.file_name} status={callback_obj.status}'
+        )
         requests.post(url=callback, json=inp, timeout=3)
 
 
@@ -495,7 +504,7 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         documents = loader.load()
         text_splitter = ElemCharacterTextSplitter(separators=separator,
                                                   chunk_size=size,
-                                                  chunk_overlap=0)
+                                                  chunk_overlap=chunk_overlap)
         texts = text_splitter.split_documents(documents)
         raw_texts = [t.page_content for t in texts]
         metadatas = [{
@@ -541,7 +550,7 @@ def file_knowledge(
             'file_id': db_file.id,
             'knowledge_id': f'{db_knowledge.id}',
             'page': metadata.get('page'),
-            'source': metadata.get('source'),
+            'source': file_name,
             'bbox': metadata.get('bbox'),
             'extra': json.dumps(metadata_extra)
         } for metadata in metadatas]
@@ -600,9 +609,9 @@ def text_knowledge(
         metadata = [{
             'file_id': db_file.id,
             'knowledge_id': f'{db_knowledge.id}',
-            'page': doc.metadata.pop('page'),
-            'source': doc.metadata.get('source', ''),
-            'bbox': doc.metadata.get('bbox', ''),
+            'page': doc.metadata.pop('page', 1),
+            'source': doc.metadata.pop('source', ''),
+            'bbox': doc.metadata.pop('bbox', ''),
             'extra': json.dumps(doc.metadata)
         } for doc in documents]
         vectore_client.add_texts(texts=[t.page_content for t in texts], metadatas=metadata)

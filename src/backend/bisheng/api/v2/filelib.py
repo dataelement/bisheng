@@ -149,11 +149,7 @@ async def upload_file(*,
 
     file_name = file.filename
     # 缓存本地
-    file_byte = []
-    file.file.seek(0)
-    # Iterate over the uploaded file in small chunks to conserve memory
-    while chunk := file.file.read(8192):  # Read 8KB at a time (adjust as needed)
-        file_byte.append(chunk)
+    file_byte = await file.read()
     file_path = save_download_file(file_byte, 'bisheng', file_name)
     auto_p = True
     if auto_p:
@@ -181,6 +177,7 @@ async def upload_file(*,
         background_tasks.add_task(addEmbedding,
                                   collection_name=collection_name,
                                   index_name=index_name,
+                                  knowledge_id=knowledge_id,
                                   model=knowledge.model,
                                   chunk_size=chunk_size,
                                   separator=separator,

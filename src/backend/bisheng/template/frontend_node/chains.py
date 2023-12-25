@@ -67,7 +67,7 @@ class ChainFrontendNode(FrontendNode):
                               advanced=False,
                               value='[]'))
             self.template.add_field(
-                TemplateField(field_type='dict',
+                TemplateField(field_type='NestedDict',
                               required=True,
                               show=True,
                               is_list=True,

@@ -208,7 +208,8 @@ def initialize_qdrant(class_object: Type[Qdrant], params: dict, search: dict):
 
 
 def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict):
-    if not params['connection_args'] and settings.get_knowledge().get('vectorstores').get('Milvus'):
+    if not params.get('connection_args') and settings.get_knowledge().get('vectorstores').get(
+            'Milvus'):
         params['connection_args'] = settings.get_knowledge().get('vectorstores').get('Milvus').get(
             'connection_args')
     elif isinstance(params.get('connection_args'), str):
@@ -240,12 +241,12 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
 
 
 def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, search: dict):
-    if not params['elasticsearch_url'] and settings.get_knowledge().get('vectorstores').get(
+    if not params.get('elasticsearch_url') and settings.get_knowledge().get('vectorstores').get(
             'ElasticKeywordsSearch'):
         params['elasticsearch_url'] = settings.get_knowledge().get('vectorstores').get(
             'ElasticKeywordsSearch').get('elasticsearch_url')
 
-    if not params['ssl_verify'] and settings.get_knowledge().get('vectorstores').get(
+    if not params.get('ssl_verify') and settings.get_knowledge().get('vectorstores').get(
             'ElasticKeywordsSearch'):
         params['ssl_verify'] = eval(settings.get_knowledge().get('vectorstores').get(
             'ElasticKeywordsSearch').get('ssl_verify'))

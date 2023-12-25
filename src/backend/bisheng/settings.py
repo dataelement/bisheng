@@ -178,15 +178,17 @@ def save_settings_to_yaml(settings: Settings, file_path: str):
 
 
 def load_settings_from_yaml(file_path: str) -> Settings:
+    # Get current path
+    current_path = os.path.dirname(os.path.abspath(__file__))
     # Check if a string is a valid path or a file name
     if '/' not in file_path:
-        # Get current path
-        current_path = os.path.dirname(os.path.abspath(__file__))
-
         file_path = os.path.join(current_path, file_path)
 
     with open(file_path, 'r') as f:
         settings_dict = yaml.safe_load(f)
+
+    with open(os.path.join(current_path, 'default_node.yaml')) as node:
+        settings_dict.update(yaml.safe_load(node))
 
     return Settings(**settings_dict)
 
