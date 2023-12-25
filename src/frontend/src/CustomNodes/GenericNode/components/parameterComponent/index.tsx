@@ -228,7 +228,9 @@ export default function ParameterComponent({
             type === "file" ||
             type === "int" ||
             type === "variable" ||
-            type === "button") &&
+            type === "button" ||
+            type === "NestedDict" ||
+            type === "dict") &&
           !optionalHandle ? (
           <></>
         ) : (
