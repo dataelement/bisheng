@@ -68,6 +68,7 @@ export type DictComponentType = {
 };
 
 export type TextAreaComponentType = {
+  id?: number | '';
   field_name?: string;
   nodeClass?: APIClassType;
   setNodeClass?: (value: APIClassType) => void;

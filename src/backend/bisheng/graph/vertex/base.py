@@ -29,18 +29,15 @@ class Vertex:
         self.output = self.data['node']['base_classes']
         template_dicts = {
             key: value
-            for key, value in self.data['node']['template'].items()
-            if isinstance(value, dict)
+            for key, value in self.data['node']['template'].items() if isinstance(value, dict)
         }
 
         self.required_inputs = [
-            template_dicts[key]['type']
-            for key, value in template_dicts.items()
+            template_dicts[key]['type'] for key, value in template_dicts.items()
             if value['required']
         ]
         self.optional_inputs = [
-            template_dicts[key]['type']
-            for key, value in template_dicts.items()
+            template_dicts[key]['type'] for key, value in template_dicts.items()
             if not value['required']
         ]
         # Add the template_dicts[key]["input_types"] to the optional_inputs
@@ -50,8 +47,8 @@ class Vertex:
         ])
 
         template_dict = self.data['node']['template']
-        self.vertex_type = (self.data['type'] if 'Tool' not in self.output or
-                            template_dict['_type'].islower() else template_dict['_type'])
+        self.vertex_type = (self.data['type'] if 'Tool' not in self.output
+                            or template_dict['_type'].islower() else template_dict['_type'])
 
         if self.base_type is None:
             for base_type, value in ALL_TYPES_DICT.items():
@@ -77,8 +74,7 @@ class Vertex:
         # and use that as the value for the param
         template_dict = {
             key: value
-            for key, value in self.data['node']['template'].items()
-            if isinstance(value, dict)
+            for key, value in self.data['node']['template'].items() if isinstance(value, dict)
         }
         params = {}
 
@@ -103,11 +99,11 @@ class Vertex:
                         # for extra params,
                         if PRESET_QUESTION not in params:
                             params[PRESET_QUESTION] = {}
-                        params[PRESET_QUESTION].update({inner_edge.target.id:
-                                                        (inner_edge.source.id, inner_edge.source)})
+                        params[PRESET_QUESTION].update(
+                            {inner_edge.target.id: (inner_edge.source.id, inner_edge.source)})
                 elif (source_type == 'documents' and inner_edge.source != self
-                        and inner_edge.target != self
-                        and inner_edge.target.vertex_type == 'LoaderOutputChain'):
+                      and inner_edge.target != self
+                      and inner_edge.target.vertex_type == 'LoaderOutputChain'):
                     if inner_edge.source.vertex_type in {'UniversalKVLoader', 'CustomKVLoader'}:
                         for key, value in inner_edge.source.data['node']['template'].items():
                             if key in {'schemas', 'schema'}:
@@ -118,12 +114,14 @@ class Vertex:
                                     params[PRESET_QUESTION][inner_edge.target.id].append(
                                         (inner_edge.source.id, schema))
                                 else:
-                                    params[PRESET_QUESTION].update({inner_edge.target.id:
-                                                                    [(inner_edge.source.id, schema)]})
+                                    params[PRESET_QUESTION].update(
+                                        {inner_edge.target.id: [(inner_edge.source.id, schema)]})
 
         for key, value in template_dict.items():
             if key == '_type' or (not value.get('show') and not value.get('value')):
                 continue
+            if value.get('collection_id'):
+                params['collection_id'] = value.get('collection_id')
             # If the type is not transformable to a python base class
             # then we need to get the edge that connects to this node
             if value.get('type') == 'file':
@@ -187,7 +185,7 @@ class Vertex:
     def _is_dict_of_nodes(self, value):
         nodes = [node for node in value.values() if isinstance(node, tuple)]
         if nodes:
-            return any(self._is_node(node[1])for node in nodes)
+            return any(self._is_node(node[1]) for node in nodes)
         else:
             return False
 
@@ -264,12 +262,10 @@ class Vertex:
         if self.base_type is None:
             raise ValueError(f'Base type for node {self.vertex_type} not found')
         try:
-            result = loading.instantiate_class(
-                node_type=self.vertex_type,
-                base_type=self.base_type,
-                params=self.params,
-                data=self._data
-            )
+            result = loading.instantiate_class(node_type=self.vertex_type,
+                                               base_type=self.base_type,
+                                               params=self.params,
+                                               data=self._data)
             self._update_built_object_and_artifacts(result)
         except Exception as exc:
             raise ValueError(f'Error building node {self.vertex_type}: {str(exc)}') from exc

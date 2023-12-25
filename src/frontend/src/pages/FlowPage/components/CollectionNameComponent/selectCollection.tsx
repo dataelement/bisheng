@@ -4,23 +4,25 @@ import { Input } from "../../../../components/ui/input";
 import { readFileLibDatabase } from "../../../../controllers/API";
 
 export default function SelectCollection({ collectionId, onChange }:
-    { collectionId: string, onChange: (id: string) => void }) {
+    { collectionId: number | '', onChange: (obj: any) => void }) {
     const { t } = useTranslation()
 
     const [datalist, setDataList] = useState([])
     const inputRef = useRef(null)
     const allData = useRef([])
+
     // Selected element at the top
     const libList = useMemo(() => {
         if (!datalist.length) return []
-        const current = datalist.find(el => el.collection_name === collectionId)
+        const current = datalist.find(el => el.id === collectionId)
         if (!current) return datalist
-        const cloneList = datalist.filter(el => el.collection_name !== collectionId)
+        const cloneList = datalist.filter(el => el.id !== collectionId)
         return [current, ...cloneList]
     }, [datalist, collectionId])
 
+    // 取800条 TODO 滚动分页 
     useEffect(() => {
-        readFileLibDatabase(1, 400).then(res => {
+        readFileLibDatabase(1, 800).then(res => {
             setDataList(res.data)
             allData.current = res.data
         })
@@ -42,9 +44,9 @@ export default function SelectCollection({ collectionId, onChange }:
         <div className="mt-4 h-[280px] overflow-y-auto no-scrollbar">
             {libList.map(item =>
                 <div
-                    key={item.collection_name}
-                    className={`hover:bg-gray-100 cursor-pointer px-4 py-2 rounded-md ${item.collection_name === collectionId && 'bg-gray-100'}`}
-                    onClick={() => onChange(item.collection_name)}
+                    key={item.id}
+                    className={`hover:bg-gray-100 cursor-pointer px-4 py-2 rounded-md ${item.id === collectionId && 'bg-gray-100'}`}
+                    onClick={() => onChange(item)}
                 >
                     <p className="text-sm">{item.name}</p>
                     <p className="text-xs text-gray-500">{item.collection_name}</p>

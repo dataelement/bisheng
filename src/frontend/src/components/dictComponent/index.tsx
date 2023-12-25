@@ -32,17 +32,19 @@ export default function DictComponent({
             {
                 <div className="flex w-full gap-3">
                     <DictAreaModal
-                        value={ref.current}
+                        value={value}
                         onChange={(obj) => {
                             onChange(obj);
                         }}
                     >
                         <Input
                             type="text"
+                            value={value}
+                            readOnly
                             className={
                                 editNode
                                     ? "input-edit-node input-disable pointer-events-none cursor-pointer"
-                                    : "input-disable pointer-events-none cursor-pointer"
+                                    : "input-disable pointer-events-none cursor-pointer text-gray-500"
                             }
                             placeholder="Click to edit your dictionary..."
                         />

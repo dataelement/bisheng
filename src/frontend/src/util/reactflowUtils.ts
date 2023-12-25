@@ -47,7 +47,12 @@ export function cleanEdges({
 
 export function convertObjToArray(singleObject: object | string) {
   if (typeof singleObject === "string") {
-    singleObject = JSON.parse(singleObject);
+    try {
+      singleObject = JSON.parse(singleObject);
+    }
+    catch(err){
+      return [];
+    }
   }
   if (Array.isArray(singleObject)) return singleObject;
 

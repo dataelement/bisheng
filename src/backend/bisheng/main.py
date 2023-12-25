@@ -3,7 +3,7 @@ from typing import Optional
 from venv import logger
 
 from bisheng.api import router, router_rpc
-from bisheng.database.base import create_db_and_tables
+from bisheng.database.base import init_default_data
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.utils.logger import configure
 from fastapi import FastAPI, HTTPException, Request
@@ -58,7 +58,7 @@ def create_app():
 
     app.include_router(router)
     app.include_router(router_rpc)
-    app.on_event('startup')(create_db_and_tables)
+    app.on_event('startup')(init_default_data)
     app.on_event('startup')(setup_llm_caching)
     return app
 
