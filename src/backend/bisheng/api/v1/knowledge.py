@@ -600,9 +600,9 @@ def text_knowledge(
         metadata = [{
             'file_id': db_file.id,
             'knowledge_id': f'{db_knowledge.id}',
-            'page': doc.metadata.pop('page', ''),
-            'source': doc.metadata.get('source', ''),
-            'bbox': doc.metadata.get('bbox', ''),
+            'page': doc.metadata.pop('page', 1),
+            'source': doc.metadata.pop('source', ''),
+            'bbox': doc.metadata.pop('bbox', ''),
             'extra': json.dumps(doc.metadata)
         } for doc in documents]
         vectore_client.add_texts(texts=[t.page_content for t in texts], metadatas=metadata)
