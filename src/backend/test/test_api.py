@@ -5,7 +5,7 @@ def _test_python_code():
         'PyPDFLoader-RJlDA': {},
         'InputFileNode-hikjJ': {
             'file_path':
-                'https://bisheng.dataelem.com/bisheng/1673?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=minioadmin%2F20231025%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20231025T093224Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=b124b651adcfb0aa3c86d821072fa81d3f8e7b42a39ec517f1d146353ef6867b'  # noqa
+            'https://bisheng.dataelem.com/bisheng/1673?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=minioadmin%2F20231025%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20231025T093224Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=b124b651adcfb0aa3c86d821072fa81d3f8e7b42a39ec517f1d146353ef6867b'  # noqa
         },
         'InputNode-keWk3': {},
         'Milvus-VzZtx': {},
@@ -14,7 +14,7 @@ def _test_python_code():
         'RecursiveCharacterTextSplitter-C6YSc': {},
         'ProxyChatLLM-oWqpn': {
             'elemai_api_key':
-                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiaXNoZW5nX29wZW42IiwiZXhwIjoxNzEzNzU0MjUyfQ.ww1l-GTBYJiHV3-U1JcacvWOqYPd-QMpuJIeuO9_OM8'  # noqa
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiaXNoZW5nX29wZW42IiwiZXhwIjoxNzEzNzU0MjUyfQ.ww1l-GTBYJiHV3-U1JcacvWOqYPd-QMpuJIeuO9_OM8'  # noqa
         },
         'HostEmbeddings-EJq6w': {}
     }
@@ -36,11 +36,13 @@ def _test_uns():
     b64_data = base64.b64encode(open(filename, 'rb').read()).decode()
     filename_type = '合同(1).pdf'
 
-    inp = dict(
-        filename=filename_type,
-        b64_data=[b64_data],
-        mode='partition',
-        parameters={'start': 0, 'n': None})
+    inp = dict(filename=filename_type,
+               b64_data=[b64_data],
+               mode='partition',
+               parameters={
+                   'start': 0,
+                   'n': None
+               })
 
     resp = requests.post(url, json=inp).json()
     print(resp)

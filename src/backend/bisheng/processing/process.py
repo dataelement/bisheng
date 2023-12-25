@@ -1,13 +1,15 @@
+import asyncio
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Coroutine, Dict, List, Optional, Tuple, Union
 
-from bisheng.interface.run import (build_sorted_vertices_with_caching, get_memory_key,
-                                   update_memory_keys)
+from bisheng.interface.run import (build_sorted_vertices, build_sorted_vertices_with_caching,
+                                   get_memory_key, update_memory_keys)
 from bisheng.utils.logger import logger
 from langchain.chains.base import Chain
-from langchain.schema import AgentAction
+from langchain.schema import AgentAction, Document
 from langchain.vectorstores.base import VectorStore
+from pydantic import BaseModel
 
 
 def fix_memory_inputs(langchain_object):
@@ -19,8 +21,8 @@ def fix_memory_inputs(langchain_object):
     if not hasattr(langchain_object, 'memory') or langchain_object.memory is None:
         return
     try:
-        if (hasattr(langchain_object.memory, 'memory_key') and
-                langchain_object.memory.memory_key in langchain_object.input_variables):
+        if (hasattr(langchain_object.memory, 'memory_key')
+                and langchain_object.memory.memory_key in langchain_object.input_variables):
             return
     except AttributeError:
         input_variables = (langchain_object.prompt.input_variables if hasattr(
@@ -61,11 +63,13 @@ def get_result_and_thought(langchain_object: Any, inputs: dict):
         fix_memory_inputs(langchain_object)
 
         try:
+            # all use chat handlers
+            # action = 'default'
             output = langchain_object(inputs, return_only_outputs=True)
         except ValueError as exc:
             # make the error message more informative
             logger.debug(f'Error: {str(exc)}')
-            output = langchain_object.run(inputs)
+            raise exc
 
     except Exception as exc:
         raise ValueError(f'Error: {str(exc)}') from exc
@@ -116,6 +120,87 @@ def process_graph_cached(data_graph: Dict[str, Any], inputs: Optional[dict] = No
     else:
         raise ValueError(f'Unknown langchain_object type: {type(langchain_object).__name__}')
     return result
+
+
+def get_build_result(data_graph, session_id):
+    # If session_id is provided, load the langchain_object from the session
+    # using build_sorted_vertices_with_caching.get_result_by_session_id
+    # if it returns something different than None, return it
+    # otherwise, build the graph and return the result
+    if session_id:
+        logger.debug(f'Loading LangChain object from session {session_id}')
+        result = build_sorted_vertices(data_graph=data_graph)
+        if result is not None:
+            logger.debug('Loaded LangChain object')
+            return result
+
+    logger.debug('Building langchain object')
+    return build_sorted_vertices(data_graph)
+
+
+def process_inputs(inputs: Optional[dict], artifacts: Dict[str, Any]) -> dict:
+    if inputs is None:
+        inputs = {}
+
+    for key, value in artifacts.items():
+        if key == 'repr':
+            continue
+        elif key not in inputs or not inputs[key]:
+            inputs[key] = value
+
+    return inputs
+
+
+def generate_result(langchain_object: Union[Chain, VectorStore], inputs: dict):
+    if isinstance(langchain_object, Chain):
+        if inputs is None:
+            raise ValueError('Inputs must be provided for a Chain')
+        logger.debug('Generating result and thought')
+        result = get_result_and_thought(langchain_object, inputs)
+
+        logger.debug('Generated result and thought')
+    elif isinstance(langchain_object, VectorStore):
+        result = langchain_object.search(**inputs)
+    elif isinstance(langchain_object, Document):
+        result = langchain_object.dict()
+    else:
+        logger.warning(f'Unknown langchain_object type: {type(langchain_object)}')
+        if isinstance(langchain_object, Coroutine):
+            result = asyncio.run(langchain_object)
+        result = langchain_object
+
+    return result
+
+
+class Result(BaseModel):
+    result: Any
+    session_id: str
+
+
+# async def process_graph_cached(
+#     data_graph: Dict[str, Any],
+#     inputs: Optional[dict] = None,
+#     clear_cache=False,
+#     session_id=None,
+# ) -> Result:
+#     session_service = get_session_service()
+#     if clear_cache:
+#         session_service.clear_session(session_id)
+#     if session_id is None:
+#         session_id = session_service.generate_key(session_id=session_id, data_graph=data_graph)
+#     # Load the graph using SessionService
+#     session = await session_service.load_session(session_id, data_graph)
+#     graph, artifacts = session if session else (None, None)
+#     if not graph:
+#         raise ValueError('Graph not found in the session')
+#     built_object = graph.build()
+#     processed_inputs = process_inputs(inputs, artifacts or {})
+#     result = generate_result(built_object, processed_inputs)
+#     # langchain_object is now updated with the new memory
+#     # we need to update the cache with the updated langchain_object
+#     session_service.update_session(session_id, (graph, artifacts))
+
+#     return Result(result=result, session_id=session_id)
 
 
 def load_flow_from_json(flow: Union[Path, str, dict], tweaks: Optional[dict] = None, build=True):
@@ -196,7 +281,8 @@ def apply_tweaks(node: Dict[str, Any], node_tweaks: Dict[str, Any]) -> None:
             template_data[tweak_name][key] = tweak_value
 
 
-def process_tweaks(graph_data: Dict[str, Any], tweaks: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+def process_tweaks(graph_data: Dict[str, Any], tweaks: Dict[str, Dict[str,
+                                                                      Any]]) -> Dict[str, Any]:
     """
     This function is used to tweak the graph data using the node id and the tweaks dict.
 

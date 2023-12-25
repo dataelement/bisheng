@@ -1,4 +1,6 @@
+import ast
 import inspect
+import json
 import types
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -132,7 +134,39 @@ class Vertex:
                 params['file_name'] = value.get('value')
                 params[key] = file_path
             elif value.get('type') in DIRECT_TYPES and params.get(key) is None:
-                params[key] = value.get('value')
+                val = value.get('value')
+                if value.get('type') == 'code':
+                    try:
+                        params[key] = ast.literal_eval(val) if val else None
+                    except Exception as exc:
+                        logger.debug(f'Error parsing code: {exc}')
+                        params[key] = val
+                elif value.get('type') in ['dict', 'NestedDict']:
+                    # When dict comes from the frontend it comes as a
+                    # list of dicts, so we need to convert it to a dict
+                    # before passing it to the build method
+                    if isinstance(val, list):
+                        params[key] = {
+                            k: v
+                            for item in value.get('value', [])
+                            for k, v in item.items()
+                        }
+                    elif isinstance(val, dict):
+                        params[key] = val
+                    elif isinstance(val, str):
+                        params[key] = json.loads(val)
+                elif value.get('type') == 'int' and val is not None:
+                    try:
+                        params[key] = int(val)
+                    except ValueError:
+                        params[key] = val
+                elif value.get('type') == 'float' and val is not None:
+                    try:
+                        params[key] = float(val)
+                    except ValueError:
+                        params[key] = val
+                else:
+                    params[key] = val
 
             if not value.get('required') and params.get(key) is None:
                 if value.get('default'):
@@ -194,7 +228,7 @@ class Vertex:
         Builds a given node and updates the params dictionary accordingly.
         """
         result = node.build()
-        self._handle_func(key, result)
+        result = self._handle_func(key, result)
         if isinstance(result, list):
             self._extend_params_list_with_result(key, result)
         self.params[key] = result
@@ -236,17 +270,20 @@ class Vertex:
         """
         if key == 'func':
             if not isinstance(result, types.FunctionType):
+                func_ = ''
                 if hasattr(result, 'arun'):
                     self.params['coroutine'] = result.arun
+                    func_ = result.arun
+                if hasattr(result, 'run'):
                     result = result.run
-                elif hasattr(result, 'run'):
-                    result = result.run  # type: ignore
+                    func_ = func_ or result.run  # type: ignore
                 elif hasattr(result, 'get_function'):
-                    result = result.get_function()  # type: ignore
+                    func_ = result.get_function()  # type: ignore
             elif inspect.iscoroutinefunction(result):
                 self.params['coroutine'] = result
             else:
                 self.params['coroutine'] = sync_to_async(result)
+        return result
 
     def _extend_params_list_with_result(self, key, result):
         """

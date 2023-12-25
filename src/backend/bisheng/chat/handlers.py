@@ -220,15 +220,11 @@ class Handler:
 
     async def process_file(self, session: ChatManager, client_id: str, chat_id: str, payload: dict,
                            user_id: int):
-        file_name = payload['inputs']['data'][0]['value']
+        file_name = payload['inputs']
+        file_name.pop('id', '')
         batch_question = payload['inputs']['questions']
         # 如果L3
-        file = ChatMessage(is_bot=False,
-                           files=[{
-                               'file_name': file_name
-                           }],
-                           type='end',
-                           user_id=user_id)
+        file = ChatMessage(is_bot=False, message=file_name, type='end', user_id=user_id)
         session.chat_history.add_message(client_id, chat_id, file)
         start_resp = ChatResponse(type='start', category='system', user_id=user_id)
 

@@ -54,7 +54,10 @@ class UpdateTemplateRequest(BaseModel):
 class ProcessResponse(BaseModel):
     """Process response schema."""
 
-    result: dict
+    result: Any
+    # task: Optional[TaskResponse] = None
+    session_id: Optional[str] = None
+    backend: Optional[str] = None
 
 
 class ChatList(BaseModel):

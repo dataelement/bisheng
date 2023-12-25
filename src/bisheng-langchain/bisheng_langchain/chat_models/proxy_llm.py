@@ -185,14 +185,25 @@ class ProxyChatLLM(BaseChatModel):
             top_p = kwargs.get('top_p')
             max_tokens = kwargs.get('max_tokens')
             params = {
-                'messages': messages,
-                'model': self.model_name,
-                'top_p': top_p,
-                'temperature': temperature,
-                'max_tokens': max_tokens,
-                **({'stop': kwargs.get('stop')} if kwargs.get('stop', None) is not None else {}),
-                **({'function_call': kwargs.get('function_call')} if kwargs.get('function_call', None) is not None else {}),
-                **({'functions': kwargs.get('functions')} if kwargs.get('functions', None) is not None else {})
+                'messages':
+                messages,
+                'model':
+                self.model_name,
+                'top_p':
+                top_p,
+                'temperature':
+                temperature,
+                'max_tokens':
+                max_tokens,
+                **({
+                    'stop': kwargs.get('stop')
+                } if kwargs.get('stop', None) is not None else {}),
+                **({
+                    'function_call': kwargs.get('function_call')
+                } if kwargs.get('function_call', None) is not None else {}),
+                **({
+                    'functions': kwargs.get('functions')
+                } if kwargs.get('functions', None) is not None else {})
             }
             response = self.client.post(self.elemai_base_url, json=params)
             return response.json()
@@ -283,8 +294,10 @@ class ProxyChatLLM(BaseChatModel):
             })
             return ChatResult(generations=[ChatGeneration(message=message)])
         else:
-            response = await self.acompletion_with_retry(messages=message_dicts, **params)
-            return self._create_chat_result(response)
+            response = [
+                item async for item in self.acompletion_with_retry(messages=message_dicts, **params)
+            ]
+            return self._create_chat_result(response[0])
 
     def _create_message_dicts(
             self, messages: List[BaseMessage],

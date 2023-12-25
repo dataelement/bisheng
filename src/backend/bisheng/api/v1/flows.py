@@ -80,7 +80,8 @@ def read_flows(*,
         flows = session.exec(sql).all()
         # get flow data
         if flows:
-            flows = session.exec(select(Flow).where(Flow.id.in_(flows))).all()
+            flows = session.exec(
+                select(Flow).where(Flow.id.in_(flows)).order_by(Flow.update_time.desc())).all()
 
         res = [jsonable_encoder(flow) for flow in flows]
         if flows:

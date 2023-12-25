@@ -8,6 +8,7 @@ from bisheng.utils.constants import ANTHROPIC_MODELS, CHAT_OPENAI_MODELS, OPENAI
 
 
 class OpenAIAPIKeyFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         if 'api_key' in field.name and 'OpenAI' in str(name):
             field.display_name = 'OpenAI API Key'
@@ -31,6 +32,7 @@ class ModelSpecificFieldFormatter(FieldFormatter):
 
 
 class KwargsFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         if 'kwargs' in field.name.lower():
             field.advanced = True
@@ -39,6 +41,7 @@ class KwargsFormatter(FieldFormatter):
 
 
 class APIKeyFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         if 'api' in field.name.lower() and 'key' in field.name.lower():
             field.required = False
@@ -49,12 +52,14 @@ class APIKeyFormatter(FieldFormatter):
 
 
 class RemoveOptionalFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         _type = field.field_type
         field.field_type = re.sub(r'Optional\[(.*)\]', r'\1', _type)
 
 
 class ListTypeFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         _type = field.field_type
         is_list = 'List' in _type or 'Sequence' in _type
@@ -65,6 +70,7 @@ class ListTypeFormatter(FieldFormatter):
 
 
 class DictTypeFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         _type = field.field_type
         _type = _type.replace('Mapping', 'dict')
@@ -72,6 +78,7 @@ class DictTypeFormatter(FieldFormatter):
 
 
 class UnionTypeFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         _type = field.field_type
         if 'Union' in _type:
@@ -93,42 +100,42 @@ class SpecialFieldFormatter(FieldFormatter):
 
 
 class ShowFieldFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         key = field.name
         required = field.required
-        field.show = ((required and
-                       (key not in ['input_variables'] or name == 'SequentialChain')) or
-                      key in FORCE_SHOW_FIELDS or 'api' in key or
-                      ('key' in key and 'input' not in key and 'output' not in key))
+        field.show = ((required and (key not in ['input_variables'] or name == 'SequentialChain'))
+                      or key in FORCE_SHOW_FIELDS or 'api' in key
+                      or ('key' in key and 'input' not in key and 'output' not in key))
 
 
 class PasswordFieldFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         key = field.name
         show = field.show
-        if (
-            any(text in key.lower() for text in {'password', 'token', 'api', 'key'})
-            and show
-        ):
+        if (any(text in key.lower() for text in {'password', 'token', 'api', 'key'}) and show):
             field.password = True
 
 
 class MultilineFieldFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         key = field.name
         if key in {
-            'suffix',
-            'prefix',
-            'template',
-            'examples',
-            'code',
-            'headers',
-            'description',
+                'suffix',
+                'prefix',
+                'template',
+                'examples',
+                'code',
+                'headers',
+                'description',
         }:
             field.multiline = True
 
 
 class DefaultValueFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         value = field.to_dict()
         if 'default' in value:
@@ -136,6 +143,7 @@ class DefaultValueFormatter(FieldFormatter):
 
 
 class HeadersDefaultValueFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         key = field.name
         if key == 'headers':
@@ -143,14 +151,13 @@ class HeadersDefaultValueFormatter(FieldFormatter):
 
 
 class DictCodeFileFormatter(FieldFormatter):
+
     def format(self, field: TemplateField, name: Optional[str] = None) -> None:
         key = field.name
         value = field.to_dict()
         _type = value['type']
-        if 'dict' in _type.lower():
-            if key == 'dict_':
-                field.field_type = 'file'
-                field.suffixes = ['.json', '.yaml', '.yml']
-                field.file_types = ['json', 'yaml', 'yml']
-            else:
-                field.field_type = 'code'
+        if 'dict' in _type.lower() and key == 'dict_':
+            field.field_type = 'file'
+            field.file_types = ['.json', '.yaml', '.yml']
+        elif _type.startswith('Dict') or _type.startswith('Mapping') or _type.startswith('dict'):
+            field.field_type = 'dict'

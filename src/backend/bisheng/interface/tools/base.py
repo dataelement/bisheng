@@ -2,19 +2,18 @@ from typing import Dict, List, Optional
 
 from bisheng.custom import customs
 from bisheng.interface.base import LangChainTypeCreator
-from bisheng.interface.tools.constants import (ALL_TOOLS_NAMES, CUSTOM_TOOLS,
-                                               FILE_TOOLS, OTHER_TOOLS)
+from bisheng.interface.tools.constants import ALL_TOOLS_NAMES, CUSTOM_TOOLS, FILE_TOOLS, OTHER_TOOLS
 from bisheng.interface.tools.util import get_tool_params
 from bisheng.settings import settings
 from bisheng.template.field.base import TemplateField
 from bisheng.template.template.base import Template
 from bisheng.utils import util
 from bisheng.utils.util import build_template_from_class
-from langchain.agents.load_tools import (_EXTRA_LLM_TOOLS,
-                                         _EXTRA_OPTIONAL_TOOLS, _LLM_TOOLS)
+from langchain.agents.load_tools import _EXTRA_LLM_TOOLS, _EXTRA_OPTIONAL_TOOLS, _LLM_TOOLS
 
 TOOL_INPUTS = {
-    'str': TemplateField(
+    'str':
+    TemplateField(
         field_type='str',
         required=True,
         is_list=False,
@@ -22,17 +21,18 @@ TOOL_INPUTS = {
         placeholder='',
         value='',
     ),
-    'llm': TemplateField(
-        field_type='BaseLanguageModel', required=True, is_list=False, show=True
-    ),
-    'func': TemplateField(
+    'llm':
+    TemplateField(field_type='BaseLanguageModel', required=True, is_list=False, show=True),
+    'func':
+    TemplateField(
         field_type='function',
         required=True,
         is_list=False,
         show=True,
         multiline=True,
     ),
-    'code': TemplateField(
+    'code':
+    TemplateField(
         field_type='str',
         required=True,
         is_list=False,
@@ -40,7 +40,8 @@ TOOL_INPUTS = {
         value='',
         multiline=True,
     ),
-    'path': TemplateField(
+    'path':
+    TemplateField(
         field_type='file',
         required=True,
         is_list=False,
@@ -146,6 +147,17 @@ class ToolCreator(LangChainTypeCreator):
             fields.append(field)
 
         template = Template(fields=fields, type_name=tool_type)
+        # add describe
+        template.add_field(
+            TemplateField(
+                field_type='NestedDict',
+                required=True,
+                placeholder='',
+                show=True,
+                multiline=True,
+                value='{"arg1": {"type": "string"}}',
+                name='args_schema',
+            ), )
 
         tool_params = {**tool_params, **self.type_to_loader_dict[name]['params']}
         return {

@@ -20,6 +20,7 @@ class AgentCreator(LangChainTypeCreator):
         'CSVAgent': 'from_toolkit_and_llm',
         'SQLAgent': 'from_toolkit_and_llm',
         'ChatglmFunctionsAgent': 'from_llm_and_tools',
+        'LLMFunctionsAgent': 'from_llm_and_tools',
     }
 
     @property
@@ -35,7 +36,7 @@ class AgentCreator(LangChainTypeCreator):
                 # TODO: validate AgentType
                 self.type_dict[name] = agent  # type: ignore
             bisheng = {
-                name: import_class(f'bisheng_langchain.agents.{chain_name}')
+                chain_name: import_class(f'bisheng_langchain.agents.{chain_name}')
                 for chain_name in bisheng_agents.__all__
             }
             self.type_dict.update(bisheng)

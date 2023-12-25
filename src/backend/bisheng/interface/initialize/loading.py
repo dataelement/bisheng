@@ -1,7 +1,6 @@
 import contextlib
 import json
 from typing import Any, Callable, Dict, List, Sequence, Type
-from venv import logger
 
 from bisheng.cache.utils import file_download
 from bisheng.chat.config import ChatConfig
@@ -30,7 +29,9 @@ from langchain.chains.base import Chain
 from langchain.document_loaders.base import BaseLoader
 from langchain.schema import BaseOutputParser, Document
 from langchain.vectorstores.base import VectorStore
-from pydantic import ValidationError
+from loguru import logger
+from pydantic import ValidationError, create_model
+from pydantic.fields import FieldInfo
 
 # from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoaderV0
 
@@ -293,7 +294,7 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_di
         }
     # 人工组装MultiPromptChain
     if node_type in {'MultiPromptChain', 'MultiRuleChain'}:
-        destination_chain_name = eval(params['destination_chain_name'])
+        destination_chain_name = params['destination_chain_name']
         llm_chains = params['LLMChains']
         destination_chain = {}
         i = 0
@@ -401,6 +402,8 @@ def instantiate_prompt(node_type, class_object, params: Dict, param_id_dict: Dic
 
 
 def instantiate_tool(node_type, class_object: Type[BaseTool], params: Dict):
+    # build args_schema
+    args_schema = params.pop('args_schema', '')
     if node_type == 'JsonSpec':
         if file_dict := load_file_into_dict(params.pop('path')):
             params['dict_'] = file_dict
@@ -416,8 +419,21 @@ def instantiate_tool(node_type, class_object: Type[BaseTool], params: Dict):
             return validate.eval_function(function_string)
         raise ValueError('Function should be a string')
     elif node_type.lower() == 'tool':
-        return class_object(**params)
-    return class_object(**params)
+        tool = class_object(**params)
+    tool = class_object(**params)
+    if args_schema and hasattr(tool, 'args_schema'):
+        fields = {}
+        for name, prop in args_schema.items():
+            # eval函数用于执行一个字符串表达式并返回结果
+            import typing  # noqa
+            if prop.get('type') == 'string':
+                field_type = str
+            else:
+                field_type = typing.Any
+            fields[name] = (field_type, FieldInfo(**prop))
+
+        tool.args_schema = create_model(name, **fields)
+    return tool
 
 
 def instantiate_toolkit(node_type, class_object: Type[BaseToolkit], params: Dict):
