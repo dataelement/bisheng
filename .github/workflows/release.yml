@@ -75,10 +75,10 @@ jobs:
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-backend"
-            APP_VERSION="release"
+            APP_VERSION=${{ steps.get_version.outputs.VERSION }}
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
-            ${{ env.DOCKER_NEXUS }}/${{ env.DOCKERHUB_REPO }}bisheng-backend:release
+            ${{ env.DOCKER_NEXUS }}/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
       # 构建 Docker frontend 并推送到 Docker hub
       - name: Build frontend and push
         id: docker_build_frontend
@@ -91,8 +91,8 @@ jobs:
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-frontend"
-            APP_VERSION="release"
+            APP_VERSION=${{ steps.get_version.outputs.VERSION }}
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
-            ${{ env.DOCKER_NEXUS }}/${{ env.DOCKERHUB_REPO }}bisheng-frontend:release
+            ${{ env.DOCKER_NEXUS }}/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
       
