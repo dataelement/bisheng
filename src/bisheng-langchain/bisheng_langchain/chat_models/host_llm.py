@@ -1,11 +1,13 @@
 """proxy llm chat wrapper."""
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
 import requests
+import sseclient
 from langchain.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
 from langchain.chat_models.base import BaseChatModel
 from langchain.schema import ChatGeneration, ChatResult
@@ -105,6 +107,10 @@ class BaseHostChatLLM(BaseChatModel):
     """Model name to use."""
     model_name: str = Field('', alias='model')
 
+    # Very important augment, ver=1 use rt-005 before, to use rt-006 should use
+    # ver=2
+    ver: int = 1
+
     temperature: float = 0.9
     top_p: float = 0.95
     do_sample: bool = False
@@ -191,9 +197,15 @@ class BaseHostChatLLM(BaseChatModel):
             # print('functions:', kwargs.get('functions', []))
             if self.verbose:
                 print('payload', params)
-            url = f'{self.host_base_url}/{self.model_name}/infer'
-            resp = self.client(url=url, json=params).json()
-            # print('resp:', resp)
+
+            method_name = 'infer' if self.ver == 1 else 'generate'
+            url = f'{self.host_base_url}/{self.model_name}/{method_name}'
+            try:
+                resp = self.client(url=url, json=params).json()
+            except requests.exceptions.Timeout:
+                raise Exception(f'timeout in host llm infer, url=[{url}]')
+            except Exception as e:
+                raise Exception(f'exception in host llm infer: [{e}]')
 
             if not resp.get('choices', []):
                 logger.info(resp)
@@ -233,6 +245,44 @@ class BaseHostChatLLM(BaseChatModel):
         response = self.completion_with_retry(messages=message_dicts, **params)
         return self._create_chat_result(response)
 
+    def _stream(self, **kwargs: Any) -> Any:
+        """Use tenacity to retry the async completion call."""
+        retry_decorator = _create_retry_decorator(self)
+
+        @retry_decorator
+        def _completion_with_retry(**kwargs: Any) -> Any:
+            if self.streaming:
+                if self.ver == 1:
+                    raise Exception('Not supported stream protocol in ver=1')
+
+                headers = {'Accept': 'text/event-stream'}
+                url = f'{self.host_base_url}/{self.model_name}/generate_stream'
+                res = requests.post(
+                        url=url,
+                        data=json.dumps(kwargs),
+                        headers=headers,
+                        stream=False)
+                res.raise_for_status()
+                client = sseclient.SSEClient(res)
+                for event in client.events():
+                    delta_data = json.loads(event.data)
+                    yield delta_data
+            else:
+                method_name = 'infer' if self.ver == 1 else 'generate'
+                url = f'{self.host_base_url}/{self.model_name}/{method_name}'
+                res = requests.post(
+                    url=url,
+                    data=json.dumps(kwargs),
+                    stream=False)
+                return res.json()
+
+        if self.streaming:
+            for response in _completion_with_retry(**kwargs):
+                if response:
+                    yield response
+        else:
+            return _completion_with_retry(**kwargs)
+
     async def _agenerate(
         self,
         messages: List[BaseMessage],
@@ -240,7 +290,42 @@ class BaseHostChatLLM(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return self._generate(messages, stop, run_manager, **kwargs)
+        if self.ver == 1:
+            return self._generate(messages, stop, run_manager, **kwargs)
+
+        message_dicts, params = self._create_message_dicts(messages, stop)
+        params = {**params, **kwargs}
+        if self.streaming:
+            inner_completion = ''
+            role = 'assistant'
+            params['stream'] = True
+            function_call: Optional[dict] = None
+            for stream_resp in self._stream(
+                messages=message_dicts, **params
+            ):
+                role = stream_resp['choices'][0]['delta'].get('role', role)
+                token = stream_resp['choices'][0]['delta'].get('content', '')
+                inner_completion += token or ''
+                _function_call = stream_resp['choices'][0]['delta'].get('function_call')
+                if _function_call:
+                    if function_call is None:
+                        function_call = _function_call
+                    else:
+                        function_call['arguments'] += _function_call['arguments']
+                if run_manager:
+                    await run_manager.on_llm_new_token(token)
+            message = _convert_dict_to_message(
+                {
+                    'content': inner_completion,
+                    'role': role,
+                    'function_call': function_call,
+                }
+            )
+            return ChatResult(generations=[ChatGeneration(message=message)])
+        else:
+            params['stream'] = False
+            response = self._stream(messages=message_dicts, **params)
+            return self._create_chat_result(response)
 
     def _create_message_dicts(
             self, messages: List[BaseMessage],
@@ -458,3 +543,12 @@ class CustomLLMChat(BaseHostChatLLM):
 
         llm_output = {'token_usage': response.get('usage', {}), 'model_name': self.model_name}
         return ChatResult(generations=generations, llm_output=llm_output)
+
+    async def _agenerate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        return self._generate(messages, stop, run_manager, **kwargs)
