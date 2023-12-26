@@ -6,6 +6,7 @@ from io import BytesIO
 
 import yaml
 from bisheng.chat.config import ChatConfig
+from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from langchain.base_language import BaseLanguageModel
 from PIL.Image import Image
@@ -41,17 +42,18 @@ def try_setting_streaming_options(langchain_object, websocket):
     llm = None
     if hasattr(langchain_object, 'llm'):
         llm = langchain_object.llm
-    elif hasattr(langchain_object, 'llm_chain') and hasattr(
-        langchain_object.llm_chain, 'llm'
-    ):
+    elif hasattr(langchain_object, 'llm_chain') and hasattr(langchain_object.llm_chain, 'llm'):
         llm = langchain_object.llm_chain.llm
 
     if isinstance(llm, BaseLanguageModel):
         if hasattr(llm, 'streaming') and isinstance(llm.streaming, bool):
-            llm.streaming = ChatConfig.streaming
+            llm.streaming = settings.get_from_db('llm_request').get(
+                'stream') if 'stream' in settings.get_from_db(
+                    'llm_request') else ChatConfig.streaming
         elif hasattr(llm, 'stream') and isinstance(llm.stream, bool):
-            llm.stream = ChatConfig.streaming
-
+            llm.stream = settings.get_from_db('llm_request').get(
+                'stream') if 'stream' in settings.get_from_db(
+                    'llm_request') else ChatConfig.streaming
     return langchain_object
 
 

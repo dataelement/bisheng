@@ -19,6 +19,14 @@ class VectorStoreFrontendNode(FrontendNode):
             multiline=False,
             value='{}',
         )
+        extra_field2 = TemplateField(
+            name='search_type',
+            field_type='str',
+            required=False,
+            placeholder='',
+            value='similarity',
+        )
+        extra_fields.append(extra_field2)
         extra_fields.append(extra_field)
 
         if self.template.type_name == 'Weaviate':
@@ -261,7 +269,7 @@ class VectorStoreFrontendNode(FrontendNode):
             'n_dim', 'key', 'prefix', 'distance_func', 'content_payload_key',
             'metadata_payload_key', 'timeout', 'host', 'path', 'url', 'port', 'https',
             'prefer_grpc', 'grpc_port', 'pinecone_api_key', 'pinecone_env', 'client_kwargs',
-            'search_kwargs'
+            'search_kwargs', 'search_type'
         ]
 
         # Check and set field attributes

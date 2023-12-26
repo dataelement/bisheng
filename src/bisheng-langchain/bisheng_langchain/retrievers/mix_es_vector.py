@@ -1,10 +1,7 @@
-from typing import Any, Dict, List
+from typing import List
 
-from langchain.callbacks.manager import (
-    AsyncCallbackManagerForRetrieverRun,
-    CallbackManagerForRetrieverRun,
-)
-
+from langchain.callbacks.manager import (AsyncCallbackManagerForRetrieverRun,
+                                         CallbackManagerForRetrieverRun)
 from langchain.schema import BaseRetriever, Document
 
 
@@ -65,8 +62,6 @@ class MixEsVectorRetriever(BaseRetriever):
                              f'(keyword_front, vector_front, mix),'
                              f'instead found {self.combine_strategy}')
 
-        return combine_docs
-
     async def _aget_relevant_documents(
         self,
         query: str,
@@ -105,5 +100,3 @@ class MixEsVectorRetriever(BaseRetriever):
             raise ValueError(f'Expected combine_strategy to be one of '
                              f'(keyword_front, vector_front, mix),'
                              f'instead found {self.combine_strategy}')
-
-        return combine_docs

@@ -28,5 +28,5 @@ export default function chatShare() {
 
     if (!flowId) return <div>请选择技能</div>
 
-    return flow ? <ChatPanne libId={libId} chatId={chatId} flow={flow} /> : null
+    return flow ? <ChatPanne version='v2' libId={libId} chatId={chatId} flow={flow} /> : null
 };

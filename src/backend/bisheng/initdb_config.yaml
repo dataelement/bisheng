@@ -14,8 +14,8 @@ knowledges: # 知识库相关配置
       connection_args: {'host': '110.16.193.170', 'port': '50032', 'user': '', 'password': '', 'secure': False}
     # 可选配置，有些类型的场景使用ES可以提高召回效果
     # ElasticKeywordsSearch:
-    #   elasticsearch_url: 'http://elasticsearch:9200'
-    #   ssl_verify: "{'basic_auth': ('elastic', 'password')}"
+    #   elasticsearch_url: 'https://elasticsearch:9200'
+    #   ssl_verify: "{'basic_auth': ('elastic', 'password'), 'ca_certs': False, 'verify_certs': False}"
   # minio: # 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储
   #   SCHEMA: false         # 是否支持 https
   #   CERT_CHECK: false         # 是否校验 http证书

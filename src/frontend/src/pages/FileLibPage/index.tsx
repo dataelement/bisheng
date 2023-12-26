@@ -136,10 +136,6 @@ export default function FileLibPage() {
         });
     };
 
-    useEffect(() => {
-        loadPage(1);
-    }, []);
-
     // Delete
     const { delShow, idRef, close, delConfirm } = useDelete();
 
@@ -149,6 +145,21 @@ export default function FileLibPage() {
             close();
         });
     }
+    
+    // 进详情页前缓存 page, 临时方案
+    const handleCachePage = () => {
+        window.LibPage = page
+    }
+    useEffect(() => {
+        const _page = window.LibPage
+        if (_page) {
+            loadPage(_page);
+            delete window.LibPage
+        } else {
+            loadPage(1);
+        }
+    }, [])
+
 
     const { t } = useTranslation();
 
@@ -198,7 +209,7 @@ export default function FileLibPage() {
                                         // @ts-ignore
                                         window.libname = el.name;
                                     }}>
-                                        <Link to={`/filelib/${el.id}`} className="underline">{t('lib.details')}</Link>
+                                        <Link to={`/filelib/${el.id}`} className="underline" onClick={handleCachePage}>{t('lib.details')}</Link>
                                         {user.user_name === 'admin' || user.user_id === el.user_id ?
                                             <a href="javascript:;" onClick={() => delConfirm(el)} className="underline ml-4">{t('delete')}</a> :
                                             <a href="javascript:;" className="underline ml-4 text-gray-400">{t('delete')}</a>

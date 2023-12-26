@@ -320,16 +320,6 @@
   resolved "https://registry.npmjs.org/@emotion/weak-memoize/-/weak-memoize-0.3.1.tgz"
   integrity sha512-EsBwpc7hBUJWAsNPBmJy4hxWx12v6bshQsldrVmjxJoc3isbxhOrF2IcCpaXxfvq03NwkI7sbsOLXbYuqF/8Ww==
 
-"@esbuild/darwin-arm64@0.17.19":
-  version "0.17.19"
-  resolved "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.17.19.tgz"
-  integrity sha512-80wEoCfF/hFKM6WE1FyBHc9SfUblloAWx6FJkFWTWiCoht9Mc0ARGEM47e67W9rI09YoUxJL68WHfDRYEAvOhg==
-
-"@esbuild/darwin-arm64@0.18.11":
-  version "0.18.11"
-  resolved "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.18.11.tgz"
-  integrity sha512-Gm0QkI3k402OpfMKyQEEMG0RuW2LQsSmI6OeO4El2ojJMoF5NLYb3qMIjvbG/lbMeLOGiW6ooU8xqc+S0fgz2w==
-
 "@floating-ui/core@^1.4.2":
   version "1.5.0"
   resolved "https://registry.npmjs.org/@floating-ui/core/-/core-1.5.0.tgz"
@@ -1237,10 +1227,10 @@
     slash "3.0.0"
     source-map "^0.7.3"
 
-"@swc/core-darwin-arm64@1.3.95":
+"@swc/core-darwin-x64@1.3.95":
   version "1.3.95"
-  resolved "https://registry.npmjs.org/@swc/core-darwin-arm64/-/core-darwin-arm64-1.3.95.tgz"
-  integrity sha512-VAuBAP3MNetO/yBIBzvorUXq7lUBwhfpJxYViSxyluMwtoQDhE/XWN598TWMwMl1ZuImb56d7eUsuFdjgY7pJw==
+  resolved "https://registry.npmjs.org/@swc/core-darwin-x64/-/core-darwin-x64-1.3.95.tgz"
+  integrity sha512-20vF2rvUsN98zGLZc+dsEdHvLoCuiYq/1B+TDeE4oolgTFDmI1jKO+m44PzWjYtKGU9QR95sZ6r/uec0QC5O4Q==
 
 "@swc/core@^1.2.66", "@swc/core@^1.3.61", "@swc/core@^1.3.80":
   version "1.3.95"
@@ -1965,12 +1955,7 @@ available-typed-arrays@^1.0.5:
   resolved "https://registry.npmjs.org/available-typed-arrays/-/available-typed-arrays-1.0.5.tgz"
   integrity sha512-DMD0KiN46eipeziST1LPP/STfDU0sufISXmjSgvVsoU2tqxctQeASejWcfNtxYKqETM1UxQ8sp2OrSBWpHY6sw==
 
-axios-progress-bar@^1.2.0:
-  version "1.2.0"
-  resolved "https://registry.npmjs.org/axios-progress-bar/-/axios-progress-bar-1.2.0.tgz"
-  integrity sha512-PEgWb/b2SMyHnKJ/cxA46OdCuNeVlo8eqL0HxXPtz+6G/Jtpyo49icPbW+jpO1wUeDEjbqpseMoCyWxESxf5pA==
-
-axios@^1.5.0, axios@0.x:
+axios@^1.5.0:
   version "1.6.0"
   resolved "https://registry.npmjs.org/axios/-/axios-1.6.0.tgz"
   integrity sha512-EZ1DYihju9pwVB+jg67ogm+Tmqc6JmhamRN6I4Zt8DfZu5lbcQGw3ozH9lFejSJgs/ibaef3A9PMXPLeefFGJg==

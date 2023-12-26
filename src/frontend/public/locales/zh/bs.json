@@ -117,7 +117,7 @@
         "downloadPDFTooltip": "下载双层PDF",
         "downloadOriginalTooltip": "下载原文件",
         "noMatchedFilesMessage": "无匹配的源文件",
-        "fileStorageFailure": "文件存储故障!",
+        "fileStorageFailure": " 文件地址失效!",
         "confirmDeleteChat": "确认删除该会话？",
         "roundOver": "本轮结束",
         "chatDialogTip": "设置提示模板中定义的输入变量。与代理和链互动"
@@ -250,7 +250,8 @@
         "file": "文件",
         "sizeExceedsLimit": "超过50M",
         "editDictionary": "编辑词典",
-        "exportCodeDialogTip": "生成代码，将流程集成到外部应用程序中 (打开此页面前请先build技能)。"
+        "exportCodeDialogTip": "生成代码，将流程集成到外部应用程序中 (打开此页面前请先build技能)。",
+        "chunkOverlap": "切分文本重叠长度"
     },
     "report": {
         "reportTemplate": "报告模板",

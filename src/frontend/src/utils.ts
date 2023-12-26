@@ -711,7 +711,7 @@ export function updateTemplate(
   // Loop through each key in the reference object
   for (const key in clonedObject) {
     // If the key is not in the object to update, add it
-    if (objectToUpdate[key] && objectToUpdate[key].value) {
+    if (objectToUpdate[key] && objectToUpdate[key].value || objectToUpdate[key].type === 'bool') {
       clonedObject[key].value = objectToUpdate[key].value;
     }
     if (
@@ -721,12 +721,7 @@ export function updateTemplate(
     ) {
       clonedObject[key].advanced = objectToUpdate[key].advanced;
     }
-    // L2 信息
-    const dbParam = objectToUpdate[key]
-    if (dbParam && !/^_/.test(key)) {
-      clonedObject[key].l2 = dbParam.l2 || false
-      clonedObject[key].l2_name = dbParam.l2_name || key
-    }
+
     // file_path的文件类型不覆盖
     if (key === 'file_path') {
       clonedObject[key].fileTypes = objectToUpdate[key].fileTypes
@@ -738,6 +733,14 @@ export function updateTemplate(
     }
     if (clonedObject[key]?.show) {
       clonedObject[key].show = objectToUpdate[key]?.show
+    }
+    // L2 覆盖
+    if (objectToUpdate[key]?.l2) {
+      clonedObject[key].l2 = objectToUpdate[key].l2
+      clonedObject[key].l2_name = objectToUpdate[key].l2_name
+    }
+    if (objectToUpdate[key]?.collection_id) {
+      clonedObject[key].collection_id = objectToUpdate[key]?.collection_id
     }
   }
   return clonedObject;

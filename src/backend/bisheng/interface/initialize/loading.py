@@ -1,7 +1,6 @@
 import contextlib
 import json
 from typing import Any, Callable, Dict, List, Sequence, Type
-from venv import logger
 
 from bisheng.cache.utils import file_download
 from bisheng.chat.config import ChatConfig
@@ -30,7 +29,9 @@ from langchain.chains.base import Chain
 from langchain.document_loaders.base import BaseLoader
 from langchain.schema import BaseOutputParser, Document
 from langchain.vectorstores.base import VectorStore
-from pydantic import ValidationError
+from loguru import logger
+from pydantic import ValidationError, create_model
+from pydantic.fields import FieldInfo
 
 # from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoaderV0
 
@@ -47,8 +48,8 @@ def instantiate_class(node_type: str, base_type: str, params: Dict, data: Dict) 
             return custom_node(**params)
 
     class_object = import_by_type(_type=base_type, name=node_type)
-    return instantiate_based_on_type(class_object, base_type, node_type,
-                                     params, params_node_id_dict)
+    return instantiate_based_on_type(class_object, base_type, node_type, params,
+                                     params_node_id_dict)
 
 
 def convert_params_to_sets(params):
@@ -149,8 +150,7 @@ def instantiate_input_output(node_type, class_object, params, id_dict):
         variable_node_id = id_dict.get('variables')
         params['variables'] = []
         for index, id in enumerate(variable_node_id):
-            params['variables'].append({'node_id': id,
-                                        'input': variable[index]})
+            params['variables'].append({'node_id': id, 'input': variable[index]})
         return class_object(**params)
     if node_type == 'InputFileNode':
         file_path = class_object(**params).text()
@@ -285,17 +285,22 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_di
     if node_type == 'ConversationalRetrievalChain':
         params['get_chat_history'] = str
         params['combine_docs_chain_kwargs'] = {
-            'prompt': params.pop('combine_docs_chain_kwargs', None)
+            'prompt': params.pop('combine_docs_chain_kwargs', None),
+            'document_prompt': params.pop('document_prompt', None)
+        }
+        params['combine_docs_chain_kwargs'] = {
+            k: v
+            for k, v in params['combine_docs_chain_kwargs'].items() if v is not None
         }
     # 人工组装MultiPromptChain
     if node_type in {'MultiPromptChain', 'MultiRuleChain'}:
-        destination_chain_name = eval(params['destination_chain_name'])
+        destination_chain_name = params['destination_chain_name']
         llm_chains = params['LLMChains']
         destination_chain = {}
         i = 0
         for k, name in destination_chain_name.items():
             destination_chain[name] = llm_chains[i]
-            i = i+1
+            i = i + 1
         params.pop('LLMChains')
         params.pop('destination_chain_name')
         params['destination_chains'] = destination_chain
@@ -381,10 +386,10 @@ def instantiate_prompt(node_type, class_object, params: Dict, param_id_dict: Dic
                 # handle_keys will be a list but it does not exist yet
                 # so we need to create it
 
-            if (isinstance(variable, List) and
-                    all(isinstance(item, Document)
-                        for item in variable)) or (isinstance(variable, BaseOutputParser) and
-                                                   hasattr(variable, 'get_format_instructions')):
+            if (isinstance(variable, List) and all(
+                    isinstance(item, Document)
+                    for item in variable)) or (isinstance(variable, BaseOutputParser)
+                                               and hasattr(variable, 'get_format_instructions')):
                 if 'handle_keys' not in format_kwargs:
                     format_kwargs['handle_keys'] = []
 
@@ -397,6 +402,8 @@ def instantiate_prompt(node_type, class_object, params: Dict, param_id_dict: Dic
 
 
 def instantiate_tool(node_type, class_object: Type[BaseTool], params: Dict):
+    # build args_schema
+    args_schema = params.pop('args_schema', '')
     if node_type == 'JsonSpec':
         if file_dict := load_file_into_dict(params.pop('path')):
             params['dict_'] = file_dict
@@ -412,8 +419,21 @@ def instantiate_tool(node_type, class_object: Type[BaseTool], params: Dict):
             return validate.eval_function(function_string)
         raise ValueError('Function should be a string')
     elif node_type.lower() == 'tool':
-        return class_object(**params)
-    return class_object(**params)
+        tool = class_object(**params)
+    tool = class_object(**params)
+    if args_schema and hasattr(tool, 'args_schema'):
+        fields = {}
+        for name, prop in args_schema.items():
+            # eval函数用于执行一个字符串表达式并返回结果
+            import typing  # noqa
+            if prop.get('type') == 'string':
+                field_type = str
+            else:
+                field_type = typing.Any
+            fields[name] = (field_type, FieldInfo(**prop))
+
+        tool.args_schema = create_model(name, **fields)
+    return tool
 
 
 def instantiate_toolkit(node_type, class_object: Type[BaseToolkit], params: Dict):
@@ -436,13 +456,14 @@ def instantiate_embedding(class_object, params: Dict):
 
 
 def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
-    search_kwargs = params.pop('search_kwargs', {})
     user_name = params.pop('user_name', '')
+    search_kwargs = params.pop('search_kwargs', {})
+    search_type = params.pop('search_type', 'similarity')
     if 'documents' not in params:
         params['documents'] = []
 
     if initializer := vecstore_initializer.get(class_object.__name__):
-        vecstore = initializer(class_object, params)
+        vecstore = initializer(class_object, params, search_kwargs)
     else:
         if 'texts' in params:
             params['documents'] = params.pop('texts')
@@ -451,13 +472,14 @@ def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
     # ! This might not work. Need to test
     if search_kwargs and hasattr(vecstore, 'as_retriever'):
         if settings.get_from_db('file_access'):
-            # need to verify file access
+            # need to verify file access / 只针对知识库
             access_url = settings.get_from_db('file_access') + f'?username={user_name}'
-            vecstore = VectorStoreFilterRetriever(vecstore=vecstore,
+            vecstore = VectorStoreFilterRetriever(vectorstore=vecstore,
+                                                  search_type=search_type,
                                                   search_kwargs=search_kwargs,
                                                   access_url=access_url)
         else:
-            vecstore = vecstore.as_retriever(search_kwargs=search_kwargs)
+            vecstore = vecstore.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
 
     return vecstore
 
@@ -514,8 +536,8 @@ def instantiate_textsplitter(
         raise ValueError('The source you provided did not load correctly or was empty.'
                          'Try changing the chunk_size of the Text Splitter.') from exc
 
-    if ('separator_type' in params and
-            params['separator_type'] == 'Text') or 'separator_type' not in params:
+    if ('separator_type' in params
+            and params['separator_type'] == 'Text') or 'separator_type' not in params:
         params.pop('separator_type', None)
         # separators might come in as an escaped string like \\n
         # so we need to convert it to a string
@@ -545,8 +567,8 @@ def replace_zero_shot_prompt_with_prompt_template(nodes):
         if node['data']['type'] == 'ZeroShotPrompt':
             # Build Prompt Template
             tools = [
-                tool for tool in nodes if tool['type'] != 'chatOutputNode' and
-                'Tool' in tool['data']['node']['base_classes']
+                tool for tool in nodes if tool['type'] != 'chatOutputNode'
+                and 'Tool' in tool['data']['node']['base_classes']
             ]
             node['data'] = build_prompt_template(prompt=node['data'], tools=tools)
             break

@@ -43,7 +43,11 @@ agents:
     documentation: ""
   SQLAgent:
     documentation: ""
+  ChatglmFunctionsAgent:
+    documentation: ""
 chains:
+  RetrievalChain:
+    documentation: ""
   RuleBasedRouter:
     documentation: ""
   MultiRuleChain:
@@ -189,11 +193,13 @@ llms:
     documentation: ""
   ChatWenxin:
     documentation: ""
+  ChatQWen:
+    documentation: ""
   ChatZhipuAI:
     documentation: ""
   ChatXunfeiAI:
     documentation: ""
-  HostChatGLM2:
+  HostChatGLM:
     documentation: ""
   HostBaichuanChat:
     documentation: ""

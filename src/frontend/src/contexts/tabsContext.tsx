@@ -541,6 +541,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         throw error; // Re-throw the error so the caller can handle it if needed
       }
     } else {
+      // 增加覆盖方法
       paste(
         { nodes: flow.data.nodes, edges: flow.data.edges },
         { x: 10, y: 10 }

@@ -50,6 +50,15 @@ class ToolNode(FrontendNode):
                 value=False,
                 name='return_direct',
             ),
+            TemplateField(
+                field_type='NestedDict',
+                required=True,
+                placeholder='',
+                show=True,
+                multiline=True,
+                value='{"arg1": {"type": "string"}}',
+                name='args_schema',
+            ),
         ],
     )
     description: str = 'Converts a chain, agent or function into a tool.'

@@ -14,6 +14,7 @@ CHAT_OPENAI_MODELS = [
     'gpt-4-32k-0613',
     'gpt-4',
     'gpt-4-32k',
+    'gpt-4-1106-preview',
 ]
 
 ANTHROPIC_MODELS = [
@@ -36,7 +37,9 @@ def python_function(text: str) -> str:
     \"\"\"This is a default python function that returns the input text\"\"\"
     return text
 """
-DIRECT_TYPES = ['str', 'bool', 'code', 'int', 'float', 'Any', 'prompt', 'variable']
+DIRECT_TYPES = [
+    'str', 'bool', 'dict', 'int', 'float', 'Any', 'prompt', 'code', 'NestedDict', 'variable'
+]
 
 # 新增用来记录node_id 和 对象之间关系的key
 NODE_ID_DICT = 'node_id_dict'

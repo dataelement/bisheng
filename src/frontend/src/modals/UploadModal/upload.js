@@ -11,7 +11,7 @@ export const uploadFileWithProgress = async (file, callback) => {
       onUploadProgress: (progressEvent) => {
         const { loaded, total } = progressEvent;
         const progress = Math.round((loaded * 100) / total);
-        console.log(`Upload progress: ${progress}%`);
+        console.log(`Upload progress: ${file.name} ${progress}%`);
         callback(progress)
         // You can update your UI with the progress information here
       },
