@@ -197,7 +197,7 @@ class BaseHostChatLLM(BaseChatModel):
             # print('functions:', kwargs.get('functions', []))
             if self.verbose:
                 print('payload', params)
-                
+
             method_name = 'infer' if self.ver == 1 else 'generate'
             url = f'{self.host_base_url}/{self.model_name}/{method_name}'
             try:
@@ -206,7 +206,7 @@ class BaseHostChatLLM(BaseChatModel):
                 raise Exception(f'timeout in host llm infer, url=[{url}]')
             except Exception as e:
                 raise Exception(f'exception in host llm infer: [{e}]')
-                
+
             if not resp.get('choices', []):
                 logger.info(resp)
                 raise ValueError(f'empty choices in llm chat result {resp}')
@@ -290,6 +290,9 @@ class BaseHostChatLLM(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        if self.ver == 1:
+            return self._generate(messages, stop, run_manager, **kwargs)
+
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {**params, **kwargs}
         if self.streaming:
