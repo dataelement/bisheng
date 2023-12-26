@@ -168,7 +168,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
                         <p className="flex items-center text-gray-400 pb-2"><span className="w-4 h-4 bg-red-400 rounded-full flex justify-center items-center text-[#fff] mr-1">!</span>{t('chat.noAccess')}</p>
                     );
                 case SourceType.LINK:
-                    return <div className="mt-6 flex flex-col items-start gap-0">
+                    return <div className="flex flex-col items-start gap-0">
                         {
                             extra.doc?.map(el =>
                                 <Button variant="link" size="sm" className="text-blue-500 h-6 p-0">
@@ -176,8 +176,8 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
                                 </Button>)
                         }
                     </div>;
-                // case SourceType.HAS_QA:
-                //     return <p className="flex items-center text-gray-400 pb-2">{extra.qa}</p>;
+                case SourceType.HAS_QA:
+                    return <p className="flex items-center text-gray-400 pb-2">{extra.qa}</p>;
                 default:
                     return null;
             }
@@ -253,7 +253,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
             <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center" style={{ background: avatarColor }}><Bot color="#fff" size={28} /></div>
         </div>
         {chat.sender && <div className="chat-header text-gray-400 text-sm">{chat.sender}</div>}
-        <div ref={textRef} className={`chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8 relative ${chat.id && chat.source === SourceType.NONE && 'mb-8'}`}>
+        <div ref={textRef} className={`chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8 relative ${chat.id && chat.end && 'pb-8'}`}>
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {/* @user */}
             {chat.receiver && <p className="text-blue-500 text-sm">@ {chat.receiver.user_name}</p>}
@@ -264,8 +264,8 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
                 id={chat.id}
                 data={chat.liked}
                 onCopy={handleCopy}
-                className={`absolute w-full left-0 bottom-[-28px] justify-end min-w-[240px] ${chat.source === SourceType.NO_PERMISSION && 'bottom-[-54px]'}`
-                }></Thumbs>}
+                className={`absolute w-full left-0 bottom-[8px] justify-end pr-5`}></Thumbs>
+            }
         </div>
         {chat.source !== SourceType.NONE && chat.end && sourceContent(chat.source)}
     </div>
