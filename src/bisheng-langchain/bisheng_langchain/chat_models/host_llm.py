@@ -107,10 +107,6 @@ class BaseHostChatLLM(BaseChatModel):
     """Model name to use."""
     model_name: str = Field('', alias='model')
 
-    # Very important augment, ver=1 use rt-005 before, to use rt-006 should use
-    # ver=2
-    ver: int = 1
-
     temperature: float = 0.9
     top_p: float = 0.95
     do_sample: bool = False
@@ -123,7 +119,7 @@ class BaseHostChatLLM(BaseChatModel):
 
     headers: Optional[Dict[str, str]] = Field(default_factory=dict)
 
-    request_timeout: Optional[Union[float, Tuple[float, float]]] = None
+    request_timeout: Optional[Union[float, Tuple[float, float]]] = 300
     """Timeout for requests to OpenAI completion API. Default is 600 seconds."""
     max_retries: Optional[int] = 1
     """Maximum number of retries to make when generating."""
@@ -144,6 +140,8 @@ class BaseHostChatLLM(BaseChatModel):
 
     verbose: Optional[bool] = False
 
+    decoupled: Optional[bool] = False
+
     class Config:
         """Configuration for this pydantic object."""
 
@@ -153,6 +151,16 @@ class BaseHostChatLLM(BaseChatModel):
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
         values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url', 'HostBaseUrl')
+        model = values['model_name']
+        try:
+            url = values['host_base_url'].split('/')[2]
+            config_ep = f'http://{url}/v2/models/{model}/config'
+            config = requests.get(url=config_ep, json={}, timeout=5).json()
+            policy = config.get('model_transaction_policy', {})
+            values['decoupled'] = policy.get('decoupled', False)
+        except Exception:
+            raise Exception(f'Update Decoupled status faild for model {model}')
+
         try:
             values['client'] = requests.post
         except AttributeError:
@@ -198,10 +206,11 @@ class BaseHostChatLLM(BaseChatModel):
             if self.verbose:
                 print('payload', params)
 
-            method_name = 'infer' if self.ver == 1 else 'generate'
+            method_name = 'infer' if not self.decoupled else 'generate'
             url = f'{self.host_base_url}/{self.model_name}/{method_name}'
             try:
-                resp = self.client(url=url, json=params).json()
+                resp = self.client(
+                    url=url, json=params, timeout=self.request_timeout).json()
             except requests.exceptions.Timeout:
                 raise Exception(f'timeout in host llm infer, url=[{url}]')
             except Exception as e:
@@ -252,29 +261,44 @@ class BaseHostChatLLM(BaseChatModel):
         @retry_decorator
         def _completion_with_retry(**kwargs: Any) -> Any:
             if self.streaming:
-                if self.ver == 1:
-                    raise Exception('Not supported stream protocol in ver=1')
+                if not self.decoupled:
+                    raise Exception('Not supported stream protocol with non decoupled model')
 
                 headers = {'Accept': 'text/event-stream'}
                 url = f'{self.host_base_url}/{self.model_name}/generate_stream'
-                res = requests.post(
+                try:
+                    res = requests.post(
+                            url=url,
+                            data=json.dumps(kwargs),
+                            headers=headers,
+                            stream=False)
+                except Exception as e:
+                    raise Exception(f'exception in host llm sse infer: [{e}]')
+
+                res.raise_for_status()
+                try:
+                    client = sseclient.SSEClient(res, timeout=self.request_timeout)
+                    for event in client.events():
+                        delta_data = json.loads(event.data)
+                        yield delta_data
+                except requests.exceptions.Timeout:
+                    raise Exception(f'timeout in host llm sse infer, url=[{url}]')
+                except Exception as e:
+                    raise Exception(f'exception in host llm sse infer: [{e}]')
+            else:
+                method_name = 'infer' if not self.decoupled else 'generate'
+                url = f'{self.host_base_url}/{self.model_name}/{method_name}'
+                try:
+                    res = requests.post(
                         url=url,
                         data=json.dumps(kwargs),
-                        headers=headers,
-                        stream=False)
-                res.raise_for_status()
-                client = sseclient.SSEClient(res)
-                for event in client.events():
-                    delta_data = json.loads(event.data)
-                    yield delta_data
-            else:
-                method_name = 'infer' if self.ver == 1 else 'generate'
-                url = f'{self.host_base_url}/{self.model_name}/{method_name}'
-                res = requests.post(
-                    url=url,
-                    data=json.dumps(kwargs),
-                    stream=False)
-                return res.json()
+                        stream=False,
+                        timeout=self.request_timeout)
+                    return res.json()
+                except requests.exceptions.Timeout:
+                    raise Exception(f'timeout in host llm infer, url=[{url}]')
+                except Exception as e:
+                    raise Exception(f'exception in host llm infer: [{e}]')
 
         if self.streaming:
             for response in _completion_with_retry(**kwargs):
@@ -290,7 +314,7 @@ class BaseHostChatLLM(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        if self.ver == 1:
+        if not self.decoupled:
             return self._generate(messages, stop, run_manager, **kwargs)
 
         message_dicts, params = self._create_message_dicts(messages, stop)
@@ -458,7 +482,7 @@ class HostBaichuanChat(BaseHostChatLLM):
 
     temperature: float = 0.3
     top_p: float = 0.85
-    max_tokens: int = 8192
+    max_tokens: int = 4096
 
     @property
     def _llm_type(self) -> str:
@@ -472,7 +496,7 @@ class HostQwenChat(BaseHostChatLLM):
 
     temperature: float = 0
     top_p: float = 1
-    max_tokens: int = 8192
+    max_tokens: int = 4096
 
     @property
     def _llm_type(self) -> str:
@@ -486,7 +510,7 @@ class HostLlama2Chat(BaseHostChatLLM):
 
     temperature: float = 0.9
     top_p: float = 0.6
-    max_tokens: int = 8192
+    max_tokens: int = 4096
 
     @property
     def _llm_type(self) -> str:
@@ -500,7 +524,7 @@ class CustomLLMChat(BaseHostChatLLM):
 
     temperature: float = 0.1
     top_p: float = 0.1
-    max_tokens: int = 8192
+    max_tokens: int = 4096
 
     @property
     def _llm_type(self) -> str:
@@ -529,7 +553,18 @@ class CustomLLMChat(BaseHostChatLLM):
             if self.verbose:
                 print('payload', params)
 
-            resp = self.client(url=self.host_base_url, json=params).json()
+            resp = None
+            try:
+                resp = self.client(
+                    url=self.host_base_url,
+                    json=params,
+                    timeout=self.request_timeout).json()
+            except requests.exceptions.Timeout:
+                raise Exception(
+                    f'timeout in custom host llm infer, url=[{self.host_base_url}]')
+            except Exception as e:
+                raise Exception(f'exception in custom host llm infer: [{e}]')
+
             return resp
 
         return _completion_with_retry(**kwargs)
