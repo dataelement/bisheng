@@ -55,13 +55,15 @@ class HostEmbeddings(BaseModel, Embeddings):
     """Maximum number of texts to embed in each batch"""
     max_retries: Optional[int] = 6
     """Maximum number of retries to make when generating."""
-    request_timeout: Optional[Union[float, Tuple[float, float]]] = None
+    request_timeout: Optional[Union[float, Tuple[float, float]]] = 200
     """Timeout in seconds for the OpenAPI request."""
 
     model_kwargs: Optional[Dict[str, Any]] = Field(default_factory=dict)
     """Holds any model parameters valid for `create` call not explicitly specified."""
 
     verbose: Optional[bool] = False
+
+    url_ep: Optional[str] = None
 
     class Config:
         """Configuration for this pydantic object."""
@@ -73,6 +75,12 @@ class HostEmbeddings(BaseModel, Embeddings):
         """Validate that api key and python package exists in environment."""
         values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url',
                                                        'HostBaseUrl')
+        model = values['model']
+        try:
+            url = values['host_base_url']
+            values['url_ep'] = f'{url}/{model}/infer'
+        except Exception:
+            raise Exception(f'Failed to set url ep failed for model {model}')
 
         try:
             values['client'] = requests.post
@@ -96,8 +104,16 @@ class HostEmbeddings(BaseModel, Embeddings):
         if self.verbose:
             print('payload', inp)
 
-        url = f'{self.host_base_url}/{self.model}/infer'
-        outp = self.client(url=url, json=inp).json()
+        outp = None
+        try:
+            outp = self.client(
+                url=self.url_ep, json=inp, timeout=self.request_timeout).json()
+        except requests.exceptions.Timeout:
+            raise Exception(
+                f'timeout in host embedding infer, url=[{self.url_ep}]')
+        except Exception as e:
+            raise Exception(f'exception in host embedding infer: [{e}]')
+
         if outp['status_code'] != 200:
             raise ValueError(
                 f"API returned an error: {outp['status_message']}")
@@ -131,3 +147,25 @@ class BGEZhEmbedding(HostEmbeddings):
 class GTEEmbedding(HostEmbeddings):
     model: str = 'gte'
     embedding_ctx_length: int = 512
+
+
+class CustomHostEmbedding(HostEmbeddings):
+    model: str = Field('custom-embedding', alias='model')
+    embedding_ctx_length: int = 512
+
+    @root_validator()
+    def validate_environment(cls, values: Dict) -> Dict:
+        """Validate that api key and python package exists in environment."""
+        values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url',
+                                                       'HostBaseUrl')
+        try:
+            values['url_ep'] = values['host_base_url']
+        except Exception:
+            raise Exception('Failed to set url ep for custom host embedding')
+
+        try:
+            values['client'] = requests.post
+        except AttributeError:
+            raise ValueError(
+                'Try upgrading it with `pip install --upgrade requests`.')
+        return values
