@@ -1,7 +1,7 @@
 import asyncio
 import os
 
-from bisheng_langchain.chat_models import HostQwenChat
+from bisheng_langchain.chat_models import HostBaichuanChat, HostQwenChat
 from langchain.schema import ChatGeneration
 from langchain.schema.messages import AIMessage, HumanMessage, SystemMessage
 
@@ -39,5 +39,24 @@ async def test_host_qwen_chat_stream():
         print('generation text', generation.message.content)
 
 
+def test_host_baichuan_chat_simple():
+    chat = HostBaichuanChat(
+      model_name='Baichuan-13B-Chat',
+      ver=1,
+      host_base_url=f'http://{RT_EP}/v2.1/models')
+    # use generate api
+    resp = chat.predict('写一个下雨的悬疑小说')
+    print(resp)
+
+    chat = HostBaichuanChat(
+      model_name='Baichuan-13B-Chat',
+      ver=2,
+      host_base_url=f'http://{RT_EP}/v2.1/models')
+    # use generate api
+    resp = chat.predict('写一个下雨的悬疑小说')
+    print(resp)
+
+
 asyncio.run(test_host_qwen_chat_stream())
-# test_host_qwen_chat_simple()
+test_host_qwen_chat_simple()
+test_host_baichuan_chat_simple()

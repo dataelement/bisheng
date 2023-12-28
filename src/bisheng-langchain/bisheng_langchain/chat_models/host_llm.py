@@ -458,7 +458,7 @@ class HostBaichuanChat(BaseHostChatLLM):
 
     temperature: float = 0.3
     top_p: float = 0.85
-    max_tokens: int = 8192
+    max_tokens: int = 4096
 
     @property
     def _llm_type(self) -> str:
