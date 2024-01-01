@@ -130,5 +130,5 @@ jobs:
       - name: Deploy Stage
         uses: fjogeleit/http-request-action@v1
         with:
-          url: 'http://110.16.193.170:50055/cgi-bin/delpoy.py'
+          url: 'https://bisheng.dataelem.com/deploy/cgi-bin/deploy_script.py'
           method: 'GET'
