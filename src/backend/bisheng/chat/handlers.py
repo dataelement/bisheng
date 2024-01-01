@@ -1,19 +1,16 @@
 import json
-from typing import Dict, List
+from typing import Dict
 
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.manager import ChatManager
-from bisheng.chat.utils import extract_answer_keys, process_graph
+from bisheng.chat.utils import judge_source, process_graph, process_source_document
 from bisheng.database.base import get_session
-from bisheng.database.models.model_deploy import ModelDeploy
-from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.database.models.report import Report
 from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.chains.autogen.auto_gen import AutoGenChain
-from langchain.docstore.document import Document
 from sqlmodel import select
 
 
@@ -67,7 +64,10 @@ class Handler:
 
         if langchain_object.stop_status():
             start_resp.category = 'divider'
-            response = ChatResponse(message='主动退出', type='end', category='divider', user_id=user_id)
+            response = ChatResponse(message='主动退出',
+                                    type='end',
+                                    category='divider',
+                                    user_id=user_id)
             await session.send_json(client_id, chat_id, response)
 
         # build report
@@ -154,41 +154,18 @@ class Handler:
         intermediate_steps = intermediate_steps or ''
         # history = self.chat_history.get_history(client_id, chat_id, filter_messages=False)
         await self.intermediate_logs(session, client_id, chat_id, user_id, intermediate_steps)
-        source = 0
         extra = {}
-        if isinstance(result, Document):
-            # 返回的是Document
-            metadata = result.metadata
-            question = result.page_content
-            result = eval(metadata.get('extra', '{}')).get('answer')
-            source = 4
-            extra = {'qa': f'本答案来源于已有问答库: {question}'}
-        elif source_doucment and chat_id:
-            if any(not doc.metadata.get('right', True) for doc in source_doucment):
-                source = 2
-            elif all(
-                    doc.metadata.get('extra') and eval(doc.metadata.get('extra')).get('url')
-                    for doc in source_doucment):
-                source = 3
-                doc = [{
-                    'title': doc.metadata.get('source'),
-                    'url': eval(doc.metadata.get('extra', '{}')).get('url')
-                } for doc in source_doucment]
-                extra = {'doc': [dict(s) for s in set(frozenset(d.items()) for d in doc)]}
-            else:
-                source = 1
+        source = await judge_source(result, source_doucment, chat_id, extra)
 
-        if source:
-            for doc in source_doucment:
-                # 确保每个chunk 都可溯源
-                if 'bbox' not in doc.metadata or not doc.metadata['bbox']:
-                    source = False
         # 最终结果
         if isinstance(langchain_object, AutoGenChain):
             # 群聊，最后一条消息重复，不进行返回
             start_resp.category = 'divider'
             await session.send_json(client_id, chat_id, start_resp)
-            response = ChatResponse(message='本轮结束', type='end', category='divider', user_id=user_id)
+            response = ChatResponse(message='本轮结束',
+                                    type='end',
+                                    category='divider',
+                                    user_id=user_id)
             await session.send_json(client_id, chat_id, response)
         else:
             # 正常
@@ -210,7 +187,7 @@ class Handler:
 
         if source:
             # 处理召回的chunk
-            await self.process_source_document(
+            await process_source_document(
                 source_doucment,
                 chat_id,
                 response.message_id,
@@ -331,40 +308,3 @@ class Handler:
         for step in steps:
             # save chate message
             session.chat_history.add_message(client_id, chat_id, step)
-
-    async def process_source_document(self, source_document: List[Document], chat_id, message_id,
-                                      answer):
-        if not source_document:
-            return
-
-        from bisheng.settings import settings
-        # 使用大模型进行关键词抽取，模型配置临时方案
-        keyword_conf = settings.get_default_llm() or {}
-        host_base_url = keyword_conf.get('host_base_url')
-        model = keyword_conf.get('model')
-
-        if model and not host_base_url:
-            db_session = next(get_session())
-            model_deploy = db_session.exec(
-                select(ModelDeploy).where(ModelDeploy.model == model)).first()
-            if model_deploy:
-                model = model if model_deploy.status == '已上线' else None
-                host_base_url = model_deploy.endpoint
-            else:
-                logger.error('不能使用配置模型进行关键词抽取，配置不正确')
-
-        answer_keywords = extract_answer_keys(answer, model, host_base_url)
-        for doc in source_document:
-            if 'bbox' in doc.metadata:
-                # 表示支持溯源
-                db_session = next(get_session())
-                content = doc.page_content
-                recall_chunk = RecallChunk(chat_id=chat_id,
-                                           keywords=json.dumps(answer_keywords),
-                                           chunk=content,
-                                           file_id=doc.metadata.get('file_id'),
-                                           meta_data=json.dumps(doc.metadata),
-                                           message_id=message_id)
-                db_session.add(recall_chunk)
-                db_session.commit()
-                db_session.refresh(recall_chunk)

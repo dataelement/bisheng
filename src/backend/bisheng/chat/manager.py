@@ -4,21 +4,19 @@ from collections import defaultdict
 from email.utils import unquote
 from typing import Any, Dict, List
 from urllib.parse import urlparse
-from uuid import UUID
 
-from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
 from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
 from bisheng.cache.manager import Subject
-from bisheng.database.base import get_session
-from bisheng.database.models.user import User
+from bisheng.database.base import session_getter
 from bisheng.processing.process import process_tweaks
+from bisheng.services.deps import get_session_service
 from bisheng.utils.logger import logger
-from bisheng.utils.threadpool import ThreadPoolManager
+from bisheng.utils.threadpool import thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.input_output.output import Report
-from fastapi import WebSocket
+from fastapi import WebSocket, status
 
 
 class ChatHistory(Subject):
@@ -32,7 +30,7 @@ class ChatHistory(Subject):
 
         if chat_id and (message.message or message.intermediate_steps
                         or message.files) and message.type != 'stream':
-            with next(get_session()) as seesion:
+            with session_getter() as seesion:
                 from bisheng.database.models.message import ChatMessage
                 msg = message.copy()
                 msg.message = str(msg.message) if isinstance(msg.message, dict) else msg.message
@@ -155,8 +153,8 @@ class ChatManager:
         gragh_data: dict = None,
     ):
         await self.connect(client_id, chat_id, websocket)
-        thread_pool_local = ThreadPoolManager(max_workers=2)
-        status = 'init'  # 创建锁
+
+        status_ = 'init'  # 创建锁
         payload = {}
         try:
             while True:
@@ -165,7 +163,6 @@ class ChatManager:
                                                                   timeout=2.0)
                 except asyncio.TimeoutError:
                     json_payload_receive = ''
-                    pass
                 try:
                     payload = json.loads(json_payload_receive) if json_payload_receive else payload
                 except TypeError:
@@ -179,7 +176,7 @@ class ChatManager:
 
                 # set start
                 from bisheng.chat.handlers import Handler
-                is_begin = True if payload and status == 'init' else False
+                is_begin = True if payload and status_ == 'init' else False
                 action = None
                 if 'action' in payload:
                     # autogen continue last session,
@@ -193,38 +190,45 @@ class ChatManager:
 
                 # should input data
                 langchain_obj_key = get_cache_key(client_id, chat_id)
-                if payload and status == 'init':
+                if payload and status_ == 'init':
                     has_file, graph_data = await self.preper_payload(payload, gragh_data,
                                                                      langchain_obj_key, client_id,
                                                                      chat_id, start_resp,
                                                                      step_resp)
-                    status = 'init_object'
+                    status_ = 'init_object'
 
                 # build in thread
                 if payload and not self.in_memory_cache.get(
-                        langchain_obj_key) and status == 'init_object':
-                    thread_pool_local.submit(self.init_langchain_object, client_id, chat_id,
-                                             user_id, graph_data)
-                    status = 'waiting_object'
+                        langchain_obj_key) and status_ == 'init_object':
+                    thread_pool.submit(self.init_langchain_object, client_id, chat_id, user_id,
+                                       graph_data)
+                    status_ = 'waiting_object'
 
                 # run in thread
+                async_task = None
                 if payload and self.in_memory_cache.get(langchain_obj_key):
                     logger.info(f"processing_message message={payload['inputs']}")
                     action, over = await self.preper_action(client_id, chat_id, langchain_obj_key,
                                                             payload, start_resp, step_resp)
                     if not over:
-                        thread_pool_local.submit(Handler().dispatch_task, self, client_id, chat_id,
-                                                 action, payload, user_id)
-                    status = 'init'
+                        # task_service: 'TaskService' = get_task_service()
+                        # async_task = asyncio.create_task(
+                        #     task_service.launch_task(Handler().dispatch_task, self, client_id,
+                        #                              chat_id, action, payload, user_id))
+                        thread_pool.submit(Handler().dispatch_task, self, client_id, chat_id,
+                                           action, payload, user_id)
+                    status_ = 'init'
                     payload = {}  # clean message
 
                 # 处理任务状态
-                complete = thread_pool_local.as_completed()
+                complete = thread_pool.as_completed()
+                if async_task and async_task.done():
+                    logger.debug(f'async_task_complete result={async_task.result}')
                 if complete:
                     for future in complete:
                         try:
-                            result = future.result()
-                            logger.debug(f'task_complete result={result}')
+                            future.result()
+                            logger.debug('task_complete')
                         except Exception as e:
                             logger.exception(e)
                             step_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
@@ -233,11 +237,9 @@ class ChatManager:
                             await self.send_json(client_id, chat_id, step_resp)
                             start_resp.type = 'close'
                             await self.send_json(client_id, chat_id, start_resp)
-                            # socket close?
-                            return
         except Exception as e:
             # Handle any exceptions that might occur
-            logger.error(str(e))
+            logger.exception(e)
             await self.close_connection(
                 client_id=client_id,
                 chat_id=chat_id,
@@ -307,32 +309,27 @@ class ChatManager:
                 await self.send_json(client_id, chat_id, step_resp, add=False)
         return action, over
 
-    def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
+    async def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
+        session_id = chat_id
+        session_service = get_session_service()
+        if session_id is None:
+            session_id = session_service.generate_key(session_id=session_id, data_graph=graph_data)
+        # Load the graph using SessionService
+        session = await session_service.load_session(session_id, graph_data)
+        graph, artifacts = session if session else (None, None)
+        if not graph:
+            raise ValueError('Graph not found in the session')
+        built_object = await graph.abuild()
         key_node = get_cache_key(flow_id, chat_id)
         logger.info(f'init_langchain key={key_node}')
-        session = next(get_session())
-        db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
-        artifacts = {}
-        graph = build_flow_no_yield(graph_data=graph_data,
-                                    artifacts=artifacts,
-                                    process_file=True,
-                                    flow_id=UUID(flow_id).hex,
-                                    chat_id=chat_id,
-                                    user_name=db_user.user_name)
-        langchain_object = graph.build()
         question = []
         for node in graph.nodes:
             if node.vertex_type == 'InputNode':
-                question.extend(node._built_object)
-
+                question.extend(node.build)
         self.set_cache(key_node + '_question', question)
-        for node in langchain_object:
-            # 只存储chain
-            if node.base_type == 'inputOutput' and node.vertex_type != 'Report':
-                continue
-            self.set_cache(key_node, node._built_object)
-            self.set_cache(key_node + '_artifacts', artifacts)
-        return graph
+        self.set_cache(key_node, built_object)
+        self.set_cache(key_node + '_artifacts', artifacts)
+        return built_object
 
     def refresh_graph_data(self, graph_data: dict, node_data: List[dict]):
         tweak = {}

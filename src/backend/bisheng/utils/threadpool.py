@@ -3,6 +3,8 @@ import concurrent.futures
 import threading
 from typing import List
 
+from loguru import logger
+
 
 class ThreadPoolManager:
 
@@ -34,6 +36,8 @@ class ThreadPoolManager:
             completed_futures = [f for f in self.futures if f.done()]
             for f in completed_futures:
                 self.futures.remove(f)
+            if self.futures:
+                logger.info(f'thread_pool pool_size={len(self.futures)}')
             return completed_futures
 
 

@@ -45,7 +45,7 @@ def get_original_file(*, message_id: int, keys: str, session: Session = Depends(
         chunk_res = json.loads(json.loads(chunk.meta_data).get('bbox'))
         file_access = json.loads(chunk.meta_data).get('right', True)
         chunk_res['right'] = file_access
-        if file_access:
+        if file_access and file:
             chunk_res['source_url'] = minio_client.get_share_link(str(chunk.file_id))
             chunk_res['original_url'] = minio_client.get_share_link(
                 file.object_name if file.object_name else str(file.id))

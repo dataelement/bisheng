@@ -9,7 +9,7 @@ import requests
 from bisheng.api.utils import access_check
 from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.cache.utils import file_download, save_uploaded_file
-from bisheng.database.base import get_session
+from bisheng.database.base import get_session, session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
 from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.role_access import AccessType, RoleAccess
@@ -308,27 +308,24 @@ def delete_knowledge(*,
             vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
     # 处理 es
     # todo
-
     session.delete(knowledge)
     session.commit()
     return {'message': 'knowledge deleted successfully'}
 
 
 @router.delete('/file/{file_id}', status_code=200)
-def delete_knowledge_file(*,
-                          session: Session = Depends(get_session),
-                          file_id: int,
-                          Authorize: AuthJWT = Depends()):
+def delete_knowledge_file(*, file_id: int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """ 删除知识文件信息 """
-    knowledge_file = session.get(KnowledgeFile, file_id)
-    if not knowledge_file:
-        raise HTTPException(status_code=404, detail='文件不存在')
+    with session_getter() as session:
+        knowledge_file = session.get(KnowledgeFile, file_id)
+        if not knowledge_file:
+            raise HTTPException(status_code=404, detail='文件不存在')
 
-    knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
-    if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
-        raise HTTPException(status_code=404, detail='没有权限执行操作')
+        knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
+        if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
+            raise HTTPException(status_code=404, detail='没有权限执行操作')
     # 处理vectordb
     collection_name = knowledge.collection_name
     embeddings = decide_embeddings(knowledge.model)
@@ -350,7 +347,7 @@ def delete_knowledge_file(*,
                 'metadata.file_id': file_id
             }})
         logger.info(f'act=delete_es file_id={file_id} res={res}')
-
+    session = next(get_session())
     session.delete(knowledge_file)
     session.commit()
     return {'message': 'knowledge file deleted successfully'}
@@ -399,16 +396,19 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
         knowledge_file = knowledge_files[index]
         logger.info(
             f'process_file_begin file_name={knowledge_file.file_name} file_id={knowledge_file.id}')
-        session = next(get_session())
+
         try:
             # 存储 mysql
-            db_file = session.get(KnowledgeFile, knowledge_file.id)
-            setattr(db_file, 'status', 2)
-            # 原文件
-            object_name_original = f'original/{db_file.id}'
-            setattr(db_file, 'object_name', object_name_original)
-            session.add(db_file)
-            session.flush()
+            with session_getter() as session:
+                db_file = session.get(KnowledgeFile, knowledge_file.id)
+                setattr(db_file, 'status', 2)
+                # 原文件
+                object_name_original = f'original/{db_file.id}'
+                setattr(db_file, 'object_name', object_name_original)
+                session.add(db_file)
+                session.flush()
+                session.commit()
+                session.refresh(db_file)
 
             minio_client.upload_minio(object_name_original, path)
             texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
@@ -420,25 +420,21 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
             minio_client.upload_minio(str(db_file.id), path)
 
             logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
-            [
-                metadata.update({
-                    'file_id': knowledge_file.id,
-                    'knowledge_id': f'{knowledge_id}'
-                }) for metadata in metadatas
-            ]
+            for metadata in metadatas:
+                metadata.update({'file_id': knowledge_file.id, 'knowledge_id': f'{knowledge_id}'})
             vectore_client.add_texts(texts=texts, metadatas=metadatas)
 
             # 存储es
             if es_client:
                 es_client.add_texts(texts=texts, metadatas=metadatas)
-            session.commit()
-            session.refresh(db_file)
+
             callback_obj = db_file.copy()
             logger.info(
                 f'process_file_done file_name={knowledge_file.file_name} file_id={knowledge_file.id} time_cost={time.time()-ts1}'  # noqa
             )
         except Exception as e:
             logger.error(e)
+            session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)
             setattr(db_file, 'remark', str(e)[:500])

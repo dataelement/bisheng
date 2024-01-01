@@ -1,10 +1,18 @@
+import json
+from typing import Dict, List
+
 from bisheng.api.v1.schemas import ChatMessage
+from bisheng.database.base import get_session
+from bisheng.database.models.model_deploy import ModelDeploy
+from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.interface.utils import try_setting_streaming_options
 from bisheng.processing.base import get_result_and_steps
 from bisheng.utils.logger import logger
 from bisheng_langchain.chat_models import HostQwenChat
 from fastapi import WebSocket
 from langchain import LLMChain, PromptTemplate
+from langchain.schema.document import Document
+from sqlmodel import select
 
 
 async def process_graph(
@@ -69,3 +77,72 @@ def extract_answer_keys(answer, extract_model, host_base_url):
         keywords = jieba.analyse.extract_tags(answer, topK=100, withWeight=False)
 
     return keywords
+
+
+async def judge_source(result, source_document, chat_id, extra: Dict):
+    source = 0
+    if isinstance(result, Document):
+        # 返回的是Document
+        metadata = result.metadata
+        question = result.page_content
+        result = json.loads(metadata.get('extra', '{}')).get('answer')
+        source = 4
+        extra.update({'qa': f'本答案来源于已有问答库: {question}'})
+    elif source_document and chat_id:
+        if any(not doc.metadata.get('right', True) for doc in source_document):
+            source = 2
+        elif all(
+                doc.metadata.get('extra') and json.loads(doc.metadata.get('extra')).get('url')
+                for doc in source_document):
+            source = 3
+            doc = [{
+                'title': doc.metadata.get('source'),
+                'url': json.loads(doc.metadata.get('extra', '{}')).get('url')
+            } for doc in source_document]
+            extra.update({'doc': [dict(s) for s in set(frozenset(d.items()) for d in doc)]})
+        else:
+            source = 1
+
+    if source:
+        for doc in source_document:
+            # 确保每个chunk 都可溯源
+            if 'bbox' not in doc.metadata or not doc.metadata['bbox']:
+                source = False
+    return source
+
+
+async def process_source_document(source_document: List[Document], chat_id, message_id, answer):
+    if not source_document:
+        return
+
+    from bisheng.settings import settings
+    # 使用大模型进行关键词抽取，模型配置临时方案
+    keyword_conf = settings.get_default_llm() or {}
+    host_base_url = keyword_conf.get('host_base_url')
+    model = keyword_conf.get('model')
+
+    if model and not host_base_url:
+        db_session = next(get_session())
+        model_deploy = db_session.exec(
+            select(ModelDeploy).where(ModelDeploy.model == model)).first()
+        if model_deploy:
+            model = model if model_deploy.status == '已上线' else None
+            host_base_url = model_deploy.endpoint
+        else:
+            logger.error('不能使用配置模型进行关键词抽取，配置不正确')
+
+    answer_keywords = extract_answer_keys(answer, model, host_base_url)
+    for doc in source_document:
+        if 'bbox' in doc.metadata:
+            # 表示支持溯源
+            db_session = next(get_session())
+            content = doc.page_content
+            recall_chunk = RecallChunk(chat_id=chat_id,
+                                       keywords=json.dumps(answer_keywords),
+                                       chunk=content,
+                                       file_id=doc.metadata.get('file_id'),
+                                       meta_data=json.dumps(doc.metadata),
+                                       message_id=message_id)
+            db_session.add(recall_chunk)
+            db_session.commit()
+            db_session.refresh(recall_chunk)

@@ -1,6 +1,6 @@
 import hashlib
 from contextlib import contextmanager
-from typing import Generator
+from typing import Generator, Optional
 
 from bisheng.database.init_config import init_config
 from bisheng.database.models.role import Role
@@ -59,9 +59,9 @@ def get_session() -> Generator['Session', None, None]:
 
 
 @contextmanager
-def session_getter(db_service: DatabaseService):
+def session_getter(db_service_p: Optional[DatabaseService] = db_service):
     try:
-        session = Session(db_service.engine)
+        session = Session(db_service_p.engine)
         yield session
     except Exception as e:
         print('Session rollback because of exception:', e)

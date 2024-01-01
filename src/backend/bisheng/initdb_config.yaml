@@ -16,14 +16,15 @@ knowledges: # 知识库相关配置
     # ElasticKeywordsSearch:
     #   elasticsearch_url: 'https://elasticsearch:9200'
     #   ssl_verify: "{'basic_auth': ('elastic', 'password'), 'ca_certs': False, 'verify_certs': False}"
-  # minio: # 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储
-  #   SCHEMA: false         # 是否支持 https
-  #   CERT_CHECK: false         # 是否校验 http证书
-  #   MINIO_ENDPOINT: "milvus:9001"       # 这个地址用来写请求
-  #   MINIO_SHAREPOIN: "milvus:9001"      # 为保证外网和内网隔离。 浏览器获取连接是这个域名
-  #   MINIO_ACCESS_KEY: "minioadmin"
-  #   MINIO_SECRET_KEY: "minioadmin"
-  #
+# 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储。 注意： minio 前面只有2个空格
+# minio: 
+#   SCHEMA: false         # 是否支持 https
+#   CERT_CHECK: false         # 是否校验 http证书
+#   MINIO_ENDPOINT: "milvus:9001"       # 这个地址用来写请求
+#   MINIO_SHAREPOIN: "milvus:9001"      # 为保证外网和内网隔离。 浏览器获取连接是这个域名
+#   MINIO_ACCESS_KEY: "minioadmin"
+#   MINIO_SECRET_KEY: "minioadmin"
+  
 
 # 全局配置大模型    
 default_llm: # 可选配置。BISHENG系统中有些功能需要使用大模型的能力，当前问答溯源功能中会用到，未来还会有其他功能会使用到。在问答溯源功能中，使用大语言模型自动从答案中提取关键词，来帮助用户快速定位到答案的可能来源段落，如果这里没有配置，则会使用jieba分词来输出答案中的关键词。

@@ -19,8 +19,8 @@ def extract_input_variables(nodes):
                 elif node['data']['node']['template']['_type'] == 'few_shot':
                     variables = re.findall(
                         r'\{(.*?)\}',
-                        node['data']['node']['template']['prefix']['value']
-                        + node['data']['node']['template']['suffix']['value'],
+                        node['data']['node']['template']['prefix']['value'] +
+                        node['data']['node']['template']['suffix']['value'],
                     )
                 else:
                     variables = []
@@ -44,6 +44,18 @@ def get_root_node(graph):
             input_node = input_node.union(node)
         return input_node
     return node
+
+
+def get_root_vertex(graph):
+    """
+    Returns the root node of the template.
+    """
+    incoming_edges = {edge.source.id for edge in graph.edges}
+
+    if not incoming_edges and len(graph.nodes) == 1:
+        return graph.nodes[0]
+
+    return next((node for node in graph.nodes if node.id not in incoming_edges), None)
 
 
 def build_json(root, graph) -> Dict:
@@ -87,9 +99,7 @@ def build_json(root, graph) -> Dict:
                 raise ValueError(f'No child with type {node_type} found')
             values = [build_json(child, graph) for child in children]
             value = (
-                list(values)
-                if value['list']
-                else next(iter(values), None)  # type: ignore
+                list(values) if value['list'] else next(iter(values), None)  # type: ignore
             )
         final_dict[key] = value
 

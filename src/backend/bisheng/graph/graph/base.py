@@ -2,6 +2,7 @@ from typing import Dict, Generator, List, Type, Union
 
 from bisheng.graph.edge.base import Edge
 from bisheng.graph.graph.constants import VERTEX_TYPE_MAP
+from bisheng.graph.utils import process_flow
 from bisheng.graph.vertex.base import Vertex
 from bisheng.graph.vertex.types import FileToolVertex, LLMVertex, ToolkitVertex
 from bisheng.interface.tools.constants import FILE_TOOLS
@@ -17,10 +18,30 @@ class Graph:
         nodes: List[Dict[str, Union[str, Dict[str, Union[str, List[str]]]]]],
         edges: List[Dict[str, str]],
     ) -> None:
+        self._vertices = nodes
         self._nodes = nodes
         self._edges = edges
-        self._param_public = {}  # for some node should store in graph scope
+        self.raw_graph_data = {'nodes': nodes, 'edges': edges}
+        self.top_level_vertices = []
+        for vertex in self._vertices:
+            if vertex_id := vertex.get('id'):
+                self.top_level_vertices.append(vertex_id)
+        self._graph_data = process_flow(self.raw_graph_data)
+
+        self._vertices = self._graph_data['nodes']
+        self._edges = self._graph_data['edges']
         self._build_graph()
+
+    def __getstate__(self):
+        return self.raw_graph_data
+
+    def __setstate__(self, state):
+        self.__init__(**state)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Graph):
+            return False
+        return self.__repr__() == other.__repr__()
 
     @classmethod
     def from_payload(cls, payload: Dict) -> 'Graph':
@@ -99,6 +120,15 @@ class Graph:
             raise ValueError('No root node found')
         [node.build() for node in root_node]
         return root_node
+
+    async def abuild(self) -> Chain:
+        """Builds the graph."""
+        # Get root node
+        root_vertex = payload.get_root_vertex(self)
+        if root_vertex is None:
+            raise ValueError('No root node vertex found')
+
+        return root_vertex.build()
 
     def topological_sort(self) -> List[Vertex]:
         """

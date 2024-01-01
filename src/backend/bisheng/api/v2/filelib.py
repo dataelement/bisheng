@@ -144,8 +144,7 @@ async def upload_file(*,
                       knowledge_id: int,
                       callback_url: Optional[str] = Form(None),
                       file: UploadFile = File(...),
-                      background_tasks: BackgroundTasks,
-                      session: Session = Depends(get_session)):
+                      background_tasks: BackgroundTasks):
 
     file_name = file.filename
     # 缓存本地
@@ -156,7 +155,7 @@ async def upload_file(*,
         separator = ['\n\n', '\n', ' ', '']
         chunk_size = 500
         chunk_overlap = 50
-
+    session = next(get_session())
     knowledge = session.get(Knowledge, knowledge_id)
 
     collection_name = knowledge.collection_name

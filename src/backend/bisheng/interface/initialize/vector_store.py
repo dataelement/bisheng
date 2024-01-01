@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any, Callable, Dict, Type
 
-from bisheng.database.base import get_session
+from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge
 from bisheng.settings import settings
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
@@ -219,13 +219,13 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
         # 匹配知识库的embedding
         col = params['collection_name']
         collection_id = params.pop('collection_id', '')
-        session = next(get_session())
-        if collection_id:
-            knowledge = session.get(Knowledge, collection_id)
-            params['collection_name'] = knowledge.collection_name
-        else:
-            knowledge = session.exec(
-                select(Knowledge).where(Knowledge.collection_name == col)).first()
+        with session_getter() as session:
+            if collection_id:
+                knowledge = session.get(Knowledge, collection_id)
+                params['collection_name'] = knowledge.collection_name
+            else:
+                knowledge = session.exec(
+                    select(Knowledge).where(Knowledge.collection_name == col)).first()
 
         if not knowledge:
             raise Exception(f'不能找到知识库collection={col}')
@@ -254,9 +254,9 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, sea
         params['ssl_verify'] = eval(params['ssl_verify'])
 
     collection_id = params.pop('collection_id', '')
-    session = next(get_session())
     if collection_id:
-        knowledge = session.get(Knowledge, collection_id)
+        with session_getter() as session:
+            knowledge = session.get(Knowledge, collection_id)
         index_name = knowledge.index_name or knowledge.collection_name
         params['index_name'] = index_name
     params['embedding'] = ''

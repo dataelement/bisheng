@@ -80,6 +80,7 @@ async def login(*,
         # Create the tokens and passing to set_access_cookies or set_refresh_cookies
         access_token = Authorize.create_access_token(subject=json.dumps(payload),
                                                      expires_time=86400)
+
         refresh_token = Authorize.create_refresh_token(subject=user.user_name)
 
         # Set the JWT cookies in the response
@@ -466,3 +467,13 @@ def md5_hash(string):
     md5 = hashlib.md5()
     md5.update(string.encode('utf-8'))
     return md5.hexdigest()
+
+
+if __name__ == '__main__':
+    payload = {
+        'UserId': 1300000000111,
+        'TenantId': 1300000000001,
+        'Account': 'admin',
+        'RealName': '系统管理员',
+        'AccountType': 4,
+    }

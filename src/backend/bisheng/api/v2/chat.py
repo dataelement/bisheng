@@ -2,7 +2,7 @@ from typing import Optional
 
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
-from bisheng.database.base import get_session
+from bisheng.database.base import get_session, session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage
 from bisheng.settings import settings
@@ -21,11 +21,11 @@ async def union_websocket(flow_id: str,
                           websocket: WebSocket,
                           chat_id: Optional[str] = None,
                           type: Optional[str] = None,
-                          knowledge_id: Optional[int] = None,
-                          session: Session = Depends(get_session)):
+                          knowledge_id: Optional[int] = None):
     """Websocket endpoint forF  chat."""
-    if type and type == 'L1':
-        db_flow = session.get(Flow, flow_id)
+    if chat_id:
+        with session_getter() as session:
+            db_flow = session.get(Flow, flow_id)
         if not db_flow:
             await websocket.accept()
             message = '该技能已被删除'

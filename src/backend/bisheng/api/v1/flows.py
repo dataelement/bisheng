@@ -49,7 +49,6 @@ def read_flows(*,
     """Read all flows."""
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
-
     try:
         sql = select(Flow.id)
         count_sql = select(func.count(Flow.id))
@@ -73,7 +72,7 @@ def read_flows(*,
             sql = sql.where(Flow.status == status)
             count_sql = count_sql.where(Flow.status == status)
         total_count = session.scalar(count_sql)
-
+        logger.debug('flows_get end_count')
         sql = sql.order_by(Flow.update_time.desc())
         if page_num and page_size:
             sql = sql.offset((page_num - 1) * page_size).limit(page_size)
@@ -82,7 +81,6 @@ def read_flows(*,
         if flows:
             flows = session.exec(
                 select(Flow).where(Flow.id.in_(flows)).order_by(Flow.update_time.desc())).all()
-
         res = [jsonable_encoder(flow) for flow in flows]
         if flows:
             db_user_ids = {flow.user_id for flow in flows}

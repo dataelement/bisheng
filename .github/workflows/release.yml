@@ -20,6 +20,19 @@ jobs:
     runs-on: ubuntu-latest
     #if: startsWith(github.event.ref, 'refs/tags')
     steps:
+      # deploy
+      - name: get commit message
+        id: get_commit_message
+        run: |
+          echo "::set-output name=commit_message::$(git log -1 --pretty=%B)"
+
+      - name: notify feishu
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: ' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b'
+          method: 'POST'
+          data: '{"msg_type":"text","content":{"text":"${{steps.get_commit_message.outputs.commit_message}}"}}'
+
       - name: checkout
         uses: actions/checkout@v2
 
@@ -71,7 +84,6 @@ jobs:
         run: |
           cd ./src/backend
           poetry source add --priority=supplemental foo http://${{ secrets.NEXUS_PUBLIC }}:${{ secrets.NEXUS_PUBLIC_PASSWORD }}@${{ env.PY_NEXUS }}/repository/pypi-group/simple
-          # sed -i 's/^bisheng_langchain.*/bisheng_langchain = "0.0.0"/g' pyproject.toml
           poetry lock
           cd ../../
 
