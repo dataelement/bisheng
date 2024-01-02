@@ -25,13 +25,14 @@ jobs:
         id: get_commit_message
         run: |
           echo "::set-output name=commit_message::$(git log -1 --pretty=%B)"
+          echo "::set-output name=commit_name::$(github.event.head_commit.author.username)"
 
       - name: notify feishu
         uses: fjogeleit/http-request-action@v1
         with:
           url: ' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b'
           method: 'POST'
-          data: '{"msg_type":"text","content":{"text":"${{steps.get_commit_message.outputs.commit_message}}"}}'
+          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{steps.get_commit_message.outputs.commit_name}}提交代码，开始编译",  "content": [[{"tag":"text","text":"提交内容${{steps.get_commit_message.outputs.commit_message}}}]]}}}}'
 
       - name: checkout
         uses: actions/checkout@v2
@@ -130,5 +131,13 @@ jobs:
       - name: Deploy Stage
         uses: fjogeleit/http-request-action@v1
         with:
+          timeout: 100000
           url: 'https://bisheng.dataelem.com/deploy/cgi-bin/deploy_script.py'
           method: 'GET'
+      
+      - name: notify feishu
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: ' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b'
+          method: 'POST'
+          data: '{"msg_type":"text","content":{"text":"release 部署成功"}}'
