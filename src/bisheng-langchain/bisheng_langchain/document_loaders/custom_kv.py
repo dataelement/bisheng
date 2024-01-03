@@ -21,6 +21,7 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+
 def convert_base64(image):
     image_binary = cv2.imencode('.jpg', image)[1].tobytes()
     x = base64.b64encode(image_binary)
@@ -52,7 +53,9 @@ def transpdf2png(pdf_file):
 class CustomKVLoader(BaseLoader):
     """Extract key-value from pdf or image.
     """
-    def __init__(self, file_path:str,
+
+    def __init__(self,
+                 file_path: str,
                  elm_api_base_url: str,
                  elm_api_key: str,
                  schemas: str,
@@ -67,8 +70,7 @@ class CustomKVLoader(BaseLoader):
         self.task_type = task_type
         self.schemas = set(schemas.split('|'))
         self.headers = {'Authorization': f'Bearer {elm_api_key}'}
-        self.requests = Requests(headers=self.headers,
-                                 request_timeout=request_timeout)
+        self.requests = Requests(headers=self.headers, request_timeout=request_timeout)
         if '~' in self.file_path:
             self.file_path = os.path.expanduser(self.file_path)
 
@@ -77,14 +79,12 @@ class CustomKVLoader(BaseLoader):
             r = self.requests.get(self.file_path)
 
             if r.status_code != 200:
-                raise ValueError(
-                    'Check the url of your file; returned status code %s'
-                    % r.status_code
-                )
+                raise ValueError('Check the url of your file; returned status code %s' %
+                                 r.status_code)
 
             self.temp_dir = tempfile.TemporaryDirectory()
-            temp_file = Path(self.temp_dir.name) / unquote(urlparse(self.file_path
-                                                                    ).path.split('/')[-1])
+            temp_file = Path(self.temp_dir.name) / unquote(
+                urlparse(self.file_path).path.split('/')[-1])
             with open(temp_file, mode='wb') as f:
                 f.write(r.content)
             self.file_path = str(temp_file)
@@ -108,17 +108,18 @@ class CustomKVLoader(BaseLoader):
 
         # else:
         #     raise ValueError(f'file type {file_type} is not support.')
-        file = {'file': open(self.file_path, 'rb')}
-        result = {}
-        if self.task_type == 'extraction-job':
-            url = self.elm_api_base_url + '/task'
-            # 创建task
-            body = {'scene_id': self.elem_server_id}
-        elif self.task_type == 'logic-job':
-            url = self.elm_api_base_url + '/logic-job'
-            body = {'logic_service_id': self.elem_server_id}
+        with open(self.file_path, 'rb') as file:
+            file = {'file': open(self.file_path, 'rb')}
+            result = {}
+            if self.task_type == 'extraction-job':
+                url = self.elm_api_base_url + '/task'
+                # 创建task
+                body = {'scene_id': self.elem_server_id}
+            elif self.task_type == 'logic-job':
+                url = self.elm_api_base_url + '/logic-job'
+                body = {'logic_service_id': self.elem_server_id}
 
-        resp = self.requests.post(url=url, json={}, data=body, files=file)
+            resp = self.requests.post(url=url, json={}, data=body, files=file)
         if resp.status_code == 200:
             task_id = resp.json().get('data').get('task_id')
             if not task_id:
@@ -141,7 +142,7 @@ class CustomKVLoader(BaseLoader):
             # get result
             job_id = 'job_id' if self.task_type == 'logic-job' else 'task_id'
             match = re.match(r'^(?:https?:\/\/)?(?:www\.)?([^\/\n]+)', self.elm_api_base_url)
-            detail_url = quote_plus(match.group()+f'/logic-job-detail/{task_id}')
+            detail_url = quote_plus(match.group() + f'/logic-job-detail/{task_id}')
             result_url = url + f'/result?{job_id}={task_id}&detail_url={detail_url}'
             result = self.requests.get(result_url).json()
             # only for independent key
@@ -153,10 +154,13 @@ class CustomKVLoader(BaseLoader):
                     independent = result.get('result').get('independent_list')
                     for element in independent:
                         if element.get('element_name') in self.schemas:
-                            document_result[element.get('element_name')] = [el.get('words')
-                                                                    for el in element.get('entity_list')]
+                            document_result[element.get('element_name')] = [
+                                el.get('words') for el in element.get('entity_list')
+                            ]
             except Exception as e:
-                logger.error(f'task_result_error scene_id={self.elem_server_id} res={result} except={str(e)}')
+                logger.error(
+                    f'task_result_error scene_id={self.elem_server_id} res={result} except={str(e)}'
+                )
                 raise Exception('custom_kv parse_error')
         else:
             logger.error(f'custom_kv=create_task resp={resp.text}')
