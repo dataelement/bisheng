@@ -24,8 +24,8 @@ jobs:
       - name: get commit message
         id: get_commit_message
         run: |
-          echo "commit_message=$(git log -1 --pretty=%B)" >> "$GITHUB_OUTPUT"
-          echo "commit_name=$(github.event.head_commit.author.username)" >> "$GITHUB_OUTPUT"
+          echo "commit_message=$(git log --format=%B -n 1 ${{ github.event.after }})" >> "$GITHUB_OUTPUT"
+          echo "commit_name=$(git show -s --format='%an' ${{ github.event.after }})" >> "$GITHUB_OUTPUT"
 
       - name: notify feishu
         uses: fjogeleit/http-request-action@v1
