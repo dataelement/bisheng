@@ -9,7 +9,7 @@ from loguru import logger
 from rich.logging import RichHandler
 from starlette.middleware.base import BaseHTTPMiddleware
 
-VALID_LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+VALID_LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', 'EXCEPTION']
 
 
 def serialize(record):
@@ -80,10 +80,7 @@ class CustomMiddleware(BaseHTTPMiddleware):
         with logger.contextualize(trace_id=trace_id):
             response = await call_next(request)
             process_time = round(time() - start_time, 2)
-
-        logger.info(
-            f'traceId={trace_id} {request.url.path} {response.status_code} timecost={process_time}'
-        )
+            logger.info(f'{request.url.path} {response.status_code} timecost={process_time}')
 
         return response
 

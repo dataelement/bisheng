@@ -1,6 +1,7 @@
 import json
 import os
 from typing import Any, Callable, Dict, Type
+from venv import logger
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge
@@ -237,6 +238,8 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
         params['embedding'] = embedding
         if knowledge.collection_name.startswith('partition'):
             search_kwargs.update({'partition_key': knowledge.id})
+    logger.info(
+        f"init_milvus collection_name={params['collection_name']} partition={search_kwargs}")
     return class_object.from_documents(**params)
 
 

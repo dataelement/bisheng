@@ -5,6 +5,7 @@ from bisheng.chat.manager import ChatManager
 from bisheng.database.base import get_session, session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage
+from bisheng.graph.graph.base import Graph
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, WebSocket, status
@@ -37,6 +38,17 @@ async def union_websocket(flow_id: str,
         graph_data = db_flow.data
 
     try:
+        graph = Graph.from_payload(graph_data)
+        for node in graph.nodes:
+            if node.base_type == 'vectorstores':
+                if 'collection_name' in node.data.get('node').get('template').keys():
+                    node.data.get('node').get(
+                        'template')['collection_name']['collection_id'] = knowledge_id
+                elif 'index_name' in node.data.get('node').get('template').keys():
+                    node.data.get('node').get(
+                        'template')['index_name']['collection_id'] = knowledge_id
+
+        graph_data = graph.raw_graph_data
         await chat_manager.handle_websocket(flow_id,
                                             chat_id,
                                             websocket,

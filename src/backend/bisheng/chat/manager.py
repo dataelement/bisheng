@@ -4,19 +4,21 @@ from collections import defaultdict
 from email.utils import unquote
 from typing import Any, Dict, List
 from urllib.parse import urlparse
+from uuid import UUID
 
+from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
 from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
 from bisheng.cache.manager import Subject
 from bisheng.database.base import session_getter
+from bisheng.database.models.user import User
 from bisheng.processing.process import process_tweaks
-from bisheng.services.deps import get_session_service
-from bisheng.utils.logger import logger
 from bisheng.utils.threadpool import thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.input_output.output import Report
 from fastapi import WebSocket, status
+from loguru import logger
 
 
 class ChatHistory(Subject):
@@ -104,6 +106,7 @@ class ChatManager:
         self.active_connections[get_cache_key(client_id, chat_id)] = websocket
 
     def disconnect(self, client_id: str, chat_id: str):
+        logger.info('disconnect_ws key={}', get_cache_key(client_id, chat_id))
         self.active_connections.pop(get_cache_key(client_id, chat_id), None)
 
     async def send_message(self, client_id: str, chat_id: str, message: str):
@@ -230,7 +233,7 @@ class ChatManager:
                             future.result()
                             logger.debug('task_complete')
                         except Exception as e:
-                            logger.exception(e)
+                            logger.error('An error happend {}', str(e))
                             step_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
                             if has_file:
                                 step_resp.intermediate_steps = f'File is parsed fail. error={str(e)}'
@@ -239,7 +242,7 @@ class ChatManager:
                             await self.send_json(client_id, chat_id, start_resp)
         except Exception as e:
             # Handle any exceptions that might occur
-            logger.exception(e)
+            logger.error(e)
             await self.close_connection(
                 client_id=client_id,
                 chat_id=chat_id,
@@ -309,27 +312,54 @@ class ChatManager:
                 await self.send_json(client_id, chat_id, step_resp, add=False)
         return action, over
 
-    async def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
-        session_id = chat_id
-        session_service = get_session_service()
-        if session_id is None:
-            session_id = session_service.generate_key(session_id=session_id, data_graph=graph_data)
-        # Load the graph using SessionService
-        session = await session_service.load_session(session_id, graph_data)
-        graph, artifacts = session if session else (None, None)
-        if not graph:
-            raise ValueError('Graph not found in the session')
-        built_object = await graph.abuild()
+    # async def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
+    #     session_id = chat_id
+    #     session_service = get_session_service()
+    #     if session_id is None:
+    #         session_id = session_service.generate_key(session_id=session_id, data_graph=graph_data)
+    #     # Load the graph using SessionService
+    #     session = await session_service.load_session(session_id, graph_data)
+    #     graph, artifacts = session if session else (None, None)
+    #     if not graph:
+    #         raise ValueError('Graph not found in the session')
+    #     built_object = await graph.abuild()
+    #     key_node = get_cache_key(flow_id, chat_id)
+    #     logger.info(f'init_langchain key={key_node}')
+    #     question = []
+    #     for node in graph.nodes:
+    #         if node.vertex_type == 'InputNode':
+    #             question.extend(node.build)
+    #     self.set_cache(key_node + '_question', question)
+    #     self.set_cache(key_node, built_object)
+    #     self.set_cache(key_node + '_artifacts', artifacts)
+    #     return built_object
+
+    def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
         key_node = get_cache_key(flow_id, chat_id)
         logger.info(f'init_langchain key={key_node}')
+        with session_getter() as session:
+            db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
+        artifacts = {}
+        graph = build_flow_no_yield(graph_data=graph_data,
+                                    artifacts=artifacts,
+                                    process_file=True,
+                                    flow_id=UUID(flow_id).hex,
+                                    chat_id=chat_id,
+                                    user_name=db_user.user_name)
+        langchain_object = graph.build()
         question = []
         for node in graph.nodes:
             if node.vertex_type == 'InputNode':
-                question.extend(node.build)
+                question.extend(node._built_object)
+
         self.set_cache(key_node + '_question', question)
-        self.set_cache(key_node, built_object)
-        self.set_cache(key_node + '_artifacts', artifacts)
-        return built_object
+        for node in langchain_object:
+            # 只存储chain
+            if node.base_type == 'inputOutput' and node.vertex_type != 'Report':
+                continue
+            self.set_cache(key_node, node._built_object)
+            self.set_cache(key_node + '_artifacts', artifacts)
+        return graph
 
     def refresh_graph_data(self, graph_data: dict, node_data: List[dict]):
         tweak = {}
