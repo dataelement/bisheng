@@ -7,7 +7,8 @@ from bisheng.settings import settings
 from bisheng.template.frontend_node.utilities import UtilitiesFrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class
-from langchain import SQLDatabase, utilities
+from langchain import utilities
+from langchain.utilities.sql_database import SQLDatabase
 
 
 class UtilityCreator(LangChainTypeCreator):

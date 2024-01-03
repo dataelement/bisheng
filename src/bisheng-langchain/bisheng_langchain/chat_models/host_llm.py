@@ -154,8 +154,8 @@ class BaseHostChatLLM(BaseChatModel):
         model = values['model_name']
         try:
             if cls != CustomLLMChat:
-                url = values['host_base_url'].split('/')[2]
-                config_ep = f'http://{url}/v2/models/{model}/config'
+                url = values['host_base_url'].rsplit('/', 2)[0]
+                config_ep = f'{url}/v2/models/{model}/config'
                 config = requests.get(url=config_ep, json={}, timeout=5).json()
                 policy = config.get('model_transaction_policy', {})
                 values['decoupled'] = policy.get('decoupled', False)

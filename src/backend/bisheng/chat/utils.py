@@ -10,7 +10,8 @@ from bisheng.processing.base import get_result_and_steps
 from bisheng.utils.logger import logger
 from bisheng_langchain.chat_models import HostQwenChat
 from fastapi import WebSocket
-from langchain import LLMChain, PromptTemplate
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
 from langchain.schema.document import Document
 from sqlmodel import select
 

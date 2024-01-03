@@ -40,8 +40,8 @@ class Handler:
                              payload: Dict,
                              user_id=None):
         chat_inputs = payload.pop('inputs', {})
-        chat_inputs.pop('data') if 'data' in chat_inputs else {}
-        chat_inputs.pop('id') if 'id' in chat_inputs else ''
+        chat_inputs.pop('data', '')
+        chat_inputs.pop('id', '')
         key = get_cache_key(client_id, chat_id)
         artifacts = session.in_memory_cache.get(key + '_artifacts')
         if artifacts:
@@ -101,7 +101,7 @@ class Handler:
                               user_id=None):
         # Process the graph data and chat message
         chat_inputs = payload.pop('inputs', {})
-        chat_inputs.pop('id') if 'id' in chat_inputs else ''
+        chat_inputs.pop('id', '')
         is_begin = payload.get('is_begin', True)
         key = get_cache_key(client_id, chat_id)
 

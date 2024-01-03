@@ -3,12 +3,12 @@ from typing import Dict, Optional, Type, Union
 from bisheng.interface.base import CustomChain
 from bisheng.interface.utils import extract_input_variables_from_prompt
 from bisheng_langchain.chains.question_answering import load_qa_chain
-from langchain import BasePromptTemplate
 from langchain.base_language import BaseLanguageModel
 from langchain.chains import ConversationChain
 from langchain.chains.summarize import load_summarize_chain
 from langchain.memory.buffer import ConversationBufferMemory
 from langchain.schema import BaseMemory
+from langchain.schema.prompt_template import BasePromptTemplate
 from pydantic import Field, root_validator
 
 DEFAULT_SUFFIX = """"
@@ -110,10 +110,15 @@ class CombineDocsChain(CustomChain):
                    token_max: str = -1):
         if chain_type == 'stuff':
             if document_prompt:
-                return load_qa_chain(llm=llm, chain_type=chain_type, prompt=prompt,
-                                     token_max=token_max, document_prompt=document_prompt)
+                return load_qa_chain(llm=llm,
+                                     chain_type=chain_type,
+                                     prompt=prompt,
+                                     token_max=token_max,
+                                     document_prompt=document_prompt)
             else:
-                return load_qa_chain(llm=llm, chain_type=chain_type, prompt=prompt,
+                return load_qa_chain(llm=llm,
+                                     chain_type=chain_type,
+                                     prompt=prompt,
                                      token_max=token_max)
         else:
             return load_qa_chain(llm=llm, chain_type=chain_type)

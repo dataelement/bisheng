@@ -184,11 +184,7 @@ class ChatManager:
 
                 # set start
                 from bisheng.chat.handlers import Handler
-                is_begin = True if payload and status_ == 'init' else False
-                action = None
-                if 'action' in payload:
-                    # autogen continue last session,
-                    action, is_begin = 'autogen', False
+                is_begin = bool(payload and status_ == 'init' and 'action' not in payload)
 
                 start_resp = ChatResponse(type='begin', category='system', user_id=user_id)
                 step_resp = ChatResponse(type='end', category='system', user_id=user_id)
@@ -215,9 +211,10 @@ class ChatManager:
                 # run in thread
                 async_task = None
                 if payload and self.in_memory_cache.get(langchain_obj_key):
-                    logger.info(f"processing_message message={payload['inputs']}")
                     action, over = await self.preper_action(client_id, chat_id, langchain_obj_key,
                                                             payload, start_resp, step_resp)
+                    logger.info(
+                        f"processing_message message={payload.get('inputs')} action={action}")
                     if not over:
                         # task_service: 'TaskService' = get_task_service()
                         # async_task = asyncio.create_task(
@@ -238,8 +235,11 @@ class ChatManager:
                             future.result()
                             logger.debug('task_complete')
                         except Exception as e:
-                            logger.error('An error happend {}', str(e))
-                            step_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
+                            logger.error('task_exception {}', e)
+                            if status_ == 'init':
+                                step_resp.intermediate_steps = f'LLM 技能执行错误. error={str(e)}'
+                            else:
+                                step_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
                             if has_file:
                                 step_resp.intermediate_steps = f'File is parsed fail. error={str(e)}'
                             await self.send_json(client_id, chat_id, step_resp)
@@ -292,6 +292,8 @@ class ChatManager:
             action = 'report'
             step_resp.intermediate_steps = 'File parsing complete, generate begin'
             await self.send_json(client_id, chat_id, step_resp)
+        elif 'action' in payload:
+            action = 'autogen'
         elif 'data' in payload['inputs'] or 'file_path' in payload['inputs']:
             action = 'auto_file'
             batch_question = self.in_memory_cache.get(langchain_obj_key + '_question')

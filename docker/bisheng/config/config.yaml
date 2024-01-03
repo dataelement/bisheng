@@ -15,7 +15,7 @@ environment:
 # admin 用户配置
 admin:
   user_name: "admin"
-  password: "1234"
+  password: "tzJkPSCZao5hEoZH"
 
 autogen_roles:
   AutoGenAssistant:

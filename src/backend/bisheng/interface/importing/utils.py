@@ -5,11 +5,11 @@ from typing import Any, Type
 
 from bisheng.interface.wrappers.base import wrapper_creator
 from bisheng.utils import validate
-from langchain import PromptTemplate
 from langchain.agents import Agent
 from langchain.base_language import BaseLanguageModel
 from langchain.chains.base import Chain
 from langchain.chat_models.base import BaseChatModel
+from langchain.prompts import PromptTemplate
 from langchain.tools import BaseTool
 
 
