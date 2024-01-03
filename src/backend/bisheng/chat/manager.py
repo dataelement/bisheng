@@ -27,7 +27,12 @@ class ChatHistory(Subject):
         super().__init__()
         self.history: Dict[str, List[ChatMessage]] = defaultdict(list)
 
-    def add_message(self, client_id: str, chat_id: str, message: ChatMessage):
+    def add_message(
+        self,
+        client_id: str,
+        chat_id: str,
+        message: ChatMessage,
+    ):
         """Add a message to the chat history."""
 
         if chat_id and (message.message or message.intermediate_steps

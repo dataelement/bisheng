@@ -7,13 +7,13 @@ from sqlmodel import select
 
 def init_config():
     # 初始化config
-    from bisheng.database.base import session_getter, db_service
+    from bisheng.database.base import session_getter
 
     # 首先通过yaml 获取配置文件所有的key
     dbconfig = read_from_conf('initdb_config.yaml')
     if not dbconfig:
         return
-    with session_getter(db_service) as session:
+    with session_getter() as session:
         config = session.exec(select(Config)).all()
         db_keys = {conf.key for conf in config}
         config_yaml = yaml.safe_load(dbconfig)

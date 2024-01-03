@@ -1,4 +1,4 @@
-langchain
+langchain==0.0.345
 zhipuai
 websocket-client
 elasticsearch

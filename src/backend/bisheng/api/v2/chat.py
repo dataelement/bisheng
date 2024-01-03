@@ -1,4 +1,5 @@
 from typing import Optional
+from uuid import uuid4
 
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
@@ -49,11 +50,14 @@ async def union_websocket(flow_id: str,
                         'template')['index_name']['collection_id'] = knowledge_id
 
         graph_data = graph.raw_graph_data
-        await chat_manager.handle_websocket(flow_id,
-                                            chat_id,
-                                            websocket,
-                                            settings.get_from_db('default_operator').get('user'),
-                                            gragh_data=graph_data)
+        trace_id = str(uuid4().hex)
+        with logger.contextualize(trace_id=trace_id):
+            await chat_manager.handle_websocket(
+                flow_id,
+                chat_id,
+                websocket,
+                settings.get_from_db('default_operator').get('user'),
+                gragh_data=graph_data)
     except Exception as exc:
         logger.error(exc)
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))

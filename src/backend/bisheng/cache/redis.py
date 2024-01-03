@@ -22,6 +22,19 @@ class RedisClient:
         finally:
             self.close()
 
+    def setNx(self, key, value, expiration=3600):
+        try:
+            if pickled := pickle.dumps(value):
+                result = self.connection.setnx(key, pickled)
+                self.connection.expire(key, expiration)
+                if not result:
+                    return False
+                return True
+        except TypeError as exc:
+            raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
+        finally:
+            self.close()
+
     def hsetkey(self, name, key, value, expiration=3600):
         try:
             r = self.connection.hset(name, key, value)

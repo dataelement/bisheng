@@ -72,7 +72,6 @@ def read_flows(*,
             sql = sql.where(Flow.status == status)
             count_sql = count_sql.where(Flow.status == status)
         total_count = session.scalar(count_sql)
-        logger.debug('flows_get end_count')
         sql = sql.order_by(Flow.update_time.desc())
         if page_num and page_size:
             sql = sql.offset((page_num - 1) * page_size).limit(page_size)

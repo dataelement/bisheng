@@ -3,7 +3,6 @@ import json
 import time
 from typing import List, Optional
 from uuid import uuid4
-from xml.dom.minidom import Document
 
 import requests
 from bisheng.api.utils import access_check
@@ -19,9 +18,10 @@ from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
-from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoader
-from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
+from bisheng_langchain.document_loaders import ElemUnstructuredLoader
+from bisheng_langchain.embeddings import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
+from bisheng_langchain.vectorstores import Milvus
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
@@ -30,8 +30,8 @@ from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
                                         UnstructuredWordDocumentLoader)
 from langchain.embeddings.base import Embeddings
 from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.schema import Document
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.vectorstores import Milvus
 from langchain.vectorstores.base import VectorStore
 from sqlalchemy import func, or_
 from sqlmodel import Session, select
@@ -571,6 +571,7 @@ def text_knowledge(
         documents: List[Document],
         session: Session = Depends(get_session),
 ):
+    """使用text 导入knowledge"""
     try:
         embeddings = decide_embeddings(db_knowledge.model)
         vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)

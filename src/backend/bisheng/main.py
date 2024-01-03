@@ -27,6 +27,7 @@ _EXCEPTION_HANDLERS = {HTTPException: handle_http_exception}
 async def lifespan(app: FastAPI):
     initialize_services()
     setup_llm_caching()
+    init_default_data()
     # LangfuseInstance.update()
     yield
     teardown_services()
@@ -70,8 +71,8 @@ def create_app():
 
     app.include_router(router)
     app.include_router(router_rpc)
-    app.on_event('startup')(init_default_data)
     app.on_event('startup')(setup_llm_caching)
+    app.on_event('startup')(init_default_data)
     return app
 
 
