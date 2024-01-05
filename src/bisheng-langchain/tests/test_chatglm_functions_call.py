@@ -70,7 +70,7 @@ def test_chatglm_functions_call():
 def test_chatglm_functions_agent():
     # cal = Calculator()
     cal = init_calculator_by_tool()
-    llm = HostChatGLM(model_name='chatglm3-6b', host_base_url='http://192.168.106.12:5001/v2.1/models', max_tokens=8192)
+    llm = HostChatGLM(model_name='chatglm3-6b', host_base_url='http://192.168.106.12:9001/v2.1/models', max_tokens=8192)
     agent = ChatglmFunctionsAgent.from_llm_and_tools(llm=llm, tools=[cal], verbose=True, handle_parsing_errors=True)
     executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=[cal])
     print(executor.run("12 乘以 12 等于多少？3 + 3 等于多少"))
