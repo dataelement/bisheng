@@ -6,8 +6,8 @@ import sys
 import time
 
 import langchain
-from data.multi_rule import MultiRuleChain
-from data.rule_router import RuleBasedRouter
+from bisheng_langchain.chains.router.multi_rule import MultiRuleChain
+from bisheng_langchain.chains.router.rule_router import RuleBasedRouter
 from langchain.chains import RetrievalQA
 
 # from bisheng_langchain.vectorstores import Milvus
@@ -104,7 +104,7 @@ def qa_loader():
 
 
 def retrieval_chain():
-    from retrieval_chain import RetrievalChain
+    from bisheng_langchain.chains.retrieval.retrieval_chain import RetrievalChain
 
     MILVUS_HOST = '192.168.106.116'
     MILVUS_PORT = '19530'

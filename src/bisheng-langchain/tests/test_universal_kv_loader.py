@@ -27,6 +27,7 @@ def test_universal_kv_loader2():
     print(doc)
     return doc
 
+
 def test_loader_output_chain():
     doc1 = test_universal_kv_loader1()
     doc2 = test_universal_kv_loader2()

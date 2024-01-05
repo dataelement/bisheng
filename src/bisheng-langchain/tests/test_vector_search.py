@@ -50,9 +50,9 @@ def retrieval(query):
         connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT}
     )
     # vector_retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-    vector_retriever = vector_store.as_retriever(search_type="similarity_score_threshold", search_kwargs={"k": 4, "score_threshold": 1.0})
+    vector_retriever = vector_store.as_retriever(search_type="similarity_score_threshold", search_kwargs={"k": 4, "score_threshold": 0.0})
 
     print(vector_retriever.get_relevant_documents(query))
 
-# data_loader()
+data_loader()
 retrieval("达梦公司聘请了哪些券商作为主要保荐机构?")

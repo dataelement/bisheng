@@ -40,7 +40,7 @@ search = SerpAPIWrapper()
 # llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
 llm = HostQwenChat(
     model_name='Qwen-1_8B-Chat',
-    host_base_url='http://192.168.106.20:7001/v2.1/models', max_tokens=8192)
+    host_base_url='http://192.168.106.12:9001/v2.1/models', max_tokens=8192)
 
 
 tools = [
