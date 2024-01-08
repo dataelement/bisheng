@@ -14,7 +14,7 @@ from langchain.schema import ChatGeneration, ChatResult
 from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
                                        HumanMessage, SystemMessage)
 from langchain.utils import get_from_dict_or_env
-from pydantic import Field, root_validator
+from langchain_core.pydantic_v1 import Field, root_validator
 # from requests.exceptions import HTTPError
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)

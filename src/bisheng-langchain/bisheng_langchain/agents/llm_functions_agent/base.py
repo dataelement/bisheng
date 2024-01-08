@@ -1,6 +1,5 @@
 """Module implements an agent that uses OpenAI's APIs function enabled API."""
 import json
-from dataclasses import dataclass
 from json import JSONDecodeError
 from typing import Any, List, Optional, Sequence, Tuple, Union
 
@@ -13,12 +12,12 @@ from langchain.chat_models.openai import ChatOpenAI
 from langchain.prompts.chat import (BaseMessagePromptTemplate, ChatPromptTemplate,
                                     HumanMessagePromptTemplate, MessagesPlaceholder)
 from langchain.schema import AgentAction, AgentFinish, BasePromptTemplate, OutputParserException
-from langchain_core.agents import AgentActionMessageLog
 from langchain.schema.language_model import BaseLanguageModel
 from langchain.schema.messages import AIMessage, BaseMessage, FunctionMessage, SystemMessage
 from langchain.tools import BaseTool
 from langchain.tools.convert_to_openai import format_tool_to_openai_function
-from pydantic import root_validator
+from langchain_core.agents import AgentActionMessageLog
+from langchain_core.pydantic_v1 import root_validator
 
 
 def _convert_agent_action_to_messages(agent_action: AgentAction,
@@ -34,7 +33,8 @@ def _convert_agent_action_to_messages(agent_action: AgentAction,
         AIMessage that corresponds to the original tool invocation.
     """
     if isinstance(agent_action, AgentActionMessageLog):
-        return list(agent_action.message_log) + [_create_function_message(agent_action, observation)]
+        return list(
+            agent_action.message_log) + [_create_function_message(agent_action, observation)]
     else:
         return [AIMessage(content=agent_action.log)]
 
@@ -104,7 +104,7 @@ def _parse_ai_message(message: BaseMessage) -> Union[AgentAction, AgentFinish]:
             tool_input = _tool_input
 
         content_msg = 'responded: {content}\n' if message.content else '\n'
-        log = f"\nInvoking: `{function_name}` with `{tool_input}`\n{content_msg}\n"
+        log = f'\nInvoking: `{function_name}` with `{tool_input}`\n{content_msg}\n'
         return AgentActionMessageLog(
             tool=function_name,
             tool_input=tool_input,

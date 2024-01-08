@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 
 class FieldFormatter(BaseModel, ABC):
+
     @abstractmethod
     def format(self, field: TemplateField, name: Optional[str]) -> None:
         pass

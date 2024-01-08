@@ -6,7 +6,7 @@ from venv import logger
 import requests
 from langchain.schema.document import Document
 from langchain.vectorstores.base import VectorStore, VectorStoreRetriever
-from pydantic import Field, root_validator
+from langchain_core.pydantic_v1 import Field, root_validator
 
 if TYPE_CHECKING:
     from langchain.callbacks.manager import (
@@ -85,7 +85,8 @@ class VectorStoreFilterRetriever(VectorStoreRetriever):
                 doc_res = res.json().get('data') or []
                 doc_right = {doc.get('docid') for doc in doc_res if doc.get('result') == 1}
                 for doc in docs:
-                    if doc.metadata.get('file_id') and doc.metadata.get('file_id') not in doc_right:
+                    if doc.metadata.get('file_id') and doc.metadata.get(
+                            'file_id') not in doc_right:
                         doc.page_content = ''
                         doc.metadata['right'] = False
                 return docs

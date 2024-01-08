@@ -3,8 +3,7 @@ from typing import Dict, List, Optional, Type
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.custom_lists import documentloaders_type_to_cls_dict
 from bisheng.settings import settings
-from bisheng.template.frontend_node.documentloaders import \
-    DocumentLoaderFrontNode
+from bisheng.template.frontend_node.documentloaders import DocumentLoaderFrontNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class
 
@@ -32,8 +31,7 @@ class DocumentLoaderCreator(LangChainTypeCreator):
 
     def to_list(self) -> List[str]:
         return [
-            documentloader.__name__
-            for documentloader in self.type_to_loader_dict.values()
+            documentloader.__name__ for documentloader in self.type_to_loader_dict.values()
             if documentloader.__name__ in settings.documentloaders or settings.dev
         ]
 

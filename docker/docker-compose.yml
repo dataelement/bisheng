@@ -45,7 +45,7 @@ services:
       - "7860:7860"
     security_opt:
       - seccomp:unconfined
-    command: bash -c "uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --workers 2" # --workers 表示使用几个进程，提高并发度
+    command: bash -c "uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --no-access-log --workers 2" # --workers 表示使用几个进程，提高并发度
     restart: on-failure
     depends_on:
       - "mysql"

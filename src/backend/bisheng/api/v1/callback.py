@@ -47,7 +47,8 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
                              **kwargs: Any) -> Any:
         """Run when chain errors."""
 
-    async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
+    async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
+                            **kwargs: Any) -> Any:
         """Run when tool starts running."""
         resp = ChatResponse(
             message='',
@@ -79,7 +80,8 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         except Exception as e:
             logger.error(e)
 
-    async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> Any:
+    async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt],
+                            **kwargs: Any) -> Any:
         """Run when tool errors."""
 
     async def on_text(self, text: str, **kwargs: Any) -> Any:
@@ -90,8 +92,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         sender = kwargs.get('sender')
         receiver = kwargs.get('receiver')
         if kwargs.get('sender'):
-            log = ChatResponse(message=text, type='end',
-                               sender=sender, receiver=receiver)
+            log = ChatResponse(message=text, type='end', sender=sender, receiver=receiver)
             start = ChatResponse(type='start', sender=sender, receiver=receiver)
 
             if receiver and receiver.get('is_self'):
@@ -106,13 +107,16 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
                 if kwargs.get('type'):
                     # 兼容下
                     start = ChatResponse(type='start', category=kwargs.get('type'))
-                    end = ChatResponse(type='end', intermediate_steps=text,
+                    end = ChatResponse(type='end',
+                                       intermediate_steps=text,
                                        category=kwargs.get('type'))
                     await self.websocket.send_json(start.dict())
                     await self.websocket.send_json(end.dict())
             else:
-                log = ChatResponse(message=text, intermediate_steps=kwargs['log'],
-                                   type=kwargs['type'], category=kwargs['category'])
+                log = ChatResponse(message=text,
+                                   intermediate_steps=kwargs['log'],
+                                   type=kwargs['type'],
+                                   category=kwargs['category'])
                 await self.websocket.send_json(log.dict())
         logger.debug(f'on_text text={text} kwargs={kwargs}')
 
@@ -251,8 +255,8 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         """Run when chain ends running."""
         logger.debug(f'on_chain_end outputs={outputs}')
 
-    def on_chat_model_start(self, serialized: Dict[str, Any],
-                            messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
+    def on_chat_model_start(self, serialized: Dict[str, Any], messages: List[List[BaseMessage]],
+                            **kwargs: Any) -> Any:
         """Run when retriever end running."""
         # sender = kwargs['sender']
         # receiver = kwargs['receiver']

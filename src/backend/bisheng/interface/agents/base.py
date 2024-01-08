@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import ClassVar, Dict, List, Optional
 
 from bisheng.custom.customs import get_custom_nodes
 from bisheng.interface.agents.custom import CUSTOM_AGENTS
@@ -15,7 +15,7 @@ from langchain.agents import types
 class AgentCreator(LangChainTypeCreator):
     type_name: str = 'agents'
 
-    from_method_nodes = {
+    from_method_nodes: ClassVar[Dict] = {
         'ZeroShotAgent': 'from_llm_and_tools',
         'CSVAgent': 'from_toolkit_and_llm',
         'SQLAgent': 'from_toolkit_and_llm',

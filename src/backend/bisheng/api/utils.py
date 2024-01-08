@@ -63,12 +63,12 @@ def build_input_keys_response(langchain_object, artifacts):
     return input_keys_response
 
 
-def build_flow(graph_data: dict,
-               artifacts,
-               process_file=False,
-               flow_id=None,
-               chat_id=None,
-               **kwargs) -> Graph:
+async def build_flow(graph_data: dict,
+                     artifacts,
+                     process_file=False,
+                     flow_id=None,
+                     chat_id=None,
+                     **kwargs) -> Graph:
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
@@ -78,7 +78,7 @@ def build_flow(graph_data: dict,
         yield str(StreamData(event='error', data={'error': error_message}))
         return
 
-    number_of_nodes = len(graph.nodes)
+    number_of_nodes = len(graph.vertices)
 
     for i, vertex in enumerate(graph.generator_build(), 1):
         try:
@@ -114,7 +114,7 @@ def build_flow(graph_data: dict,
                     # es
                     vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
 
-            vertex.build()
+            await vertex.build()
             params = vertex._built_object_repr()
             valid = True
             logger.debug(
@@ -125,6 +125,7 @@ def build_flow(graph_data: dict,
                 # to set the input_keys values
                 artifacts.update(vertex.artifacts)
         except Exception as exc:
+            logger.error(f'Error building node {vertex.id}', exc_info=True)
             params = str(exc)
             valid = False
             response = {
@@ -143,15 +144,15 @@ def build_flow(graph_data: dict,
             'progress': round(i / number_of_nodes, 2),
         }
         yield str(StreamData(event='message', data=response))
-    return graph
+    yield graph
 
 
-def build_flow_no_yield(graph_data: dict,
-                        artifacts,
-                        process_file=False,
-                        flow_id=None,
-                        chat_id=None,
-                        **kwargs):
+async def build_flow_no_yield(graph_data: dict,
+                              artifacts,
+                              process_file=False,
+                              flow_id=None,
+                              chat_id=None,
+                              **kwargs):
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
@@ -198,7 +199,7 @@ def build_flow_no_yield(graph_data: dict,
             if vertex.base_type == 'chains' and 'retriever' in vertex.params:
                 vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
 
-            vertex.build()
+            await vertex.build()
             params = vertex._built_object_repr()
             logger.debug(
                 f"Building node {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}")
@@ -233,7 +234,7 @@ def get_L2_param_from_flow(
     node_id = []
     variable_ids = []
     file_name = []
-    for node in graph.nodes:
+    for node in graph.vertices:
         if node.vertex_type in {'InputFileNode'}:
             node_id.append(node.id)
             file_name.append(node.params.get('file_type'))

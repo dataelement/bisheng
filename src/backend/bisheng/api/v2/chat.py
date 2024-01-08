@@ -40,7 +40,7 @@ async def union_websocket(flow_id: str,
 
     try:
         graph = Graph.from_payload(graph_data)
-        for node in graph.nodes:
+        for node in graph.vertices:
             if node.base_type == 'vectorstores':
                 if 'collection_name' in node.data.get('node').get('template').keys():
                     node.data.get('node').get(

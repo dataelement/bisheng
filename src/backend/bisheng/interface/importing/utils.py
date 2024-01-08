@@ -1,7 +1,7 @@
 # This module is used to import any langchain class by name.
 
 import importlib
-from typing import Any, Type
+from typing import Any, ClassVar, Dict, Type
 
 from bisheng.interface.wrappers.base import wrapper_creator
 from bisheng.utils import validate
@@ -32,7 +32,7 @@ def import_by_type(_type: str, name: str) -> Any:
     """Import class by type and name"""
     if _type is None:
         raise ValueError(f'Type cannot be None. Check if {name} is in the config file.')
-    func_dict = {
+    func_dict: ClassVar[Dict] = {
         'agents': import_agent,
         'prompts': import_prompt,
         'llms': {

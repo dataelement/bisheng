@@ -6,9 +6,8 @@ opencv-python==4.5.5.64
 Pillow==9.5.0
 bisheng-pyautogen
 jieba==0.42.1
-pydantic==1.10.9
+pydantic==1.10.13
 pymupdf==1.23.8
-loguru==0.7.2
 pypdfium2==4.25.0
 shapely==2.0.2
 filetype==1.2.0

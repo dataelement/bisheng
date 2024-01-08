@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import ClassVar, Dict, Optional
 
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
@@ -26,69 +26,88 @@ class DocumentLoaderFrontNode(FrontendNode):
         self.base_classes = ['Document']
         self.output_types = ['Document']
 
-    file_path_templates = {
+    file_path_templates: ClassVar[Dict] = {
         'ElemUnstructuredLoaderV0':
-            build_file_field(
-                suffixes=[
-                    '.html', '.md', '.txt', '.bmp', '.jpg', '.png', '.jpeg', '.doc', '.docx',
-                    '.pdf', '.ppt', '.pptx', '.xls', '.xlsx', '.tsv', '.csv', '.tiff'
-                ],
-                fileTypes=[
-                    'html', 'md', 'txt', 'bmp', 'jpg', 'png', 'jpeg', 'doc', 'docx',
-                    'pdf', 'ppt', 'pptx', '.xls', 'xlsx', 'tsv', 'csv', 'tiff',
-                ],
-            ),
+        build_file_field(
+            suffixes=[
+                '.html', '.md', '.txt', '.bmp', '.jpg', '.png', '.jpeg', '.doc', '.docx', '.pdf',
+                '.ppt', '.pptx', '.xls', '.xlsx', '.tsv', '.csv', '.tiff'
+            ],
+            fileTypes=[
+                'html',
+                'md',
+                'txt',
+                'bmp',
+                'jpg',
+                'png',
+                'jpeg',
+                'doc',
+                'docx',
+                'pdf',
+                'ppt',
+                'pptx',
+                '.xls',
+                'xlsx',
+                'tsv',
+                'csv',
+                'tiff',
+            ],
+        ),
         'AirbyteJSONLoader':
-            build_file_field(suffixes=['.json'], fileTypes=['json']),
+        build_file_field(suffixes=['.json'], fileTypes=['json']),
         'CoNLLULoader':
-            build_file_field(suffixes=['.csv'], fileTypes=['csv']),
+        build_file_field(suffixes=['.csv'], fileTypes=['csv']),
         'CSVLoader':
-            build_file_field(suffixes=['.csv'], fileTypes=['csv']),
+        build_file_field(suffixes=['.csv'], fileTypes=['csv']),
         'UnstructuredEmailLoader':
-            build_file_field(suffixes=['.eml'], fileTypes=['eml']),
+        build_file_field(suffixes=['.eml'], fileTypes=['eml']),
         'SlackDirectoryLoader':
-            build_file_field(suffixes=['.zip'], fileTypes=['zip']),
+        build_file_field(suffixes=['.zip'], fileTypes=['zip']),
         'EverNoteLoader':
-            build_file_field(suffixes=['.xml'], fileTypes=['xml']),
+        build_file_field(suffixes=['.xml'], fileTypes=['xml']),
         'FacebookChatLoader':
-            build_file_field(suffixes=['.json'], fileTypes=['json']),
+        build_file_field(suffixes=['.json'], fileTypes=['json']),
         'BSHTMLLoader':
-            build_file_field(suffixes=['.html'], fileTypes=['html']),
+        build_file_field(suffixes=['.html'], fileTypes=['html']),
         'UnstructuredHTMLLoader':
-            build_file_field(suffixes=['.html'], fileTypes=['html']),
+        build_file_field(suffixes=['.html'], fileTypes=['html']),
         'UnstructuredImageLoader':
-            build_file_field(
-                suffixes=['.jpg', '.jpeg', '.png', '.gif', '.bmp'],
-                fileTypes=['jpg', 'jpeg', 'png', 'gif', 'bmp'],
-            ),
+        build_file_field(
+            suffixes=['.jpg', '.jpeg', '.png', '.gif', '.bmp'],
+            fileTypes=['jpg', 'jpeg', 'png', 'gif', 'bmp'],
+        ),
         'UnstructuredMarkdownLoader':
-            build_file_field(suffixes=['.md'], fileTypes=['md']),
+        build_file_field(suffixes=['.md'], fileTypes=['md']),
         'PyPDFLoader':
-            build_file_field(suffixes=['.pdf'], fileTypes=['pdf'], fieldType='fileNode'),
+        build_file_field(suffixes=['.pdf'], fileTypes=['pdf'], fieldType='fileNode'),
         'UnstructuredPowerPointLoader':
-            build_file_field(suffixes=['.pptx', '.ppt'], fileTypes=['pptx', 'ppt']),
+        build_file_field(suffixes=['.pptx', '.ppt'], fileTypes=['pptx', 'ppt']),
         'SRTLoader':
-            build_file_field(suffixes=['.srt'], fileTypes=['srt']),
+        build_file_field(suffixes=['.srt'], fileTypes=['srt']),
         'TelegramChatLoader':
-            build_file_field(suffixes=['.json'], fileTypes=['json']),
+        build_file_field(suffixes=['.json'], fileTypes=['json']),
         'TextLoader':
-            build_file_field(suffixes=['.txt'], fileTypes=['txt']),
+        build_file_field(suffixes=['.txt'], fileTypes=['txt']),
         'UnstructuredWordDocumentLoader':
-            build_file_field(suffixes=['.docx', '.doc'], fileTypes=['docx', 'doc']),
+        build_file_field(suffixes=['.docx', '.doc'], fileTypes=['docx', 'doc']),
         'PDFWithSemanticLoader':
-            build_file_field(suffixes=['.pdf'], fileTypes=['pdf']),
+        build_file_field(suffixes=['.pdf'], fileTypes=['pdf']),
         'UniversalKVLoader':
-            build_file_field(
-                suffixes=['.jpg', '.png', '.jpeg', '.bmp', '.pdf'],
-                fileTypes=['jpg', 'png', 'jpeg', 'bmp', 'pdf'],
-            ),
+        build_file_field(
+            suffixes=['.jpg', '.png', '.jpeg', '.bmp', '.pdf'],
+            fileTypes=['jpg', 'png', 'jpeg', 'bmp', 'pdf'],
+        ),
         'CustomKVLoader':
-            build_file_field(
-                suffixes=['.jpg', '.png', '.jpeg', '.pdf', '.txt', '.docx',
-                          '.doc', '.bmp', '.tif', '.tiff', '.xls', '.xlsx'],
-                fileTypes=['jpg', 'png', 'jpeg', 'pdf', 'txt', 'docx',
-                           'doc', 'bmp', 'tif', 'tiff', 'xls', 'xlsx'],
-            ),
+        build_file_field(
+            suffixes=[
+                '.jpg', '.png', '.jpeg', '.pdf', '.txt', '.docx', '.doc', '.bmp', '.tif', '.tiff',
+                '.xls', '.xlsx'
+            ],
+            fileTypes=[
+                'jpg', 'png', 'jpeg', 'pdf', 'txt', 'docx', 'doc', 'bmp', 'tif', 'tiff', 'xls',
+                'xlsx'
+            ],
+        ),
     }
 
     def add_extra_fields(self) -> None:
@@ -225,14 +244,12 @@ class DocumentLoaderFrontNode(FrontendNode):
                     advanced=False,
                 ))
             self.template.add_field(
-                TemplateField(
-                    field_type='int',
-                    required=True,
-                    show=True,
-                    name='request_timeout',
-                    advanced=True,
-                    value=10
-                ))
+                TemplateField(field_type='int',
+                              required=True,
+                              show=True,
+                              name='request_timeout',
+                              advanced=True,
+                              value=10))
             self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in self.file_path_templates:
             self.template.add_field(self.file_path_templates[self.template.type_name])

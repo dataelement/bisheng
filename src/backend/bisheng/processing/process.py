@@ -162,7 +162,9 @@ async def process_graph_cached(
     return Result(result=result, session_id=session_id)
 
 
-def load_flow_from_json(flow: Union[Path, str, dict], tweaks: Optional[dict] = None, build=True):
+async def load_flow_from_json(flow: Union[Path, str, dict],
+                              tweaks: Optional[dict] = None,
+                              build=True):
     """
     Load flow from a JSON file or a JSON object.
 
@@ -185,11 +187,11 @@ def load_flow_from_json(flow: Union[Path, str, dict], tweaks: Optional[dict] = N
     if tweaks is not None:
         graph_data = process_tweaks(graph_data, tweaks)
     from bisheng.api.utils import build_flow_no_yield
-    graph = build_flow_no_yield(graph_data=graph_data,
-                                artifacts={},
-                                process_file=True,
-                                flow_id='tmp',
-                                chat_id=None)
+    graph = await build_flow_no_yield(graph_data=graph_data,
+                                      artifacts={},
+                                      process_file=True,
+                                      flow_id='tmp',
+                                      chat_id=None)
 
     if build:
         langchain_object = graph.build()

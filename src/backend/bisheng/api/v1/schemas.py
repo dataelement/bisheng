@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from uuid import UUID
 
 from bisheng.database.models.flow import FlowCreate, FlowRead
@@ -49,6 +49,29 @@ class TweaksRequest(BaseModel):
 
 class UpdateTemplateRequest(BaseModel):
     template: dict
+
+
+# 创建泛型变量
+DataT = TypeVar('DataT')
+
+
+class UnifiedResponseModel(Generic[DataT], BaseModel):
+    """统一响应模型"""
+    status_code: int
+    status_message: str
+    data: DataT = None
+
+
+def resp_200(data: Union[list, dict, str, Any] = None,
+             message: str = 'SUCCESS') -> UnifiedResponseModel:
+    """成功的代码"""
+    return UnifiedResponseModel(status_code=200, status_message=message, data=data)
+    # return data
+
+
+def resp_500(data: str = None, message: str = 'BAD REQUEST') -> UnifiedResponseModel:
+    """错误的逻辑回复"""
+    return UnifiedResponseModel(status_code=500, status_message=message, data=data)
 
 
 class ProcessResponse(BaseModel):

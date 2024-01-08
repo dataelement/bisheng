@@ -1,6 +1,7 @@
 import json
 from typing import List
 
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import get_session
 from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.recall_chunk import RecallChunk
@@ -12,14 +13,14 @@ from sqlmodel import Session, select
 router = APIRouter(prefix='/qa', tags=['QA'])
 
 
-@router.get('/keyword', response_model=List[str], status_code=200)
+@router.get('/keyword', response_model=UnifiedResponseModel[List[str]], status_code=200)
 def get_answer_keyword(message_id: int, session: Session = Depends(get_session)):
     # 获取命中的key
     chunks = session.exec(select(RecallChunk).where(RecallChunk.message_id == message_id)).first()
     # keywords
     if chunks:
         keywords = chunks.keywords
-        return json.loads(keywords)
+        return resp_200(json.loads(keywords))
     else:
         return []
 
@@ -30,7 +31,7 @@ def get_original_file(*, message_id: int, keys: str, session: Session = Depends(
     chunks = session.exec(select(RecallChunk).where(RecallChunk.message_id == message_id)).all()
 
     if not chunks:
-        return {'data': [], 'message': 'no chunk found'}
+        return resp_200(message='没有找到chunks')
 
     # chunk 的所有file
     file_ids = {chunk.file_id for chunk in chunks}
@@ -57,7 +58,7 @@ def get_original_file(*, message_id: int, keys: str, session: Session = Depends(
         result.append(chunk_res)
 
     # sort_and_filter_all_chunks(keywords, all_chunk)
-    return {'data': result, 'msg': 'success'}
+    return resp_200(result)
 
 
 def find_lcsubstr(s1, s2):

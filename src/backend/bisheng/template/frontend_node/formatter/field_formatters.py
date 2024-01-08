@@ -1,5 +1,5 @@
 import re
-from typing import Optional
+from typing import ClassVar, Dict, Optional
 
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.constants import FORCE_SHOW_FIELDS
@@ -18,7 +18,7 @@ class OpenAIAPIKeyFormatter(FieldFormatter):
 
 
 class ModelSpecificFieldFormatter(FieldFormatter):
-    MODEL_DICT = {
+    MODEL_DICT: ClassVar[Dict] = {
         'OpenAI': OPENAI_MODELS,
         'ChatOpenAI': CHAT_OPENAI_MODELS,
         'Anthropic': ANTHROPIC_MODELS,
@@ -89,7 +89,7 @@ class UnionTypeFormatter(FieldFormatter):
 
 
 class SpecialFieldFormatter(FieldFormatter):
-    SPECIAL_FIELD_HANDLERS = {
+    SPECIAL_FIELD_HANDLERS: ClassVar[Dict] = {
         'allowed_tools': lambda field: 'Tool',
         'max_value_length': lambda field: 'int',
     }

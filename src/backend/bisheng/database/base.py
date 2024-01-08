@@ -1,17 +1,19 @@
 import hashlib
 from contextlib import contextmanager
-from typing import Generator
+from typing import TYPE_CHECKING, Generator
 
 from bisheng.database.init_config import init_config
 from bisheng.database.models.role import Role
 from bisheng.database.models.user import User
 from bisheng.database.models.user_role import UserRole
-from bisheng.database.service import DatabaseService
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from sqlmodel import Session, select
 
-db_service = DatabaseService(settings.database_url)
+if TYPE_CHECKING:
+    from bisheng.database.service import DatabaseService
+
+db_service: 'DatabaseService' = DatabaseService(settings.database_url)
 
 
 def init_default_data():

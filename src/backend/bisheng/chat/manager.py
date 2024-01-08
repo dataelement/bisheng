@@ -341,30 +341,31 @@ class ChatManager:
     #     self.set_cache(key_node + '_artifacts', artifacts)
     #     return built_object
 
-    def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
+    async def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
         key_node = get_cache_key(flow_id, chat_id)
         logger.info(f'init_langchain key={key_node}')
         with session_getter() as session:
             db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
         artifacts = {}
-        graph = build_flow_no_yield(graph_data=graph_data,
-                                    artifacts=artifacts,
-                                    process_file=True,
-                                    flow_id=UUID(flow_id).hex,
-                                    chat_id=chat_id,
-                                    user_name=db_user.user_name)
-        langchain_object = graph.build()
+        graph = await build_flow_no_yield(graph_data=graph_data,
+                                          artifacts=artifacts,
+                                          process_file=True,
+                                          flow_id=UUID(flow_id).hex,
+                                          chat_id=chat_id,
+                                          user_name=db_user.user_name)
+        await graph.abuild()
         question = []
-        for node in graph.nodes:
+        for node in graph.vertices:
             if node.vertex_type == 'InputNode':
-                question.extend(node._built_object)
+                question.extend(await node.get_result())
 
         self.set_cache(key_node + '_question', question)
-        for node in langchain_object:
+        input_nodes = graph.get_input_nodes()
+        for node in input_nodes:
             # 只存储chain
             if node.base_type == 'inputOutput' and node.vertex_type != 'Report':
                 continue
-            self.set_cache(key_node, node._built_object)
+            self.set_cache(key_node, await node.get_result())
             self.set_cache(key_node + '_artifacts', artifacts)
         return graph
 

@@ -1,13 +1,11 @@
 import logging
 from pathlib import Path
-from time import time
 from typing import Optional
-from uuid import uuid4
 
 import orjson
 from loguru import logger
+from rich.console import Console
 from rich.logging import RichHandler
-from starlette.middleware.base import BaseHTTPMiddleware
 
 VALID_LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', 'EXCEPTION']
 
@@ -31,18 +29,19 @@ def configure(log_level: Optional[str] = None, log_file: Optional[Path] = None):
     if log_level is None:
         log_level = 'INFO'
     # Human-readable
-    log_format = '<level>[{thread.name} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
+    log_format = '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'  # noqa
 
     # log_format = log_format_dev if log_level.upper() == "DEBUG" else log_format_prod
     logger.remove()  # Remove default handlers
     logger.patch(patching)
     # Configure loguru to use RichHandler
+
     logger.configure(handlers=[{
         'sink':
-        RichHandler(rich_tracebacks=True,
-                    markup=True,
+        RichHandler(console=Console(width=300),
                     log_time_format='[%Y-%m-%d %H:%M:%S.%f]',
-                    tracebacks_width=1000),
+                    show_path=False,
+                    show_level=False),
         'format':
         log_format,
         'level':
@@ -62,27 +61,12 @@ def configure(log_level: Optional[str] = None, log_file: Optional[Path] = None):
         format=log_format,
         rotation='00:00',  # Log rotation based on file size
         retention='3 days',
-        serialize=True,
+        serialize=False,
     )
 
     logger.debug(f'Logger set up with log level: {log_level}')
     if log_file:
         logger.debug(f'Log file: {log_file}')
-
-
-# Define a custom middleware class
-class CustomMiddleware(BaseHTTPMiddleware):
-
-    async def dispatch(self, request, call_next):
-        # You can modify the request before passing it to the next middleware or endpoint
-        trace_id = str(uuid4().hex)
-        start_time = time()
-        with logger.contextualize(trace_id=trace_id):
-            response = await call_next(request)
-            process_time = round(time() - start_time, 2)
-            logger.info(f'{request.url.path} {response.status_code} timecost={process_time}')
-
-        return response
 
 
 class InterceptHandler(logging.Handler):

@@ -6,11 +6,11 @@ from uuid import uuid4
 
 import requests
 from bisheng.api.utils import access_check
-from bisheng.api.v1.schemas import UploadFileResponse
+from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200
 from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import get_session, session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
-from bisheng.database.models.knowledge_file import KnowledgeFile
+from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.interface.importing.utils import import_vectorstore
@@ -50,7 +50,7 @@ filetype_load_map = {
 }
 
 
-@router.post('/upload', response_model=UploadFileResponse, status_code=201)
+@router.post('/upload', response_model=UnifiedResponseModel[UploadFileResponse], status_code=201)
 async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
@@ -58,7 +58,7 @@ async def upload_file(*, file: UploadFile = File(...)):
         file_path = save_uploaded_file(file.file, 'bisheng', file_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)
-        return UploadFileResponse(file_path=file_path)
+        return resp_200(UploadFileResponse(file_path=file_path))
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -73,13 +73,15 @@ async def get_embedding():
             models = list(model_list.keys())
         else:
             models = list()
-        return {'data': {'models': models}}
+        return resp_200({'models': models})
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.post('/process', status_code=201)
+@router.post('/process',
+             response_model=UnifiedResponseModel[List[KnowledgeFileRead]],
+             status_code=201)
 async def process_knowledge(*,
                             data: dict,
                             background_tasks: BackgroundTasks,
@@ -159,10 +161,10 @@ async def process_knowledge(*,
     knowledge.update_time = db_file.create_time
     session.add(knowledge)
     session.commit()
-    return {'code': 200, 'message': 'success', 'data': result}
+    return resp_200(result)
 
 
-@router.post('/create', response_model=KnowledgeRead, status_code=201)
+@router.post('/create', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
 def create_knowledge(*,
                      session: Session = Depends(get_session),
                      knowledge: KnowledgeCreate,
@@ -190,7 +192,7 @@ def create_knowledge(*,
     session.add(db_knowldge)
     session.commit()
     session.refresh(db_knowldge)
-    return db_knowldge
+    return resp_200(db_knowldge)
 
 
 @router.get('/', status_code=200)
@@ -236,7 +238,7 @@ def get_knowledge(*,
             userMap = {user.user_id: user.user_name for user in db_user}
             for r in res:
                 r['user_name'] = userMap[r['user_id']]
-        return {'data': res, 'total': total_count}
+        return resp_200({'data': res, 'total': total_count})
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -275,11 +277,11 @@ def get_filelist(*,
         select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id).order_by(
             KnowledgeFile.update_time.desc()).offset(page_size *
                                                      (page_num - 1)).limit(page_size)).all()
-    return {
+    return resp_200({
         'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
         'total': total_count,
         'writeable': writable
-    }
+    })
 
 
 @router.delete('/{knowledge_id}', status_code=200)
@@ -310,7 +312,7 @@ def delete_knowledge(*,
     # todo
     session.delete(knowledge)
     session.commit()
-    return {'message': 'knowledge deleted successfully'}
+    return resp_200(message='删除成功')
 
 
 @router.delete('/file/{file_id}', status_code=200)
@@ -350,7 +352,7 @@ def delete_knowledge_file(*, file_id: int, Authorize: AuthJWT = Depends()):
     session = next(get_session())
     session.delete(knowledge_file)
     session.commit()
-    return {'message': 'knowledge file deleted successfully'}
+    return resp_200(message='删除成功')
 
 
 def decide_embeddings(model: str) -> Embeddings:
@@ -475,7 +477,6 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             'source': file_name,
             'extra': ''
         } for t in texts]
-        metadatas = [t.metadata for t in texts]
     else:
         # 如果文件不是pdf 需要内部转pdf
         if file_name.rsplit('.', 1)[-1] != 'pdf':

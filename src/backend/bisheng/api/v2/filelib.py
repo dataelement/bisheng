@@ -69,6 +69,7 @@ def update_knowledge(
         raise HTTPException(status_code=500, detail='知识库名称重复')
 
     db_knowldge.name = knowledge.name
+
     session.add(db_knowldge)
     session.commit()
     session.refresh(db_knowldge)

@@ -6,17 +6,20 @@ from bisheng.api import router, router_rpc
 from bisheng.database.base import init_default_data
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
-from bisheng.utils.logger import CustomMiddleware, configure
+from bisheng.utils.http_middleware import CustomMiddleware
+from bisheng.utils.logger import configure
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
+from loguru import logger
 
 
 def handle_http_exception(req: Request, exc: HTTPException) -> ORJSONResponse:
     msg = {'status_code': exc.status_code, 'status_message': exc.detail}
+    logger.error(f'{req.method} {req.url} {exc.status_code} {exc.detail}')
     return ORJSONResponse(content=msg)
 
 

@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Type
+from typing import ClassVar, Dict, List, Optional, Type
 
 from bisheng.custom.customs import get_custom_nodes
 from bisheng.interface.base import LangChainTypeCreator
@@ -7,14 +7,13 @@ from bisheng.settings import settings
 from bisheng.template.frontend_node.base import FrontendNode
 from bisheng.template.frontend_node.memories import MemoryFrontendNode
 from bisheng.utils.logger import logger
-from bisheng.utils.util import (build_template_from_class,
-                                build_template_from_method)
+from bisheng.utils.util import build_template_from_class, build_template_from_method
 
 
 class MemoryCreator(LangChainTypeCreator):
     type_name: str = 'memories'
 
-    from_method_nodes = {
+    from_method_nodes: ClassVar[Dict] = {
         'ZepChatMessageHistory': '__init__',
         'SQLiteEntityStore': '__init__',
     }
@@ -50,8 +49,7 @@ class MemoryCreator(LangChainTypeCreator):
 
     def to_list(self) -> List[str]:
         return [
-            memory.__name__
-            for memory in self.type_to_loader_dict.values()
+            memory.__name__ for memory in self.type_to_loader_dict.values()
             if memory.__name__ in settings.memories or settings.dev
         ]
 

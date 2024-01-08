@@ -4,7 +4,7 @@ from typing import Optional, Union
 import yaml
 from bisheng.database.models.config import Config
 from bisheng.utils.logger import logger
-from pydantic import BaseSettings, root_validator
+from pydantic import BaseSettings, root_validator, validator
 from sqlmodel import select
 
 
@@ -39,15 +39,15 @@ class Settings(BaseSettings):
     default_llm: dict = {}
     jwt_secret: str = 'secret'
 
-    @root_validator(pre=True)
-    def set_database_url(cls, values):
-        if 'database_url' not in values:
+    @validator('database_url', pre=True)
+    def set_database_url(cls, value):
+        if not value:
             logger.debug('No database_url provided, trying bisheng_DATABASE_URL env variable')
             if bisheng_database_url := os.getenv('bisheng_DATABASE_URL'):
-                values['database_url'] = bisheng_database_url
+                value = bisheng_database_url
             else:
                 logger.debug('No DATABASE_URL env variable, using sqlite database')
-                values['database_url'] = 'sqlite:///./bisheng.db'
+                value = 'sqlite:///./bisheng.db'
         # else:
         #     # 对密码进行加密
         #     import re
@@ -59,9 +59,9 @@ class Settings(BaseSettings):
         #         new_mysql_url = re.sub(pattern, f":{new_password}@", values['database_url'])
         #         values['database_url'] = new_mysql_url
 
-        return values
+        return value
 
-    @root_validator(pre=True)
+    @root_validator()
     def set_redis_url(cls, values):
         # if 'redis_url' in values:
         #     import re
@@ -78,7 +78,7 @@ class Settings(BaseSettings):
         validate_assignment = True
         extra = 'ignore'
 
-    @root_validator(allow_reuse=True)
+    @root_validator()
     def validate_lists(cls, values):
         for key, value in values.items():
             if key != 'dev' and not value:
@@ -94,8 +94,8 @@ class Settings(BaseSettings):
         if cache:
             return yaml.safe_load(cache)
         with next(get_session()) as session:
-            knowledge_config = session.exec(select(Config)
-                                            .where(Config.key == 'knowledges')).first()
+            knowledge_config = session.exec(
+                select(Config).where(Config.key == 'knowledges')).first()
             if knowledge_config:
                 redis_client.set(redis_key, knowledge_config.value, 100)
                 return yaml.safe_load(knowledge_config.value)
@@ -111,8 +111,7 @@ class Settings(BaseSettings):
         if cache:
             return yaml.safe_load(cache)
         with next(get_session()) as session:
-            llm_config = session.exec(select(Config)
-                                      .where(Config.key == 'default_llm')).first()
+            llm_config = session.exec(select(Config).where(Config.key == 'default_llm')).first()
             if llm_config:
                 redis_client.set(redis_key, llm_config.value, 100)
                 return yaml.safe_load(llm_config.value)
@@ -186,11 +185,15 @@ def load_settings_from_yaml(file_path: str) -> Settings:
     if '/' not in file_path:
         file_path = os.path.join(current_path, file_path)
 
-    with open(file_path, 'r') as f:
+    with open(file_path, 'r', encoding='utf-8') as f:
         settings_dict = yaml.safe_load(f)
 
-    with open(os.path.join(current_path, 'default_node.yaml')) as node:
+    with open(os.path.join(current_path, 'default_node.yaml'), 'r', encoding='utf-8') as node:
         settings_dict.update(yaml.safe_load(node))
+    for key in settings_dict:
+        if key not in Settings.__fields__.keys():
+            raise KeyError(f'Key {key} not found in settings')
+        logger.debug(f'Loading {len(settings_dict[key])} {key} from {file_path}')
 
     return Settings(**settings_dict)
 
