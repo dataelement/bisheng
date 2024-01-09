@@ -1,9 +1,9 @@
 import asyncio
 import json
+import time
 from collections import defaultdict
-from email.utils import unquote
 from typing import Any, Dict, List
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from uuid import UUID
 
 from bisheng.api.utils import build_flow_no_yield
@@ -15,7 +15,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.user import User
 from bisheng.processing.process import process_tweaks
-from bisheng.utils.threadpool import thread_pool
+from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.input_output.output import Report
 from fastapi import WebSocket, status
@@ -162,7 +162,7 @@ class ChatManager:
         gragh_data: dict = None,
     ):
         await self.connect(client_id, chat_id, websocket)
-
+        autogen_pool = ThreadPoolManager(max_workers=1, thread_name_prefix='autogen')
         status_ = 'init'  # 创建锁
         payload = {}
 
@@ -226,14 +226,26 @@ class ChatManager:
                         # async_task = asyncio.create_task(
                         #     task_service.launch_task(Handler().dispatch_task, self, client_id,
                         #                              chat_id, action, payload, user_id))
-                        thread_pool.submit(Handler().dispatch_task,
-                                           self,
-                                           client_id,
-                                           chat_id,
-                                           action,
-                                           payload,
-                                           user_id,
-                                           trace_id=chat_id)
+                        from bisheng_langchain.chains.autogen.auto_gen import AutoGenChain
+                        if isinstance(self.in_memory_cache.get(langchain_obj_key), AutoGenChain):
+                            # autogen chain
+                            autogen_pool.submit(Handler().dispatch_task,
+                                                self,
+                                                client_id,
+                                                chat_id,
+                                                action,
+                                                payload,
+                                                user_id,
+                                                trace_id=chat_id)
+                        else:
+                            thread_pool.submit(Handler().dispatch_task,
+                                               self,
+                                               client_id,
+                                               chat_id,
+                                               action,
+                                               payload,
+                                               user_id,
+                                               trace_id=chat_id)
                     status_ = 'init'
                     payload = {}  # clean message
 
@@ -355,10 +367,11 @@ class ChatManager:
 
     async def init_langchain_object(self, flow_id, chat_id, user_id, graph_data):
         key_node = get_cache_key(flow_id, chat_id)
-        logger.info(f'init_langchain key={key_node}')
+        logger.info(f'init_langchain build_begin key={key_node}')
         with session_getter() as session:
             db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
         artifacts = {}
+        start_time = time.time()
         graph = await build_flow_no_yield(graph_data=graph_data,
                                           artifacts=artifacts,
                                           process_file=True,
@@ -366,6 +379,7 @@ class ChatManager:
                                           chat_id=chat_id,
                                           user_name=db_user.user_name)
         await graph.abuild()
+        logger.info(f'init_langchain build_end timecost={time.time() - start_time}')
         question = []
         for node in graph.vertices:
             if node.vertex_type == 'InputNode':

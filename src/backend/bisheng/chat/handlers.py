@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Dict
 
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
@@ -25,6 +26,8 @@ class Handler:
 
     async def dispatch_task(self, session: ChatManager, client_id: str, chat_id: str, action: str,
                             payload: dict, user_id):
+        logger.info(f'dispatch_task payload={payload}')
+        start_time = time.time()
         with session.cache_manager.set_client_id(client_id, chat_id):
             if not action:
                 action = 'default'
@@ -32,6 +35,7 @@ class Handler:
                 raise Exception(f'unknown action {action}')
 
             await self.handler_dict[action](session, client_id, chat_id, payload, user_id)
+            logger.info(f'dispatch_task done timecost={time.time() - start_time}')
 
     async def process_report(self,
                              session: ChatManager,

@@ -9,9 +9,9 @@ from loguru import logger
 
 class ThreadPoolManager:
 
-    def __init__(self, max_workers):
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers,
-                                                              thread_name_prefix='pool')
+    def __init__(self, max_workers, thread_name_prefix='pool'):
+        self.executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_workers, thread_name_prefix=thread_name_prefix)
         self.futures: List[concurrent.futures.Future] = []
         self.lock = threading.Lock()
 
