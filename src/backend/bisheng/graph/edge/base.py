@@ -37,7 +37,7 @@ class Edge:
             self.validate_handles(source, target)
         else:
             # Logging here because this is a breaking change
-            logger.error('Edge data is empty')
+            # logger.error('Edge data is empty')
             self._source_handle = edge.get('sourceHandle', '')
             self._target_handle = edge.get('targetHandle', '')
             # 'BaseLoader;BaseOutputParser|documents|PromptTemplate-zmTlD'

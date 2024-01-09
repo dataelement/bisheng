@@ -12,6 +12,7 @@ from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
 from bisheng.cache.manager import Subject
 from bisheng.database.base import session_getter
+from bisheng.database.models.flow import Flow
 from bisheng.database.models.user import User
 from bisheng.processing.process import process_tweaks
 from bisheng.utils.threadpool import thread_pool
@@ -164,6 +165,7 @@ class ChatManager:
 
         status_ = 'init'  # 创建锁
         payload = {}
+
         try:
             while True:
                 try:
@@ -176,11 +178,11 @@ class ChatManager:
                 except TypeError:
                     payload = json_payload_receive
 
-                if 'clear_history' in payload:
-                    self.chat_history.history[client_id] = []
-                    continue
-                if 'clear_cache' in payload:
-                    self.in_memory_cache
+                # websocket multi use
+                if 'flow_id' in payload:
+                    flow_id = payload.get('flow_id')
+                    with session_getter() as session:
+                        gragh_data = session.get(Flow, flow_id)
 
                 # set start
                 from bisheng.chat.handlers import Handler
@@ -204,8 +206,12 @@ class ChatManager:
                 # build in thread
                 if payload and not self.in_memory_cache.get(
                         langchain_obj_key) and status_ == 'init_object':
-                    thread_pool.submit(self.init_langchain_object, client_id, chat_id, user_id,
-                                       graph_data)
+                    thread_pool.submit(self.init_langchain_object,
+                                       client_id,
+                                       chat_id,
+                                       user_id,
+                                       graph_data,
+                                       trace_id=chat_id)
                     status_ = 'waiting_object'
 
                 # run in thread
@@ -220,8 +226,14 @@ class ChatManager:
                         # async_task = asyncio.create_task(
                         #     task_service.launch_task(Handler().dispatch_task, self, client_id,
                         #                              chat_id, action, payload, user_id))
-                        thread_pool.submit(Handler().dispatch_task, self, client_id, chat_id,
-                                           action, payload, user_id)
+                        thread_pool.submit(Handler().dispatch_task,
+                                           self,
+                                           client_id,
+                                           chat_id,
+                                           action,
+                                           payload,
+                                           user_id,
+                                           trace_id=chat_id)
                     status_ = 'init'
                     payload = {}  # clean message
 
@@ -235,7 +247,7 @@ class ChatManager:
                             future.result()
                             logger.debug('task_complete')
                         except Exception as e:
-                            logger.error('task_exception {}', e)
+                            logger.exception(e)
                             if status_ == 'init':
                                 step_resp.intermediate_steps = f'LLM 技能执行错误. error={str(e)}'
                             else:
@@ -247,12 +259,12 @@ class ChatManager:
                             await self.send_json(client_id, chat_id, start_resp)
         except Exception as e:
             # Handle any exceptions that might occur
-            logger.error(e)
+            logger.error(str(e))
             await self.close_connection(
                 client_id=client_id,
                 chat_id=chat_id,
                 code=status.WS_1011_INTERNAL_ERROR,
-                reason=str(e)[:120],
+                reason='后端未知错误类型',
             )
         finally:
             try:
@@ -261,7 +273,7 @@ class ChatManager:
                                             code=status.WS_1000_NORMAL_CLOSURE,
                                             reason='Client disconnected')
             except Exception as e:
-                logger.error(e)
+                logger.exception(e)
             self.disconnect(client_id, chat_id)
 
     async def preper_payload(self, payload, graph_data, langchain_obj_key, client_id, chat_id,

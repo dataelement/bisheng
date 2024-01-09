@@ -118,7 +118,6 @@ async def chat(
         flow_id: str,
         websocket: WebSocket,
         chat_id: Optional[str] = None,
-        type: Optional[str] = None,
         session_id: Union[None, str] = None,  # noqa: F821
         Authorize: AuthJWT = Depends(),
 ):
@@ -155,6 +154,7 @@ async def chat(
             chat_manager.set_cache(get_cache_key(flow_id, chat_id), None)
 
         with logger.contextualize(trace_id=chat_id):
+            logger.info('websocket_verify_ok begin=handle_websocket')
             await chat_manager.handle_websocket(flow_id,
                                                 chat_id,
                                                 websocket,

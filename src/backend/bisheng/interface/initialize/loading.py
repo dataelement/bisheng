@@ -126,9 +126,9 @@ async def instantiate_based_on_type(class_object,
         return instantiate_memory(node_type, class_object, params)
     elif base_type == 'wrappers':
         return instantiate_wrapper(node_type, class_object, params)
-    elif base_type == 'inputOutput':
+    elif base_type == 'input_output':
         return instantiate_input_output(node_type, class_object, params, param_id_dict)
-    elif base_type == 'autogenRoles':
+    elif base_type == 'autogen_roles':
         return instantiate_autogen_roles(node_type, class_object, params)
     else:
         return class_object(**params)

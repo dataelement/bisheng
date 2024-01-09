@@ -125,7 +125,7 @@ async def build_flow(graph_data: dict,
                 # to set the input_keys values
                 artifacts.update(vertex.artifacts)
         except Exception as exc:
-            logger.error(f'Error building node {vertex.id}', exc_info=True)
+            logger.exception(f'Error building node {vertex.id}', exc_info=True)
             params = str(exc)
             valid = False
             response = {
