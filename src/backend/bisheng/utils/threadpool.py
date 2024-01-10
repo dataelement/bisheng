@@ -13,6 +13,8 @@ class ThreadPoolManager:
         self.thread_group = thread_name_prefix
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=max_workers, thread_name_prefix=thread_name_prefix)
+        # 设计每个同步线程配备一个协程
+        self.event_loops = {}
         self.future_dict: Dict[str, List[concurrent.futures.Future]] = {}
         self.async_task: Dict[str, List[asyncio.Task]] = {}
         self.lock = threading.Lock()
@@ -45,18 +47,27 @@ class ThreadPoolManager:
     def run_in_event_loop(self, coro, *args, **kwargs):
         try:
             loop = asyncio.get_event_loop()
+            logger.info('event loop {}', loop)
         except Exception:
-            logger.info('Creating new event loop')
             loop = asyncio.new_event_loop()
+            logger.info('Creating new event loop {}', loop)
         asyncio.set_event_loop(loop)
+        if loop not in self.event_loops:
+            logger.info('create_new_thread_event')
+            thread_event = threading.Thread(target=self.start_loop, args=(loop, ))
+            thread_event.start()
         trace_id = kwargs.pop('trace_id', '2')
         start_wait = time.time()
         with logger.contextualize(trace_id=trace_id):
-            task = loop.create_task(coro(*args, **kwargs))
+            future = asyncio.run_coroutine_threadsafe(coro(*args, **kwargs), loop)
             # result = loop.run_until_complete(coro(*args, **kwargs))
             end_wait = time.time()
             logger.info(f'async_task_waited={end_wait - start_wait:.2f} seconds', )
-            return task
+            return future
+
+    def start_loop(self, loop):
+        asyncio.set_event_loop(loop)
+        loop.run_forever()
 
     async def as_completed(self) -> List[Tuple[str, concurrent.futures.Future]]:
         with self.lock:
@@ -68,17 +79,22 @@ class ThreadPoolManager:
                         self.future_dict[k].remove(f)
                 if len(lf) == 0:
                     self.future_dict.pop(k)
-            if self.future_dict:
-                logger.info(f'{self.thread_group} queue={len(self.future_dict.keys())}')
+
             for k, lf in list(self.async_task.items()):
                 for f in lf:
-                    try:
-                        await asyncio.wait_for(f, timeout=0.1)
-                        completed_futures.append((k, f))
-                    except asyncio.TimeoutError:
-                        pass
+                    if f.done():
+                        # 获取task
+                        task = f.result()
+                        if task.done():
+                            completed_futures.append((k, task))
+                            self.async_task[k].remove(f)
+                if len(lf) == 0:
+                    self.async_task.pop(k)
 
             return completed_futures
+
+    # async def async_done_callback(self, future):
+    #     self.async_task_result.append(future)
 
 
 # 创建一个线程池管理器
