@@ -138,12 +138,12 @@ async def process_knowledge(*,
         session.commit()
         session.refresh(db_file)
         if not repeat:
-            files.append(db_file)
+            files.append(db_file.copy())
             file_paths.append(filepath)
-        logger.info(f'fileName={file_name} col={collection_name}')
+        logger.info(f'fileName={file_name} col={collection_name} file_id={db_file.id}')
         result.append(db_file.copy())
 
-    if not repeat:
+    if files:
         background_tasks.add_task(
             addEmbedding,
             collection_name=collection_name,
@@ -388,16 +388,16 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
         embeddings = decide_embeddings(model)
         vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
         es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+        minio_client = MinioClient()
     except Exception as e:
         logger.exception(e)
 
-    minio_client = MinioClient()
     callback_obj = {}
     for index, path in enumerate(file_paths):
         ts1 = time.time()
         knowledge_file = knowledge_files[index]
-        logger.info(
-            f'process_file_begin file_name={knowledge_file.file_name} file_id={knowledge_file.id}')
+        logger.info('process_file_begin knowledge_id={} file_name={} file_size={} ',
+                    knowledge_files[0].knowledge_id, knowledge_file.file_name, len(file_paths))
 
         try:
             # 存储 mysql

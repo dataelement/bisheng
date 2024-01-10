@@ -228,7 +228,8 @@ class ChatManager:
                 else:
                     for v in context_dict.values():
                         if v['status'] != 'init':
-                            await self._process_when_payload(flow_id, chat_id, **process_param)
+                            await self._process_when_payload(v['flow_id'], v['chat_id'],
+                                                             **process_param)
 
                 # 处理任务状态
                 complete_normal = await thread_pool.as_completed()
