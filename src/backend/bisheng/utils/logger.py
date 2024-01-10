@@ -39,6 +39,7 @@ def configure(log_level: Optional[str] = None, log_file: Optional[Path] = None):
     logger.configure(handlers=[{
         'sink':
         RichHandler(console=Console(width=300),
+                    markup=True,
                     log_time_format='[%Y-%m-%d %H:%M:%S.%f]',
                     show_path=False,
                     show_level=False),

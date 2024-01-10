@@ -110,6 +110,8 @@ class ChatMessage(BaseModel):
     receiver: dict = None
     liked: int = 0
     extra: str = '{}'
+    flow_id: str = None
+    chat_id: str = None
 
 
 class ChatResponse(ChatMessage):

@@ -26,7 +26,7 @@ class Handler:
 
     async def dispatch_task(self, session: ChatManager, client_id: str, chat_id: str, action: str,
                             payload: dict, user_id):
-        logger.info(f'dispatch_task payload={payload}')
+        logger.info(f'dispatch_task payload={payload.get("inputs")}')
         start_time = time.time()
         with session.cache_manager.set_client_id(client_id, chat_id):
             if not action:
@@ -36,6 +36,7 @@ class Handler:
 
             await self.handler_dict[action](session, client_id, chat_id, payload, user_id)
             logger.info(f'dispatch_task done timecost={time.time() - start_time}')
+        return client_id, chat_id
 
     async def process_report(self,
                              session: ChatManager,
@@ -136,6 +137,8 @@ class Handler:
                 langchain_object=langchain_object,
                 chat_inputs=chat_inputs,
                 websocket=session.active_connections[get_cache_key(client_id, chat_id)],
+                flow_id=client_id,
+                chat_id=chat_id,
             )
         except Exception as e:
             # Log stack trace

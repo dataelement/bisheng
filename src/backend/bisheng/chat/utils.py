@@ -16,11 +16,11 @@ from langchain.schema.document import Document
 from sqlmodel import select
 
 
-async def process_graph(
-    langchain_object,
-    chat_inputs: ChatMessage,
-    websocket: WebSocket,
-):
+async def process_graph(langchain_object,
+                        chat_inputs: ChatMessage,
+                        websocket: WebSocket,
+                        flow_id: str = None,
+                        chat_id: str = None):
     langchain_object = try_setting_streaming_options(langchain_object, websocket)
     logger.debug('Loaded langchain object')
 
@@ -38,7 +38,11 @@ async def process_graph(
 
         logger.debug('Generating result and thought')
         result, intermediate_steps, source_document = await get_result_and_steps(
-            langchain_object, chat_inputs.message, websocket=websocket)
+            langchain_object,
+            chat_inputs.message,
+            websocket=websocket,
+            flow_id=flow_id,
+            chat_id=chat_id)
         logger.debug('Generated result and intermediate_steps')
         return result, intermediate_steps, source_document
     except Exception as e:

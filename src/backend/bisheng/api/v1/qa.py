@@ -1,12 +1,13 @@
+import asyncio
 import json
 from typing import List
 
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.database.base import get_session
+from bisheng.database.base import get_session, session_getter
 from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils.minio_client import MinioClient
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 # build router
@@ -14,15 +15,24 @@ router = APIRouter(prefix='/qa', tags=['QA'])
 
 
 @router.get('/keyword', response_model=UnifiedResponseModel[List[str]], status_code=200)
-def get_answer_keyword(message_id: int, session: Session = Depends(get_session)):
+async def get_answer_keyword(message_id: int):
     # 获取命中的key
-    chunks = session.exec(select(RecallChunk).where(RecallChunk.message_id == message_id)).first()
-    # keywords
-    if chunks:
-        keywords = chunks.keywords
-        return resp_200(json.loads(keywords))
-    else:
-        return []
+    conter = 3
+    while True:
+        with session_getter() as session:
+            chunks = session.exec(
+                select(RecallChunk).where(RecallChunk.message_id == message_id)).first()
+        # keywords
+        if chunks:
+            keywords = chunks.keywords
+            return resp_200(json.loads(keywords))
+        else:
+            # 延迟循环
+            if conter <= 0:
+                break
+            await asyncio.sleep(1)
+            conter -= 1
+    raise HTTPException(status_code=500, detail='后台处理中，稍后再试')
 
 
 @router.get('/chunk', status_code=200)

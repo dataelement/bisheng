@@ -15,11 +15,16 @@ from langchain.schema.messages import BaseMessage
 class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     """Callback handler for streaming LLM responses."""
 
-    def __init__(self, websocket: WebSocket):
+    def __init__(self, websocket: WebSocket, flow_id: str, chat_id: str):
         self.websocket = websocket
+        self.flow_id = flow_id
+        self.chat_id = chat_id
 
     async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        resp = ChatResponse(message=token, type='stream', intermediate_steps='')
+        resp = ChatResponse(message=token,
+                            type='stream',
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
         await self.websocket.send_json(resp.dict())
 
     async def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str],
@@ -50,11 +55,10 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
                             **kwargs: Any) -> Any:
         """Run when tool starts running."""
-        resp = ChatResponse(
-            message='',
-            type='stream',
-            intermediate_steps=f'Tool input: {input_str}',
-        )
+        resp = ChatResponse(type='stream',
+                            intermediate_steps=f'Tool input: {input_str}',
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
         await self.websocket.send_json(resp.dict())
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
@@ -68,11 +72,10 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         intermediate_steps = f'{observation_prefix}{result}'
 
         # Create a ChatResponse instance.
-        resp = ChatResponse(
-            message='',
-            type='stream',
-            intermediate_steps=intermediate_steps,
-        )
+        resp = ChatResponse(type='stream',
+                            intermediate_steps=intermediate_steps,
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
 
         try:
             # This is to emulate the stream of tokens
@@ -92,8 +95,17 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         sender = kwargs.get('sender')
         receiver = kwargs.get('receiver')
         if kwargs.get('sender'):
-            log = ChatResponse(message=text, type='end', sender=sender, receiver=receiver)
-            start = ChatResponse(type='start', sender=sender, receiver=receiver)
+            log = ChatResponse(message=text,
+                               type='end',
+                               sender=sender,
+                               receiver=receiver,
+                               flow_id=self.flow_id,
+                               chat_id=self.chat_id)
+            start = ChatResponse(type='start',
+                                 sender=sender,
+                                 receiver=receiver,
+                                 flow_id=self.flow_id,
+                                 chat_id=self.chat_id)
 
             if receiver and receiver.get('is_self'):
                 await self.websocket.send_json(log.dict())
@@ -102,21 +114,31 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
                 await self.websocket.send_json(start.dict())
         elif 'category' in kwargs:
             if 'autogen' == kwargs['category']:
-                log = ChatResponse(message=text, type='stream')
+                log = ChatResponse(message=text,
+                                   type='stream',
+                                   flow_id=self.flow_id,
+                                   chat_id=self.chat_id)
                 await self.websocket.send_json(log.dict())
                 if kwargs.get('type'):
                     # 兼容下
-                    start = ChatResponse(type='start', category=kwargs.get('type'))
+                    start = ChatResponse(type='start',
+                                         category=kwargs.get('type'),
+                                         flow_id=self.flow_id,
+                                         chat_id=self.chat_id)
                     end = ChatResponse(type='end',
                                        intermediate_steps=text,
-                                       category=kwargs.get('type'))
+                                       category=kwargs.get('type'),
+                                       flow_id=self.flow_id,
+                                       chat_id=self.chat_id)
                     await self.websocket.send_json(start.dict())
                     await self.websocket.send_json(end.dict())
             else:
                 log = ChatResponse(message=text,
                                    intermediate_steps=kwargs['log'],
                                    type=kwargs['type'],
-                                   category=kwargs['category'])
+                                   category=kwargs['category'],
+                                   flow_id=self.flow_id,
+                                   chat_id=self.chat_id)
                 await self.websocket.send_json(log.dict())
         logger.debug(f'on_text text={text} kwargs={kwargs}')
 
@@ -127,19 +149,24 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         if '\n' in log:
             logs = log.split('\n')
             for log in logs:
-                resp = ChatResponse(message='', type='stream', intermediate_steps=log)
+                resp = ChatResponse(type='stream',
+                                    intermediate_steps=log,
+                                    flow_id=self.flow_id,
+                                    chat_id=self.chat_id)
                 await self.websocket.send_json(resp.dict())
         else:
-            resp = ChatResponse(message='', type='stream', intermediate_steps=log)
+            resp = ChatResponse(type='stream',
+                                intermediate_steps=log,
+                                flow_id=self.flow_id,
+                                chat_id=self.chat_id)
             await self.websocket.send_json(resp.dict())
 
     async def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""
-        resp = ChatResponse(
-            message='',
-            type='stream',
-            intermediate_steps=finish.log,
-        )
+        resp = ChatResponse(flow_id=self.flow_id,
+                            chat_id=self.chat_id,
+                            type='stream',
+                            intermediate_steps=finish.log)
         await self.websocket.send_json(resp.dict())
 
     async def on_retriever_start(self, serialized: Dict[str, Any], query: str,
@@ -163,11 +190,16 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
     """Callback handler for streaming LLM responses."""
 
-    def __init__(self, websocket: WebSocket):
+    def __init__(self, websocket: WebSocket, flow_id: str, chat_id: str):
         self.websocket = websocket
+        self.flow_id = flow_id
+        self.chat_id = chat_id
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        resp = ChatResponse(message=token, type='stream', intermediate_steps='')
+        resp = ChatResponse(message=token,
+                            type='stream',
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
 
         loop = asyncio.get_event_loop()
         coroutine = self.websocket.send_json(resp.dict())
@@ -180,34 +212,38 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         if '\n' in log:
             logs = log.split('\n')
             for log in logs:
-                resp = ChatResponse(message='', type='stream', intermediate_steps=log)
+                resp = ChatResponse(type='stream',
+                                    intermediate_steps=log,
+                                    flow_id=self.flow_id,
+                                    chat_id=self.chat_id)
                 loop = asyncio.get_event_loop()
                 coroutine = self.websocket.send_json(resp.dict())
                 asyncio.run_coroutine_threadsafe(coroutine, loop)
         else:
-            resp = ChatResponse(message='', type='stream', intermediate_steps=log)
+            resp = ChatResponse(type='stream',
+                                intermediate_steps=log,
+                                flow_id=self.flow_id,
+                                chat_id=self.chat_id)
             loop = asyncio.get_event_loop()
             coroutine = self.websocket.send_json(resp.dict())
             asyncio.run_coroutine_threadsafe(coroutine, loop)
 
     def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""
-        resp = ChatResponse(
-            message='',
-            type='stream',
-            intermediate_steps=finish.log,
-        )
+        resp = ChatResponse(type='stream',
+                            intermediate_steps=finish.log,
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
         loop = asyncio.get_event_loop()
         coroutine = self.websocket.send_json(resp.dict())
         asyncio.run_coroutine_threadsafe(coroutine, loop)
 
     def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
-        resp = ChatResponse(
-            message='',
-            type='stream',
-            intermediate_steps=f'Tool input: {input_str}',
-        )
+        resp = ChatResponse(type='stream',
+                            intermediate_steps=f'Tool input: {input_str}',
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
         loop = asyncio.get_event_loop()
         coroutine = self.websocket.send_json(resp.dict())
         asyncio.run_coroutine_threadsafe(coroutine, loop)
@@ -223,11 +259,10 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         intermediate_steps = f'{observation_prefix}{result}'
 
         # Create a ChatResponse instance.
-        resp = ChatResponse(
-            message='',
-            type='stream',
-            intermediate_steps=intermediate_steps,
-        )
+        resp = ChatResponse(type='stream',
+                            intermediate_steps=intermediate_steps,
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
 
         # Try to send the response, handle potential errors.
 

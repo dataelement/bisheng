@@ -2,6 +2,7 @@ import pickle
 
 import redis
 from bisheng.settings import settings
+from loguru import logger
 from redis import ConnectionPool
 
 
@@ -17,6 +18,8 @@ class RedisClient:
                 result = self.connection.setex(key, expiration, pickled)
                 if not result:
                     raise ValueError('RedisCache could not set the value.')
+            else:
+                logger.error('pickle error, value={}', value)
         except TypeError as exc:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
         finally:
