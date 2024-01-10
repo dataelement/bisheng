@@ -19,7 +19,7 @@ bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
 bisheng_langchain = "0.2.2"
-bisheng_pyautogen = "0.1.18"
+bisheng_pyautogen = "0.1.19"
 minio = "7.2.0"
 loguru = "^0.7.1"
 fastapi_jwt_auth = "^0.5.0"

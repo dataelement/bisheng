@@ -13,6 +13,7 @@ from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, Knowle
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
+from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
@@ -21,7 +22,7 @@ from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.embeddings import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
-from bisheng_langchain.vectorstores import Milvus
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
@@ -309,7 +310,14 @@ def delete_knowledge(*,
                                           output_fields=['pk'])
             vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
     # 处理 es
-    # todo
+    # elastic
+    esvectore_client: 'ElasticKeywordsSearch' = decide_vectorstores(knowledge.index_name,
+                                                                    'ElasticKeywordsSearch',
+                                                                    embeddings)
+    if esvectore_client:
+        res = esvectore_client.client.indices.delete(index=knowledge.index_name, ignore=[400, 404])
+        logger.info(f'act=delete_es index={knowledge.index_name} res={res}')
+
     session.delete(knowledge)
     session.commit()
     return resp_200(message='删除成功')
@@ -330,7 +338,7 @@ def delete_knowledge_file(*, file_id: int, Authorize: AuthJWT = Depends()):
             raise HTTPException(status_code=404, detail='没有权限执行操作')
     # 处理vectordb
     collection_name = knowledge.collection_name
-    embeddings = decide_embeddings(knowledge.model)
+    embeddings = FakeEmbedding()
     vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
     if isinstance(vectore_client, Milvus) and vectore_client.col:
         pk = vectore_client.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])

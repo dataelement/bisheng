@@ -118,7 +118,8 @@ async def build_flow(graph_data: dict,
             params = vertex._built_object_repr()
             valid = True
             logger.debug(
-                f"Building node {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}")
+                f"Building node {vertex.vertex_type} {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}"
+            )
             if vertex.artifacts:
                 # The artifacts will be prompt variables
                 # passed to build_input_keys_response
