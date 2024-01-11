@@ -20,10 +20,14 @@ jobs:
     runs-on: ubuntu-latest
     #if: startsWith(github.event.ref, 'refs/tags')
     steps:
-      # deploy
-      - name: get commit message
-        id: get_commit_message
+      # deploy  
+      - name: checkout
+        uses: actions/checkout@v2 
+
+      - name: Get version
+        id: get_version
         run: |
+          echo ::set-output name=VERSION::${GITHUB_REF/v\//}
           echo "commit_message=$(git log --format=%B -n 1 ${{ github.event.after }})" >> "$GITHUB_OUTPUT"
           echo "commit_name=$(git show -s --format='%an' ${{ github.event.after }})" >> "$GITHUB_OUTPUT"
 
@@ -34,13 +38,6 @@ jobs:
           method: 'POST'
           data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{steps.get_commit_message.outputs.commit_name}}提交代码，开始编译",  "content": [[{"tag":"text","text":"提交内容${{steps.get_commit_message.outputs.commit_message}}"}]]}}}}'
 
-      - name: checkout
-        uses: actions/checkout@v2
-
-      - name: Get version
-        id: get_version
-        run: |
-          echo ::set-output name=VERSION::${GITHUB_REF/v\//}
 
       # 构建 bisheng-langchain
       - name: Set python version 3.8
