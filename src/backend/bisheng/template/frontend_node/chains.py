@@ -91,6 +91,10 @@ class ChainFrontendNode(FrontendNode):
             field.show = False
             field.required = False
 
+        if name == 'APIChain' and field.name == 'limit_to_domains':
+            field.show = True
+            field.required = True
+
         field.advanced = False
         if 'key' in field.name:
             field.password = False
