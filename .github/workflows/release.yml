@@ -27,7 +27,7 @@ jobs:
       - name: git message
         id: git_message
         run: |
-          echo "::set-output name=message::$( echo ${{github.event.head_commit.message}} | sed ':a;N;$!ba;s/\n/\\n/g')"
+          echo "::set-output name=message::$( echo '${{github.event.head_commit.message}}' | sed ':a;N;$!ba;s/\n/\\n/g')"
 
       - name: notify feishu
         uses: fjogeleit/http-request-action@v1
