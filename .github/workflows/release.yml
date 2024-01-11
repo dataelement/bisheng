@@ -24,12 +24,17 @@ jobs:
       - name: checkout
         uses: actions/checkout@v2 
 
+      - name: git message
+        id: git_message
+        run: |
+          echo "::set-output name=message::$( echo ${{github.event.head_commit.message}} | sed ':a;N;$!ba;s/\n/\\n/g')"
+
       - name: notify feishu
         uses: fjogeleit/http-request-action@v1
         with:
           url: ' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b'
           method: 'POST'
-          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{github.event.pusher.name}}提交代码，开始编译",  "content": [[{"tag":"text","text":"提交内容${{ github.event.head_commit.message }}"}]]}}}}'
+          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{github.event.pusher.name}}提交代码，开始编译",  "content": [[{"tag":"text","text":"提交内容${{ steps.git_message.outputs.message }}"}]]}}}}'
 
 
       # 构建 bisheng-langchain
