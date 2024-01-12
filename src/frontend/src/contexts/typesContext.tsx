@@ -5,6 +5,7 @@ import { APIKindType } from "../types/api";
 import { typesContextType } from "../types/typesContext";
 
 //context to share types adn functions from nodes to flow
+// 技能组件模板
 
 const initialValue: typesContextType = {
   reactFlowInstance: null,
@@ -40,11 +41,11 @@ export function TypesProvider({ children }: { children: ReactNode }) {
         const result = await getAll();
         // Make sure to only update the state if the component is still mounted.
         if (isMounted) {
-          setData(result.data);
+          setData(result);
           setTemplates(
-            Object.keys(result.data).reduce((acc, curr) => {
-              Object.keys(result.data[curr]).forEach((c: keyof APIKindType) => {
-                acc[c] = result.data[curr][c];
+            Object.keys(result).reduce((acc, curr) => {
+              Object.keys(result[curr]).forEach((c: keyof APIKindType) => {
+                acc[c] = result[curr][c];
               });
               return acc;
             }, {})
@@ -52,14 +53,14 @@ export function TypesProvider({ children }: { children: ReactNode }) {
           // Set the types by reducing over the keys of the result data and updating the accumulator.
           setTypes(
             // Reverse the keys so the tool world does not overlap
-            Object.keys(result.data)
+            Object.keys(result)
               .reverse()
               .reduce((acc, curr) => {
-                Object.keys(result.data[curr]).forEach(
+                Object.keys(result[curr]).forEach(
                   (c: keyof APIKindType) => {
                     acc[c] = curr;
                     // Add the base classes to the accumulator as well.
-                    result.data[curr][c].base_classes?.forEach((b) => {
+                    result[curr][c].base_classes?.forEach((b) => {
                       acc[b] = curr;
                     });
                   }
@@ -109,6 +110,7 @@ export function TypesProvider({ children }: { children: ReactNode }) {
         .filter((ns) => ns.source !== idx && ns.target !== idx)
     );
   }
+
   return (
     <typesContext.Provider
       value={{

@@ -12,6 +12,7 @@ import {
 import { userContext } from "../../../contexts/userContext";
 import { disableUserApi, getUsersApi } from "../../../controllers/API/user";
 import UserRoleModal from "./UserRoleModal";
+import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 
 export default function Users(params) {
     const [users, setUsers] = useState([])
@@ -27,7 +28,7 @@ export default function Users(params) {
         const pageSize = 20
         setPage(_page)
         getUsersApi('', _page, pageSize).then(res => {
-            const { data, total } = res.data
+            const { data, total } = res
             pages.current = Math.ceil(total / pageSize)
             setPageEnd(data.length < pageSize)
             setUsers(data)
@@ -41,16 +42,16 @@ export default function Users(params) {
     // 禁用
     const { delShow, idRef, close, delConfim } = useDelete()
     const handleDelete = () => {
-        disableUserApi(idRef.current.user_id, 1).then(res => {
+        captureAndAlertRequestErrorHoc(disableUserApi(idRef.current.user_id, 1).then(res => {
             loadPage(page)
             close()
-        })
+        }))
     }
     const handleEnableUser = (user) => {
-        disableUserApi(user.user_id, 0).then(res => {
+        captureAndAlertRequestErrorHoc(disableUserApi(user.user_id, 0).then(res => {
             loadPage(page)
             close()
-        })
+        }))
     }
 
     // 编辑

@@ -1,13 +1,13 @@
-import _ from 'lodash';
+import cloneDeep from 'lodash-es/cloneDeep';
 import { ArrowDownUp, Plus, X } from "lucide-react";
 import { useContext, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
+import { alertContext } from '../../contexts/alertContext';
 import { generateUUID } from '../../utils';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { alertContext } from '../../contexts/alertContext';
 
 export default function VarDialog({ data, onSave, onClose }) {
 
@@ -118,7 +118,7 @@ export default function VarDialog({ data, onSave, onClose }) {
                                                         <Input value={option.value} className={errors[index] && 'border-red-400'} onChange={(e) => handleChangeOptionValue(e.target.value, index)} />
                                                         <button onClick={() => {
                                                             setItem((old) => {
-                                                                let newItem = _.cloneDeep(old);
+                                                                let newItem = cloneDeep(old);
                                                                 newItem.options.splice(index, 1);
                                                                 return newItem;
                                                             });

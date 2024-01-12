@@ -1,7 +1,7 @@
 // 嵌iframe、适配移动端
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
-import { getFlowFromDatabase } from "../../controllers/API";
+import { getFlowApi } from "../../controllers/API/flow";
 import { FlowType } from "../../types/flow";
 import { generateUUID } from "../../utils";
 import ChatPanne from "./components/ChatPanne";
@@ -15,14 +15,10 @@ export default function chatShare() {
     const [flow, setFlow] = useState<FlowType>(null)
     const [chatId, setChatId] = useState<string>('')
     useEffect(() => {
-        flowId && getFlowFromDatabase(flowId).then(node => {
-            setFlow(null)
+        flowId && getFlowApi(flowId).then(node => {
             // 会话ID
-            // 预留 websoket 重连时间
-            node && setTimeout(() => {
-                setFlow(node)
-                setChatId(generateUUID(32))
-            }, 200);
+            setFlow(node)
+            setChatId(generateUUID(32))
         })
     }, [flowId])
 

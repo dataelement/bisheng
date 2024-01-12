@@ -31,8 +31,8 @@ export default function PromptAreaComponent({
     setMyValue(value);
     if (value !== "" && !editNode) {
       postValidatePrompt(field_name, value, nodeClass).then((apiReturn) => {
-        if (apiReturn.data) {
-          setNodeClass(apiReturn.data.frontend_node);
+        if (apiReturn) {
+          setNodeClass(apiReturn.frontend_node);
           // need to update reactFlowInstance to re-render the nodes.
         }
       });

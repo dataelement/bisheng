@@ -47,3 +47,7 @@ To learn React, check out the [React documentation](https://reactjs.org/).
 
 
 onlyoffice & LibreOffice Online
+
+2.2 改动记录
+lodash 替换为 lodash-es
+技能列表数据拆分

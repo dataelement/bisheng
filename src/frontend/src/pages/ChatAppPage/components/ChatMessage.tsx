@@ -44,7 +44,7 @@ const enum SourceType {
 
 export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageType, userName: string, onSource: () => void }) => {
     // const { user } = useContext(userContext);
-    console.log('chat :>> ', chat);
+    // console.log('chat :>> ', chat);
 
     const textRef = useRef(null)
     const { t } = useTranslation()

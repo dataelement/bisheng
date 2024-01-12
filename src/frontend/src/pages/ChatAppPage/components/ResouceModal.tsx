@@ -16,9 +16,9 @@ const Anwser = ({ id, msg, onInit, onAdd }) => {
         onInit([])
         msg && splitWordApi(msg, id).then((res) => {
             // 匹配
-            const reg = new RegExp(`(${res.data.join('|')})`, 'g')
+            const reg = new RegExp(`(${res.join('|')})`, 'g')
             setHtml(msg.replace(reg, '<span>$1</span>'))
-            onInit(res.data)
+            onInit(res)
         })
     }, [])
 

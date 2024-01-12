@@ -3,11 +3,13 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
 import { TabsContext } from "../../contexts/tabsContext";
-import { deleteChatApi, getChatsApi, getFlowFromDatabase, readOnlineFlows } from "../../controllers/API";
+import { deleteChatApi, getChatsApi } from "../../controllers/API";
+import { getFlowApi, readOnlineFlows } from "../../controllers/API/flow";
 import { FlowType } from "../../types/flow";
 import { generateUUID } from "../../utils";
 import SkillTemps from "../SkillPage/components/SkillTemps";
 import ChatPanne from "./components/ChatPanne";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
 export default function SkillChatPage() {
     const [open, setOpen] = useState(false)
@@ -15,11 +17,11 @@ export default function SkillChatPage() {
 
     const { t } = useTranslation()
 
-    const { flows } = useContext(TabsContext);
+    const { flow: initFlow } = useContext(TabsContext);
     const [flow, setFlow] = useState<FlowType>(null)
     const [onlineFlows, setOnlineFlows] = useState([])
     useEffect(() => {
-        readOnlineFlows().then(res => setOnlineFlows(res))
+        readOnlineFlows().then(setOnlineFlows)
     }, [])
     // 对话列表
     const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat } = useChatList()
@@ -27,7 +29,6 @@ export default function SkillChatPage() {
 
     // select flow
     const handlerSelectFlow = async (node: FlowType) => {
-        setFlow(null)
         // 会话ID
         chatIdRef.current = generateUUID(32)
         setOpen(false)
@@ -41,21 +42,18 @@ export default function SkillChatPage() {
             "update_time": "-"
         })
 
-        // 预留 websoket 重连时间
-        setTimeout(() => {
-            setFlow(node)
-            setChatId(chatIdRef.current)
-            setFace(false)
-        }, 200);
+        const flow = await getFlowApi(node.id)
+        setFlow(flow)
+        setChatId(chatIdRef.current)
+        setFace(false)
     }
 
     // select chat
     const handleSelectChat = async (chat) => {
         if (chat.chat_id === chatId) return
-        setFlow(null)
 
         chatIdRef.current = chat.chat_id
-        let flow = flows.find(flow => flow.id === chat.flow_id) || await getFlowFromDatabase(chat.flow_id)
+        const flow = initFlow?.id === chat.flow_id ? initFlow : await getFlowApi(chat.flow_id)
 
         // if (!flow) {
         //     setInputState({ lock: true, errorCode: '1004' })
@@ -63,12 +61,9 @@ export default function SkillChatPage() {
         //     return setFace(false)
         // }
 
-        // 预留 websoket 重连时间
-        flow && setTimeout(() => {
-            setFlow(flow)
-            setChatId(chat.chat_id)
-            setFace(false)
-        }, 200);
+        setFlow(flow)
+        setChatId(chat.chat_id)
+        setFace(false)
     }
 
 
@@ -119,7 +114,7 @@ export default function SkillChatPage() {
             title={t('chat.skillTempsTitle')}
             desc={t('chat.skillTempsDesc')}
             open={open} setOpen={setOpen}
-            onSelect={(e) => handlerSelectFlow(e)}></SkillTemps>
+            onSelect={handlerSelectFlow}></SkillTemps>
     </div>
 };
 /**
@@ -150,8 +145,9 @@ const useChatList = () => {
         },
         deleteChat: (id: string) => {
             // api
-            deleteChatApi(id)
-            setChatList(oldList => oldList.filter(item => item.chat_id !== id))
+            captureAndAlertRequestErrorHoc(deleteChatApi(id).then(res => {
+                setChatList(oldList => oldList.filter(item => item.chat_id !== id))
+            }))
         }
     }
 }

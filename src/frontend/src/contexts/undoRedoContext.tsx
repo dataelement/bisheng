@@ -1,4 +1,4 @@
-import { cloneDeep } from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
 import {
   createContext,
   useCallback,
@@ -47,59 +47,52 @@ const defaultOptions: UseUndoRedoOptions = {
 export const undoRedoContext = createContext<undoRedoContextType>(initialValue);
 
 export function UndoRedoProvider({ children }) {
-  const { tabId, flows } = useContext(TabsContext);
+  const { flow } = useContext(TabsContext);
 
-  const [past, setPast] = useState<HistoryItem[][]>(flows.map(() => []));
-  const [future, setFuture] = useState<HistoryItem[][]>(flows.map(() => []));
-  const [tabIndex, setTabIndex] = useState(
-    flows.findIndex((f) => f.id === tabId)
-  );
+  const [past, setPast] = useState<HistoryItem[]>([]);
+  const [future, setFuture] = useState<HistoryItem[]>([]);
 
   useEffect(() => {
     // whenever the flows variable changes, we need to add one array to the past and future states
-    setPast((old) => flows.map((f, i) => (old[i] ? old[i] : [])));
-    setFuture((old) => flows.map((f, i) => (old[i] ? old[i] : [])));
-    setTabIndex(flows.findIndex((f) => f.id === tabId));
-  }, [flows, tabId]);
+    setPast([]);
+    setFuture([]);
+  }, [flow?.id]);
 
+  // 通过getNodes, getEdges读取状态写入队列，通过setNodes, setEdges还原
   const { setNodes, setEdges, getNodes, getEdges } = useReactFlow();
 
   const takeSnapshot = useCallback(() => {
     // push the current graph to the past state
     setPast((old) => {
       let newPast = cloneDeep(old);
-      newPast[tabIndex] = old[tabIndex].slice(
-        old[tabIndex].length - defaultOptions.maxHistorySize + 1,
-        old[tabIndex].length
+      newPast = old.slice(
+        old.length - defaultOptions.maxHistorySize + 1,
+        old.length
       );
-      newPast[tabIndex].push({ nodes: getNodes(), edges: getEdges() });
+      newPast.push({ nodes: getNodes(), edges: getEdges() });
       return newPast;
     });
 
     // whenever we take a new snapshot, the redo operations need to be cleared to avoid state mismatches
-    setFuture((old) => {
-      let newFuture = cloneDeep(old);
-      newFuture[tabIndex] = [];
-      return newFuture;
-    });
-  }, [getNodes, getEdges, past, future, flows, tabId, setPast, setFuture]);
+    setFuture([]);
+  }, [getNodes, getEdges, past, future, flow, setPast, setFuture]);
 
   const undo = useCallback(() => {
     // get the last state that we want to go back to
-    const pastState = past[tabIndex][past[tabIndex].length - 1];
+    const pastState = past[past.length - 1];
 
     if (pastState) {
       // first we remove the state from the history
       setPast((old) => {
         let newPast = cloneDeep(old);
-        newPast[tabIndex] = old[tabIndex].slice(0, old[tabIndex].length - 1);
+        newPast = old.slice(0, old.length - 1);
         return newPast;
       });
       // we store the current graph for the redo operation
       setFuture((old) => {
         let newFuture = cloneDeep(old);
-        newFuture[tabIndex] = old[tabIndex];
-        newFuture[tabIndex].push({ nodes: getNodes(), edges: getEdges() });
+        newFuture = old;
+        newFuture.push({ nodes: getNodes(), edges: getEdges() });
         return newFuture;
       });
       // now we can set the graph to the past state
@@ -114,23 +107,21 @@ export function UndoRedoProvider({ children }) {
     future,
     past,
     setFuture,
-    setPast,
-    tabIndex,
+    setPast
   ]);
 
   const redo = useCallback(() => {
-    const futureState = future[tabIndex][future[tabIndex].length - 1];
+    const futureState = future[future.length - 1];
 
     if (futureState) {
       setFuture((old) => {
         let newFuture = cloneDeep(old);
-        newFuture[tabIndex] = old[tabIndex].slice(0, old[tabIndex].length - 1);
+        newFuture = old.slice(0, old.length - 1);
         return newFuture;
       });
       setPast((old) => {
         let newPast = cloneDeep(old);
-        newPast[tabIndex] = old[tabIndex];
-        newPast[tabIndex].push({ nodes: getNodes(), edges: getEdges() });
+        newPast.push({ nodes: getNodes(), edges: getEdges() });
         return newPast;
       });
       setNodes(futureState.nodes);
@@ -145,8 +136,7 @@ export function UndoRedoProvider({ children }) {
     setEdges,
     getNodes,
     getEdges,
-    future,
-    tabIndex,
+    future
   ]);
 
   useEffect(() => {

@@ -57,7 +57,7 @@ export default function ParameterComponent({
   const updateNodeInternals = useUpdateNodeInternals();
   const [position, setPosition] = useState(0);
   const { closePopUp } = useContext(PopUpContext);
-  const { setTabsState, tabId, save } = useContext(TabsContext);
+  const { setTabsState, flow } = useContext(TabsContext);
 
   useEffect(() => {
     if (ref.current && ref.current.offsetTop && ref.current.clientHeight) {
@@ -105,13 +105,13 @@ export default function ParameterComponent({
     setTabsState((prev) => {
       return {
         ...prev,
-        [tabId]: {
-          ...prev[tabId],
+        [flow.id]: {
+          ...prev[flow.id],
           isPending: true,
         },
       };
     });
-  }, [data, tabId]);
+  }, [data, flow.id]);
 
   // 临时处理知识库保存方法, 类似方法多了需要抽象
   const handleOnNewLibValue = (newValue: string, collectionId: number | '') => {
@@ -121,8 +121,8 @@ export default function ParameterComponent({
     setTabsState((prev) => {
       return {
         ...prev,
-        [tabId]: {
-          ...prev[tabId],
+        [flow.id]: {
+          ...prev[flow.id],
           isPending: true,
         },
       };
@@ -304,7 +304,6 @@ export default function ParameterComponent({
               // 单行输入
               <InputComponent
                 disabled={disabled}
-                disableCopyPaste={true}
                 password={data.node.template[name].password ?? false}
                 value={data.node.template[name].value ?? ""}
                 onChange={handleOnNewValue}
@@ -327,7 +326,6 @@ export default function ParameterComponent({
           <div className="mt-2 w-full">
             <FloatComponent
               disabled={disabled}
-              disableCopyPaste={true}
               value={data.node.template[name].value ?? ""}
               onChange={handleOnNewValue}
             />
@@ -365,7 +363,7 @@ export default function ParameterComponent({
               suffixes={data.node.template[name].suffixes}
               onFileChange={(t: string) => {
                 data.node.template[name].file_path = t;
-                save();
+                // save();
               }}
             ></InputFileComponent>
           </div>
@@ -373,7 +371,6 @@ export default function ParameterComponent({
           <div className="mt-2 w-full">
             <IntComponent
               disabled={disabled}
-              disableCopyPaste={true}
               value={data.node.template[name].value ?? ""}
               onChange={handleOnNewValue}
             />

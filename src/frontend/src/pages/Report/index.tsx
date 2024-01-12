@@ -74,8 +74,7 @@ const useReport = () => {
     const { id } = useParams()
     useEffect(() => {
         setLoading(true);
-        getReportFormApi(id).then(res => {
-            const { version_key, temp_url } = res.data
+        getReportFormApi(id).then(({ version_key, temp_url }) => {
             setLoading(false);
             setDocx({
                 key: version_key,

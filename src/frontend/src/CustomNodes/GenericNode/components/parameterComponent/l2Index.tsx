@@ -28,15 +28,15 @@ export default function L2ParameterComponent({
 
     const [errorDuplicateKey, setErrorDuplicateKey] = useState(false);
 
-    const { setTabsState, tabId, save } = useContext(TabsContext);
+    const { setTabsState, flow } = useContext(TabsContext);
     const handleOnNewValue = (newValue: any) => {
         data.node.template[name].value = ['float', 'int'].includes(type) ? Number(newValue) : newValue;
         // Set state to pending
         setTabsState((prev) => {
             return {
                 ...prev,
-                [tabId]: {
-                    ...prev[tabId],
+                [flow.id]: {
+                    ...prev[flow.id],
                     isPending: true,
                 },
             };
@@ -51,8 +51,8 @@ export default function L2ParameterComponent({
         setTabsState((prev) => {
             return {
                 ...prev,
-                [tabId]: {
-                    ...prev[tabId],
+                [flow.id]: {
+                    ...prev[flow.id],
                     isPending: true,
                 },
             };
@@ -95,7 +95,6 @@ export default function L2ParameterComponent({
                 ) : (
                     <InputComponent
                         disabled={disabled}
-                        disableCopyPaste={true}
                         password={data.node.template[name].password ?? false}
                         value={data.node.template[name].value ?? ""}
                         onChange={handleOnNewValue}
@@ -117,7 +116,6 @@ export default function L2ParameterComponent({
             <div className="mt-2 w-full">
                 <FloatComponent
                     disabled={disabled}
-                    disableCopyPaste={true}
                     value={data.node.template[name].value ?? ""}
                     onChange={handleOnNewValue}
                 />
@@ -153,7 +151,6 @@ export default function L2ParameterComponent({
                     suffixes={data.node.template[name].suffixes}
                     onFileChange={(t: string) => {
                         data.node.template[name].file_path = t;
-                        save();
                     }}
                 ></InputFileComponent>
             </div>
@@ -161,7 +158,6 @@ export default function L2ParameterComponent({
             <div className="mt-2 w-full">
                 <IntComponent
                     disabled={disabled}
-                    disableCopyPaste={true}
                     value={data.node.template[name].value ?? ""}
                     onChange={handleOnNewValue}
                 />

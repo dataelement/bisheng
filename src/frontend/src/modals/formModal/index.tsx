@@ -9,7 +9,7 @@ import { classNames, validateNodes } from "../../utils";
 import ChatInput from "./chatInput";
 import ChatMessage from "./chatMessage";
 
-import _ from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
 import ToggleShadComponent from "../../components/toggleShadComponent";
 import {
   Accordion,
@@ -105,7 +105,7 @@ export default function FormModal({
     files?: Array<any>
   ) => {
     setChatHistory((old) => {
-      let newChat = _.cloneDeep(old);
+      let newChat = cloneDeep(old);
       if (files) {
         newChat.push({ message, isSend, files, thought, chatKey });
       } else if (thought) {
@@ -344,7 +344,7 @@ export default function FormModal({
 
   // 消息滚动
   useEffect(() => {
-    if (ref.current) ref.current.scrollIntoView({ behavior: "smooth" });
+    // if (ref.current) ref.current.scrollIntoView({ behavior: "smooth" }); // iframe会影响父级滚动
   }, [chatHistory]);
 
   const ref = useRef(null);
@@ -381,7 +381,7 @@ export default function FormModal({
       });
       setTabsState((old) => {
         if (!chatKey) return old;
-        let newTabsState = _.cloneDeep(old);
+        let newTabsState = cloneDeep(old);
         // newTabsState[id.current].formKeysData.input_keys[chatKey] = "";
         return newTabsState;
       });
@@ -499,7 +499,7 @@ export default function FormModal({
                               }
                               onChange={(e) => {
                                 setTabsState((old) => {
-                                  let newTabsState = _.cloneDeep(old);
+                                  let newTabsState = cloneDeep(old);
                                   const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type) || {}
                                   input[i] = e.target.value;
                                   return newTabsState;
@@ -584,7 +584,7 @@ export default function FormModal({
                       setChatValue={(value) => {
                         setChatValue(value);
                         setTabsState((old) => {
-                          let newTabsState = _.cloneDeep(old);
+                          let newTabsState = cloneDeep(old);
                           const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type) || {}
                           input[chatKey] = value;
                           return newTabsState;

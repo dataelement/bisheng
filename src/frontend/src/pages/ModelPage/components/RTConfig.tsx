@@ -13,6 +13,7 @@ import {
 import { addServiceApi, deleteServiceApi, getServicesApi } from "../../../controllers/API";
 import { useCopyText } from "../../../util/hook";
 import { useTranslation } from "react-i18next";
+import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 
 export default function RTConfig({ open, onChange }) {
 
@@ -91,28 +92,29 @@ const useRTService = (onChange) => {
     }, [])
 
     const loadData = async () => {
-        const { data } = await getServicesApi()
-        setServices(data.data.map(el => ({
+        const res = await getServicesApi()
+        setServices(res.map(el => ({
             id: el.id,
             name: el.server,
             url: el.endpoint
         })))
     }
 
-    const addItem = async (name, url) => {
-        const { data } = await addServiceApi(name, url)
-
-        setServices([...services, {
-            id: data.id,
-            name,
-            url
-        }])
-        setShowAdd(false)
+    const addItem = (name, url) => {
+        captureAndAlertRequestErrorHoc(addServiceApi(name, url).then(data => {
+            setServices([...services, {
+                id: data.id,
+                name,
+                url
+            }])
+            setShowAdd(false)
+        }))
     }
 
-    const handleDel = async (id) => {
-        const res = await deleteServiceApi(id)
-        setServices(services.filter(el => el.id !== id))
+    const handleDel = (id) => {
+        captureAndAlertRequestErrorHoc(deleteServiceApi(id).then(res =>
+            setServices(services.filter(el => el.id !== id))
+        ))
     }
 
     const create = () => {

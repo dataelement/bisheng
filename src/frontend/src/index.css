@@ -161,6 +161,9 @@ The cursor: default; property value restores the browser's default cursor style 
       -ms-overflow-style: none;  /* IE and Edge */
       scrollbar-width: none;  /* Firefox */
   }
+  .template-scrollbar {
+    @apply overflow-y-auto max-h-[51vh] no-scrollbar
+  }
   .round-buttons-position {
     @apply fixed right-4
   }

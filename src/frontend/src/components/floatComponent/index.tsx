@@ -1,17 +1,14 @@
 import { useContext, useEffect, useState } from "react";
 import { PopUpContext } from "../../contexts/popUpContext";
-import { TabsContext } from "../../contexts/tabsContext";
 import { FloatComponentType } from "../../types/components";
 
 export default function FloatComponent({
   value,
   onChange,
-  disableCopyPaste = false,
   disabled,
   editNode = false,
 }: FloatComponentType) {
   const [myValue, setMyValue] = useState(value ?? "");
-  const { setDisableCopyPaste } = useContext(TabsContext);
   const { closePopUp } = useContext(PopUpContext);
 
   const step = 0.1;
@@ -32,12 +29,6 @@ export default function FloatComponent({
   return (
     <div className={"w-full " + (disabled ? "float-component-pointer" : "")}>
       <input
-        onFocus={() => {
-          if (disableCopyPaste) setDisableCopyPaste(true);
-        }}
-        onBlur={() => {
-          if (disableCopyPaste) setDisableCopyPaste(false);
-        }}
         type="number"
         step={step}
         min={min}

@@ -1,6 +1,6 @@
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
 import { getUserInfo } from "../controllers/API/user";
-import { User } from "../types/app";
+import { User } from "../types/api/user";
 
 type userContextType = {
     user: any; // {} loading null login
@@ -29,7 +29,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
 
         getUserInfo().then(res => {
-            setUser(res.data.user_id ? res.data : null)
+            setUser(res.user_id ? res : null)
+            localStorage.setItem('UUR_INFO', res.user_id ? String(res.user_id) : '')
         }).catch(e => {
             setUser(null)
         })

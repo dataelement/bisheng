@@ -1,5 +1,5 @@
 import { Download } from "lucide-react";
-import { useContext, useRef, useState } from "react";
+import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import EditFlowSettings from "../../components/EditFlowSettingsComponent";
 import { Button } from "../../components/ui/button";
@@ -21,15 +21,12 @@ import { removeApiKeys } from "../../utils";
 export default function ExportModal() {
   const { t } = useTranslation()
 
-  const [open, setOpen] = useState(true);
   const { closePopUp } = useContext(PopUpContext);
 
   const { setErrorData } = useContext(alertContext);
-  const { flows, tabId, updateFlow, downloadFlow } =
-    useContext(TabsContext);
+  const { flow, downloadFlow } = useContext(TabsContext);
 
   function setModalOpen(x: boolean) {
-    setOpen(x);
     if (x === false) {
       setTimeout(() => {
         closePopUp();
@@ -37,10 +34,8 @@ export default function ExportModal() {
     }
   }
   const [checked, setChecked] = useState(false);
-  const [name, setName] = useState(flows.find((f) => f.id === tabId).name);
-  const [description, setDescription] = useState(
-    flows.find((f) => f.id === tabId).description
-  );
+  const [name, setName] = useState(flow.name);
+  const [description, setDescription] = useState(flow.description);
 
   const handleClose = () => {
     if (name === '') return setErrorData({
@@ -51,13 +46,13 @@ export default function ExportModal() {
     });
     if (checked)
       downloadFlow(
-        flows.find((f) => f.id === tabId),
+        flow,
         name,
         description
       );
     else
       downloadFlow(
-        removeApiKeys(flows.find((f) => f.id === tabId)),
+        removeApiKeys(flow),
         name,
         description
       );
@@ -83,11 +78,8 @@ export default function ExportModal() {
         <EditFlowSettings
           name={name}
           description={description}
-          flows={flows}
-          tabId={tabId}
           setName={setName}
           setDescription={setDescription}
-          updateFlow={updateFlow}
         />
         <div className="flex items-center space-x-2">
           <Checkbox

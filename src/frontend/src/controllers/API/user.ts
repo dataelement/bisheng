@@ -1,19 +1,8 @@
-import axios, { AxiosResponse } from "axios";
+import { ROLE, User } from "../../types/api/user";
+import axios from "../request";
 
-axios.interceptors.response.use(function (response) {
-    return response;
-}, function (error) {
-    if (error.response.status === 401) {
-        // cookie expires
-        console.error('登录过期 :>> ');
-        const isLogin = localStorage.getItem('isLogin')
-        localStorage.removeItem('isLogin')
-        isLogin && location.reload()
-    }
-    return Promise.reject(error);
-})
 // 校验登录
-export async function getUserInfo() {
+export async function getUserInfo(): Promise<User> {
     return await axios.get(`/api/v1/user/info`);
 }
 // 退出登录
@@ -29,7 +18,7 @@ export async function registerApi(name, pwd) {
     return await axios.post(`/api/v1/user/regist`, { user_name: name, password: pwd });
 }
 // 用户列表
-export async function getUsersApi(name: string, page: number, pageSize: number) {
+export async function getUsersApi(name: string, page: number, pageSize: number): Promise<{ data: User[], total: number }> {
     return await axios.get(`/api/v1/user/list?page_num=${page}&page_size=${pageSize}&name=${name || ''}`)
 }
 // 修改用户状态（启\禁用）
@@ -37,13 +26,13 @@ export async function disableUserApi(userid, status) {
     return await axios.post(`/api/v1/user/update`, { user_id: userid, delete: status });
 }
 // 角色列表
-export async function getRolesApi() {
+export async function getRolesApi(): Promise<{ data: ROLE[] }> {
     return await axios.get(`/api/v1/role/list`)
 }
 /**
  * 获取配置
  */
-export async function getSysConfigApi() {
+export async function getSysConfigApi(): Promise<string> {
     return await axios.get(`/api/v1/config`);
 }
 /**
@@ -55,13 +44,13 @@ export async function setSysConfigApi(data) {
 /**
  * 根据角色获取技能列表
  */
-export async function getRoleSkillsApi(params) {
+export async function getRoleSkillsApi(params): Promise<{ data: any[], total: number }> {
     return await axios.get(`/api/v1/role_access/flow`, { params });
 }
 /**
  * 根据角色获取知识库列表
  */
-export async function getRoleLibsApi(params) {
+export async function getRoleLibsApi(params): Promise<{ data: any[], total: number }> {
     return await axios.get(`/api/v1/role_access/knowledge`, { params });
 }
 /**
@@ -88,7 +77,7 @@ export async function updateRolePermissionsApi(data: { role_id: number, access_i
 /**
  * 获取角色下的权限
  */
-export async function getRolePermissionsApi(roleId) {
+export async function getRolePermissionsApi(roleId): Promise<{ data: any[], total: number }> {
     const params = { role_id: roleId, page_size: 200, page_num: 1 }
     return axios.get(`/api/v1/role_access/list`, { params })
     // return Promise.all([
@@ -118,7 +107,7 @@ export async function delRoleApi(roleId) {
 /**
  * 获取用户的角色信息
  */
-export async function getUserRoles(userId) {
+export async function getUserRoles(userId): Promise<ROLE[]> {
     return axios.get(`/api/v1/user/role?user_id=${userId}`)
 }
 

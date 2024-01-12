@@ -1,13 +1,13 @@
 import { uploadLibFile } from "../../controllers/API";
 
 // Function to upload the file with progress tracking
-export const uploadFileWithProgress = async (file, callback) => {
+export const uploadFileWithProgress = async (file, callback): Promise<any> => {
   try {
     const formData = new FormData();
     formData.append('file', file);
 
     const config = {
-      headers: {'Content-Type': 'multipart/form-data;charset=utf-8'},
+      headers: { 'Content-Type': 'multipart/form-data;charset=utf-8' },
       onUploadProgress: (progressEvent) => {
         const { loaded, total } = progressEvent;
         const progress = Math.round((loaded * 100) / total);
@@ -18,14 +18,14 @@ export const uploadFileWithProgress = async (file, callback) => {
     };
 
     // Convert the FormData to binary using the FileReader API
-    const response = await uploadLibFile(formData, config);
+    const data = await uploadLibFile(formData, config);
 
-    console.log('Upload complete:', response.data);
-    return response.data
+    console.log('Upload complete:', data);
+    return data
     // Handle the response data as needed
   } catch (error) {
     console.error('Error uploading file:', error);
-    return error.response.statusText || 'Upload error'
+    return ''
     // Handle errors
   }
 };

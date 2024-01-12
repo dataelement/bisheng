@@ -1,4 +1,5 @@
-import _ from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
+import isEqual from "lodash-es/isEqual";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { unstable_useBlocker as useBlocker } from "react-router-dom";
@@ -23,103 +24,45 @@ import ReactFlow, {
 import GenericNode from "../../../../CustomNodes/GenericNode";
 import Chat from "../../../../components/chatComponent";
 import { Button } from "../../../../components/ui/button";
-import { alertContext } from "../../../../contexts/alertContext";
-import { locationContext } from "../../../../contexts/locationContext";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
 import { undoRedoContext } from "../../../../contexts/undoRedoContext";
 import { APIClassType } from "../../../../types/api";
 import { FlowType, NodeType } from "../../../../types/flow";
+import { intersectArrays } from "../../../../util/utils";
 import { isValidConnection } from "../../../../utils";
 import ConnectionLineComponent from "../ConnectionLineComponent";
 import ExtraSidebar from "../extraSidebarComponent";
-import { intersectArrays } from "../../../../util/utils";
 
 const nodeTypes = {
   genericNode: GenericNode,
 };
 
 export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: string }) {
+
+  let {
+    setTabsState,
+    saveFlow,
+    uploadFlow,
+    getNodeId,
+  } = useContext(TabsContext);
+
+  const reactFlowWrapper = useRef(null);
+  const { data, types, reactFlowInstance, setReactFlowInstance, templates } = useContext(typesContext);
   useEffect(() => {
     return () => {
       setReactFlowInstance(null) // 销毁reactflow实例
     }
   }, [])
 
-  let {
-    tabId,
-    disableCopyPaste,
-    lastCopiedSelection,
-    saveFlow,
-    uploadFlow,
-    getNodeId,
-    paste,
-    setLastCopiedSelection,
-    setTabsState,
-  } = useContext(TabsContext);
-
-  const { types, reactFlowInstance, setReactFlowInstance, templates } = useContext(typesContext);
-  const reactFlowWrapper = useRef(null);
-
+  // 记录快照
   const { takeSnapshot } = useContext(undoRedoContext);
-
-  const position = useRef({ x: 0, y: 0 });
-  const [lastSelection, setLastSelection] =
-    useState<OnSelectionChangeParams>(null);
-
   // 快捷键
-  useEffect(() => {
-    // this effect is used to attach the global event handlers
+  const setLastSelection = useKeyBoard(reactFlowWrapper)
+  const onSelectionChange = useCallback((flow) => {
+    setLastSelection(flow);
+  }, []);
 
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        event.key === "c" &&
-        lastSelection &&
-        !disableCopyPaste
-      ) {
-        event.preventDefault();
-        setLastCopiedSelection(_.cloneDeep(lastSelection));
-      }
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        event.key === "v" &&
-        lastCopiedSelection &&
-        !disableCopyPaste
-      ) {
-        event.preventDefault();
-        let bounds = reactFlowWrapper.current.getBoundingClientRect();
-        paste(lastCopiedSelection, {
-          x: position.current.x - bounds.left,
-          y: position.current.y - bounds.top,
-        });
-      }
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        event.key === "g" &&
-        lastSelection
-      ) {
-        event.preventDefault();
-        // addFlow(newFlow, false);
-      }
-    };
-    const handleMouseMove = (event) => {
-      position.current = { x: event.clientX, y: event.clientY };
-    };
-
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("mousemove", handleMouseMove);
-
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("mousemove", handleMouseMove);
-    };
-  }, [position, lastCopiedSelection, lastSelection]);
-
-  // const [selectionMenuVisible, setSelectionMenuVisible] = useState(false);
-
-  const { setExtraComponent, setExtraNavigation } = useContext(locationContext);
-  const { setErrorData } = useContext(alertContext);
   const [nodes, setNodes, onNodesChange] = useNodesState(
     flow.data?.nodes ?? []
   );
@@ -127,11 +70,10 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     flow.data?.edges ?? []
   );
   const { setViewport } = useReactFlow();
-  const edgeUpdateSuccessful = useRef(true);
   useEffect(() => {
     if (reactFlowInstance && flow) {
+      // 节点变化update flow
       flow.data = reactFlowInstance.toObject();
-      // updateFlow(flow);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, edges]);
@@ -144,30 +86,25 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       reactFlowInstance.fitView();
     }
   }, [flow, reactFlowInstance, setEdges, setNodes, setViewport]);
-  //set extra sidebar
-  useEffect(() => {
-    setExtraComponent(<ExtraSidebar />);
-    setExtraNavigation({ title: "Components" });
-  }, [setExtraComponent, setExtraNavigation]);
 
   const onEdgesChangeMod = useCallback(
     (s: EdgeChange[]) => {
       onEdgesChange(s);
       setNodes((x) => {
-        let newX = _.cloneDeep(x);
+        let newX = cloneDeep(x);
         return newX;
       });
       setTabsState((prev) => {
         return {
           ...prev,
-          [tabId]: {
-            ...prev[tabId],
+          [flow.id]: {
+            ...prev[flow.id],
             isPending: true,
           },
         };
       });
     },
-    [onEdgesChange, setNodes, setTabsState, tabId]
+    [onEdgesChange, setNodes, setTabsState, flow.id]
   );
 
   const onNodesChangeMod = useCallback(
@@ -176,25 +113,20 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       setTabsState((prev) => {
         return {
           ...prev,
-          [tabId]: {
-            ...prev[tabId],
+          [flow.id]: {
+            ...prev[flow.id],
             isPending: true,
           },
         };
       });
     },
-    [onNodesChange, setTabsState, tabId]
+    [onNodesChange, setTabsState, flow.id]
   );
 
   const onConnect = useCallback(
     (params: Connection) => {
       takeSnapshot();
-      let hasInputNodeEdg = false
       setEdges((eds) => {
-        // const moreTarget = eds.find(el => el.source === params.source)
-        // hasInputNodeEdg = moreTarget && params.source.indexOf('InputFileNode') === 0
-        // 限制InputFileNode节点只有一个下游
-        // hasInputNodeEdg ? eds : 
         return addEdge(
           {
             ...params,
@@ -211,7 +143,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       });
 
       setNodes((x) => {
-        let newX = _.cloneDeep(x);
+        let newX = cloneDeep(x);
         // inputFileNode类型跟随下游组件决定上传文件类型
         const inputNodeId = params.source
         if (inputNodeId.split('-')[0] === 'InputFileNode') {
@@ -262,8 +194,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
         takeSnapshot();
 
         // Get the current bounds of the ReactFlow wrapper element
-        const reactflowBounds =
-          reactFlowWrapper.current.getBoundingClientRect();
+        const reactflowBounds = reactFlowWrapper.current.getBoundingClientRect();
 
         // Extract the data from the drag event and parse it as a JSON object
         let data: { type: string; node?: APIClassType } = JSON.parse(
@@ -288,11 +219,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
             id: newId,
             type: "genericNode",
             position,
-            data: {
-              ...data,
-              id: newId,
-              value: null,
-            },
+            data: { ...data, id: newId, value: null }
           };
         } else {
           // Create a new node object
@@ -300,19 +227,15 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
             id: newId,
             type: "genericNode",
             position,
-            data: {
-              ...data,
-              id: newId,
-              value: null,
-            },
+            data: { ...data, id: newId, value: null }
           };
-
           // Add the new node to the list of nodes in state
         }
         setNodes((nds) => nds.concat(newNode));
       } else if (event.dataTransfer.types.some((t) => t === "Files")) {
+        // 拖拽上传技能
         takeSnapshot();
-        uploadFlow(false, event.dataTransfer.files.item(0));
+        uploadFlow(event.dataTransfer.files.item(0));
       }
     },
     // Specify dependencies for useCallback
@@ -331,6 +254,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     [takeSnapshot, edges, setEdges]
   );
 
+  const edgeUpdateSuccessful = useRef(true);
   const onEdgeUpdateStart = useCallback(() => {
     edgeUpdateSuccessful.current = false;
   }, []);
@@ -353,55 +277,9 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     edgeUpdateSuccessful.current = true;
   }, []);
 
-  const [selectionEnded, setSelectionEnded] = useState(false);
-
-  const onSelectionEnd = useCallback(() => {
-    setSelectionEnded(true);
-  }, []);
-  const onSelectionStart = useCallback((event) => {
-    event.preventDefault();
-    setSelectionEnded(false);
-  }, []);
-
-  // Workaround to show the menu only after the selection has ended.
-  // useEffect(() => {
-  //   if (selectionEnded && lastSelection && lastSelection.nodes.length > 1) {
-  //     setSelectionMenuVisible(true);
-  //   } else {
-  //     setSelectionMenuVisible(false);
-  //   }
-  // }, [selectionEnded, lastSelection]);
-
-  const onSelectionChange = useCallback((flow) => {
-    setLastSelection(flow);
-  }, []);
-
-  const { setDisableCopyPaste } = useContext(TabsContext);
-
   const { t } = useTranslation()
+  const blocker = useBeforeUnload(flow, preFlow)
 
-  // 离开提示保存
-  useEffect(() => {
-    const fun = (e) => {
-      var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
-      (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
-      return confirmationMessage;
-    }
-    window.addEventListener('beforeunload', fun);
-    return () => { window.removeEventListener('beforeunload', fun) }
-  }, [])
-
-  const hasChange = useMemo(() => {
-    if (!flow.data) return false
-    const oldFlowData = JSON.parse(preFlow)
-    if (!oldFlowData) return true
-    // 比较新旧
-    const { edges, nodes } = flow.data
-    const { edges: oldEdges, nodes: oldNodes } = oldFlowData
-    return !(_.isEqual(edges, oldEdges) && _.isEqual(nodes, oldNodes))
-  }, [preFlow, flow.data])
-
-  const blocker = useBlocker(hasChange);
   // 离开并保存
   const handleSaveAndClose = async () => {
     await saveFlow(flow)
@@ -410,7 +288,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
 
   return (
     <div className="flex h-full overflow-hidden">
-      <ExtraSidebar flow={flow} />
+      {Object.keys(data).length ? <ExtraSidebar flow={flow} /> : <></>}
       {/* Main area */}
       <main className="flex flex-1">
         {/* Primary column */}
@@ -423,21 +301,8 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
                   onMove={() => {
                     if (reactFlowInstance)
                       flow = { ...flow, data: reactFlowInstance.toObject() }
-                    // updateFlow({
-                    //   ...flow,
-                    //   data: reactFlowInstance.toObject()
-                    // });
                   }}
                   edges={edges}
-                  onPaneClick={() => {
-                    setDisableCopyPaste(false);
-                  }}
-                  onPaneMouseLeave={() => {
-                    setDisableCopyPaste(true);
-                  }}
-                  onPaneMouseEnter={() => {
-                    setDisableCopyPaste(false);
-                  }}
                   onNodesChange={onNodesChangeMod}
                   onEdgesChange={onEdgesChangeMod}
                   onConnect={onConnect}
@@ -449,17 +314,12 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
                   onEdgeUpdateEnd={onEdgeUpdateEnd}
                   onNodeDragStart={onNodeDragStart}
                   onSelectionDragStart={onSelectionDragStart}
-                  onSelectionEnd={onSelectionEnd}
-                  onSelectionStart={onSelectionStart}
                   onEdgesDelete={onEdgesDelete}
                   connectionLineComponent={ConnectionLineComponent}
                   onDragOver={onDragOver}
                   onDrop={onDrop}
                   onNodesDelete={onDelete}
                   onSelectionChange={onSelectionChange}
-                  nodesDraggable={!disableCopyPaste}
-                  panOnDrag={!disableCopyPaste}
-                  zoomOnDoubleClick={!disableCopyPaste}
                   className="theme-attribution"
                   minZoom={0.01}
                   maxZoom={8}
@@ -494,4 +354,83 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       </dialog>
     </div>
   );
+}
+
+// 复制粘贴组件，支持跨技能粘贴
+const useKeyBoard = (reactFlowWrapper) => {
+  const position = useRef({ x: 0, y: 0 });
+  const [lastSelection, setLastSelection] =
+    useState<OnSelectionChangeParams>(null);
+  let {
+    lastCopiedSelection,
+    paste,
+    setLastCopiedSelection,
+  } = useContext(TabsContext);
+
+  useEffect(() => {
+    // this effect is used to attach the global event handlers
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key === "c" &&
+        lastSelection
+      ) {
+        event.preventDefault();
+        setLastCopiedSelection(cloneDeep(lastSelection));
+      }
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key === "v" &&
+        lastCopiedSelection
+      ) {
+        event.preventDefault();
+        let bounds = reactFlowWrapper.current.getBoundingClientRect();
+        paste(lastCopiedSelection, {
+          x: position.current.x - bounds.left,
+          y: position.current.y - bounds.top,
+        });
+      }
+    };
+    const handleMouseMove = (event) => {
+      position.current = { x: event.clientX, y: event.clientY };
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousemove", handleMouseMove);
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousemove", handleMouseMove);
+    };
+  }, [position, lastCopiedSelection, lastSelection]);
+
+  return setLastSelection
+}
+
+// 离开页面保存提示
+const useBeforeUnload = (flow, preFlow) => {
+  const { t } = useTranslation()
+
+  // 离开提示保存
+  useEffect(() => {
+    const fun = (e) => {
+      var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
+      (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
+      return confirmationMessage;
+    }
+    window.addEventListener('beforeunload', fun);
+    return () => { window.removeEventListener('beforeunload', fun) }
+  }, [])
+
+  const hasChange = useMemo(() => {
+    if (!flow.data) return false
+    const oldFlowData = JSON.parse(preFlow)
+    if (!oldFlowData) return true
+    // 比较新旧
+    const { edges, nodes } = flow.data
+    const { edges: oldEdges, nodes: oldNodes } = oldFlowData
+    return !(isEqual(edges, oldEdges) && isEqual(nodes, oldNodes))
+  }, [preFlow, flow.data])
+
+  return useBlocker(hasChange);
 }

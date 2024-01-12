@@ -1,4 +1,4 @@
-import _ from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
 import { Send, StopCircle } from "lucide-react";
 import { forwardRef, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -34,7 +34,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
     // 消息列表
     const { messages, messagesRef, loadHistory, setChatHistory, changeHistoryByScroll } = useMessages(chatId, flow)
     // ws通信
-    const { stop, connectWS, closeWs, begin: chating, checkReLinkWs, sendAll } = useWebsocket(chatId, flow, setChatHistory, libId, version)
+    const { stop, connectWS, begin: chating, checkReLinkWs, sendAll } = useWebsocket(chatId, flow, setChatHistory, libId, version)
     // 停止状态
     const [isStop, setIsStop] = useState(true)
     // 输入框状态
@@ -44,8 +44,18 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
     const initChat = async () => {
         await checkPrompt(flow)
         await build()
-        connectWS({ setInputState, setIsStop, changeHistoryByScroll })
         loadHistory()
+        await connectWS({ setInputState, setIsStop, changeHistoryByScroll })
+        setInputState({ lock: false, errorMsg: '' });
+        // 第一条消息，用来初始化会话
+        sendAll({
+            chatHistory: messages,
+            name: flow.name,
+            description: flow.description,
+            inputs: {},
+            flow_id: flow.id,
+            chat_id: chatId
+        })
 
         changeHistoryByScroll.current = false
         // 自动聚焦
@@ -56,11 +66,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
     }
     useEffect(() => {
         initChat()
-        return () => {
-            closeWs()
-            setChatHistory([])
-        }
-    }, [])
+    }, [flow])
 
     // sendmsg user name
     const sendUserName = useMemo(() => {
@@ -80,12 +86,12 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
 
         if (msg.trim() === '') return
 
-        setInputState({ lock: true, errorCode: '' });
+        setInputState({ lock: true, errorMsg: '' });
         let inputs = tabsState[flow.id].formKeysData.input_keys;
         const input = inputs.find((el: any) => !el.type)
         const inputKey = input ? Object.keys(input)[0] : '';
         setChatHistory((old) => {
-            let newChat = _.cloneDeep(old);
+            let newChat = cloneDeep(old);
             newChat.push({
                 isSend: true,
                 message: { ...input, [inputKey]: msg },
@@ -100,18 +106,22 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
         });
 
         await checkReLinkWs(async () => {
-            await build()
+            // await build()
             await connectWS({ setInputState, setIsStop, changeHistoryByScroll })
         })
 
+        const chatInfo = {
+            chat_id: chatId,
+            flow_id: flow.id,
+            inputs: { ...input, [inputKey]: msg }
+        }
         // @ts-ignore
-        isRoom && chating ? sendAll({ action: "continue", "inputs": { ...input, [inputKey]: msg } })
+        isRoom && chating ? sendAll({ action: "continue", ...chatInfo })
             : sendAll({
-                ...flow.data,
-                inputs: { ...input, [inputKey]: msg },
                 chatHistory: messages,
                 name: flow.name,
-                description: flow.description
+                description: flow.description,
+                ...chatInfo
             });
     }
 
@@ -122,7 +132,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
         const input = inputs.find((el: any) => !el.type)
         const inputKey = input ? Object.keys(input)[0] : '';
         setChatHistory((old) => {
-            let newChat = _.cloneDeep(old);
+            let newChat = cloneDeep(old);
             newChat.push({
                 isSend: true,
                 message: { ...input, [inputKey]: str },
@@ -146,7 +156,6 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
         setIsStop(false)
 
         sendAll({
-            ...flow.data,
             inputs: {
                 ...input,
                 [inputKey]: str,
@@ -154,7 +163,9 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
             },
             chatHistory: messages,
             name: flow.name,
-            description: flow.description
+            description: flow.description,
+            chat_id: chatId,
+            flow_id: flow.id,
         });
     }
 
@@ -186,12 +197,12 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
                             <button disabled={inputEmpty || inputDisabled} className=" disabled:text-gray-400" onClick={handleSend}><Send /></button>
                         </ShadTooltip>
                     </div>
-                    {inputState.errorCode && <div className="bg-gray-200 absolute top-0 left-0 w-full h-full text-center text-gray-400 align-middle pt-4">{t(`status.${inputState.errorCode}`)}</div>}
+                    {inputState.errorMsg && <div className="bg-gray-200 absolute top-0 left-0 w-full h-full text-center text-gray-400 align-middle pt-4">{inputState.errorMsg}</div>}
                 </div>
             </div>
         </div>
-        {(isRoom || isReport) && <div className=" absolute w-full flex justify-center bottom-32">
-            <Button className="rounded-full" variant="outline" disabled={isStop} onClick={() => { setIsStop(true); stop(); }}><StopCircle className="mr-2" />Stop</Button>
+        {(isRoom || isReport) && <div className=" absolute w-full flex justify-center bottom-32 pointer-events-none">
+            <Button className="rounded-full pointer-events-auto" variant="outline" disabled={isStop} onClick={() => { setIsStop(true); stop(); }}><StopCircle className="mr-2" />Stop</Button>
         </div>}
         {/* 源文件类型 */}
         <ResouceModal chatId={chatId} open={!!souce} data={souce} setOpen={() => setSouce(null)}></ResouceModal>
@@ -210,7 +221,7 @@ const useInputState = ({ flow, chatId, chating, messages, isReport }) => {
 
     const [inputState, setInputState] = useState({
         lock: false,
-        errorCode: ''
+        errorMsg: ''
     })
     // 输入问答
     const inputRef = useRef(null)
@@ -279,7 +290,7 @@ const useFlowState = (flow: FlowType) => {
 
         const promises = params.map(param => {
             return postValidatePrompt(param.name, param.template, param.data.node).then(res => {
-                if (res.data) param.data.node = res.data.frontend_node
+                if (res) param.data.node = res.frontend_node
             })
         })
         return Promise.all(promises)
@@ -296,6 +307,10 @@ const useFlowState = (flow: FlowType) => {
 const useMessages = (chatId, flow) => {
     const [chatHistory, setChatHistory] = useState<ChatMessageType[]>([]);
     const lastIdRef = useRef(0)
+    useEffect(() => {
+        setChatHistory([])
+        lastIdRef.current = 0
+    }, [flow])
     // 控制开启自动随消息滚动（临时方案）
     const changeHistoryByScroll = useRef(false)
 
@@ -378,6 +393,11 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
     const { setErrorData } = useContext(alertContext);
     const { t } = useTranslation()
 
+    const chatIdRef = useRef(chatId);
+    useEffect(() => {
+        chatIdRef.current = chatId;
+    }, [chatId])
+
     function heartbeat() {
         if (!ws.current) return;
         if (ws.current.readyState !== 1) return;
@@ -395,7 +415,27 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
         return `${webSocketProtocol}://${host}${chatEndpoint}`;
     }
 
-    function connectWS({ setInputState, setIsStop, changeHistoryByScroll }) {
+    const newChatStart = useRef(false) // 处理当前会话上下文丢失，阻止上一次打字机效果
+    // 自动重连次数
+    const tryReLinkCount = useRef(0)
+    const reConnect = (params) => {
+        if (tryReLinkCount.current <= 3) {
+            connectWS(params)
+            tryReLinkCount.current++
+        } else {
+            console.warn('超过最大重试次数 :>> ');
+        }
+    }
+    useEffect(() => {
+        tryReLinkCount.current = 0
+        newChatStart.current = true
+    }, [chatId])
+
+    function connectWS(params) {
+        const { setInputState, setIsStop, changeHistoryByScroll } = params
+        if (ws.current) return Promise.resolve('ok');
+
+        // 连接断开重链接
         return new Promise((res, rej) => {
             try {
                 const urlWs = getWebSocketUrl(
@@ -404,44 +444,56 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
                 );
                 const newWs = new WebSocket(urlWs);
                 newWs.onopen = () => {
-                    setInputState({ lock: false, errorCode: '' });
                     console.log("WebSocket connection established!");
                     res('ok')
                     // heartbeat()
                 };
                 newWs.onmessage = (event) => {
                     const data = JSON.parse(event.data);
+                    if (data.chat_id !== chatIdRef.current) return
+                    console.log('newChatStart.current :>> ', newChatStart.current);
+                    if (newChatStart.current) {
+                        if (data.type === 'close') {
+                            newChatStart.current = false
+                            return setInputState({ lock: false, errorMsg: '' })
+                        } else {
+                            return setInputState({ lock: true, errorMsg: '' })
+                        }
+                    }
+
                     handleWsMessage({ data, setIsStop, setInputState, changeHistoryByScroll });
                     // get chat history
                     // 群聊@自己时，开启input
                     if (data.type === 'end' && data.receiver?.is_self) {
-                        setInputState({ lock: false, errorCode: '' })
+                        setInputState({ lock: false, errorMsg: '' })
                     }
                 };
                 newWs.onclose = (event) => {
+                    ws.current = null
+
                     handleOnClose({ event, setIsStop, setInputState });
+                    // reConnect(params)
                 };
                 newWs.onerror = (ev) => {
-                    console.error('error', ev);
+                    ws.current = null
+
+                    console.error('链接异常error', ev);
                     setIsStop(true)
 
-                    if (flow.id === "") {
-                        // connectWS();
-                    } else {
-                        setErrorData({
-                            title: `${t('chat.networkError')}:`,
-                            list: [
-                                t('chat.networkErrorList1'),
-                                t('chat.networkErrorList2'),
-                                t('chat.networkErrorList3')
-                            ],
-                        });
-                    }
+                    setErrorData({
+                        title: `${t('chat.networkError')}:`,
+                        list: [
+                            t('chat.networkErrorList1'),
+                            t('chat.networkErrorList2'),
+                            t('chat.networkErrorList3')
+                        ],
+                    });
+                    reConnect(params)
                 };
                 ws.current = newWs;
                 console.log('newWs :>> ', newWs);
             } catch (error) {
-                console.log(error);
+                console.error('创建链接异常', error);
                 rej(error)
             }
         })
@@ -449,6 +501,11 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
 
     var isStream = false;
     function handleWsMessage({ data, setIsStop, setInputState, changeHistoryByScroll }) {
+        // 异常类型处理，提示
+        if (data.category === 'error') {
+            return setInputState({ lock: true, errorMsg: data.intermediate_steps });
+        }
+
         if (Array.isArray(data) && data.length) return
         if (data.type === "begin") {
             setBegin(true)
@@ -458,12 +515,12 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
         if (data.type === "close") {
             setBegin(false)
             setIsStop(true)
-            setInputState({ lock: false, errorCode: '' });
+            setInputState({ lock: false, errorMsg: '' });
             changeHistoryByScroll.current = true
         }
         if (data.type === "start") {
             setChatHistory((old) => {
-                let newChat = _.cloneDeep(old);
+                let newChat = cloneDeep(old);
                 newChat.push({
                     isSend: false,
                     message: '',
@@ -509,7 +566,7 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
     }) {
         setChatHistory((old) => {
             const newChats = [...old]
-            console.log('newchats :>> ', newChats);
+            // console.log('newchats :>> ', newChats);
             let chatsLen = newChats.length
             const prevChat = newChats[chatsLen - 2]
             // hack 过滤重复最后消息
@@ -549,6 +606,9 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
     async function sendAll(data: sendAllProps) {
         try {
             if (ws) {
+                if (JSON.stringify(data.inputs) !== '{}') {
+                    newChatStart.current = false
+                }
                 ws.current.send(JSON.stringify(data));
             }
         } catch (error) {
@@ -559,56 +619,51 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
         }
     }
 
-
+    // 处理主动断开
     function handleOnClose({ event, setIsStop, setInputState }) {
-        console.error('链接断开 event :>> ', event);
+        console.error('链接手动断开 event :>> ', event);
         setIsStop(true)
         setBegin(false)
 
         if ([1005, 1008].includes(event.code)) {
-            setInputState({ lock: true, errorCode: String(event.code) });
+            console.warn('即将废弃 :>> ');
+            setInputState({ lock: true, errorMsg: '' });
         } else {
             if (event.reason) {
                 setErrorData({ title: event.reason });
-                setChatHistory((old) => {
-                    let newChat = _.cloneDeep(old);
-                    if (newChat.length) {
-                        newChat[newChat.length - 1].end = true;
-                    }
-                    newChat.push({ end: true, message: `${t('chat.connectionbreakTip')}${event.reason}`, isSend: false, chatKey: '', files: [] });
-                    return newChat
-                })
+                // setChatHistory((old) => {
+                //     let newChat = cloneDeep(old);
+                //     if (newChat.length) {
+                //         newChat[newChat.length - 1].end = true;
+                //     }
+                //     newChat.push({ end: true, message: `${t('chat.connectionbreakTip')}${event.reason}`, isSend: false, chatKey: '', files: [] });
+                //     return newChat
+                // })
             }
-            setInputState({ lock: false, errorCode: '' });
+            setInputState({ lock: false, errorMsg: '' });
         }
-
-        ws.current?.close()
-        ws.current = null
     }
 
     useEffect(() => {
+        // destory
         return () => {
+            // close prev connection
             if (ws.current) {
-                ws.current.close();
-            }
-        };
-    }, []);
-
-    const closeWs = () => {
-        // close prev connection
-        if (ws.current) {
-            switch (ws.current.readyState) {
-                case WebSocket.OPEN:
-                    ws.current.close()
-                    ws.current = null
-                        ; break;
-                case WebSocket.CONNECTING:
-                    ws.current.onopen = () => {
+                switch (ws.current.readyState) {
+                    case WebSocket.OPEN:
+                        console.warn('前端主动关闭1')
                         ws.current.close()
-                    };
+                            ; break;
+                    case WebSocket.CONNECTING:
+                        ws.current.onopen = () => {
+                            console.warn('前端主动关闭2')
+                            ws.current.close()
+                        };
+                }
+                ws.current = null
             }
         }
-    }
+    }, [])
 
     // 检测并重连
     const checkReLinkWs = async (reConnect) => {
@@ -645,7 +700,7 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
         }
     }
 
-    return { begin, stop: handleStop, checkReLinkWs, sendAll, connectWS, closeWs }
+    return { begin, stop: handleStop, checkReLinkWs, sendAll, connectWS }
 }
 
 /**
@@ -662,8 +717,7 @@ const useBuild = (flow: FlowType, chatId: string) => {
     // SSE 服务端推送
     async function streamNodeData(flow: FlowType, chatId: string) {
         // Step 1: Make a POST request to send the flow data and receive a unique session ID
-        const response = await postBuildInit(flow, chatId);
-        const { flowId } = response.data;
+        const { flowId } = await postBuildInit(flow, chatId);
         // Step 2: Use the session ID to establish an SSE connection using EventSource
         let validationResults = [];
         let finished = false;

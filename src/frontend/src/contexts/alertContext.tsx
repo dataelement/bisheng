@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useState } from "react";
 import { AlertItemType } from "../types/alerts";
-
-import _ from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
+import uniqueId from "lodash-es/uniqueId";
 
 //types for alertContextType
 type alertContextType = {
@@ -68,7 +68,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
   const [notificationList, setNotificationList] = useState([]);
   const pushNotificationList = (notification: AlertItemType) => {
     setNotificationList((old) => {
-      let newNotificationList = _.cloneDeep(old);
+      let newNotificationList = cloneDeep(old);
       newNotificationList.unshift(notification);
       return newNotificationList;
     });
@@ -86,7 +86,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         type: "error",
         title: newState.title,
         list: newState.list,
-        id: _.uniqueId(),
+        id: uniqueId(),
       });
     }
   }
@@ -104,7 +104,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         type: "notice",
         title: newState.title,
         link: newState.link,
-        id: _.uniqueId(),
+        id: uniqueId(),
       });
     }
   }
@@ -122,7 +122,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         // add the new notification to the list
         type: "success",
         title: newState.title,
-        id: _.uniqueId(),
+        id: uniqueId(),
       });
     }
   }
