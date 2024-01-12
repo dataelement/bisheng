@@ -59,6 +59,8 @@ class ThreadPoolManager:
             future = asyncio.run_coroutine_threadsafe(coro(*args, **kwargs), loop)
             # result = loop.run_until_complete(coro(*args, **kwargs))
             end_wait = time.time()
+            # 压力大的时候，会创建更多线程，从而更多事件队列
+            time.sleep(1)
             logger.info(f'async_task_waited={end_wait - start_wait:.2f} seconds', )
             return future
 
