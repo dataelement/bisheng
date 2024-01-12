@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional, Union
+from typing import List, Optional
 from uuid import UUID
 
 from bisheng.api.utils import build_flow, build_input_keys_response
@@ -115,10 +115,10 @@ def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: Aut
 
 @router.websocket('/chat/{flow_id}')
 async def chat(
+        *,
         flow_id: str,
         websocket: WebSocket,
         chat_id: Optional[str] = None,
-        session_id: Union[None, str] = None,  # noqa: F821
         Authorize: AuthJWT = Depends(),
 ):
     """Websocket endpoint for chat."""

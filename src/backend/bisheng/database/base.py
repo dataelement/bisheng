@@ -31,7 +31,7 @@ def init_default_data():
                     session.commit()
 
                 user = session.exec(select(User).limit(1)).all()
-                if not user:
+                if not user and settings.admin:
                     md5 = hashlib.md5()
                     md5.update(settings.admin.get('password').encode('utf-8'))
                     user = User(
