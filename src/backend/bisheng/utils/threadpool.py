@@ -77,6 +77,7 @@ class ThreadPoolManager:
                 if len(lf) == 0:
                     self.future_dict.pop(k)
 
+            pending_count = 0
             for k, lf in list(self.async_task.items()):
                 for f in lf:
                     if f.done():
@@ -85,9 +86,11 @@ class ThreadPoolManager:
                         if task.done():
                             completed_futures.append((k, task))
                             self.async_task[k].remove(f)
+                        else:
+                            pending_count += 1
                 if len(lf) == 0:
                     self.async_task.pop(k)
-
+            logger.info('async_wait_count={}', pending_count)
             return completed_futures
 
     # async def async_done_callback(self, future):

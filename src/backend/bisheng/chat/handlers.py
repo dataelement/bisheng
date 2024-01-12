@@ -299,6 +299,7 @@ class Handler:
                 steps.append(msg)
         else:
             # agent model will produce the steps log
+            from langchain.schema import Document  # noqa
             if chat_id and intermediate_steps.strip():
                 for s in intermediate_steps.split('\n'):
                     if 'source_documents' in s:
