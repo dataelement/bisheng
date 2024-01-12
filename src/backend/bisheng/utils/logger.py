@@ -55,11 +55,11 @@ def configure(log_level: Optional[str] = None, log_file: Optional[Path] = None):
 
     log_file = Path(log_file)
     log_file.parent.mkdir(parents=True, exist_ok=True)
-
+    log_format_file = '[%Y-%m-%d %H:%M:%S.%f] [{level.name} process-{process.id}-{thread.id} {name}:{line}] - trace={extra[trace_id]} {message}'  # noqa
     logger.add(
         sink=str(log_file),
         level=log_level.upper(),
-        format=log_format,
+        format=log_format_file,
         rotation='00:00',  # Log rotation based on file size
         retention='3 days',
         serialize=False,

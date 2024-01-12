@@ -153,6 +153,7 @@ class ChainFrontendNode(FrontendNode):
         if name == 'TransformChain' and field.name == 'transform_cb':
             field.show = True
             field.field_type = 'function'
+            field.name = 'transform'
 
 
 class SeriesCharacterChainNode(FrontendNode):

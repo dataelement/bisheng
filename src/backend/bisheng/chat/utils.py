@@ -111,9 +111,11 @@ async def judge_source(result, source_document, chat_id, extra: Dict):
     if source:
         for doc in source_document:
             # 确保每个chunk 都可溯源
-            if 'bbox' not in doc.metadata or not doc.metadata['bbox']:
-                source = False
-    return source
+            if 'bbox' not in doc.metadata or not doc.metadata['bbox'] or not doc.metadata['bbox'][
+                    'chunk_bboxes']:
+                source = 0
+                break
+    return source, result
 
 
 async def process_source_document(source_document: List[Document], chat_id, message_id, answer):

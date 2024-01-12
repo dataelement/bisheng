@@ -162,7 +162,7 @@ class Handler:
         # history = self.chat_history.get_history(client_id, chat_id, filter_messages=False)
         await self.intermediate_logs(session, client_id, chat_id, user_id, intermediate_steps)
         extra = {}
-        source = await judge_source(result, source_doucment, chat_id, extra)
+        source, result = await judge_source(result, source_doucment, chat_id, extra)
 
         # 最终结果
         if isinstance(langchain_object, AutoGenChain):

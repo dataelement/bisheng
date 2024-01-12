@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 import time
 from typing import List, Optional
 from uuid import uuid4
@@ -181,7 +182,7 @@ def create_knowledge(*,
         raise HTTPException(status_code=500, detail='知识库名称重复')
     if not db_knowldge.collection_name:
         if knowledge.is_partition:
-            embedding = knowledge.model.replace('-', '')
+            embedding = re.sub(r'[^\w]', '_', knowledge.model)
             id = settings.get_knowledge().get('vectorstores').get('Milvus',
                                                                   {}).get('partition_suffix', 1)
             db_knowldge.collection_name = f'partition_{embedding}_knowledge_{id}'
@@ -315,8 +316,9 @@ def delete_knowledge(*,
                                                                     'ElasticKeywordsSearch',
                                                                     embeddings)
     if esvectore_client:
-        res = esvectore_client.client.indices.delete(index=knowledge.index_name, ignore=[400, 404])
-        logger.info(f'act=delete_es index={knowledge.index_name} res={res}')
+        index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
+        res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
+        logger.info(f'act=delete_es index={index_name} res={res}')
 
     session.delete(knowledge)
     session.commit()

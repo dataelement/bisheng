@@ -126,7 +126,7 @@ jobs:
       - name: Deploy Stage
         uses: fjogeleit/http-request-action@v1
         with:
-          timeout: 100000
+          timeout: 200000
           url: 'https://bisheng.dataelem.com/deploy/cgi-bin/deploy_script.py'
           method: 'GET'
       

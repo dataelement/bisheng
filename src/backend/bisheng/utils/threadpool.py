@@ -14,7 +14,6 @@ class ThreadPoolManager:
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=max_workers, thread_name_prefix=thread_name_prefix)
         # 设计每个同步线程配备一个协程
-        self.event_loops = {}
         self.future_dict: Dict[str, List[concurrent.futures.Future]] = {}
         self.async_task: Dict[str, List[asyncio.Task]] = {}
         self.lock = threading.Lock()
@@ -50,12 +49,10 @@ class ThreadPoolManager:
             logger.info('event loop {}', loop)
         except Exception:
             loop = asyncio.new_event_loop()
-            logger.info('Creating new event loop {}', loop)
-        asyncio.set_event_loop(loop)
-        if loop not in self.event_loops:
-            logger.info('create_new_thread_event')
             thread_event = threading.Thread(target=self.start_loop, args=(loop, ))
             thread_event.start()
+            logger.info('Creating new event loop {}', loop)
+        asyncio.set_event_loop(loop)
         trace_id = kwargs.pop('trace_id', '2')
         start_wait = time.time()
         with logger.contextualize(trace_id=trace_id):
