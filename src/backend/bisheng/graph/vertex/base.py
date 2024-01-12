@@ -358,7 +358,7 @@ class Vertex:
                     else:
                         self.params[key][k] = (k1, v1)
             elif self._is_node(v[1]):
-                result = v[1].get_result(user_id)
+                result = await v[1].get_result(user_id)
                 self.params[key][k] = (v[0], result)
             else:
                 self.params[key][k] = (v[0], v[1])
