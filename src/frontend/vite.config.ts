@@ -17,6 +17,12 @@ const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
     secure: false,
     ws: true,
   };
+  proxyObj['/bisheng'] = {
+    target: "http://110.16.193.170:50061",
+    changeOrigin: true,
+    withCredentials: true,
+    secure: false
+  }
   return proxyObj;
 }, {});
 
