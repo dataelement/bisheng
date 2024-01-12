@@ -22,7 +22,6 @@ expire = 600  # reids 60s 过期
 async def union_websocket(flow_id: str,
                           websocket: WebSocket,
                           chat_id: Optional[str] = None,
-                          type: Optional[str] = None,
                           knowledge_id: Optional[int] = None):
     """Websocket endpoint forF  chat."""
     if chat_id:
