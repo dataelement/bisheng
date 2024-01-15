@@ -51,6 +51,10 @@ NODE_ID_DICT = 'node_id_dict'
 # 用来记录 preset questions, dict: key 为作用对象的id
 PRESET_QUESTION = 'preset_question'
 
+# redis key
+CAPTCHA_PREFIX = 'cap_'
+RSA_KEY = 'rsa_'
+
 LOADERS_INFO: List[Dict[str, Any]] = [
     {
         'loader': 'AirbyteJSONLoader',

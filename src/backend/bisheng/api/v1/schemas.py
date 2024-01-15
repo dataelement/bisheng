@@ -9,6 +9,11 @@ from langchain.docstore.document import Document
 from pydantic import BaseModel, Field, validator
 
 
+class CaptchaInput(BaseModel):
+    captcha_key: str
+    captcha: str
+
+
 class ChunkInput(BaseModel):
     knowledge_id: int
     documents: List[Document]

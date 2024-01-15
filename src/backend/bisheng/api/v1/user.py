@@ -1,9 +1,17 @@
 import hashlib
 import json
+import random
+import string
+import uuid
+from base64 import b64decode, b64encode
+from io import BytesIO
 from typing import Optional
 from uuid import UUID
 
+import rsa
+from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.cache.redis import redis_client
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.knowledge import Knowledge
@@ -11,7 +19,10 @@ from bisheng.database.models.role import Role, RoleCreate, RoleUpdate
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleRefresh
 from bisheng.database.models.user import User, UserCreate, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_role import UserRole, UserRoleCreate
+from bisheng.settings import settings
+from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY
 from bisheng.utils.logger import logger
+from captcha.image import ImageCaptcha
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
@@ -27,7 +38,12 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
 
 @router.post('/user/regist', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def regist(*, session: Session = Depends(get_session), user: UserCreate):
-    db_user = User.from_orm(user)
+    # 验证码校验
+    if settings.get_from_db('use_captcha'):
+        if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
+            raise HTTPException(status_code=500, detail='验证码错误')
+
+    db_user = User.model_validate(user)
     # check if admin user
     admin = session.exec(select(User).where(User.user_id == 1)).all()
     if not admin:
@@ -40,7 +56,12 @@ async def regist(*, session: Session = Depends(get_session), user: UserCreate):
         raise HTTPException(status_code=500, detail='账号已存在')
     else:
         try:
-            db_user.password = md5_hash(user.password)
+            if value := redis_client.get(RSA_KEY):
+                private_key = value[1]
+                db_user.password = md5_hash(
+                    rsa.decrypt(b64decode(user.password), private_key).decode('utf-8'))
+            else:
+                db_user.password = md5_hash(user.password)
             session.add(db_user)
             session.flush()
             session.refresh(db_user)
@@ -60,8 +81,18 @@ async def login(*,
                 session: Session = Depends(get_session),
                 user: UserLogin,
                 Authorize: AuthJWT = Depends()):
+    # 验证码校验
+    if settings.get_from_db('use_captcha'):
+        if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
+            raise HTTPException(status_code=500, detail='验证码错误')
+
     # check if user already exist
-    password = md5_hash(user.password)
+    if value := redis_client.get(RSA_KEY):
+        private_key = value[1]
+        password = md5_hash(rsa.decrypt(b64decode(user.password), private_key).decode('utf-8'))
+    else:
+        password = md5_hash(user.password)
+
     db_user = session.exec(
         select(User).where(User.user_name == user.user_name, User.password == password)).first()
     if db_user:
@@ -455,6 +486,49 @@ async def flow_list(*,
         'total':
         total_count
     })
+
+
+@router.get('/user/get_captcha', status_code=200)
+async def get_captcha():
+    # generate captcha
+    chr_all = string.ascii_letters + string.digits
+    chr_4 = ''.join(random.sample(chr_all, 4))
+    image = ImageCaptcha().generate_image(chr_4)
+    # 对image 进行base 64 编码
+    buffered = BytesIO()
+    image.save(buffered, format='PNG')
+
+    capthca_b64 = b64encode(buffered.getvalue()).decode()
+    logger.info('get_captcha captcha_char={}', chr_4)
+    # generate key, 生成简单的唯一id，
+    key = CAPTCHA_PREFIX + uuid.uuid4().hex[:8]
+    redis_client.set(key, chr_4, expiration=300)
+
+    # 增加配置，是否必须使用验证码
+    return resp_200({
+        'captcha_key': key,
+        'captcha': capthca_b64,
+        'user_capthca': settings.get_from_db('use_captcha') or False
+    })
+
+
+@router.get('/user/public_key', status_code=200)
+async def get_rsa_publish_key():
+    # redis 存储
+    key = RSA_KEY
+    # redis lock
+    if redis_client.setNx(key, 1):
+        # Generate a key pair
+        (pubkey, privkey) = rsa.newkeys(512)
+
+        # Save the keys to strings
+        redis_client.set(key, (pubkey, privkey), 3600)
+    else:
+        pubkey, privkey = redis_client.get(key)
+
+    pubkey_str = pubkey.save_pkcs1().decode()
+
+    return resp_200({'public_key': pubkey_str})
 
 
 def md5_hash(string):
