@@ -37,7 +37,7 @@ def create_template(*, session: Session = Depends(get_session), template: Templa
     return resp_200(db_template)
 
 
-@router.get('/template/', response_model=UnifiedResponseModel[list[Template]], status_code=200)
+@router.get('/template', response_model=UnifiedResponseModel[list[Template]], status_code=200)
 def read_template(*,
                   page_size: Optional[int] = None,
                   page_name: Optional[int] = None,
@@ -55,7 +55,8 @@ def read_template(*,
         sql.offset(page_size * (page_name - 1)).limit(page_size)
 
     try:
-        templates = session.exec(sql).all()
+        template_session = session.exec(sql)
+        templates = template_session.mappings().all()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     return resp_200(templates)
