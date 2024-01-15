@@ -47,13 +47,13 @@ def read_template(*,
     """Read all flows."""
     sql = select(Template.id, Template.name, Template.description, Template.update_time)
     if id:
-        sql = select(Template).where(Template.id == id)
+        template = session.get(Template, id)
+        return resp_200([template])
     if name:
         sql.where(Template.name == name)
     sql.order_by(Template.order_num.desc())
     if page_size and page_name:
         sql.offset(page_size * (page_name - 1)).limit(page_size)
-
     try:
         template_session = session.exec(sql)
         templates = template_session.mappings().all()
