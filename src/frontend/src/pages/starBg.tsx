@@ -1,10 +1,11 @@
+import zIndex from "@mui/material/styles/zIndex";
 import { useEffect } from "react";
 
 export default function StarBg(params) {
 
     useFace()
 
-    return <canvas className=" translate-x-[-350px] translate-y-[-100px]" id="cccc" width="0" height="0"></canvas>
+    return <canvas className=" translate-x-[-350px] translate-y-[-100px] relative" id="cccc" width="0" height="0" style={{zIndex: 999}}></canvas>
 };
 
 
@@ -12,13 +13,14 @@ export default function StarBg(params) {
 const useFace = () => {
     useEffect(() => {
         // var cbox = document.getElementById('cbox')
+        var enter = false
 
         var canvas = document.getElementById('cccc');
         var ctx = canvas.getContext('2d');
         var w = canvas.width = canvas.parentNode.offsetWidth,
             h = canvas.height = 1200, //canvas.parentNode.offsetHeight,
-        // var w = canvas.width = window.innerWidth,
-        //     h = canvas.height = window.innerHeight,
+            // var w = canvas.width = window.innerWidth,
+            //     h = canvas.height = window.innerHeight,
 
             hue = 217,
             stars = [],
@@ -75,8 +77,8 @@ const useFace = () => {
         }
 
         Star.prototype.draw = function () {
-            var x = Math.sin(this.timePassed + 1) * this.orbitRadius + 100 + this.orbitX,
-                y = Math.cos(this.timePassed) * this.orbitRadius / -1 + this.orbitY,
+            var x = Math.sin(this.timePassed + 1) * (this.orbitRadius + (enter ? 4 : 0)) + 100 + this.orbitX,
+                y = Math.cos(this.timePassed) * (this.orbitRadius + (enter ? 4 : 0)) / -1 + this.orbitY,
                 twinkle = random(10);
 
             if (twinkle === 1 && this.alpha > 0) {
@@ -87,7 +89,7 @@ const useFace = () => {
 
             ctx.globalAlpha = this.alpha;
             ctx.drawImage(canvas2, x - this.radius / 2, y - this.radius / 2, this.radius, this.radius);
-            this.timePassed += this.speed;
+            this.timePassed += this.speed + (enter ? 0.008: 0);
         }
 
         for (var i = 0; i < maxStars; i++) {
@@ -110,5 +112,17 @@ const useFace = () => {
 
         animation()
 
+        const func = function () {
+            enter = true
+        }
+        const over = function () {
+            enter = false
+        }
+        canvas.addEventListener('mouseenter', func)
+        canvas.addEventListener('mouseleave', over)
+        return () => {
+            canvas.removeEventListener('mouseenter', func)
+            canvas.removeEventListener('mouseleave', over)
+        }
     }, [])
 }

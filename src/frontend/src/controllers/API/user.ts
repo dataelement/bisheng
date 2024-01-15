@@ -1,6 +1,15 @@
 import { ROLE, User } from "../../types/api/user";
 import axios from "../request";
 
+// 获取 key
+export const getPublicKeyApi = async (): Promise<{ public_key: string }> => {
+    return await axios.get(`/api/v1/user/public_key`);
+};
+// 获取验证码
+export const getCaptchaApi = (): Promise<any> => {
+    return axios.get(`/api/v1/user/get_captcha`);
+};
+
 // 校验登录
 export async function getUserInfo(): Promise<User> {
     return await axios.get(`/api/v1/user/info`);
@@ -10,12 +19,12 @@ export async function logoutApi() {
     return await axios.post(`/api/v1/user/logout`);
 }
 // 登录
-export async function loginApi(name, pwd) {
-    return await axios.post(`/api/v1/user/login`, { user_name: name, password: pwd });
+export async function loginApi(name, pwd, captcha_key?, captcha?) {
+    return await axios.post(`/api/v1/user/login`, { user_name: name, password: pwd, captcha_key, captcha });
 }
 // 注册
-export async function registerApi(name, pwd) {
-    return await axios.post(`/api/v1/user/regist`, { user_name: name, password: pwd });
+export async function registerApi(name, pwd, captcha_key?, captcha?) {
+    return await axios.post(`/api/v1/user/regist`, { user_name: name, password: pwd, captcha_key, captcha });
 }
 // 用户列表
 export async function getUsersApi(name: string, page: number, pageSize: number): Promise<{ data: User[], total: number }> {

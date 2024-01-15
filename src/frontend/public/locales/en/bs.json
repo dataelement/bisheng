@@ -16,7 +16,8 @@
         "accountTooShort": "Account is too short",
         "passwordTooShort": "Password is too short, at least six characters",
         "passwordMismatch": "Passwords do not match",
-        "registrationSuccess": "Registration successful. Please enter your password to log in"
+        "registrationSuccess": "Registration successful. Please enter your password to log in",
+        "pleaseEnterCaptcha": "Please enter captcha"
     },
     "menu": {
         "app": "App",
