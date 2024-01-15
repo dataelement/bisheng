@@ -3,6 +3,7 @@ import json
 from typing import Optional
 from uuid import UUID
 
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.knowledge import Knowledge
@@ -24,7 +25,7 @@ router = APIRouter(prefix='', tags=['User'])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
 
 
-@router.post('/user/regist', response_model=UserRead, status_code=201)
+@router.post('/user/regist', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def regist(*, session: Session = Depends(get_session), user: UserCreate):
     db_user = User.from_orm(user)
     # check if admin user
@@ -50,11 +51,11 @@ async def regist(*, session: Session = Depends(get_session), user: UserCreate):
             session.commit()
         except Exception as e:
             session.rollback()
-            raise HTTPException(status_code=500, detail=f'数据库写入错误， {str(e)}')
-        return db_user
+            raise HTTPException(status_code=500, detail=f'数据库写入错误， {str(e)}') from e
+        return resp_200(db_user)
 
 
-@router.post('/user/login', response_model=UserRead, status_code=201)
+@router.post('/user/login', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def login(*,
                 session: Session = Depends(get_session),
                 user: UserLogin,
@@ -80,18 +81,19 @@ async def login(*,
         # Create the tokens and passing to set_access_cookies or set_refresh_cookies
         access_token = Authorize.create_access_token(subject=json.dumps(payload),
                                                      expires_time=86400)
+
         refresh_token = Authorize.create_refresh_token(subject=user.user_name)
 
         # Set the JWT cookies in the response
         Authorize.set_access_cookies(access_token)
         Authorize.set_refresh_cookies(refresh_token)
 
-        return UserRead(role=str(role), **db_user.__dict__)
+        return resp_200(UserRead(role=str(role), **db_user.__dict__))
     else:
         raise HTTPException(status_code=500, detail='密码不正确')
 
 
-@router.get('/user/info', response_model=UserRead, status_code=201)
+@router.get('/user/info', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def get_info(session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
     # check if user already exist
     Authorize.jwt_required()
@@ -106,7 +108,7 @@ async def get_info(session: Session = Depends(get_session), Authorize: AuthJWT =
             role = 'admin'
         else:
             role = [user_role.role_id for user_role in db_user_role]
-        return UserRead(role=str(role), **user.__dict__)
+        return resp_200(UserRead(role=str(role), **user.__dict__))
     except Exception:
         raise HTTPException(status_code=500, detail='用户信息失败')
 
@@ -138,10 +140,10 @@ async def list(*,
     if page_size and page_num:
         sql = sql.order_by(User.user_id.desc()).offset((page_num - 1) * page_size).limit(page_size)
     users = session.exec(sql).all()
-    return {
-        'data': [jsonable_encoder(UserRead.from_orm(user)) for user in users],
+    return resp_200({
+        'data': [jsonable_encoder(UserRead.model_validate(user)) for user in users],
         'total': total_count
-    }
+    })
 
 
 @router.post('/user/update', status_code=201)
@@ -165,7 +167,7 @@ async def update(*,
 
     session.add(db_user)
     session.commit()
-    return {'msg': 'success'}
+    return resp_200()
 
 
 @router.post('/role/add', status_code=201)
@@ -185,9 +187,8 @@ async def create_role(*,
         session.add(db_role)
         session.commit()
         session.refresh(db_role)
-        return {'data': jsonable_encoder(db_role)}
-    except Exception as e:
-        logger.excepition(e)
+        return resp_200(db_role)
+    except Exception:
         raise HTTPException(status_code=500, detail='添加失败，检查是否重复添加')
 
 
@@ -211,9 +212,8 @@ async def update_role(*,
         session.add(db_role)
         session.commit()
         session.refresh(db_role)
-        return {'data': jsonable_encoder(db_role)}
-    except Exception as e:
-        logger.excepition(e)
+        return resp_200(db_role)
+    except Exception:
         raise HTTPException(status_code=500, detail='添加失败，检查是否重复添加')
 
 
@@ -250,7 +250,7 @@ async def delete_role(*,
         logger.exception(e)
         session.rollback()
         raise HTTPException(status_code=500, detail='删除角色失败')
-    return {'message': 'success'}
+    return resp_200()
 
 
 @router.post('/user/role_add', status_code=200)
@@ -275,7 +275,7 @@ async def user_addrole(*,
             delete(UserRole).where(UserRole.user_id == userRole.user_id,
                                    UserRole.role_id.in_(role_ids)))
     session.commit()
-    return {'message': 'success'}
+    return resp_200()
 
 
 @router.get('/user/role', status_code=200)
@@ -302,7 +302,7 @@ async def get_user_role(*,
         user_role['role_name'] = role_name_dict[db_user_role.role_id]
         res.append(user_role)
 
-    return {'message': 'success', 'data': res}
+    return resp_200(res)
 
 
 @router.post('/role_access/refresh', status_code=200)
@@ -328,7 +328,7 @@ async def access_refresh(*,
         role_access = RoleAccess(role_id=role_id, third_id=str(id), type=access_type)
         session.add(role_access)
     session.commit()
-    return {'msg': 'success'}
+    return resp_200()
 
 
 @router.get('/role_access/list', status_code=200)
@@ -354,11 +354,10 @@ async def access_list(*,
         if access.type == AccessType.FLOW.value:
             access.third_id = UUID(access.third_id)
 
-    return {
-        'msg': 'success',
+    return resp_200({
         'data': [jsonable_encoder(access) for access in db_role_access],
         'total': total_count
-    }
+    })
 
 
 @router.get('/role_access/knowledge', status_code=200)
@@ -397,9 +396,7 @@ async def knowledge_list(*,
     db_users = session.query(User).filter(User.user_id.in_(user_ids)).all()
     user_dict = {user.user_id: user.user_name for user in db_users}
 
-    return {
-        'msg':
-        'success',
+    return resp_200({
         'data': [{
             'name': access[0].name,
             'user_name': user_dict.get(access[0].user_id),
@@ -409,7 +406,7 @@ async def knowledge_list(*,
         } for access in db_role_access],
         'total':
         total_count
-    }
+    })
 
 
 @router.get('/role_access/flow', status_code=200)
@@ -447,9 +444,7 @@ async def flow_list(*,
     user_ids = [access[2] for access in db_role_access]
     db_users = session.query(User).filter(User.user_id.in_(user_ids)).all()
     user_dict = {user.user_id: user.user_name for user in db_users}
-    return {
-        'msg':
-        'success',
+    return resp_200({
         'data': [{
             'name': access[1],
             'user_name': user_dict.get(access[2]),
@@ -459,7 +454,7 @@ async def flow_list(*,
         } for access in db_role_access],
         'total':
         total_count
-    }
+    })
 
 
 def md5_hash(string):

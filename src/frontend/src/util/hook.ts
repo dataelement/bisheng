@@ -3,7 +3,8 @@ import { copyText } from "../utils";
 import { alertContext } from "../contexts/alertContext";
 import { useTranslation } from "react-i18next";
 
-export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): any {
+// 防抖
+export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): (any) => any {
     let timer = useRef<NodeJS.Timeout | null>();
     const fnRef = useRef<any>(func);
     useEffect(() => { fnRef.current = func; }, [func]);

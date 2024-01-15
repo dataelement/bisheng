@@ -8,7 +8,7 @@ from sqlmodel import Field
 
 class ConfigBase(SQLModelSerializable):
     key: str = Field(index=True, unique=True)
-    value: str = Field(index=False, sa_column=Column(String(length=8096)))
+    value: str = Field(sa_column=Column(String(length=8096)))
     comment: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))

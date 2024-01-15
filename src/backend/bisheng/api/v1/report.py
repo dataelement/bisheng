@@ -1,13 +1,12 @@
-
 from uuid import UUID, uuid4
 
+from bisheng.api.v1.schemas import resp_200
 from bisheng.database.base import get_session
 from bisheng.database.models.report import Report
 from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
 from bisheng_langchain.utils.requests import Requests
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.encoders import jsonable_encoder
 from sqlalchemy import or_
 from sqlmodel import Session, select
 
@@ -26,14 +25,14 @@ async def callback(data: dict, session: Session = Depends(get_session)):
         # 保存回掉
         logger.info(f'office_callback url={file_url}')
         file = Requests().get(url=file_url)
-        object_name = mino_prefix+key+'.docx'
-        minio_client.MinioClient().upload_minio_data(object_name, file._content,
-                                                     len(file._content),
-                                                     'application/vnd.openxmlformats-officedocument.wordprocessingml.document') # noqa
+        object_name = mino_prefix + key + '.docx'
+        minio_client.MinioClient().upload_minio_data(
+            object_name, file._content, len(file._content),
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document')  # noqa
         # 重复保存，key 不更新
-        db_report = session.exec(select(Report)
-                                 .where(or_(Report.version_key == key,
-                                            Report.newversion_key == key))).first()
+        db_report = session.exec(
+            select(Report).where(or_(Report.version_key == key,
+                                     Report.newversion_key == key))).first()
         if not db_report:
             logger.error(f'report_callback cannot find the flow_id flow_id={key}')
             raise HTTPException(status_code=500, detail='cannot find the flow_id')
@@ -48,9 +47,9 @@ async def callback(data: dict, session: Session = Depends(get_session)):
 @router.get('/report_temp')
 async def get_template(*, flow_id: str, session: Session = Depends(get_session)):
     flow_id = UUID(flow_id).hex
-    db_report = session.exec(select(Report).where(
-        Report.flow_id == flow_id,
-        Report.del_yn == 0).order_by(Report.update_time.desc())).first()
+    db_report = session.exec(
+        select(Report).where(Report.flow_id == flow_id,
+                             Report.del_yn == 0).order_by(Report.update_time.desc())).first()
     file_url = ''
     if not db_report:
         db_report = Report(flow_id=flow_id)
@@ -70,4 +69,4 @@ async def get_template(*, flow_id: str, session: Session = Depends(get_session))
         'version_key': version_key,
     }
 
-    return jsonable_encoder(res)
+    return resp_200(res)

@@ -23,6 +23,8 @@ import ShadTooltip from "../../components/ShadTooltipComponent";
 import { locationContext } from "../../contexts/locationContext";
 import { deleteFile, readFileByLibDatabase } from "../../controllers/API";
 import UploadModal from "../../modals/UploadModal";
+import { bsconfirm } from "../../alerts/confirm";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
 export default function FilesPage() {
     const { t } = useTranslation()
@@ -68,11 +70,27 @@ export default function FilesPage() {
     const { delShow, idRef, close, delConfim } = useDelete()
 
     const handleDelete = () => {
-        deleteFile(idRef.current).then(res => {
+        captureAndAlertRequestErrorHoc(deleteFile(idRef.current).then(res => {
             loadPage(page)
             close()
+        }))
+    }
+
+    // 上传结果展示
+    const handleUploadResult = (fileCount, failFiles) => {
+        failFiles.length && bsconfirm({
+            desc: <div>
+                <p>{t('lib.fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
+                <div className="max-h-[160px] overflow-y-auto no-scrollbar">
+                    {failFiles.map(str => <p className=" text-red-400" key={str}>{str}</p>)}
+                </div>
+            </div>,
+            onOk(next) {
+                next()
+            }
         })
     }
+
     return <div className="w-full h-screen p-6 relative overflow-y-auto">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
@@ -90,7 +108,7 @@ export default function FilesPage() {
             <TabsContent value="account">
                 <div className="flex justify-between items-center">
                     <span className=" text-gray-800">{title}</span>
-                    {hasPermission && <Button className="h-8 rounded-full" onClick={() => { setOpen(true) }}>{t('lib.upload')}</Button>}
+                    {hasPermission && <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
                 </div>
                 <Table>
                     <TableCaption>
@@ -132,7 +150,7 @@ export default function FilesPage() {
             <TabsContent value="password"></TabsContent>
         </Tabs>
         {/* upload modal */}
-        <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen}></UploadModal>
+        <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen} onResult={handleUploadResult}></UploadModal>
         {/* Delete confirmation */}
         <dialog className={`modal ${delShow && 'modal-open'}`}>
             <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">

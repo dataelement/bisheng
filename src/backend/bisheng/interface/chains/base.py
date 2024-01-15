@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, ClassVar, Dict, List, Optional, Type
 
 from bisheng.custom.customs import get_custom_nodes
 from bisheng.interface.base import LangChainTypeCreator
@@ -21,7 +21,7 @@ class ChainCreator(LangChainTypeCreator):
         return ChainFrontendNode
 
     # We need to find a better solution for this
-    from_method_nodes = {
+    from_method_nodes: ClassVar[Dict] = {
         'APIChain': 'from_llm_and_api_docs',
         'ConversationalRetrievalChain': 'from_llm',
         'LLMCheckerChain': 'from_llm',

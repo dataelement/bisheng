@@ -20,14 +20,13 @@ from langchain.schema.prompt_template import BasePromptTemplate
 class LoadingCallable(Protocol):
     """Interface for loading the combine documents chain."""
 
-    def __call__(self, llm: BaseLanguageModel,
-                 **kwargs: Any) -> BaseCombineDocumentsChain:
+    def __call__(self, llm: BaseLanguageModel, **kwargs: Any) -> BaseCombineDocumentsChain:
         """Callable to load the combine documents chain."""
 
 
 def _load_map_rerank_chain(
     llm: BaseLanguageModel,
-    prompt: BasePromptTemplate = MAP_RERANK_PROMPT,
+    prompt: BasePromptTemplate = None,
     verbose: bool = False,
     document_variable_name: str = 'context',
     rank_key: str = 'score',
@@ -36,6 +35,10 @@ def _load_map_rerank_chain(
     callbacks: Callbacks = None,
     **kwargs: Any,
 ) -> MapRerankDocumentsChain:
+    """Load the map rerank documents chain."""
+    if hasattr(MAP_RERANK_PROMPT.output_parser, 'default_output_key'):
+        MAP_RERANK_PROMPT.output_parser.default_output_key = 'answer'
+    prompt = prompt or MAP_RERANK_PROMPT
     llm_chain = LLMChain(
         llm=llm,
         prompt=prompt,
@@ -96,12 +99,9 @@ def _load_map_reduce_chain(
     token_max: int = 3000,
     **kwargs: Any,
 ) -> MapReduceDocumentsChain:
-    _question_prompt = (
-        question_prompt
-        or map_reduce_prompt.QUESTION_PROMPT_SELECTOR.get_prompt(llm))
-    _combine_prompt = (
-        combine_prompt
-        or map_reduce_prompt.COMBINE_PROMPT_SELECTOR.get_prompt(llm))
+    _question_prompt = (question_prompt
+                        or map_reduce_prompt.QUESTION_PROMPT_SELECTOR.get_prompt(llm))
+    _combine_prompt = (combine_prompt or map_reduce_prompt.COMBINE_PROMPT_SELECTOR.get_prompt(llm))
     map_chain = LLMChain(
         llm=llm,
         prompt=_question_prompt,
@@ -128,9 +128,8 @@ def _load_map_reduce_chain(
     if collapse_prompt is None:
         collapse_chain = None
         if collapse_llm is not None:
-            raise ValueError(
-                'collapse_llm provided, but collapse_prompt was not: please '
-                'provide one or stop providing collapse_llm.')
+            raise ValueError('collapse_llm provided, but collapse_prompt was not: please '
+                             'provide one or stop providing collapse_llm.')
     else:
         _collapse_llm = collapse_llm or llm
         collapse_chain = StuffDocumentsChain(
@@ -174,11 +173,8 @@ def _load_refine_chain(
     callbacks: Callbacks = None,
     **kwargs: Any,
 ) -> RefineDocumentsChain:
-    _question_prompt = (
-        question_prompt
-        or refine_prompts.QUESTION_PROMPT_SELECTOR.get_prompt(llm))
-    _refine_prompt = refine_prompt or refine_prompts.REFINE_PROMPT_SELECTOR.get_prompt(
-        llm)
+    _question_prompt = (question_prompt or refine_prompts.QUESTION_PROMPT_SELECTOR.get_prompt(llm))
+    _refine_prompt = refine_prompt or refine_prompts.REFINE_PROMPT_SELECTOR.get_prompt(llm)
     initial_chain = LLMChain(
         llm=llm,
         prompt=_question_prompt,

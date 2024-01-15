@@ -7,6 +7,7 @@ import { Textarea } from "../../../components/ui/textarea";
 import { alertContext } from "../../../contexts/alertContext";
 import { createTempApi } from "../../../controllers/API";
 import { FlowType } from "../../../types/flow";
+import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 
 export default function CreateTemp({ flow, open, setOpen, onCreated }: { flow: FlowType, open: boolean, setOpen: any, onCreated?: any }) {
     const { setErrorData, setSuccessData } = useContext(alertContext);
@@ -36,17 +37,11 @@ export default function CreateTemp({ flow, open, setOpen, onCreated }: { flow: F
             list: errorlist,
         });
         // rq
-        createTempApi({ ...data, flow_id: flow.id }).then(res => {
+        captureAndAlertRequestErrorHoc(createTempApi({ ...data, flow_id: flow.id }).then(res => {
             setOpen(false)
             setSuccessData({ title: t('skills.createSuccessTitle') });
             onCreated?.()
-        }).catch(err => {
-            console.error('创建失败 :>> ', err.response);
-            setErrorData({
-                title: t('skills.createFailureTitle'),
-                list: [err.response.data.detail],
-            });
-        })
+        }))
     }
 
     return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => setOpen(false)}>

@@ -25,6 +25,7 @@ import { Textarea } from "../../components/ui/textarea";
 import { alertContext } from "../../contexts/alertContext";
 import { userContext } from "../../contexts/userContext";
 import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "../../controllers/API";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
 function CreateModal({ datalist, open, setOpen }) {
     const { t } = useTranslation()
@@ -38,7 +39,7 @@ function CreateModal({ datalist, open, setOpen }) {
     // Fetch model data
     useEffect(() => {
         getEmbeddingModel().then(res => {
-            const models = res.data.data.models || []
+            const models = res.models || []
             setOptions(models)
             setModal(models[0] || '')
         })
@@ -64,18 +65,16 @@ function CreateModal({ datalist, open, setOpen }) {
         setError({ name: !!nameErrors, desc: errorlist.length > nameErrors })
         if (errorlist.length) return handleError(errorlist)
 
-        createFileLib({
+        captureAndAlertRequestErrorHoc(createFileLib({
             name,
             description: desc,
             model: modal
         }).then(res => {
             // @ts-ignore
             window.libname = name
-            navigate("/filelib/" + res.data.id);
+            navigate("/filelib/" + res.id);
             setOpen(false)
-        }).catch(e => {
-            handleError(e.response.data.detail);
-        })
+        }))
     }
 
     const handleError = (list) => {
@@ -140,12 +139,12 @@ export default function FileLibPage() {
     const { delShow, idRef, close, delConfirm } = useDelete();
 
     const handleDelete = () => {
-        deleteFileLib(idRef.current.id).then(res => {
+        captureAndAlertRequestErrorHoc(deleteFileLib(idRef.current.id).then(res => {
             loadPage(page);
             close();
-        });
+        }));
     }
-    
+
     // 进详情页前缓存 page, 临时方案
     const handleCachePage = () => {
         window.LibPage = page

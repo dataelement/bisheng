@@ -13,7 +13,7 @@ from langchain.schema import ChatGeneration, ChatResult
 from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
                                        HumanMessage, SystemMessage)
 from langchain.utils import get_from_dict_or_env
-from pydantic import Field, root_validator
+from langchain_core.pydantic_v1 import Field, root_validator
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
 
@@ -209,7 +209,7 @@ class ProxyChatLLM(BaseChatModel):
             return response.json()
 
         rsp_dict = _completion_with_retry(**kwargs)
-        if 200 != rsp_dict.get('status_code'):
+        if 200 != rsp_dict.get('status_code', 200):
             logger.error(f'proxy_llm_error resp={rsp_dict}')
             raise Exception(rsp_dict)
         return rsp_dict
@@ -295,7 +295,8 @@ class ProxyChatLLM(BaseChatModel):
             return ChatResult(generations=[ChatGeneration(message=message)])
         else:
             response = [
-                item async for item in self.acompletion_with_retry(messages=message_dicts, **params)
+                item
+                async for item in self.acompletion_with_retry(messages=message_dicts, **params)
             ]
             return self._create_chat_result(response[0])
 

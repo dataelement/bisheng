@@ -4,7 +4,8 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "../../../components/ui/button"
 import { getRolesApi, getUserRoles, updateUserRoles } from "../../../controllers/API/user"
-import { ROLE } from "./Roles"
+import { ROLE } from "../../../types/api/user"
+import { captureAndAlertRequestErrorHoc } from "../../../controllers/request"
 
 export default function UserRoleModal({ id, onClose, onChange }) {
     const { t } = useTranslation()
@@ -16,12 +17,11 @@ export default function UserRoleModal({ id, onClose, onChange }) {
     useEffect(() => {
         if (!id) return
         getRolesApi().then(res => {
-            const roleOptions = res.data.data.filter(role => role.id !== 1)
+            const roleOptions = res.data.filter(role => role.id !== 1)
                 .map(role => ({ ...role, role_id: role.id }))
             setRoles(roleOptions);
 
-            getUserRoles(id).then(result => {
-                const userRoles = result.data.data
+            getUserRoles(id).then(userRoles => {
                 // 默认设置 普通用户
                 if (!userRoles.find(role => role.role_id === 2)) {
                     const roleByroles = roleOptions.find(role => role.role_id === 2)
@@ -39,7 +39,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
 
     const handleSave = async () => {
         if (!selected.length) return setError(true)
-        const res = await updateUserRoles(id, selected.map(item => item.role_id))
+        const res = await captureAndAlertRequestErrorHoc(updateUserRoles(id, selected.map(item => item.role_id)))
         console.log('res :>> ', res);
         onChange()
     }
@@ -65,8 +65,12 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                                 key={role.role_id}
                                 className={({ active }) =>
                                     `relative select-none py-2 pl-10 pr-4
-                                    ${active ? 'bg-blue-100 text-gray-700' : 'text-gray-900 bg-gray-50'} 
-                                    ${role.role_id === 2 ? 'cursor-not-allowed text-gray-300' : "cursor-default"}`
+                                    ${active
+                                        ? 'bg-blue-100 text-gray-700'
+                                        : 'text-gray-900 bg-gray-50 dark:bg-gray-900 dark:text-gray-100'} 
+                                    ${role.role_id === 2
+                                        ? 'cursor-not-allowed text-gray-300'
+                                        : "cursor-default"}`
                                 }
                                 value={role}
                                 disabled={role.role_id === 2}

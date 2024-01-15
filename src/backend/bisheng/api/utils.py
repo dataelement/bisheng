@@ -1,11 +1,11 @@
 from bisheng.api.v1.schemas import StreamData
-from bisheng.database.base import get_session
+from bisheng.database.base import get_session, session_getter
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
 from sqlalchemy import delete
-from sqlmodel import Session, select
+from sqlmodel import select
 
 API_WORDS = ['api', 'key', 'token']
 
@@ -46,7 +46,8 @@ def build_input_keys_response(langchain_object, artifacts):
             input_keys_response['input_keys'][key] = value
     # If the object has memory, that memory will have a memory_variables attribute
     # memory variables should be removed from the input keys
-    if hasattr(langchain_object, 'memory') and hasattr(langchain_object.memory, 'memory_variables'):
+    if hasattr(langchain_object, 'memory') and hasattr(langchain_object.memory,
+                                                       'memory_variables'):
         # Remove memory variables from input keys
         input_keys_response['input_keys'] = {
             key: value
@@ -62,12 +63,12 @@ def build_input_keys_response(langchain_object, artifacts):
     return input_keys_response
 
 
-def build_flow(graph_data: dict,
-               artifacts,
-               process_file=False,
-               flow_id=None,
-               chat_id=None,
-               **kwargs) -> Graph:
+async def build_flow(graph_data: dict,
+                     artifacts,
+                     process_file=False,
+                     flow_id=None,
+                     chat_id=None,
+                     **kwargs) -> Graph:
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
@@ -77,7 +78,7 @@ def build_flow(graph_data: dict,
         yield str(StreamData(event='error', data={'error': error_message}))
         return
 
-    number_of_nodes = len(graph.nodes)
+    number_of_nodes = len(graph.vertices)
 
     for i, vertex in enumerate(graph.generator_build(), 1):
         try:
@@ -113,17 +114,19 @@ def build_flow(graph_data: dict,
                     # es
                     vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
 
-            vertex.build()
+            await vertex.build()
             params = vertex._built_object_repr()
             valid = True
             logger.debug(
-                f"Building node {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}")
+                f"Building node {vertex.vertex_type} {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}"
+            )
             if vertex.artifacts:
                 # The artifacts will be prompt variables
                 # passed to build_input_keys_response
                 # to set the input_keys values
                 artifacts.update(vertex.artifacts)
         except Exception as exc:
+            logger.exception(f'Error building node {vertex.id}', exc_info=True)
             params = str(exc)
             valid = False
             response = {
@@ -142,15 +145,15 @@ def build_flow(graph_data: dict,
             'progress': round(i / number_of_nodes, 2),
         }
         yield str(StreamData(event='message', data=response))
-    return graph
+    yield graph
 
 
-def build_flow_no_yield(graph_data: dict,
-                        artifacts,
-                        process_file=False,
-                        flow_id=None,
-                        chat_id=None,
-                        **kwargs):
+async def build_flow_no_yield(graph_data: dict,
+                              artifacts,
+                              process_file=False,
+                              flow_id=None,
+                              chat_id=None,
+                              **kwargs):
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
@@ -197,7 +200,7 @@ def build_flow_no_yield(graph_data: dict,
             if vertex.base_type == 'chains' and 'retriever' in vertex.params:
                 vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
 
-            vertex.build()
+            await vertex.build()
             params = vertex._built_object_repr()
             logger.debug(
                 f"Building node {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}")
@@ -214,10 +217,10 @@ def build_flow_no_yield(graph_data: dict,
 def access_check(payload: dict, owner_user_id: int, target_id: int, type: AccessType) -> bool:
     if payload.get('role') != 'admin':
         # role_access
-        session = next(get_session())
-        role_access = session.exec(
-            select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
-                                     RoleAccess.type == type.value)).all()
+        with next(get_session()) as session:
+            role_access = session.exec(
+                select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
+                                         RoleAccess.type == type.value)).all()
         third_ids = [access.third_id for access in role_access]
         if owner_user_id != payload.get('user_id') and str(target_id) not in third_ids:
             return False
@@ -232,54 +235,54 @@ def get_L2_param_from_flow(
     node_id = []
     variable_ids = []
     file_name = []
-    for node in graph.nodes:
+    for node in graph.vertices:
         if node.vertex_type in {'InputFileNode'}:
             node_id.append(node.id)
             file_name.append(node.params.get('file_type'))
         elif node.vertex_type in {'VariableNode'}:
             variable_ids.append(node.id)
 
-    session: Session = next(get_session())
-    db_variables = session.exec(select(Variable).where(Variable.flow_id == flow_id)).all()
+    with session_getter() as session:
+        db_variables = session.exec(select(Variable).where(Variable.flow_id == flow_id)).all()
 
-    old_file_ids = {
-        variable.node_id: variable
-        for variable in db_variables if variable.value_type == 3
-    }
-    update = []
-    delete_node_ids = []
-    try:
-        for index, id in enumerate(node_id):
-            if id in old_file_ids:
-                if file_name[index] != old_file_ids.get(id).variable_name:
-                    old_file_ids.get(id).variable_name = file_name[index]
-                    update.append(old_file_ids.get(id))
-                old_file_ids.pop(id)
-            else:
-                # file type
-                db_new_var = Variable(flow_id=flow_id,
-                                      node_id=id,
-                                      variable_name=file_name[index],
-                                      value_type=3)
-                update.append(db_new_var)
-        # delete variable which not delete by edit
-        old_variable_ids = {
-            variable.node_id
-            for variable in db_variables if variable.value_type != 3
+        old_file_ids = {
+            variable.node_id: variable
+            for variable in db_variables if variable.value_type == 3
         }
+        update = []
+        delete_node_ids = []
+        try:
+            for index, id in enumerate(node_id):
+                if id in old_file_ids:
+                    if file_name[index] != old_file_ids.get(id).variable_name:
+                        old_file_ids.get(id).variable_name = file_name[index]
+                        update.append(old_file_ids.get(id))
+                    old_file_ids.pop(id)
+                else:
+                    # file type
+                    db_new_var = Variable(flow_id=flow_id,
+                                          node_id=id,
+                                          variable_name=file_name[index],
+                                          value_type=3)
+                    update.append(db_new_var)
+            # delete variable which not delete by edit
+            old_variable_ids = {
+                variable.node_id
+                for variable in db_variables if variable.value_type != 3
+            }
 
-        if old_file_ids:
-            delete_node_ids.extend(list(old_file_ids.keys()))
+            if old_file_ids:
+                delete_node_ids.extend(list(old_file_ids.keys()))
 
-        delete_node_ids.extend(old_variable_ids.difference(set(variable_ids)))
+            delete_node_ids.extend(old_variable_ids.difference(set(variable_ids)))
 
-        if update:
-            [session.add(var) for var in update]
-        if delete_node_ids:
-            session.exec(delete(Variable).where(Variable.node_id.in_(delete_node_ids)))
-        session.commit()
-        return True
-    except Exception as e:
-        logger.exception(e)
-        session.rollback()
-        return False
+            if update:
+                [session.add(var) for var in update]
+            if delete_node_ids:
+                session.exec(delete(Variable).where(Variable.node_id.in_(delete_node_ids)))
+            session.commit()
+            return True
+        except Exception as e:
+            logger.exception(e)
+            session.rollback()
+            return False

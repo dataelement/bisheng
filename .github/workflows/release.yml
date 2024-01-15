@@ -20,13 +20,22 @@ jobs:
     runs-on: ubuntu-latest
     #if: startsWith(github.event.ref, 'refs/tags')
     steps:
+      # deploy  
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2 
 
-      - name: Get version
-        id: get_version
+      - name: git message
+        id: git_message
         run: |
-          echo ::set-output name=VERSION::${GITHUB_REF/v\//}
+          echo "::set-output name=message::$( echo '${{github.event.head_commit.message}}' | sed ':a;N;$!ba;s/\n/\\n/g')"
+
+      - name: notify feishu
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: ' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b'
+          method: 'POST'
+          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{github.event.pusher.name}}提交代码，开始编译",  "content": [[{"tag":"text","text":"提交内容${{ steps.git_message.outputs.message }}"}]]}}}}'
+
 
       # 构建 bisheng-langchain
       - name: Set python version 3.8
@@ -71,7 +80,6 @@ jobs:
         run: |
           cd ./src/backend
           poetry source add --priority=supplemental foo http://${{ secrets.NEXUS_PUBLIC }}:${{ secrets.NEXUS_PUBLIC_PASSWORD }}@${{ env.PY_NEXUS }}/repository/pypi-group/simple
-          # sed -i 's/^bisheng_langchain.*/bisheng_langchain = "0.0.0"/g' pyproject.toml
           poetry lock
           cd ../../
 
@@ -118,5 +126,13 @@ jobs:
       - name: Deploy Stage
         uses: fjogeleit/http-request-action@v1
         with:
-          url: 'http://110.16.193.170:50055/cgi-bin/delpoy.py'
+          timeout: 200000
+          url: 'https://bisheng.dataelem.com/deploy/cgi-bin/deploy_script.py'
           method: 'GET'
+      
+      - name: notify feishu
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: ' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b'
+          method: 'POST'
+          data: '{"msg_type":"text","content":{"text":"release 部署成功"}}'

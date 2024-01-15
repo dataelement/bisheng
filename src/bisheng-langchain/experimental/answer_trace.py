@@ -1,12 +1,9 @@
 # flake8: noqa
 
-import json
-import os
-
-import numpy as np
 import jieba.analyse
 from bisheng_langchain.chat_models import QwenChat
-from langchain import LLMChain, PromptTemplate
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
 
 model_name = 'Qwen-7B-Chat'
 host_base_url = 'http://192.168.106.12:9001/v2.1/models'
@@ -25,8 +22,7 @@ KeyWords: ['过去三年', '流动比率', '2021', '3.74', '2020', '2.82', '2019
 ----------------
 Question: {question}'''
 
-llm_chain = LLMChain(llm=llm,
-                     prompt=PromptTemplate.from_template(prompt_template))
+llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
 
 
 def extract_keys(answer, method='jiaba_kv'):
@@ -89,9 +85,7 @@ def sort_and_filter_all_chunks(answer, all_chunks, thr=0.0):
 
     sorted_res = sorted(enumerate(chunk_match_score), key=lambda x: -x[1])
     print(sorted_res)
-    remain_chunks = [
-        all_chunks[elem[0]] for elem in sorted_res if elem[1] >= thr
-    ]
+    remain_chunks = [all_chunks[elem[0]] for elem in sorted_res if elem[1] >= thr]
     if not remain_chunks:
         remain_chunks = [all_chunks[sorted_res[0][0]]]
 

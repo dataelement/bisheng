@@ -1,27 +1,29 @@
 import base64
 import json
+import re
 import time
 from typing import List, Optional
 from uuid import uuid4
-from xml.dom.minidom import Document
 
 import requests
 from bisheng.api.utils import access_check
-from bisheng.api.v1.schemas import UploadFileResponse
+from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200
 from bisheng.cache.utils import file_download, save_uploaded_file
-from bisheng.database.base import get_session
+from bisheng.database.base import get_session, session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
-from bisheng.database.models.knowledge_file import KnowledgeFile
+from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
+from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
-from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoader
-from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
+from bisheng_langchain.document_loaders import ElemUnstructuredLoader
+from bisheng_langchain.embeddings import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
@@ -30,8 +32,8 @@ from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
                                         UnstructuredWordDocumentLoader)
 from langchain.embeddings.base import Embeddings
 from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.schema import Document
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.vectorstores import Milvus
 from langchain.vectorstores.base import VectorStore
 from sqlalchemy import func, or_
 from sqlmodel import Session, select
@@ -50,7 +52,7 @@ filetype_load_map = {
 }
 
 
-@router.post('/upload', response_model=UploadFileResponse, status_code=201)
+@router.post('/upload', response_model=UnifiedResponseModel[UploadFileResponse], status_code=201)
 async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
@@ -58,7 +60,7 @@ async def upload_file(*, file: UploadFile = File(...)):
         file_path = save_uploaded_file(file.file, 'bisheng', file_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)
-        return UploadFileResponse(file_path=file_path)
+        return resp_200(UploadFileResponse(file_path=file_path))
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -73,13 +75,15 @@ async def get_embedding():
             models = list(model_list.keys())
         else:
             models = list()
-        return {'data': {'models': models}}
+        return resp_200({'models': models})
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.post('/process', status_code=201)
+@router.post('/process',
+             response_model=UnifiedResponseModel[List[KnowledgeFileRead]],
+             status_code=201)
 async def process_knowledge(*,
                             data: dict,
                             background_tasks: BackgroundTasks,
@@ -136,12 +140,12 @@ async def process_knowledge(*,
         session.commit()
         session.refresh(db_file)
         if not repeat:
-            files.append(db_file)
+            files.append(db_file.copy())
             file_paths.append(filepath)
-        logger.info(f'fileName={file_name} col={collection_name}')
+        logger.info(f'fileName={file_name} col={collection_name} file_id={db_file.id}')
         result.append(db_file.copy())
 
-    if not repeat:
+    if files:
         background_tasks.add_task(
             addEmbedding,
             collection_name=collection_name,
@@ -159,10 +163,10 @@ async def process_knowledge(*,
     knowledge.update_time = db_file.create_time
     session.add(knowledge)
     session.commit()
-    return {'code': 200, 'message': 'success', 'data': result}
+    return resp_200(result)
 
 
-@router.post('/create', response_model=KnowledgeRead, status_code=201)
+@router.post('/create', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
 def create_knowledge(*,
                      session: Session = Depends(get_session),
                      knowledge: KnowledgeCreate,
@@ -178,7 +182,7 @@ def create_knowledge(*,
         raise HTTPException(status_code=500, detail='知识库名称重复')
     if not db_knowldge.collection_name:
         if knowledge.is_partition:
-            embedding = knowledge.model.replace('-', '')
+            embedding = re.sub(r'[^\w]', '_', knowledge.model)
             id = settings.get_knowledge().get('vectorstores').get('Milvus',
                                                                   {}).get('partition_suffix', 1)
             db_knowldge.collection_name = f'partition_{embedding}_knowledge_{id}'
@@ -190,7 +194,7 @@ def create_knowledge(*,
     session.add(db_knowldge)
     session.commit()
     session.refresh(db_knowldge)
-    return db_knowldge
+    return resp_200(db_knowldge)
 
 
 @router.get('/', status_code=200)
@@ -236,7 +240,7 @@ def get_knowledge(*,
             userMap = {user.user_id: user.user_name for user in db_user}
             for r in res:
                 r['user_name'] = userMap[r['user_id']]
-        return {'data': res, 'total': total_count}
+        return resp_200({'data': res, 'total': total_count})
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -275,11 +279,11 @@ def get_filelist(*,
         select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id).order_by(
             KnowledgeFile.update_time.desc()).offset(page_size *
                                                      (page_num - 1)).limit(page_size)).all()
-    return {
+    return resp_200({
         'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
         'total': total_count,
         'writeable': writable
-    }
+    })
 
 
 @router.delete('/{knowledge_id}', status_code=200)
@@ -307,31 +311,36 @@ def delete_knowledge(*,
                                           output_fields=['pk'])
             vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
     # 处理 es
-    # todo
+    # elastic
+    esvectore_client: 'ElasticKeywordsSearch' = decide_vectorstores(knowledge.index_name,
+                                                                    'ElasticKeywordsSearch',
+                                                                    embeddings)
+    if esvectore_client:
+        index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
+        res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
+        logger.info(f'act=delete_es index={index_name} res={res}')
 
     session.delete(knowledge)
     session.commit()
-    return {'message': 'knowledge deleted successfully'}
+    return resp_200(message='删除成功')
 
 
 @router.delete('/file/{file_id}', status_code=200)
-def delete_knowledge_file(*,
-                          session: Session = Depends(get_session),
-                          file_id: int,
-                          Authorize: AuthJWT = Depends()):
+def delete_knowledge_file(*, file_id: int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """ 删除知识文件信息 """
-    knowledge_file = session.get(KnowledgeFile, file_id)
-    if not knowledge_file:
-        raise HTTPException(status_code=404, detail='文件不存在')
+    with session_getter() as session:
+        knowledge_file = session.get(KnowledgeFile, file_id)
+        if not knowledge_file:
+            raise HTTPException(status_code=404, detail='文件不存在')
 
-    knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
-    if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
-        raise HTTPException(status_code=404, detail='没有权限执行操作')
+        knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
+        if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
+            raise HTTPException(status_code=404, detail='没有权限执行操作')
     # 处理vectordb
     collection_name = knowledge.collection_name
-    embeddings = decide_embeddings(knowledge.model)
+    embeddings = FakeEmbedding()
     vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
     if isinstance(vectore_client, Milvus) and vectore_client.col:
         pk = vectore_client.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])
@@ -343,17 +352,19 @@ def delete_knowledge_file(*,
     minio_client.delete_minio(str(knowledge_file.id))
     minio_client.delete_minio(str(knowledge_file.object_name))
     # elastic
-    esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+    index_name = knowledge.index_name or collection_name
+    esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+
     if esvectore_client:
         res = esvectore_client.client.delete_by_query(
-            index=collection_name, query={'match': {
+            index=index_name, query={'match': {
                 'metadata.file_id': file_id
             }})
         logger.info(f'act=delete_es file_id={file_id} res={res}')
-
+    session = next(get_session())
     session.delete(knowledge_file)
     session.commit()
-    return {'message': 'knowledge file deleted successfully'}
+    return resp_200(message='删除成功')
 
 
 def decide_embeddings(model: str) -> Embeddings:
@@ -389,26 +400,29 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
         embeddings = decide_embeddings(model)
         vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
         es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+        minio_client = MinioClient()
     except Exception as e:
         logger.exception(e)
 
-    minio_client = MinioClient()
     callback_obj = {}
     for index, path in enumerate(file_paths):
         ts1 = time.time()
         knowledge_file = knowledge_files[index]
-        logger.info(
-            f'process_file_begin file_name={knowledge_file.file_name} file_id={knowledge_file.id}')
-        session = next(get_session())
+        logger.info('process_file_begin knowledge_id={} file_name={} file_size={} ',
+                    knowledge_files[0].knowledge_id, knowledge_file.file_name, len(file_paths))
+
         try:
             # 存储 mysql
-            db_file = session.get(KnowledgeFile, knowledge_file.id)
-            setattr(db_file, 'status', 2)
-            # 原文件
-            object_name_original = f'original/{db_file.id}'
-            setattr(db_file, 'object_name', object_name_original)
-            session.add(db_file)
-            session.flush()
+            with session_getter() as session:
+                db_file = session.get(KnowledgeFile, knowledge_file.id)
+                setattr(db_file, 'status', 2)
+                # 原文件
+                object_name_original = f'original/{db_file.id}'
+                setattr(db_file, 'object_name', object_name_original)
+                session.add(db_file)
+                session.flush()
+                session.commit()
+                session.refresh(db_file)
 
             minio_client.upload_minio(object_name_original, path)
             texts, metadatas = _read_chunk_text(path, knowledge_file.file_name, chunk_size,
@@ -420,25 +434,21 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
             minio_client.upload_minio(str(db_file.id), path)
 
             logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
-            [
-                metadata.update({
-                    'file_id': knowledge_file.id,
-                    'knowledge_id': f'{knowledge_id}'
-                }) for metadata in metadatas
-            ]
+            for metadata in metadatas:
+                metadata.update({'file_id': knowledge_file.id, 'knowledge_id': f'{knowledge_id}'})
             vectore_client.add_texts(texts=texts, metadatas=metadatas)
 
             # 存储es
             if es_client:
                 es_client.add_texts(texts=texts, metadatas=metadatas)
-            session.commit()
-            session.refresh(db_file)
+
             callback_obj = db_file.copy()
             logger.info(
                 f'process_file_done file_name={knowledge_file.file_name} file_id={knowledge_file.id} time_cost={time.time()-ts1}'  # noqa
             )
         except Exception as e:
             logger.error(e)
+            session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)
             setattr(db_file, 'remark', str(e)[:500])
@@ -479,7 +489,6 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             'source': file_name,
             'extra': ''
         } for t in texts]
-        metadatas = [t.metadata for t in texts]
     else:
         # 如果文件不是pdf 需要内部转pdf
         if file_name.rsplit('.', 1)[-1] != 'pdf':
@@ -526,8 +535,8 @@ def file_knowledge(
     try:
         embeddings = decide_embeddings(db_knowledge.model)
         vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
-        es_client = decide_vectorstores(db_knowledge.collection_name, 'ElasticKeywordsSearch',
-                                        embeddings)
+        index_name = db_knowledge.index_name or db_knowledge.collection_name
+        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
     except Exception as e:
         logger.exception(e)
     separator = ['\n\n', '\n', ' ', '']
@@ -575,10 +584,11 @@ def text_knowledge(
         documents: List[Document],
         session: Session = Depends(get_session),
 ):
+    """使用text 导入knowledge"""
     try:
         embeddings = decide_embeddings(db_knowledge.model)
         vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
-        es_client = decide_vectorstores(db_knowledge.collection_name, 'ElasticKeywordsSearch',
+        es_client = decide_vectorstores(db_knowledge.index_name, 'ElasticKeywordsSearch',
                                         embeddings)
     except Exception as e:
         logger.exception(e)

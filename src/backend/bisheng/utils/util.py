@@ -139,7 +139,8 @@ def build_template_from_method(
                         'default': param.default if param.default != param.empty else None,
                         'type': param.annotation if param.annotation != param.empty else None,
                         'required': param.default == param.empty,
-                    } for name, param in params.items() if name not in ['self', 'kwargs', 'args']
+                    }
+                    for name, param in params.items() if name not in ['self', 'kwargs', 'args']
                 },
             }
 
@@ -190,8 +191,8 @@ def get_default_factory(module: str, function: str):
 
 def type_to_string(tp):
     if getattr(tp, '__args__', None):
-        args_str = ','.join(
-            type_to_string(arg) for arg in tp.__args__ if arg is not type(None))  # noqa
+        args_str = ','.join(type_to_string(arg) for arg in tp.__args__
+                            if arg is not type(None))  # noqa
         return f'{tp.__name__}[{args_str}]'
     else:
         return tp.__name__
@@ -242,12 +243,13 @@ def format_dict(d, name: Optional[str] = None):
         value['type'] = 'int' if key in ['max_value_length'] else value['type']
 
         # Show or not field
-        value['show'] = bool((value['required'] and
-                              (key not in ['input_variables'] or name == 'SequentialChain')) or
-                             key in FORCE_SHOW_FIELDS or 'api_key' in key)
+        value['show'] = bool(
+            (value['required'] and (key not in ['input_variables'] or name == 'SequentialChain'))
+            or key in FORCE_SHOW_FIELDS or 'api_key' in key)
 
         # Add password field
-        value['password'] = any(text in key.lower() for text in ['password', 'token', 'api', 'key'])
+        value['password'] = any(text in key.lower()
+                                for text in ['password', 'token', 'api', 'key'])
 
         # Add multline
         value['multiline'] = key in [

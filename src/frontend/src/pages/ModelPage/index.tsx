@@ -29,6 +29,7 @@ import { serverListApi, switchOnLineApi, updateConfigApi } from "../../controlle
 import { useCopyText } from "../../util/hook";
 import RTConfig from "./components/RTConfig";
 import { CpuDetail } from "./cpuInfo";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
 enum STATUS {
     ONLINE,
@@ -154,7 +155,7 @@ export default function FileLibPage() {
                 item.id === el.id ? { ...item, status: STATUS.WAIT_ONLINE } : item
             ))
             // 接口
-            switchOnLineApi(el.id, true)
+            captureAndAlertRequestErrorHoc(switchOnLineApi(el.id, true))
         } else if (el.status === STATUS.ONLINE) {
             bsconfirm({
                 desc: t('model.confirmModelOffline'),
@@ -164,7 +165,7 @@ export default function FileLibPage() {
                         item.id === el.id ? { ...item, status: STATUS.WAIT_OFFLINE } : item
                     ))
                     // 接口
-                    switchOnLineApi(el.id, false)
+                    captureAndAlertRequestErrorHoc(switchOnLineApi(el.id, false))
                     next()
                 }
             })
@@ -172,13 +173,13 @@ export default function FileLibPage() {
     }
 
     // 保存
-    const handleSave = async (id, code) => {
-        const res = await updateConfigApi(id, code)
-
-        setOpen(false)
-        setDataList(oldList => oldList.map(item =>
-            item.id === id ? { ...item, config: code } : item
-        ))
+    const handleSave = (id, code) => {
+        captureAndAlertRequestErrorHoc(updateConfigApi(id, code).then(res => {
+            setOpen(false)
+            setDataList(oldList => oldList.map(item =>
+                item.id === id ? { ...item, config: code } : item
+            ))
+        }))
     }
 
     // 5s刷新一次

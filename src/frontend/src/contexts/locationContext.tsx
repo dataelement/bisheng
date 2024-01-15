@@ -69,9 +69,9 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     getAppConfig().then(res => {
       setAppConfig({
-        isDev: res.data.data.env === 'dev',
-        libAccepts: res.data.data.uns_support,
-        officeUrl: res.data.data.office_url
+        isDev: res.env === 'dev',
+        libAccepts: res.uns_support,
+        officeUrl: res.office_url
       })
     })
   }, [])

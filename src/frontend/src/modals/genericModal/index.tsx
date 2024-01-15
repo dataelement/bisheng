@@ -134,10 +134,10 @@ export default function GenericModal({
 
   function validatePrompt(closeModal: boolean) {
     postValidatePrompt(field_name, inputValue, nodeClass)
-      .then((apiReturn) => {
-        if (apiReturn.data) {
-          setNodeClass(apiReturn.data?.frontend_node);
-          let inputVariables = apiReturn.data.input_variables ?? [];
+      .then((apiReturn) => { 
+        if (apiReturn) {
+          setNodeClass(apiReturn?.frontend_node);
+          let inputVariables = apiReturn.input_variables ?? [];
           if (inputVariables && inputVariables.length === 0) {
             setIsEdit(true);
             setNoticeData({

@@ -42,7 +42,7 @@ export default function DictAreaModal({
             <BaseModal.Content>
                 <div className="flex h-full w-full flex-col transition-all ">
                     <AceEditor
-                        value={value || '{}'}
+                        value={codeRef.current || '{}'}
                         mode="json"
                         theme={"twilight"}
                         highlightActiveLine={true}

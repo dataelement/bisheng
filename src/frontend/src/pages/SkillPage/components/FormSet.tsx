@@ -4,6 +4,7 @@ import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from "react-i18next";
 import { Switch } from "../../../components/ui/switch";
 import { getVariablesApi, saveReportFormApi } from "../../../controllers/API/flow";
+import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 
 /**
  * @component l2报表表单展示，可设置必填项及表单排序
@@ -54,7 +55,7 @@ export default forwardRef(function FormSet({ id }: any, ref) {
     const saveFucRef = useRef(() => { })
     const handleSave = (items) => {
         saveFucRef.current = () => {
-            saveReportFormApi(id, items)
+            captureAndAlertRequestErrorHoc(saveReportFormApi(id, items))
         }
     }
 

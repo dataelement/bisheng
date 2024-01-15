@@ -69,6 +69,7 @@ def update_knowledge(
         raise HTTPException(status_code=500, detail='知识库名称重复')
 
     db_knowldge.name = knowledge.name
+
     session.add(db_knowldge)
     session.commit()
     session.refresh(db_knowldge)
@@ -144,8 +145,7 @@ async def upload_file(*,
                       knowledge_id: int,
                       callback_url: Optional[str] = Form(None),
                       file: UploadFile = File(...),
-                      background_tasks: BackgroundTasks,
-                      session: Session = Depends(get_session)):
+                      background_tasks: BackgroundTasks):
 
     file_name = file.filename
     # 缓存本地
@@ -156,7 +156,7 @@ async def upload_file(*,
         separator = ['\n\n', '\n', ' ', '']
         chunk_size = 500
         chunk_overlap = 50
-
+    session = next(get_session())
     knowledge = session.get(Knowledge, knowledge_id)
 
     collection_name = knowledge.collection_name
@@ -223,9 +223,10 @@ def delete_knowledge_file(
     # minio
     minio_client.MinioClient().delete_minio(str(knowledge_file.id))
     # elastic
-    esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+    index_name = knowledge.index_name or knowledge.collection_name
+    esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
     if esvectore_client:
-        esvectore_client.client.delete_by_query(index=collection_name,
+        esvectore_client.client.delete_by_query(index=index_name,
                                                 query={'match': {
                                                     'metadata.file_id': file_id
                                                 }})

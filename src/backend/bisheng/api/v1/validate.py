@@ -1,5 +1,6 @@
 from bisheng.api.v1.base import (Code, CodeValidationResponse, PromptValidationResponse,
                                  ValidatePromptRequest, validate_prompt)
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.template.field.base import TemplateField
 from bisheng.utils.logger import logger
 from bisheng.utils.validate import validate_code
@@ -9,19 +10,22 @@ from fastapi import APIRouter, HTTPException
 router = APIRouter(prefix='/validate', tags=['Validate'])
 
 
-@router.post('/code', status_code=200, response_model=CodeValidationResponse)
+@router.post('/code', status_code=200, response_model=UnifiedResponseModel[CodeValidationResponse])
 def post_validate_code(code: Code):
     try:
         errors = validate_code(code.code)
-        return CodeValidationResponse(
-            imports=errors.get('imports', {}),
-            function=errors.get('function', {}),
-        )
+        return resp_200(
+            CodeValidationResponse(
+                imports=errors.get('imports', {}),
+                function=errors.get('function', {}),
+            ))
     except Exception as e:
         return HTTPException(status_code=500, detail=str(e))
 
 
-@router.post('/prompt', status_code=200, response_model=PromptValidationResponse)
+@router.post('/prompt',
+             status_code=200,
+             response_model=UnifiedResponseModel[PromptValidationResponse])
 def post_validate_prompt(prompt_request: ValidatePromptRequest):
     try:
         input_variables = validate_prompt(prompt_request.template)
@@ -30,16 +34,15 @@ def post_validate_prompt(prompt_request: ValidatePromptRequest):
 
         add_new_variables_to_template(input_variables, prompt_request)
 
-        remove_old_variables_from_template(
-            old_custom_fields, input_variables, prompt_request
-        )
+        remove_old_variables_from_template(old_custom_fields, input_variables, prompt_request)
 
         update_input_variables_field(input_variables, prompt_request)
 
-        return PromptValidationResponse(
-            input_variables=input_variables,
-            frontend_node=prompt_request.frontend_node,
-        )
+        return resp_200(
+            PromptValidationResponse(
+                input_variables=input_variables,
+                frontend_node=prompt_request.frontend_node,
+            ))
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -47,9 +50,7 @@ def post_validate_prompt(prompt_request: ValidatePromptRequest):
 
 def get_old_custom_fields(prompt_request):
     try:
-        old_custom_fields = prompt_request.frontend_node.custom_fields[
-            prompt_request.name
-        ].copy()
+        old_custom_fields = prompt_request.frontend_node.custom_fields[prompt_request.name].copy()
     except KeyError:
         old_custom_fields = []
     prompt_request.frontend_node.custom_fields[prompt_request.name] = []
@@ -71,40 +72,27 @@ def add_new_variables_to_template(input_variables, prompt_request):
             )
             if variable in prompt_request.frontend_node.template:
                 # Set the new field with the old value
-                template_field.value = prompt_request.frontend_node.template[variable][
-                    'value'
-                ]
+                template_field.value = prompt_request.frontend_node.template[variable]['value']
 
             prompt_request.frontend_node.template[variable] = template_field.to_dict()
 
             # Check if variable is not already in the list before appending
-            if (
-                variable
-                not in prompt_request.frontend_node.custom_fields[prompt_request.name]
-            ):
-                prompt_request.frontend_node.custom_fields[prompt_request.name].append(
-                    variable
-                )
+            if (variable not in prompt_request.frontend_node.custom_fields[prompt_request.name]):
+                prompt_request.frontend_node.custom_fields[prompt_request.name].append(variable)
 
         except Exception as exc:
             logger.exception(exc)
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-def remove_old_variables_from_template(
-    old_custom_fields, input_variables, prompt_request
-):
+def remove_old_variables_from_template(old_custom_fields, input_variables, prompt_request):
     for variable in old_custom_fields:
         if variable not in input_variables:
             try:
                 # Remove the variable from custom_fields associated with the given name
-                if (
-                    variable
-                    in prompt_request.frontend_node.custom_fields[prompt_request.name]
-                ):
-                    prompt_request.frontend_node.custom_fields[
-                        prompt_request.name
-                    ].remove(variable)
+                if (variable in prompt_request.frontend_node.custom_fields[prompt_request.name]):
+                    prompt_request.frontend_node.custom_fields[prompt_request.name].remove(
+                        variable)
 
                 # Remove the variable from the template
                 prompt_request.frontend_node.template.pop(variable, None)
@@ -116,6 +104,4 @@ def remove_old_variables_from_template(
 
 def update_input_variables_field(input_variables, prompt_request):
     if 'input_variables' in prompt_request.frontend_node.template:
-        prompt_request.frontend_node.template['input_variables'][
-            'value'
-        ] = input_variables
+        prompt_request.frontend_node.template['input_variables']['value'] = input_variables

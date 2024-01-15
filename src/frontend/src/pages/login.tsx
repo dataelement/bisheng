@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../com
 import { alertContext } from "../contexts/alertContext";
 import { loginApi, registerApi } from "../controllers/API/user";
 import StarBg from "./starBg";
+import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 
 export const LoginPage = () => {
     const { setErrorData, setSuccessData } = useContext(alertContext);
@@ -32,17 +33,11 @@ export const LoginPage = () => {
             title: `${t('prompt')}:`,
             list: error,
         });
-        loginApi(mail, pwd).then(res => {
+        captureAndAlertRequestErrorHoc(loginApi(mail, pwd).then(res => {
             // setUser(res.data)
             localStorage.setItem('isLogin', '1')
             location.href = '/'
-        }).catch(e => {
-            console.error(e.response.data.detail);
-            setErrorData({
-                title: `${t('prompt')}:`,
-                list: [e.response.data.detail],
-            });
-        })
+        }))
     }
 
     const handleRegister = () => {
@@ -56,17 +51,11 @@ export const LoginPage = () => {
             title: `${t('prompt')}:`,
             list: error,
         });
-        registerApi(mail, pwd).then(res => {
+        captureAndAlertRequestErrorHoc(registerApi(mail, pwd).then(res => {
             setSuccessData({ title: t('login.registrationSuccess') })
             pwdRef.current.value = ''
             setShowLogin(true)
-        }).catch(err => {
-            console.error(err.response.data.detail);
-            setErrorData({
-                title: `${t('prompt')}:`,
-                list: [err.response.data.detail],
-            });
-        })
+        }))
     }
 
     return <div className="w-full h-full bg-gray-200 dark:bg-gray-700">

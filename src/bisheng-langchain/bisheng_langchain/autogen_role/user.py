@@ -25,17 +25,17 @@ class AutoGenUserProxyAgent(UserProxyAgent):
         openai_api_base: Optional[str] = '',  # when llm_flag=True, need to set
         openai_proxy: Optional[str] = '',  # when llm_flag=True, need to set
         temperature: Optional[float] = 0,  # when llm_flag=True, need to set
-        system_message: Optional[str] = '',  # agent system message, llm or group chat manage will use
+        system_message: Optional[
+            str] = '',  # agent system message, llm or group chat manage will use
         is_termination_msg: Optional[Callable[[Dict], bool]] = None,
         **kwargs,
     ):
-        is_termination_msg = (
-            is_termination_msg if is_termination_msg is not None else (lambda x: x.get("content") == "TERMINATE")
-        )
+        is_termination_msg = (is_termination_msg if is_termination_msg is not None else
+                              (lambda x: x.get('content') == 'TERMINATE'))
 
         if code_execution_flag:
             code_execution_config = {
-                'work_dir': 'autogen_coding',  # code save path
+                'work_dir': '/tmp/autogen_coding',  # code save path
                 'use_docker': False,
             }
         else:
@@ -61,16 +61,14 @@ class AutoGenUserProxyAgent(UserProxyAgent):
         else:
             llm_config = False
 
-        super().__init__(
-            name,
-            is_termination_msg=is_termination_msg,
-            max_consecutive_auto_reply=max_consecutive_auto_reply,
-            human_input_mode=human_input_mode,
-            function_map=function_map,
-            code_execution_config=code_execution_config,
-            llm_config=llm_config,
-            system_message=system_message
-        )
+        super().__init__(name,
+                         is_termination_msg=is_termination_msg,
+                         max_consecutive_auto_reply=max_consecutive_auto_reply,
+                         human_input_mode=human_input_mode,
+                         function_map=function_map,
+                         code_execution_config=code_execution_config,
+                         llm_config=llm_config,
+                         system_message=system_message)
 
 
 class AutoGenUser(UserProxyAgent):
@@ -82,25 +80,23 @@ class AutoGenUser(UserProxyAgent):
         name: str,
         max_consecutive_auto_reply: Optional[int] = 10,
         human_input_mode: Optional[str] = 'ALWAYS',  # hmean feedback input
-        system_message: Optional[str] = '',  # agent system message, llm or group chat manage will use
+        system_message: Optional[
+            str] = '',  # agent system message, llm or group chat manage will use
         is_termination_msg: Optional[Callable[[Dict], bool]] = None,
         **kwargs,
     ):
-        is_termination_msg = (
-            is_termination_msg if is_termination_msg is not None else (lambda x: x.get('content') == 'TERMINATE')
-        )
+        is_termination_msg = (is_termination_msg if is_termination_msg is not None else
+                              (lambda x: x.get('content') == 'TERMINATE'))
         code_execution_config = False
         llm_config = False
 
-        super().__init__(
-            name,
-            is_termination_msg=is_termination_msg,
-            max_consecutive_auto_reply=max_consecutive_auto_reply,
-            human_input_mode=human_input_mode,
-            code_execution_config=code_execution_config,
-            llm_config=llm_config,
-            system_message=system_message
-        )
+        super().__init__(name,
+                         is_termination_msg=is_termination_msg,
+                         max_consecutive_auto_reply=max_consecutive_auto_reply,
+                         human_input_mode=human_input_mode,
+                         code_execution_config=code_execution_config,
+                         llm_config=llm_config,
+                         system_message=system_message)
 
 
 class AutoGenCoder(UserProxyAgent):
@@ -111,25 +107,23 @@ class AutoGenCoder(UserProxyAgent):
         self,
         name: str,
         function_map: Optional[Dict[str, Callable]] = None,  # function call
-        system_message: Optional[str] = '',  # agent system message, llm or group chat manage will use
+        system_message: Optional[
+            str] = '',  # agent system message, llm or group chat manage will use
         is_termination_msg: Optional[Callable[[Dict], bool]] = None,
         **kwargs,
     ):
-        is_termination_msg = (
-            is_termination_msg if is_termination_msg is not None else (lambda x: x.get('content') == 'TERMINATE')
-        )
+        is_termination_msg = (is_termination_msg if is_termination_msg is not None else
+                              (lambda x: x.get('content') == 'TERMINATE'))
         code_execution_config = {
-            'work_dir': 'autogen_coding',  # code save path
+            'work_dir': '/tmp/autogen_coding',  # code save path
             'use_docker': False,
         }
         llm_config = False
 
-        super().__init__(
-            name,
-            is_termination_msg=is_termination_msg,
-            human_input_mode='NEVER',
-            function_map=function_map,
-            code_execution_config=code_execution_config,
-            llm_config=llm_config,
-            system_message=system_message
-        )
+        super().__init__(name,
+                         is_termination_msg=is_termination_msg,
+                         human_input_mode='NEVER',
+                         function_map=function_map,
+                         code_execution_config=code_execution_config,
+                         llm_config=llm_config,
+                         system_message=system_message)

@@ -12,15 +12,14 @@ import {
     TableRow
 } from "../../components/ui/table";
 import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
 export default function Templates({ onBack, onChange }) {
     const { t } = useTranslation()
 
     const [temps, setTemps] = useState([])
     useEffect(() => {
-        readTempsDatabase().then(res => {
-            setTemps(res)
-        })
+        readTempsDatabase().then(setTemps)
     }, [])
 
     const handleDragEnd = ({ source, destination }: any) => {
@@ -46,7 +45,7 @@ export default function Templates({ onBack, onChange }) {
         const currentItem = updatedList[destination.index]
         currentItem.order_num = sort
         const { name, description, order_num } = currentItem
-        updateTempApi(currentItem.id, { name, description, order_num }).then(onChange)
+        captureAndAlertRequestErrorHoc(updateTempApi(currentItem.id, { name, description, order_num }).then(onChange))
     }
 
     const handleDelTemp = (index: number, id: number) => {
@@ -54,9 +53,11 @@ export default function Templates({ onBack, onChange }) {
             desc: t('skills.confirmText'),
             okTxt: t('delete'),
             onOk(next) {
-                deleteTempApi(id).then(onChange)
-                setTemps(temps.filter((temp, i) => index !== i));
-                next()
+                captureAndAlertRequestErrorHoc(deleteTempApi(id).then((res) => {
+                    onChange(res)
+                    setTemps(temps.filter((temp, i) => index !== i));
+                    next()
+                }))
             }
         })
     }

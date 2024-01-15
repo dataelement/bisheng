@@ -1,61 +1,172 @@
-version: '3.4'
-
 services:
+  mysql:
+    container_name: bisheng-mysql
+    image: mysql:8.0
+    pull_policy: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"  # 数据库密码，如果修改需要同步修改bisheng/congfig/config.yaml配置database_url的mysql连接密码
+      MYSQL_DATABASE: bisheng
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "exit | mysql -u root -p$$MYSQL_ROOT_PASSWORD"]
+      start_period: 30s
+      interval: 20s
+      timeout: 10s
+      retries: 3
+    restart: on-failure
+
   redis:
-    container_name: redis
+    container_name: bisheng-redis
     image: redis:7.0.4
     ports:
       - "6379:6379"
+    environment:
+      TZ: Asia/Shanghai
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/data:/data
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/redis:/data
       - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/redis.conf:/etc/redis.conf
     command: redis-server /etc/redis.conf
-
-  mysql:
-    image: mysql:8.0
-    environment:
-      - "MYSQL_ROOT_PASSWORD=1234"  # 数据库密码，建议修改，如果修改需要同步修改bisheng/congfig/config.yaml配置
-      - "MYSQL_DATABASE=bisheng"
-      - "TZ=Asia/Shanghai"
-    ports:
-      - "3306:3306"
-    volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: on-failure
 
   office:
+    container_name: bisheng-office
     image: onlyoffice/documentserver:7.1.1
     ports:
       - "8701:80"
+    environment:
+      TZ: Asia/Shanghai
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
-      
+    restart: on-failure
+
   backend:
+    container_name: bisheng-backend
     image: dataelement/bisheng-backend:latest
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
-      interval: 1m30s
-      timeout: 30s
-      retries: 3
-      start_period: 30s
-    volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/data/:/app/data/
+    pull_policy: always
     ports:
       - "7860:7860"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
     security_opt:
       - seccomp:unconfined
     command: bash -c "uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --workers 2" # --workers 表示使用几个进程，提高并发度
     restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      start_period: 30s
+      interval: 90s
+      timeout: 30s
+      retries: 3
     depends_on:
-      - "mysql"
-      - "office"
-      - "redis"
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      office:
+        condition: service_started
 
-  nginx:
+  frontend:
+    container_name: bisheng-frontend
     image: dataelement/bisheng-frontend:latest
+    pull_policy: always
     ports:
       - "3001:3001"
+    environment:
+      TZ: Asia/Shanghai
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/nginx.conf:/etc/nginx/nginx.conf
       - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/conf.d:/etc/nginx/conf.d
+    restart: on-failure
+    depends_on:
+      - backend
+
+  elasticsearch:
+    container_name: bisheng-es
+    image: docker.io/bitnami/elasticsearch:8
+    user: root
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/es:/bitnami/elasticsearch/data
+    restart: on-failure
+
+  etcd:
+    container_name: milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.5
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus-etcd:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  minio:
+    container_name: milvus-minio
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "9100:9000"
+      - "9101:9001"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus-minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  milvus:
+    container_name: milvus-standalone
+    image: milvusdb/milvus:v2.3.3
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+    - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus:/var/lib/milvus
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      start_period: 90s
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      - etcd
+      - minio

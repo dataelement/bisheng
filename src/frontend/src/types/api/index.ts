@@ -30,16 +30,18 @@ export type TemplateVariableType = {
   [key: string]: any;
 };
 export type sendAllProps = {
-  nodes: Node[];
-  edges: Edge[];
+  nodes?: Node[];
+  edges?: Edge[];
   name: string;
   description: string;
-  viewport: Viewport;
+  viewport?: Viewport;
   inputs: any;
   id?: string;
   file_path?: string;
   action?: string;
   chatHistory: { message: string | object; isSend: boolean }[];
+  flow_id: string;
+  chat_id: string;
 };
 export type errorsTypeAPI = {
   function: { errors: Array<string> };
@@ -62,3 +64,13 @@ export type UploadFileTypeAPI = {
   file_path: string;
   flowId: string;
 };
+
+
+export type RTServer = {
+  update_time: string;
+  endpoint: string;
+  remark: string;
+  create_time: string;
+  server: string;
+  id: number;
+}

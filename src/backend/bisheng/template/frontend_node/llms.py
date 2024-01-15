@@ -104,7 +104,8 @@ class LLMFrontendNode(FrontendNode):
         if field.name in advanced_fields:
             field.advanced = True
         if field.name == 'headers':
-            field.show = False
+            field.show = True
+            field.advanced = True
             field.value = ''
 
         show_fields = [

@@ -17,10 +17,6 @@ export default function DictComponent({
         }
     }, [disabled]);
 
-    useEffect(() => {
-        if (value) onChange(value);
-    }, [value]);
-
     const ref = useRef(value);
     return (
         <div
@@ -32,7 +28,7 @@ export default function DictComponent({
             {
                 <div className="flex w-full gap-3">
                     <DictAreaModal
-                        value={value}
+                        value={ref.current}
                         onChange={(obj) => {
                             onChange(obj);
                         }}

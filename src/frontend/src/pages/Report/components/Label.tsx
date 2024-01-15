@@ -1,22 +1,22 @@
 import { Braces } from "lucide-react";
 import { useContext, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { Input } from "../../../components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select1";
 import { TabsContext } from "../../../contexts/tabsContext";
-import { useDebounce } from "../../../util/hook";
 import { getVariablesApi } from "../../../controllers/API/flow";
-import { useTranslation } from "react-i18next";
+import { useDebounce } from "../../../util/hook";
 
 export default function Label({ onInset }) {
     const { id: flowId } = useParams();
-    const { flows } = useContext(TabsContext);
+    const { flow } = useContext(TabsContext);
 
     const nodes = useMemo(() => {
-        const _flow = flows.find(flow => flow.id === flowId);
-        if (!_flow) return [];
+        if (!flow) return []
+
         // 提取报表变量
-        return _flow.data.nodes.reduce((res, node) => {
+        return flow.data.nodes.reduce((res, node) => {
             if (["InputNode", "VariableNode", "UniversalKVLoader", "CustomKVLoader"].includes(node.data.type)) {
                 res.push({
                     id: node.id,
@@ -26,7 +26,7 @@ export default function Label({ onInset }) {
             }
             return res
         }, [])
-    }, [flows, flowId])
+    }, [flow])
 
     // labels
     const { selectChange, labels, onSearch } = useLabels(flowId, nodes)

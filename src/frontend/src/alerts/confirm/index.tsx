@@ -5,7 +5,7 @@ import { Button } from "../../components/ui/button";
 
 interface ConfirmParams {
   title?: string
-  desc: string
+  desc: string | React.ReactNode
   canelTxt?: string
   okTxt?: string
   onClose?: () => void

@@ -33,10 +33,19 @@ from loguru import logger
 from pydantic import ValidationError, create_model
 from pydantic.fields import FieldInfo
 
+
+def build_vertex_in_params(params: Dict) -> Dict:
+    from bisheng.graph.vertex.base import Vertex
+
+    # If any of the values in params is a Vertex, we will build it
+    return {
+        key: value.build() if isinstance(value, Vertex) else value
+        for key, value in params.items()
+    }
+
+
 # from bisheng_langchain.document_loaders.elem_unstrcutured_loader import ElemUnstructuredLoaderV0
-
-
-def instantiate_class(node_type: str, base_type: str, params: Dict, data: Dict) -> Any:
+async def instantiate_class(node_type: str, base_type: str, params: Dict, user_id=None) -> Any:
     """Instantiate class from module type and key, and params"""
     params = convert_params_to_sets(params)
     params = convert_kwargs(params)
@@ -48,8 +57,12 @@ def instantiate_class(node_type: str, base_type: str, params: Dict, data: Dict) 
             return custom_node(**params)
 
     class_object = import_by_type(_type=base_type, name=node_type)
-    return instantiate_based_on_type(class_object, base_type, node_type, params,
-                                     params_node_id_dict)
+    return await instantiate_based_on_type(class_object,
+                                           base_type,
+                                           node_type,
+                                           params,
+                                           params_node_id_dict,
+                                           user_id=user_id)
 
 
 def convert_params_to_sets(params):
@@ -73,7 +86,12 @@ def convert_kwargs(params):
     return params
 
 
-def instantiate_based_on_type(class_object, base_type, node_type, params, param_id_dict):
+async def instantiate_based_on_type(class_object,
+                                    base_type,
+                                    node_type,
+                                    params,
+                                    param_id_dict,
+                                    user_id=None):
     if base_type == 'agents':
         return instantiate_agent(node_type, class_object, params)
     elif base_type == 'prompts':
@@ -108,9 +126,9 @@ def instantiate_based_on_type(class_object, base_type, node_type, params, param_
         return instantiate_memory(node_type, class_object, params)
     elif base_type == 'wrappers':
         return instantiate_wrapper(node_type, class_object, params)
-    elif base_type == 'inputOutput':
+    elif base_type == 'input_output':
         return instantiate_input_output(node_type, class_object, params, param_id_dict)
-    elif base_type == 'autogenRoles':
+    elif base_type == 'autogen_roles':
         return instantiate_autogen_roles(node_type, class_object, params)
     else:
         return class_object(**params)
@@ -309,7 +327,6 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_di
         if class_method := getattr(class_object, method, None):
             return class_method(**params)
         raise ValueError(f'Method {method} not found in {class_object}')
-
     return class_object(**params)
 
 

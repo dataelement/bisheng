@@ -54,7 +54,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
   const { closePopUp } = useContext(PopUpContext);
   const { types } = useContext(typesContext);
   const ref = useRef();
-  const { setTabsState, tabId } = useContext(TabsContext);
+  const { setTabsState, flow } = useContext(TabsContext);
   const { reactFlowInstance } = useContext(typesContext);
 
   let disabled =
@@ -89,8 +89,8 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
     setTabsState((prev) => {
       return {
         ...prev,
-        [tabId]: {
-          ...prev[tabId],
+        [flow.id]: {
+          ...prev[flow.id],
           isPending: true,
         },
       };

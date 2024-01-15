@@ -11,7 +11,7 @@ from langchain.schema import ChatGeneration, ChatResult
 from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
                                        HumanMessage, SystemMessage)
 from langchain.utils import get_from_dict_or_env
-from pydantic import Field, root_validator
+from langchain_core.pydantic_v1 import Field, root_validator
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
 
@@ -51,8 +51,7 @@ def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
     if role == 'user':
         return HumanMessage(content=_dict['content'])
     elif role == 'assistant':
-        content = _dict[
-            'content'] or ''  # OpenAI returns None for tool invocations
+        content = _dict['content'] or ''  # OpenAI returns None for tool invocations
         if _dict.get('function_call'):
             additional_kwargs = {'function_call': dict(_dict['function_call'])}
         else:
@@ -158,8 +157,8 @@ class ChatZhipuAI(BaseChatModel):
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
-        values['zhipuai_api_key'] = get_from_dict_or_env(
-            values, 'zhipuai_api_key', 'ZHIPUAI_API_KEY')
+        values['zhipuai_api_key'] = get_from_dict_or_env(values, 'zhipuai_api_key',
+                                                         'ZHIPUAI_API_KEY')
         try:
             import zhipuai
             zhipuai.api_key = values['zhipuai_api_key']
@@ -169,10 +168,9 @@ class ChatZhipuAI(BaseChatModel):
         try:
             values['client'] = zhipuai.model_api.invoke
         except AttributeError:
-            raise ValueError(
-                '`openai` has no `ChatCompletion` attribute, this is likely '
-                'due to an old version of the zhipuai package. Try upgrading it '
-                'with `pip install --upgrade zhipuai`.')
+            raise ValueError('`openai` has no `ChatCompletion` attribute, this is likely '
+                             'due to an old version of the zhipuai package. Try upgrading it '
+                             'with `pip install --upgrade zhipuai`.')
         return values
 
     @property
@@ -217,10 +215,7 @@ class ChatZhipuAI(BaseChatModel):
                     overall_token_usage[k] += v
                 else:
                     overall_token_usage[k] = v
-        return {
-            'token_usage': overall_token_usage,
-            'model_name': self.model_name
-        }
+        return {'token_usage': overall_token_usage, 'model_name': self.model_name}
 
     def _generate(
         self,
@@ -245,13 +240,12 @@ class ChatZhipuAI(BaseChatModel):
         return self._generate(messages, stop, run_manager, **kwargs)
 
     def _create_message_dicts(
-        self, messages: List[BaseMessage], stop: Optional[List[str]]
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+            self, messages: List[BaseMessage],
+            stop: Optional[List[str]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         params = dict(self._client_params)
         if stop is not None:
             if 'stop' in params:
-                raise ValueError(
-                    '`stop` found in both the input and default params.')
+                raise ValueError('`stop` found in both the input and default params.')
             params['stop'] = stop
 
         system_content = ''
@@ -263,8 +257,7 @@ class ChatZhipuAI(BaseChatModel):
             message_dicts.extend(_convert_message_to_dict2(m))
 
         if system_content:
-            message_dicts[-1][
-                'content'] = system_content + message_dicts[-1]['content']
+            message_dicts[-1]['content'] = system_content + message_dicts[-1]['content']
 
         return message_dicts, params
 
@@ -285,10 +278,7 @@ class ChatZhipuAI(BaseChatModel):
             gen = ChatGeneration(message=message)
             generations.append(gen)
 
-        llm_output = {
-            'token_usage': response['data']['usage'],
-            'model_name': self.model_name
-        }
+        llm_output = {'token_usage': response['data']['usage'], 'model_name': self.model_name}
         return ChatResult(generations=generations, llm_output=llm_output)
 
     @property
@@ -332,8 +322,7 @@ class ChatZhipuAI(BaseChatModel):
         try:
             encoding = tiktoken_.encoding_for_model(model)
         except KeyError:
-            logger.warning(
-                'Warning: model not found. Using cl100k_base encoding.')
+            logger.warning('Warning: model not found. Using cl100k_base encoding.')
             model = 'cl100k_base'
             encoding = tiktoken_.get_encoding(model)
         return model, encoding

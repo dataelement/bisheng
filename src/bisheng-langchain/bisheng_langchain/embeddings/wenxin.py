@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 # import numpy as np
 from langchain.embeddings.base import Embeddings
 from langchain.utils import get_from_dict_or_env
-from pydantic import BaseModel, Extra, Field, root_validator
+from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
 from requests.exceptions import HTTPError
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
@@ -15,8 +15,7 @@ from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_aft
 logger = logging.getLogger(__name__)
 
 
-def _create_retry_decorator(
-        embeddings: WenxinEmbeddings) -> Callable[[Any], Any]:
+def _create_retry_decorator(embeddings: WenxinEmbeddings) -> Callable[[Any], Any]:
     min_seconds = 4
     max_seconds = 10
     # Wait 2^x * 1 second between each retry starting with
@@ -82,8 +81,7 @@ class WenxinEmbeddings(BaseModel, Embeddings):
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
-        values['wenxin_api_key'] = get_from_dict_or_env(
-            values, 'wenxin_api_key', 'WENXIN_API_KEY')
+        values['wenxin_api_key'] = get_from_dict_or_env(values, 'wenxin_api_key', 'WENXIN_API_KEY')
         values['wenxin_secret_key'] = get_from_dict_or_env(
             values,
             'wenxin_secret_key',
@@ -94,11 +92,9 @@ class WenxinEmbeddings(BaseModel, Embeddings):
         sec_key = values['wenxin_secret_key']
         try:
             from .interface import WenxinEmbeddingClient
-            values['client'] = WenxinEmbeddingClient(api_key=api_key,
-                                                     sec_key=sec_key)
+            values['client'] = WenxinEmbeddingClient(api_key=api_key, sec_key=sec_key)
         except AttributeError:
-            raise ValueError(
-                'Try upgrading it with `pip install --upgrade requests`.')
+            raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
         return values
 
     @property
@@ -115,8 +111,7 @@ class WenxinEmbeddings(BaseModel, Embeddings):
         inp = {'input': texts, 'model': self.model}
         outp = self.client.create(**inp)
         if outp['status_code'] != 200:
-            raise ValueError(
-                f"Wenxin API returned an error: {outp['status_message']}")
+            raise ValueError(f"Wenxin API returned an error: {outp['status_message']}")
         return [e['embedding'] for e in outp['data']]
 
     def embed_documents(self,

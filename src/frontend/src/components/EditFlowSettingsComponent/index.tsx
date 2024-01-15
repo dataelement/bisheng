@@ -8,11 +8,8 @@ type InputProps = {
   name: string | null;
   description: string | null;
   maxLength?: number;
-  flows: Array<{ id: string; name: string }>;
-  tabId: string;
   setName: (name: string) => void;
   setDescription: (description: string) => void;
-  updateFlow: (flow: { id: string; name: string }) => void;
 };
 
 export const EditFlowSettings: React.FC<InputProps> = ({

@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
+from bisheng.services.base import Service
 from loguru import logger
-from pydantic import BaseModel
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -9,13 +9,10 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
 
-class DatabaseService(BaseModel):
-    name = 'database_service'
-    database_url = ''
-    engine: 'Engine' = None
+class DatabaseService(Service):
+    name: str = 'database_service'
 
     def __init__(self, database_url: str):
-        super().__init__()
         self.database_url = database_url
         # This file is in langflow.services.database.manager.py
         # the ini is in langflow

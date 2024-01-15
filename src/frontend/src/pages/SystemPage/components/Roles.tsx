@@ -12,23 +12,15 @@ import {
     TableRow
 } from "../../../components/ui/table";
 import { delRoleApi, getRolesApi } from "../../../controllers/API/user";
+import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { ROLE } from "../../../types/api/user";
 import EditRole from "./EditRole";
-
-export type ROLE = {
-    create_time: string
-    id: number
-    role_id: number
-    remark: string
-    role_name: string
-    update_time: string
-}
 
 export default function Roles() {
     const { t } = useTranslation()
 
-    const [role, setRole] = useState<ROLE | null | {}>(null)
+    const [role, setRole] = useState<Partial<ROLE> | null>(null)
     const [roles, setRoles] = useState<ROLE[]>([])
-    console.log('roles :>> ', roles);
 
     const handleChange = (change: boolean) => {
         change && loadData()
@@ -36,9 +28,9 @@ export default function Roles() {
     }
 
     const loadData = () => {
-        getRolesApi().then(res => {
-            setRoles(res.data.data);
-        })
+        getRolesApi().then(res =>
+            setRoles(res.data)
+        )
     }
 
     useEffect(() => loadData(), [])
@@ -49,7 +41,7 @@ export default function Roles() {
             desc: `${t('system.confirmText')} 【${item.role_name}】 ?`,
             okTxt: t('delete'),
             onOk(next) {
-                delRoleApi(item.id).then(loadData)
+                captureAndAlertRequestErrorHoc(delRoleApi(item.id).then(loadData))
                 next()
             }
         })
@@ -61,7 +53,7 @@ export default function Roles() {
             _role.role_name === name && role.id !== _role.id))
     }
 
-    if (role) return <EditRole id={role?.id || -1} name={role?.role_name || ''} onBeforeChange={checkSameName} onChange={handleChange}></EditRole>
+    if (role) return <EditRole id={role.id || -1} name={role.role_name || ''} onBeforeChange={checkSameName} onChange={handleChange}></EditRole>
 
     return <div className=" relative">
         <Button className="h-8 rounded-full absolute right-0 top-[-40px]" onClick={() => setRole({})}>{t('create')}</Button>

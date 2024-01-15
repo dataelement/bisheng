@@ -1,15 +1,15 @@
 # This module is used to import any langchain class by name.
 
 import importlib
-from typing import Any, Type
+from typing import Any, ClassVar, Dict, Type
 
 from bisheng.interface.wrappers.base import wrapper_creator
 from bisheng.utils import validate
-from langchain import PromptTemplate
 from langchain.agents import Agent
 from langchain.base_language import BaseLanguageModel
 from langchain.chains.base import Chain
 from langchain.chat_models.base import BaseChatModel
+from langchain.prompts import PromptTemplate
 from langchain.tools import BaseTool
 
 
@@ -32,7 +32,7 @@ def import_by_type(_type: str, name: str) -> Any:
     """Import class by type and name"""
     if _type is None:
         raise ValueError(f'Type cannot be None. Check if {name} is in the config file.')
-    func_dict = {
+    func_dict: ClassVar[Dict] = {
         'agents': import_agent,
         'prompts': import_prompt,
         'llms': {
@@ -52,8 +52,8 @@ def import_by_type(_type: str, name: str) -> Any:
         'utilities': import_utility,
         'output_parsers': import_output_parser,
         'retrievers': import_retriever,
-        'autogenRoles': import_autogenRoles,
-        'inputOutput': import_inputoutput,
+        'autogen_roles': import_autogenRoles,
+        'input_output': import_inputoutput,
     }
     if _type == 'llms':
         key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(

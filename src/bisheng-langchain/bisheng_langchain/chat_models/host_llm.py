@@ -14,7 +14,7 @@ from langchain.schema import ChatGeneration, ChatResult
 from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
                                        HumanMessage, SystemMessage)
 from langchain.utils import get_from_dict_or_env
-from pydantic import Field, root_validator
+from langchain_core.pydantic_v1 import Field, root_validator
 # from requests.exceptions import HTTPError
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
@@ -154,8 +154,8 @@ class BaseHostChatLLM(BaseChatModel):
         model = values['model_name']
         try:
             if cls != CustomLLMChat:
-                url = values['host_base_url'].split('/')[2]
-                config_ep = f'http://{url}/v2/models/{model}/config'
+                url = values['host_base_url'].rsplit('/', 2)[0]
+                config_ep = f'{url}/v2/models/{model}/config'
                 config = requests.get(url=config_ep, json={}, timeout=5).json()
                 policy = config.get('model_transaction_policy', {})
                 values['decoupled'] = policy.get('decoupled', False)

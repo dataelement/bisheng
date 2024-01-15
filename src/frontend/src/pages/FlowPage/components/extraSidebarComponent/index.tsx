@@ -16,30 +16,29 @@ import { APIClassType, APIObjectType } from "../../../../types/api";
 import { FlowType } from "../../../../types/flow";
 import { classNames, nodeColors, nodeIconsLucide, getNodeNames, } from "../../../../utils";
 import DisclosureComponent from "../DisclosureComponent";
+import { undoRedoContext } from "../../../../contexts/undoRedoContext";
 
 export default function ExtraSidebar({ flow }: { flow: FlowType }) {
   const { t } = useTranslation()
 
   const { data } = useContext(typesContext);
   const { openPopUp } = useContext(PopUpContext);
-  const { flows, tabId, uploadFlow, tabsState, saveFlow } =
-    useContext(TabsContext);
+  const { uploadFlow, tabsState, saveFlow } = useContext(TabsContext);
   const AlertWidth = 384;
   const { notificationCenter, setNotificationCenter, setSuccessData, setErrorData } = useContext(alertContext);
   const [dataFilter, setFilterData] = useState(data);
   const [search, setSearch] = useState("");
-  const isPending = tabsState[tabId]?.isPending;
+  const isPending = tabsState[flow.id]?.isPending;
+  // 记录快照
+  const { takeSnapshot } = useContext(undoRedoContext);
 
   const [open, setOpen] = useState(false)
-  // const flow = useMemo(() => {
-  //   return flows.find(el => el.id === tabId)
-  // }, [flows, tabId])
 
   function onDragStart(
     event: React.DragEvent<any>,
     data: { type: string; node?: APIClassType }
   ) {
-    //start drag event
+    // start drag event
     var crt = event.currentTarget.cloneNode(true);
     crt.style.position = "absolute";
     crt.style.top = "-500px";
@@ -102,7 +101,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
       </div>
       <div className="side-bar-buttons-arrangement">
         <ShadTooltip content={t('flow.import')} side="bottom">
-          <button className="extra-side-bar-buttons" onClick={() => { uploadFlow(); }} >
+          <button className="extra-side-bar-buttons" onClick={() => { takeSnapshot(); uploadFlow() }} >
             <FileUp strokeWidth={1.5} className="side-bar-button-size " ></FileUp>
           </button>
         </ShadTooltip>
@@ -112,7 +111,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
           </button>
         </ShadTooltip>
         <ShadTooltip content={t('flow.code')} side="bottom">
-          <button className={classNames("extra-side-bar-buttons")} onClick={(event) => { openPopUp(<ApiModal flow={flows.find((f) => f.id === tabId)} />); }} >
+          <button className={classNames("extra-side-bar-buttons")} onClick={(event) => { openPopUp(<ApiModal flow={flow} />); }} >
             <TerminalSquare strokeWidth={1.5} className="side-bar-button-size"></TerminalSquare>
           </button>
         </ShadTooltip>

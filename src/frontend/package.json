@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -39,7 +39,7 @@
     "esbuild": "^0.17.19",
     "i18next": "^23.6.0",
     "i18next-http-backend": "^2.2.2",
-    "lodash": "^4.17.21",
+    "lodash-es": "^4.17.21",
     "lucide-react": "^0.233.0",
     "pdfjs-dist": "3.10.111",
     "react": "^18.2.0",

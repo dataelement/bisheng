@@ -15,6 +15,7 @@ import {
 import { alertContext } from "../../../contexts/alertContext";
 import { createRole, getRoleLibsApi, getRolePermissionsApi, getRoleSkillsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
 import { useDebounce } from "../../../util/hook";
+import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 
 const pageSize = 10
 const SearchPanne = ({ title, total, onChange, children }) => {
@@ -68,7 +69,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
             // 获取详情
             getRolePermissionsApi(id).then(res => {
                 const useSkills = [], useLibs = [], manageLibs = []
-                res.data.data.forEach(item => {
+                res.data.forEach(item => {
                     switch (item.type) {
                         case 1: useLibs.push(Number(item.third_id)); break;
                         case 2: useSkills.push(item.third_id); break;
@@ -117,11 +118,11 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
         // 新增先创建角色
         let roleId = id
         if (id === -1) {
-            const res = await createRole(form.name)
-            roleId = res.data.data.id
+            const res = await captureAndAlertRequestErrorHoc(createRole(form.name))
+            roleId = res.id
         } else {
             // 更新基本信息
-            updateRoleNameApi(roleId, form.name)
+            captureAndAlertRequestErrorHoc(updateRoleNameApi(roleId, form.name))
         }
         // 更新角色权限
         const res = await Promise.all([
@@ -213,8 +214,8 @@ const usePageData = <T,>(id: number, key: 'skill' | 'lib') => {
             page_num: page,
             page_size: pageSize
         }
-        const res = key === 'skill' ? await getRoleSkillsApi(param) : await getRoleLibsApi(param)
-        setData(res.data)
+        const data = key === 'skill' ? await getRoleSkillsApi(param) : await getRoleLibsApi(param)
+        setData(data)
     }
 
     return {

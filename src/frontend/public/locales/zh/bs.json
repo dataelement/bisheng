@@ -217,7 +217,8 @@
         "parseFailed": "解析失败",
         "parsing": "解析中",
         "completed": "完成",
-        "confirmDeleteFile": "确认删除该文件？"
+        "confirmDeleteFile": "确认删除该文件？",
+        "fileUploadResult": "共上传 {{total}} 份文件，有 {{failed}} 份文件上传失败"
     },
     "code": {
         "editPythonCodeDescription": "编辑你的 Python 代码此代码片段接受模块导入和一个函数定义。确保您的函数返回一个字符串。",
@@ -248,7 +249,7 @@
         "selectFileToUpload": "请先选择文件上传",
         "fileSizeExceedsLimit": "文件不能超50M",
         "file": "文件",
-        "sizeExceedsLimit": "超过50M",
+        "sizeExceedsLimit": "超过50M,已移除",
         "editDictionary": "编辑词典",
         "exportCodeDialogTip": "生成代码，将流程集成到外部应用程序中 (打开此页面前请先build技能)。",
         "chunkOverlap": "切分文本重叠长度"

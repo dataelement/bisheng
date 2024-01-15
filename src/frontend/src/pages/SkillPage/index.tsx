@@ -1,94 +1,71 @@
 import { useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { bsconfirm } from "../../alerts/confirm";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import {
-    Tabs,
-    TabsContent
-} from "../../components/ui/tabs";
+import { Tabs, TabsContent } from "../../components/ui/tabs";
 import { alertContext } from "../../contexts/alertContext";
-import { TabsContext } from "../../contexts/tabsContext";
 import { userContext } from "../../contexts/userContext";
-import { readTempsDatabase, saveFlowToDatabase } from "../../controllers/API";
+import { readTempsDatabase } from "../../controllers/API";
+import { deleteFlowFromDatabase, getFlowApi, readFlowsFromDatabase, saveFlowToDatabase } from "../../controllers/API/flow";
+import { useDebounce } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import CardItem from "./components/CardItem";
 import CreateTemp from "./components/CreateTemp";
 import SkillTemps from "./components/SkillTemps";
 import Templates from "./temps";
-import { useTranslation } from "react-i18next";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
 export default function SkillPage() {
     const { t } = useTranslation()
 
-    const { user } = useContext(userContext);
     const [isTempsPage, setIsTempPage] = useState(false)
 
     const [open, setOpen] = useState(false)
     const navigate = useNavigate()
-    const { page, flows, pages, turnPage, search, removeFlow, setFlows } = useContext(TabsContext);
-    const { setErrorData } = useContext(alertContext);
 
-    const [temps, setTemps] = useState([])
-    const loadTemps = () => {
-        readTempsDatabase().then(setTemps)
-    }
-    useEffect(() => {
-        loadTemps()
-    }, [])
+    const { page, loading, inputRef, search, loadPage, delFlow } = useSkills()
 
+    const [temps, loadTemps] = useTemps()
     const { open: tempOpen, flowRef, toggleTempModal } = useCreateTemp()
-    const { delShow, idRef, close, delConfim } = useDelete()
-    // 分页
-    const [pageEnd, setPageEnd] = useState(false)
-    const loadPage = (_page) => {
-        // setLoading(true)
-        turnPage(_page).then(res => {
-            setPageEnd(res.length < 20)
-            // setLoading(false)
+
+    const handleDelete = (id) => {
+        bsconfirm({
+            desc: t('skills.confirmDeleteSkill'),
+            okTxt: t('delete'),
+            onOk(next) {
+                captureAndAlertRequestErrorHoc(deleteFlowFromDatabase(id).then(() => delFlow(id)));
+                next()
+            }
         })
     }
 
+    const { user } = useContext(userContext);
+    const { setErrorData } = useContext(alertContext);
     // 选模板(创建技能)
-    const handldSelectTemp = (el) => {
-        el.name = `${el.name}-${generateUUID(5)}`
-        saveFlowToDatabase({ ...el, id: el.flow_id }).then(res => {
+    const handldSelectTemp = async (el) => {
+        const [flow] = await readTempsDatabase(el.id)
+
+        flow.name = `${flow.name}-${generateUUID(5)}`
+        captureAndAlertRequestErrorHoc(saveFlowToDatabase({ ...flow, id: flow.flow_id }).then(res => {
             res.user_name = user.user_name
             res.write = true
             setOpen(false)
-            setFlows(el => [res, ...el])
             navigate("/skill/" + res.id)
-        }).catch(e => {
-            console.error(e.response.data.detail);
-            setErrorData({
-                title: `${t('prompt')}: `,
-                list: [e.response.data.detail],
-            });
-        })
-    }
-
-    // 输入框记忆
-    const inputRef = useRef(null)
-    useEffect(() => {
-        // @ts-ignore
-        inputRef.current.value = window.SearchInput || ''
-    }, [])
-
-    // 检索
-    const timerRef = useRef(null)
-    const hanldeInputChange = (e) => {
-        clearTimeout(timerRef.current)
-        timerRef.current = setTimeout(() => {
-            const value = e.target.value
-            search(value)
-            // @ts-ignore
-            window.SearchInput = value
-        }, 500);
+        }))
     }
 
     // 模板管理
     if (isTempsPage) return <Templates onBack={() => setIsTempPage(false)} onChange={loadTemps}></Templates>
 
     return <div className={`w-full p-6 h-screen overflow-y-auto`}>
+        {/* loading */}
+        {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+            <span className="loading loading-infinity loading-lg"></span>
+        </div>}
+
+        {/* 技能列表 */}
         <Tabs defaultValue="my" className="w-full">
             <TabsContent value="my">
                 <div className="flex justify-end gap-4">
@@ -96,64 +73,46 @@ export default function SkillPage() {
                     <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('skills.createNew')}</Button>
                 </div>
                 <span className="main-page-description-text">{t('skills.manageProjects')}</span>
-                <Input ref={inputRef} defaultValue={window.SearchInput || ''} placeholder={t('skills.skillSearch')} className=" w-[400px] relative top-[-20px]" onChange={hanldeInputChange}></Input>
+                <Input
+                    ref={inputRef}
+                    defaultValue={window.SearchSkillsPage?.key || ''}
+                    placeholder={t('skills.skillSearch')}
+                    className=" w-[400px] relative top-[-20px]"
+                    onChange={e => search(e.target.value)}></Input>
+
+                {/* cards */}
                 <div className="w-full flex flex-wrap mt-1">
-                    {flows.map((flow) => (
+                    {page.flows.map((flow) => (
                         <CardItem
                             key={flow.id}
                             data={flow}
                             isAdmin={user.role === 'admin'}
                             edit={flow.write}
-                            onDelete={() => delConfim(flow.id)}
+                            onDelete={() => handleDelete(flow.id)}
                             onCreate={toggleTempModal}
+                            onBeforeEdit={() =>
+                                window.SearchSkillsPage = { no: page.pageNo, key: inputRef.current.value } // 临时缓存方案
+                            }
                         ></CardItem>
                     ))}
                 </div>
                 {/* 分页 */}
                 {/* <Pagination count={10}></Pagination> */}
                 <div className="join grid grid-cols-2 w-[200px] mx-auto my-4">
-                    <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>{t('previousPage')}</button>
-                    <button disabled={page >= pages || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>{t('nextPage')}</button>
+                    <button disabled={page.pageNo === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page.pageNo - 1)}>{t('previousPage')}</button>
+                    <button disabled={page.end} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page.pageNo + 1)}>{t('nextPage')}</button>
                 </div>
             </TabsContent>
             <TabsContent value="temp"> </TabsContent>
         </Tabs>
-        {/* chose temp */}
+        {/* chose template */}
         <SkillTemps flows={temps} isTemp open={open} setOpen={setOpen} onSelect={handldSelectTemp}></SkillTemps>
         {/* 添加模板 */}
         <CreateTemp flow={flowRef.current} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={loadTemps} ></CreateTemp>
-        {/* Open the modal using ID.showModal() method */}
-        <dialog className={`modal ${delShow && 'modal-open'}`}>
-            <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg">{t('prompt')}!</h3>
-                <p className="py-4">{t('skills.confirmDeleteSkill')}</p>
-                <div className="modal-action">
-                    <Button className="h-8 rounded-full" variant="outline" onClick={close}>{t('cancel')}</Button>
-                    <Button className="h-8 rounded-full" variant="destructive" onClick={() => { removeFlow(idRef.current); close() }}>{t('delete')}</Button>
-                </div>
-            </form>
-        </dialog>
     </div>
 };
 
-
-const useDelete = () => {
-    const [delShow, setDelShow] = useState(false)
-    const idRef = useRef('')
-
-    return {
-        delShow,
-        idRef,
-        close: () => {
-            setDelShow(false)
-        },
-        delConfim: (id) => {
-            idRef.current = id
-            setDelShow(true)
-        }
-    }
-}
-
+// 创建技能模板弹窗状态
 const useCreateTemp = () => {
     const [open, setOpen] = useState(false)
     const flowRef = useRef(null)
@@ -164,6 +123,75 @@ const useCreateTemp = () => {
         toggleTempModal(flow?) {
             flowRef.current = flow || null
             setOpen(!open)
+        }
+    }
+}
+
+// 获取模板数据
+const useTemps = () => {
+    const [temps, setTemps] = useState([]);
+
+    const loadTemps = () => {
+        readTempsDatabase().then(setTemps);
+    };
+
+    useEffect(() => {
+        loadTemps();
+    }, []);
+
+    return [temps, loadTemps];
+};
+
+// 技能列表相关
+const useSkills = () => {
+    const [page, setPage] = useState({
+        pageNo: 1,
+        pages: 0,
+        flows: [],
+        end: false
+    })
+    const [loading, setLoading] = useState(false)
+    // 分页
+    const loadPage = (_page) => {
+        setLoading(true)
+        readFlowsFromDatabase(_page, inputRef.current.value || '').then(res => {
+            setPage({
+                pageNo: _page,
+                pages: res.pages,
+                flows: res.data,
+                end: res.pages === _page
+            })
+            setLoading(false)
+        })
+    }
+
+    const inputRef = useRef(null)
+    useEffect(() => {
+        // 输入框记忆
+        if (window.SearchSkillsPage) {
+            loadPage(window.SearchSkillsPage.no)
+            delete window.SearchSkillsPage
+            return
+        }
+        loadPage(1)
+    }, [])
+
+    // search
+    function search(value) {
+        loadPage(1)
+    }
+
+    return {
+        page,
+        loading,
+        inputRef,
+        loadPage,
+        search: useDebounce(search, 600, false),
+        delFlow: (id) => {
+            setPage((data) => ({
+                ...data,
+                flows: data.flows.filter(item => item.id !== id)
+            }));
         }
     }
 }

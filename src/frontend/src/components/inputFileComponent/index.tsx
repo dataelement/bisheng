@@ -3,8 +3,8 @@ import { useContext, useEffect, useState } from "react";
 import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { uploadFile } from "../../controllers/API";
-import { FileComponentType } from "../../types/components";
 import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
+import { FileComponentType } from "../../types/components";
 
 export default function InputFileComponent({
   value,
@@ -20,7 +20,7 @@ export default function InputFileComponent({
   const [myValue, setMyValue] = useState(value);
   const [loading, setLoading] = useState(false);
   const { setErrorData } = useContext(alertContext);
-  const { tabId } = useContext(TabsContext);
+  const { flow } = useContext(TabsContext);
   useEffect(() => {
     if (disabled) {
       setMyValue("");
@@ -61,14 +61,13 @@ export default function InputFileComponent({
       // Upload the file
       isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
         setLoading(false);
-        if (typeof res === 'string') return setErrorData({title: "Error", list: [res]})
+        if (typeof res === 'string') return setErrorData({ title: "Error", list: [res] })
         const { file_path } = res;
         setMyValue(file.name);
         onChange(file.name);
         // sets the value that goes to the backend
         onFileChange(file_path);
-      }) : uploadFile(file, tabId)
-        .then((res) => res.data)
+      }) : uploadFile(file, flow.id)
         .then((data) => {
           console.log("File uploaded successfully");
           // Get the file name from the response

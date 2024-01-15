@@ -1,17 +1,14 @@
 import { useContext, useEffect, useState } from "react";
 import { PopUpContext } from "../../contexts/popUpContext";
-import { TabsContext } from "../../contexts/tabsContext";
 import { FloatComponentType } from "../../types/components";
 
 export default function IntComponent({
   value,
   onChange,
-  disableCopyPaste = false,
   disabled,
   editNode = false,
 }: FloatComponentType) {
   const [myValue, setMyValue] = useState(value ?? "");
-  const { setDisableCopyPaste } = useContext(TabsContext);
   const min = 0;
   const { closePopUp } = useContext(PopUpContext);
 
@@ -34,12 +31,6 @@ export default function IntComponent({
       }
     >
       <input
-        onFocus={() => {
-          if (disableCopyPaste) setDisableCopyPaste(true);
-        }}
-        onBlur={() => {
-          if (disableCopyPaste) setDisableCopyPaste(false);
-        }}
         onKeyDown={(event) => {
           if (
             event.key !== "Backspace" &&
@@ -72,7 +63,7 @@ export default function IntComponent({
             ? " input-edit-node "
             : " input-primary " + (disabled ? " input-disable" : "")
         }
-        placeholder={editNode ? "integer": "Enter an integer"}
+        placeholder={editNode ? "integer" : "Enter an integer"}
         onChange={(e) => {
           setMyValue(e.target.value);
           onChange(e.target.value);

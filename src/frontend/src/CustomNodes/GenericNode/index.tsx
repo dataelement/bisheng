@@ -143,9 +143,8 @@ export default function GenericNode({ data, selected }: {
           </div> */}
         </div>
 
-        <div className="generic-node-desc">
+        <div className="generic-node-desc nodrag" onKeyDown={e => e.stopPropagation()}>
           <div className="generic-node-desc-text">{data.node.description}</div>
-
           <>
             {Object.keys(data.node.template)
               .filter((t) => t.charAt(0) !== "_")

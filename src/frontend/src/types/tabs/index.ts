@@ -2,30 +2,15 @@ import { Dispatch, SetStateAction } from "react";
 import { FlowType, TweaksType } from "../flow";
 
 export type TabsContextType = {
-  page: number;
-  pages: number;
-  saveFlow: (flow: FlowType) => Promise<void>;
-  save: () => void;
-  tabId: string;
-  setTabId: (index: string) => void;
-  flows: Array<FlowType>;
-  setFlows: (f) => void;
-  removeFlow: (id: string) => void;
-  addFlow: (flowData?: FlowType, newProject?: boolean) => Promise<String>;
-  updateFlow: (newFlow: FlowType) => void;
-  incrementNodeId: () => string;
+  flow: FlowType | null;
+  setFlow: (ac: string, t: FlowType) => void;
+  saveFlow: (flow: FlowType) => Promise<any>;
   downloadFlow: (
     flow: FlowType,
     flowName: string,
     flowDescription?: string
   ) => void;
-  downloadFlows: () => void;
-  uploadFlows: () => void;
-  uploadFlow: (newFlow?: boolean, file?: File) => void;
-  hardReset: () => void;
-  //disable CopyPaste
-  disableCopyPaste: boolean;
-  setDisableCopyPaste: (value: boolean) => void;
+  uploadFlow: (file?: File) => void;
   getNodeId: (nodeType: string) => string;
   tabsState: TabsState;
   setTabsState: Dispatch<SetStateAction<TabsState>>;
@@ -37,8 +22,6 @@ export type TabsContextType = {
   setLastCopiedSelection: (selection: { nodes: any; edges: any }) => void;
   setTweak: (tweak: TweaksType) => void;
   getTweak: TweaksType[];
-  turnPage: (page: number) => any;
-  search: (v: string) => any,
 };
 
 export type TabsState = {
