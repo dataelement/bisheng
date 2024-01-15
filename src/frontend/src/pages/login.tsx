@@ -64,6 +64,7 @@ export const LoginPage = () => {
         if (!mail) error.push(t('login.pleaseEnterAccount'))
         if (mail.length < 3) error.push(t('login.accountTooShort'))
         if (!/.{6,}/.test(pwd)) error.push(t('login.passwordTooShort'))
+        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#^]{8,}$/.test(pwd)) error.push(t('login.passwordError'))
         if (pwd !== apwd) error.push(t('login.passwordMismatch'))
         if (captchaData.user_capthca && !captchaRef.current.value) error.push(t('login.pleaseEnterCaptcha'))
         if (error.length) return setErrorData({
