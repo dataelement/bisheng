@@ -68,7 +68,7 @@ def session_getter():
         session = Session(db_service.engine)
         yield session
     except Exception as e:
-        print('Session rollback because of exception:', e)
+        logger.info('Session rollback because of exception:{}', e)
         session.rollback()
         raise
     finally:

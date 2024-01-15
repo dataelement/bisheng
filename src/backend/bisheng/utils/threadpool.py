@@ -92,7 +92,8 @@ class ThreadPoolManager:
                             pending_count += 1
                 if len(lf) == 0:
                     self.async_task.pop(k)
-            logger.info('async_wait_count={}', pending_count)
+            if pending_count > 0:
+                logger.info('async_wait_count={}', pending_count)
             return completed_futures
 
     # async def async_done_callback(self, future):

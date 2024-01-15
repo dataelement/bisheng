@@ -118,13 +118,20 @@ async def chat(
         *,
         flow_id: str,
         websocket: WebSocket,
+        t: Optional[str] = None,
         chat_id: Optional[str] = None,
         Authorize: AuthJWT = Depends(),
 ):
     """Websocket endpoint for chat."""
     try:
-        Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-        payload = json.loads(Authorize.get_jwt_subject())
+        if t:
+            Authorize.jwt_required(auth_from='websocket', token=t)
+            Authorize._token = t
+        else:
+            Authorize.jwt_required(auth_from='websocket', websocket=websocket)
+
+        payload = Authorize.get_jwt_subject()
+        payload = json.loads(payload)
         user_id = payload.get('user_id')
         if chat_id:
             with next(get_session()) as session:
