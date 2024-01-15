@@ -35,7 +35,7 @@ def create_template(*, session: Session = Depends(get_session), template: Templa
     return resp_200(db_template)
 
 
-@router.get('/template/', response_model=UnifiedResponseModel[list[Template]], status_code=200)
+@router.get('/template', response_model=UnifiedResponseModel[list[Template]], status_code=200)
 def read_template(*, session: Session = Depends(get_session)):
     """Read all flows."""
     try:
