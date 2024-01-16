@@ -59,6 +59,8 @@ class ThreadPoolManager:
             future = asyncio.run_coroutine_threadsafe(coro(*args, **kwargs), loop)
             # result = loop.run_until_complete(coro(*args, **kwargs))
             end_wait = time.time()
+            # 压力大的时候，会创建更多线程，从而更多事件队列
+            time.sleep(1)
             logger.info(f'async_task_waited={end_wait - start_wait:.2f} seconds', )
             return future
 
@@ -77,6 +79,7 @@ class ThreadPoolManager:
                 if len(lf) == 0:
                     self.future_dict.pop(k)
 
+            pending_count = 0
             for k, lf in list(self.async_task.items()):
                 for f in lf:
                     if f.done():
@@ -85,9 +88,12 @@ class ThreadPoolManager:
                         if task.done():
                             completed_futures.append((k, task))
                             self.async_task[k].remove(f)
+                        else:
+                            pending_count += 1
                 if len(lf) == 0:
                     self.async_task.pop(k)
-
+            if pending_count > 0:
+                logger.info('async_wait_count={}', pending_count)
             return completed_futures
 
     # async def async_done_callback(self, future):

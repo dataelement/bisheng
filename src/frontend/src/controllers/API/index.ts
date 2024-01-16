@@ -45,8 +45,8 @@ export async function getAppConfig(): Promise<AppConfig> {
  * @returns The flows data.
  * @throws Will throw an error if reading fails.
  */
-export async function readTempsDatabase(): Promise<FlowType[]> {
-  return await axios.get("/api/v1/skill/template/");
+export async function readTempsDatabase(id?: number): Promise<FlowType[]> {
+  return await axios.get(`/api/v1/skill/template${id ? '?id=' + id : ''}`);
 }
 
 /**

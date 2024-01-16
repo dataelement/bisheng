@@ -28,13 +28,17 @@ knowledges:
      MINIO_SECRET_KEY: "minioadmin"
   #
 
-# 全局配置大模型    
 default_llm:
+  # 全局配置大模型    
   model: "" # 在模型管理页面中已上线的大模型服务的名称
   host_base_url: "" # 在模型管理页面中已上线的大模型服务的地址
 
-# 模型访问的超时配置
 llm_request:
+  # 模型访问的超时配置
   request_timeout: 600
   max_retries: 1
   stream: true
+
+office_url:
+  # office 组件
+  http://office:80

@@ -45,7 +45,7 @@ export default function SkillPage() {
     const { setErrorData } = useContext(alertContext);
     // 选模板(创建技能)
     const handldSelectTemp = async (el) => {
-        const flow = await getFlowApi(el.flow_id)
+        const [flow] = await readTempsDatabase(el.id)
 
         flow.name = `${flow.name}-${generateUUID(5)}`
         captureAndAlertRequestErrorHoc(saveFlowToDatabase({ ...flow, id: flow.flow_id }).then(res => {

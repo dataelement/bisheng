@@ -60,10 +60,15 @@ def get_original_file(*, message_id: int, keys: str, session: Session = Depends(
             chunk_res['source_url'] = minio_client.get_share_link(str(chunk.file_id))
             chunk_res['original_url'] = minio_client.get_share_link(
                 file.object_name if file.object_name else str(file.id))
+            chunk_res['source'] = file.file_name
+        else:
+            chunk_res['source_url'] = ''
+            chunk_res['original_url'] = ''
+            chunk_res['source'] = ''
+
         chunk_res['score'] = round(match_score(chunk.chunk, keywords),
                                    2) if len(keywords) > 0 else 0
         chunk_res['file_id'] = chunk.file_id
-        chunk_res['source'] = file.file_name
 
         result.append(chunk_res)
 

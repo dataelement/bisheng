@@ -2,13 +2,10 @@ from typing import Optional
 
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
-from bisheng.template.frontend_node.constants import (INPUT_KEY_INFO,
-                                                      OUTPUT_KEY_INFO)
+from bisheng.template.frontend_node.constants import INPUT_KEY_INFO, OUTPUT_KEY_INFO
 from bisheng.template.template.base import Template
-from langchain.memory.chat_message_histories.mongodb import (
-    DEFAULT_COLLECTION_NAME, DEFAULT_DBNAME)
-from langchain.memory.chat_message_histories.postgres import \
-    DEFAULT_CONNECTION_STRING
+from langchain.memory.chat_message_histories.mongodb import DEFAULT_COLLECTION_NAME, DEFAULT_DBNAME
+from langchain.memory.chat_message_histories.postgres import DEFAULT_CONNECTION_STRING
 
 
 class MemoryFrontendNode(FrontendNode):
@@ -29,8 +26,7 @@ class MemoryFrontendNode(FrontendNode):
                 name='return_messages',
                 advanced=False,
                 value=False,
-            )
-        )
+            ))
         # add input_key and output_key str fields
         self.template.add_field(
             TemplateField(
@@ -40,8 +36,7 @@ class MemoryFrontendNode(FrontendNode):
                 name='input_key',
                 advanced=True,
                 value='',
-            )
-        )
+            ))
         if self.template.type_name not in {'VectorStoreRetrieverMemory'}:
             self.template.add_field(
                 TemplateField(
@@ -51,8 +46,7 @@ class MemoryFrontendNode(FrontendNode):
                     name='output_key',
                     advanced=True,
                     value='',
-                )
-            )
+                ))
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
@@ -75,10 +69,8 @@ class MemoryFrontendNode(FrontendNode):
             field.required = False
             field.show = True
             field.advanced = False
-            field.value = ''
-            field.info = (
-                INPUT_KEY_INFO if field.name == 'input_key' else OUTPUT_KEY_INFO
-            )
+            field.value = 'answer' if field.name == 'output_key' else ''
+            field.info = (INPUT_KEY_INFO if field.name == 'input_key' else OUTPUT_KEY_INFO)
 
         if field.name == 'memory_key':
             field.value = 'chat_history'

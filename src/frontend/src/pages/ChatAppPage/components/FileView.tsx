@@ -5,7 +5,6 @@ import { FixedSizeList as List, areEqual } from 'react-window';
 
 const SASS_HOST = 'https://bisheng.dataelem.com'
 export const checkSassUrl = (url: string) => {
-    return url
     return url.replace(/https?:\/\/[^\/]+/, '')
     // location.origin === SASS_HOST ? url.replace(/https?:\/\/[^\/]+/, '') : url;
 }

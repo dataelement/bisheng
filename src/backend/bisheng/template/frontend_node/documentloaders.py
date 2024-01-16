@@ -249,7 +249,7 @@ class DocumentLoaderFrontNode(FrontendNode):
                               show=True,
                               name='request_timeout',
                               advanced=True,
-                              value=10))
+                              value=600))
             self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in self.file_path_templates:
             self.template.add_field(self.file_path_templates[self.template.type_name])

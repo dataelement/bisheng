@@ -11,3 +11,4 @@ pymupdf==1.23.8
 pypdfium2==4.25.0
 shapely==2.0.2
 filetype==1.2.0
+

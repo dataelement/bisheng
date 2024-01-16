@@ -1,3 +1,5 @@
+from typing import Optional
+
 from bisheng.api.utils import remove_api_keys
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import get_session
@@ -36,10 +38,25 @@ def create_template(*, session: Session = Depends(get_session), template: Templa
 
 
 @router.get('/template', response_model=UnifiedResponseModel[list[Template]], status_code=200)
-def read_template(*, session: Session = Depends(get_session)):
+def read_template(*,
+                  page_size: Optional[int] = None,
+                  page_name: Optional[int] = None,
+                  id: Optional[int] = None,
+                  name: Optional[str] = None,
+                  session: Session = Depends(get_session)):
     """Read all flows."""
+    sql = select(Template.id, Template.name, Template.description, Template.update_time)
+    if id:
+        template = session.get(Template, id)
+        return resp_200([template])
+    if name:
+        sql.where(Template.name == name)
+    sql.order_by(Template.order_num.desc())
+    if page_size and page_name:
+        sql.offset(page_size * (page_name - 1)).limit(page_size)
     try:
-        templates = session.exec(select(Template).order_by(Template.order_num.desc())).all()
+        template_session = session.exec(sql)
+        templates = template_session.mappings().all()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     return resp_200(templates)
@@ -51,7 +68,7 @@ def update_template(*, session: Session = Depends(get_session), id: int, templat
     db_template = session.get(Template, id)
     if not db_template:
         raise HTTPException(status_code=404, detail='Template not found')
-    template_data = template.dict(exclude_unset=True)
+    template_data = template.model_dump(exclude_unset=True)
     if settings.remove_api_keys:
         template_data = remove_api_keys(template_data)
     for key, value in template_data.items():

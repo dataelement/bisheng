@@ -51,7 +51,7 @@ export default function ChatReportForm({ flow, onStart }) {
 
         // 组装数据，抛出
         const obj = items
-        const str = items.map((el, i) => `${el.name || ''}：${el.type === VariableType.File
+        const str = items.map((el, i) => `${el.name ? el.name + '：' : ''}${el.type === VariableType.File
             ? fileKindexVpath.current[i] : el.value}\n`).join('')
         onStart(obj, str)
     }

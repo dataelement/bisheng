@@ -352,10 +352,12 @@ def delete_knowledge_file(*, file_id: int, Authorize: AuthJWT = Depends()):
     minio_client.delete_minio(str(knowledge_file.id))
     minio_client.delete_minio(str(knowledge_file.object_name))
     # elastic
-    esvectore_client = decide_vectorstores(collection_name, 'ElasticKeywordsSearch', embeddings)
+    index_name = knowledge.index_name or collection_name
+    esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+
     if esvectore_client:
         res = esvectore_client.client.delete_by_query(
-            index=collection_name, query={'match': {
+            index=index_name, query={'match': {
                 'metadata.file_id': file_id
             }})
         logger.info(f'act=delete_es file_id={file_id} res={res}')
@@ -533,8 +535,8 @@ def file_knowledge(
     try:
         embeddings = decide_embeddings(db_knowledge.model)
         vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
-        es_client = decide_vectorstores(db_knowledge.collection_name, 'ElasticKeywordsSearch',
-                                        embeddings)
+        index_name = db_knowledge.index_name or db_knowledge.collection_name
+        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
     except Exception as e:
         logger.exception(e)
     separator = ['\n\n', '\n', ' ', '']
@@ -586,7 +588,7 @@ def text_knowledge(
     try:
         embeddings = decide_embeddings(db_knowledge.model)
         vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
-        es_client = decide_vectorstores(db_knowledge.collection_name, 'ElasticKeywordsSearch',
+        es_client = decide_vectorstores(db_knowledge.index_name, 'ElasticKeywordsSearch',
                                         embeddings)
     except Exception as e:
         logger.exception(e)
