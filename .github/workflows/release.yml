@@ -53,6 +53,7 @@ jobs:
           python setup.py bdist_wheel
           repo="http://${{ env.PY_NEXUS }}/repository/pypi-hosted/"
           twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl
+          cd ../../
 
       # 发布到 私有仓库
       - name: set insecure registry
