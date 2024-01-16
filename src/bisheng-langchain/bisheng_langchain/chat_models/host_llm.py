@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import sys
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
@@ -15,6 +14,7 @@ from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, Func
                                        HumanMessage, SystemMessage)
 from langchain.utils import get_from_dict_or_env
 from langchain_core.pydantic_v1 import Field, root_validator
+from loguru import logger
 # from requests.exceptions import HTTPError
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
@@ -24,8 +24,6 @@ from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_aft
 
 if TYPE_CHECKING:
     import tiktoken
-
-logger = logging.getLogger(__name__)
 
 
 def _import_tiktoken() -> Any:
@@ -49,7 +47,7 @@ def _create_retry_decorator(llm: BaseHostChatLLM) -> Callable[[Any], Any]:
         stop=stop_after_attempt(llm.max_retries),
         wait=wait_exponential(multiplier=1, min=min_seconds, max=max_seconds),
         retry=(retry_if_exception_type(Exception)),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
+        before_sleep=before_sleep_log(logger, logger.level('WARNING')),
     )
 
 
@@ -295,7 +293,11 @@ class BaseHostChatLLM(BaseChatModel):
                 if response.startswith('event:error'):
                     is_error = True
                 elif response.startswith('data:'):
-                    yield (is_error, response[len('data:'):])
+                    text = response[len('data:'):].strip()
+                    if text.startswith('{'):
+                        yield (is_error, response[len('data:'):])
+                    else:
+                        logger.info('agenerate_no_json text={}', text)
                     if is_error:
                         break
                 elif response.startswith('{'):

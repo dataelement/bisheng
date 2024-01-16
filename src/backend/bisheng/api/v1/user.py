@@ -49,6 +49,7 @@ async def regist(*, session: Session = Depends(get_session), user: UserCreate):
     if not admin:
         db_user_role = UserRole(user_id=db_user.user_id, role_id=1)
         db_user.user_id = 1
+        session.add(db_user_role)
 
     # check if user already exist
     name_user = session.exec(select(User).where(User.user_name == user.user_name)).all()
@@ -66,7 +67,7 @@ async def regist(*, session: Session = Depends(get_session), user: UserCreate):
             session.flush()
             session.refresh(db_user)
             # 默认加入普通用户
-            if db_user != 1:
+            if db_user.user_id != 1:
                 db_user_role = UserRole(user_id=db_user.user_id, role_id=2)
                 session.add(db_user_role)
             session.commit()
