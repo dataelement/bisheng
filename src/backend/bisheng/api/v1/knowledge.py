@@ -381,6 +381,7 @@ def decide_vectorstores(collection_name: str, vector_store: str,
     if not vector_config:
         # 无相关配置
         return None
+
     if vector_store == 'ElasticKeywordsSearch':
         param = {'index_name': collection_name, 'embedding': embedding}
         if isinstance(vector_config['ssl_verify'], str):

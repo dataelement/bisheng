@@ -1,5 +1,6 @@
+import { JSEncrypt } from 'jsencrypt';
 import { BookOpen, Github } from "lucide-react";
-import { useContext, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 import json from "../../package.json";
 import { Button } from "../components/ui/button";
@@ -7,9 +8,9 @@ import { Input } from "../components/ui/input";
 import { Separator } from "../components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { alertContext } from "../contexts/alertContext";
-import { loginApi, registerApi } from "../controllers/API/user";
-import StarBg from "./starBg";
+import { getPublicKeyApi, loginApi, getCaptchaApi, registerApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
+import StarBg from "./starBg";
 
 export const LoginPage = () => {
     const { setErrorData, setSuccessData } = useContext(alertContext);
@@ -24,38 +25,68 @@ export const LoginPage = () => {
     // login or register
     const [showLogin, setShowLogin] = useState(true)
 
-    const handleLogin = () => {
+    // captcha
+    const captchaRef = useRef(null)
+    const [captchaData, setCaptchaData] = useState({ captcha_key: '', user_capthca: false, captcha: '' });
+
+    useEffect(() => {
+        fetchCaptchaData();
+    }, []);
+
+    const fetchCaptchaData = () => {
+        getCaptchaApi().then(setCaptchaData)
+    };
+
+    const handleLogin = async () => {
         const error = []
         const [mail, pwd] = [mailRef.current.value, pwdRef.current.value]
         if (!mail) error.push(t('login.pleaseEnterAccount'))
         if (!pwd) error.push(t('login.pleaseEnterPassword'))
+        if (captchaData.user_capthca && !captchaRef.current.value) error.push(t('login.pleaseEnterCaptcha'))
         if (error.length) return setErrorData({
             title: `${t('prompt')}:`,
             list: error,
         });
-        captureAndAlertRequestErrorHoc(loginApi(mail, pwd).then(res => {
+
+        const encryptPwd = await handleEncrypt(pwd)
+        captureAndAlertRequestErrorHoc(loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(res => {
             // setUser(res.data)
             localStorage.setItem('isLogin', '1')
             location.href = '/'
         }))
+
+        fetchCaptchaData()
     }
 
-    const handleRegister = () => {
+    const handleRegister = async () => {
         const error = []
         const [mail, pwd, apwd] = [mailRef.current.value, pwdRef.current.value, agenPwdRef.current.value]
         if (!mail) error.push(t('login.pleaseEnterAccount'))
         if (mail.length < 3) error.push(t('login.accountTooShort'))
-        if (!/.{6,}/.test(pwd)) error.push(t('login.passwordTooShort'))
+        if (!/.{8,}/.test(pwd)) error.push(t('login.passwordTooShort'))
+        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#=_()^]{8,}$/.test(pwd)) error.push(t('login.passwordError'))
         if (pwd !== apwd) error.push(t('login.passwordMismatch'))
+        if (captchaData.user_capthca && !captchaRef.current.value) error.push(t('login.pleaseEnterCaptcha'))
         if (error.length) return setErrorData({
             title: `${t('prompt')}:`,
             list: error,
         });
-        captureAndAlertRequestErrorHoc(registerApi(mail, pwd).then(res => {
+
+        const encryptPwd = await handleEncrypt(pwd)
+        captureAndAlertRequestErrorHoc(registerApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(res => {
             setSuccessData({ title: t('login.registrationSuccess') })
             pwdRef.current.value = ''
             setShowLogin(true)
         }))
+
+        fetchCaptchaData()
+    }
+
+    const handleEncrypt = async (pwd) => {
+        const { public_key } = await getPublicKeyApi()
+        const encrypt = new JSEncrypt()
+        encrypt.setPublicKey(public_key)
+        return encrypt.encrypt(pwd) as string
     }
 
     return <div className="w-full h-full bg-gray-200 dark:bg-gray-700">
@@ -86,6 +117,24 @@ export const LoginPage = () => {
                             !showLogin && <div className="grid">
                                 <Input id="pwd" ref={agenPwdRef} placeholder={t('login.confirmPassword')} type="password" />
                             </div>
+                        }
+                        {
+                            captchaData.user_capthca && (<div className="flex items-center gap-4">
+                                <Input
+                                    type="text"
+                                    ref={captchaRef}
+                                    placeholder={t('login.pleaseEnterCaptcha')}
+                                    className="form-input px-4 py-2 border border-gray-300 focus:outline-none"
+                                />
+                                <img
+                                    src={'data:image/jpg;base64,' + captchaData.captcha} // 这里应该是你的验证码图片的URL
+                                    alt="captcha"
+                                    onClick={fetchCaptchaData} // 这里应该是你的刷新验证码函数
+                                    className="cursor-pointer h-10 bg-gray-100 border border-gray-300"
+                                    style={{ width: '120px' }} // 根据需要调整宽度
+                                />
+                            </div>
+                            )
                         }
                         {
                             showLogin ? <>

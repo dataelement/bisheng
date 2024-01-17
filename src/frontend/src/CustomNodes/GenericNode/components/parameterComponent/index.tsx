@@ -264,7 +264,7 @@ export default function ParameterComponent({
         )}
 
         {/* 左侧input输入项 */}
-        {left === true &&
+        {!data.node.template[name] ? null : left === true &&
           type === "str" &&
           !data.node.template[name].options ? (
           <div className="mt-2 w-full">

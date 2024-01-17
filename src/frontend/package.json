@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "0.2.2",
+  "version": "0.2.2.1",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -39,6 +39,7 @@
     "esbuild": "^0.17.19",
     "i18next": "^23.6.0",
     "i18next-http-backend": "^2.2.2",
+    "jsencrypt": "^3.3.2",
     "lodash-es": "^4.17.21",
     "lucide-react": "^0.233.0",
     "pdfjs-dist": "3.10.111",
@@ -53,7 +54,7 @@
     "react-icons": "^4.10.1",
     "react-laag": "^2.0.5",
     "react-markdown": "^8.0.7",
-    "react-router-dom": "^6.15.0",
+    "react-router-dom": "6.17.0",
     "react-syntax-highlighter": "^15.5.0",
     "react-tabs": "^6.0.2",
     "react-tooltip": "^5.21.1",

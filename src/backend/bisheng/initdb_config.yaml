@@ -40,5 +40,5 @@ llm_request:
   stream: true
 
 office_url:
-  # office 组件
-  http://office:80
+  # office 组件访问地址，需要浏览器能直接访问
+  http://ip:8701

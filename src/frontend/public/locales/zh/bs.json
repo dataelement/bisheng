@@ -14,9 +14,11 @@
         "pleaseEnterAccount": "请填写账号",
         "pleaseEnterPassword": "请填写密码",
         "accountTooShort": "账号过短",
-        "passwordTooShort": "请填写密码,至少六位",
+        "passwordTooShort": "请填写密码,至少8位",
+        "passwordError": "密码必须包含大小写字母、数字和特殊字符！",
         "passwordMismatch": "两次密码不一致",
-        "registrationSuccess": "注册成功,请输入密码进行登录"
+        "registrationSuccess": "注册成功,请输入密码进行登录",
+        "pleaseEnterCaptcha": "请输入验证码"
     },
     "menu": {
         "app": "应 用",
