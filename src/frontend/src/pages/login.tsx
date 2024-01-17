@@ -63,8 +63,8 @@ export const LoginPage = () => {
         const [mail, pwd, apwd] = [mailRef.current.value, pwdRef.current.value, agenPwdRef.current.value]
         if (!mail) error.push(t('login.pleaseEnterAccount'))
         if (mail.length < 3) error.push(t('login.accountTooShort'))
-        if (!/.{6,}/.test(pwd)) error.push(t('login.passwordTooShort'))
-        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#^]{8,}$/.test(pwd)) error.push(t('login.passwordError'))
+        if (!/.{8,}/.test(pwd)) error.push(t('login.passwordTooShort'))
+        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#=_()^]{8,}$/.test(pwd)) error.push(t('login.passwordError'))
         if (pwd !== apwd) error.push(t('login.passwordMismatch'))
         if (captchaData.user_capthca && !captchaRef.current.value) error.push(t('login.pleaseEnterCaptcha'))
         if (error.length) return setErrorData({
@@ -130,7 +130,7 @@ export const LoginPage = () => {
                                     src={'data:image/jpg;base64,' + captchaData.captcha} // 这里应该是你的验证码图片的URL
                                     alt="captcha"
                                     onClick={fetchCaptchaData} // 这里应该是你的刷新验证码函数
-                                    className="cursor-pointer h-10 bg-gray-100 border border-gray-300 p-2"
+                                    className="cursor-pointer h-10 bg-gray-100 border border-gray-300"
                                     style={{ width: '120px' }} // 根据需要调整宽度
                                 />
                             </div>
