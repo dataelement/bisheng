@@ -44,7 +44,7 @@ def get_chatmessage(*,
                                       ChatMessage.chat_id == chat_id,
                                       ChatMessage.user_id == payload.get('user_id'))
     if id:
-        where = where.where(ChatMessage.id < id)
+        where = where.where(ChatMessage.id < int(id))
     db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
     return resp_200(db_message)
 
