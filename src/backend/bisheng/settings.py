@@ -4,6 +4,7 @@ from typing import Optional, Union
 import yaml
 from bisheng.database.models.config import Config
 from bisheng.utils.logger import logger
+from cryptography.fernet import Fernet
 from pydantic import BaseSettings, root_validator, validator
 from sqlmodel import select
 
@@ -48,30 +49,30 @@ class Settings(BaseSettings):
             else:
                 logger.debug('No DATABASE_URL env variable, using sqlite database')
                 value = 'sqlite:///./bisheng.db'
-        # else:
-        #     # 对密码进行加密
-        #     import re
-        #     pattern = r"(?<=:)[^:]+(?=@)"  # 匹配冒号后面到@符号前面的任意字符
-        #     match = re.search(pattern, values['database_url'])
-        #     if match:
-        #         password = match.group(0)
-        #         new_password = decrypt_token(password)
-        #         new_mysql_url = re.sub(pattern, f":{new_password}@", values['database_url'])
-        #         values['database_url'] = new_mysql_url
+        else:
+            # 对密码进行加密
+            import re
+            pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
+            match = re.search(pattern, value)
+            if match:
+                password = match.group(0)
+                new_password = decrypt_token(password)
+                new_mysql_url = re.sub(pattern, f'{new_password}', value)
+                value = new_mysql_url
 
         return value
 
     @root_validator()
     def set_redis_url(cls, values):
-        # if 'redis_url' in values:
-        #     import re
-        #     pattern = r"(?<=:)[^:]+(?=@)"  # 匹配冒号后面到@符号前面的任意字符
-        #     match = re.search(pattern, values['redis_url'])
-        #     if match:
-        #         password = match.group(0)
-        #         new_password = decrypt_token(password)
-        #         new_mysql_url = re.sub(pattern, f":{new_password}@", values['redis_url'])
-        #         values['redis_url'] = new_mysql_url
+        if 'redis_url' in values:
+            import re
+            pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
+            match = re.search(pattern, values['redis_url'])
+            if match:
+                password = match.group(0)
+                new_password = decrypt_token(password)
+                new_redis_url = re.sub(pattern, f':{new_password}@', values['redis_url'])
+                values['redis_url'] = new_redis_url
         return values
 
     class Config:
@@ -242,15 +243,16 @@ def parse_key(keys: list[str], setting_str: str = None) -> str:
     return ['\n'.join(value) for value in value_of_key]
 
 
-# from cryptography.fernet import Fernet
+secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
 
-# secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
 
-# def encrypt_token(token: str):
-#     return Fernet(secret_key).encrypt(token.encode())
+def encrypt_token(token: str):
+    return Fernet(secret_key).encrypt(token.encode())
 
-# def decrypt_token(token: str):
-#     return Fernet(secret_key).decrypt(token).decode()
+
+def decrypt_token(token: str):
+    return Fernet(secret_key).decrypt(token).decode()
+
 
 config_file = os.getenv('config', 'config.yaml')
 settings = load_settings_from_yaml(config_file)
