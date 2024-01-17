@@ -232,8 +232,8 @@ class ChatManager:
                                                              **process_param)
 
                 # 处理任务状态
-                complete_normal = await thread_pool.as_completed()
-                autoComplete = await autogen_pool.as_completed()
+                complete_normal = await thread_pool.as_completed(key_list)
+                autoComplete = await autogen_pool.as_completed(key_list)
                 complete = complete_normal + autoComplete
                 # if async_task and async_task.done():
                 #     logger.debug(f'async_task_complete result={async_task.result}')
