@@ -2,7 +2,7 @@ import asyncio
 import concurrent.futures
 import threading
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Set, Tuple
 
 from loguru import logger
 
@@ -68,14 +68,16 @@ class ThreadPoolManager:
         asyncio.set_event_loop(loop)
         loop.run_forever()
 
-    async def as_completed(self) -> List[Tuple[str, concurrent.futures.Future]]:
+    async def as_completed(self,
+                           key_list: Set[str]) -> List[Tuple[str, concurrent.futures.Future]]:
         with self.lock:
             completed_futures = []
             for k, lf in list(self.future_dict.items()):
                 for f in lf:
                     if f.done():
-                        completed_futures.append((k, f))
-                        self.future_dict[k].remove(f)
+                        if k in key_list:
+                            completed_futures.append((k, f))
+                            self.future_dict[k].remove(f)
                 if len(lf) == 0:
                     self.future_dict.pop(k)
 
@@ -86,8 +88,9 @@ class ThreadPoolManager:
                         # 获取task
                         task = f.result()
                         if task.done():
-                            completed_futures.append((k, task))
-                            self.async_task[k].remove(f)
+                            if k in key_list:
+                                completed_futures.append((k, task))
+                                self.async_task[k].remove(f)
                         else:
                             pending_count += 1
                 if len(lf) == 0:
