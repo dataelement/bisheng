@@ -18,7 +18,11 @@ include = ["./bisheng/*", "bisheng/**/*"]
 bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
+<<<<<<< Updated upstream
 bisheng_langchain = "0.2.2"
+=======
+bisheng_langchain = "0.2.2.2"
+>>>>>>> Stashed changes
 bisheng_pyautogen = "0.1.19"
 minio = "7.2.0"
 loguru = "^0.7.1"

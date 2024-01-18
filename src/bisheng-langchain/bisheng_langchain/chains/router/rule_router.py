@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, Callable, Dict, List, Union
 
 from langchain.callbacks.manager import Callbacks
@@ -41,7 +42,12 @@ class RuleBasedRouter(RouterChain):
         inputs: Union[Dict[str, Any], Any],
         callbacks: Callbacks = None,
     ) -> Route:
-        result = await self.rule_function(inputs)
+        """Route the inputs to the next chain based on the rule function."""
+        # 如果是异步function，那么就用await
+        if asyncio.iscoroutinefunction(self.rule_function):
+            result = await self.rule_function(inputs)
+        else:
+            result = self.rule_function(inputs)
         if not result.get('destination') or not result:
             return Route(None, result['next_inputs'])
         return Route(result['destination'], result['next_inputs'])
