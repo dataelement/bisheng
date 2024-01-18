@@ -3,11 +3,11 @@ from typing import List, Optional
 from uuid import UUID
 
 from bisheng.api.utils import build_flow, build_input_keys_response
-from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatList, InitResponse, StreamData,
-                                    UnifiedResponseModel, resp_200)
+from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList, InitResponse,
+                                    StreamData, UnifiedResponseModel, resp_200)
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
-from bisheng.database.base import get_session
+from bisheng.database.base import get_session, session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageRead
 from bisheng.graph.graph.base import Graph
@@ -67,18 +67,30 @@ def del_chat_id(*,
 
 @router.post('/liked', status_code=200)
 def like_response(*,
-                  data: dict,
+                  data: ChatInput,
                   session: Session = Depends(get_session),
                   Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
-    message_id = data.get('message_id')
-    liked = data.get('liked')
+    message_id = data.message_id
+    liked = data.liked
     message = session.get(ChatMessage, message_id)
     if message and message.user_id == payload.get('user_id'):
         message.liked = liked
     session.add(message)
     session.commit()
+    return resp_200(message='操作成功')
+
+
+@router.post('/comment', status_code=200)
+def comment_resp(*, data: ChatInput, Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    with session_getter() as session:
+        message = session.get(ChatMessage, data.message_id)
+        if message:
+            message.remark = data.comment
+            session.add(message)
+            session.commit()
     return resp_200(message='操作成功')
 
 

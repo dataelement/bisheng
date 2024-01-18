@@ -2,7 +2,6 @@ import asyncio
 from typing import Tuple, Union
 
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler, StreamingLLMCallbackHandler
-from bisheng.api.v1.schemas import ChatResponse
 from bisheng.processing.process import fix_memory_inputs, format_actions
 from bisheng.utils.logger import logger
 
@@ -32,8 +31,8 @@ async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwa
             # make the error message more informative
             logger.exception(exc)
             asyc = False
-            step = ChatResponse(intermediate_steps='分析中', type='stream',)
-            await kwargs['websocket'].send_json(step.dict())
+            # step = ChatResponse(intermediate_steps='分析中', type='stream',)
+            # await kwargs['websocket'].send_json(step.dict())
             sync_callbacks = [StreamingLLMCallbackHandler(**kwargs)]
             output = langchain_object(inputs, callbacks=sync_callbacks)
         finally:

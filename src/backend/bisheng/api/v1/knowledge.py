@@ -398,12 +398,16 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
                  separator: str, chunk_overlap: int, file_paths: List[str],
                  knowledge_files: List[KnowledgeFile], callback: str):
     try:
+        vectore_client, es_client = None, None
         embeddings = decide_embeddings(model)
         vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
         es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
         minio_client = MinioClient()
     except Exception as e:
         logger.exception(e)
+
+    if not vectore_client and not es_client:
+        raise ValueError('no vectordb present')
 
     callback_obj = {}
     for index, path in enumerate(file_paths):
@@ -437,6 +441,7 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
             logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
             for metadata in metadatas:
                 metadata.update({'file_id': knowledge_file.id, 'knowledge_id': f'{knowledge_id}'})
+
             vectore_client.add_texts(texts=texts, metadatas=metadatas)
 
             # 存储es

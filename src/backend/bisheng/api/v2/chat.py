@@ -1,3 +1,4 @@
+import json
 from typing import Optional
 from uuid import uuid4
 
@@ -7,6 +8,7 @@ from bisheng.database.base import get_session, session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage
 from bisheng.graph.graph.base import Graph
+from bisheng.processing.process import process_tweaks
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, WebSocket, status
@@ -22,6 +24,7 @@ expire = 600  # reids 60s 过期
 async def union_websocket(flow_id: str,
                           websocket: WebSocket,
                           chat_id: Optional[str] = None,
+                          tweak: Optional[str] = None,
                           knowledge_id: Optional[int] = None):
     """Websocket endpoint forF  chat."""
     if chat_id:
@@ -38,6 +41,9 @@ async def union_websocket(flow_id: str,
         graph_data = db_flow.data
 
     try:
+        if tweak:
+            tweak = json.loads(tweak)
+            graph_data = process_tweaks(graph_data, tweak)
         graph = Graph.from_payload(graph_data)
         for node in graph.vertices:
             if node.base_type == 'vectorstores':

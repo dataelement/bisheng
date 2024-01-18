@@ -88,6 +88,12 @@ class ProcessResponse(BaseModel):
     backend: Optional[str] = None
 
 
+class ChatInput(BaseModel):
+    message_id: int
+    comment: str = None
+    liked: int = 0
+
+
 class ChatList(BaseModel):
     """Chat message list."""
 
