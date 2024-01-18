@@ -42,3 +42,12 @@ llm_request:
 office_url:
   # office 组件访问地址，需要浏览器能直接访问
   http://ip:8701
+
+
+# 是否需要验证码
+use_captcha:
+  True
+
+# 聊天对话框配置
+dialog_tips:
+  "欢迎使用bisheng，我们github地址：https://github.com/dataelement/bisheng, 有问题可以提issue，我们会尽快回复您。"

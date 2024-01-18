@@ -4,12 +4,12 @@ from uuid import uuid4
 
 from bisheng.api.v1.knowledge import (addEmbedding, decide_embeddings, decide_vectorstores,
                                       file_knowledge, text_knowledge)
-from bisheng.api.v1.schemas import ChunkInput
+from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200
 from bisheng.cache.utils import save_download_file
-from bisheng.database.base import get_session
+from bisheng.database.base import get_session, session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeRead,
                                                KnowledgeUpdate)
-from bisheng.database.models.knowledge_file import KnowledgeFile
+from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.settings import settings
@@ -140,7 +140,9 @@ def delete_knowledge(
     return {'message': 'knowledge deleted successfully'}
 
 
-@router.post('/file/{knowledge_id}', status_code=200)
+@router.post('/file/{knowledge_id}',
+             response_model=UnifiedResponseModel[KnowledgeFileRead],
+             status_code=200)
 async def upload_file(*,
                       knowledge_id: int,
                       callback_url: Optional[str] = Form(None),
@@ -156,8 +158,8 @@ async def upload_file(*,
         separator = ['\n\n', '\n', ' ', '']
         chunk_size = 500
         chunk_overlap = 50
-    session = next(get_session())
-    knowledge = session.get(Knowledge, knowledge_id)
+    with session_getter() as session:
+        knowledge = session.get(Knowledge, knowledge_id)
 
     collection_name = knowledge.collection_name
 
@@ -167,10 +169,11 @@ async def upload_file(*,
                             status=1,
                             md5=md5_,
                             user_id=1)
-    session.add(db_file)
-    session.commit()
-    session.refresh(db_file)
-
+    with session_getter() as session:
+        session.add(db_file)
+        session.commit()
+        session.refresh(db_file)
+    db_file = db_file.copy()
     logger.info(f'fileName={file_name} col={collection_name} file_id={db_file.id}')
     try:
         index_name = knowledge.index_name or knowledge.collection_name
@@ -188,14 +191,15 @@ async def upload_file(*,
     except Exception:
         # 失败，需要删除数据
         logger.info(f'delete file_id={db_file.id} status={db_file.status} reason={db_file.remark}')
-        session.delete(db_file)
-        session.commit()
+        with session_getter() as session:
+            session.delete(db_file)
+            session.commit()
         raise HTTPException(status_code=500, detail=db_file.remark)
     knowledge.update_time = db_file.create_time
-    session.add(knowledge)
-    session.commit()
-    session.refresh(db_file)
-    return {'status_code': 200, 'message': 'success', 'data': jsonable_encoder(db_file)}
+    with session_getter() as session:
+        session.add(knowledge)
+        session.commit()
+    return resp_200(db_file)
 
 
 @router.delete('/file/{file_id}', status_code=200)
@@ -234,7 +238,7 @@ def delete_knowledge_file(
 
     session.delete(knowledge_file)
     session.commit()
-    return {'message': 'knowledge file deleted successfully'}
+    return resp_200()
 
 
 @router.get('/file/{knowledge_id}', status_code=200)
@@ -288,7 +292,7 @@ async def post_chunks(
 
     file_knowledge(db_knowledge, file_path, file_name, metadata, session)
 
-    return {'status_code': 200, 'message': 'success'}
+    return resp_200()
 
 
 @router.post('/chunks_string', status_code=200)
@@ -304,4 +308,4 @@ async def post_string_chunks(
 
     text_knowledge(db_knowledge, document.documents, session)
 
-    return {'status_code': 200, 'message': 'success'}
+    return resp_200()

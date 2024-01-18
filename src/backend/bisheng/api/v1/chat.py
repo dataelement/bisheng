@@ -82,7 +82,7 @@ def like_response(*,
     return resp_200(message='操作成功')
 
 
-@router.post('/comment', status_code=200)
+@router.post('/chat/comment', status_code=200)
 def comment_resp(*, data: ChatInput, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     with session_getter() as session:

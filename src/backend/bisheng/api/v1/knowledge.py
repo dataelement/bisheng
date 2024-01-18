@@ -397,13 +397,20 @@ def decide_vectorstores(collection_name: str, vector_store: str,
 def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chunk_size: int,
                  separator: str, chunk_overlap: int, file_paths: List[str],
                  knowledge_files: List[KnowledgeFile], callback: str):
+    error_msg = ''
     try:
         vectore_client, es_client = None, None
+        minio_client = MinioClient()
         embeddings = decide_embeddings(model)
         vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
-        minio_client = MinioClient()
     except Exception as e:
+        error_msg = 'MilvusExcept:' + str(e)
+        logger.exception(e)
+
+    try:
+        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+    except Exception as e:
+        error_msg = error_msg + 'ESException:' + str(e)
         logger.exception(e)
 
     if not vectore_client and not es_client:
