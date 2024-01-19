@@ -240,7 +240,8 @@ class Vertex:
             if not value.get('required') and params.get(key) is None:
                 if value.get('default'):
                     params[key] = value.get('default')
-
+                else:
+                    params.pop(key, None)
         # Add _type to params
         self._raw_params = params
         self.params = params
