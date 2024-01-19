@@ -123,7 +123,8 @@
         "confirmDeleteChat": "确认删除该会话？",
         "roundOver": "本轮结束",
         "chatDialogTip": "设置提示模板中定义的输入变量。与代理和链互动",
-        "feedback": "反馈"
+        "feedback": "反馈",
+        "feedbackRequired": "反馈信息不能为空"
     },
     "model": {
         "modelConfiguration": "模型配置",

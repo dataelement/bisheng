@@ -58,7 +58,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   // 记录快照
   const { takeSnapshot } = useContext(undoRedoContext);
   // 快捷键
-  const setLastSelection = useKeyBoard(reactFlowWrapper)
+  const [keyBoardPanneRef, setLastSelection] = useKeyBoard(reactFlowWrapper)
   const onSelectionChange = useCallback((flow) => {
     setLastSelection(flow);
   }, []);
@@ -290,7 +290,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     <div className="flex h-full overflow-hidden">
       {Object.keys(data).length ? <ExtraSidebar flow={flow} /> : <></>}
       {/* Main area */}
-      <main className="flex flex-1">
+      <main className="flex flex-1" ref={keyBoardPanneRef}>
         {/* Primary column */}
         <div className="h-full w-full">
           <div className="h-full w-full" ref={reactFlowWrapper}>
@@ -358,6 +358,8 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
 
 // 复制粘贴组件，支持跨技能粘贴
 const useKeyBoard = (reactFlowWrapper) => {
+  const keyBoardPanneRef = useRef(null)
+
   const position = useRef({ x: 0, y: 0 });
   const [lastSelection, setLastSelection] =
     useState<OnSelectionChangeParams>(null);
@@ -395,16 +397,16 @@ const useKeyBoard = (reactFlowWrapper) => {
       position.current = { x: event.clientX, y: event.clientY };
     };
 
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("mousemove", handleMouseMove);
+    keyBoardPanneRef.current.addEventListener("keydown", onKeyDown);
+    keyBoardPanneRef.current.addEventListener("mousemove", handleMouseMove);
 
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("mousemove", handleMouseMove);
+      keyBoardPanneRef.current?.removeEventListener("keydown", onKeyDown);
+      keyBoardPanneRef.current?.removeEventListener("mousemove", handleMouseMove);
     };
   }, [position, lastCopiedSelection, lastSelection]);
 
-  return setLastSelection
+  return [keyBoardPanneRef, setLastSelection] as const
 }
 
 // 离开页面保存提示

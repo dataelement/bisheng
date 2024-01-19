@@ -103,7 +103,6 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
     data.id = `${idArr[0]}-${id}`
   }
 
-
   return (
     <Dialog open={true} onOpenChange={setModalOpen}>
       <DialogTrigger asChild></DialogTrigger>
@@ -111,7 +110,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
         <DialogHeader>
           <DialogTitle className="flex items-center">
             <span className="pr-2">{data.type}</span>
-            <Badge variant="secondary" onClick={handleChangeId}>ID:{idArr[0]}-
+            <Badge variant="secondary">ID:{idArr[0]}-
               <EditLabel str={idArr[1]} onChange={handleChangeId}>{
                 (val) => <>{val}</>
               }</EditLabel>

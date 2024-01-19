@@ -2,8 +2,6 @@ import { PenLine } from "lucide-react";
 import { useRef, useState } from "react";
 
 export default function EditLabel({ str, children, onChange }) {
-    const [value, setValue] = useState(str)
-
     const [edit, setEdit] = useState(false)
     const inputRef = useRef(str)
 

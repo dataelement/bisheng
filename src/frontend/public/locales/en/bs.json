@@ -127,7 +127,8 @@
         "confirmDeleteChat": "Confirm deletion of this chat？",
         "roundOver": "This round is over",
         "chatDialogTip": "Set the input variables defined in the prompt template. Interact with agents and chains.",
-        "feedback": "Feedback"
+        "feedback": "Feedback",
+        "feedbackRequired": "Feedback is required"
     },
     "model": {
         "modelConfiguration": "Model Configuration",

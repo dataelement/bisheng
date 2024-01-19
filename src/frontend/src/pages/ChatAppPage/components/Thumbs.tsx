@@ -21,7 +21,7 @@ export default function Thumbs({ id, className, onCopy, data, onDislike }) {
             likeChatApi(id, newType);
             return newType
         })
-        if (state === ThumbsState.Default && type === ThumbsState.ThumbsDown) onDislike?.(id)
+        if (state !== ThumbsState.ThumbsDown && type === ThumbsState.ThumbsDown) onDislike?.(id)
     }
 
     const handleCopy = (e) => {
