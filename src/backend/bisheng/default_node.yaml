@@ -147,6 +147,8 @@ embeddings:
     documentation: ""
   HostEmbeddings:
     documentation: ""
+  CustomHostEmbedding:
+    documentation: ""
 llms:
   AzureChatOpenAI:
     documentation: ""

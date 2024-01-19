@@ -174,7 +174,9 @@ def create_knowledge(*,
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """ 创建知识库. """
-    db_knowldge = Knowledge.from_orm(knowledge)
+    knowledge.is_partition = knowledge.is_partition or settings.vectorstores.get('Milvus', {}).get(
+        'is_partition', True)
+    db_knowldge = Knowledge.model_validate(knowledge)
     know = session.exec(
         select(Knowledge).where(Knowledge.name == knowledge.name,
                                 knowledge.user_id == payload.get('user_id'))).all()
@@ -183,9 +185,9 @@ def create_knowledge(*,
     if not db_knowldge.collection_name:
         if knowledge.is_partition:
             embedding = re.sub(r'[^\w]', '_', knowledge.model)
-            id = settings.get_knowledge().get('vectorstores').get('Milvus',
-                                                                  {}).get('partition_suffix', 1)
-            db_knowldge.collection_name = f'partition_{embedding}_knowledge_{id}'
+            suffix_id = settings.get_knowledge().get('vectorstores').get('Milvus', {}).get(
+                'partition_suffix', 1)
+            db_knowldge.collection_name = f'partition_{embedding}_knowledge_{suffix_id}'
         else:
             # 默认collectionName
             db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
@@ -413,9 +415,6 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
         error_msg = error_msg + 'ESException:' + str(e)
         logger.exception(e)
 
-    if not vectore_client and not es_client:
-        raise ValueError('no vectordb present')
-
     callback_obj = {}
     for index, path in enumerate(file_paths):
         ts1 = time.time()
@@ -423,6 +422,26 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
         logger.info('process_file_begin knowledge_id={} file_name={} file_size={} ',
                     knowledge_files[0].knowledge_id, knowledge_file.file_name, len(file_paths))
 
+        if not vectore_client and not es_client:
+            # 设置错误
+            with session_getter() as session:
+                db_file = session.get(KnowledgeFile, knowledge_file.id)
+                setattr(db_file, 'status', 3)
+                setattr(db_file, 'remark', error_msg[:500])
+                session.add(db_file)
+                callback_obj = db_file.copy()
+                session.commit()
+            if callback:
+                inp = {
+                    'file_name': knowledge_file.file_name,
+                    'file_status': knowledge_file.status,
+                    'file_id': callback_obj.id,
+                    'error_msg': callback_obj.remark
+                }
+                logger.error('add_fail callback={} file_name={} status={}', callback,
+                             callback_obj.file_name, callback_obj.status)
+                requests.post(url=callback, json=inp, timeout=3)
+            continue
         try:
             # 存储 mysql
             with session_getter() as session:
@@ -449,16 +468,17 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
             for metadata in metadatas:
                 metadata.update({'file_id': knowledge_file.id, 'knowledge_id': f'{knowledge_id}'})
 
-            vectore_client.add_texts(texts=texts, metadatas=metadatas)
+            if vectore_client:
+                vectore_client.add_texts(texts=texts, metadatas=metadatas)
 
             # 存储es
             if es_client:
                 es_client.add_texts(texts=texts, metadatas=metadatas)
 
             callback_obj = db_file.copy()
-            logger.info(
-                f'process_file_done file_name={knowledge_file.file_name} file_id={knowledge_file.id} time_cost={time.time()-ts1}'  # noqa
-            )
+            logger.info('process_file_done file_name={} file_id={} time_cost={}',
+                        knowledge_file.file_name, knowledge_file.id,
+                        time.time() - ts1)
         except Exception as e:
             logger.error(e)
             session = next(get_session())
@@ -468,18 +488,18 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
             session.add(db_file)
             callback_obj = db_file.copy()
             session.commit()
-    if callback:
-        # asyn
-        inp = {
-            'file_name': callback_obj.file_name,
-            'file_status': callback_obj.status,
-            'file_id': callback_obj.id,
-            'error_msg': callback_obj.remark
-        }
-        logger.info(
-            f'add_complete callback={callback} file_name={callback_obj.file_name} status={callback_obj.status}'
-        )
-        requests.post(url=callback, json=inp, timeout=3)
+        if callback:
+            # asyn
+            inp = {
+                'file_name': callback_obj.file_name,
+                'file_status': callback_obj.status,
+                'file_id': callback_obj.id,
+                'error_msg': callback_obj.remark
+            }
+            logger.info(
+                f'add_complete callback={callback} file_name={callback_obj.file_name} status={callback_obj.status}'
+            )
+            requests.post(url=callback, json=inp, timeout=3)
 
 
 def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):

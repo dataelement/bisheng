@@ -108,7 +108,7 @@ async def judge_source(result, source_document, chat_id, extra: Dict):
         else:
             source = 1
 
-    if source:
+    if source == 1:
         for doc in source_document:
             # 确保每个chunk 都可溯源
             if 'bbox' not in doc.metadata or not doc.metadata['bbox'] or not json.loads(

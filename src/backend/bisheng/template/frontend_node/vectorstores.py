@@ -307,6 +307,8 @@ class VectorStoreFrontendNode(FrontendNode):
                 field.placeholder = ':memory:'
             elif field.name == 'collection_name' and name == 'Milvus':
                 field.value = ''
+            elif field.name == 'index_name':
+                field.value = ''
 
         elif field.name in advanced_fields:
             field.show = True

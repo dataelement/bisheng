@@ -24,7 +24,7 @@ class MessageBase(SQLModelSerializable):
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
     intermediate_steps: Optional[str] = Field(sa_column=Column(Text), description='过程日志')
     files: Optional[str] = Field(sa_column=Column(String(length=4096)), description='上传的文件等')
-    remark: Optional[str] = Field(sa_column=Column(String(length=1024)), description='备注')
+    remark: Optional[str] = Field(sa_column=Column(String(length=10000)), description='备注')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(

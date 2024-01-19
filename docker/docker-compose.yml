@@ -2,7 +2,7 @@ services:
   mysql:
     container_name: bisheng-mysql
     image: mysql:8.0
-    pull_policy: always
+    
     ports:
       - "3306:3306"
     environment:
