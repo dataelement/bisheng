@@ -53,7 +53,6 @@ services:
   backend:
     container_name: bisheng-backend
     image: dataelement/bisheng-backend:latest
-    pull_policy: always
     ports:
       - "7860:7860"
     environment:
@@ -82,7 +81,6 @@ services:
   frontend:
     container_name: bisheng-frontend
     image: dataelement/bisheng-frontend:latest
-    pull_policy: always
     ports:
       - "3001:3001"
     environment:
