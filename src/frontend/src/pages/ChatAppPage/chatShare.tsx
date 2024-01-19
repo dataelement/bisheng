@@ -1,5 +1,5 @@
 // 嵌iframe、适配移动端
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { getFlowApi } from "../../controllers/API/flow";
 import { FlowType } from "../../types/flow";
@@ -11,6 +11,17 @@ export default function chatShare() {
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
     const libId = searchParams.get('lib')
+    const tweak = searchParams.get('tweak')
+
+    const queryString = useMemo(() => {
+        const params = [];
+
+        if (libId) params.push(`libId=${libId}`);
+        if (tweak) params.push(`tweak=${tweak}`);
+
+        return params.length > 0 ? `&${params.join('&')}` : '';
+    }, [libId, tweak])
+
     // 
     const [flow, setFlow] = useState<FlowType>(null)
     const [chatId, setChatId] = useState<string>('')
@@ -24,5 +35,5 @@ export default function chatShare() {
 
     if (!flowId) return <div>请选择技能</div>
 
-    return flow ? <ChatPanne version='v2' libId={libId} chatId={chatId} flow={flow} /> : null
+    return flow ? <ChatPanne version='v2' queryString={queryString} chatId={chatId} flow={flow} /> : null
 };

@@ -233,6 +233,13 @@ export const likeChatApi = (chatId, liked) => {
 };
 
 /**
+ * 踩消息反馈
+ */
+export const disLikeCommentApi = (message_id, comment) => {
+  return axios.post(`/api/v1/chat/comment`, { message_id, comment });
+};
+
+/**
  * Fetches the version of the API.
  *
  * @returns {Promise<AxiosResponse<any>>} A promise that resolves to an AxiosResponse containing the version information.

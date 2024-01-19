@@ -3,15 +3,6 @@ import axios from "axios";
 axios.defaults.withCredentials = true;
 
 axios.interceptors.response.use(function (response) {
-    // test
-    if (!response.data.status_code) {
-        response.data = {
-            status_code: 200,
-            data: response.data,
-            msg: 'success'
-        }
-    }
-
     if (response.data.status_code === 200) {
         return response.data.data;
     }
