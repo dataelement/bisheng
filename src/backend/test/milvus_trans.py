@@ -138,3 +138,7 @@ with Session(engine) as session:
             print(f'deal_done id={knowledge[0]} index={index_name}')
             cli.col.drop()
             pass
+
+# def elastic_clean():
+#     url = 'http://192.168.106.116:9200/_stats'
+#     headers = {'Authorization': 'Basic ZWxhc3RpYzpvU0dMLXpWdlo1UDNUbTdxa0RMQw=='}
