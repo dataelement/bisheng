@@ -12,7 +12,7 @@ export default function FlowPage() {
   useEffect(() => {
     if (id && flow?.id !== id) {
       // 切换技能重新加载flow数据
-      getFlowApi(id).then(_flow => setFlow('flow init', _flow))
+      getFlowApi(id).then(_flow => setFlow('flow_init', _flow))
     }
   }, [])
 

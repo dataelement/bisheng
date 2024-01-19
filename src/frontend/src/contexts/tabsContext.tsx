@@ -45,9 +45,6 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   const { templates, reactFlowInstance } = useContext(typesContext);
 
   async function saveFlow(flow: FlowType) {
-    // 按模板矫正数据格式
-    processFlowEdges(flow);
-    processFlowNodes(flow);
     // save api
     const newFlow = await captureAndAlertRequestErrorHoc(updateFlowApi(flow))
     if (!newFlow) return {}
@@ -274,7 +271,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     flow.data.nodes.forEach((node: NodeType) => {
       const template = templates[node.data.type];
       if (!template) {
-        setErrorData({ title: `Unknown node type: ${node.data.type}` });
+        // setErrorData({ title: `Unknown node type: ${node.data.type}` });
+        console.warn(`Unknown node type: ${node.data.type}`)
         return;
       }
       if (Object.keys(template["template"]).length > 0) {
@@ -297,6 +295,12 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         flow,
         setFlow: (action, flow) => {
           console.log('action :>> ', action);
+          if (action === "flow_init") {
+            // 按模板矫正数据格式
+            processFlowEdges(flow);
+            processFlowNodes(flow);
+          }
+
           setFlow(flow);
         },
         saveFlow,

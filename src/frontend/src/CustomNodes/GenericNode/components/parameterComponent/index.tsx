@@ -47,7 +47,7 @@ export default function ParameterComponent({
   info = "",
   onChange
 }: ParameterComponentType) {
-  // console.log('data, id :>> ', data.id, id, type);
+  // console.log('data, id :>> ', name, optionalHandle);
   const { id: flowId } = useParams();
 
   const ref = useRef(null);
@@ -390,6 +390,7 @@ export default function ParameterComponent({
                     updateEdge: (edge) => reactFlowInstance.setEdges(edge),
                   });
                 }
+                // onChange?.()
               }}
               nodeClass={data.node}
               disabled={disabled}
