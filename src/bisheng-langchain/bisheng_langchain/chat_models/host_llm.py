@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
@@ -13,17 +14,18 @@ from langchain.schema import ChatGeneration, ChatResult
 from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
                                        HumanMessage, SystemMessage)
 from langchain.utils import get_from_dict_or_env
+from langchain_core.language_models.llms import create_base_retry_decorator
 from langchain_core.pydantic_v1 import Field, root_validator
-from loguru import logger
+
 # from requests.exceptions import HTTPError
-from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
-                      wait_exponential)
 
 # from .interface import MinimaxChatCompletion
 # from .interface.types import ChatInput
 
 if TYPE_CHECKING:
     import tiktoken
+
+logger = logging.getLogger(__name__)
 
 
 def _import_tiktoken() -> Any:
@@ -36,19 +38,15 @@ def _import_tiktoken() -> Any:
     return tiktoken
 
 
-def _create_retry_decorator(llm: BaseHostChatLLM) -> Callable[[Any], Any]:
+def _create_retry_decorator(
+    llm: BaseHostChatLLM,
+    run_manager: Optional[Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]] = None,
+) -> Callable[[Any], Any]:
 
-    min_seconds = 1
-    max_seconds = 20
-    # Wait 2^x * 1 second between each retry starting with
-    # 4 seconds, then up to 10 seconds, then 10 seconds afterwards
-    return retry(
-        reraise=True,
-        stop=stop_after_attempt(llm.max_retries),
-        wait=wait_exponential(multiplier=1, min=min_seconds, max=max_seconds),
-        retry=(retry_if_exception_type(Exception)),
-        before_sleep=before_sleep_log(logger, logger.level('WARNING')),
-    )
+    errors = [requests.exceptions.ReadTimeout, ValueError]
+    return create_base_retry_decorator(error_types=errors,
+                                       max_retries=llm.max_retries,
+                                       run_manager=run_manager)
 
 
 def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
@@ -215,7 +213,7 @@ class BaseHostChatLLM(BaseChatModel):
             # print('messages:', messages)
             # print('functions:', kwargs.get('functions', []))
             if self.verbose:
-                logger.info(f'payload={params}')
+                logger.info('payload=%s', json.dumps(params, indent=2))
             try:
                 resp = self.client.post(url=self.host_base_url, json=params)
                 if resp.text.startswith('data:'):
@@ -297,7 +295,7 @@ class BaseHostChatLLM(BaseChatModel):
                     if text.startswith('{'):
                         yield (is_error, response[len('data:'):])
                     else:
-                        logger.info('agenerate_no_json text={}', text)
+                        logger.info('agenerate_no_json text=%s', text)
                     if is_error:
                         break
                 elif response.startswith('{'):

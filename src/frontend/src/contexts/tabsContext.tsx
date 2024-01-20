@@ -45,9 +45,6 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   const { templates, reactFlowInstance } = useContext(typesContext);
 
   async function saveFlow(flow: FlowType) {
-    // 按模板矫正数据格式
-    processFlowEdges(flow);
-    processFlowNodes(flow);
     // save api
     const newFlow = await captureAndAlertRequestErrorHoc(updateFlowApi(flow))
     if (!newFlow) return {}
@@ -78,7 +75,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         // 粘贴
         paste(
           { nodes: flow.data.nodes, edges: flow.data.edges },
-          { x: 10, y: 10 }
+          { x: 10, y: 10 },
+          true
         );
         // 覆盖
         // setFlow(flow);
@@ -103,7 +101,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
             // 粘贴
             paste(
               { nodes: flow.data.nodes, edges: flow.data.edges },
-              { x: 10, y: 10 }
+              { x: 10, y: 10 },
+              true
             );
           });
         }
@@ -149,7 +148,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
 
   function paste(
     selectionInstance,
-    position: { x: number; y: number; paneX?: number; paneY?: number }
+    position: { x: number; y: number; paneX?: number; paneY?: number },
+    keepId: boolean = false // keep id
   ) {
     let minimumX = Infinity;
     let minimumY = Infinity;
@@ -172,6 +172,10 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     selectionInstance.nodes.forEach((n: NodeType) => {
       // Generate a unique node ID
       let newId = getNodeId(n.data.type);
+      // 保留原id； 重复 id除外
+      if (keepId && !nodes.find(node => node.id === n.id)) {
+        newId = n.id;
+      }
       idsMap[n.id] = newId;
 
       // Create a new node object
@@ -193,6 +197,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         .map((e) => ({ ...e, selected: false }))
         .concat({ ...newNode, selected: false });
     });
+    console.log(nodes)
     reactFlowInstance.setNodes(nodes);
 
     selectionInstance.edges.forEach((e) => {
@@ -266,7 +271,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     flow.data.nodes.forEach((node: NodeType) => {
       const template = templates[node.data.type];
       if (!template) {
-        setErrorData({ title: `Unknown node type: ${node.data.type}` });
+        // setErrorData({ title: `Unknown node type: ${node.data.type}` });
+        console.warn(`Unknown node type: ${node.data.type}`)
         return;
       }
       if (Object.keys(template["template"]).length > 0) {
@@ -289,6 +295,12 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         flow,
         setFlow: (action, flow) => {
           console.log('action :>> ', action);
+          if (action === "flow_init") {
+            // 按模板矫正数据格式
+            processFlowEdges(flow);
+            processFlowNodes(flow);
+          }
+
           setFlow(flow);
         },
         saveFlow,

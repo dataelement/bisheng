@@ -42,7 +42,14 @@ const enum SourceType {
     HAS_QA = 4,
 }
 
-export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageType, userName: string, onSource: () => void }) => {
+interface IProps {
+    chat: ChatMessageType,
+    userName: string,
+    onSource: () => void
+    onDislike?: (chatId) => void
+}
+
+export const ChatMessage = ({ chat, userName, onSource, onDislike }: IProps) => {
     // const { user } = useContext(userContext);
     // console.log('chat :>> ', chat);
 
@@ -253,7 +260,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
             <div className="w-[40px] h-[40px] rounded-full flex items-center justify-center" style={{ background: avatarColor }}><Bot color="#fff" size={28} /></div>
         </div>
         {chat.sender && <div className="chat-header text-gray-400 text-sm">{chat.sender}</div>}
-        <div ref={textRef} className={`chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8 relative ${chat.id && chat.end && 'pb-8'}`}>
+        <div ref={textRef} className={`chat-bubble chat-bubble-info bg-[rgba(240,240,240,0.8)] dark:bg-gray-600 min-h-8 relative min-w-[110px] ${chat.id && chat.end && 'pb-8'}`}>
             {chat.message.toString() ? mkdown : <span className="loading loading-ring loading-md"></span>}
             {/* @user */}
             {chat.receiver && <p className="text-blue-500 text-sm">@ {chat.receiver.user_name}</p>}
@@ -264,6 +271,7 @@ export const ChatMessage = ({ chat, userName, onSource }: { chat: ChatMessageTyp
                 id={chat.id}
                 data={chat.liked}
                 onCopy={handleCopy}
+                onDislike={onDislike}
                 className={`absolute w-full left-0 bottom-[8px] justify-end pr-5`}></Thumbs>
             }
         </div>

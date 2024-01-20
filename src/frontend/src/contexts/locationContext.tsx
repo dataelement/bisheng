@@ -71,7 +71,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
       setAppConfig({
         isDev: res.env === 'dev',
         libAccepts: res.uns_support,
-        officeUrl: res.office_url
+        officeUrl: res.office_url,
+        dialogTips: res.dialog_tips
       })
     })
   }, [])

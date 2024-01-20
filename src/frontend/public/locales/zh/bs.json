@@ -122,7 +122,9 @@
         "fileStorageFailure": " 文件地址失效!",
         "confirmDeleteChat": "确认删除该会话？",
         "roundOver": "本轮结束",
-        "chatDialogTip": "设置提示模板中定义的输入变量。与代理和链互动"
+        "chatDialogTip": "设置提示模板中定义的输入变量。与代理和链互动",
+        "feedback": "反馈",
+        "feedbackRequired": "反馈信息不能为空"
     },
     "model": {
         "modelConfiguration": "模型配置",
@@ -288,6 +290,7 @@
     "close": "关闭",
     "cancel": "取消",
     "save": "保存",
+    "submit": "提交",
     "operations": "操作",
     "previousPage": "上一页",
     "nextPage": "下一页",

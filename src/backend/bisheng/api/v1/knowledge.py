@@ -174,7 +174,9 @@ def create_knowledge(*,
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """ 创建知识库. """
-    db_knowldge = Knowledge.from_orm(knowledge)
+    knowledge.is_partition = knowledge.is_partition or settings.vectorstores.get('Milvus', {}).get(
+        'is_partition', True)
+    db_knowldge = Knowledge.model_validate(knowledge)
     know = session.exec(
         select(Knowledge).where(Knowledge.name == knowledge.name,
                                 knowledge.user_id == payload.get('user_id'))).all()
@@ -183,9 +185,9 @@ def create_knowledge(*,
     if not db_knowldge.collection_name:
         if knowledge.is_partition:
             embedding = re.sub(r'[^\w]', '_', knowledge.model)
-            id = settings.get_knowledge().get('vectorstores').get('Milvus',
-                                                                  {}).get('partition_suffix', 1)
-            db_knowldge.collection_name = f'partition_{embedding}_knowledge_{id}'
+            suffix_id = settings.get_knowledge().get('vectorstores').get('Milvus', {}).get(
+                'partition_suffix', 1)
+            db_knowldge.collection_name = f'partition_{embedding}_knowledge_{suffix_id}'
         else:
             # 默认collectionName
             db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
@@ -397,12 +399,20 @@ def decide_vectorstores(collection_name: str, vector_store: str,
 def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chunk_size: int,
                  separator: str, chunk_overlap: int, file_paths: List[str],
                  knowledge_files: List[KnowledgeFile], callback: str):
+    error_msg = ''
     try:
+        vectore_client, es_client = None, None
+        minio_client = MinioClient()
         embeddings = decide_embeddings(model)
         vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
-        minio_client = MinioClient()
     except Exception as e:
+        error_msg = 'MilvusExcept:' + str(e)
+        logger.exception(e)
+
+    try:
+        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+    except Exception as e:
+        error_msg = error_msg + 'ESException:' + str(e)
         logger.exception(e)
 
     callback_obj = {}
@@ -412,6 +422,26 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
         logger.info('process_file_begin knowledge_id={} file_name={} file_size={} ',
                     knowledge_files[0].knowledge_id, knowledge_file.file_name, len(file_paths))
 
+        if not vectore_client and not es_client:
+            # 设置错误
+            with session_getter() as session:
+                db_file = session.get(KnowledgeFile, knowledge_file.id)
+                setattr(db_file, 'status', 3)
+                setattr(db_file, 'remark', error_msg[:500])
+                session.add(db_file)
+                callback_obj = db_file.copy()
+                session.commit()
+            if callback:
+                inp = {
+                    'file_name': knowledge_file.file_name,
+                    'file_status': knowledge_file.status,
+                    'file_id': callback_obj.id,
+                    'error_msg': callback_obj.remark
+                }
+                logger.error('add_fail callback={} file_name={} status={}', callback,
+                             callback_obj.file_name, callback_obj.status)
+                requests.post(url=callback, json=inp, timeout=3)
+            continue
         try:
             # 存储 mysql
             with session_getter() as session:
@@ -437,16 +467,18 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
             logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
             for metadata in metadatas:
                 metadata.update({'file_id': knowledge_file.id, 'knowledge_id': f'{knowledge_id}'})
-            vectore_client.add_texts(texts=texts, metadatas=metadatas)
+
+            if vectore_client:
+                vectore_client.add_texts(texts=texts, metadatas=metadatas)
 
             # 存储es
             if es_client:
                 es_client.add_texts(texts=texts, metadatas=metadatas)
 
             callback_obj = db_file.copy()
-            logger.info(
-                f'process_file_done file_name={knowledge_file.file_name} file_id={knowledge_file.id} time_cost={time.time()-ts1}'  # noqa
-            )
+            logger.info('process_file_done file_name={} file_id={} time_cost={}',
+                        knowledge_file.file_name, knowledge_file.id,
+                        time.time() - ts1)
         except Exception as e:
             logger.error(e)
             session = next(get_session())
@@ -456,18 +488,18 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
             session.add(db_file)
             callback_obj = db_file.copy()
             session.commit()
-    if callback:
-        # asyn
-        inp = {
-            'file_name': callback_obj.file_name,
-            'file_status': callback_obj.status,
-            'file_id': callback_obj.id,
-            'error_msg': callback_obj.remark
-        }
-        logger.info(
-            f'add_complete callback={callback} file_name={callback_obj.file_name} status={callback_obj.status}'
-        )
-        requests.post(url=callback, json=inp, timeout=3)
+        if callback:
+            # asyn
+            inp = {
+                'file_name': callback_obj.file_name,
+                'file_status': callback_obj.status,
+                'file_id': callback_obj.id,
+                'error_msg': callback_obj.remark
+            }
+            logger.info(
+                f'add_complete callback={callback} file_name={callback_obj.file_name} status={callback_obj.status}'
+            )
+            requests.post(url=callback, json=inp, timeout=3)
 
 
 def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):

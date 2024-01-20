@@ -33,6 +33,7 @@ import { TabsContext } from "../../contexts/tabsContext";
 import { typesContext } from "../../contexts/typesContext";
 import { NodeDataType } from "../../types/flow";
 import { classNames, limitScrollFieldsModal } from "../../utils";
+import EditLabel from "../../components/ui/editLabel";
 
 export default function EditNodeModal({ data }: { data: NodeDataType }) {
   const [open, setOpen] = useState(true);
@@ -97,6 +98,11 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
     });
   };
 
+  const idArr = data.id.split('-')
+  const handleChangeId = (id) => {
+    data.id = `${idArr[0]}-${id}`
+  }
+
   return (
     <Dialog open={true} onOpenChange={setModalOpen}>
       <DialogTrigger asChild></DialogTrigger>
@@ -104,7 +110,11 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
         <DialogHeader>
           <DialogTitle className="flex items-center">
             <span className="pr-2">{data.type}</span>
-            <Badge variant="secondary">ID: {data.id}</Badge>
+            <Badge variant="secondary">ID:{idArr[0]}-
+              <EditLabel str={idArr[1]} onChange={handleChangeId}>{
+                (val) => <>{val}</>
+              }</EditLabel>
+            </Badge>
           </DialogTitle>
           <DialogDescription asChild>
             <div>

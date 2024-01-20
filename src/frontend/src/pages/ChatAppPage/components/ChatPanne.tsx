@@ -15,15 +15,17 @@ import { validateNode } from "../../../utils";
 import { ChatMessage } from "./ChatMessage";
 import ChatReportForm from "./ChatReportForm";
 import ResouceModal from "./ResouceModal";
+import ThumbsMessage from "./ThumbsMessage";
+import { locationContext } from "../../../contexts/locationContext";
 
 interface Iprops {
     chatId: string
     flow: FlowType
-    libId?: string
+    queryString?: string
     version?: string
 }
 
-export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v1' }: Iprops) {
+export default forwardRef(function ChatPanne({ chatId, flow, queryString, version = 'v1' }: Iprops) {
     const { t } = useTranslation()
     const { tabsState } = useContext(TabsContext);
 
@@ -34,11 +36,13 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
     // 消息列表
     const { messages, messagesRef, loadHistory, setChatHistory, changeHistoryByScroll } = useMessages(chatId, flow)
     // ws通信
-    const { stop, connectWS, begin: chating, checkReLinkWs, sendAll } = useWebsocket(chatId, flow, setChatHistory, libId, version)
+    const { stop, connectWS, begin: chating, checkReLinkWs, sendAll } = useWebsocket(chatId, flow, setChatHistory, queryString, version)
     // 停止状态
     const [isStop, setIsStop] = useState(true)
     // 输入框状态
     const { inputState, inputEmpty, inputDisabled, inputRef, setInputState, setInputEmpty, handleTextAreaHeight } = useInputState({ flow, chatId, chating, messages, isReport })
+
+    const { appConfig } = useContext(locationContext)
 
     // 开始构建&初始化会话
     const initChat = async () => {
@@ -172,16 +176,26 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
     // 溯源
     const [souce, setSouce] = useState<ChatMessageType>(null)
 
+    const thumbRef = useRef(null)
+
     return <div className="h-screen overflow-hidden relative">
         <div className="absolute px-2 py-2 bg-[#fff] z-10 dark:bg-gray-950 text-sm text-gray-400 font-bold">{flow.name}</div>
         <div className="chata mt-14" style={{ height: 'calc(100vh - 5rem)' }}>
-            <div ref={messagesRef} className={`chat-panne h-full overflow-y-scroll no-scrollbar px-4 ${isRoom || isReport ? 'pb-40' : 'pb-20'}`}>
+            {/* 会话记录 */}
+            <div ref={messagesRef} className={`chat-panne h-full overflow-y-scroll no-scrollbar px-4 ${isRoom || isReport ? 'pb-40' : 'pb-24'}`}>
                 {
-                    messages.map((c, i) => <ChatMessage key={c.id || i} userName={sendUserName} chat={c} onSource={() => setSouce(c)}></ChatMessage>)
+                    messages.map((c, i) => <ChatMessage
+                        key={c.id || i}
+                        userName={sendUserName}
+                        chat={c}
+                        onSource={() => setSouce(c)}
+                        onDislike={(chatId) => { thumbRef.current?.openModal(chatId) }}
+                    ></ChatMessage>)
                 }
             </div>
+            {/* 输入框 */}
             <div className="absolute w-full bottom-0 bg-gradient-to-t from-[#fff] to-[rgba(255,255,255,0.8)] px-8 dark:bg-gradient-to-t dark:from-[#000] dark:to-[rgba(0,0,0,0.8)]">
-                <div className={`w-full text-area-box border border-gray-600 rounded-lg my-6 overflow-hidden pr-2 py-2 relative 
+                <div className={`w-full text-area-box border border-gray-600 rounded-lg mt-6 mb-2 overflow-hidden pr-2 py-2 relative 
                   ${inputDisabled && 'bg-gray-200 dark:bg-gray-600'}`}>
                     <textarea id='input'
                         ref={inputRef}
@@ -199,6 +213,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
                     </div>
                     {inputState.errorMsg && <div className="bg-gray-200 absolute top-0 left-0 w-full h-full text-center text-gray-400 align-middle pt-4">{inputState.errorMsg}</div>}
                 </div>
+                <p className="mb-2 text-center text-gray-400 text-sm">{appConfig.dialogTips}</p>
             </div>
         </div>
         {(isRoom || isReport) && <div className=" absolute w-full flex justify-center bottom-32 pointer-events-none">
@@ -208,6 +223,8 @@ export default forwardRef(function ChatPanne({ chatId, flow, libId, version = 'v
         <ResouceModal chatId={chatId} open={!!souce} data={souce} setOpen={() => setSouce(null)}></ResouceModal>
         {/* 表单 */}
         {isForm && !messages.length && <ChatReportForm flow={flow} onStart={sendReport} />}
+        {/* 报表 */}
+        <ThumbsMessage ref={thumbRef}></ThumbsMessage>
     </div>
 });
 /**
@@ -386,7 +403,7 @@ const useMessages = (chatId, flow) => {
  * 建立连接、重连、断开、接收、发送
  * @returns 
  */
-const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
+const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
     const ws = useRef<WebSocket | null>(null);
     // 接收ws状态
     const [begin, setBegin] = useState(false)
@@ -410,7 +427,7 @@ const useWebsocket = (chatId, flow, setChatHistory, libId, version) => {
         const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
         const host = window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
         const chatEndpoint = version === 'v1' ? `/api/v1/chat/${flowId}?type=L1&chat_id=${chatId}`
-            : `/api/v2/chat/ws/${flowId}?type=L1&chat_id=${chatId}${libId ? '&knowledge_id=' + libId : ''}`
+            : `/api/v2/chat/ws/${flowId}?type=L1&chat_id=${chatId}${queryString}`
 
         return `${webSocketProtocol}://${host}${chatEndpoint}`;
     }

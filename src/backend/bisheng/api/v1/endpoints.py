@@ -62,6 +62,8 @@ def getn_env():
         env['uns_support'] = list(knowledge.filetype_load_map.keys())
     if settings.settings.get_from_db('office_url'):
         env['office_url'] = settings.settings.get_from_db('office_url')
+    # add tips from settings
+    env['dialog_tips'] = settings.settings.get_from_db('dialog_tips')
     return resp_200(env)
 
 

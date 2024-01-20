@@ -1,9 +1,8 @@
-
 """Wrapper around the Milvus vector database."""
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, List, Optional, Tuple, Union, Callable
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 from uuid import uuid4
 
 import numpy as np
@@ -880,7 +879,7 @@ class Milvus(MilvusLangchain):
         )
         vector_db.add_texts(texts=texts, metadatas=metadatas)
         return vector_db
-    
+
     @staticmethod
     def _relevance_score_fn(distance: float) -> float:
         """Normalize the distance to a score on a scale [0, 1]."""

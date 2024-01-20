@@ -9,7 +9,7 @@ const enum ThumbsState {
     ThumbsDown
 }
 
-export default function Thumbs({ id, className, onCopy, data }) {
+export default function Thumbs({ id, className, onCopy, data, onDislike }) {
 
     const [state, setState] = useState<ThumbsState>(data)
     const [copied, setCopied] = useState(false)
@@ -21,6 +21,7 @@ export default function Thumbs({ id, className, onCopy, data }) {
             likeChatApi(id, newType);
             return newType
         })
+        if (state !== ThumbsState.ThumbsDown && type === ThumbsState.ThumbsDown) onDislike?.(id)
     }
 
     const handleCopy = (e) => {

@@ -126,7 +126,9 @@
         "fileStorageFailure": "File storage failure!",
         "confirmDeleteChat": "Confirm deletion of this chat？",
         "roundOver": "This round is over",
-        "chatDialogTip": "Set the input variables defined in the prompt template. Interact with agents and chains."
+        "chatDialogTip": "Set the input variables defined in the prompt template. Interact with agents and chains.",
+        "feedback": "Feedback",
+        "feedbackRequired": "Feedback is required"
     },
     "model": {
         "modelConfiguration": "Model Configuration",
@@ -292,6 +294,7 @@
     "close": "Close",
     "cancel": "Cancel",
     "save": "Save",
+    "submit": "Submit",
     "operations": "Operations",
     "previousPage": "Previous Page",
     "nextPage": "Next Page",

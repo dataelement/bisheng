@@ -38,7 +38,7 @@ export default function UploadModal({ id, accept, open, desc = '', setOpen, onRe
 
     const failFilesRef = useRef([]) // 记录上传失败的文件
     const onDrop = (acceptedFiles) => {
-        const sizeLimit = 50000000;
+        const sizeLimit = 50 * 1024 * 1024;
         const errorFile = [];
         const files = []
         acceptedFiles.forEach(file => {
