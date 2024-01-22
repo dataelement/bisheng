@@ -178,7 +178,7 @@ async def process_flow(
         source_documents = task_result.pop('source_documents', '')
         answer = list(task_result.values())[0]
         extra = {}
-        source = await judge_source(answer, source_documents, session_id, extra)
+        source, result = await judge_source(answer, source_documents, session_id, extra)
 
         try:
             question = ChatMessage(user_id=0,
@@ -202,6 +202,7 @@ async def process_flow(
             session.refresh(message)
             extra.update({'source': source, 'message_id': message.id})
             task_result.update(extra)
+            task_result.update({'result': result})
             if source != 0:
                 await process_source_document(source_documents, session_id, message.id, answer)
         except Exception as e:
