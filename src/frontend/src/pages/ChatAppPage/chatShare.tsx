@@ -16,7 +16,7 @@ export default function chatShare() {
     const queryString = useMemo(() => {
         const params = [];
 
-        if (libId) params.push(`libId=${libId}`);
+        if (libId) params.push(`knowledge_id=${libId}`);
         if (tweak) params.push(`tweak=${tweak}`);
 
         return params.length > 0 ? `&${params.join('&')}` : '';

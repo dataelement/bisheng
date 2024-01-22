@@ -194,7 +194,9 @@
         "options": "选项",
         "variableName": "变量名",
         "varOptionRequired": "请输入选项内容",
-        "optionRepeated": "选项重复"
+        "optionRepeated": "选项重复",
+        "incorrectIdFormatMessage": "ID格式有误（包含字符和数字组成的5位字符）",
+        "idAlreadyExistsMessage": "该ID已存在"
     },
     "lib": {
         "enterLibraryName": "请输入知识库名称",

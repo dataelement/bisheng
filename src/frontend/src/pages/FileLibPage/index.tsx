@@ -209,7 +209,7 @@ export default function FileLibPage() {
                                         window.libname = el.name;
                                     }}>
                                         <Link to={`/filelib/${el.id}`} className="underline" onClick={handleCachePage}>{t('lib.details')}</Link>
-                                        {user.user_name === 'admin' || user.user_id === el.user_id ?
+                                        {user.role === 'admin' || user.user_id === el.user_id ?
                                             <a href="javascript:;" onClick={() => delConfirm(el)} className="underline ml-4">{t('delete')}</a> :
                                             <a href="javascript:;" className="underline ml-4 text-gray-400">{t('delete')}</a>
                                         }

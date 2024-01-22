@@ -28,23 +28,23 @@ type alertContextType = {
 //initial values to alertContextType
 const initialValue: alertContextType = {
   errorData: { title: "", list: [] },
-  setErrorData: () => {},
+  setErrorData: () => { },
   errorOpen: false,
-  setErrorOpen: () => {},
+  setErrorOpen: () => { },
   noticeData: { title: "", link: "" },
-  setNoticeData: () => {},
+  setNoticeData: () => { },
   noticeOpen: false,
-  setNoticeOpen: () => {},
+  setNoticeOpen: () => { },
   successData: { title: "" },
-  setSuccessData: () => {},
+  setSuccessData: () => { },
   successOpen: false,
-  setSuccessOpen: () => {},
+  setSuccessOpen: () => { },
   notificationCenter: false,
-  setNotificationCenter: () => {},
+  setNotificationCenter: () => { },
   notificationList: [],
-  pushNotificationList: () => {},
-  clearNotificationList: () => {},
-  removeFromNotificationList: () => {},
+  pushNotificationList: () => { },
+  clearNotificationList: () => { },
+  removeFromNotificationList: () => { },
 };
 
 export const alertContext = createContext<alertContextType>(initialValue);
@@ -78,17 +78,15 @@ export function AlertProvider({ children }: { children: ReactNode }) {
    * @param newState An object containing the new error data, including title and optional list of error messages
    */
   function setErrorData(newState: { title: string; list?: Array<string> }) {
-    if (newState.title && newState.title !== "") {
-      setErrorDataState(newState);
-      setErrorOpen(true);
-      setNotificationCenter(true);
-      pushNotificationList({
-        type: "error",
-        title: newState.title,
-        list: newState.list,
-        id: uniqueId(),
-      });
-    }
+    setErrorDataState(newState);
+    setErrorOpen(true);
+    setNotificationCenter(true);
+    pushNotificationList({
+      type: "error",
+      title: newState.title || " ",
+      list: newState.list,
+      id: uniqueId(),
+    });
   }
   /**
    * Sets the state of the notice data and opens the notice modal, also adds a new notice to the notification center if the title is defined.

@@ -85,6 +85,12 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       setViewport(flow?.data?.viewport ?? { x: 1, y: 0, zoom: 0.5 });
       reactFlowInstance.fitView();
     }
+
+    /**
+     * 由于flow模块设计问题，临时通过把flow挂在到window上，来提供 reactflow 节点做重复 id校验使用
+     */
+    window._flow = flow;
+    
   }, [flow, reactFlowInstance, setEdges, setNodes, setViewport]);
 
   const onEdgesChangeMod = useCallback(

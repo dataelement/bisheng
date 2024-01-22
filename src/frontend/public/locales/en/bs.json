@@ -198,7 +198,9 @@
         "options": "Options",
         "variableName": "Variable Name",
         "varOptionRequired": "options are required",
-        "optionRepeated": "Option repeated"
+        "optionRepeated": "Option repeated",
+        "incorrectIdFormatMessage": "Incorrect ID format (should be a 5-character combination of letters and numbers)",
+        "idAlreadyExistsMessage": "This ID already exists"
     },
     "lib": {
         "enterLibraryName": "Enter Knowledge Base Name",
