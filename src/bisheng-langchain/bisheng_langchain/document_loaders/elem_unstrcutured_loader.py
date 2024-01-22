@@ -88,12 +88,25 @@ class ElemUnstructuredLoader(BasePDFLoader):
 
         if 200 != resp.get('status_code'):
             logger.info(f'not return resp={resp}')
-        partitions = resp['partitions']
+
+        partitions = None
+        if "partitions" in resp:
+            partitions = resp['partitions']
+            for elem in partitions:
+                if "metadata" in elem and "extra_data" in elem["metadata"] and \
+                "bboxes" in elem["metadata"]["extra_data"]:
+                    boxes = elem["metadata"]["extra_data"]["bboxes"]
+                    if len(boxes) and len(boxes[0]):
+                        continue
+                    else:
+                        logger.error(f'empty box detected after unstructured: {resp}')
+                else:
+                    logger.error(f'invalid resp structure after unstructured: {resp}')
+        
         if not partitions:
             logger.info(f'partition_error resp={resp}')
         logger.info(f'unstruct_return code={resp.get("status_code")}')
-
-        partitions = resp['partitions']
+        
         content, metadata = merge_partitions(partitions)
         metadata['source'] = self.file_name
 
@@ -129,7 +142,12 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
         if 200 != resp.get('status_code'):
             logger.info(f'not return resp={resp}')
 
-        page_content = resp['text']
+        page_content = None
+        if "text" in resp and len(resp["text"].strip()):
+            page_content = resp['text']
+        else:
+            logger.error(f'empty text after unstructured: {resp}')
+
         meta = {'source': self.file_name}
         doc = Document(page_content=page_content, metadata=meta)
         return [doc]
