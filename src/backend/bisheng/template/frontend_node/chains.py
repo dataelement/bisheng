@@ -94,7 +94,9 @@ class ChainFrontendNode(FrontendNode):
         if name == 'APIChain' and field.name == 'limit_to_domains':
             field.show = True
             field.required = True
-            field.field_type = 'list'
+            field.field_type = 'str'
+            field.is_list = True
+            field.value = ['']
 
         field.advanced = False
         if 'key' in field.name:
