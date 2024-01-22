@@ -644,7 +644,7 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
 
         if ([1005, 1008].includes(event.code)) {
             console.warn('即将废弃 :>> ');
-            setInputState({ lock: true, errorMsg: '' });
+            setInputState({ lock: true, errorMsg: event.reason });
         } else {
             if (event.reason) {
                 setErrorData({ title: event.reason });
