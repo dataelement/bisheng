@@ -46,13 +46,15 @@ async def union_websocket(flow_id: str,
             tweak = json.loads(tweak)
             graph_data = process_tweaks(graph_data, tweak)
         # vectordatabase update
-        for node in graph_data['nodes']:
-            if 'VectorStore' in node['data']['node']['base_classes']:
-                if 'collection_name' in node['data'].get('node').get('template').keys():
-                    node['data']['node']['template']['collection_name'][
-                        'collection_id'] = knowledge_id
-                if 'index_name' in node['data'].get('node').get('template').keys():
-                    node['data']['node']['template']['index_name']['collection_id'] = knowledge_id
+        if knowledge_id:
+            for node in graph_data['nodes']:
+                if 'VectorStore' in node['data']['node']['base_classes']:
+                    if 'collection_name' in node['data'].get('node').get('template').keys():
+                        node['data']['node']['template']['collection_name'][
+                            'collection_id'] = knowledge_id
+                    if 'index_name' in node['data'].get('node').get('template').keys():
+                        node['data']['node']['template']['index_name'][
+                            'collection_id'] = knowledge_id
         trace_id = str(uuid4().hex)
         with logger.contextualize(trace_id=trace_id):
             await chat_manager.handle_websocket(
