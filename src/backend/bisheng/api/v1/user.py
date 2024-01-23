@@ -149,7 +149,7 @@ async def get_info(session: Session = Depends(get_session), Authorize: AuthJWT =
 async def logout(Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     Authorize.unset_jwt_cookies()
-    return {'msg': 'Successfully logout'}
+    return resp_200()
 
 
 @router.get('/user/list', status_code=201)
@@ -256,7 +256,7 @@ async def get_role(*, session: Session = Depends(get_session), Authorize: AuthJW
         raise HTTPException(status_code=500, detail='无查看权限')
     # 默认不返回 管理员和普通用户，因为用户无法设置
     db_role = session.exec(select(Role).where(Role.id > 1)).all()
-    return {'data': [jsonable_encoder(role) for role in db_role]}
+    return resp_200([jsonable_encoder(role) for role in db_role])
 
 
 @router.delete('/role/{role_id}', status_code=200)

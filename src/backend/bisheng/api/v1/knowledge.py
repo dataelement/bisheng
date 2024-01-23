@@ -302,7 +302,7 @@ def delete_knowledge(*,
     if not access_check(payload, knowledge.user_id, knowledge_id, AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
     # 处理vector
-    embeddings = decide_embeddings(knowledge.model)
+    embeddings = FakeEmbedding()
     vectore_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
     if vectore_client.col:
         logger.info(f'drop_vectore col={knowledge.collection_name}')
@@ -312,6 +312,10 @@ def delete_knowledge(*,
             pk = vectore_client.col.query(expr=f'knowledge_id=="{knowledge.id}"',
                                           output_fields=['pk'])
             vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
+        # 判断milvus 是否还有entity
+        if vectore_client.col.num_entities == 0:
+            vectore_client.col.drop()
+
     # 处理 es
     # elastic
     esvectore_client: 'ElasticKeywordsSearch' = decide_vectorstores(knowledge.index_name,
@@ -391,6 +395,8 @@ def decide_vectorstores(collection_name: str, vector_store: str,
     else:
         param = {'collection_name': collection_name, 'embedding': embedding}
         vector_config.pop('partition_suffix', '')
+        vector_config.pop('is_partition', '')
+
     param.update(vector_config)
     class_obj = import_vectorstore(vector_store)
     return instantiate_vectorstore(class_object=class_obj, params=param)
@@ -610,6 +616,7 @@ def file_knowledge(
         setattr(db_file, 'remark', str(e)[:500])
         session.add(db_file)
         session.commit()
+    return db_file.copy()
 
 
 def text_knowledge(
@@ -671,3 +678,4 @@ def text_knowledge(
         setattr(db_file, 'remark', str(e)[:500])
         session.add(db_file)
         session.commit()
+    return db_file.copy()

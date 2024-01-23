@@ -18,7 +18,7 @@ include = ["./bisheng/*", "bisheng/**/*"]
 bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
-bisheng_langchain = "0.2.2.2"
+bisheng_langchain = "0.2.2.3"
 bisheng_pyautogen = "0.1.19"
 minio = "7.2.0"
 loguru = "^0.7.1"
@@ -50,7 +50,6 @@ rich = "^13.4.2"
 networkx = "^3.1"
 unstructured = "^0.7.0"
 pypdf = "^3.11.0"
-pypdfium2 = "^4.18.0"
 lxml = "^4.9.2"
 pysrt = "^1.1.2"
 fake-useragent = "^1.1.3"

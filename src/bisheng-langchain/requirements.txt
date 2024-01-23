@@ -8,7 +8,6 @@ bisheng-pyautogen
 jieba==0.42.1
 pydantic==1.10.13
 pymupdf==1.23.8
-pypdfium2==4.25.0
 shapely==2.0.2
 filetype==1.2.0
 

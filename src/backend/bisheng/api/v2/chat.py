@@ -2,6 +2,8 @@ import json
 from typing import Optional
 from uuid import uuid4
 
+from bisheng.api.services.chat import comment_answer
+from bisheng.api.v1.schemas import ChatInput, resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import get_session, session_getter
@@ -98,3 +100,9 @@ def solve_response(
         message.solved = solved
     session.commit()
     return {'status_code': 200, 'status_message': 'success'}
+
+
+@router.post('/comment', status_code=200)
+def comment(*, data: ChatInput):
+    comment_answer(data.message_id, data.comment)
+    return resp_200()
