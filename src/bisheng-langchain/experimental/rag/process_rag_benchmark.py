@@ -106,6 +106,7 @@ def data_loader(data_folder):
 
     for file_path in tqdm(pdf_files):
         file_name = os.path.basename(file_path)
+
         # loader = PyPDFLoader(file_path)
         loader = ElemUnstructuredLoader(file_name=file_name,
                                         file_path=file_path,
@@ -145,7 +146,7 @@ def data_loader(data_folder):
 
 
 def get_answer(data_dir):
-    excel_file = os.path.join(data_dir, 'questions_info.xlsx')
+    excel_file = os.path.join(data_dir, 'questions_info_with_answer_sample.xlsx')
 
     df = pd.read_excel(excel_file)
     all_questions_info = list()
@@ -199,12 +200,14 @@ def get_answer(data_dir):
             questions_info['rag_answer'] = ''
     
     df = pd.DataFrame(all_questions_info)
-    df.to_excel(os.path.join(save_dir, 'questions_info_with_answer.xlsx'), index=False)
+    df.to_excel(os.path.join(save_dir, 'questions_info_with_answer_sample_gpt4.xlsx'), index=False)
 
 
 if __name__ == '__main__':
-    data_dir = '/home/gulixin/workspace/datasets/rag_benchmark'
-    save_dir = '/home/gulixin/workspace/datasets/rag_benchmark_processed'
+    data_dir = '/home/public/rag_benchmark_v1.0/rag_benchmark'
+    save_dir = '/home/public/rag_benchmark_v1.0/rag_benchmark_processed'
     # process_rag_benchmark(data_dir, save_dir)
     # data_loader(save_dir)
+
+    save_dir = 'data'
     get_answer(save_dir)
