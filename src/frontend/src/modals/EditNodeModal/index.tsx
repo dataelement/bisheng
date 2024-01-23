@@ -101,7 +101,9 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
 
   const idArr = data.id.split('-')
   const handleChangeId = (id) => {
-    data.id = `${idArr[0]}-${id}`
+    const oldId = data.id
+    const newId = `${idArr[0]}-${id}`
+    document.dispatchEvent(new CustomEvent('idChange', { detail: [newId, oldId] }))
     setOpen(!open)
   }
 

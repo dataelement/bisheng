@@ -45,8 +45,6 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   const { templates, reactFlowInstance } = useContext(typesContext);
 
   async function saveFlow(flow: FlowType) {
-    // keep same id(适用id变更情况)
-    flow.data.nodes.forEach(node => node.id = node.data.id)
     // save api
     const newFlow = await captureAndAlertRequestErrorHoc(updateFlowApi(flow))
     if (!newFlow) return {}

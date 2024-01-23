@@ -41,6 +41,7 @@ const nodeTypes = {
 export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: string }) {
 
   let {
+    setFlow,
     setTabsState,
     saveFlow,
     uploadFlow,
@@ -76,6 +77,10 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       flow.data = reactFlowInstance.toObject();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    /**
+     * 由于flow模块设计问题，临时通过把flow挂在到window上，来提供 reactflow 节点做重复 id校验使用
+     */
+    window._flow = flow;
   }, [nodes, edges]);
   //update flow when tabs change
   useEffect(() => {
@@ -85,12 +90,6 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       setViewport(flow?.data?.viewport ?? { x: 1, y: 0, zoom: 0.5 });
       reactFlowInstance.fitView();
     }
-
-    /**
-     * 由于flow模块设计问题，临时通过把flow挂在到window上，来提供 reactflow 节点做重复 id校验使用
-     */
-    window._flow = flow;
-    
   }, [flow, reactFlowInstance, setEdges, setNodes, setViewport]);
 
   const onEdgesChangeMod = useCallback(
@@ -291,6 +290,20 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     await saveFlow(flow)
     blocker.proceed?.()
   }
+
+  // 修改组件id
+  useEffect(() => {
+    const handleChangeId = (data) => {
+      console.log('changeid')
+      const detail = data.detail
+      const node = flow.data.nodes.find((node) => node.id === detail[1])
+      node.id = detail[0]
+      node.data.id = detail[0]
+      setFlow('changeid', { ...flow })
+    }
+    document.addEventListener('idChange', handleChangeId)
+    return () => document.removeEventListener('idChange', handleChangeId)
+  }, [flow])
 
   return (
     <div className="flex h-full overflow-hidden">

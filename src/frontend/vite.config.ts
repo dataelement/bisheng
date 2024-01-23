@@ -6,7 +6,8 @@ import svgr from "vite-plugin-svgr";
 const apiRoutes = ["^/api/", "/health"];
 
 // Use environment variable to determine the target.
- const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
+const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.120:3002";
+//  const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
 
 const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
   proxyObj[route] = {
@@ -18,7 +19,7 @@ const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
   };
   // 文件服务地址
   proxyObj['/bisheng'] = {
-    target: "http://127.0.0.1",
+    target: "http://110.16.193.170:50061",
     changeOrigin: true,
     withCredentials: true,
     secure: false
