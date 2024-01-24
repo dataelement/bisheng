@@ -486,7 +486,7 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
                         knowledge_file.file_name, knowledge_file.id,
                         time.time() - ts1)
         except Exception as e:
-            logger.error(e)
+            logger.error('insert_metadata={} ', metadatas, e)
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)
@@ -524,7 +524,7 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         raw_texts = [t.page_content for t in texts]
         metadatas = [{
             'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
-            'page': t.metadata.get('page'),
+            'page': t.metadata.get('page') or 0,
             'source': file_name,
             'extra': ''
         } for t in texts]

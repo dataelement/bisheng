@@ -273,7 +273,7 @@ class BaseHostChatLLM(BaseChatModel):
             try:
                 async with self.client.apost(url=self.host_base_url, json=kwargs) as response:
                     if response.status != 200:
-                        raise ValueError(f'Error: {response.status}')
+                        raise ValueError(f'Error: {response.status} contet: {response.text}')
                     async for txt in response.content.iter_any():
                         if b'\n' in txt:
                             for txt_ in txt.split(b'\n'):
