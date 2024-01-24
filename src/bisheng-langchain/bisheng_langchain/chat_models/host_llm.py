@@ -313,7 +313,7 @@ class BaseHostChatLLM(BaseChatModel):
         """Generate chat completion with retry."""
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {**params, **kwargs}
-        if self.streaming:
+        if self.streaming and 'infer' not in self.host_base_url:
             inner_completion = ''
             role = 'assistant'
             params['stream'] = True

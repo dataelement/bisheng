@@ -273,7 +273,7 @@ def get_filelist(
     }
 
 
-@router.post('/chunks', status_code=200)
+@router.post('/chunks', response_model=UnifiedResponseModel[KnowledgeFileRead], status_code=200)
 async def post_chunks(
         *,
         knowledge_id: int = Form(...),
@@ -290,12 +290,14 @@ async def post_chunks(
     if not db_knowledge:
         raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
 
-    file_knowledge(db_knowledge, file_path, file_name, metadata, session)
+    db_file = file_knowledge(db_knowledge, file_path, file_name, metadata, session)
 
-    return resp_200()
+    return resp_200(db_file)
 
 
-@router.post('/chunks_string', status_code=200)
+@router.post('/chunks_string',
+             response_model=UnifiedResponseModel[KnowledgeFileRead],
+             status_code=200)
 async def post_string_chunks(
         *,
         document: ChunkInput,
@@ -306,6 +308,6 @@ async def post_string_chunks(
     if not db_knowledge:
         raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
 
-    text_knowledge(db_knowledge, document.documents, session)
+    db_file = text_knowledge(db_knowledge, document.documents, session)
 
-    return resp_200()
+    return resp_200(db_file)

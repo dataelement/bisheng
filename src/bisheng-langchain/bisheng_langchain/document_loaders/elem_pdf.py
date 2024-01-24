@@ -2,22 +2,15 @@
 """Loads PDF with semantic splilter."""
 import io
 import json
-import logging
 import os
 import re
-import tempfile
 import time
-from abc import ABC
 from collections import Counter
 from copy import deepcopy
-from pathlib import Path
-from typing import Any, Iterator, List, Mapping, Optional, Union
-from urllib.parse import urlparse
+from typing import List, Optional, Union
 
 import fitz
 import numpy as np
-import pypdfium2
-import requests
 from bisheng_langchain.document_loaders.parsers import LayoutParser
 from langchain.docstore.document import Document
 from langchain.document_loaders.blob_loaders import Blob
@@ -72,8 +65,7 @@ def order_by_tbyx(block_info, th=10):
     for i in range(len(res) - 1):
         for j in range(i, 0, -1):
             # restore the order using the
-            if (abs(res[j + 1][1] - res[j][1]) < th
-                    and (res[j + 1][0] < res[j][0])):
+            if (abs(res[j + 1][1] - res[j][1]) < th and (res[j + 1][0] < res[j][0])):
                 tmp = deepcopy(res[j])
                 res[j] = deepcopy(res[j + 1])
                 res[j + 1] = deepcopy(tmp)
@@ -207,8 +199,7 @@ class PDFWithSemanticLoader(BasePDFLoader):
                  html_output_file: str = None,
                  verbose: bool = False) -> None:
         """Initialize with a file path."""
-        self.layout_parser = LayoutParser(api_key=layout_api_key,
-                                          api_base_url=layout_api_url)
+        self.layout_parser = LayoutParser(api_key=layout_api_key, api_base_url=layout_api_url)
         self.with_columns = with_columns
         self.is_join_table = is_join_table
         self.support_rotate = support_rotate
@@ -286,8 +277,7 @@ class PDFWithSemanticLoader(BasePDFLoader):
         texts = []
         for b in blocks:
             if b[-1] != IMG_BLOCK_TYPE:
-                text = re.sub(RE_MULTISPACE_INCLUDING_NEWLINES, ' ', b[4]
-                              or '').strip()
+                text = re.sub(RE_MULTISPACE_INCLUDING_NEWLINES, ' ', b[4] or '').strip()
                 if text:
                     texts.append(text)
                     text_ploys.append(Rect(b[0], b[1], b[2], b[3]))
@@ -301,8 +291,7 @@ class PDFWithSemanticLoader(BasePDFLoader):
         layout_info = json.loads(layout.page_content)
         for info in layout_info:
             bbs = info['bbox']
-            coords = ((bbs[0], bbs[1]), (bbs[2], bbs[3]), (bbs[4], bbs[5]),
-                      (bbs[6], bbs[7]))
+            coords = ((bbs[0], bbs[1]), (bbs[2], bbs[3]), (bbs[4], bbs[5]), (bbs[6], bbs[7]))
             semantic_polys.append(Polygon(coords))
             semantic_labels.append(info['category_id'])
 
@@ -350,8 +339,7 @@ class PDFWithSemanticLoader(BasePDFLoader):
                 rs = text_rects[ind]
                 ord_ind = np.min(ori_orders)
                 mask[ind] = 1
-                new_block_info.append(
-                    (rect[0], rect[1], rect[2], rect[3], ts, rs, ord_ind))
+                new_block_info.append((rect[0], rect[1], rect[2], rect[3], ts, rs, ord_ind))
 
             elif np.all(mask[start:end] == 0):
                 rect = merge_rects(text_rects[start:end])
@@ -367,16 +355,14 @@ class PDFWithSemanticLoader(BasePDFLoader):
                     rs = rs[arg_ind]
 
                 mask[start:end] = 1
-                new_block_info.append(
-                    (rect[0], rect[1], rect[2], rect[3], ts, rs, ord_ind))
+                new_block_info.append((rect[0], rect[1], rect[2], rect[3], ts, rs, ord_ind))
 
         for i in range(texts_cnt):
             if mask[i] == 0:
                 b = blocks[i]
                 r = np.asarray([b[0], b[1], b[2], b[3]])
                 ord_ind = b[-2]
-                new_block_info.append(
-                    (b[0], b[1], b[2], b[3], [texts[i]], [r], ord_ind))
+                new_block_info.append((b[0], b[1], b[2], b[3], [texts[i]], [r], ord_ind))
 
         if self.with_columns:
             new_blocks = sorted(new_block_info, key=lambda x: x[-1])
@@ -430,8 +416,7 @@ class PDFWithSemanticLoader(BasePDFLoader):
         for label, b in zip(texts_labels, new_blocks):
             if label in effective_class_inds:
                 text = join_lines(b[4], label == TABLE_ID)
-                filtered_blocks.append(
-                    (b[0], b[1], b[2], b[3], text, b[5], label))
+                filtered_blocks.append((b[0], b[1], b[2], b[3], text, b[5], label))
 
         # print('---filtered_blocks---')
         # for b in filtered_blocks:
@@ -539,8 +524,7 @@ class PDFWithSemanticLoader(BasePDFLoader):
                 if (c0 > LINE_FULL_THRESHOLD and c1 < START_THRESHOLD
                         and c2 < SIMI_HEIGHT_THRESHOLD):
                     new_text = join_lines([b0[4], b1[4]])
-                    new_block = (b0[0], b0[1], b0[2], b0[3], new_text, b0[5],
-                                 b0[6])
+                    new_block = (b0[0], b0[1], b0[2], b0[3], new_text, b0[5], b0[6])
                     groups[i - 1][-1] = new_block
                     groups[i].pop(0)
 
@@ -549,8 +533,7 @@ class PDFWithSemanticLoader(BasePDFLoader):
                 c0 = (r1_w - r0_w) / r1_h
                 if c0 < SIMI_WIDTH_THRESHOLD:
                     new_text = join_lines([b0[4], b1[4]], True)
-                    new_block = (b0[0], b0[1], b0[2], b0[3], new_text, b0[5],
-                                 b0[6])
+                    new_block = (b0[0], b0[1], b0[2], b0[3], new_text, b0[5], b0[6])
                     groups[i - 1][-1] = new_block
                     groups[i].pop(0)
 
@@ -559,10 +542,7 @@ class PDFWithSemanticLoader(BasePDFLoader):
         return groups
 
     def save_to_html(self, groups, output_file):
-        styles = [
-            'style="background-color: #EBEBEB;"',
-            'style="background-color: #ABBAEA;"'
-        ]
+        styles = ['style="background-color: #EBEBEB;"', 'style="background-color: #ABBAEA;"']
         idx = 0
         table_style = 'style="border:1px solid black;"'
 
@@ -578,8 +558,7 @@ class PDFWithSemanticLoader(BasePDFLoader):
                         rows = b[4].split('\n')
                         content = []
                         for r in rows:
-                            content.append(
-                                f'<tr><td {table_style}>{r}</td></tr>')
+                            content.append(f'<tr><td {table_style}>{r}</td></tr>')
                         elem_text = '\n'.join(content)
                         text = f'<table {table_style}>{elem_text}</table>'
                     else:
@@ -610,6 +589,7 @@ class PDFWithSemanticLoader(BasePDFLoader):
 
     def load(self) -> List[Document]:
         """Load given path as pages."""
+        import pypdfium2
         blob = Blob.from_path(self.file_path)
         start = self.start
         groups = []
