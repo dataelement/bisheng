@@ -356,7 +356,8 @@ def delete_knowledge_file(*, file_id: int, Authorize: AuthJWT = Depends()):
     # minio
     minio_client = MinioClient()
     minio_client.delete_minio(str(knowledge_file.id))
-    minio_client.delete_minio(str(knowledge_file.object_name))
+    if knowledge_file.object_name:
+        minio_client.delete_minio(str(knowledge_file.object_name))
     # elastic
     index_name = knowledge.index_name or collection_name
     esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
@@ -591,6 +592,7 @@ def file_knowledge(
                             status=1,
                             object_name=metadata_extra.get('url'))
     session.add(db_file)
+    result = db_file.model_dump()
     session.flush()
 
     try:
@@ -608,6 +610,7 @@ def file_knowledge(
         if es_client:
             es_client.add_texts(texts=raw_texts, metadatas=metadata)
         db_file.status = 2
+        result['status'] = 2
         session.commit()
 
     except Exception as e:
@@ -616,7 +619,9 @@ def file_knowledge(
         setattr(db_file, 'remark', str(e)[:500])
         session.add(db_file)
         session.commit()
-    return db_file.copy()
+        result['status'] = 3
+        result['remark'] = str(e)[:500]
+    return result
 
 
 def text_knowledge(
@@ -654,7 +659,7 @@ def text_knowledge(
                             object_name=documents[0].metadata.get('url'))
     session.add(db_file)
     session.flush()
-
+    result = db_file.model_dump()
     try:
         metadata = [{
             'file_id': db_file.id,
@@ -670,12 +675,14 @@ def text_knowledge(
         if es_client:
             es_client.add_texts(texts=[t.page_content for t in texts], metadatas=metadata)
         db_file.status = 2
+        result['status'] = 2
         session.commit()
-
     except Exception as e:
         logger.error(e)
         setattr(db_file, 'status', 3)
         setattr(db_file, 'remark', str(e)[:500])
         session.add(db_file)
         session.commit()
-    return db_file.copy()
+        result['status'] = 3
+        result['remark'] = str(e)[:500]
+    return result

@@ -2,7 +2,7 @@ import json
 from typing import Optional
 from uuid import uuid4
 
-from bisheng.api.services.chat import comment_answer
+from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.v1.schemas import ChatInput, resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager

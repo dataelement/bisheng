@@ -2,7 +2,7 @@ import json
 from typing import List, Optional
 from uuid import UUID
 
-from bisheng.api.services.chat import comment_answer
+from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList, InitResponse,
                                     StreamData, UnifiedResponseModel, resp_200)
