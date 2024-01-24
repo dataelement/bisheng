@@ -174,8 +174,8 @@ def create_knowledge(*,
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """ 创建知识库. """
-    knowledge.is_partition = knowledge.is_partition or settings.vectorstores.get('Milvus', {}).get(
-        'is_partition', True)
+    knowledge.is_partition = knowledge.is_partition or settings.get_knowledge().get(
+        'vectorstores', {}).get('Milvus', {}).get('is_partition', True)
     db_knowldge = Knowledge.model_validate(knowledge)
     know = session.exec(
         select(Knowledge).where(Knowledge.name == knowledge.name,
