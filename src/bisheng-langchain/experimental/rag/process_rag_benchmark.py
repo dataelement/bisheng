@@ -13,9 +13,10 @@ from langchain.chat_models import ChatOpenAI
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from bisheng_langchain.retrievers import MixEsVectorRetriever
 from langchain.chains.question_answering import load_qa_chain
+from rerank import match_score, sort_and_filter_all_chunks
 
 embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
-llm = ChatOpenAI(model="gpt-4-1106-preview", temperature=0.0)
+llm = ChatOpenAI(model="gpt-3.5-turbo-1106", temperature=0.0)
 
 file_types = {
     'doc': 'doc',
@@ -162,7 +163,7 @@ def get_answer(data_dir):
     
     qa_chain = load_qa_chain(llm=llm, chain_type="stuff", verbose=False)
     for questions_info in tqdm(all_questions_info):
-        question = questions_info['问题']
+        question = questions_info['问题改写']
         file_type = questions_info['文件类型']
         collection_name = questions_info['知识库名']
         
@@ -177,7 +178,7 @@ def get_answer(data_dir):
                 connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT}
             )
             vector_retriever = vector_store.as_retriever(
-                search_type="similarity", search_kwargs={"k": 10})
+                search_type="similarity", search_kwargs={"k": 6})
 
             ssl_verify = {'basic_auth': ("elastic", "oSGL-zVvZ5P3Tm7qkDLC")}
             es_store = ElasticKeywordsSearch(
@@ -185,13 +186,18 @@ def get_answer(data_dir):
                 index_name=collection_name + "_es",
                 ssl_verify=ssl_verify)
             keyword_retriever = es_store.as_retriever(
-                search_type="similarity", search_kwargs={"k": 10})
+                search_type="similarity", search_kwargs={"k": 6})
 
             combine_strategy = 'mix'
             es_vector_retriever = MixEsVectorRetriever(vector_retriever=vector_retriever,
                                                        keyword_retriever=keyword_retriever,
                                                        combine_strategy=combine_strategy)
             docs = es_vector_retriever.get_relevant_documents(question)
+            print('origin docs:', len(docs))
+            # rerank docs
+            # docs = sort_and_filter_all_chunks(question, docs, th=0.0)
+            print('rerank docs:', len(docs))
+
             ans = qa_chain({"input_documents": docs, "question": question}, 
                            return_only_outputs=True)
             print('ans:', ans, 'question:', question)
@@ -200,7 +206,7 @@ def get_answer(data_dir):
             questions_info['rag_answer'] = ''
     
     df = pd.DataFrame(all_questions_info)
-    df.to_excel(os.path.join(save_dir, 'questions_info_with_answer_sample_gpt4.xlsx'), index=False)
+    df.to_excel(os.path.join(save_dir, 'questions_info_with_answer_sample_gpt3.5_12chunk_ques_rewrite.xlsx'), index=False)
 
 
 if __name__ == '__main__':
