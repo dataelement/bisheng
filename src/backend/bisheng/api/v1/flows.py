@@ -29,7 +29,11 @@ def create_flow(*,
     """Create a new flow."""
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
-
+    # 判断用户是否重复技能名
+    if session.exec(
+            select(Flow).where(Flow.name == flow.name,
+                               Flow.user_id == payload.get('user_id'))).first():
+        raise HTTPException(status_code=500, detail='技能名重复')
     flow.user_id = payload.get('user_id')
     db_flow = Flow.model_validate(flow)
     session.add(db_flow)
