@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronUp } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import L2ParameterComponent from "../../CustomNodes/GenericNode/components/parameterComponent/l2Index";
@@ -20,8 +20,11 @@ export default function l2Edit() {
     const { t } = useTranslation()
 
     const { id } = useParams()
-    const { flow, setFlow, saveFlow } = useContext(TabsContext);
+    const { flow: nextFlow, setFlow, saveFlow } = useContext(TabsContext);
     const { setErrorData, setSuccessData } = useContext(alertContext);
+    const flow = useMemo(() => {
+        return id ? nextFlow : null
+    }, [nextFlow])
 
     const [isL2, setIsL2] = useState(false)
     const [loading, setLoading] = useState(false)

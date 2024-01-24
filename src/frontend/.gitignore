@@ -1,5 +1,6 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+vite.config.ts
 # dependencies
 /node_modules
 /.pnp
@@ -18,6 +19,7 @@ yarn.lock
 .env.development.local
 .env.test.local
 .env.production.local
+
 
 npm-debug.log*
 yarn-debug.log*

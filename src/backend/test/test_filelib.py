@@ -16,7 +16,7 @@ def test_upload():
 
 
 def test_file():
-    url = 'http://192.168.106.116:7860/api/v2/filelib/chunks'
+    url = 'http://127.0.0.1:7860/api/v2/filelib/chunks'
     data = {'knowledge_id': 349, 'metadata': "{\"url\":\"https://baidu.com\"}"}
     file = {'file': open('/Users/huangly/Downloads/co2.pdf', 'rb')}
 
@@ -33,5 +33,5 @@ def test_upload2():
     resp
 
 
-# test_file()
-test_upload()
+test_file()
+# test_upload()

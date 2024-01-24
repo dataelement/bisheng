@@ -8,7 +8,7 @@ export function classNames(...classes: Array<string>): string {
 
 export function downloadFile(url, label) {
     axios.get(url, { responseType: "blob" }).then((res: any) => {
-        const blob = new Blob([res]);
+        const blob = new Blob([res.data], { type: res.headers['content-type'] });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = label;

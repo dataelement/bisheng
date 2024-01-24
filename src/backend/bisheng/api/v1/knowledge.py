@@ -174,8 +174,8 @@ def create_knowledge(*,
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     """ 创建知识库. """
-    knowledge.is_partition = knowledge.is_partition or settings.vectorstores.get('Milvus', {}).get(
-        'is_partition', True)
+    knowledge.is_partition = knowledge.is_partition or settings.get_knowledge().get(
+        'vectorstores', {}).get('Milvus', {}).get('is_partition', True)
     db_knowldge = Knowledge.model_validate(knowledge)
     know = session.exec(
         select(Knowledge).where(Knowledge.name == knowledge.name,
@@ -302,7 +302,7 @@ def delete_knowledge(*,
     if not access_check(payload, knowledge.user_id, knowledge_id, AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
     # 处理vector
-    embeddings = decide_embeddings(knowledge.model)
+    embeddings = FakeEmbedding()
     vectore_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
     if vectore_client.col:
         logger.info(f'drop_vectore col={knowledge.collection_name}')
@@ -312,6 +312,10 @@ def delete_knowledge(*,
             pk = vectore_client.col.query(expr=f'knowledge_id=="{knowledge.id}"',
                                           output_fields=['pk'])
             vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
+        # 判断milvus 是否还有entity
+        if vectore_client.col.num_entities == 0:
+            vectore_client.col.drop()
+
     # 处理 es
     # elastic
     esvectore_client: 'ElasticKeywordsSearch' = decide_vectorstores(knowledge.index_name,
@@ -352,7 +356,8 @@ def delete_knowledge_file(*, file_id: int, Authorize: AuthJWT = Depends()):
     # minio
     minio_client = MinioClient()
     minio_client.delete_minio(str(knowledge_file.id))
-    minio_client.delete_minio(str(knowledge_file.object_name))
+    if knowledge_file.object_name:
+        minio_client.delete_minio(str(knowledge_file.object_name))
     # elastic
     index_name = knowledge.index_name or collection_name
     esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
@@ -391,6 +396,8 @@ def decide_vectorstores(collection_name: str, vector_store: str,
     else:
         param = {'collection_name': collection_name, 'embedding': embedding}
         vector_config.pop('partition_suffix', '')
+        vector_config.pop('is_partition', '')
+
     param.update(vector_config)
     class_obj = import_vectorstore(vector_store)
     return instantiate_vectorstore(class_object=class_obj, params=param)
@@ -480,7 +487,7 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
                         knowledge_file.file_name, knowledge_file.id,
                         time.time() - ts1)
         except Exception as e:
-            logger.error(e)
+            logger.error('insert_metadata={} ', metadatas, e)
             session = next(get_session())
             db_file = session.get(KnowledgeFile, knowledge_file.id)
             setattr(db_file, 'status', 3)
@@ -518,7 +525,7 @@ def _read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         raw_texts = [t.page_content for t in texts]
         metadatas = [{
             'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
-            'page': t.metadata.get('page'),
+            'page': t.metadata.get('page') or 0,
             'source': file_name,
             'extra': ''
         } for t in texts]
@@ -585,6 +592,7 @@ def file_knowledge(
                             status=1,
                             object_name=metadata_extra.get('url'))
     session.add(db_file)
+    result = db_file.model_dump()
     session.flush()
 
     try:
@@ -602,6 +610,7 @@ def file_knowledge(
         if es_client:
             es_client.add_texts(texts=raw_texts, metadatas=metadata)
         db_file.status = 2
+        result['status'] = 2
         session.commit()
 
     except Exception as e:
@@ -610,6 +619,9 @@ def file_knowledge(
         setattr(db_file, 'remark', str(e)[:500])
         session.add(db_file)
         session.commit()
+        result['status'] = 3
+        result['remark'] = str(e)[:500]
+    return result
 
 
 def text_knowledge(
@@ -647,7 +659,7 @@ def text_knowledge(
                             object_name=documents[0].metadata.get('url'))
     session.add(db_file)
     session.flush()
-
+    result = db_file.model_dump()
     try:
         metadata = [{
             'file_id': db_file.id,
@@ -663,11 +675,14 @@ def text_knowledge(
         if es_client:
             es_client.add_texts(texts=[t.page_content for t in texts], metadatas=metadata)
         db_file.status = 2
+        result['status'] = 2
         session.commit()
-
     except Exception as e:
         logger.error(e)
         setattr(db_file, 'status', 3)
         setattr(db_file, 'remark', str(e)[:500])
         session.add(db_file)
         session.commit()
+        result['status'] = 3
+        result['remark'] = str(e)[:500]
+    return result

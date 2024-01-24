@@ -2,7 +2,11 @@ import axios from "axios";
 
 axios.defaults.withCredentials = true;
 
-axios.interceptors.response.use(function (response) {
+const customAxios = axios.create({
+    // 配置
+});
+
+customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 200) {
         return response.data.data;
     }
@@ -23,7 +27,7 @@ axios.interceptors.response.use(function (response) {
     return Promise.reject(null);
 })
 
-export default axios
+export default customAxios
 
 
 // 接口异常提示弹窗

@@ -1,4 +1,5 @@
 import { useContext, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import CodeAreaComponent from "../../components/codeAreaComponent";
 import Dropdown from "../../components/dropdownComponent";
 import FloatComponent from "../../components/floatComponent";
@@ -20,6 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../../components/ui/dialog";
+import EditLabel from "../../components/ui/editLabel";
 import {
   Table,
   TableBody,
@@ -33,7 +35,6 @@ import { TabsContext } from "../../contexts/tabsContext";
 import { typesContext } from "../../contexts/typesContext";
 import { NodeDataType } from "../../types/flow";
 import { classNames, limitScrollFieldsModal } from "../../utils";
-import EditLabel from "../../components/ui/editLabel";
 
 export default function EditNodeModal({ data }: { data: NodeDataType }) {
   const [open, setOpen] = useState(true);
@@ -100,9 +101,13 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
 
   const idArr = data.id.split('-')
   const handleChangeId = (id) => {
-    data.id = `${idArr[0]}-${id}`
+    const oldId = data.id
+    const newId = `${idArr[0]}-${id}`
+    document.dispatchEvent(new CustomEvent('idChange', { detail: [newId, oldId] }))
+    setOpen(!open)
   }
 
+  const { t } = useTranslation()
   return (
     <Dialog open={true} onOpenChange={setModalOpen}>
       <DialogTrigger asChild></DialogTrigger>
@@ -111,9 +116,30 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
           <DialogTitle className="flex items-center">
             <span className="pr-2">{data.type}</span>
             <Badge variant="secondary">ID:{idArr[0]}-
-              <EditLabel str={idArr[1]} onChange={handleChangeId}>{
-                (val) => <>{val}</>
-              }</EditLabel>
+              <EditLabel
+                rule={[
+                  {
+                    // 正则字母和数字 5 位数
+                    pattern: /^[a-zA-Z0-9]{5}$/,
+                    message: t('flow.incorrectIdFormatMessage'),
+                  },
+                  {
+                    // required: true,
+                    // 自定义函数校验
+                    validator: (val) => {
+                      const node = window._flow.data.nodes.find((node) =>
+                        node.data.id.split('-')[1] === val &&
+                        node.data.id !== data.id // 排除self
+                      )
+                      return !node
+                    },
+                    message: t('flow.idAlreadyExistsMessage'),
+                  }
+                ]}
+                str={idArr[1]}
+                onChange={handleChangeId}>
+                {(val) => <>{val}</>}
+              </EditLabel>
             </Badge>
           </DialogTitle>
           <DialogDescription asChild>

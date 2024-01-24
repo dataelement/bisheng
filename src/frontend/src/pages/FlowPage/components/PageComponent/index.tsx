@@ -41,6 +41,7 @@ const nodeTypes = {
 export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: string }) {
 
   let {
+    setFlow,
     setTabsState,
     saveFlow,
     uploadFlow,
@@ -76,6 +77,10 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       flow.data = reactFlowInstance.toObject();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    /**
+     * 由于flow模块设计问题，临时通过把flow挂在到window上，来提供 reactflow 节点做重复 id校验使用
+     */
+    window._flow = flow;
   }, [nodes, edges]);
   //update flow when tabs change
   useEffect(() => {
@@ -285,6 +290,28 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     await saveFlow(flow)
     blocker.proceed?.()
   }
+
+  // 修改组件id
+  useEffect(() => {
+    const handleChangeId = (data) => {
+      const detail = data.detail
+      const node = flow.data.nodes.find((node) => node.data.id === detail[1])
+      node.id = detail[0]
+      node.data.id = detail[0]
+      // 更新线上 id 信息
+      flow.data.edges.forEach(edge => {
+        ['id', 'source', 'sourceHandle', 'target', 'targetHandle'].forEach(prop => {
+          if (edge[prop]) {
+            edge[prop] = edge[prop].replaceAll(detail[1], detail[0]);
+          }
+        });
+      });
+
+      setFlow('changeid', { ...flow })
+    }
+    document.addEventListener('idChange', handleChangeId)
+    return () => document.removeEventListener('idChange', handleChangeId)
+  }, [flow.data]); // 修改 id后, 需要监听 data这一层
 
   return (
     <div className="flex h-full overflow-hidden">

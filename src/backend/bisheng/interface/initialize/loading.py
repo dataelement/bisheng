@@ -165,7 +165,7 @@ def instantiate_input_output(node_type, class_object, params, id_dict):
         params['chains'] = chain_list
         # variable
         variable = params.get('variables')
-        variable_node_id = id_dict.get('variables')
+        variable_node_id = id_dict.get('variables') or []
         params['variables'] = []
         for index, id in enumerate(variable_node_id):
             params['variables'].append({'node_id': id, 'input': variable[index]})

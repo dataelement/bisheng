@@ -2,12 +2,13 @@ import json
 from typing import List, Optional
 from uuid import UUID
 
+from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList, InitResponse,
                                     StreamData, UnifiedResponseModel, resp_200)
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
-from bisheng.database.base import get_session, session_getter
+from bisheng.database.base import get_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageRead
 from bisheng.graph.graph.base import Graph
@@ -85,12 +86,7 @@ def like_response(*,
 @router.post('/chat/comment', status_code=200)
 def comment_resp(*, data: ChatInput, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
-    with session_getter() as session:
-        message = session.get(ChatMessage, data.message_id)
-        if message:
-            message.remark = data.comment
-            session.add(message)
-            session.commit()
+    comment_answer(data.message_id, data.comment)
     return resp_200(message='操作成功')
 
 

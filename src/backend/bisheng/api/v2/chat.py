@@ -2,6 +2,8 @@ import json
 from typing import Optional
 from uuid import uuid4
 
+from bisheng.api.services.chat_imp import comment_answer
+from bisheng.api.v1.schemas import ChatInput, resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import get_session, session_getter
@@ -44,13 +46,15 @@ async def union_websocket(flow_id: str,
             tweak = json.loads(tweak)
             graph_data = process_tweaks(graph_data, tweak)
         # vectordatabase update
-        for node in graph_data['nodes']:
-            if 'VectorStore' in node['data']['node']['base_classes']:
-                if 'collection_name' in node['data'].get('node').get('template').keys():
-                    node['data']['node']['template']['collection_name'][
-                        'collection_id'] = knowledge_id
-                if 'index_name' in node['data'].get('node').get('template').keys():
-                    node['data']['node']['template']['index_name']['collection_id'] = knowledge_id
+        if knowledge_id:
+            for node in graph_data['nodes']:
+                if 'VectorStore' in node['data']['node']['base_classes']:
+                    if 'collection_name' in node['data'].get('node').get('template').keys():
+                        node['data']['node']['template']['collection_name'][
+                            'collection_id'] = knowledge_id
+                    if 'index_name' in node['data'].get('node').get('template').keys():
+                        node['data']['node']['template']['index_name'][
+                            'collection_id'] = knowledge_id
         trace_id = str(uuid4().hex)
         with logger.contextualize(trace_id=trace_id):
             await chat_manager.handle_websocket(
@@ -98,3 +102,9 @@ def solve_response(
         message.solved = solved
     session.commit()
     return {'status_code': 200, 'status_message': 'success'}
+
+
+@router.post('/comment', status_code=200)
+def comment(*, data: ChatInput):
+    comment_answer(data.message_id, data.comment)
+    return resp_200()

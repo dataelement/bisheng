@@ -4,6 +4,7 @@ declare global {
     interface Window {
         SearchSkillsPage: any;
         errorAlerts: (errorList: string[]) => void
+        _flow: any
     }
 }
 
