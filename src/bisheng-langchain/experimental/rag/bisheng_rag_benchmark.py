@@ -3,6 +3,7 @@ import json
 import shutil
 import pandas as pd
 from tqdm import tqdm
+import httpx
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
@@ -13,10 +14,19 @@ from langchain.chat_models import ChatOpenAI
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from bisheng_langchain.retrievers import MixEsVectorRetriever
 from langchain.chains.question_answering import load_qa_chain
-from rerank import match_score, sort_and_filter_all_chunks
+from rerank import sort_and_filter_all_chunks
+from scoring.ragas_score import rag_benchmark_scoring
 
-embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
-llm = ChatOpenAI(model="gpt-3.5-turbo-1106", temperature=0.0)
+openai_api_key = os.environ.get('OPENAI_API_KEY', '')
+openai_proxy = os.environ.get('OPENAI_PROXY', '')
+
+embeddings = OpenAIEmbeddings(model="text-embedding-ada-002", 
+                              openai_api_key=openai_api_key,
+                              http_client=httpx.Client(proxies=openai_proxy))
+llm = ChatOpenAI(model="gpt-4-1106-preview", 
+                 temperature=0.0,
+                 openai_api_key=openai_api_key,
+                 http_client=httpx.Client(proxies=openai_proxy))
 
 file_types = {
     'doc': 'doc',
@@ -146,10 +156,8 @@ def data_loader(data_folder):
         )
 
 
-def get_answer(data_dir):
-    excel_file = os.path.join(data_dir, 'questions_info_with_answer_sample.xlsx')
-
-    df = pd.read_excel(excel_file)
+def get_answer(origin_excel_file, save_excel_file):
+    df = pd.read_excel(origin_excel_file)
     all_questions_info = list()
     # 遍历每一行
     for index, row in df.iterrows():
@@ -163,7 +171,7 @@ def get_answer(data_dir):
     
     qa_chain = load_qa_chain(llm=llm, chain_type="stuff", verbose=False)
     for questions_info in tqdm(all_questions_info):
-        question = questions_info['问题改写']
+        question = questions_info['问题']
         file_type = questions_info['文件类型']
         collection_name = questions_info['知识库名']
         
@@ -194,9 +202,19 @@ def get_answer(data_dir):
                                                        combine_strategy=combine_strategy)
             docs = es_vector_retriever.get_relevant_documents(question)
             print('origin docs:', len(docs))
-            # rerank docs
-            # docs = sort_and_filter_all_chunks(question, docs, th=0.0)
-            print('rerank docs:', len(docs))
+            # 去重 and rerank docs
+            # all_contents = []
+            # docs_no_dup = []
+            # for index, doc in enumerate(docs):
+            #     doc_content = doc.page_content
+            #     if doc_content in all_contents:
+            #         continue
+            #     all_contents.append(doc_content)
+            #     docs_no_dup.append(doc)
+            # docs = docs_no_dup
+            # if len(docs):
+            #     docs = sort_and_filter_all_chunks(question, docs, th=0.0)
+            print('delete dup and rerank docs:', len(docs))
 
             ans = qa_chain({"input_documents": docs, "question": question}, 
                            return_only_outputs=True)
@@ -206,7 +224,7 @@ def get_answer(data_dir):
             questions_info['rag_answer'] = ''
     
     df = pd.DataFrame(all_questions_info)
-    df.to_excel(os.path.join(save_dir, 'questions_info_with_answer_sample_gpt3.5_12chunk_ques_rewrite.xlsx'), index=False)
+    df.to_excel(save_excel_file, index=False)
 
 
 if __name__ == '__main__':
@@ -215,5 +233,8 @@ if __name__ == '__main__':
     # process_rag_benchmark(data_dir, save_dir)
     # data_loader(save_dir)
 
-    save_dir = 'data'
-    get_answer(save_dir)
+    origin_excel_file = 'data/questions_info_with_answer_sample.xlsx'
+    save_excel_file = 'data/questions_info_with_answer_sample_gpt4_12chunk.xlsx'
+    # get_answer(origin_excel_file, save_excel_file)
+    score = rag_benchmark_scoring(save_excel_file)
+    print(score)
