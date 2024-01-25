@@ -112,23 +112,9 @@ def _convert_message_to_dict2(message: BaseMessage) -> List[dict]:
 
     return [message_dict]
 
-def encode_jwt_token(ak, sk):
-    headers = {
-        "alg": "HS256",
-        "typ": "JWT"
-    }
-    payload = {
-        "iss": ak,
-        "exp": int(time.time()) + 1800, # 填写您期望的有效时间，此处示例代表当前时间+30分钟
-        "nbf": int(time.time()) - 5 # 填写您期望的生效时间，此处示例代表当前时间-5秒
-    }
-    token = jwt.encode(payload, sk, headers=headers)
-    return token
-
 url = "https://api.sensenova.cn/v1/llm/chat-completions"
 
 class SenseChat(BaseChatModel):
-# class ChatQWen(BaseChatModel):
 
     client: Optional[Any]  #: :meta private:
     model_name: str = Field(default='SenseChat', alias='model')
