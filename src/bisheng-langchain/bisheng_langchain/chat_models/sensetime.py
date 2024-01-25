@@ -19,9 +19,16 @@ import requests
 import json
 
 
-import jwt # pip3 install PyJWT
+import jwt
+# if TYPE_CHECKING:
+#     import jwt
 
 logger = logging.getLogger(__name__)
+
+def llll(dd):
+    with open(f"/app/{dd}.txt",'w') as f:
+        f.write(dd+'\n')
+
 
 def _import_pyjwt() -> Any:
     try:
@@ -53,7 +60,7 @@ def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
     if role == 'user':
         return HumanMessage(content=_dict['content'])
     elif role == 'assistant':
-        content = _dict['content'] or ''  # OpenAI returns None for tool invocations
+        content = _dict['message'] or ''  # OpenAI returns None for tool invocations
         if _dict.get('function_call'):
             additional_kwargs = {'function_call': dict(_dict['function_call'])}
         else:
@@ -121,6 +128,7 @@ def encode_jwt_token(ak, sk):
 url = "https://api.sensenova.cn/v1/llm/chat-completions"
 
 class SenseChat(BaseChatModel):
+# class ChatQWen(BaseChatModel):
 
     client: Optional[Any]  #: :meta private:
     model_name: str = Field(default='SenseChat', alias='model')
@@ -167,19 +175,15 @@ class SenseChat(BaseChatModel):
         """Validate that api key and python package exists in environment."""
 
         _import_pyjwt()
-        # values['access_key_id'] = get_from_dict_or_env(values, 'access_key_id',
-        #                                                  'ACCESS_KEY_ID')
-        # values['secret_access_key'] = get_from_dict_or_env(values, 'secret_access_key',
-        #                                                  'SECRET_ACCESS_KEY')
 
         values['api_token'] = get_from_dict_or_env(values, 'api_token',
                                                          'API_TOKEN')
 
-        # try:
-            # header = {'Authorization': 'Bearer {}'.format(api_key), 'Content-Type': 'application/json'}
-            # values['client'] = requests
-        # except AttributeError:
-            # raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
+        try:
+            header = {'Authorization': 'Bearer {}'.format(values['api_token']), 'Content-Type': 'application/json'}
+            values['client'] = Requests(headers=header, )
+        except AttributeError:
+            raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
         return values
 
     @property
@@ -212,15 +216,56 @@ class SenseChat(BaseChatModel):
                 "max_new_tokens": self.max_tokens,
                 'stream': False#self.streaming
             }
+            
+            response = self.client.post(url=url, json=params).json()
+            return response
+        rsp_dict = _completion_with_retry(**kwargs)
+        if 'error' in rsp_dict:
+            logger.error(f'sensechat_error resp={rsp_dict}')
+            message = rsp_dict['error']['message']
+            raise Exception(message)
+        else:
+            # return rsp_dict['data'], rsp_dict.get('usage', '')
+            return rsp_dict, rsp_dict.get('usage', '')
 
-            # api_key = encode_jwt_token(self.access_key_id, self.secret_access_key)
-            header = {'Authorization': 'Bearer {}'.format(self.api_token), 'Content-Type': 'application/json'}
 
-            response = requests.post(url, json=params, headers=header)
-            res = response.json()
-            return res
+    async def acompletion_with_retry(self, **kwargs: Any) -> Any:
+        """Use tenacity to retry the async completion call."""
+        retry_decorator = _create_retry_decorator(self)
+        if self.streaming:
+            self.client.headers.update({'Accept': 'text/event-stream'})
+        else:
+            self.client.headers.pop('Accept', '')
 
-        return _completion_with_retry(**kwargs)
+        @retry_decorator
+        async def _acompletion_with_retry(**kwargs: Any) -> Any:
+            messages = kwargs.pop('messages', '')
+            input, params = SenseChat._build_input_parameters(self.model_name,
+                                                             messages=messages,
+                                                             **kwargs)
+            inp = {'input': input, 'parameters': params, 'model': self.model_name}
+            # Use OpenAI's async api https://github.com/openai/openai-python#async-api
+            async with self.client.apost(url=url, json=inp) as response:
+                async for line in response.content.iter_any():
+                    if b'\n' in line:
+                        for txt_ in line.split(b'\n'):
+                            yield txt_.decode('utf-8').strip()
+                    else:
+                        yield line.decode('utf-8').strip()
+
+        async for response in _acompletion_with_retry(**kwargs):
+            is_error = False
+            if response:
+                if response.startswith('event:error'):
+                    is_error = True
+                elif response.startswith('data:'):
+                    yield (is_error, response[len('data:'):])
+                    if is_error:
+                        break
+                elif response.startswith('{'):
+                    yield (is_error, response)
+                else:
+                    continue
 
     def _combine_llm_outputs(self, llm_outputs: List[Optional[dict]]) -> dict:
         overall_token_usage: dict = {}
@@ -246,10 +291,8 @@ class SenseChat(BaseChatModel):
 
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {**params, **kwargs}
-        response = self.completion_with_retry(messages=message_dicts, **params)
+        response, usage = self.completion_with_retry(messages=message_dicts, **params)
 
-        if "error" in response:
-            logger.error(f"invalid result: {response}")
         return self._create_chat_result(response)
 
     async def _agenerate(
@@ -259,7 +302,44 @@ class SenseChat(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return self._generate(messages, stop, run_manager, **kwargs)
+        message_dicts, params = self._create_message_dicts(messages, stop)
+        params = {**params, **kwargs}
+        if self.streaming:
+            inner_completion = ''
+            role = 'assistant'
+            params['stream'] = True
+            function_call: Optional[dict] = None
+            async for is_error, stream_resp in self.acompletion_with_retry(messages=message_dicts,
+                                                                           **params):
+                output = None
+                msg = json.loads(stream_resp)
+                if is_error:
+                    logger.error(stream_resp)
+                    raise ValueError(stream_resp)
+                if 'data' in msg:
+                    output = msg['data']
+                choices = output.get('choices')
+                if choices:
+                    for choice in choices:
+                        role = choice['message'].get('role', role)
+                        token = choice['message'].get('message', '')
+                        inner_completion += token or ''
+                        _function_call = choice['message'].get('function_call', '')
+                        if run_manager:
+                            await run_manager.on_llm_new_token(token)
+                        if _function_call:
+                            if function_call is None:
+                                function_call = _function_call
+                            else:
+                                function_call['arguments'] += _function_call['arguments']
+            message = _convert_dict_to_message({
+                'content': inner_completion,
+                'role': role,
+                'function_call': function_call,
+            })
+            return ChatResult(generations=[ChatGeneration(message=message)])
+        else:
+            return self._generate(messages, stop, run_manager, **kwargs)
 
     def _create_message_dicts(
             self, messages: List[BaseMessage],
@@ -286,16 +366,16 @@ class SenseChat(BaseChatModel):
     def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
         generations = []
 
+        # print('response', response)
         def _norm_text(text):
             if text[0] == '"' and text[-1] == '"':
                 out = eval(text)
             else:
                 out = text
             return out
-
         for res in response['data']['choices']:
             res['content'] = _norm_text(res['message'])
-            res["role"] = 'user' # 写死了角色
+            res["role"] = 'user' 
             message = _convert_dict_to_message(res)
             gen = ChatGeneration(message=message)
             generations.append(gen)
