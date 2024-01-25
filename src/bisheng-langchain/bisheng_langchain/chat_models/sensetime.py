@@ -19,16 +19,9 @@ import requests
 import json
 
 
-import jwt
-# if TYPE_CHECKING:
-#     import jwt
+import jwt # pip3 install PyJWT
 
 logger = logging.getLogger(__name__)
-
-def llll(dd):
-    with open(f"/app/{dd}.txt",'w') as f:
-        f.write(dd+'\n')
-
 
 def _import_pyjwt() -> Any:
     try:
@@ -219,18 +212,12 @@ class SenseChat(BaseChatModel):
                 "max_new_tokens": self.max_tokens,
                 'stream': False#self.streaming
             }
-            
-            # llll(self.api_token)
+
             # api_key = encode_jwt_token(self.access_key_id, self.secret_access_key)
-            # logger.info(f"#####{self.api_token}#####")
             header = {'Authorization': 'Bearer {}'.format(self.api_token), 'Content-Type': 'application/json'}
-            # logger.info(f"#####{params}#####")
-            # logger.info(f"#####{response}#####")
+
             response = requests.post(url, json=params, headers=header)
-            logger.info(f"#####{response.json()}#####")
-            # response = requests.post(url, headers=header, data=json.dumps(params))
             res = response.json()
-            # res["role"] = messages[0]["role"]
             return res
 
         return _completion_with_retry(**kwargs)
