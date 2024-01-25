@@ -1,7 +1,7 @@
 services:
   bisheng-rt:
     container_name: bisheng-rt
-    image: dataelement/bisheng-rt:latest
+    image: dataelement/bisheng-rt:0.0.6.2
     shm_size: 10gb
     ports:
       - "9000:9000"
@@ -28,7 +28,7 @@ services:
 
   bisheng-unstructured:
     container_name: bisheng-unstructured
-    image: dataelement/bisheng-unstructured:latest
+    image: dataelement/bisheng-unstructured:0.0.3.2
     ports:
       - "10001:10001"
     environment:
