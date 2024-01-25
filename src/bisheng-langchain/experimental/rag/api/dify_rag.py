@@ -256,7 +256,7 @@ if __name__ == '__main__':
     data_dir = './rag_benchmark_v1.0/rag_benchmark'
     save_dir = './rag_benchmark_v1.0/rag_benchmark_processed'
     excel_file = './data/questions_info_with_answer_sample.xlsx'
-    save_excel_file = './data/questions_info_with_openai_assistant_file_id.xlsx'
+    save_excel_file = './data/questions_info_with_dify_file_id.xlsx'
     
     query_dataset_from_dify()
     # upload_file_to_dify(save_dir, excel_file, save_excel_file)
