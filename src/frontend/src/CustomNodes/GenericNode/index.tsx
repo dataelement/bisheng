@@ -142,7 +142,7 @@ export default function GenericNode({ data, selected }: {
           </div> */}
         </div>
 
-        <div className="generic-node-desc nodrag" onKeyDown={e => e.stopPropagation()}>
+        <div className="generic-node-desc nodrag">
           <div className="generic-node-desc-text">{data.node.description}</div>
           <>
             {Object.keys(data.node.template)

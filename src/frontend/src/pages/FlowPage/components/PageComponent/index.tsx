@@ -399,6 +399,8 @@ const useKeyBoard = (reactFlowWrapper) => {
   useEffect(() => {
     // this effect is used to attach the global event handlers
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target.tagName === 'INPUT') return // 排除输入框内复制粘贴
+
       if (
         (event.ctrlKey || event.metaKey) &&
         event.key === "c" &&
