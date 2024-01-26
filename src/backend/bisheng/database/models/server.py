@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Optional
 
+from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, text
-from sqlmodel import Field
+from sqlmodel import Field, select
 
 
 class ServerBase(SQLModelSerializable):
@@ -21,6 +22,15 @@ class ServerBase(SQLModelSerializable):
 
 class Server(ServerBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+
+
+# 封装业务操作
+class ServerDao(ServerBase):
+    @classmethod
+    def find_server(cls, server_id: int) -> Server:
+        with session_getter() as session:
+            statement = select(Server).where(Server.id == server_id)
+            return session.exec(statement)
 
 
 class ServerRead(ServerBase):
