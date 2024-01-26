@@ -34,7 +34,7 @@ def rag_benchmark_scoring(excel_file):
     contexts = []
     for question_info in all_questions_info:
         question = question_info['问题']
-        answer = question_info['GT']
+        gt = question_info['GT']
         pred = question_info['rag_answer']
 
         # 去除【1†source】, only for openai assitant
@@ -45,8 +45,8 @@ def rag_benchmark_scoring(excel_file):
         #     pred = pred.replace(str_temp, '')
         
         questions.append(question)
-        answers.append(answer)
-        ground_truths.append([pred])
+        answers.append(pred)
+        ground_truths.append([gt])
         contexts.append([''])
     
      # To dict
@@ -62,16 +62,21 @@ def rag_benchmark_scoring(excel_file):
     answer_correctness_score = rages_answer_correctness(dataset)
     answer_correctness_score = answer_correctness_score.to_dict('records')
 
-    ragas_score = defaultdict(lambda: defaultdict(list))
-    for i in range(len(all_questions_info)):
-        if all_questions_info[i]['问题'] != answer_correctness_score[i]['question']:
-            raise ValueError('question not match')
-        all_questions_info[i]['answer_correctness'] = answer_correctness_score[i]['answer_correctness']
+    score_map = {
+        'answer_correctness': answer_correctness_score,
+    }
 
-        if '问题类型' in all_questions_info[i]:
-            ragas_score[all_questions_info[i]['问题类型']]['answer_correctness'].append(
-                all_questions_info[i]['answer_correctness'])  
-        ragas_score['all']['answer_correctness'].append(all_questions_info[i]['answer_correctness'])
+    ragas_score = defaultdict(lambda: defaultdict(list))
+    for score_type in score_map:
+        for i in range(len(all_questions_info)):
+            if all_questions_info[i]['问题'] != score_map[score_type][i]['question']:
+                raise ValueError('question not match')
+            all_questions_info[i][score_type] = score_map[score_type][i][score_type]
+
+            if '问题类型' in all_questions_info[i]:
+                ques_type = all_questions_info[i]['问题类型'].strip()
+                ragas_score[ques_type][score_type].append(all_questions_info[i][score_type])  
+            ragas_score['all'][score_type].append(all_questions_info[i][score_type])
         
     df = pd.DataFrame(all_questions_info)
     df.to_excel(excel_file, index=False)
@@ -80,7 +85,7 @@ def rag_benchmark_scoring(excel_file):
     for ques_type in ragas_score:
         each_ques_type_score = dict()
         each_ques_type_score['问题类型'] = ques_type
-        each_ques_type_score['问题个数'] = len(ragas_score[ques_type]['answer_correctness'])
+        each_ques_type_score['问题个数'] = len(ragas_score[ques_type][list(score_map.keys())[0]])
         for score_type in ragas_score[ques_type]:
             avg_score = sum(ragas_score[ques_type][score_type]) / len(ragas_score[ques_type][score_type])
             each_ques_type_score[score_type] = avg_score
@@ -91,5 +96,5 @@ def rag_benchmark_scoring(excel_file):
 
 
 if __name__ == '__main__':
-    excel_file = '../data/questions_info_with_answer_sample_gpt4_12chunk.xlsx'
+    excel_file = '../data/questions_info_with_answer_sample_qwen14b_12chunk.xlsx'
     print(rag_benchmark_scoring(excel_file))
