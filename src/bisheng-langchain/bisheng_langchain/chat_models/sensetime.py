@@ -25,11 +25,6 @@ import jwt
 
 logger = logging.getLogger(__name__)
 
-def llll(dd):
-    with open(f"/app/{dd}.txt",'w') as f:
-        f.write(dd+'\n')
-
-
 def _import_pyjwt() -> Any:
     try:
         import jwt
@@ -39,6 +34,18 @@ def _import_pyjwt() -> Any:
                          'Please install it with `pip install PyJWT`.')
     return jwt
 
+def encode_jwt_token(ak, sk):
+    headers = {
+        "alg": "HS256",
+        "typ": "JWT"
+    }
+    payload = {
+        "iss": ak,
+        "exp": int(time.time()) + 1800, # 填写您期望的有效时间，此处示例代表当前时间+30分钟
+        "nbf": int(time.time()) - 5 # 填写您期望的生效时间，此处示例代表当前时间-5秒
+    }
+    token = jwt.encode(payload, sk, headers=headers)
+    return token
 
 def _create_retry_decorator(llm):
 
@@ -124,8 +131,8 @@ class SenseChat(BaseChatModel):
     """What sampling temperature to use."""
     model_kwargs: Optional[Dict[str, Any]] = Field(default_factory=dict)
     """Holds any model parameters valid for `create` call not explicitly specified."""
-    api_token: Optional[str] = None
-    # secret_access_key: Optional[str] = None
+    access_key_id: Optional[str] = None
+    secret_access_key: Optional[str] = None
 
     repetition_penalty: float = 1.05
     request_timeout: Optional[Union[float, Tuple[float, float]]] = None
@@ -162,11 +169,17 @@ class SenseChat(BaseChatModel):
 
         _import_pyjwt()
 
-        values['api_token'] = get_from_dict_or_env(values, 'api_token',
-                                                         'API_TOKEN')
+        values['access_key_id'] = get_from_dict_or_env(values, 'access_key_id',
+                                                         'ACCESS_KEY_ID')
+        values['secret_access_key'] = get_from_dict_or_env(values, 'secret_access_key',
+                                                         'SECRET_ACCESS_KEY')
+        token = encode_jwt_token(values['access_key_id'], values['secret_access_key'])
+        if isinstance(token, bytes):
+            token = token.decode('utf-8')
 
         try:
-            header = {'Authorization': 'Bearer {}'.format(values['api_token']), 'Content-Type': 'application/json'}
+            header = {'Authorization': 'Bearer {}'.format(token), 
+                      'Content-Type': 'application/json'}
             values['client'] = Requests(headers=header, )
         except AttributeError:
             raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
@@ -378,7 +391,8 @@ class SenseChat(BaseChatModel):
     def _client_params(self) -> Mapping[str, Any]:
         """Get the parameters used for the openai client."""
         zhipu_creds: Dict[str, Any] = {
-            'api_key': self.api_token,
+            'access_key_id': self.access_key_id,
+            'secret_access_key': self.secret_access_key,
             'model': self.model_name,
         }
         return {**zhipu_creds, **self._default_params}
