@@ -1,9 +1,10 @@
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+device_id = 'cuda:7'
 tokenizer = AutoTokenizer.from_pretrained('/home/public/llm/bge-reranker-large')
-model = AutoModelForSequenceClassification.from_pretrained('/home/public/llm/bge-reranker-large').to('cuda:2')
-model.eval()
+rank_model = AutoModelForSequenceClassification.from_pretrained('/home/public/llm/bge-reranker-large').to(device_id)
+rank_model.eval()
 
 
 def match_score(chunk, query):
@@ -13,8 +14,8 @@ def match_score(chunk, query):
     pairs = [[query, chunk]]
 
     with torch.no_grad():
-        inputs = tokenizer(pairs, padding=True, truncation=True, return_tensors='pt', max_length=512).to('cuda:2')
-        scores = model(**inputs, return_dict=True).logits.view(-1, ).float()
+        inputs = tokenizer(pairs, padding=True, truncation=True, return_tensors='pt', max_length=512).to(device_id)
+        scores = rank_model(**inputs, return_dict=True).logits.view(-1, ).float()
         scores = torch.sigmoid(scores) 
         scores = scores.cpu().numpy()
         
@@ -37,8 +38,8 @@ def sort_and_filter_all_chunks(query, all_chunks, th=0.0):
 
     # for index, chunk in enumerate(remain_chunks):
     #     print('query:', query)
-    #     print('chunk_text:', chunk['text'])
+    #     print('chunk_text:', chunk.page_content)
     #     print('socre:', sorted_res[index][1])
     #     print('***********')
 
-    return all_chunks
+    return remain_chunks
