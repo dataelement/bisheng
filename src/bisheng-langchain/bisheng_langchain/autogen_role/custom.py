@@ -1,4 +1,3 @@
-
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 from autogen import Agent, ConversableAgent
@@ -15,14 +14,13 @@ class AutoGenCustomRole(ConversableAgent):
         coroutine: Optional[Callable[..., Awaitable[str]]] = None,
         **kwargs,
     ):
-        super().__init__(
-            name=name,
-            system_message=system_message,
-            human_input_mode='NEVER',
-            code_execution_config=False,
-            llm_config=False,
-            **kwargs,
-        )
+        super().__init__(name=name,
+                         system_message=system_message,
+                         human_input_mode='NEVER',
+                         code_execution_config=False,
+                         llm_config=False,
+                         llm=None,
+                         **kwargs)
         self.func = func
         self.coroutine = coroutine
         self.register_reply(Agent, AutoGenCustomRole.generate_custom_reply)

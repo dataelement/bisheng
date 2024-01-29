@@ -35,6 +35,7 @@ from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.schema import Document
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores.base import VectorStore
+from pymilvus import Collection
 from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
@@ -167,19 +168,18 @@ async def process_knowledge(*,
 
 
 @router.post('/create', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
-def create_knowledge(*,
-                     session: Session = Depends(get_session),
-                     knowledge: KnowledgeCreate,
-                     Authorize: AuthJWT = Depends()):
+def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends()):
+    """ 创建知识库. """
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
-    """ 创建知识库. """
+    user_id = payload.get('user_id')
     knowledge.is_partition = knowledge.is_partition or settings.get_knowledge().get(
         'vectorstores', {}).get('Milvus', {}).get('is_partition', True)
     db_knowldge = Knowledge.model_validate(knowledge)
-    know = session.exec(
-        select(Knowledge).where(Knowledge.name == knowledge.name,
-                                knowledge.user_id == payload.get('user_id'))).all()
+    with session_getter() as session:
+        know = session.exec(
+            select(Knowledge).where(Knowledge.name == knowledge.name,
+                                    knowledge.user_id == user_id)).all()
     if know:
         raise HTTPException(status_code=500, detail='知识库名称重复')
     if not db_knowldge.collection_name:
@@ -192,11 +192,12 @@ def create_knowledge(*,
             # 默认collectionName
             db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
     db_knowldge.index_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
-    db_knowldge.user_id = payload.get('user_id')
-    session.add(db_knowldge)
-    session.commit()
-    session.refresh(db_knowldge)
-    return resp_200(db_knowldge)
+    db_knowldge.user_id = user_id
+    with session_getter() as session:
+        session.add(db_knowldge)
+        session.commit()
+        session.refresh(db_knowldge)
+        return resp_200(db_knowldge.copy())
 
 
 @router.get('/', status_code=200)
@@ -304,7 +305,7 @@ def delete_knowledge(*,
     # 处理vector
     embeddings = FakeEmbedding()
     vectore_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
-    if vectore_client.col:
+    if isinstance(vectore_client.col, Collection):
         logger.info(f'drop_vectore col={knowledge.collection_name}')
         if knowledge.collection_name.startswith('col'):
             vectore_client.col.drop()
@@ -486,6 +487,7 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
             logger.info('process_file_done file_name={} file_id={} time_cost={}',
                         knowledge_file.file_name, knowledge_file.id,
                         time.time() - ts1)
+
         except Exception as e:
             logger.error('insert_metadata={} ', metadatas, e)
             session = next(get_session())
@@ -592,8 +594,8 @@ def file_knowledge(
                             status=1,
                             object_name=metadata_extra.get('url'))
     session.add(db_file)
-    result = db_file.model_dump()
     session.flush()
+    result = db_file.model_dump()
 
     try:
         metadata = [{
@@ -633,8 +635,8 @@ def text_knowledge(
     try:
         embeddings = decide_embeddings(db_knowledge.model)
         vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
-        es_client = decide_vectorstores(db_knowledge.index_name, 'ElasticKeywordsSearch',
-                                        embeddings)
+        index_name = db_knowledge.index_name or db_knowledge.collection_name
+        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
     except Exception as e:
         logger.exception(e)
 

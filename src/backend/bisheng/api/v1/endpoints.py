@@ -10,7 +10,7 @@ from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, Uploa
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.chat.utils import judge_source, process_source_document
-from bisheng.database.base import get_session
+from bisheng.database.base import get_session, session_getter
 from bisheng.database.models.config import Config
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage
@@ -110,7 +110,6 @@ def save_config(data: dict, session: Session = Depends(get_session)):
 @router.post('/predict/{flow_id}', response_model=UnifiedResponseModel[ProcessResponse])
 @router.post('/process/{flow_id}', response_model=UnifiedResponseModel[ProcessResponse])
 async def process_flow(
-        session: Annotated[Session, Depends(get_session)],
         flow_id: str,
         inputs: Optional[dict] = None,
         tweaks: Optional[dict] = None,
@@ -124,9 +123,10 @@ async def process_flow(
     """
     if inputs and isinstance(inputs, dict) and 'id' in inputs:
         inputs.pop('id')
-
+    logger.info(f'act=api_call sessionid={session_id} flow_id={flow_id}')
     try:
-        flow = session.get(Flow, flow_id)
+        with session_getter() as session:
+            flow = session.get(Flow, flow_id)
         if flow is None:
             raise ValueError(f'Flow {flow_id} not found')
         if flow.data is None:
@@ -201,10 +201,16 @@ async def process_flow(
             session.commit()
             session.refresh(message)
             extra.update({'source': source, 'message_id': message.id})
-            task_result.update(extra)
-            task_result.update({'result': result})
-            if source != 0:
+
+            if source == 1:
                 await process_source_document(source_documents, session_id, message.id, answer)
+            elif source == 4:
+                # QA
+                extra_qa = json.loads(answer.metadata.get('extra'))
+                extra_qa.pop('answer', None)
+                extra.update({'doc': [extra_qa]})
+            task_result.update(extra)
+            task_result.update({'answer': result})
         except Exception as e:
             logger.error(e)
 

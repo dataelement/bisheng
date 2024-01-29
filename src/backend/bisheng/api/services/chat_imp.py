@@ -1,5 +1,5 @@
-from bisheng.api.v1.schemas import ChatMessage
 from bisheng.database.base import session_getter
+from bisheng.database.models.message import ChatMessage
 
 
 def comment_answer(message_id: int, comment: str):

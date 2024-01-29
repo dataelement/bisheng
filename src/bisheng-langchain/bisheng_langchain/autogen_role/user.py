@@ -1,9 +1,11 @@
 """Chain that runs an arbitrary python function."""
 import logging
+import os
 from typing import Callable, Dict, Optional
 
 import openai
 from autogen import UserProxyAgent
+from langchain.base_language import BaseLanguageModel
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,9 @@ class AutoGenUserProxyAgent(UserProxyAgent):
         openai_api_base: Optional[str] = '',  # when llm_flag=True, need to set
         openai_proxy: Optional[str] = '',  # when llm_flag=True, need to set
         temperature: Optional[float] = 0,  # when llm_flag=True, need to set
+        api_type: Optional[str] = None,  # when llm_flag=True, need to set
+        api_version: Optional[str] = None,  # when llm_flag=True, need to set
+        llm: Optional[BaseLanguageModel] = None,
         system_message: Optional[
             str] = '',  # agent system message, llm or group chat manage will use
         is_termination_msg: Optional[Callable[[Dict], bool]] = None,
@@ -44,12 +49,19 @@ class AutoGenUserProxyAgent(UserProxyAgent):
         if llm_flag:
             if openai_proxy:
                 openai.proxy = {'https': openai_proxy, 'http': openai_proxy}
+            else:
+                openai.proxy = None
             if openai_api_base:
                 openai.api_base = openai_api_base
+            else:
+                openai.api_base = os.environ.get('OPENAI_API_BASE', 'https://api.openai.com/v1')
             config_list = [
                 {
                     'model': model_name,
                     'api_key': openai_api_key,
+                    'api_base': openai_api_base,
+                    'api_type': api_type,
+                    'api_version': api_version,
                 },
             ]
             llm_config = {
@@ -68,6 +80,7 @@ class AutoGenUserProxyAgent(UserProxyAgent):
                          function_map=function_map,
                          code_execution_config=code_execution_config,
                          llm_config=llm_config,
+                         llm=llm,
                          system_message=system_message)
 
 
@@ -96,6 +109,7 @@ class AutoGenUser(UserProxyAgent):
                          human_input_mode=human_input_mode,
                          code_execution_config=code_execution_config,
                          llm_config=llm_config,
+                         llm=None,
                          system_message=system_message)
 
 
@@ -126,4 +140,5 @@ class AutoGenCoder(UserProxyAgent):
                          function_map=function_map,
                          code_execution_config=code_execution_config,
                          llm_config=llm_config,
+                         llm=None,
                          system_message=system_message)

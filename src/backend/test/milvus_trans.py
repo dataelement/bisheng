@@ -3,12 +3,12 @@ import json
 import requests
 from bisheng_langchain.embeddings import HostEmbeddings
 from bisheng_langchain.vectorstores import Milvus
-from pymilvus import Collection, MilvusException
+from pymilvus import Collection, MilvusClient, MilvusException
 from sqlmodel import Session, create_engine
 
 params = {}
 params['connection_args'] = {
-    'host': '192.168.106.109',
+    'host': '192.168.106.116',
     'port': '19530',
     'user': '',
     'password': '',
@@ -23,6 +23,23 @@ engine = create_engine(database_url, connect_args={}, pool_pre_ping=True)
 
 
 def milvus_clean():
+    milvus_cli = MilvusClient(uri='http://192.168.106.109:19530')
+
+    collection = milvus_cli.list_collections()
+    for col in collection:
+        if col.startswith('tmp'):
+            print(col)
+            milvus_cli.drop_collection(col)
+        # if not col.startswith('rag'):
+        #     if milvus_cli.num_entities(col) < 10:
+        #         print(col)
+        #         milvus_cli.drop_collection(col)
+
+
+milvus_clean()
+
+
+def milvus_trans():
     params['collection_name'] = 'partition_textembeddingada002_knowledge_1'
     openai_target = Milvus.from_documents(embedding=embedding, **params)
     params['collection_name'] = 'partition_multilinguale5large_knowledge_1'
@@ -145,19 +162,20 @@ def milvus_clean():
 
 
 def elastic_clean():
-    url = 'http://192.168.106.116:9200/_stats'
-    headers = {'Authorization': 'Basic ZWxhc3RpYzpvU0dMLXpWdlo1UDNUbTdxa0RMQw=='}
+    url = 'http://192.168.106.109:9200/_stats'
+    user_name = 'elastic'
+    auth = 'MBDsrs5O_zHCE+12na3f'
     del_url = 'http://192.168.106.116:9200/%s'
-    col = requests.get(url, headers=headers).json()
+    col = requests.get(url, auth=(user_name, auth)).json()
     for c in col.get('indices').keys():
         if c.startswith('tmp'):
             print(c)
-            x = requests.delete(del_url % c, headers=headers)
+            # x = requests.delete(del_url % c, headers=headers)
             # url = f'http://
-        elif col.get('indices').get(c).get('primaries').get('docs').get('count') == 0:
-            print(c)
-            x = requests.delete(del_url % c, headers=headers)
-            print(x)
+        # elif col.get('indices').get(c).get('primaries').get('docs').get('count') == 0:
+        #     print(c)
+        #     x = requests.delete(del_url % c, headers=headers)
+        #     print(x)
 
 
-elastic_clean()
+# elastic_clean()

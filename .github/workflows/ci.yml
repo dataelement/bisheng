@@ -129,7 +129,8 @@ jobs:
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
 
       - name: notify feishu
-        uses:  sozo-design/curl@v1.0.2
+        uses: fjogeleit/http-request-action@v1
         with:
-          args: -X POST -d '{"msg_type":"text","content":{"text":"latest version 编译成功"}}' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b 
-      
+          url: ${{ secrets.FEISHU_WEBHOOK }}
+          method: 'POST'
+          data: '{"msg_type":"text","content":{"text":" ${{ steps.get_version.outputs.VERSION }}发布成功"}}'

@@ -15,7 +15,7 @@
         "pleaseEnterPassword": "Please enter your password",
         "accountTooShort": "Account is too short",
         "passwordTooShort": "Password is too short, at least 8 characters",
-        "passwordError": "The password must include upper and lower case letters, numbers, and special characters!",
+        "passwordError": "The password must include upper and lower case letters, numbers, and characters!",
         "passwordMismatch": "Passwords do not match",
         "registrationSuccess": "Registration successful. Please enter your password to log in",
         "pleaseEnterCaptcha": "Please enter captcha"
