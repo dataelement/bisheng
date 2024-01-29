@@ -4,6 +4,7 @@ from typing import List, Optional
 
 import openai
 from autogen import Agent, GroupChat, GroupChatManager
+from langchain.base_language import BaseLanguageModel
 
 from .user import AutoGenUser
 
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 class AutoGenGroupChatManager(GroupChatManager):
     """A chat manager agent that can manage a group chat of multiple agents.
     """
+
     def __init__(
         self,
         agents: List[Agent],
@@ -22,7 +24,10 @@ class AutoGenGroupChatManager(GroupChatManager):
         openai_api_base: Optional[str] = '',
         openai_proxy: Optional[str] = '',
         temperature: Optional[float] = 0,
+        api_type: Optional[str] = None,  # when llm_flag=True, need to set
+        api_version: Optional[str] = None,  # when llm_flag=True, need to set
         name: Optional[str] = 'chat_manager',
+        llm: Optional[BaseLanguageModel] = None,
         system_message: Optional[str] = 'Group chat manager.',
         **kwargs,
     ):
@@ -40,6 +45,9 @@ class AutoGenGroupChatManager(GroupChatManager):
             {
                 'model': model_name,
                 'api_key': openai_api_key,
+                'api_base': openai_api_base,
+                'api_type': api_type,
+                'api_version': api_version,
             },
         ]
         llm_config = {
@@ -52,6 +60,7 @@ class AutoGenGroupChatManager(GroupChatManager):
         super().__init__(
             groupchat=groupchat,
             llm_config=llm_config,
+            llm=llm,
             name=name,
             system_message=system_message,
         )

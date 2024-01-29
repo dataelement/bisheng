@@ -1,9 +1,10 @@
 """Chain that runs an arbitrary python function."""
 import logging
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Callable, Dict, Optional
 
 import openai
 from autogen import AssistantAgent
+from langchain.base_language import BaseLanguageModel
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,16 @@ Reply "TERMINATE" in the end when everything is done.
         openai_api_base: Optional[str] = '',  # when llm_flag=True, need to set
         openai_proxy: Optional[str] = '',  # when llm_flag=True, need to set
         temperature: Optional[float] = 0,  # when llm_flag=True, need to set
-        system_message: Optional[str] = DEFAULT_SYSTEM_MESSAGE,  # agent system message, llm or group chat manage will use # noqa
+        api_type: Optional[str] = None,  # when llm_flag=True, need to set
+        api_version: Optional[str] = None,  # when llm_flag=True, need to set
+        llm: Optional[BaseLanguageModel] = None,
+        system_message: Optional[
+            str] = DEFAULT_SYSTEM_MESSAGE,  # agent system message, llm or group chat manage will use # noqa
         is_termination_msg: Optional[Callable[[Dict], bool]] = None,
         **kwargs,
     ):
-        is_termination_msg = (
-            is_termination_msg if is_termination_msg is not None else (lambda x: x.get("content") == "TERMINATE")
-        )
+        is_termination_msg = (is_termination_msg if is_termination_msg is not None else
+                              (lambda x: x.get('content') == 'TERMINATE'))
         if openai_proxy:
             openai.proxy = {'https': openai_proxy, 'http': openai_proxy}
         if openai_api_base:
@@ -49,6 +53,9 @@ Reply "TERMINATE" in the end when everything is done.
             {
                 'model': model_name,
                 'api_key': openai_api_key,
+                'api_base': openai_api_base,
+                'api_type': api_type,
+                'api_version': api_version,
             },
         ]
         llm_config = {
@@ -61,9 +68,10 @@ Reply "TERMINATE" in the end when everything is done.
         super().__init__(
             name,
             llm_config=llm_config,
+            llm=llm,
             system_message=system_message,
             is_termination_msg=is_termination_msg,
             max_consecutive_auto_reply=None,
-            human_input_mode="NEVER",
+            human_input_mode='NEVER',
             code_execution_config=False,
         )
