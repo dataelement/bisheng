@@ -23,17 +23,17 @@ engine = create_engine(database_url, connect_args={}, pool_pre_ping=True)
 
 
 def milvus_clean():
-    milvus_cli = MilvusClient(uri='http://192.168.106.116:19530')
+    milvus_cli = MilvusClient(uri='http://192.168.106.109:19530')
 
     collection = milvus_cli.list_collections()
     for col in collection:
         if col.startswith('tmp'):
             print(col)
             milvus_cli.drop_collection(col)
-        if not col.startswith('rag'):
-            if milvus_cli.num_entities(col) < 10:
-                print(col)
-                milvus_cli.drop_collection(col)
+        # if not col.startswith('rag'):
+        #     if milvus_cli.num_entities(col) < 10:
+        #         print(col)
+        #         milvus_cli.drop_collection(col)
 
 
 milvus_clean()

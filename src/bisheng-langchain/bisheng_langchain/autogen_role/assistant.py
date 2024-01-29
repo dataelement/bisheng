@@ -1,5 +1,6 @@
 """Chain that runs an arbitrary python function."""
 import logging
+import os
 from typing import Callable, Dict, Optional
 
 import openai
@@ -46,8 +47,12 @@ Reply "TERMINATE" in the end when everything is done.
                               (lambda x: x.get('content') == 'TERMINATE'))
         if openai_proxy:
             openai.proxy = {'https': openai_proxy, 'http': openai_proxy}
+        else:
+            openai.proxy = None
         if openai_api_base:
             openai.api_base = openai_api_base
+        else:
+            openai.api_base = os.environ.get('OPENAI_API_BASE', 'https://api.openai.com/v1')
 
         config_list = [
             {
