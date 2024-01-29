@@ -41,7 +41,7 @@ def encode_jwt_token(ak, sk):
     }
     payload = {
         "iss": ak,
-        "exp": int(time.time()) + 1800, # 填写您期望的有效时间，此处示例代表当前时间+30分钟
+        "exp": int(time.time()) + 1800, # 填写您期望的有效时间，此处示例代表当前时间+300分钟
         "nbf": int(time.time()) - 5 # 填写您期望的生效时间，此处示例代表当前时间-5秒
     }
     token = jwt.encode(payload, sk, headers=headers)
@@ -215,7 +215,12 @@ class SenseChat(BaseChatModel):
                 "max_new_tokens": self.max_tokens,
                 'stream': False#self.streaming
             }
-            
+
+            token = encode_jwt_token(self.access_key_id, self.secret_access_key)
+            if isinstance(token, bytes):
+                token = token.decode('utf-8')
+            self.client.headers.update({'Authorization': 'Bearer {}'.format(token)})
+
             response = self.client.post(url=url, json=params).json()
             return response
         rsp_dict = _completion_with_retry(**kwargs)
@@ -231,6 +236,12 @@ class SenseChat(BaseChatModel):
     async def acompletion_with_retry(self, **kwargs: Any) -> Any:
         """Use tenacity to retry the async completion call."""
         retry_decorator = _create_retry_decorator(self)
+
+        token = encode_jwt_token(self.access_key_id, self.secret_access_key)
+        if isinstance(token, bytes):
+            token = token.decode('utf-8')
+        self.client.headers.update({'Authorization': 'Bearer {}'.format(token)})
+        
         if self.streaming:
             self.client.headers.update({'Accept': 'text/event-stream'})
         else:
