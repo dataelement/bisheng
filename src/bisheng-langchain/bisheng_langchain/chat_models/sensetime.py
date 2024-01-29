@@ -41,7 +41,7 @@ def encode_jwt_token(ak, sk):
     }
     payload = {
         "iss": ak,
-        "exp": int(time.time()) + 1800, # 填写您期望的有效时间，此处示例代表当前时间+300分钟
+        "exp": int(time.time()) + 1800, # 填写您期望的有效时间，此处示例代表当前时间+30分钟
         "nbf": int(time.time()) - 5 # 填写您期望的生效时间，此处示例代表当前时间-5秒
     }
     token = jwt.encode(payload, sk, headers=headers)
