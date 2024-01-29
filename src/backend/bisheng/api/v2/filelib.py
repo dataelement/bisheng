@@ -1,7 +1,6 @@
-import time
 from typing import Optional
-from uuid import uuid4
 
+from bisheng.api.services import knowledge_imp
 from bisheng.api.v1.knowledge import (addEmbedding, decide_embeddings, decide_vectorstores,
                                       file_knowledge, text_knowledge)
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200
@@ -26,26 +25,10 @@ router = APIRouter(prefix='/filelib')
 
 
 @router.post('/', response_model=KnowledgeRead, status_code=201)
-def create_knowledge(
-        *,
-        session: Session = Depends(get_session),
-        knowledge: KnowledgeCreate,
-):
+def creat(knowledge: KnowledgeCreate):
     """创建知识库."""
-    db_knowldge = Knowledge.from_orm(knowledge)
-    know = session.exec(
-        select(Knowledge).where(
-            Knowledge.name == knowledge.name,
-            knowledge.user_id == settings.get_from_db('default_operator').get('user'))).all()
-    if know:
-        raise HTTPException(status_code=500, detail='知识库名称重复')
-    if not db_knowldge.collection_name:
-        # 默认collectionName
-        db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
-    db_knowldge.user_id = settings.get_from_db('default_operator').get('user')
-    session.add(db_knowldge)
-    session.commit()
-    session.refresh(db_knowldge)
+    user_id = knowledge.user_id or settings.get_from_db('default_operator').get('user')
+    db_knowldge = knowledge_imp.create_knowledge(knowledge, user_id)
     return db_knowldge
 
 

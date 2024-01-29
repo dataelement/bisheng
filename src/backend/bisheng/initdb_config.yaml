@@ -10,7 +10,7 @@ knowledges:
       # openai_api_version: ""  # azure api_version
     embedding-host: # 知识库下拉框中显示的embedding模型的名称，可自定义
       host_base_url: "" # 在模型管理页面中已上线的embedding服务的地址
-    model: "" # 在模型管理页面中已上线的embedding模型的名称
+      model: "" # 在模型管理页面中已上线的embedding模型的名称
   vectorstores:
     # Milvus 最低要求cpu 4C 8G 推荐4C 16G
     Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数

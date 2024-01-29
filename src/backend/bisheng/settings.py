@@ -71,7 +71,7 @@ class Settings(BaseSettings):
             if match:
                 password = match.group(0)
                 new_password = decrypt_token(password)
-                new_redis_url = re.sub(pattern, f':{new_password}@', values['redis_url'])
+                new_redis_url = re.sub(pattern, f'{new_password}', values['redis_url'])
                 values['redis_url'] = new_redis_url
         return values
 
