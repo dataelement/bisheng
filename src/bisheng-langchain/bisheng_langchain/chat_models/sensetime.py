@@ -41,7 +41,7 @@ def encode_jwt_token(ak, sk):
     }
     payload = {
         "iss": ak,
-        "exp": int(time.time()) + 1800, # 填写您期望的有效时间，此处示例代表当前时间+30分钟
+        "exp": int(time.time()) + 43200, # 填写您期望的有效时间，此处示例代表当前时间   12 h
         "nbf": int(time.time()) - 5 # 填写您期望的生效时间，此处示例代表当前时间-5秒
     }
     token = jwt.encode(payload, sk, headers=headers)
@@ -423,3 +423,14 @@ class SenseChat(BaseChatModel):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return 'sense-chat'
+    
+    @classmethod
+    def _build_input_parameters(cls, model, messages, **kwargs):
+
+        parameters = {}
+        input = {}
+
+        if 'incremental_output' not in kwargs and kwargs.get('stream'):
+            parameters['incremental_output'] = True
+
+        return input, {**parameters, **kwargs}
