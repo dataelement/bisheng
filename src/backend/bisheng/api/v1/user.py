@@ -56,7 +56,8 @@ async def regist(*, user: UserCreate):
             session.commit()
 
     # check if user already exist
-    name_user = session.exec(select(User).where(User.user_name == user.user_name)).all()
+    with session_getter() as session:
+        name_user = session.exec(select(User).where(User.user_name == user.user_name)).all()
     if name_user:
         raise HTTPException(status_code=500, detail='账号已存在')
     else:
@@ -103,8 +104,9 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
         if 1 == db_user.delete:
             raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
         # 查询角色
-        db_user_role = session.exec(
-            select(UserRole).where(UserRole.user_id == db_user.user_id)).all()
+        with session_getter() as session:
+            db_user_role = session.exec(
+                select(UserRole).where(UserRole.user_id == db_user.user_id)).all()
 
         if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
             # 是管理员，忽略其他的角色
@@ -137,8 +139,8 @@ async def get_info(Authorize: AuthJWT = Depends()):
         user_id = payload.get('user_id')
         with session_getter() as session:
             user = session.get(User, user_id)
-        # 查询角色
-        db_user_role = session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
+            # 查询角色
+            db_user_role = session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
         if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
             # 是管理员，忽略其他的角色
             role = 'admin'
@@ -189,6 +191,7 @@ async def update(*, user: UserUpdate, Authorize: AuthJWT = Depends()):
         raise HTTPException(status_code=500, detail='无查看权限')
     with session_getter() as session:
         db_user = session.get(User, user.user_id)
+    # check if user already exist
     if db_user and user.delete is not None:
         # 判断是否是管理员
         with session_getter() as session:

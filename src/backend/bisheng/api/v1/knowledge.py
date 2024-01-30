@@ -198,7 +198,7 @@ def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends
         session.add(db_knowldge)
         session.commit()
         session.refresh(db_knowldge)
-        return resp_200(db_knowldge.copy())
+    return resp_200(db_knowldge.copy())
 
 
 @router.get('/', status_code=200)

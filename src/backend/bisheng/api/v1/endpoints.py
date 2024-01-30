@@ -102,7 +102,6 @@ def save_config(data: dict):
             redis_key = 'config_' + old.key
             redis_client.delete(redis_key)
     except Exception as e:
-        session.rollback()
         raise HTTPException(status_code=500, detail=f'格式不正确, {str(e)}')
 
     return resp_200('保存成功')
@@ -198,10 +197,11 @@ async def process_flow(
                                   category='answer',
                                   message=answer,
                                   source=source)
-            session.add(question)
-            session.add(message)
-            session.commit()
-            session.refresh(message)
+            with session_getter() as session:
+                session.add(question)
+                session.add(message)
+                session.commit()
+                session.refresh(message)
             extra.update({'source': source, 'message_id': message.id})
 
             if source == 1:
