@@ -14,7 +14,7 @@ from ragas.metrics import AnswerCorrectness
 def rages_answer_correctness(dataset):
     # answer_correctness, 只考虑事实相似度
     weights = [1.0, 0.0]
-    batch_size = 5
+    batch_size = 15
     answer_correctness = AnswerCorrectness(weights=weights, batch_size=batch_size)
     result = evaluate(
         dataset=dataset,
@@ -26,12 +26,20 @@ def rages_answer_correctness(dataset):
     return df
 
 
-def rag_benchmark_scoring(excel_file):
+def rag_benchmark_scoring(excel_file, answer_colunm='rag_answer'):
     if not os.path.exists(excel_file + '.bak'):
         shutil.copy(excel_file, excel_file + '.bak')
 
     df = pd.read_excel(excel_file)
-    df.dropna(subset=['问题', 'GT', 'rag_answer'], inplace=True)
+    df.rename(
+        columns={
+            'question': '问题',
+            'ground_truths': 'GT',
+            'query_type': '问题类型',
+        },
+        inplace=True,
+    )
+    df.dropna(subset=['问题', 'GT', answer_colunm], inplace=True)
     all_questions_info = df.to_dict('records')
 
     questions = []
@@ -39,9 +47,9 @@ def rag_benchmark_scoring(excel_file):
     answers = []
     contexts = []
     for question_info in all_questions_info:
-        question = question_info['问题']
+        question = question_info['问题改写']
         gt = question_info['GT']
-        pred = question_info['rag_answer']
+        pred = question_info[answer_colunm]
 
         # 去除【1†source】, only for openai assitant
         # pattern = re.compile("【(\d+)†source】")
@@ -70,8 +78,9 @@ def rag_benchmark_scoring(excel_file):
         'answer_correctness': answer_correctness_score,
     }
     for metric, scores in score_map.items():
-        df[metric] = df.index.map({idx: rows[metric] for idx, rows in scores.iterrows()})
+        df[metric] = df.index.map({idx: rows.tail(1) for idx, rows in scores.iterrows()})
     df.to_excel(excel_file, index=False)
+    print(f'successfully save to {excel_file}')
 
     if '问题类型' in df.columns:
         grouped_df = (
@@ -87,5 +96,5 @@ def rag_benchmark_scoring(excel_file):
 
 
 if __name__ == '__main__':
-    excel_file = '/opt/bisheng/src/bisheng-langchain/experimental/rag/scoring/data/benchmark_v1.0.xlsx'
-    print(rag_benchmark_scoring(excel_file))
+    excel_file = '../data/short_doc_8k_qwen14b.xlsx'
+    print(rag_benchmark_scoring(excel_file, 'rag_answer'))
