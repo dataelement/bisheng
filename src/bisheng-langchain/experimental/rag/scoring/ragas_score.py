@@ -78,7 +78,7 @@ def rag_benchmark_scoring(excel_file, answer_colunm='rag_answer'):
         'answer_correctness': answer_correctness_score,
     }
     for metric, scores in score_map.items():
-        df[metric] = df.index.map({idx: rows.tail(1) for idx, rows in scores.iterrows()})
+        df[metric] = df.index.map({idx: rows.tail(1).values[0] for idx, rows in scores.iterrows()})
     df.to_excel(excel_file, index=False)
     print(f'successfully save to {excel_file}')
 
@@ -97,4 +97,4 @@ def rag_benchmark_scoring(excel_file, answer_colunm='rag_answer'):
 
 if __name__ == '__main__':
     excel_file = '../data/short_doc_8k_qwen14b.xlsx'
-    print(rag_benchmark_scoring(excel_file, 'rag_answer'))
+    print(rag_benchmark_scoring(excel_file, answer_colunm='rag_answer'))
