@@ -17,7 +17,7 @@ from bisheng_langchain.utils.requests import Requests
 import time
 import requests
 import json
-
+import copy
 
 import jwt
 # if TYPE_CHECKING:
@@ -41,7 +41,7 @@ def encode_jwt_token(ak, sk):
     }
     payload = {
         "iss": ak,
-        "exp": int(time.time()) + 43200, # 填写您期望的有效时间，此处示例代表当前时间   12 h
+        "exp": int(time.time()) + 43200, # 填写您期望的有效时间，此处示例代表当前时间+300分钟
         "nbf": int(time.time()) - 5 # 填写您期望的生效时间，此处示例代表当前时间-5秒
     }
     token = jwt.encode(payload, sk, headers=headers)
@@ -67,7 +67,8 @@ def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
     if role == 'user':
         return HumanMessage(content=_dict['content'])
     elif role == 'assistant':
-        content = _dict['message'] or ''  # OpenAI returns None for tool invocations
+        content = _dict['content'] or ''  # OpenAI returns None for tool invocations
+
         if _dict.get('function_call'):
             additional_kwargs = {'function_call': dict(_dict['function_call'])}
         else:
@@ -180,6 +181,7 @@ class SenseChat(BaseChatModel):
         try:
             header = {'Authorization': 'Bearer {}'.format(token), 
                       'Content-Type': 'application/json'}
+
             values['client'] = Requests(headers=header, )
         except AttributeError:
             raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
@@ -240,6 +242,7 @@ class SenseChat(BaseChatModel):
         token = encode_jwt_token(self.access_key_id, self.secret_access_key)
         if isinstance(token, bytes):
             token = token.decode('utf-8')
+
         self.client.headers.update({'Authorization': 'Bearer {}'.format(token)})
         
         if self.streaming:
@@ -250,13 +253,22 @@ class SenseChat(BaseChatModel):
         @retry_decorator
         async def _acompletion_with_retry(**kwargs: Any) -> Any:
             messages = kwargs.pop('messages', '')
-            input, params = SenseChat._build_input_parameters(self.model_name,
-                                                             messages=messages,
-                                                             **kwargs)
-            inp = {'input': input, 'parameters': params, 'model': self.model_name}
+
+            inp = {'messages': messages, 
+                   'model': self.model_name, 
+                   'max_new_tokens': self.max_tokens,
+                    'top_p': self.top_p,
+                    'temperature': self.temperature,
+                    'repetition_penalty': self.repetition_penalty,
+                    'n': self.n,
+                    "max_new_tokens": self.max_tokens,
+                    'stream': True}
+
             # Use OpenAI's async api https://github.com/openai/openai-python#async-api
             async with self.client.apost(url=url, json=inp) as response:
+
                 async for line in response.content.iter_any():
+
                     if b'\n' in line:
                         for txt_ in line.split(b'\n'):
                             yield txt_.decode('utf-8').strip()
@@ -315,26 +327,30 @@ class SenseChat(BaseChatModel):
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {**params, **kwargs}
         if self.streaming:
+
             inner_completion = ''
             role = 'assistant'
             params['stream'] = True
             function_call: Optional[dict] = None
             async for is_error, stream_resp in self.acompletion_with_retry(messages=message_dicts,
                                                                            **params):
-                output = None
-                msg = json.loads(stream_resp)
+
+                if str(stream_resp).startswith("[DONE]"): continue
+                output = json.loads(stream_resp)
                 if is_error:
                     logger.error(stream_resp)
                     raise ValueError(stream_resp)
-                if 'data' in msg:
-                    output = msg['data']
-                choices = output.get('choices')
+                if 'data' in output:
+                    output = output['data']
+                if "choices" in output:
+                    choices = output.get('choices')
+
                 if choices:
                     for choice in choices:
-                        role = choice['message'].get('role', role)
-                        token = choice['message'].get('message', '')
+                        token = choice['delta']
+
                         inner_completion += token or ''
-                        _function_call = choice['message'].get('function_call', '')
+                        _function_call = ''
                         if run_manager:
                             await run_manager.on_llm_new_token(token)
                         if _function_call:
@@ -376,7 +392,6 @@ class SenseChat(BaseChatModel):
     def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
         generations = []
 
-        # print('response', response)
         def _norm_text(text):
             if text[0] == '"' and text[-1] == '"':
                 out = eval(text)
@@ -425,10 +440,13 @@ class SenseChat(BaseChatModel):
         return 'sense-chat'
     
     @classmethod
-    def _build_input_parameters(cls, model, messages, **kwargs):
+    def _build_input_parameters(cls, messages, **kwargs):
 
         parameters = {}
         input = {}
+        if messages is not None:
+            msgs = copy.deepcopy(messages)
+            input = {'messages': msgs}
 
         if 'incremental_output' not in kwargs and kwargs.get('stream'):
             parameters['incremental_output'] = True
