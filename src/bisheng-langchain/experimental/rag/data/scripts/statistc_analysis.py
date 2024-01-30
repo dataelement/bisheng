@@ -8,41 +8,71 @@ def get_short_doc_filename():
     all_docs_path = '../all_split_docs.json'
     with open(all_docs_path, 'r') as f:
         all_docs = json.load(f)
+
     filenames2num = defaultdict(int)
     for filename, doc in all_docs.items():
         for page in doc:
             filenames2num[filename] += len(page['page_content'])
+
     df = pd.DataFrame(filenames2num.items(), columns=['filename', 'num_of_char'])
     df.to_excel('./num_of_char.xlsx', index=False)
 
-    short_df_8k = df[(df['num_of_char'] < 8000) & (df['num_of_char'] > 0)]
-    short_df_16k = df[(df['num_of_char'] < 16000) & (df['num_of_char'] >= 8000)]
-    print(f'8k以下短文档占比: {short_df_8k.shape[0] / df.shape[0]}')
-    print(f'16k以下短文档占比: {short_df_16k.shape[0] / df.shape[0]}')
+    stats = defaultdict(dict)
+    start = 1
+    interval2filenames = defaultdict(list)
+    for end in range(8000, 200000, 8000):
+        interval = f'[{start}, {end})'
+        count = df[(df['num_of_char'] >= start) & (df['num_of_char'] < end)]
+        interval2filenames[interval] = count['filename'].to_list()
+        row_nums = count.shape[0]
 
-    short_doc_8k = short_df_8k['filename'].to_list()
-    short_doc_16k = short_df_16k['filename'].tolist()
+        stats[interval] = {'count': row_nums, 'percent': row_nums / df.shape[0]}
 
-    return short_doc_8k, short_doc_16k
+        print(f'{interval} : {row_nums}')
+        print(f'{interval} 占比 : {row_nums / df.shape[0]}')
+        print('-' * 20)
+
+        start = end
+
+    match_row_nums = df[df['num_of_char'] >= start].shape[0]
+    final_interval = f'[{start}, +inf)'
+    stats[final_interval] = {
+        'count': match_row_nums,
+        'percent': match_row_nums / df.shape[0],
+    }
+    interval2filenames[final_interval] = df[df['num_of_char'] >= start]['filename'].to_list()
+
+    return interval2filenames
 
 
-def analyze_short_docs():
-    doc_8k, doc_16k = get_short_doc_filename()
+def analyze_docs():
+    interval2filenames = get_short_doc_filename()
 
     benchmark_path = '../benchmark_v1.0.xlsx'
     df = pd.read_excel(benchmark_path, sheet_name='qwen14b')
+    df.dropna(subset=['问题', 'GT', 'rag_answer'], inplace=True)
 
-    df_8k = df[df['文件名'].isin(doc_8k)]
-    print(f'8k以下的文档，问题数量: {df_8k.shape[0]}')
-    print(f'8k以下文档数量：{len(doc_8k)}')
-    print(f'8k以下的文档，事实相似度平均值: {df_8k["事实相似度"].mean().round(4)}')
+    total_question = 0
+    interval2question_num = defaultdict(dict)
+    for interval, filenames in interval2filenames.items():
+        match_rows = df[df['文件名'].isin(filenames)]
+        match_question_num = match_rows.shape[0]
+        total_question += match_question_num
+        interval2question_num[interval]['问题数'] = match_question_num
+        interval2question_num[interval]['文档数'] = len(filenames)
+        print(f"{interval}的文档，问题数量: {match_question_num}")
+        print(f"{interval}的文档数量：{len(filenames)}")
+        if len(filenames) == 0:
+            print('-' * 20)
+            continue
+        print(f"{interval}的文档，事实相似度平均值: {match_rows['事实相似度'].mean():.4f}")
+        print('-' * 20)
 
-    print('-' * 20)
-
-    df_16k = df[df['文件名'].isin(doc_16k)]
-    print(f'16k以下的文档，问题数量: {df_16k.shape[0]}')
-    print(f'16k以下文档数量：{len(doc_16k)}')
-    print(f'16k以下的文档，事实相似度平均值: {df_16k["事实相似度"].mean().round(4)}')
+    c_df = pd.DataFrame.from_dict(interval2question_num, orient='index')
+    c_df['问题数占比'] = c_df['问题数'] / c_df['问题数'].sum()
+    c_df['文档数占比'] = c_df['文档数'] / c_df['文档数'].sum()
+    c_df.to_excel('./interval2question_num.xlsx')
+    print(total_question)
 
 
 def strip_column_value():
@@ -62,5 +92,6 @@ def strip_column_value():
 
 
 if __name__ == '__main__':
-    # short_doc_questions()
-    strip_column_value()
+    get_short_doc_filename()
+    analyze_docs()
+    # strip_column_value()
