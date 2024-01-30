@@ -439,16 +439,3 @@ class SenseChat(BaseChatModel):
         """Return type of chat model."""
         return 'sense-chat'
     
-    @classmethod
-    def _build_input_parameters(cls, messages, **kwargs):
-
-        parameters = {}
-        input = {}
-        if messages is not None:
-            msgs = copy.deepcopy(messages)
-            input = {'messages': msgs}
-
-        if 'incremental_output' not in kwargs and kwargs.get('stream'):
-            parameters['incremental_output'] = True
-
-        return input, {**parameters, **kwargs}
