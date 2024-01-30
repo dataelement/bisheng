@@ -8,5 +8,5 @@ class BaseErrorCode(BaseModel):
     Msg: str
 
     @classmethod
-    def return_resp(cls, data: any) -> UnifiedResponseModel:
+    def return_resp(cls, data: any = None) -> UnifiedResponseModel:
         return UnifiedResponseModel(status_code=cls.Code, status_msg=cls.Msg, data=data)

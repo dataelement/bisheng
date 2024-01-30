@@ -89,11 +89,10 @@ class FinetuneDao(FinetuneBase):
         return data
 
     @classmethod
-    def find_job(cls, job_id: str) -> Finetune:
+    def find_job(cls, job_id: str) -> Finetune | None:
         with session_getter() as session:
             statement = select(Finetune).where(Finetune.id == job_id)
-            ret = session.exec(statement).first()
-        return ret
+            return session.exec(statement).first()
 
     @classmethod
     def change_status(cls, job_id: str, old_status: int, status: int) -> bool:

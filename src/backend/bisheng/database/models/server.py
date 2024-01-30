@@ -27,10 +27,10 @@ class Server(ServerBase, table=True):
 # 封装业务操作
 class ServerDao(ServerBase):
     @classmethod
-    def find_server(cls, server_id: int) -> Server:
+    def find_server(cls, server_id: int) -> Server | None:
         with session_getter() as session:
             statement = select(Server).where(Server.id == server_id)
-            return session.exec(statement)
+            return session.exec(statement).first()
 
 
 class ServerRead(ServerBase):
