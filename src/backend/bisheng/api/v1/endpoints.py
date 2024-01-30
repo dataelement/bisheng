@@ -10,7 +10,7 @@ from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, Uploa
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.chat.utils import judge_source, process_source_document
-from bisheng.database.base import get_session, session_getter
+from bisheng.database.base import session_getter
 from bisheng.database.models.config import Config
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage
@@ -23,7 +23,7 @@ from bisheng.utils.logger import logger
 from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile
 from fastapi_jwt_auth import AuthJWT
 from sqlalchemy import delete
-from sqlmodel import Session, select
+from sqlmodel import select
 
 try:
     from bisheng.worker import process_graph_cached_task
@@ -68,12 +68,13 @@ def getn_env():
 
 
 @router.get('/config')
-def get_config(session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
+def get_config(Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     if payload.get('role') != 'admin':
         raise HTTPException(status_code=500, detail='Unauthorized')
-    configs = session.exec(select(Config)).all()
+    with session_getter() as session:
+        configs = session.exec(select(Config)).all()
     config_str = []
     for config in configs:
         config_str.append(config.key + ':')
@@ -82,19 +83,20 @@ def get_config(session: Session = Depends(get_session), Authorize: AuthJWT = Dep
 
 
 @router.post('/config/save')
-def save_config(data: dict, session: Session = Depends(get_session)):
+def save_config(data: dict):
     try:
         config_yaml = yaml.safe_load(data.get('data'))
-        old_config = session.exec(select(Config).where(Config.id > 0)).all()
-        session.exec(delete(Config).where(Config.id > 0))
-        session.flush()
+        with session_getter() as session:
+            old_config = session.exec(select(Config).where(Config.id > 0)).all()
+            session.exec(delete(Config).where(Config.id > 0))
+            session.commit()
         keys = list(config_yaml.keys())
         values = parse_key(keys, data.get('data'))
-
-        for index, key in enumerate(keys):
-            config = Config(key=key, value=values[index])
-            session.add(config)
-        session.commit()
+        with session_getter() as session:
+            for index, key in enumerate(keys):
+                config = Config(key=key, value=values[index])
+                session.add(config)
+            session.commit()
         # 淘汰缓存
         for old in old_config:
             redis_key = 'config_' + old.key

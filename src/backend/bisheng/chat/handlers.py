@@ -5,7 +5,7 @@ from typing import Dict
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.utils import judge_source, process_graph, process_source_document
-from bisheng.database.base import get_session
+from bisheng.database.base import session_getter
 from bisheng.database.models.report import Report
 from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
@@ -76,9 +76,10 @@ class Handler:
             await session.send_json(client_id, chat_id, response)
 
         # build report
-        db_session = next(get_session())
-        template = db_session.exec(
-            select(Report).where(Report.flow_id == client_id).order_by(Report.id.desc())).first()
+        with session_getter() as db_session:
+            template = db_session.exec(
+                select(Report).where(Report.flow_id == client_id).order_by(
+                    Report.id.desc())).first()
         if not template:
             logger.error('template not support')
             return

@@ -8,7 +8,7 @@ from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatL
                                     StreamData, UnifiedResponseModel, resp_200)
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
-from bisheng.database.base import get_session
+from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageRead
 from bisheng.graph.graph.base import Graph
@@ -19,7 +19,7 @@ from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
 from sqlalchemy import delete, func
-from sqlmodel import Session, select
+from sqlmodel import select
 
 router = APIRouter(tags=['Chat'])
 chat_manager = ChatManager()
@@ -31,7 +31,6 @@ expire = 600  # reids 60s 过期
             response_model=UnifiedResponseModel[List[ChatMessageRead]],
             status_code=200)
 def get_chatmessage(*,
-                    session: Session = Depends(get_session),
                     chat_id: str,
                     flow_id: str,
                     id: Optional[str] = None,
@@ -46,40 +45,37 @@ def get_chatmessage(*,
                                       ChatMessage.user_id == payload.get('user_id'))
     if id:
         where = where.where(ChatMessage.id < int(id))
-    db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
+    with session_getter() as session:
+        db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
     return resp_200(db_message)
 
 
 @router.delete('/chat/{chat_id}', status_code=200)
-def del_chat_id(*,
-                session: Session = Depends(get_session),
-                chat_id: str,
-                Authorize: AuthJWT = Depends()):
+def del_chat_id(*, chat_id: str, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
 
     statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id,
                                           ChatMessage.user_id == payload.get('user_id'))
-
-    session.exec(statement)
-    session.commit()
+    with session_getter() as session:
+        session.exec(statement)
+        session.commit()
     return resp_200(message='删除成功')
 
 
 @router.post('/liked', status_code=200)
-def like_response(*,
-                  data: ChatInput,
-                  session: Session = Depends(get_session),
-                  Authorize: AuthJWT = Depends()):
+def like_response(*, data: ChatInput, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     message_id = data.message_id
     liked = data.liked
-    message = session.get(ChatMessage, message_id)
+    with session_getter() as session:
+        message = session.get(ChatMessage, message_id)
     if message and message.user_id == payload.get('user_id'):
         message.liked = liked
-    session.add(message)
-    session.commit()
+    with session_getter() as session:
+        session.add(message)
+        session.commit()
     return resp_200(message='操作成功')
 
 
@@ -91,7 +87,7 @@ def comment_resp(*, data: ChatInput, Authorize: AuthJWT = Depends()):
 
 
 @router.get('/chat/list', response_model=UnifiedResponseModel[List[ChatList]], status_code=200)
-def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: AuthJWT = Depends()):
+def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
 
@@ -101,9 +97,11 @@ def get_chatlist_list(*, session: Session = Depends(get_session), Authorize: Aut
                       ChatMessage.user_id == payload.get('user_id')).group_by(
                           ChatMessage.flow_id,
                           ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
-    db_message = session.exec(smt).all()
+    with session_getter() as session:
+        db_message = session.exec(smt).all()
     flow_ids = [message.flow_id for message in db_message]
-    db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
+    with session_getter() as session:
+        db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
     # set object
     chat_list = []
     flow_dict = {flow.id: flow for flow in db_flow}
@@ -142,7 +140,7 @@ async def chat(
         payload = json.loads(payload)
         user_id = payload.get('user_id')
         if chat_id:
-            with next(get_session()) as session:
+            with session_getter() as session:
                 db_flow = session.get(Flow, flow_id)
             if not db_flow:
                 await websocket.accept()
@@ -190,11 +188,12 @@ async def chat(
 @router.post('/build/init/{flow_id}',
              response_model=UnifiedResponseModel[InitResponse],
              status_code=201)
-async def init_build(*, graph_data: dict, session: Session = Depends(get_session), flow_id: str):
+async def init_build(*, graph_data: dict, flow_id: str):
     """Initialize the build by storing graph data and returning a unique session ID."""
     chat_id = graph_data.get('chat_id')
     if chat_id:
-        graph_data = session.get(Flow, UUID(flow_id).hex).data
+        with session_getter() as session:
+            graph_data = session.get(Flow, UUID(flow_id).hex).data
 
     try:
         if flow_id is None:
