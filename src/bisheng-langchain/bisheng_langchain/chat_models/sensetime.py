@@ -342,6 +342,8 @@ class SenseChat(BaseChatModel):
                     raise ValueError(stream_resp)
                 if 'data' in output:
                     output = output['data']
+
+                choices = None
                 if "choices" in output:
                     choices = output.get('choices')
 
