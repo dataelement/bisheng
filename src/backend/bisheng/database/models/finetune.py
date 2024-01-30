@@ -6,11 +6,11 @@ from uuid import UUID, uuid4
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from pydantic import validator
-from sqlmodel import JSON, TEXT, Column, DateTime, Field, text
+from sqlmodel import JSON, TEXT, Column, DateTime, Field, select, text, update
 
 
 class TrainMethod(Enum):
-    ALL = 'all'
+    FULL = 'full'
     FREEZE = 'freeze'
     LORA = 'lora'
 
@@ -18,12 +18,12 @@ class TrainMethod(Enum):
 class FinetuneStatus(Enum):
     # 训练中
     TRAINING = 1
-    # 训练成功
-    SUCCESS = 2
     # 训练失败
-    FAILED = 3
+    FAILED = 2
     # 任务中止
-    CANCEL = 4
+    CANCEL = 3
+    # 训练成功
+    SUCCESS = 4
     # 发布完成
     PUBLISHED = 5
 
@@ -34,7 +34,7 @@ class FinetuneBase(SQLModelSerializable):
     base_model: int = Field(default=0, index=True, description='基础模型ID')
     model_id: int = Field(default=0, index=True, description='已发布的模型ID')
     model_name: str = Field(index=True, max_length=50, description='训练模型的名称')
-    method: str = Field(default=TrainMethod.ALL.value, nullable=False, max_length=20, description='训练方法')
+    method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description='训练方法')
     extra_params: Dict = Field(sa_column=Column(JSON), description='训练任务所需的额外参数')
     train_data: Optional[Dict] = Field(sa_column=Column(JSON), description='个人训练数据集信息')
     preset_data: Optional[Dict] = Field(sa_column=Column(JSON), description='预置训练数据集信息')
@@ -87,6 +87,36 @@ class FinetuneDao(FinetuneBase):
             session.commit()
             session.refresh(data)
         return data
+
+    @classmethod
+    def find_job(cls, job_id: str) -> Finetune:
+        with session_getter() as session:
+            statement = select(Finetune).where(Finetune.id == job_id)
+            ret = session.exec(statement).first()
+        return ret
+
+    @classmethod
+    def change_status(cls, job_id: str, old_status: int, status: int) -> bool:
+        with session_getter() as session:
+            update_statement = update(Finetune).where(
+                Finetune.id == job_id, Finetune.status == old_status).values(status=status)
+            update_ret = session.exec(update_statement)
+            return update_ret.rowcount != 0
+
+    @classmethod
+    def delete_job(cls, job: Finetune) -> bool:
+        with session_getter() as session:
+            session.delete(job)
+            session.commit()
+            return True
+
+    @classmethod
+    def update_job(cls, job: Finetune) -> bool:
+        with session_getter() as session:
+            session.add(job)
+            session.commit()
+            session.refresh(job)
+            return True
 
 
 class FinetuneCreate(FinetuneBase):
