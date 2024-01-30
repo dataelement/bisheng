@@ -41,8 +41,8 @@ def encode_jwt_token(ak, sk):
     }
     payload = {
         "iss": ak,
-        "exp": int(time.time()) + 43200, # 填写您期望的有效时间，此处示例代表当前时间+300分钟
-        "nbf": int(time.time()) - 5 # 填写您期望的生效时间，此处示例代表当前时间-5秒
+        "exp": int(time.time()) + 18000, # 填写您期望的有效时间，此处示例代表当前时间+300分钟
+        "nbf": int(time.time()) - 500 # 填写您期望的生效时间，此处示例代表当前时间-500秒
     }
     token = jwt.encode(payload, sk, headers=headers)
     return token
@@ -179,8 +179,8 @@ class SenseChat(BaseChatModel):
             token = token.decode('utf-8')
 
         try:
-            header = {'Authorization': 'Bearer {}'.format(token), 
-                      'Content-Type': 'application/json'}
+            header = {"Authorization": "Bearer {}".format(token), 
+                      "Content-Type": "application/json"}
 
             values['client'] = Requests(headers=header, )
         except AttributeError:
@@ -221,7 +221,7 @@ class SenseChat(BaseChatModel):
             token = encode_jwt_token(self.access_key_id, self.secret_access_key)
             if isinstance(token, bytes):
                 token = token.decode('utf-8')
-            self.client.headers.update({'Authorization': 'Bearer {}'.format(token)})
+            self.client.headers.update({"Authorization": "Bearer {}".format(token)})
 
             response = self.client.post(url=url, json=params).json()
             return response
@@ -242,13 +242,14 @@ class SenseChat(BaseChatModel):
         token = encode_jwt_token(self.access_key_id, self.secret_access_key)
         if isinstance(token, bytes):
             token = token.decode('utf-8')
-
-        self.client.headers.update({'Authorization': 'Bearer {}'.format(token)})
+	new_token = "Bearer  " + token
+	self.client.headers.update({"Authorization": new_token})
+ 
         
         if self.streaming:
-            self.client.headers.update({'Accept': 'text/event-stream'})
+            self.client.headers.update({"Accept": "text/event-stream"})
         else:
-            self.client.headers.pop('Accept', '')
+            self.client.headers.pop("Accept", "")
 
         @retry_decorator
         async def _acompletion_with_retry(**kwargs: Any) -> Any:
@@ -329,7 +330,7 @@ class SenseChat(BaseChatModel):
         if self.streaming:
 
             inner_completion = ''
-            role = 'assistant'
+            role = 'user'
             params['stream'] = True
             function_call: Optional[dict] = None
             async for is_error, stream_resp in self.acompletion_with_retry(messages=message_dicts,
