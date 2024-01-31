@@ -26,6 +26,11 @@ class RagScore:
     query_type_column: Optional[str] = None
     batch_size: int = 5
 
+    def _validate_metrics(self):
+        for metric in self.metrics:
+            if not hasattr(self, f'ragas_{metric}'):
+                raise Exception(f'"ragas_{metric}" 未实现!')
+
     def ragas_answer_correctness(self, dataset: Dataset) -> pd.DataFrame:
         # answer_correctness, 只考虑事实相似度
         weights = [1.0, 0.0]
@@ -96,11 +101,10 @@ class RagScore:
         # Convert dict to dataset
         dataset = Dataset.from_dict(data)
 
+        self._validate_metrics()
+
         save_group_df = dict()
         for metric in self.metrics:
-            if not hasattr(self, f'ragas_{metric}'):
-                raise Exception(f'"ragas_{metric}" 未实现!')
-
             ragas_result = getattr(self, f'ragas_{metric}')(dataset)
             score_map = dict().fromkeys(self.score_map_keys, ragas_result)
 
@@ -143,4 +147,4 @@ if __name__ == '__main__':
         'batch_size': 1,
     }
     rag_score = RagScore(**params)
-    rag_score.score()  
+    rag_score.score()
