@@ -52,6 +52,14 @@ class ModelDeployDao(ModelDeployBase):
             session.refresh(model)
         return model
 
+    @classmethod
+    def update_model(cls, model: ModelDeploy) -> ModelDeploy:
+        with session_getter() as session:
+            session.add(model)
+            session.commit()
+            session.refresh(model)
+        return model
+
 
 class ModelDeployRead(ModelDeployBase):
     id: Optional[int]

@@ -1,11 +1,11 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from pydantic import validator
+from pydantic import BaseModel, validator
 from sqlmodel import JSON, TEXT, Column, DateTime, Field, select, text, update
 
 
@@ -40,6 +40,8 @@ class FinetuneBase(SQLModelSerializable):
     preset_data: Optional[Dict] = Field(sa_column=Column(JSON), description='预置训练数据集信息')
     status: int = Field(default=FinetuneStatus.TRAINING.TRAINING, index=True, description='训练任务的状态')
     reason: str = Field(default='', sa_column=Column(TEXT), description='任务失败原因')
+    log_path: str = Field(default='', max_length=512, description='训练日志在minio上的路径')
+    report: Dict = Field(sa_column=Column(JSON), description='训练任务的评估报告数据')
     user_id: int = Field(default=None, index=True, description='创建人ID')
     user_name: str = Field(default=None, description='创建人姓名')
     create_time: Optional[datetime] = Field(sa_column=Column(
@@ -78,6 +80,25 @@ class Finetune(FinetuneBase, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
 
 
+class FinetuneCreate(FinetuneBase):
+    id: UUID = Field(default_factory=uuid4)
+    server: int
+    base_model: int
+    method: TrainMethod
+
+
+class FinetuneList(BaseModel):
+    server: Optional[int] = 0
+    status: Optional[int] = 0
+    page: Optional[int] = 1
+    limit: Optional[int] = 10
+
+
+class FinetuneChangeModelName(BaseModel):
+    id: str = Field(description='训练任务唯一ID')
+    model_name: str
+
+
 class FinetuneDao(FinetuneBase):
 
     @classmethod
@@ -87,6 +108,14 @@ class FinetuneDao(FinetuneBase):
             session.commit()
             session.refresh(data)
         return data
+
+    @classmethod
+    def update_job(cls, finetune: Finetune) -> Finetune:
+        with session_getter() as session:
+            session.add(finetune)
+            session.commit()
+            session.refresh(finetune)
+        return finetune
 
     @classmethod
     def find_job(cls, job_id: str) -> Finetune | None:
@@ -110,16 +139,13 @@ class FinetuneDao(FinetuneBase):
             return True
 
     @classmethod
-    def update_job(cls, job: Finetune) -> bool:
+    def find_jobs(cls, finetune_list: FinetuneList) -> List[Finetune]:
+        offset = (finetune_list.page - 1) * finetune_list.limit
         with session_getter() as session:
-            session.add(job)
-            session.commit()
-            session.refresh(job)
-            return True
-
-
-class FinetuneCreate(FinetuneBase):
-    id: UUID = Field(default_factory=uuid4)
-    server: int
-    base_model: int
-    method: TrainMethod
+            statement = select(Finetune)
+            if finetune_list.server:
+                statement = statement.where(Finetune.server == finetune_list.server)
+            if finetune_list.status:
+                statement = statement.where(Finetune.status == finetune_list.status)
+            statement = statement.offset(offset).limit(finetune_list.limit)
+            return session.exec(statement).all()

@@ -10,14 +10,18 @@ class SFTBackend(BaseModel):
     # 微调训练指令的options参数列表
     CMD_OPTIONS = ['train']
 
-    @classmethod
-    def handle_response(cls, res) -> (bool, str):
-        if res.status_code != 200 or res.json()['status_code'] != 200:
-            return False, res.content.decode('utf-8')
-        return True, 'success'
+    # job任务状态
+    JOB_FINISHED = 'FINISHED'
+    JOB_FAILED = 'FAILED'
 
     @classmethod
-    def create_job(cls, host: str, job_id: str, params: Dict) -> (bool, str):
+    def handle_response(cls, res) -> (bool, str | Dict):
+        if res.status_code != 200 or res.json()['status_code'] != 200:
+            return False, res.content.decode('utf-8')
+        return True, res.json()['data']
+
+    @classmethod
+    def create_job(cls, host: str, job_id: str, params: Dict) -> (bool, str | Dict):
         """
         host RT服务的host地址
         job_id 为指令唯一id，UUID格式
@@ -29,43 +33,46 @@ class SFTBackend(BaseModel):
         return cls.handle_response(res)
 
     @classmethod
-    def cancel_job(cls, host: str, job_id: str) -> (bool, str):
+    def cancel_job(cls, host: str, job_id: str) -> (bool, str | Dict):
         """ 取消训练任务 """
         url = f'{host}/v2.1/sft/job/cancel'
         res = requests.post(url, json={'job_id': job_id})
         return cls.handle_response(res)
 
     @classmethod
-    def delete_job(cls, host: str, job_id: str, model_name: str) -> (bool, str):
+    def delete_job(cls, host: str, job_id: str, model_name: str) -> (bool, str | Dict):
         """ 删除训练任务 """
         url = f'{host}/v2.1/sft/job/delete'
         res = requests.delete(url, json={'job_id': job_id, model_name: model_name})
         return cls.handle_response(res)
 
     @classmethod
-    def export_job(cls, host: str, job_id: str, model_name: str) -> (bool, str):
+    def publish_job(cls, host: str, job_id: str, model_name: str) -> (bool, str | Dict):
         """ 发布训练任务 从训练路径到处到正式路径"""
-        url = f'{host}/v2.1/sft/job/export'
+        url = f'{host}/v2.1/sft/job/publish'
         res = requests.post(url, json={'job_id': job_id, model_name: model_name})
         return cls.handle_response(res)
 
     @classmethod
-    def get_job_status(cls, host: str, job_id: str) -> (bool, str):
+    def get_job_status(cls, host: str, job_id: str) -> (bool, str | Dict):
         """ 获取训练任务状态 """
         url = f'{host}/v2.1/sft/job/status'
         res = requests.get(url, params={'job_id': job_id})
         return cls.handle_response(res)
 
     @classmethod
-    def get_job_log(cls, host: str, job_id: str) -> (bool, str):
-        """ 获取训练任务日志 """
+    def get_job_log(cls, host: str, job_id: str) -> (bool, str | Dict):
+        """
+        获取训练任务日志，暂时用dict格式返回文件内容
+        TODO zgq 后续采用http标准文件传输格式
+        """
         url = f'{host}/v2.1/sft/job/log'
         res = requests.get(url, params={'job_id': job_id})
         return cls.handle_response(res)
 
     @classmethod
-    def get_job_metrics(cls, host: str, job_id: str) -> (bool, str):
-        """ 获取训练任务指标 """
+    def get_job_metrics(cls, host: str, job_id: str) -> (bool, str | Dict):
+        """ 获取训练任务最终报告 """
         url = f'{host}/v2.1/sft/job/metrics'
         res = requests.get(url, params={'job_id': job_id})
         return cls.handle_response(res)

@@ -95,3 +95,7 @@ class MinioClient():
         if self.minio_client:
             if not self.minio_client.bucket_exists(bucket):
                 self.minio_client.make_bucket(bucket)
+
+    def download_minio(self, object_name: str):
+        if self.minio_client:
+            return self.minio_client.get_object(bucket_name=bucket, object_name=object_name)

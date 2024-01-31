@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID, uuid4
 
+from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlmodel import Column, DateTime, Field, text
+from sqlmodel import Column, DateTime, Field, select, text
 
 
 # Finetune任务的预置训练集
@@ -21,3 +22,33 @@ class PresetTrainBase(SQLModelSerializable):
 
 class PresetTrain(PresetTrainBase, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
+
+
+class PresetTrainDao(PresetTrainBase):
+
+    @classmethod
+    def insert_batch(cls, models: List[PresetTrain]) -> List[PresetTrain]:
+        with session_getter() as session:
+            session.add_all(models)
+            session.commit()
+            session.refresh(models)
+        return models
+
+    @classmethod
+    def delete_one(cls, model: PresetTrain) -> bool:
+        with session_getter() as session:
+            session.delete(model)
+            session.commit()
+        return True
+
+    @classmethod
+    def find_one(cls, file_id: str) -> PresetTrain | None:
+        with session_getter() as session:
+            statement = select(PresetTrain).where(PresetTrain.id == file_id)
+            return session.exec(statement).first()
+
+    @classmethod
+    def find_all(cls) -> List[PresetTrain]:
+        with session_getter() as session:
+            statement = select(PresetTrain)
+            return session.exec(statement).all()

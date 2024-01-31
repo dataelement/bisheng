@@ -9,7 +9,7 @@ class CreateFinetuneError(BaseErrorCode):
 
 class TrainDataNoneError(BaseErrorCode):
     code: int = 10101
-    msg: str = '个人训练集和预置训练集必须有一个'
+    msg: str = '个人训练集和预置训练集最少选择一个'
 
 
 class NotFoundJobError(BaseErrorCode):
@@ -35,3 +35,13 @@ class DeleteJobError(BaseErrorCode):
 class ExportJobError(BaseErrorCode):
     code: int = 10106
     msg: str = '任务发布失败'
+
+
+class ChangeModelNameError(BaseErrorCode):
+    code: int = 10107
+    msg: str = '模型名接口修改失败'
+
+
+class TrainFileNotExistError(BaseErrorCode):
+    code: int = 10120
+    msg: str = '训练文件不存在'
