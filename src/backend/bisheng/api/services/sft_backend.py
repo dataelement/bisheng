@@ -55,7 +55,14 @@ class SFTBackend(BaseModel):
 
     @classmethod
     def get_job_status(cls, host: str, job_id: str) -> (bool, str | Dict):
-        """ 获取训练任务状态 """
+        """
+         获取训练任务状态
+         接口返回格式：
+         {
+            "status": "FINISHED",
+            "reason": "失败原因"
+         }
+        """
         url = f'{host}/v2.1/sft/job/status'
         res = requests.get(url, params={'job_id': job_id})
         return cls.handle_response(res)

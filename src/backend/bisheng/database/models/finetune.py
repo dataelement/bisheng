@@ -88,10 +88,10 @@ class FinetuneCreate(FinetuneBase):
 
 
 class FinetuneList(BaseModel):
-    server: Optional[int] = 0
-    status: Optional[int] = 0
-    page: Optional[int] = 1
-    limit: Optional[int] = 10
+    server: Optional[int] = Field(description='关联的RT服务ID')
+    status: Optional[int] = Field(description='训练任务的状态')
+    page: Optional[int] = Field(default=1, description='页码')
+    limit: Optional[int] = Field(default=10, description='每页条数')
 
 
 class FinetuneChangeModelName(BaseModel):

@@ -11,7 +11,7 @@ from bisheng.api.errcode.server import NotFoundServerError
 from bisheng.api.services.rt_backend import RTBackend
 from bisheng.api.services.sft_backend import SFTBackend
 from bisheng.api.utils import parse_server_host
-from bisheng.api.v1.schemas import UnifiedResponseModel
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.models.finetune import (Finetune, FinetuneChangeModelName, FinetuneCreate,
                                               FinetuneDao, FinetuneList, FinetuneStatus)
 from bisheng.database.models.model_deploy import ModelDeploy, ModelDeployDao
@@ -114,7 +114,7 @@ class FinetuneService(BaseModel):
             logger.error(f'create sft job error: job_id: {finetune.id.hex}, err: {sft_ret[1]}')
             return CreateFinetuneError.return_resp(None)
         logger.info('create sft job success')
-        return UnifiedResponseModel(status_code=200, msg='success', data=Finetune)
+        return resp_200(data=Finetune)
 
     @classmethod
     def cancel_job(cls, job_id: str, user: Any) -> UnifiedResponseModel[Finetune]:
@@ -144,7 +144,7 @@ class FinetuneService(BaseModel):
         FinetuneDao.change_status(job_id, finetune.status, FinetuneStatus.CANCEL.value)
         finetune.status = new_status
         logger.info('cancel sft job success')
-        return UnifiedResponseModel(status_code=200, msg='success', data=Finetune)
+        return resp_200(data=Finetune)
 
     @classmethod
     def delete_job(cls, job_id: str, user: Any) -> UnifiedResponseModel[Finetune]:
@@ -253,7 +253,7 @@ class FinetuneService(BaseModel):
         finetune.model_id = published_model.id
         FinetuneDao.update_job(finetune)
         logger.info('export sft job success')
-        return UnifiedResponseModel(status_code=200, msg='success', data=finetune)
+        return resp_200(data=finetune)
 
     @classmethod
     def get_all_job(cls, req_data: FinetuneList) -> UnifiedResponseModel[List[Finetune]]:
@@ -261,7 +261,7 @@ class FinetuneService(BaseModel):
         # 异步线程更新任务状态
         sync_job_thread_pool.submit(cls.sync_all_job_status, job_list)
 
-        return UnifiedResponseModel(status_code=200, msg='success', data=job_list)
+        return resp_200(data=job_list)
 
     @classmethod
     def sync_all_job_status(cls, job_list: List[Finetune]) -> None:
@@ -298,7 +298,7 @@ class FinetuneService(BaseModel):
         if log_data is not None:
             log_data = log_data.read().decode('utf-8')
 
-        return UnifiedResponseModel(status_code=200, msg='success', data={
+        return resp_200(data={
             'finetune': finetune,
             'log': log_data,
             'report': finetune.report,
@@ -365,7 +365,7 @@ class FinetuneService(BaseModel):
         finetune.model_name = req.model_name
         FinetuneDao.update_job(finetune)
 
-        return UnifiedResponseModel(status_code=200, msg='success', data=finetune)
+        return resp_200(data=finetune)
 
     @classmethod
     def change_published_model_name(cls, finetune: Finetune, model_name: str) -> bool:
