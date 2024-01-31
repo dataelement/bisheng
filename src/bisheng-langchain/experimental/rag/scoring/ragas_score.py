@@ -1,100 +1,146 @@
-import os
 import json
-import pandas as pd
+import os
 import re
 from collections import defaultdict
-from ragas import evaluate
-from ragas.metrics import AnswerCorrectnessBisheng
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import pandas as pd
 from datasets import Dataset
+from loguru import logger
+from ragas import evaluate
+from ragas.metrics import AnswerCorrectness, AnswerCorrectnessBisheng
+from ragas.metrics.base import Metric
 
 
-def rages_answer_correctness(dataset):
-    # answer_correctness, 只考虑事实相似度
-    batch_size = 5
-    answer_correctness = AnswerCorrectnessBisheng(batch_size=batch_size)
-    result = evaluate(
-        dataset = dataset, 
-        metrics=[
-            answer_correctness,
-        ],
-    )
-    df = result.to_pandas()
-    return df
+@dataclass
+class RagScore:
+    excel_path: str
+    save_path: str
+    question_column: str
+    gt_column: str
+    answer_column: str
+    metrics: List[str]
+    contexts_column: Optional[str] = None
+    query_type_column: Optional[str] = None
+    batch_size: int = 5
 
+    def ragas_answer_correctness(self, dataset: Dataset) -> pd.DataFrame:
+        # answer_correctness, 只考虑事实相似度
+        weights = [1.0, 0.0]
+        answer_correctness = AnswerCorrectness(weights=weights, batch_size=self.batch_size)
+        result = evaluate(
+            dataset=dataset,
+            metrics=[
+                answer_correctness,
+            ],
+        )
+        self.score_map_keys = list(result.keys())
+        df = result.to_pandas()
+        return df
 
-def rag_benchmark_scoring(excel_file):
-    df = pd.read_excel(excel_file)
-    all_questions_info = df.to_dict('records')
-    
-    questions = []
-    ground_truths = []
-    answers = []
-    contexts = []
-    for question_info in all_questions_info:
-        question = question_info['问题']
-        gt = question_info['GT']
-        pred = question_info['rag_answer']
+    def ragas_answer_correctness_bisheng(self, dataset: Dataset) -> pd.DataFrame:
+        answer_correctness = AnswerCorrectnessBisheng(batch_size=self.batch_size)
+        result = evaluate(
+            dataset=dataset,
+            metrics=[answer_correctness],
+        )
+        self.score_map_keys = list(result.keys())
+        df = result.to_pandas()
+        return df
 
-        # # 去除【1†source】, only for openai assitant
-        # pattern = re.compile("【(\d+)†source】")
-        # match = re.findall(pattern, pred)
-        # for i in match:
-        #     str_temp = f"【{i}†source】"
-        #     pred = pred.replace(str_temp, '')
-        
-        questions.append(question)
-        answers.append(pred)
-        ground_truths.append([gt])
-        contexts.append([''])
-    
-     # To dict
-    data = {
-        "question": questions,
-        "answer": answers,
-        "contexts": contexts,
-        "ground_truths": ground_truths
-    }
-    # Convert dict to dataset
-    dataset = Dataset.from_dict(data)
+    def _remove_source(self, pred: str) -> str:
+        """去除【1†source】, only for openai assistant"""
+        pattern = re.compile("【(\d+)†source】")
+        match = re.findall(pattern, pred)
+        for i in match:
+            str_temp = f"【{i}†source】"
+            pred = pred.replace(str_temp, '')
+        return pred
 
-    answer_correctness_score = rages_answer_correctness(dataset)
-    answer_correctness_score = answer_correctness_score.to_dict('records')
+    def score(self) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+        df = pd.read_excel(self.excel_path)
+        ori_row_nums = df.shape[0]
 
-    score_map = {
-        'answer_f1': answer_correctness_score,
-        'answer_precision': answer_correctness_score,
-        'answer_recall': answer_correctness_score,
-    }
+        # 删除含有na的行
+        columns_to_check = [
+            self.question_column,
+            self.gt_column,
+            self.answer_column,
+            self.contexts_column,
+            self.query_type_column,
+        ]
 
-    ragas_score = defaultdict(lambda: defaultdict(list))
-    for score_type in score_map:
-        for i in range(len(all_questions_info)):
-            if all_questions_info[i]['问题'] != score_map[score_type][i]['question']:
-                raise ValueError('question not match')
-            all_questions_info[i][score_type] = score_map[score_type][i][score_type]
+        df.dropna(subset=[col for col in columns_to_check if col], inplace=True)
+        print(f'删除含有na的行 {ori_row_nums - df.shape[0]} 个!')
+        print(f'总计 {df.shape[0]} 个问题')
 
-            if '问题类型' in all_questions_info[i]:
-                ques_type = all_questions_info[i]['问题类型'].strip()
-                ragas_score[ques_type][score_type].append(all_questions_info[i][score_type])  
-            ragas_score['all'][score_type].append(all_questions_info[i][score_type])
-        
-    df = pd.DataFrame(all_questions_info)
-    df.to_excel(excel_file, index=False)
+        questions = df[self.question_column].tolist()
+        answers = df[self.answer_column].tolist()
+        # answers = df[self.answer_column].apply(self._remove_source).tolist() # for openai assistant
+        ground_truths = df[self.gt_column].apply(lambda x: [x]).tolist()
+        # todo: contexts可能是保存在json中的，这段代码可能需要修改
+        contexts = (
+            [['']] * len(questions)
+            if not self.contexts_column
+            else df[self.contexts_column].apply(lambda x: [x]).tolist()
+        )
+        # To dict
+        data: Dict[str, List[Any]] = {
+            "question": questions,
+            "answer": answers,
+            "contexts": contexts,
+            "ground_truths": ground_truths,
+        }
+        # Convert dict to dataset
+        dataset = Dataset.from_dict(data)
 
-    flat_score = []
-    for ques_type in ragas_score:
-        each_ques_type_score = dict()
-        each_ques_type_score['问题类型'] = ques_type
-        each_ques_type_score['问题个数'] = len(ragas_score[ques_type][list(score_map.keys())[0]])
-        for score_type in ragas_score[ques_type]:
-            avg_score = sum(ragas_score[ques_type][score_type]) / len(ragas_score[ques_type][score_type])
-            each_ques_type_score[score_type] = avg_score
+        save_group_df = dict()
+        for metric in self.metrics:
+            if not hasattr(self, f'ragas_{metric}'):
+                raise Exception(f'"ragas_{metric}" 未实现!')
 
-        flat_score.append(each_ques_type_score)
-    
-    return pd.DataFrame(flat_score)
+            ragas_result = getattr(self, f'ragas_{metric}')(dataset)
+            score_map = dict().fromkeys(self.score_map_keys, ragas_result)
+
+            for metric, scores in score_map.items():
+                df[metric] = df.index.map({idx: rows[metric] for idx, rows in scores.iterrows()})
+
+            if self.query_type_column and self.query_type_column in df.columns:
+                grouped_df = (
+                    df.groupby(self.query_type_column)
+                    .agg({self.question_column: 'count', **{metric: 'mean' for metric in score_map}})
+                    .rename(columns={self.question_column: '问题个数'})
+                )
+                total_question = grouped_df['问题个数'].sum()
+                grouped_df.loc['总计', '问题个数'] = total_question
+                for metric in score_map:
+                    grouped_df.loc['总计', metric] = df[metric].sum() / total_question
+                save_group_df[f'{metric}_group'] = grouped_df
+                print(grouped_df.to_markdown())
+
+        # # save
+        output_path = Path(self.save_path) / f"{Path(self.excel_path).stem}_score.xlsx"
+
+        with pd.ExcelWriter(output_path) as writer:
+            df.to_excel(writer, sheet_name='Sheet1', index=False)
+            if len(save_group_df):
+                for metric, grouped_df in save_group_df.items():
+                    grouped_df.to_excel(writer, sheet_name=metric, index=True)
+        print(f'保存到 {output_path} 成功!')
 
 
 if __name__ == '__main__':
-    excel_file = '../data/questions_info_with_answer_sample_gpt4_12chunk.xlsx'
-    print(rag_benchmark_scoring(excel_file))
+    params = {
+        'excel_path': './test_score_2.xlsx',
+        'save_path': './',
+        'question_column': '问题',
+        'gt_column': 'GT',
+        'answer_column': 'rag_answer',
+        'query_type_column': '问题类型',
+        'metrics': ['answer_correctness', 'answer_correctness_bisheng'],
+        'batch_size': 1,
+    }
+    rag_score = RagScore(**params)
+    rag_score.score()  
