@@ -1,28 +1,31 @@
 import os
+import shutil
+
 import httpx
-import pandas as pd
 import nest_asyncio
+import pandas as pd
+
 nest_asyncio.apply()
 from collections import defaultdict
-from tqdm import tqdm
-from llama_index.evaluation import CorrectnessEvaluator
-from llama_index.llms import OpenAI
+
 from llama_index import ServiceContext
 from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.evaluation import CorrectnessEvaluator
+from llama_index.llms import OpenAI
+from tqdm import tqdm
 
 openai_api_key = os.environ.get('OPENAI_API_KEY', '')
 openai_proxy = os.environ.get('OPENAI_PROXY', '')
 
 
 def llama_index_answer_correctness(querys, responses, references):
-    embed = OpenAIEmbedding(api_key=openai_api_key, 
-                            http_client=httpx.AsyncClient(proxies=openai_proxy))
+    embed = OpenAIEmbedding(api_key=openai_api_key, http_client=httpx.AsyncClient(proxies=openai_proxy))
 
     model_name = "gpt-3.5-turbo-16k"
-    service_context = ServiceContext.from_defaults(llm=OpenAI(model=model_name, 
-                                                              api_key=openai_api_key, 
-                                                              http_client=httpx.AsyncClient(proxies=openai_proxy)), 
-                                                   embed_model=embed)
+    service_context = ServiceContext.from_defaults(
+        llm=OpenAI(model=model_name, api_key=openai_api_key, http_client=httpx.AsyncClient(proxies=openai_proxy)),
+        embed_model=embed,
+    )
     evaluator = CorrectnessEvaluator(service_context=service_context)
 
     correctness_scores = []
@@ -41,9 +44,13 @@ def llama_index_answer_correctness(querys, responses, references):
 
 
 def rag_benchmark_scoring(excel_file):
+    if not os.path.exists(excel_file + '.bak'):
+        shutil.copy(excel_file, excel_file + '.bak')
+
     df = pd.read_excel(excel_file)
+    df.dropna(subset=['问题', 'GT', 'rag_answer'], inplace=True)
     all_questions_info = df.to_dict('records')
-    
+
     questions = []
     ground_truths = []
     answers = []
@@ -55,41 +62,30 @@ def rag_benchmark_scoring(excel_file):
         questions.append(question)
         answers.append(pred)
         ground_truths.append(gt)
-    
-    correctness_scores, correctness_feedbacks = llama_index_answer_correctness(
-        questions, answers, ground_truths)
+
+    correctness_scores, correctness_feedbacks = llama_index_answer_correctness(questions, answers, ground_truths)
 
     score_map = {
         'llama_index_correctness': correctness_scores,
     }
 
-    llama_index_score = defaultdict(lambda: defaultdict(list))
-    for score_type in score_map:
-        for i in range(len(all_questions_info)):
-            all_questions_info[i][score_type] = score_map[score_type][i]
-
-            if '问题类型' in all_questions_info[i]:
-                ques_type = all_questions_info[i]['问题类型'].strip()
-                llama_index_score[ques_type][score_type].append(all_questions_info[i][score_type])  
-            llama_index_score['all'][score_type].append(all_questions_info[i][score_type])
-        
-    df = pd.DataFrame(all_questions_info)
+    for metric, scores in score_map.items():
+        df[metric] = df.index.map({i: score for i, score in enumerate(scores)})
     df.to_excel(excel_file, index=False)
 
-    flat_score = []
-    for ques_type in llama_index_score:
-        each_ques_type_score = dict()
-        each_ques_type_score['问题类型'] = ques_type
-        each_ques_type_score['问题个数'] = len(llama_index_score[ques_type][list(score_map.keys())[0]])
-        for score_type in llama_index_score[ques_type]:
-            avg_score = sum(llama_index_score[ques_type][score_type]) / len(llama_index_score[ques_type][score_type])
-            each_ques_type_score[score_type] = avg_score
-
-        flat_score.append(each_ques_type_score)
-    
-    return pd.DataFrame(flat_score)
+    if '问题类型' in df.columns:
+        grouped_df = (
+            df.groupby('问题类型')
+            .agg({'问题': 'count', **{metric: 'mean' for metric in score_map}})
+            .rename(columns={'问题': '问题数量'})
+        )
+        total_question = grouped_df['问题数量'].sum()
+        grouped_df.loc['all', '问题数量'] = total_question
+        for metric in score_map:
+            grouped_df.loc['all', metric] = df[metric].sum() / total_question
+        return grouped_df
 
 
 if __name__ == '__main__':
-    excel_file = '../data/questions_info_with_answer_sample_qwen14b_12chunk.xlsx'
+    excel_file = './data/benchmark_v1.0.xlsx'
     print(rag_benchmark_scoring(excel_file))
