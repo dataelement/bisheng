@@ -24,7 +24,7 @@ from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.embeddings import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
 from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
@@ -199,6 +199,128 @@ def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends
         session.commit()
         session.refresh(db_knowldge)
     return resp_200(db_knowldge.copy())
+
+@router.get('/search', status_code=200)
+def search_knowledge(*,
+               name: str = Query(default=None, description='根据name查找数据库'),
+               page_size: int = Query(default=None, description='根据pagesize查找数据库'),
+               page_num: int = Query(default=None, description='根据pagenum查找数据库'),
+               Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+
+    sql_0 = select(Knowledge.id, Knowledge.user_id, Knowledge.name, Knowledge.create_time,
+                Knowledge.update_time, Knowledge.description, Knowledge.collection_name,
+                Knowledge.model, Knowledge.index_name)
+    count_sql_0 = select(func.count(Knowledge.id))
+    if 'admin' != payload.get('role'):
+        with session_getter() as session:
+            role_third_id = session.exec(
+                select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')))).all()
+
+        if role_third_id:
+            third_ids = [
+                acess.third_id for acess in role_third_id
+                if acess.type == AccessType.KNOWLEDGE.value
+            ]
+            sql_0 = sql_0.where(
+                or_(Knowledge.user_id == payload.get('user_id'), Knowledge.id.in_(third_ids)))
+            count_sql_0 = count_sql_0.where(
+                or_(Knowledge.user_id == payload.get('user_id'), Knowledge.id.in_(third_ids)))
+        else:
+            sql_0 = sql_0.where(Knowledge.user_id == payload.get('user_id'))
+            count_sql_0 = count_sql_0.where(Knowledge.user_id == payload.get('user_id'))
+
+    # name
+    sql_0 = sql_0.where(Knowledge.name.like(f'%{name}%'))
+    count_sql_0 = count_sql_0.where(Knowledge.name.like(f'%{name}%'))
+    with session_getter() as session:
+        total_count_0 = session.scalar(count_sql_0)
+    sql_0 = sql_0.order_by(Knowledge.update_time.desc())  
+
+    if page_num and page_size:
+        sql_0 = sql_0.offset((page_num - 1) * page_size).limit(page_size)
+
+    with session_getter() as session:
+        knowledges = session.exec(sql_0)  
+    knowledges_partial = knowledges.mappings().all()
+    knowledges = [Knowledge.model_validate(f) for f in knowledges_partial]
+
+    res_0 = [jsonable_encoder(know) for know in knowledges]
+    if knowledges:
+        db_user_ids_0 = {know.user_id for know in knowledges}
+        with session_getter() as session:
+            db_user_0 = session.exec(select(User).where(User.user_id.in_(db_user_ids_0))).all()
+        userMap_0 = {user.user_id: user.user_name for user in db_user_0}
+        for r in res_0:
+            r['user_name'] = userMap_0[r['user_id']]
+            r['write'] = True if 'admin' == payload.get('role') or r.get(
+                'user_id') == payload.get('user_id') else False
+
+    return resp_200(data={'data': res_0, 'total': total_count_0})
+
+
+@router.get('/search_file', status_code=200)
+def search_knowledge_file(*,
+               file_name: str = Query(default=None, description='根据file_name查找数据库'),
+               page_size: int = Query(default=None, description='根据pagesize查找数据库'),
+               page_num: int = Query(default=None, description='根据pagenum查找数据库'),
+               Authorize: AuthJWT = Depends()):
+    # from bisheng.database.models.knowledge_file import KnowledgeFile
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    
+    sql_0 = select(KnowledgeFile.file_name, KnowledgeFile.create_time, 
+                   KnowledgeFile.knowledge_id, KnowledgeFile.remark,
+                   KnowledgeFile.object_name, KnowledgeFile.status,
+                   KnowledgeFile.user_id, KnowledgeFile.md5,
+                   KnowledgeFile.update_time, KnowledgeFile.id)
+    
+    count_sql_0 = select(func.count(KnowledgeFile.id))
+    if 'admin' != payload.get('role'):
+        with session_getter() as session:
+            role_third_id = session.exec(
+            select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')))).all()
+
+        if role_third_id:
+            third_ids = [
+                acess.third_id for acess in role_third_id
+                if acess.type == AccessType.KNOWLEDGE.value
+            ]
+            sql_0 = sql_0.where(
+                or_(KnowledgeFile.user_id == payload.get('user_id'), KnowledgeFile.id.in_(third_ids)))
+            count_sql_0 = count_sql_0.where(
+                or_(KnowledgeFile.user_id == payload.get('user_id'), KnowledgeFile.id.in_(third_ids)))
+        else:
+            sql_0 = sql_0.where(KnowledgeFile.user_id == payload.get('user_id'))
+            count_sql_0 = count_sql_0.where(KnowledgeFile.user_id == payload.get('user_id'))
+
+    # name
+    sql_0 = sql_0.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
+    count_sql_0 = count_sql_0.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
+    with session_getter() as session:
+        total_count_0 = session.scalar(count_sql_0)
+    sql_0 = sql_0.order_by(KnowledgeFile.update_time.desc())  
+
+    if page_num and page_size:
+        sql_0 = sql_0.offset((page_num - 1) * page_size).limit(page_size)
+
+    with session_getter() as session:
+        knowledgefile = session.exec(sql_0)  
+    know_files = knowledgefile.mappings().all()
+
+    res_0 = [jsonable_encoder(know) for know in know_files]
+    if know_files:
+        db_user_ids_0 = {know.user_id for know in know_files}
+        with session_getter() as session:
+            db_user_0 = session.exec(select(User).where(User.user_id.in_(db_user_ids_0))).all()
+        userMap_0 = {user.user_id: user.user_name for user in db_user_0}
+        for r in res_0:
+            r['user_name'] = userMap_0[r['user_id']]
+            r['write'] = True if 'admin' == payload.get('role') or r.get(
+                'user_id') == payload.get('user_id') else False
+
+    return resp_200(data={'data': res_0, 'total': total_count_0})
 
 
 @router.get('/', status_code=200)

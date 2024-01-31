@@ -226,6 +226,31 @@ async def create_role(*, role: RoleCreate, Authorize: AuthJWT = Depends()):
     except Exception:
         raise HTTPException(status_code=500, detail='添加失败，检查是否重复添加')
 
+@router.get('/user/search_role', status_code=200)
+async def create_role(*,
+                      role_name: str,
+                      Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
+        raise HTTPException(status_code=500, detail='无查看权限')
+    
+    sql = select(Role.role_name, Role.remark, Role.create_time,
+                 Role.update_time, Role.id)
+    count_sql = select(func.count(Role.id))
+
+    if role_name:
+        sql = sql.where(Role.role_name.like(f'%{role_name}%'))
+        count_sql = count_sql.where(Role.role_name.like(f'%{role_name}%'))
+
+    with session_getter() as session:
+        total_count = session.scalar(count_sql)
+    sql = sql.order_by(Role.update_time.desc())  
+    with session_getter() as session:
+        roles = session.exec(sql)  
+    roles = roles.mappings().all()
+
+    res_0 = [jsonable_encoder(r) for r in roles]
+    return resp_200(data={'data': res_0, 'total': total_count})
 
 @router.patch('/role/{role_id}', status_code=201)
 async def update_role(*, role_id: int, role: RoleUpdate, Authorize: AuthJWT = Depends()):
