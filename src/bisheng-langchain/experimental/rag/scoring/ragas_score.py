@@ -4,16 +4,14 @@ import pandas as pd
 import re
 from collections import defaultdict
 from ragas import evaluate
-from ragas.metrics import AnswerCorrectness
+from ragas.metrics import AnswerCorrectnessBisheng
 from datasets import Dataset
 
 
 def rages_answer_correctness(dataset):
     # answer_correctness, 只考虑事实相似度
-    weights = [1.0, 0.0]
     batch_size = 5
-    answer_correctness = AnswerCorrectness(weights=weights, 
-                                           batch_size=batch_size)
+    answer_correctness = AnswerCorrectnessBisheng(batch_size=batch_size)
     result = evaluate(
         dataset = dataset, 
         metrics=[
@@ -37,7 +35,7 @@ def rag_benchmark_scoring(excel_file):
         gt = question_info['GT']
         pred = question_info['rag_answer']
 
-        # 去除【1†source】, only for openai assitant
+        # # 去除【1†source】, only for openai assitant
         # pattern = re.compile("【(\d+)†source】")
         # match = re.findall(pattern, pred)
         # for i in match:
@@ -63,7 +61,9 @@ def rag_benchmark_scoring(excel_file):
     answer_correctness_score = answer_correctness_score.to_dict('records')
 
     score_map = {
-        'answer_correctness': answer_correctness_score,
+        'answer_f1': answer_correctness_score,
+        'answer_precision': answer_correctness_score,
+        'answer_recall': answer_correctness_score,
     }
 
     ragas_score = defaultdict(lambda: defaultdict(list))
@@ -96,5 +96,5 @@ def rag_benchmark_scoring(excel_file):
 
 
 if __name__ == '__main__':
-    excel_file = '../data/questions_info_with_answer_sample_qwen14b_12chunk.xlsx'
+    excel_file = '../data/questions_info_with_answer_sample_gpt4_12chunk.xlsx'
     print(rag_benchmark_scoring(excel_file))
