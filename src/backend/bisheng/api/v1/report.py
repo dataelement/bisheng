@@ -58,12 +58,14 @@ async def get_template(*, flow_id: str):
         db_report = Report(flow_id=flow_id)
     elif db_report.object_name:
         file_url = minio_client.MinioClient().get_share_link(db_report.object_name)
+
     if not db_report.newversion_key or not db_report.object_name:
         version_key = uuid4().hex
         db_report.newversion_key = version_key
         with session_getter() as session:
             session.add(db_report)
             session.commit()
+            session.refresh()
     else:
         version_key = db_report.newversion_key
     res = {

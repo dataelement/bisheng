@@ -139,6 +139,8 @@ async def process_source_document(source_document: List[Document], chat_id, mess
             logger.error('不能使用配置模型进行关键词抽取，配置不正确')
 
     answer_keywords = extract_answer_keys(answer, model, host_base_url)
+
+    batch_insert = []
     for doc in source_document:
         if 'bbox' in doc.metadata:
             # 表示支持溯源
@@ -149,7 +151,8 @@ async def process_source_document(source_document: List[Document], chat_id, mess
                                        file_id=doc.metadata.get('file_id'),
                                        meta_data=json.dumps(doc.metadata),
                                        message_id=message_id)
-            with session_getter() as db_session:
-                db_session.add(recall_chunk)
-                db_session.commit()
-                db_session.refresh(recall_chunk)
+            batch_insert.append(recall_chunk)
+    if batch_insert:
+        with session_getter() as db_session:
+            db_session.add_all(batch_insert)
+            db_session.commit()

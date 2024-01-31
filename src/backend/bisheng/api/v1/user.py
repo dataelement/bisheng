@@ -381,7 +381,6 @@ async def access_list(*, role_id: int, type: Optional[int] = None, Authorize: Au
     with session_getter() as session:
         db_role_access = session.exec(sql).all()
         total_count = session.scalar(count_sql)
-        session.commit()
     # uuid 和str的转化
     for access in db_role_access:
         if access.type == AccessType.FLOW.value:

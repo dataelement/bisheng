@@ -198,8 +198,7 @@ async def process_flow(
                                   message=answer,
                                   source=source)
             with session_getter() as session:
-                session.add(question)
-                session.add(message)
+                session.add_all([question, message])
                 session.commit()
                 session.refresh(message)
             extra.update({'source': source, 'message_id': message.id})

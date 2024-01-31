@@ -290,6 +290,7 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_di
     # sequence chain
     if node_type == 'SequentialChain':
         # 改造sequence 支持自定义chain顺序
+        params.pop('input_node', '')  # sequential 不支持增加入参
         try:
             chain_order = json.loads(params.pop('chain_order'))
         except Exception:

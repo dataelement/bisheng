@@ -474,7 +474,6 @@ def addEmbedding(collection_name, index_name, knowledge_id: int, model: str, chu
                 object_name_original = f'original/{db_file.id}'
                 setattr(db_file, 'object_name', object_name_original)
                 session.add(db_file)
-                session.flush()
                 session.commit()
                 session.refresh(db_file)
 
