@@ -227,7 +227,7 @@ async def create_role(*, role: RoleCreate, Authorize: AuthJWT = Depends()):
         raise HTTPException(status_code=500, detail='添加失败，检查是否重复添加')
 
 @router.get('/user/search_role', status_code=200)
-async def create_role(*,
+async def search_role(*,
                       role_name: str,
                       Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
