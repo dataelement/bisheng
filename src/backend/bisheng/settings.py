@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 import yaml
 from bisheng.database.models.config import Config
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     dev: bool = False
     environment: Union[dict, str] = 'dev'
     database_url: Optional[str] = None
-    redis_url: Optional[str] = None
+    redis_url: Optional[Union[str, Dict]] = None
     redis: Optional[dict] = None
     admin: dict = {}
     cache: str = 'InMemoryCache'
@@ -65,14 +65,20 @@ class Settings(BaseSettings):
     @root_validator()
     def set_redis_url(cls, values):
         if 'redis_url' in values:
-            import re
-            pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
-            match = re.search(pattern, values['redis_url'])
-            if match:
-                password = match.group(0)
-                new_password = decrypt_token(password)
-                new_redis_url = re.sub(pattern, f'{new_password}', values['redis_url'])
-                values['redis_url'] = new_redis_url
+            if isinstance(values['redis_url'], dict):
+                for k, v in values['redis_url'].items():
+                    if isinstance(v, str) and v.startswith('encrypt(') and v.endswith(')'):
+                        v = v[8:-1]
+                        values['redis_url'][k] = decrypt_token(v)
+            else:
+                import re
+                pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
+                match = re.search(pattern, values['redis_url'])
+                if match:
+                    password = match.group(0)
+                    new_password = decrypt_token(password)
+                    new_redis_url = re.sub(pattern, f'{new_password}', values['redis_url'])
+                    values['redis_url'] = new_redis_url
         return values
 
     class Config:

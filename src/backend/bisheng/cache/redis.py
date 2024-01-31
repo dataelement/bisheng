@@ -1,16 +1,32 @@
 import pickle
+from typing import Dict
 
 import redis
 from bisheng.settings import settings
 from loguru import logger
 from redis import ConnectionPool
+from redis.sentinel import Sentinel
 
 
 class RedisClient:
 
     def __init__(self, url, max_connections=10):
-        self.pool = ConnectionPool.from_url(url, max_connections=max_connections)
-        self.connection = redis.StrictRedis(connection_pool=self.pool)
+        # # 哨兵模式
+        if isinstance(settings.redis_url, Dict):
+            redis_conf = settings.redis_url
+            hosts = [eval(x) for x in redis_conf.get('sentinel_hosts')]
+            sentinel = Sentinel(sentinels=hosts,
+                                socket_timeout=0.1,
+                                password=redis_conf.get('sentinel_password'))
+            # 获取主节点的连接
+            self.connection = sentinel.master_for(redis_conf.get('sentinel_master'),
+                                                  socket_timeout=0.1,
+                                                  db=1)
+
+        else:
+            # 单机模式
+            self.pool = ConnectionPool.from_url(url, max_connections=max_connections)
+            self.connection = redis.StrictRedis(connection_pool=self.pool)
 
     def set(self, key, value, expiration=3600):
         try:

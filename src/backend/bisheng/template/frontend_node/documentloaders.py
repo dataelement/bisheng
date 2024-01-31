@@ -318,6 +318,8 @@ class DocumentLoaderFrontNode(FrontendNode):
             field.field_type = 'str'
             field.info = "please use '|' seperate"
             field.is_list = False
+        if name == 'ElemUnstructuredLoaderV0' and field.name == 'kwargs':
+            field.show = True
 
 
 def build_pdf_semantic_loader_fields():

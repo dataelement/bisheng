@@ -49,7 +49,7 @@ def get_original_file(*, message_id: int, keys: str):
     file_ids = {chunk.file_id for chunk in chunks}
     with session_getter() as session:
         db_knowledge_files = session.exec(
-            select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
+            select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
     id2file = {file.id: file for file in db_knowledge_files}
     # keywords
     keywords = keys.split(';') if keys else []
