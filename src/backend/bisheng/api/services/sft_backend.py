@@ -72,6 +72,10 @@ class SFTBackend(BaseModel):
         """
         获取训练任务日志，暂时用dict格式返回文件内容
         TODO zgq 后续采用http标准文件传输格式
+        接口返回的数据格式
+        {
+            "log_data": [{}]
+        }
         """
         url = f'{host}/v2.1/sft/job/log'
         res = requests.get(url, params={'job_id': job_id})
@@ -79,7 +83,13 @@ class SFTBackend(BaseModel):
 
     @classmethod
     def get_job_metrics(cls, host: str, job_id: str) -> (bool, str | Dict):
-        """ 获取训练任务最终报告 """
+        """
+        获取训练任务最终报告
+        接口返回数据格式
+        {
+            "report": {}
+        }
+        """
         url = f'{host}/v2.1/sft/job/metrics'
         res = requests.get(url, params={'job_id': job_id})
         return cls.handle_response(res)
