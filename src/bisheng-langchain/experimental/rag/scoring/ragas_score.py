@@ -76,7 +76,6 @@ class RagScore:
             self.contexts_column,
             self.query_type_column,
         ]
-
         df.dropna(subset=[col for col in columns_to_check if col], inplace=True)
         print(f'删除含有na的行 {ori_row_nums - df.shape[0]} 个!')
         print(f'总计 {df.shape[0]} 个问题')
@@ -104,29 +103,28 @@ class RagScore:
         self._validate_metrics()
 
         save_group_df = dict()
-        for metric in self.metrics:
-            ragas_result = getattr(self, f'ragas_{metric}')(dataset)
+        for metric_name in self.metrics:
+            ragas_result = getattr(self, f'ragas_{metric_name}')(dataset)
             score_map = dict().fromkeys(self.score_map_keys, ragas_result)
 
             for metric, scores in score_map.items():
                 df[metric] = df.index.map({idx: rows[metric] for idx, rows in scores.iterrows()})
 
             if self.query_type_column and self.query_type_column in df.columns:
-                grouped_df = (
-                    df.groupby(self.query_type_column)
-                    .agg({self.question_column: 'count', **{metric: 'mean' for metric in score_map}})
-                    .rename(columns={self.question_column: '问题个数'})
-                )
+                grouped_df = df.groupby(self.query_type_column)
+                grouped_df = grouped_df.agg({self.question_column: 'count', **{metric: 'mean' for metric in score_map}})
+                grouped_df.rename(columns={self.question_column: '问题个数'}, inplace=True)
+                
                 total_question = grouped_df['问题个数'].sum()
                 grouped_df.loc['总计', '问题个数'] = total_question
                 for metric in score_map:
                     grouped_df.loc['总计', metric] = df[metric].sum() / total_question
-                save_group_df[f'{metric}_group'] = grouped_df
+                save_group_df[f'{metric_name}_group'] = grouped_df
+                
                 print(grouped_df.to_markdown())
 
-        # # save
+        # save
         output_path = Path(self.save_path) / f"{Path(self.excel_path).stem}_score.xlsx"
-
         with pd.ExcelWriter(output_path) as writer:
             df.to_excel(writer, sheet_name='Sheet1', index=False)
             if len(save_group_df):
