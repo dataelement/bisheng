@@ -29,10 +29,12 @@ class PresetTrainDao(PresetTrainBase):
     @classmethod
     def insert_batch(cls, models: List[PresetTrain]) -> List[PresetTrain]:
         with session_getter() as session:
-            session.add_all(models)
+            for one in models:
+                session.add(one)
             session.commit()
-            session.refresh(models)
-        return models
+            for one in models:
+                session.refresh(one)
+            return models
 
     @classmethod
     def delete_one(cls, model: PresetTrain) -> bool:

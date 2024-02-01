@@ -3,9 +3,8 @@ from typing import List, Optional
 
 from bisheng.api.services.finetune import FinetuneService
 from bisheng.api.services.finetune_file import FinetuneFileService
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.database.models.finetune import (Finetune, FinetuneChangeModelName, FinetuneCreate,
-                                              FinetuneList)
+from bisheng.api.v1.schemas import FinetuneCreateReq, UnifiedResponseModel, resp_200
+from bisheng.database.models.finetune import Finetune, FinetuneChangeModelName, FinetuneList
 from bisheng.database.models.preset_train import PresetTrain
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi_jwt_auth import AuthJWT
@@ -16,12 +15,13 @@ router = APIRouter(prefix='/finetune', tags=['Finetune'])
 # create finetune job
 @router.post('/job', response_model=UnifiedResponseModel[Finetune])
 async def create_job(*,
-                     finetune: FinetuneCreate,
+                     finetune: FinetuneCreateReq,
                      Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-    return FinetuneService.create_job(finetune, current_user)
+    finetune = Finetune(**finetune.dict(), user_id=current_user.get('user_id'), user_name=current_user.get('user_name'))
+    return FinetuneService.create_job(finetune)
 
 
 # 删除训练任务
@@ -61,7 +61,8 @@ async def publish_job(*,
 @router.get('/job', response_model=UnifiedResponseModel[List[Finetune]])
 async def get_job(*,
                   server: int = Query(default=None, description='关联的RT服务ID'),
-                  status: int = Query(default=None, description='训练任务的状态，1: 训练中 2: 训练失败 3: 任务中止 4: 训练成功 5: 发布完成'),
+                  status: int = Query(default=None,
+                                      description='训练任务的状态，1: 训练中 2: 训练失败 3: 任务中止 4: 训练成功 5: 发布完成'),
                   page: Optional[int] = Query(default=1, description='页码'),
                   limit: Optional[int] = Query(default=10, description='每页条数'),
                   Authorize: AuthJWT = Depends()):

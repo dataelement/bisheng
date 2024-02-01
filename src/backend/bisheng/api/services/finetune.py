@@ -12,8 +12,8 @@ from bisheng.api.services.rt_backend import RTBackend
 from bisheng.api.services.sft_backend import SFTBackend
 from bisheng.api.utils import parse_server_host
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.database.models.finetune import (Finetune, FinetuneChangeModelName, FinetuneCreate,
-                                              FinetuneDao, FinetuneList, FinetuneStatus)
+from bisheng.database.models.finetune import (Finetune, FinetuneChangeModelName, FinetuneDao,
+                                              FinetuneList, FinetuneStatus)
 from bisheng.database.models.model_deploy import ModelDeploy, ModelDeployDao
 from bisheng.database.models.server import ServerDao
 from bisheng.utils.logger import logger
@@ -26,10 +26,10 @@ sync_job_thread_pool = ThreadPoolExecutor(3)
 class FinetuneService(BaseModel):
 
     @classmethod
-    def validate_params(cls, finetune_create: FinetuneCreate) -> UnifiedResponseModel | None:
+    def validate_params(cls, finetune: Finetune) -> UnifiedResponseModel | None:
         """ 检查请求参数，返回None表示校验通过 """
         # 个人训练集和预置训练集 最少使用一个
-        if not finetune_create.train_data and not finetune_create.preset_data:
+        if not finetune.train_data and not finetune.preset_data:
             return TrainDataNoneError.return_resp()
         return None
 
@@ -83,26 +83,24 @@ class FinetuneService(BaseModel):
         return None
 
     @classmethod
-    def create_job(cls, finetune_create: FinetuneCreate, user: Any) -> UnifiedResponseModel[Finetune]:
+    def create_job(cls, finetune: Finetune) -> UnifiedResponseModel[Finetune]:
         # 校验额外参数
-        validate_ret = cls.validate_params(finetune_create)
+        validate_ret = cls.validate_params(finetune)
         if validate_ret is not None:
             return validate_ret
 
         # 查找RT服务是否存在
-        server = ServerDao.find_server(finetune_create.server)
+        server = ServerDao.find_server(finetune.server)
         if not server:
             return NotFoundServerError.return_resp()
 
         # 查找基础模型是否存在
-        base_model = ModelDeployDao.find_model(finetune_create.base_model)
+        base_model = ModelDeployDao.find_model(finetune.base_model)
         if not base_model:
             return NotFoundModelError.return_resp()
 
         # 插入到数据库内
-        finetune_create.user_id = user.get('user_id')
-        finetune_create.user_name = user.get('user_name')
-        finetune = FinetuneDao.insert_one(Finetune(**finetune_create.dict()))
+        finetune = FinetuneDao.insert_one(finetune)
 
         # 调用SFT-backend的API新建任务
         logger.info(f'start create sft job: {finetune.id.hex}')
@@ -180,7 +178,7 @@ class FinetuneService(BaseModel):
     def upload_job_log(cls, finetune: Finetune, log_data: io.BytesIO, length: int) -> str:
         minio_client = MinioClient()
         log_path = f'/finetune/log/{finetune.id.hex}'
-        minio_client.upload_minio_data(log_path, log_data, length, 'application/octet-stream')
+        minio_client.upload_minio_file(log_path, log_data, length)
         return log_path
 
     @classmethod

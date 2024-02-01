@@ -42,7 +42,7 @@ class FinetuneFileService(BaseModel):
             file_id = uuid.uuid4().hex
             file_info = PresetTrain(id=file_id, name=file.filename, url=f'{file_root}/{file_id}',
                                     user_id=user.get('user_id'), user_name=user.get('user_name'))
-            minio_client.upload_minio_data(file_info.url, file.file, file.size, 'application/octet-stream')
+            minio_client.upload_minio_file(file_info.url, file.file, file.size, content_type=file.content_type)
             ret.append(file_info)
         return ret
 
