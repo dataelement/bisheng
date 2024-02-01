@@ -169,6 +169,15 @@ class DocumentLoaderFrontNode(FrontendNode):
                     display_name='unstructured_api_url',
                     advanced=False,
                 ))
+            self.template.add_field(
+                TemplateField(
+                    field_type='dict',
+                    required=True,
+                    show=True,
+                    name='kwargs',
+                    display_name='kwargs',
+                    advanced=False,
+                ))
             self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in {'UniversalKVLoader'}:
             self.template.add_field(
@@ -320,6 +329,7 @@ class DocumentLoaderFrontNode(FrontendNode):
             field.is_list = False
         if name == 'ElemUnstructuredLoaderV0' and field.name == 'kwargs':
             field.show = True
+            field.advanced = False
 
 
 def build_pdf_semantic_loader_fields():

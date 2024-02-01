@@ -216,13 +216,15 @@ class Handler:
         key = get_cache_key(client_id, chat_id)
         langchain_object = session.in_memory_cache.get(key)
         input_key = langchain_object.input_keys[0]
+        input_dict = {k: '' for k in langchain_object.input_keys}
 
         report = ''
         logger.info(f'process_file batch_question={batch_question}')
         for question in batch_question:
             if not question:
                 continue
-            payload = {'inputs': {input_key: question}, 'is_begin': False}
+            input_dict[input_key] = question
+            payload = {'inputs': input_dict, 'is_begin': False}
             start_resp.category == 'question'
             await session.send_json(client_id, chat_id, start_resp)
             step_resp = ChatResponse(type='end',

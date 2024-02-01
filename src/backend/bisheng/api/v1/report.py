@@ -65,7 +65,7 @@ async def get_template(*, flow_id: str):
         with session_getter() as session:
             session.add(db_report)
             session.commit()
-            session.refresh()
+            session.refresh(db_report)
     else:
         version_key = db_report.newversion_key
     res = {
