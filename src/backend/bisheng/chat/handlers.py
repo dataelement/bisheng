@@ -285,12 +285,19 @@ class Handler:
         if isinstance(intermediate_steps, list):
             # autogen produce multi dialog
             for message in intermediate_steps:
-                content = message.get('message')
-                log = message.get('log', '')
-                sender = message.get('sender')
-                receiver = message.get('receiver')
-                is_bot = False if receiver and receiver.get('is_bot') else True
-                category = message.get('category', 'processing')
+                # autogen produce message object
+                if isinstance(message, str):
+                    log = message
+                    is_bot = True
+                    category = 'processing'
+                    content = sender = receiver = None
+                else:
+                    content = message.get('message')
+                    log = message.get('log', '')
+                    sender = message.get('sender')
+                    receiver = message.get('receiver')
+                    is_bot = False if receiver and receiver.get('is_bot') else True
+                    category = message.get('category', 'processing')
                 msg = ChatResponse(message=content,
                                    intermediate_steps=log,
                                    sender=sender,

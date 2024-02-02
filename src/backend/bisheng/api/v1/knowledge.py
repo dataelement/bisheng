@@ -604,7 +604,7 @@ def file_knowledge(db_knowledge: Knowledge, file_path: str, file_name: str, meta
     with session_getter() as session:
         session.add(db_file)
         session.commit()
-        session.refresh()
+        session.refresh(db_file)
     result = db_file.model_dump()
 
     try:
@@ -671,7 +671,7 @@ def text_knowledge(db_knowledge: Knowledge, documents: List[Document]):
     with session_getter() as session:
         session.add(db_file)
         session.commit()
-        session.refresh()
+        session.refresh(db_file)
     result = db_file.model_dump()
     try:
         metadata = [{

@@ -501,9 +501,10 @@ class ChatManager:
                 nd['value'] = file_name
                 tweak[nd.get('id')] = {'file_path': file_path, 'value': file_name}
             elif 'VariableNode' in nd.get('id'):
+                # general key value
                 variables = nd.get('name')
                 variable_value = nd.get('value')
-                # key
+                # actual key varaialbes & variable_value
                 variables_list = tweak[nd.get('id')].get('variables', [])
                 if not variables_list:
                     tweak[nd.get('id')]['variables'] = variables_list

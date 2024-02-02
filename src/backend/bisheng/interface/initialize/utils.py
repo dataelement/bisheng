@@ -41,6 +41,7 @@ def handle_format_kwargs(prompt, params: Dict):
     for input_variable in prompt.input_variables:
         if input_variable in params:
             format_kwargs = handle_variable(params, input_variable, format_kwargs)
+
     return format_kwargs
 
 
@@ -58,6 +59,13 @@ def handle_variable(params: Dict, input_variable: str, format_kwargs: Dict):
     variable = params[input_variable]
     if isinstance(variable, str):
         format_kwargs[input_variable] = variable
+    elif isinstance(variable, dict):
+        # variable node 特殊处理
+        if len(variable) == 0:
+            format_kwargs[input_variable] = ''
+        elif len(variable) != 1:
+            raise ValueError(f'VariableNode contains multi-key {variable.keys()}')
+        format_kwargs[input_variable] = list(variable.values())[0]
     elif isinstance(variable, BaseOutputParser) and hasattr(variable, 'get_format_instructions'):
         format_kwargs[input_variable] = variable.get_format_instructions()
     elif is_instance_of_list_or_document(variable):
