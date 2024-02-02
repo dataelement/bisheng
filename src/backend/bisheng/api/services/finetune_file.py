@@ -23,7 +23,7 @@ class FinetuneFileService(BaseModel):
         file_list = cls.upload_file_to_minio(files, file_root, user)
         # 将预置数据存入数据库
         if is_preset:
-            logger.info(f'保存预置训练数据信息: {file_list}')
+            logger.info(f'save preset file : {file_list}')
             PresetTrainDao.insert_batch(file_list)
         return resp_200(data=file_list)
 
@@ -51,7 +51,7 @@ class FinetuneFileService(BaseModel):
         return PresetTrainDao.find_all()
 
     @classmethod
-    def delete_preset_file(cls, file_id: str, user: Any) -> UnifiedResponseModel:
+    def delete_preset_file(cls, file_id: uuid.UUID, user: Any) -> UnifiedResponseModel:
         file_data = PresetTrainDao.find_one(file_id)
         if not file_data:
             return TrainFileNotExistError.return_resp()

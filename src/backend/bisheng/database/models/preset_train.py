@@ -44,7 +44,7 @@ class PresetTrainDao(PresetTrainBase):
         return True
 
     @classmethod
-    def find_one(cls, file_id: str) -> PresetTrain | None:
+    def find_one(cls, file_id: UUID) -> PresetTrain | None:
         with session_getter() as session:
             statement = select(PresetTrain).where(PresetTrain.id == file_id)
             return session.exec(statement).first()

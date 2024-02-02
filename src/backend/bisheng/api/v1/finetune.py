@@ -1,5 +1,6 @@
 import json
 from typing import List, Optional
+from uuid import UUID
 
 from bisheng.api.services.finetune import FinetuneService
 from bisheng.api.services.finetune_file import FinetuneFileService
@@ -27,7 +28,7 @@ async def create_job(*,
 # 删除训练任务
 @router.delete('/job', response_model=UnifiedResponseModel)
 async def delete_job(*,
-                     job_id: str,
+                     job_id: UUID,
                      Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -38,7 +39,7 @@ async def delete_job(*,
 # 中止训练任务
 @router.post('/job/cancel', response_model=UnifiedResponseModel)
 async def cancel_job(*,
-                     job_id: str,
+                     job_id: UUID,
                      Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -49,7 +50,7 @@ async def cancel_job(*,
 # 发布训练任务
 @router.post('/job/publish', response_model=UnifiedResponseModel)
 async def publish_job(*,
-                      job_id: str,
+                      job_id: UUID,
                       Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -75,7 +76,7 @@ async def get_job(*,
 # 获取任务最新详细信息，此接口会同步查询SFT-backend侧将任务状态更新到最新
 @router.get('/job/info', response_model=UnifiedResponseModel[Finetune])
 async def get_job_info(*,
-                       job_id: str,
+                       job_id: UUID,
                        Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -115,15 +116,16 @@ async def upload_preset_file(*,
 
 # 获取预置训练文件列表
 @router.get('/job/file/preset', response_model=UnifiedResponseModel[List[PresetTrain]])
-async def get_preset_file(*,
-                          Authorize: AuthJWT = Depends()):
+async def get_preset_file(*, Authorize: AuthJWT = Depends()):
+    # get login user
+    Authorize.jwt_required()
     ret = FinetuneFileService.get_preset_file()
     return resp_200(ret)
 
 
 @router.delete('/job/file/preset', response_model=UnifiedResponseModel)
 async def delete_preset_file(*,
-                             file_id: str,
+                             file_id: UUID,
                              Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()

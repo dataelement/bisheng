@@ -88,7 +88,7 @@ class FinetuneList(BaseModel):
 
 
 class FinetuneChangeModelName(BaseModel):
-    id: str = Field(description='训练任务唯一ID')
+    id: UUID = Field(description='训练任务唯一ID')
     model_name: str
 
 
@@ -111,17 +111,18 @@ class FinetuneDao(FinetuneBase):
         return finetune
 
     @classmethod
-    def find_job(cls, job_id: str) -> Finetune | None:
+    def find_job(cls, job_id: UUID) -> Finetune | None:
         with session_getter() as session:
             statement = select(Finetune).where(Finetune.id == job_id)
             return session.exec(statement).first()
 
     @classmethod
-    def change_status(cls, job_id: str, old_status: int, status: int) -> bool:
+    def change_status(cls, job_id: UUID, old_status: int, status: int) -> bool:
         with session_getter() as session:
             update_statement = update(Finetune).where(
                 Finetune.id == job_id, Finetune.status == old_status).values(status=status)
             update_ret = session.exec(update_statement)
+            session.commit()
             return update_ret.rowcount != 0
 
     @classmethod
@@ -141,4 +142,5 @@ class FinetuneDao(FinetuneBase):
             if finetune_list.status:
                 statement = statement.where(Finetune.status == finetune_list.status)
             statement = statement.offset(offset).limit(finetune_list.limit)
+            print(statement)
             return session.exec(statement).all()

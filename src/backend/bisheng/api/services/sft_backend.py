@@ -1,10 +1,9 @@
 from typing import Dict
 
 import requests
-from pydantic import BaseModel
 
 
-class SFTBackend(BaseModel):
+class SFTBackend:
     """ 封装和SFT-Backend的交互 """
 
     # 微调训练指令的options参数列表
@@ -15,10 +14,10 @@ class SFTBackend(BaseModel):
     JOB_FAILED = 'FAILED'
 
     @classmethod
-    def handle_response(cls, res) -> (bool, str | Dict):
+    def handle_response(cls, res) -> (bool, str | None | Dict):
         if res.status_code != 200 or res.json()['status_code'] != 200:
             return False, res.content.decode('utf-8')
-        return True, res.json()['data']
+        return True, res.json().get('data', None)
 
     @classmethod
     def create_job(cls, host: str, job_id: str, params: Dict) -> (bool, str | Dict):
@@ -43,14 +42,14 @@ class SFTBackend(BaseModel):
     def delete_job(cls, host: str, job_id: str, model_name: str) -> (bool, str | Dict):
         """ 删除训练任务 """
         url = f'{host}/v2.1/sft/job/delete'
-        res = requests.delete(url, json={'job_id': job_id, model_name: model_name})
+        res = requests.delete(url, json={'job_id': job_id, 'model_name': model_name})
         return cls.handle_response(res)
 
     @classmethod
     def publish_job(cls, host: str, job_id: str, model_name: str) -> (bool, str | Dict):
         """ 发布训练任务 从训练路径到处到正式路径"""
         url = f'{host}/v2.1/sft/job/publish'
-        res = requests.post(url, json={'job_id': job_id, model_name: model_name})
+        res = requests.post(url, json={'job_id': job_id, 'model_name': model_name})
         return cls.handle_response(res)
 
     @classmethod
