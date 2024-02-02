@@ -53,7 +53,7 @@ def read_flows(*,
     payload = json.loads(Authorize.get_jwt_subject())
     try:
         sql = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
-                     Flow.update_time, Flow.description)
+                     Flow.update_time, Flow.description, Flow.guide_word)
         count_sql = select(func.count(Flow.id))
         if 'admin' != payload.get('role'):
             with session_getter() as session:
