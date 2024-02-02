@@ -188,8 +188,16 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
                         key={c.id || i}
                         userName={sendUserName}
                         chat={c}
+                        disabledReSend={inputDisabled}
+                        showSearch={!!appConfig.dialogQuickSearch}
                         onSource={() => setSouce(c)}
                         onDislike={(chatId) => { thumbRef.current?.openModal(chatId) }}
+                        onReSend={(msg) => {
+                            inputRef.current.value = msg
+                            handleSend()
+                        }}
+                        onEdit={(msg) => { inputRef.current.value = msg }}
+                        onSearch={(msg) => window.open(appConfig.dialogQuickSearch + encodeURIComponent(msg))}
                     ></ChatMessage>)
                 }
             </div>

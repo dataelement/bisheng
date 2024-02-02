@@ -57,37 +57,39 @@ export default function ChatReportForm({ flow, onStart }) {
     }
 
     return <div className="absolute right-20 bottom-32 w-[90%] max-w-[680px] flex flex-col gap-6 rounded-xl p-4 md:p-6 border bg-gray-50">
-        {items.map((item, i) => <div key={item.id} className="w-full text-sm">
-            {item.name}
-            <span className="text-status-red">{item.required ? " *" : ""}</span>
-            <div className="mt-2">
-                {item.type === VariableType.Text ? <InputComponent
-                    password={false}
-                    value={item.value}
-                    onChange={(val) => handleChange(i, val)}
-                /> :
-                    item.type === VariableType.Select ?
-                        <Dropdown
-                            options={item.options.map(e => e.value)}
-                            onSelect={(val) => handleChange(i, val)}
-                            value={item.value}
-                        ></Dropdown> :
-                        item.type === VariableType.File ?
-                            <InputFileComponent
-                                isSSO
-                                disabled={false}
-                                placeholder={t('report.fileRequired')}
-                                value={''}
-                                onChange={(e) => fileKindexVpath.current[i] = e}
-                                fileTypes={["pdf"]}
-                                suffixes={flow.data.nodes.find(el => el.id === item.nodeId)
-                                    ?.data.node.template.file_path.suffixes || ['xxx']}
-                                onFileChange={(val: string) => handleChange(i, val)}
-                            ></InputFileComponent> : <></>
-                }
+        <div className="max-h-[600px] overflow-y-auto">
+            {items.map((item, i) => <div key={item.id} className="w-full text-sm">
+                {item.name}
+                <span className="text-status-red">{item.required ? " *" : ""}</span>
+                <div className="mt-2">
+                    {item.type === VariableType.Text ? <InputComponent
+                        password={false}
+                        value={item.value}
+                        onChange={(val) => handleChange(i, val)}
+                    /> :
+                        item.type === VariableType.Select ?
+                            <Dropdown
+                                options={item.options.map(e => e.value)}
+                                onSelect={(val) => handleChange(i, val)}
+                                value={item.value}
+                            ></Dropdown> :
+                            item.type === VariableType.File ?
+                                <InputFileComponent
+                                    isSSO
+                                    disabled={false}
+                                    placeholder={t('report.fileRequired')}
+                                    value={''}
+                                    onChange={(e) => fileKindexVpath.current[i] = e}
+                                    fileTypes={["pdf"]}
+                                    suffixes={flow.data.nodes.find(el => el.id === item.nodeId)
+                                        ?.data.node.template.file_path.suffixes || ['xxx']}
+                                    onFileChange={(val: string) => handleChange(i, val)}
+                                ></InputFileComponent> : <></>
+                    }
+                </div>
             </div>
+            )}
         </div>
-        )}
         <Button size="sm" onClick={handleStart}>{t('report.start')}</Button>
     </div>
 };
