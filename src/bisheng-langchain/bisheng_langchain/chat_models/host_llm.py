@@ -548,7 +548,7 @@ class HostYuanChat(BaseHostChatLLM):
     @property
     def _llm_type(self) -> str:
         """Return type of chat model."""
-        return 'yuan2_2b_janus_hf'
+        return 'yuan2'
     
 class HostYiChat(BaseHostChatLLM):
     # use custom llm chat api, api should compatiable with openai definition
@@ -562,4 +562,4 @@ class HostYiChat(BaseHostChatLLM):
     @property
     def _llm_type(self) -> str:
         """Return type of chat model."""
-        return 'yi_34b_chat'
+        return 'yi_chat'
