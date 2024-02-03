@@ -16,6 +16,7 @@ from langchain_core.pydantic_v1 import Field
 from loguru import logger
 from tqdm import tqdm
 
+import llama_index
 from langchain.chains.question_answering import load_qa_chain
 from langchain.chat_models import ChatOpenAI
 from langchain.embeddings.openai import OpenAIEmbeddings
@@ -25,18 +26,17 @@ from langchain.schema import Document
 from langchain.storage import InMemoryByteStore
 from langchain.text_splitter import RecursiveCharacterTextSplitter, TextSplitter
 from langchain.vectorstores.milvus import Milvus
+from llama_index.schema import NodeWithScore
 
-httpx_client = httpx.Client(proxies=os.environ.get('OPENAI_PROXY'))
-embeddings = OpenAIEmbeddings(model='text-embedding-ada-002', http_client=httpx_client)
+openai_proxy = os.environ.get('OPENAI_PROXY')
+httpx_client = httpx.Client(proxies=openai_proxy)
+# httpx_client = httpx.AsyncClient(proxies=openai_proxy)
+embedding = OpenAIEmbeddings(model='text-embedding-ada-002', http_client=httpx_client)
 llm = ChatOpenAI(model='gpt-4-1106-preview', temperature=0.0, http_client=httpx_client)
 
 
 @dataclass
 class BishengMultiVectorRetriever:
-    '''
-    Base class for multi vector retriever
-    '''
-
     doc_path: str
     question_file: str
     save_path: str
@@ -75,10 +75,6 @@ class BishengMultiVectorRetriever:
     def _parent_splitter(self):
         return self.parent_splitter(chunk_size=self.parent_chunk_size)
 
-    @property
-    def parent_docstore(self):
-        return InMemoryByteStore()
-
     def data_loader(
         self,
     ) -> Dict[str, List[Document]]:
@@ -93,9 +89,6 @@ class BishengMultiVectorRetriever:
             return result
 
     def get_answer(self):
-        '''
-        get answer
-        '''
         df = self._validate_excel()
         select_file = set(df['文件名'].to_list())
 
@@ -103,35 +96,20 @@ class BishengMultiVectorRetriever:
         all_parent_docs = {k: v for k, v in all_parent_docs.items() if k in select_file}
 
         for pdf_name, parent_doc in tqdm(all_parent_docs.items()):
-            par_docs_with_id, child_docs_with_id = getattr(self, f'built_par_child_docs_{self.retriever_method}')(
-                parent_doc
-            )
-            # vectorestore写入
-            collection_name = self._filename_to_collection_name(pdf_name)
-            vector_store = Milvus(
-                embedding_function=self.embedding,
-                collection_name=collection_name,
-                connection_args=self.milvus_connection_args,
-            )
-            self.parent_doc_retriever = MultiVectorRetriever(
-                vectorstore=vector_store,
-                byte_store=self.parent_docstore,
-                id_key=self.id_key,
-                search_kwargs=self.search_kwargs,
-            )
-            self.parent_doc_retriever.vectorstore.add_documents(
-                documents=child_docs_with_id,
-                embedding=self.embedding,
-            )
-            self.parent_doc_retriever.docstore.mset(par_docs_with_id)
-
-            # 读取问题
-            idx2question = df[df['文件名'] == pdf_name]['问题改写'].to_dict()
+            # built retriever
+            self.retriever = getattr(self, f'{self.retriever_method}')(parent_doc)
+            logger.info(f'{self.retriever_method} built')
+            
+            # get answer
+            idx2question = df[df['文件名'] == pdf_name]['question'].to_dict()
             for idx, question in idx2question.items():
-                rel_docs = self.parent_doc_retriever.get_relevant_documents(question)
-                logger.info(f'rel_docs: {len(rel_docs)}')
+                rel_docs = self.retriever(question)
                 source_docs = {d.metadata.get('source') for d in rel_docs}
+                logger.info(f'rel_docs: {len(rel_docs)}')
                 logger.info(f'source_file: {source_docs}')
+
+                if len(rel_docs) and isinstance(rel_docs[0], NodeWithScore):
+                    rel_docs = [Document(page_content=d.text, metadata=d.metadata) for d in rel_docs]
 
                 try:
                     ans = self.qa_chain({'input_documents': rel_docs, 'question': question}, return_only_outputs=True)
@@ -159,23 +137,29 @@ class BishengMultiVectorRetriever:
         id_to_par_doc = list(zip(doc_ids, splited_parent_docs))
         return id_to_par_doc
 
-    def built_par_child_docs_Base(self, parent_doc: List[Document]) -> Union[Tuple[Any], List[Document]]:
+    def smaller_chunks_retriever(self, parent_doc: List[Document]):
+
         id_to_par_doc = self.split_parent_doc_and_built_index(parent_doc)
         all_sub_docs = []
-        for i, (_id, docs) in enumerate(id_to_par_doc):
+        for _id, docs in id_to_par_doc:
             sub_docs = self._child_splitter.split_documents([docs])
             for _doc in sub_docs:
                 _doc.metadata[self.id_key] = _id
             all_sub_docs.extend(sub_docs)
-        return id_to_par_doc, all_sub_docs
 
-    def built_par_child_docs_Summary(self, parent_doc: List[Document]) -> Union[Tuple[Any], List[Document]]:
-        logger.info('built_par_child_docs_Summary')
+        filename = parent_doc[0].metadata.get('source')
+        collection_name = self._filename_to_collection_name(filename)
+        return self._built_retreiver(
+            collection_name=collection_name,
+            par_docs_with_id=id_to_par_doc,
+            child_docs_with_id=all_sub_docs,
+        )
 
+    def summary_retriever(self, parent_doc: List[Document]):
         chain = (
             {"doc": lambda x: x.page_content}
             | ChatPromptTemplate.from_template("请帮我总结下列文档:\n\n{doc}")
-            | llm
+            | ChatOpenAI(model='gpt-3.5-turbo-0125', temperature=0.0, http_client=httpx_client)
             | StrOutputParser()
         )
 
@@ -193,9 +177,15 @@ class BishengMultiVectorRetriever:
                 )
             )
 
-        return id_to_par_doc, summary_docs
+        filename = parent_doc[0].metadata.get('source')
+        collection_name = self._filename_to_collection_name(filename)
+        return self._built_retreiver(
+            collection_name=collection_name,
+            par_docs_with_id=id_to_par_doc,
+            child_docs_with_id=summary_docs,
+        )
 
-    def built_par_child_docs_Hquery(self, parent_doc: List[Document]) -> Union[Tuple[Any], List[Document]]:
+    def hypothetical_queries_retriever(self, parent_doc: List[Document]):
         functions = [
             {
                 "name": "hypothetical_questions",
@@ -219,7 +209,7 @@ class BishengMultiVectorRetriever:
             | ChatPromptTemplate.from_template(
                 "Generate a list of exactly 3 hypothetical questions in Chinese that the below document could be used to answer:\n\n{doc}"
             )
-            | ChatOpenAI(model='gpt-3.5-turbo-0125', temperature=0.0, http_client=httpx_client).bind(
+            | ChatOpenAI(model='gpt-3.5-turbo-1106', temperature=0.0, http_client=httpx_client).bind(
                 functions=functions, function_call={"name": "hypothetical_questions"}
             )
             | JsonKeyOutputFunctionsParser(key_name="questions")
@@ -231,11 +221,45 @@ class BishengMultiVectorRetriever:
             question_list = chain.invoke(doc)
             question_docs.extend([Document(page_content=s, metadata={self.id_key: id}) for s in question_list])
 
-        return id_to_par_doc, question_docs
+        filename = parent_doc[0].metadata.get('source')
+        collection_name = self._filename_to_collection_name(filename)
+        return self._built_retreiver(
+            collection_name=collection_name,
+            par_docs_with_id=id_to_par_doc,
+            child_docs_with_id=question_docs,
+        )
+
+    def hybrid_fusion_retriever(self, parent_doc: List[Document]):
+        """混合检索+rrf"""
+        from hybrid_fusion_pack.base import HybridFusionRetrieverPack
+
+        from llama_index import Document
+        from llama_index.embeddings.openai import OpenAIEmbedding
+        from llama_index.llms import OpenAI
+        from llama_index.node_parser import LangchainNodeParser, SimpleNodeParser
+
+        openai_api_key = os.environ.get('OPENAI_API_KEY', '')
+        openai_proxy = os.environ.get('OPENAI_PROXY', '')
+        llm = ChatOpenAI(model='gpt-3.5-turbo-1106', temperature=0.0, http_client=httpx_client)
+        embed = OpenAIEmbedding(api_key=openai_api_key, http_client=httpx.Client(proxies=openai_proxy))
+
+        documents = [Document(text=i.page_content, metadata=i.metadata) for i in parent_doc]
+        node_parser = LangchainNodeParser(RecursiveCharacterTextSplitter(chunk_size=512))
+        nodes = node_parser.get_nodes_from_documents(documents)
+        hybrid_fusion_pack = HybridFusionRetrieverPack(
+            nodes,
+            vector_similarity_top_k=6,
+            bm25_similarity_top_k=6,
+            fusion_similarity_top_k=self.search_kwargs.get('k', 4),
+            llm=llm,
+            embedding=embed,
+        )
+
+        return hybrid_fusion_pack.retrieve
 
     def _validate_excel(self) -> pd.DataFrame:
         df: pd.DataFrame = pd.read_excel(self.question_file)
-        df.dropna(subset=['问题改写', '文件名', 'GT'], inplace=True)
+        df.dropna(subset=['question', '文件名', 'ground_truths'], inplace=True)
         logger.info(f'question number: {df.shape[0]}')
         return df
 
@@ -245,22 +269,59 @@ class BishengMultiVectorRetriever:
         collection_name = f'{self.retriever_method}_{num}'
         return collection_name
 
+    def _built_retreiver(
+        self,
+        collection_name: str,
+        par_docs_with_id: List[Tuple[str, Document]],
+        child_docs_with_id: List[Document],
+    ) -> MultiVectorRetriever:
+
+        vector_store = Milvus(
+            embedding_function=self.embedding,
+            collection_name=collection_name,
+            connection_args=self.milvus_connection_args,
+        )
+        retriever = MultiVectorRetriever(
+            vectorstore=vector_store,
+            byte_store=InMemoryByteStore(),
+            id_key=self.id_key,
+            search_kwargs=self.search_kwargs,
+        )
+        retriever.vectorstore.add_documents(
+            documents=child_docs_with_id,
+            embedding=self.embedding,
+        )
+        retriever.docstore.mset(par_docs_with_id)
+
+        return retriever.get_relevant_documents
+
 
 if __name__ == '__main__':
 
-    params = {
-        'retriever_method': 'Hquery',
-        'doc_path': '/opt/bisheng/src/bisheng-langchain/experimental/rag/data/all_docs.json',
-        'question_file': '/opt/bisheng/src/bisheng-langchain/experimental/rag/data/analysis_result/short_doc_gpt4.xlsx',
-        'save_path': './output',
-        'llm': llm,
-        'embedding': embeddings,
-        'search_kwargs': {"k": 10},  # 控制子文档的返回数量
-        'child_chunk_size': 216,
-        'parent_chunk_size': 512,
-        'child_splitter': RecursiveCharacterTextSplitter,
-        'parent_splitter': RecursiveCharacterTextSplitter,
-    }
+    method_list = [
+        'smaller_chunks_retriever',
+        'summary_retriever',
+        'hypothetical_queries_retriever',
+        'hybrid_fusion_retriever',
+    ]
+    for m in method_list:
 
-    bmv_retriver = BaseMultiVectorRetriever(**params)
-    bmv_retriver.get_answer()
+        params = {
+            'retriever_method': m,  # smaller_chunks_retriever / summary_retriever / hypothetical_queries_retriever / hybrid_fusion_retriever
+            'doc_path': '/opt/bisheng/src/bisheng-langchain/experimental/rag/data/all_docs.json',
+            'question_file': '/opt/bisheng/src/bisheng-langchain/experimental/rag/retrieval/multi_vector_retriever/data/benchmark_gpt4_badcase_less_than_50k.xlsx',
+            'save_path': './output',
+            'llm': llm,
+            'embedding': embedding,
+            'search_kwargs': {"k": 6},  # 控制子文档的返回数量
+            'child_chunk_size': 216,
+            # 'child_chunk_overlap': 0,
+            'parent_chunk_size': 1024,
+            'child_splitter': RecursiveCharacterTextSplitter,
+            'parent_splitter': RecursiveCharacterTextSplitter,
+            # todo
+            # 'retriever_args': {'child_chunk_size': 256, 'parent_chunk_size': '512', search_kwargs: {"k": 3}, 'vector_similarity_top_k': 2, 'bm25_similarity_top_k': 2, 'fusion_similarity_top_k': 2, 'num_queries': 4, 'documents': None, 'cache_dir': None,},
+        }
+
+        bmv_retriver = BishengMultiVectorRetriever(**params)
+        bmv_retriver.get_answer()
