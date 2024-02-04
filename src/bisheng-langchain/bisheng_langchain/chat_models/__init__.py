@@ -1,4 +1,4 @@
-from .host_llm import CustomLLMChat, HostBaichuanChat, HostChatGLM, HostLlama2Chat, HostQwenChat
+from .host_llm import CustomLLMChat, HostBaichuanChat, HostChatGLM, HostLlama2Chat, HostQwenChat, HostYuanChat, HostYiChat
 from .minimax import ChatMinimaxAI
 from .proxy_llm import ProxyChatLLM
 from .qwen import ChatQWen
@@ -9,5 +9,6 @@ from .sensetime import SenseChat
 
 __all__ = [
     'ProxyChatLLM', 'ChatMinimaxAI', 'ChatWenxin', 'ChatZhipuAI', 'ChatXunfeiAI', 'HostChatGLM',
-    'HostBaichuanChat', 'HostLlama2Chat', 'HostQwenChat', 'CustomLLMChat', 'ChatQWen', 'SenseChat'
+    'HostBaichuanChat', 'HostLlama2Chat', 'HostQwenChat', 'CustomLLMChat', 'ChatQWen', 'SenseChat',
+    'HostYuanChat', 'HostYiChat'
 ]

@@ -24,7 +24,7 @@ from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.embeddings import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
 from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
@@ -203,6 +203,7 @@ def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends
 
 @router.get('/', status_code=200)
 def get_knowledge(*,
+                  name: str = Query(default=None, description='根据name查找数据库'),
                   page_size: Optional[int],
                   page_num: Optional[str],
                   Authorize: AuthJWT = Depends()):
@@ -229,6 +230,11 @@ def get_knowledge(*,
             else:
                 sql = sql.where(Knowledge.user_id == payload.get('user_id'))
                 count_sql = count_sql.where(Knowledge.user_id == payload.get('user_id'))
+        if name:
+            name = name.strip()
+            sql = sql.where(Knowledge.name.like(f'%{name}%'))
+            count_sql = count_sql.where(Knowledge.name.like(f'%{name}%'))
+
         sql = sql.order_by(Knowledge.update_time.desc())
         # get total count
         with session_getter() as session:
@@ -257,6 +263,7 @@ def get_knowledge(*,
 
 @router.get('/file_list/{knowledge_id}', status_code=200)
 def get_filelist(*,
+                 file_name: str = Query(default=None, description='根据file_name查找数据库'),
                  knowledge_id: int,
                  page_size: int = 10,
                  page_num: int = 1,
@@ -284,12 +291,22 @@ def get_filelist(*,
 
     # 查找上传的文件信息
     with session_getter() as session:
-        total_count = session.scalar(
-            select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
-        files = session.exec(
-            select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id).order_by(
-                KnowledgeFile.update_time.desc()).offset(page_size *
-                                                         (page_num - 1)).limit(page_size)).all()
+        if file_name:
+            file_name = file_name.strip()
+            total_count = session.scalar(
+                select(func.count(KnowledgeFile.id)).where(
+                    (KnowledgeFile.knowledge_id == knowledge_id, KnowledgeFile.file_name.like(
+                        f'%{file_name}%'))))
+            files = session.exec(select(KnowledgeFile).where(
+                (KnowledgeFile.knowledge_id == knowledge_id, KnowledgeFile.file_name.like(
+                    f'%{file_name}%')))).all()
+        else:
+            total_count = session.scalar(
+                select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
+            files = session.exec(
+                select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id).order_by(
+                    KnowledgeFile.update_time.desc()).offset(page_size *
+                                                            (page_num - 1)).limit(page_size)).all()
     return resp_200({
         'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
         'total': total_count,

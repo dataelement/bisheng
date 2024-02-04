@@ -194,6 +194,10 @@ llms:
     documentation: ""
   SenseChat:
     documentation: ""
+  HostYuanChat:
+    documentation: ""
+  HostYiChat:
+    documentation: ""
   ###
   # There's a bug in this component deactivating until we get it sorted: _language_models.py", line 804, in send_message
   #     is_blocked=safety_attributes.get("blocked", False),
