@@ -298,14 +298,25 @@ class FinetuneService(BaseModel):
 
         # 获取日志文件
         log_data = None
+        res_data = list()
         if finetune.log_path:
             log_data = cls.get_job_log(finetune)
             if log_data is not None:
                 log_data = log_data.read().decode('utf-8')
 
+                contents = log_data.split('\n')
+                for elem in contents:
+                    sub_data = {"step": None, "loss": None}
+                    elem_data = json.loads(elem)
+                    if elem_data["loss"] is None: continue
+                    sub_data["step"] = elem_data["current_steps"]
+                    sub_data["loss"] = elem_data["loss"] 
+                    res_data.append(sub_data)
+
         return resp_200(data={
             'finetune': finetune,
             'log': log_data,
+            'loss_data': res_data,  # like [{"step": 10, "loss": 0.5}, {"step": 20, "loss": 0.3}]
             'report': finetune.report,
         })
 
