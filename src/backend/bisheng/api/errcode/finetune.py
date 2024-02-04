@@ -42,6 +42,11 @@ class ChangeModelNameError(BaseErrorCode):
     Msg: str = '模型名接口修改失败'
 
 
+class UnExportJobError(BaseErrorCode):
+    Code: int = 10108
+    Msg: str = '取消发布失败'
+
+
 class TrainFileNotExistError(BaseErrorCode):
     Code: int = 10120
     Msg: str = '训练文件不存在'

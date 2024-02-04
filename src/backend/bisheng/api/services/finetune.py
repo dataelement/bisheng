@@ -7,7 +7,7 @@ from uuid import UUID
 
 from bisheng.api.errcode.finetune import (CancelJobError, ChangeModelNameError, CreateFinetuneError,
                                           DeleteJobError, ExportJobError, JobStatusError,
-                                          NotFoundJobError, TrainDataNoneError)
+                                          NotFoundJobError, TrainDataNoneError, UnExportJobError)
 from bisheng.api.errcode.model_deploy import NotFoundModelError
 from bisheng.api.errcode.server import NotFoundServerError
 from bisheng.api.services.rt_backend import RTBackend
@@ -257,6 +257,39 @@ class FinetuneService(BaseModel):
         finetune.model_id = published_model.id
         FinetuneDao.update_job(finetune)
         logger.info('export sft job success')
+        return resp_200(data=finetune)
+
+    @classmethod
+    def cancel_publish_job(cls, job_id: UUID, user: Any) -> UnifiedResponseModel[Finetune]:
+        # 查看job任务信息
+        finetune = FinetuneDao.find_job(job_id)
+        if not finetune:
+            return NotFoundJobError.return_resp()
+        new_status = FinetuneStatus.SUCCESS.value
+        validate_ret = cls.validate_status(finetune, new_status)
+        if validate_ret is not None:
+            return validate_ret
+
+        # 查找RT服务是否存在
+        server = ServerDao.find_server(finetune.server)
+        if not server:
+            return NotFoundServerError.return_resp()
+
+        # 调用SFT-backend的API接口
+        logger.info(f'start cancel export sft job: {job_id}, user: {user.get("user_name")}')
+        sft_ret = SFTBackend.publish_job(host=parse_server_host(server.endpoint), job_id=job_id.hex,
+                                         model_name=finetune.model_name)
+        if not sft_ret[0]:
+            logger.error(f'cancel export sft job error: job_id: {job_id}, err: {sft_ret[1]}')
+            return UnExportJobError.return_resp()
+        # 删除发布的模型信息
+        logger.info(f'delete published model: {finetune.model_id}')
+        ModelDeployDao.delete_model_by_id(finetune.model_id)
+        logger.info('update finetune status')
+        finetune.status = new_status
+        finetune.model_id = 0
+        FinetuneDao.update_job(finetune)
+        logger.info('cancel export sft job success')
         return resp_200(data=finetune)
 
     @classmethod

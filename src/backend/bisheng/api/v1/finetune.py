@@ -59,18 +59,31 @@ async def publish_job(*,
     return FinetuneService.publish_job(job_id, current_user)
 
 
+@router.post('/job/publish/cancel', response_model=UnifiedResponseModel)
+async def cancel_publish_job(*,
+                             job_id: UUID,
+                             Authorize: AuthJWT = Depends()):
+    # get login user
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+    return FinetuneService.cancel_publish_job(job_id, current_user)
+
+
 # 获取训练任务列表，支持分页
 @router.get('/job', response_model=UnifiedResponseModel[List[Finetune]])
 async def get_job(*,
                   server: int = Query(default=None, description='关联的RT服务ID'),
-                  status: str = Query(default=None, title='多个以英文逗号,分隔',
+                  status: str = Query(default='', title='多个以英文逗号,分隔',
                                       description='训练任务的状态，1: 训练中 2: 训练失败 3: 任务中止 4: 训练成功 5: 发布完成'),
                   page: Optional[int] = Query(default=1, description='页码'),
                   limit: Optional[int] = Query(default=10, description='每页条数'),
                   Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
-    req_data = FinetuneList(server=server, status=status.strip().split(','), page=page, limit=limit)
+    status_list = []
+    if status.strip():
+        status_list = [int(one) for one in status.strip().split(',')]
+    req_data = FinetuneList(server=server, status=status_list, page=page, limit=limit)
     return FinetuneService.get_all_job(req_data)
 
 

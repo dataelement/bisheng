@@ -53,6 +53,13 @@ class SFTBackend:
         return cls.handle_response(res)
 
     @classmethod
+    def cancel_publish_job(cls, host: str, job_id: str, model_name: str) -> (bool, str | Dict):
+        """ 下架训练任务已发布的模型 """
+        url = f'{host}/v2.1/sft/job/publish/cancel'
+        res = requests.post(url, json={'job_id': job_id, 'model_name': model_name})
+        return cls.handle_response(res)
+
+    @classmethod
     def get_job_status(cls, host: str, job_id: str) -> (bool, str | Dict):
         """
          获取训练任务状态

@@ -3,7 +3,7 @@ from typing import Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, String, text
+from sqlalchemy import Column, DateTime, String, delete, text
 from sqlmodel import Field, select
 
 
@@ -43,6 +43,13 @@ class ModelDeployDao(ModelDeployBase):
             session.delete(model)
             session.commit()
         return True
+
+    @classmethod
+    def delete_model_by_id(cls, model_id: int):
+        with session_getter() as session:
+            statement = delete(ModelDeploy).where(ModelDeploy.id == model_id)
+            session.exec(statement)
+            session.commit()
 
     @classmethod
     def insert_one(cls, model: ModelDeploy) -> ModelDeploy:
