@@ -116,7 +116,7 @@ async def process_flow(
         flow_id: str,
         inputs: Optional[dict] = None,
         tweaks: Optional[dict] = None,
-        history_count: Optional[int] = 5,
+        history_count: Optional[int] = 10,
         clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
         session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
         task_service: 'TaskService' = Depends(get_task_service),
@@ -127,7 +127,7 @@ async def process_flow(
     """
     if inputs and isinstance(inputs, dict) and 'id' in inputs:
         inputs.pop('id')
-    logger.info(f'act=api_call sessionid={session_id} flow_id={flow_id}')
+    logger.info(f'act=api_call sessionid={session_id} flow_id={flow_id} inputs={inputs}')
 
     try:
         with session_getter() as session:
@@ -146,12 +146,12 @@ async def process_flow(
 
         # process
         if sync:
-            result = await process_graph_cached(
-                graph_data,
-                inputs,
-                clear_cache,
-                session_id,
-            )
+            result = await process_graph_cached(graph_data,
+                                                inputs,
+                                                clear_cache,
+                                                session_id,
+                                                history_count=history_count,
+                                                flow_id=flow_id)
             if isinstance(result, dict) and 'result' in result:
                 task_result = result['result']
                 session_id = result['session_id']
@@ -171,7 +171,8 @@ async def process_flow(
                 inputs,
                 clear_cache,
                 session_id,
-            )
+                history_count=history_count,
+                flow_id=flow_id)
             if task.status == 'SUCCESS':
                 task_result = task.result
                 if hasattr(task_result, 'result'):
@@ -192,7 +193,7 @@ async def process_flow(
                                    chat_id=session_id,
                                    category='question',
                                    flow_id=flow_id,
-                                   message=inputs)
+                                   message=json.dumps(inputs))
             message = ChatMessage(user_id=0,
                                   is_bot=True,
                                   chat_id=session_id,
