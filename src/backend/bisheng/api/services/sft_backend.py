@@ -73,7 +73,7 @@ class SFTBackend:
         TODO zgq 后续采用http标准文件传输格式
         接口返回的数据格式
         {
-            "log_data": [{}]
+            "log_data": 参考bisheng-ft生产的训练日志文件内容
         }
         """
         url = f'{host}/v2.1/sft/job/log'

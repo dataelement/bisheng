@@ -301,17 +301,7 @@ class FinetuneService(BaseModel):
         res_data = list()
         if finetune.log_path:
             log_data = cls.get_job_log(finetune)
-            if log_data is not None:
-                log_data = log_data.read().decode('utf-8')
-
-                contents = log_data.split('\n')
-                for elem in contents:
-                    sub_data = {"step": None, "loss": None}
-                    elem_data = json.loads(elem)
-                    if elem_data["loss"] is None: continue
-                    sub_data["step"] = elem_data["current_steps"]
-                    sub_data["loss"] = elem_data["loss"] 
-                    res_data.append(sub_data)
+            res_data = cls.parse_log_data(log_data)
 
         return resp_200(data={
             'finetune': finetune,
@@ -319,6 +309,26 @@ class FinetuneService(BaseModel):
             'loss_data': res_data,  # like [{"step": 10, "loss": 0.5}, {"step": 20, "loss": 0.3}]
             'report': finetune.report,
         })
+
+    @classmethod
+    def parse_log_data(cls, log_data: io.BytesIO) -> List[Dict[str, str]]:
+        if log_data is None:
+            return []
+        res_data = []
+        log_data = log_data.read().decode('utf-8')
+        contents = log_data.split('\n')
+        for elem in contents:
+            if elem.strip() == '':
+                continue
+            sub_data = {'step': None, 'loss': None}
+            elem = elem.strip()
+            elem_data = json.loads(elem)
+            if elem_data['loss'] is None:
+                continue
+            sub_data['step'] = elem_data['current_steps']
+            sub_data['loss'] = elem_data['loss']
+            res_data.append(sub_data)
+        return res_data
 
     @classmethod
     def sync_job_status(cls, finetune: Finetune, server_endpoint: str) -> bool:
@@ -349,7 +359,7 @@ class FinetuneService(BaseModel):
         sft_ret = SFTBackend.get_job_log(host=parse_server_host(server_endpoint), job_id=finetune.id.hex)
         if not sft_ret[0]:
             logger.error(f'get sft job log error: job_id: {finetune.id.hex}, err: {sft_ret[1]}')
-        log_data = json.dumps(sft_ret[1]['log_data']).encode('utf-8')
+        log_data = sft_ret[1]['log_data'].encode('utf-8')
         # 上传日志文件到minio上
         log_path = cls.upload_job_log(finetune, io.BytesIO(log_data), len(log_data))
         finetune.log_path = log_path
