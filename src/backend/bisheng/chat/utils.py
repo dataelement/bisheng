@@ -92,7 +92,10 @@ async def judge_source(result, source_document, chat_id, extra: Dict):
         question = result.page_content
         result = json.loads(metadata.get('extra', '{}')).get('answer')
         source = 4
-        extra.update({'qa': f'本答案来源于已有问答库: {question}'})
+        extra.update({
+            'qa': f'本答案来源于已有问答库: {question}',
+            'url': json.loads(metadata.get('extra', '{}')).get('url')
+        })
     elif source_document and chat_id:
         if any(not doc.metadata.get('right', True) for doc in source_document):
             source = 2

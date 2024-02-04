@@ -64,6 +64,8 @@ def getn_env():
         env['office_url'] = settings.settings.get_from_db('office_url')
     # add tips from settings
     env['dialog_tips'] = settings.settings.get_from_db('dialog_tips')
+    # add env dict from settings
+    env.update(settings.settings.get_from_db('env') or {})
     return resp_200(env)
 
 
@@ -114,6 +116,7 @@ async def process_flow(
         flow_id: str,
         inputs: Optional[dict] = None,
         tweaks: Optional[dict] = None,
+        history_count: Optional[int] = 5,
         clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
         session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
         task_service: 'TaskService' = Depends(get_task_service),
@@ -125,6 +128,7 @@ async def process_flow(
     if inputs and isinstance(inputs, dict) and 'id' in inputs:
         inputs.pop('id')
     logger.info(f'act=api_call sessionid={session_id} flow_id={flow_id}')
+
     try:
         with session_getter() as session:
             flow = session.get(Flow, flow_id)

@@ -340,9 +340,9 @@ def delete_knowledge(*, knowledge_id: int, Authorize: AuthJWT = Depends()):
             pk = vectore_client.col.query(expr=f'knowledge_id=="{knowledge.id}"',
                                           output_fields=['pk'])
             vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
-        # 判断milvus 是否还有entity
-        if vectore_client.col and vectore_client.col.num_entities == 0:
-            vectore_client.col.drop()
+            # 判断milvus 是否还有entity
+            if vectore_client.col.is_empty():
+                vectore_client.col.drop()
 
     # 处理 es
     # elastic
