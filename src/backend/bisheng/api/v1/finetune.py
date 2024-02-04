@@ -7,6 +7,7 @@ from bisheng.api.services.finetune_file import FinetuneFileService
 from bisheng.api.v1.schemas import FinetuneCreateReq, UnifiedResponseModel, resp_200
 from bisheng.database.models.finetune import Finetune, FinetuneChangeModelName, FinetuneList
 from bisheng.database.models.preset_train import PresetTrain
+from bisheng.utils.minio_client import MinioClient
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi_jwt_auth import AuthJWT
 
@@ -131,3 +132,15 @@ async def delete_preset_file(*,
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
     return FinetuneFileService.delete_preset_file(file_id, current_user)
+
+
+@router.get('/job/file/download', response_model=UnifiedResponseModel)
+async def get_download_url(*,
+                           file_url: str,
+                           Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    minio_client = MinioClient()
+    download_url = minio_client.get_share_link(file_url)
+    return resp_200(data={
+        'url': download_url
+    })
