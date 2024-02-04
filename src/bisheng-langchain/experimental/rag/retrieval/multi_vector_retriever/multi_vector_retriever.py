@@ -26,6 +26,9 @@ from langchain.schema import Document
 from langchain.storage import InMemoryByteStore
 from langchain.text_splitter import RecursiveCharacterTextSplitter, TextSplitter
 from langchain.vectorstores.milvus import Milvus
+from llama_index.core.response.schema import RESPONSE_TYPE, Response
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.node_parser import LangchainNodeParser, SimpleNodeParser
 from llama_index.schema import NodeWithScore
 
 openai_proxy = os.environ.get('OPENAI_PROXY')
@@ -99,11 +102,14 @@ class BishengMultiVectorRetriever:
             # built retriever
             self.retriever = getattr(self, f'{self.retriever_method}')(parent_doc)
             logger.info(f'{self.retriever_method} built')
-            
+
             # get answer
             idx2question = df[df['文件名'] == pdf_name]['question'].to_dict()
             for idx, question in idx2question.items():
                 rel_docs = self.retriever(question)
+                if isinstance(rel_docs, Response):
+                    df.loc[idx, f'{self.retriever_method}_answer'] = rel_docs.response
+                    continue
                 source_docs = {d.metadata.get('source') for d in rel_docs}
                 logger.info(f'rel_docs: {len(rel_docs)}')
                 logger.info(f'source_file: {source_docs}')
@@ -229,34 +235,6 @@ class BishengMultiVectorRetriever:
             child_docs_with_id=question_docs,
         )
 
-    def hybrid_fusion_retriever(self, parent_doc: List[Document]):
-        """混合检索+rrf"""
-        from hybrid_fusion_pack.base import HybridFusionRetrieverPack
-
-        from llama_index import Document
-        from llama_index.embeddings.openai import OpenAIEmbedding
-        from llama_index.llms import OpenAI
-        from llama_index.node_parser import LangchainNodeParser, SimpleNodeParser
-
-        openai_api_key = os.environ.get('OPENAI_API_KEY', '')
-        openai_proxy = os.environ.get('OPENAI_PROXY', '')
-        llm = ChatOpenAI(model='gpt-3.5-turbo-1106', temperature=0.0, http_client=httpx_client)
-        embed = OpenAIEmbedding(api_key=openai_api_key, http_client=httpx.Client(proxies=openai_proxy))
-
-        documents = [Document(text=i.page_content, metadata=i.metadata) for i in parent_doc]
-        node_parser = LangchainNodeParser(RecursiveCharacterTextSplitter(chunk_size=512))
-        nodes = node_parser.get_nodes_from_documents(documents)
-        hybrid_fusion_pack = HybridFusionRetrieverPack(
-            nodes,
-            vector_similarity_top_k=6,
-            bm25_similarity_top_k=6,
-            fusion_similarity_top_k=self.search_kwargs.get('k', 4),
-            llm=llm,
-            embedding=embed,
-        )
-
-        return hybrid_fusion_pack.retrieve
-
     def _validate_excel(self) -> pd.DataFrame:
         df: pd.DataFrame = pd.read_excel(self.question_file)
         df.dropna(subset=['question', '文件名', 'ground_truths'], inplace=True)
@@ -295,33 +273,129 @@ class BishengMultiVectorRetriever:
 
         return retriever.get_relevant_documents
 
+    def hybrid_fusion_retriever(self, parent_doc: List[Document]):
+        """混合检索+rrf"""
+        from hybrid_fusion_pack.base import HybridFusionRetrieverPack
+
+        openai_api_key = os.environ.get('OPENAI_API_KEY', '')
+        openai_proxy = os.environ.get('OPENAI_PROXY', '')
+        llm = ChatOpenAI(model='gpt-3.5-turbo-1106', temperature=0.0, http_client=httpx_client)
+        embed = OpenAIEmbedding(api_key=openai_api_key, http_client=httpx.Client(proxies=openai_proxy))
+
+        documents = [llama_index.Document(text=i.page_content, metadata=i.metadata) for i in parent_doc]
+        node_parser = LangchainNodeParser(RecursiveCharacterTextSplitter(chunk_size=512))
+        nodes = node_parser.get_nodes_from_documents(documents)
+        hybrid_fusion_pack = HybridFusionRetrieverPack(
+            nodes,
+            vector_similarity_top_k=6,
+            bm25_similarity_top_k=6,
+            fusion_similarity_top_k=self.search_kwargs.get('k', 4),
+            llm=llm,
+            embedding=embed,
+        )
+
+        return hybrid_fusion_pack.retrieve
+
+    def dense_x_retriever(self, parent_doc: List[Document]):
+        from dense_x_retrieval.base import DenseXRetrievalPack
+
+        from llama_index.llms import OpenAI
+        from llama_index.text_splitter import SentenceSplitter
+
+        httpx_client = httpx.AsyncClient(proxies=openai_proxy)
+
+        llm = OpenAI(model='gpt-3.5-turbo-1106', temperature=0.0, http_client=httpx_client)
+        embed = OpenAIEmbedding(http_client=httpx.Client(proxies=openai_proxy))
+
+        documents = [llama_index.Document(text=i.page_content, metadata=i.metadata) for i in parent_doc]
+        dense_pack = DenseXRetrievalPack(
+            documents,
+            proposition_llm=llm,
+            query_llm=llm,
+            embed_model=embed,
+            text_splitter=SentenceSplitter(chunk_size=1024),
+        )
+
+        return dense_pack.retriever.retrieve
+
+    def auto_merging_retriever(self, parent_doc: List[Document]):
+        from auto_merging_retriever_pack.base import AutoMergingRetrieverPack
+
+        documents = [llama_index.Document(text=i.page_content, metadata=i.metadata) for i in parent_doc]
+
+        auto_merging_pack = AutoMergingRetrieverPack(documents)
+        return auto_merging_pack.retriever.retrieve
+
+    def sentence_window_retriever(self, parent_doc: List[Document]):
+        from sentence_window_retriever.base import SentenceWindowRetrieverPack
+
+        from llama_index.llms import OpenAI
+
+        # httpx_client = httpx.AsyncClient(proxies=openai_proxy)
+        # llm = OpenAI(model='gpt-3.5-turbo-1106', temperature=0.0, http_client=httpx_client)
+        node_parser = LangchainNodeParser(RecursiveCharacterTextSplitter(chunk_size=512))
+        documents = [llama_index.Document(text=i.page_content, metadata=i.metadata) for i in parent_doc]
+        nodes = node_parser.get_nodes_from_documents(documents)
+
+        embed = OpenAIEmbedding(http_client=httpx.Client(proxies=openai_proxy))
+
+        sentence_window_pack = SentenceWindowRetrieverPack(
+            nodes,
+            query_llm=llm,
+            embed_model=embed,
+        )
+
+        return sentence_window_pack.run
+
 
 if __name__ == '__main__':
+    # method_list = [
+    # 'smaller_chunks_retriever',
+    # 'summary_retriever',
+    # 'hypothetical_queries_retriever',
+    # 'hybrid_fusion_retriever',
+    # 'dense_x_retriever',
+    # 'auto_merging_retriever',
+    # 'sentence_window_retriever'
+    # ]
+    # for m in method_list:
 
-    method_list = [
-        'smaller_chunks_retriever',
-        'summary_retriever',
-        'hypothetical_queries_retriever',
-        'hybrid_fusion_retriever',
-    ]
-    for m in method_list:
+    #     params = {
+    #         'retriever_method': m,  # smaller_chunks_retriever / summary_retriever / hypothetical_queries_retriever / hybrid_fusion_retriever
+    #         'doc_path': '/opt/bisheng/src/bisheng-langchain/experimental/rag/data/all_docs.json',
+    #         'question_file': '/opt/bisheng/src/bisheng-langchain/experimental/rag/retrieval/multi_vector_retriever/data/benchmark_gpt4_badcase_less_than_50k.xlsx',
+    #         'save_path': './output',
+    #         'llm': llm,
+    #         'embedding': embedding,
+    #         'search_kwargs': {"k": 6},  # 控制子文档的返回数量
+    #         'child_chunk_size': 216,
+    #         # 'child_chunk_overlap': 0,
+    #         'parent_chunk_size': 1024,
+    #         'child_splitter': RecursiveCharacterTextSplitter,
+    #         'parent_splitter': RecursiveCharacterTextSplitter,
+    #         # todo
+    #         # 'retriever_args': {'child_chunk_size': 256, 'parent_chunk_size': '512', search_kwargs: {"k": 3}, 'vector_similarity_top_k': 2, 'bm25_similarity_top_k': 2, 'fusion_similarity_top_k': 2, 'num_queries': 4, 'documents': None, 'cache_dir': None,},
+    #     }
 
-        params = {
-            'retriever_method': m,  # smaller_chunks_retriever / summary_retriever / hypothetical_queries_retriever / hybrid_fusion_retriever
-            'doc_path': '/opt/bisheng/src/bisheng-langchain/experimental/rag/data/all_docs.json',
-            'question_file': '/opt/bisheng/src/bisheng-langchain/experimental/rag/retrieval/multi_vector_retriever/data/benchmark_gpt4_badcase_less_than_50k.xlsx',
-            'save_path': './output',
-            'llm': llm,
-            'embedding': embedding,
-            'search_kwargs': {"k": 6},  # 控制子文档的返回数量
-            'child_chunk_size': 216,
-            # 'child_chunk_overlap': 0,
-            'parent_chunk_size': 1024,
-            'child_splitter': RecursiveCharacterTextSplitter,
-            'parent_splitter': RecursiveCharacterTextSplitter,
-            # todo
-            # 'retriever_args': {'child_chunk_size': 256, 'parent_chunk_size': '512', search_kwargs: {"k": 3}, 'vector_similarity_top_k': 2, 'bm25_similarity_top_k': 2, 'fusion_similarity_top_k': 2, 'num_queries': 4, 'documents': None, 'cache_dir': None,},
-        }
+    #     bmv_retriver = BishengMultiVectorRetriever(**params)
+    #     bmv_retriver.get_answer()
 
-        bmv_retriver = BishengMultiVectorRetriever(**params)
-        bmv_retriver.get_answer()
+    params = {
+        'retriever_method': 'sentence_window_retriever',  # smaller_chunks_retriever / summary_retriever / hypothetical_queries_retriever / hybrid_fusion_retriever
+        'doc_path': '/opt/bisheng/src/bisheng-langchain/experimental/rag/data/all_docs.json',
+        'question_file': '/opt/bisheng/src/bisheng-langchain/experimental/rag/retrieval/multi_vector_retriever/data/benchmark_gpt4_badcase_less_than_50k.xlsx',
+        'save_path': './output',
+        'llm': llm,
+        'embedding': embedding,
+        'search_kwargs': {"k": 6},  # 控制子文档的返回数量
+        'child_chunk_size': 216,
+        # 'child_chunk_overlap': 0,
+        'parent_chunk_size': 1024,
+        'child_splitter': RecursiveCharacterTextSplitter,
+        'parent_splitter': RecursiveCharacterTextSplitter,
+        # todo
+        # 'retriever_args': {'child_chunk_size': 256, 'parent_chunk_size': '512', search_kwargs: {"k": 3}, 'vector_similarity_top_k': 2, 'bm25_similarity_top_k': 2, 'fusion_similarity_top_k': 2, 'num_queries': 4, 'documents': None, 'cache_dir': None,},
+    }
+
+    bmv_retriver = BishengMultiVectorRetriever(**params)
+    bmv_retriver.get_answer()
