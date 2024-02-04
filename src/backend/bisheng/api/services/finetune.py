@@ -13,7 +13,7 @@ from bisheng.api.errcode.server import NotFoundServerError
 from bisheng.api.services.rt_backend import RTBackend
 from bisheng.api.services.sft_backend import SFTBackend
 from bisheng.api.utils import parse_server_host
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.api.v1.schemas import FinetuneInfoResponse, UnifiedResponseModel, resp_200
 from bisheng.database.models.finetune import (Finetune, FinetuneChangeModelName, FinetuneDao,
                                               FinetuneList, FinetuneStatus)
 from bisheng.database.models.model_deploy import ModelDeploy, ModelDeployDao
@@ -282,7 +282,7 @@ class FinetuneService(BaseModel):
             cls.sync_job_status(finetune, server.endpoint)
 
     @classmethod
-    def get_job_info(cls, job_id: UUID) -> UnifiedResponseModel[Finetune]:
+    def get_job_info(cls, job_id: UUID) -> UnifiedResponseModel:
         """ 获取训练中任务的实时信息 """
         # 查看job任务信息
         finetune = FinetuneDao.find_job(job_id)
@@ -292,6 +292,11 @@ class FinetuneService(BaseModel):
         server = ServerDao.find_server(finetune.server)
         if not server:
             return NotFoundServerError.return_resp()
+        base_model_name = ''
+        if finetune.base_model != 0:
+            base_model = ModelDeployDao.find_model(finetune.base_model)
+            if base_model:
+                base_model_name = base_model.model
 
         # 同步任务执行情况
         cls.sync_job_status(finetune, server.endpoint)
@@ -304,7 +309,7 @@ class FinetuneService(BaseModel):
             res_data = cls.parse_log_data(log_data)
 
         return resp_200(data={
-            'finetune': finetune,
+            'finetune': FinetuneInfoResponse(**finetune.dict(), base_model_name=base_model_name),
             'log': log_data,
             'loss_data': res_data,  # like [{"step": 10, "loss": 0.5}, {"step": 20, "loss": 0.3}]
             'report': finetune.report,
