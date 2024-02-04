@@ -7,8 +7,8 @@ from typing import List
 import requests
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import get_session
-from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployQuery, ModelDeployRead,
-                                                  ModelDeployUpdate)
+from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployDao, ModelDeployQuery,
+                                                  ModelDeployRead, ModelDeployUpdate)
 from bisheng.database.models.server import Server, ServerCreate, ServerRead
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, HTTPException
@@ -85,6 +85,19 @@ async def list(*, session=Depends(get_session), query: ModelDeployQuery = None):
         return resp_200(data=db_model)
     except Exception as exc:
         logger.error(f'Error add server: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get('/model/{deploy_id}', response_model=UnifiedResponseModel[ModelDeployRead], status_code=201)
+async def get_model_deploy(*, deploy_id: int):
+    try:
+
+        model_deploy = ModelDeployDao.find_model(deploy_id)
+        if not ModelDeployDao:
+            raise HTTPException(status_code=404, detail='配置不存在')
+        return resp_200(data=model_deploy)
+    except Exception as exc:
+        logger.error(f'Error get model deploy: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

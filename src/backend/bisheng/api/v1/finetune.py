@@ -63,14 +63,14 @@ async def publish_job(*,
 @router.get('/job', response_model=UnifiedResponseModel[List[Finetune]])
 async def get_job(*,
                   server: int = Query(default=None, description='关联的RT服务ID'),
-                  status: List[int] = Query(default=None,
-                                            description='训练任务的状态，1: 训练中 2: 训练失败 3: 任务中止 4: 训练成功 5: 发布完成'),
+                  status: str = Query(default=None, title='多个以英文逗号,分隔',
+                                      description='训练任务的状态，1: 训练中 2: 训练失败 3: 任务中止 4: 训练成功 5: 发布完成'),
                   page: Optional[int] = Query(default=1, description='页码'),
                   limit: Optional[int] = Query(default=10, description='每页条数'),
                   Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
-    req_data = FinetuneList(server=server, status=status, page=page, limit=limit)
+    req_data = FinetuneList(server=server, status=status.strip().split(','), page=page, limit=limit)
     return FinetuneService.get_all_job(req_data)
 
 
