@@ -314,7 +314,8 @@ class FinetuneService(BaseModel):
 
         return resp_200(data={
             'finetune': finetune,
-            'log': res_data,  # like [{"step": 10, "loss": 0.5}, {"step": 20, "loss": 0.3}]
+            'log': log_data,
+            'loss_data': res_data,  # like [{"step": 10, "loss": 0.5}, {"step": 20, "loss": 0.3}]
             'report': finetune.report,
         })
 
