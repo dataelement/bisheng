@@ -82,7 +82,7 @@ class Finetune(FinetuneBase, table=True):
 
 class FinetuneList(BaseModel):
     server: Optional[int] = Field(description='关联的RT服务ID')
-    status: Optional[int] = Field(description='训练任务的状态')
+    status: Optional[List[int]] = Field(description='训练任务的状态')
     page: Optional[int] = Field(default=1, description='页码')
     limit: Optional[int] = Field(default=10, description='每页条数')
 
@@ -140,7 +140,6 @@ class FinetuneDao(FinetuneBase):
             if finetune_list.server:
                 statement = statement.where(Finetune.server == finetune_list.server)
             if finetune_list.status:
-                statement = statement.where(Finetune.status == finetune_list.status)
+                statement = statement.where(Finetune.status.in_(finetune_list.status))
             statement = statement.offset(offset).limit(finetune_list.limit)
-            print(statement)
             return session.exec(statement).all()

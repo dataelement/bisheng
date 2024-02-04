@@ -62,8 +62,8 @@ async def publish_job(*,
 @router.get('/job', response_model=UnifiedResponseModel[List[Finetune]])
 async def get_job(*,
                   server: int = Query(default=None, description='关联的RT服务ID'),
-                  status: int = Query(default=None,
-                                      description='训练任务的状态，1: 训练中 2: 训练失败 3: 任务中止 4: 训练成功 5: 发布完成'),
+                  status: List[int] = Query(default=None,
+                                            description='训练任务的状态，1: 训练中 2: 训练失败 3: 任务中止 4: 训练成功 5: 发布完成'),
                   page: Optional[int] = Query(default=1, description='页码'),
                   limit: Optional[int] = Query(default=10, description='每页条数'),
                   Authorize: AuthJWT = Depends()):
