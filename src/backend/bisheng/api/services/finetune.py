@@ -308,8 +308,9 @@ class FinetuneService(BaseModel):
                 for elem in contents:
                     sub_data = {"step": None, "loss": None}
                     elem_data = json.loads(elem)
+                    if elem_data["loss"] is None: continue
                     sub_data["step"] = elem_data["current_steps"]
-                    sub_data["loss"] = elem_data["loss"] if elem_data["loss"] is not None else 0
+                    sub_data["loss"] = elem_data["loss"] 
                     res_data.append(sub_data)
 
         return resp_200(data={
