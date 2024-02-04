@@ -24,7 +24,7 @@ from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.embeddings import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
 from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
@@ -203,7 +203,7 @@ def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends
 
 @router.get('/', status_code=200)
 def get_knowledge(*,
-                  name: str = Query(default=None, description='根据name查找数据库'),
+                  name: Optional[str],
                   page_size: Optional[int],
                   page_num: Optional[str],
                   Authorize: AuthJWT = Depends()):
@@ -263,7 +263,7 @@ def get_knowledge(*,
 
 @router.get('/file_list/{knowledge_id}', status_code=200)
 def get_filelist(*,
-                 file_name: str = Query(default=None, description='根据file_name查找数据库'),
+                 file_name: Optional[str],
                  knowledge_id: int,
                  page_size: int = 10,
                  page_num: int = 1,
@@ -295,11 +295,9 @@ def get_filelist(*,
             file_name = file_name.strip()
             total_count = session.scalar(
                 select(func.count(KnowledgeFile.id)).where(
-                    (KnowledgeFile.knowledge_id == knowledge_id, KnowledgeFile.file_name.like(
-                        f'%{file_name}%'))))
-            files = session.exec(select(KnowledgeFile).where(
-                (KnowledgeFile.knowledge_id == knowledge_id, KnowledgeFile.file_name.like(
-                    f'%{file_name}%')))).all()
+                    KnowledgeFile.knowledge_id == knowledge_id, KnowledgeFile.file_name.like(
+                        f'%{file_name}%')))
+            files = session.exec(select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id, KnowledgeFile.file_name.like(f'%{file_name}%'))).all()
         else:
             total_count = session.scalar(
                 select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
