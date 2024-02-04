@@ -203,7 +203,7 @@ def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends
 
 @router.get('/', status_code=200)
 def get_knowledge(*,
-                  name: Optional[str],
+                  name: str = None,
                   page_size: Optional[int],
                   page_num: Optional[str],
                   Authorize: AuthJWT = Depends()):
@@ -263,7 +263,7 @@ def get_knowledge(*,
 
 @router.get('/file_list/{knowledge_id}', status_code=200)
 def get_filelist(*,
-                 file_name: Optional[str],
+                 file_name: str = None,
                  knowledge_id: int,
                  page_size: int = 10,
                  page_num: int = 1,
