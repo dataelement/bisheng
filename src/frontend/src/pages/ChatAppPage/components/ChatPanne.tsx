@@ -196,7 +196,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
                             inputRef.current.value = msg
                             handleSend()
                         }}
-                        onEdit={(msg) => { inputRef.current.value = msg }}
+                        onEdit={(msg) => { inputRef.current.value = msg; setInputEmpty(!msg) }}
                         onSearch={(msg) => window.open(appConfig.dialogQuickSearch + encodeURIComponent(msg))}
                     ></ChatMessage>)
                 }
@@ -484,14 +484,19 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
                     const data = JSON.parse(event.data);
                     if (data.chat_id !== chatIdRef.current) return
                     console.log('newChatStart.current :>> ', newChatStart.current);
+
+                    const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
+
                     if (newChatStart.current) {
                         if (data.type === 'close') {
                             newChatStart.current = false
-                            return setInputState({ lock: false, errorMsg: '' })
+                            return setInputState({ lock: false, errorMsg })
                         } else {
-                            return setInputState({ lock: true, errorMsg: '' })
+                            return setInputState({ lock: true, errorMsg })
                         }
                     }
+                    // 异常类型处理，提示
+                    if (errorMsg) return setInputState({ lock: true, errorMsg })
 
                     handleWsMessage({ data, setIsStop, setInputState, changeHistoryByScroll });
                     // get chat history
@@ -533,11 +538,6 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
 
     var isStream = false;
     function handleWsMessage({ data, setIsStop, setInputState, changeHistoryByScroll }) {
-        // 异常类型处理，提示
-        if (data.category === 'error') {
-            return setInputState({ lock: true, errorMsg: data.intermediate_steps });
-        }
-
         if (Array.isArray(data) && data.length) return
         if (data.type === "begin") {
             setBegin(true)
