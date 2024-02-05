@@ -295,16 +295,19 @@ def get_filelist(*,
             file_name = file_name.strip()
             total_count = session.scalar(
                 select(func.count(KnowledgeFile.id)).where(
-                    KnowledgeFile.knowledge_id == knowledge_id, KnowledgeFile.file_name.like(
-                        f'%{file_name}%')))
-            files = session.exec(select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id, KnowledgeFile.file_name.like(f'%{file_name}%'))).all()
+                    KnowledgeFile.knowledge_id == knowledge_id,
+                    KnowledgeFile.file_name.like(f'%{file_name}%')))
+            files = session.exec(
+                select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id,
+                                            KnowledgeFile.file_name.like(f'%{file_name}%'))).all()
         else:
             total_count = session.scalar(
-                select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
+                select(func.count(
+                    KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
             files = session.exec(
                 select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id).order_by(
-                    KnowledgeFile.update_time.desc()).offset(page_size *
-                                                            (page_num - 1)).limit(page_size)).all()
+                    KnowledgeFile.update_time.desc()).offset(
+                        page_size * (page_num - 1)).limit(page_size)).all()
     return resp_200({
         'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
         'total': total_count,
@@ -341,7 +344,7 @@ def delete_knowledge(*, knowledge_id: int, Authorize: AuthJWT = Depends()):
                                           output_fields=['pk'])
             vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
             # 判断milvus 是否还有entity
-            if vectore_client.col.is_empty():
+            if vectore_client.col.is_empty:
                 vectore_client.col.drop()
 
     # 处理 es

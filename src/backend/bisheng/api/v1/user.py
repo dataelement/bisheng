@@ -125,7 +125,7 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
         Authorize.set_access_cookies(access_token)
         Authorize.set_refresh_cookies(refresh_token)
 
-        return resp_200(UserRead(role=str(role), **db_user.__dict__))
+        return resp_200(UserRead(role=str(role), access_token=access_token, **db_user.__dict__))
     else:
         raise HTTPException(status_code=500, detail='密码不正确')
 
@@ -251,22 +251,19 @@ async def update_role(*, role_id: int, role: RoleUpdate, Authorize: AuthJWT = De
 
 
 @router.get('/role/list', status_code=200)
-async def get_role(*, 
-                   role_name: str = None,
-                   Authorize: AuthJWT = Depends()):
+async def get_role(*, role_name: str = None, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无查看权限')
-    
+
     if role_name:
         role_name = role_name.strip()
-        sql = select(Role.role_name, Role.remark, Role.create_time,
-                    Role.update_time, Role.id)
+        sql = select(Role.role_name, Role.remark, Role.create_time, Role.update_time, Role.id)
         count_sql = select(func.count(Role.id))
         if role_name:
             sql = sql.where(Role.role_name.like(f'%{role_name}%'))
             count_sql = count_sql.where(Role.role_name.like(f'%{role_name}%'))
-        
+
         sql = sql.order_by(Role.update_time.desc())
         with session_getter() as session:
             roles = session.exec(sql)
