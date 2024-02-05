@@ -39,9 +39,9 @@ class FinetuneBase(SQLModelSerializable):
     train_data: Optional[List[Dict]] = Field(sa_column=Column(JSON), description='个人训练数据集信息')
     preset_data: Optional[List[Dict]] = Field(sa_column=Column(JSON), description='预置训练数据集信息')
     status: int = Field(default=FinetuneStatus.TRAINING.value, index=True, description='训练任务的状态')
-    reason: str = Field(default='', sa_column=Column(TEXT), description='任务失败原因')
-    log_path: str = Field(default='', max_length=512, description='训练日志在minio上的路径')
-    report: Dict = Field(sa_column=Column(JSON), description='训练任务的评估报告数据')
+    reason: Optional[str] = Field(default='', sa_column=Column(TEXT), description='任务失败原因')
+    log_path: Optional[str] = Field(default='', max_length=512, description='训练日志在minio上的路径')
+    report: Optional[Dict] = Field(sa_column=Column(JSON), description='训练任务的评估报告数据')
     user_id: int = Field(default=None, index=True, description='创建人ID')
     user_name: str = Field(default=None, description='创建人姓名')
     create_time: Optional[datetime] = Field(sa_column=Column(
