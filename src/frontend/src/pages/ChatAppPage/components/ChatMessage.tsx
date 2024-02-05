@@ -229,7 +229,7 @@ export const ChatMessage = ({ chat, userName, disabledReSend, showSearch, onSour
             {chat.category === 'loading' && <span className="loading loading-spinner loading-xs mr-4 align-middle"></span>}
             {chat.message[chat.chatKey]}
             <div className='flex gap-2 absolute w-full left-0 bottom-[8px] justify-end pr-5'>
-                <PenLine size={18} className="cursor-pointer hover:text-blue-600 text-blue-400" onClick={() => !disabledReSend && onEdit(chat.message[chat.chatKey])}></PenLine>
+                {!disabledReSend && <PenLine size={18} className="cursor-pointer hover:text-blue-600 text-blue-400" onClick={() => !disabledReSend && onEdit(chat.message[chat.chatKey])}></PenLine>}
                 {!disabledReSend && <RefreshCw size={18} className="cursor-pointer hover:text-blue-600 text-blue-400" onClick={() => onReSend(chat.message[chat.chatKey])}></RefreshCw>}
                 {showSearch && <Search size={18} className="cursor-pointer hover:text-blue-600 text-blue-400" onClick={() => onSearch(chat.message[chat.chatKey])}></Search>}
             </div>

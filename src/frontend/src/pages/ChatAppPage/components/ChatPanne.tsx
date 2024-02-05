@@ -44,7 +44,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
 
     const { appConfig } = useContext(locationContext)
 
-    // 开始构建&初始化会话
+    // 开始构建&切换初始化会话
     const initChat = async () => {
         await checkPrompt(flow)
         await build()
@@ -332,10 +332,6 @@ const useFlowState = (flow: FlowType) => {
 const useMessages = (chatId, flow) => {
     const [chatHistory, setChatHistory] = useState<ChatMessageType[]>([]);
     const lastIdRef = useRef(0)
-    useEffect(() => {
-        setChatHistory([])
-        lastIdRef.current = 0
-    }, [flow])
     // 控制开启自动随消息滚动（临时方案）
     const changeHistoryByScroll = useRef(false)
 
@@ -361,8 +357,15 @@ const useMessages = (chatId, flow) => {
                 noAccess: true
             }
         })
-        lastIdRef.current = hisData[hisData.length - 1]?.id || lastIdRef.current // 记录最后一个id
-        setChatHistory((history) => [...hisData.reverse(), ...history])
+        lastIdRef.current = hisData[hisData.length - 1]?.id || lastIdRef.current || 0 // 记录最后一个id
+        // 取消上一次
+        if (lastId) {
+            setChatHistory((history) => [...hisData.reverse(), ...history])
+        } else if (flow.id === hisData[0]?.flow_id) { // 保证同一技能
+            setChatHistory(hisData.reverse())
+        } else {
+            setChatHistory([])
+        }
     }
 
     const loadLock = useRef(false)

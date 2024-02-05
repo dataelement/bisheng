@@ -81,14 +81,14 @@ export default function l2Edit() {
         if (isParamError(name, description, true)) return
         setLoading(true)
 
-        captureAndAlertRequestErrorHoc(createCustomFlowApi({
+        await captureAndAlertRequestErrorHoc(createCustomFlowApi({
             name,
             description
         }, user.user_name).then(newFlow => {
             setFlow('l2 create flow', newFlow)
             navigate("/flow/" + newFlow.id, { replace: true }); // l3
-            setLoading(false)
         }))
+        setLoading(false)
     }
 
 
