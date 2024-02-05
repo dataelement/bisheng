@@ -2,6 +2,7 @@ import os
 import httpx
 import gradio as gr
 import re
+import json
 from typing import Optional, Tuple
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import LLMChain
@@ -66,8 +67,15 @@ def response_parse(json_string: str) -> str:
         json_str = json_str.replace('{\n{', '{', 1)
 
     print(f'llm response after parse: {json_str}')
-    # todo：清掉历史memory
-    
+    # 清掉历史memory
+    if json_str:
+        try:    
+            res = json.loads(json_str)
+        except:
+            res = {}
+        if res:
+            print('finnal information:', res)
+            conversation.memory.clear()
     return json_str
 
 
