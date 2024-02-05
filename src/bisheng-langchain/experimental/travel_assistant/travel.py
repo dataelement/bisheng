@@ -5,6 +5,7 @@ import re
 import json
 from typing import Optional, Tuple
 from langchain.chat_models import ChatOpenAI
+from bisheng_langchain.chat_models import HostQwenChat
 from langchain.chains import LLMChain
 from langchain.memory import ConversationBufferMemory
 from prompt import system_template
@@ -19,7 +20,7 @@ openai_api_key = os.environ.get('OPENAI_API_KEY', '')
 openai_proxy = os.environ.get('OPENAI_PROXY', '')
 
 
-def initial_chain(assistant_message):
+def initial_chain(assistant_message, host_url):
     travel_prompt = ChatPromptTemplate(
         messages=[
             SystemMessagePromptTemplate.from_template(assistant_message),
@@ -32,6 +33,11 @@ def initial_chain(assistant_message):
                     temperature=0.0,
                     openai_api_key=openai_api_key,
                     http_client=httpx.Client(proxies=openai_proxy))
+    # llm = HostQwenChat(
+    #     model_name='Qwen-14B-Chat',
+    #     host_base_url=host_url,
+    #     request_timeout=1000,
+    # )
     # Notice that we `return_messages=True` to fit into the MessagesPlaceholder
     # Notice that `"chat_history"` aligns with the MessagesPlaceholder name.
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
@@ -40,8 +46,8 @@ def initial_chain(assistant_message):
     return [('正在初始化助手', '初始化助手成功请开始对话')]
 
 
-def clear_session(assistant_message):
-    initial_chain(assistant_message)
+def clear_session(assistant_message, host_url):
+    initial_chain(assistant_message, host_url)
     return [], []
 
 
@@ -92,6 +98,7 @@ if __name__ == "__main__":
         gr.Markdown(title)
 
         assistant_message = gr.Textbox(label='自定义你的专属差旅助手', value=system_template, interactive=True, lines=2)
+        model_url = gr.Textbox(label='模型服务地址', value='http://34.142.140.180:7001/v2.1/models', interactive=True, lines=2)
 
         with gr.Row():
             with gr.Column(scale=2):
@@ -105,8 +112,8 @@ if __name__ == "__main__":
 
         state = gr.State([])
 
-        initialBtn.click(fn=initial_chain, inputs=[assistant_message], outputs=[chatbot])
+        initialBtn.click(fn=initial_chain, inputs=[assistant_message, model_url], outputs=[chatbot])
         submitBtn.click(fn=predict, inputs=[user_input, state], outputs=[chatbot, state, user_input, slot_show])
-        emptyBtn.click(fn=clear_session, inputs=[assistant_message], outputs=[chatbot, state])
+        emptyBtn.click(fn=clear_session, inputs=[assistant_message, model_url], outputs=[chatbot, state])
 
     demo.queue().launch(share=False, inbrowser=True, server_name="0.0.0.0", server_port=8000)
