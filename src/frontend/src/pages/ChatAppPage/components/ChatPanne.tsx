@@ -421,6 +421,8 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
     const { setErrorData } = useContext(alertContext);
     const { t } = useTranslation()
 
+    const { appConfig } = useContext(locationContext)
+
     const chatIdRef = useRef(chatId);
     useEffect(() => {
         chatIdRef.current = chatId;
@@ -434,11 +436,13 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
     }
 
     function getWebSocketUrl(flowId, isDevelopment = false) {
+        const token = localStorage.getItem("ws_token");
+
         const isSecureProtocol = window.location.protocol === "https:";
         const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
-        const host = window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
-        const chatEndpoint = version === 'v1' ? `/api/v1/chat/${flowId}?type=L1&chat_id=${chatId}`
-            : `/api/v2/chat/ws/${flowId}?type=L1&chat_id=${chatId}${queryString}`
+        const host = appConfig.websocketHost || window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
+        const chatEndpoint = version === 'v1' ? `/api/v1/chat/${flowId}?type=L1&chat_id=${chatId}&t=${token}`
+            : `/api/v2/chat/ws/${flowId}?type=L1&chat_id=${chatId}${queryString}&t=${token}`
 
         return `${webSocketProtocol}://${host}${chatEndpoint}`;
     }
