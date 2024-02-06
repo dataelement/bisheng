@@ -20,7 +20,7 @@ class TemplateSkillBase(SQLModelSerializable):
                          nullable=False,
                          server_default=text('CURRENT_TIMESTAMP'),
                          onupdate=text('CURRENT_TIMESTAMP')))
-    guide_word: Optional[str] = Field(index=False)
+    guide_word: Optional[str] = Field(index=False, max_length=1000)
 
 
 class Template(TemplateSkillBase, table=True):
