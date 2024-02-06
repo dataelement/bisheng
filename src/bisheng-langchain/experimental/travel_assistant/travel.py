@@ -6,6 +6,7 @@ import json
 from typing import Optional, Tuple
 from langchain.chat_models import ChatOpenAI
 from bisheng_langchain.chat_models import HostQwenChat
+from bisheng_langchain.chat_models import ChatZhipuAI
 from langchain.chains import LLMChain
 from langchain.memory import ConversationBufferMemory
 from prompt import system_template
@@ -38,6 +39,11 @@ def initial_chain(assistant_message, host_url):
     #     host_base_url=host_url,
     #     request_timeout=1000,
     # )
+    # llm = ChatZhipuAI(
+    #     model_name='glm-4',
+    #     zhipuai_api_key='a57f9268b15a331b857ec5a73765f948.57xj0ahR3cBv5DLe',
+    #     request_timeout=1000,
+    # )
     # Notice that we `return_messages=True` to fit into the MessagesPlaceholder
     # Notice that `"chat_history"` aligns with the MessagesPlaceholder name.
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
@@ -52,6 +58,7 @@ def clear_session(assistant_message, host_url):
 
 
 def response_parse(json_string: str) -> str:
+    print(f'llm response before parse: {json_string}')
     match = re.search(r"```(json)?(.*)```", json_string, re.DOTALL)
     if match is None:
         json_str = ''
