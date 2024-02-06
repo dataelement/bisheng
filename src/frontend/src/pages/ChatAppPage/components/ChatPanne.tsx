@@ -335,8 +335,11 @@ const useMessages = (chatId, flow) => {
     // 控制开启自动随消息滚动（临时方案）
     const changeHistoryByScroll = useRef(false)
 
+    const loadIdRef = useRef('') // 记录最后一个加载的 chatId
     // 获取聊天记录
     const loadHistory = async (lastId?: number) => {
+        loadIdRef.current = chatId
+
         const res = await getChatHistory(flow.id, chatId, lastId ? 10 : 30, lastId)
         const hisData = res.map(item => {
             // let count = 0
@@ -361,7 +364,7 @@ const useMessages = (chatId, flow) => {
         // 取消上一次
         if (lastId) {
             setChatHistory((history) => [...hisData.reverse(), ...history])
-        } else if (flow.id === hisData[0]?.flow_id) { // 保证同一技能
+        } else if (loadIdRef.current === chatId) { // 保证同一会话
             setChatHistory(hisData.reverse())
         } else {
             setChatHistory([])
@@ -402,7 +405,7 @@ const useMessages = (chatId, flow) => {
 
         messagesRef.current?.addEventListener('scroll', handleScroll);
         return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
-    }, [messagesRef.current]);
+    }, [messagesRef.current, chatId]);
 
     return {
         messages: chatHistory, messagesRef, loadHistory, setChatHistory, changeHistoryByScroll
