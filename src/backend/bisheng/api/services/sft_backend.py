@@ -42,7 +42,7 @@ class SFTBackend:
     def delete_job(cls, host: str, job_id: str, model_name: str) -> (bool, str | Dict):
         """ 删除训练任务 """
         url = f'{host}/v2.1/sft/job/delete'
-        res = requests.delete(url, json={'job_id': job_id, 'model_name': model_name})
+        res = requests.post(url, json={'job_id': job_id, 'model_name': model_name})
         return cls.handle_response(res)
 
     @classmethod
@@ -70,7 +70,7 @@ class SFTBackend:
          }
         """
         url = f'{host}/v2.1/sft/job/status'
-        res = requests.get(url, params={'job_id': job_id})
+        res = requests.post(url, json={'job_id': job_id})
         return cls.handle_response(res)
 
     @classmethod
@@ -84,7 +84,7 @@ class SFTBackend:
         }
         """
         url = f'{host}/v2.1/sft/job/log'
-        res = requests.get(url, params={'job_id': job_id})
+        res = requests.post(url, params={'job_id': job_id})
         return cls.handle_response(res)
 
     @classmethod
@@ -97,7 +97,7 @@ class SFTBackend:
         }
         """
         url = f'{host}/v2.1/sft/job/metrics'
-        res = requests.get(url, params={'job_id': job_id})
+        res = requests.post(url, params={'job_id': job_id})
         return cls.handle_response(res)
 
     @classmethod
