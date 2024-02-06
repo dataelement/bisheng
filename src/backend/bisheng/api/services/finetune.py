@@ -14,18 +14,20 @@ from bisheng.api.services.rt_backend import RTBackend
 from bisheng.api.services.sft_backend import SFTBackend
 from bisheng.api.utils import parse_server_host
 from bisheng.api.v1.schemas import FinetuneInfoResponse, UnifiedResponseModel, resp_200
+from bisheng.cache import InMemoryCache
 from bisheng.database.models.finetune import (Finetune, FinetuneChangeModelName, FinetuneDao,
                                               FinetuneList, FinetuneStatus)
 from bisheng.database.models.model_deploy import ModelDeploy, ModelDeployDao
 from bisheng.database.models.server import ServerDao
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
-from pydantic import BaseModel
 
 sync_job_thread_pool = ThreadPoolExecutor(3)
 
 
-class FinetuneService(BaseModel):
+class FinetuneService:
+
+    ServerCache: InMemoryCache = InMemoryCache()
 
     @classmethod
     def validate_params(cls, finetune: Finetune) -> UnifiedResponseModel | None:
@@ -293,11 +295,30 @@ class FinetuneService(BaseModel):
         return resp_200(data=finetune)
 
     @classmethod
-    def get_all_job(cls, req_data: FinetuneList) -> UnifiedResponseModel[List[Finetune]]:
+    def get_server_by_cache(cls, server_id: int):
+        # 先从内存获取
+        cache_server = cls.ServerCache.get(server_id)
+        if cache_server:
+            return cls.ServerCache.get(server_id)
+        # 再从数据库获取
+        server = ServerDao.find_server(server_id)
+        if server:
+            cls.ServerCache.set(server_id, server)
+            return server
+
+    @classmethod
+    def get_all_job(cls, req_data: FinetuneList) -> UnifiedResponseModel[List[FinetuneInfoResponse]]:
         job_list = FinetuneDao.find_jobs(req_data)
+        ret = []
+        for job in job_list:
+            tmp = FinetuneInfoResponse(**job.dict())
+            job_server = cls.get_server_by_cache(job.server)
+            if job_server:
+                tmp.server_name = job_server.server
+            ret.append(tmp)
         # 异步线程更新任务状态
         asyncio.get_event_loop().run_in_executor(sync_job_thread_pool, cls.sync_all_job_status, job_list)
-        return resp_200(data=job_list)
+        return resp_200(data=ret)
 
     @classmethod
     def sync_all_job_status(cls, job_list: List[Finetune]) -> None:

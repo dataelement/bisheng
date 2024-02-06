@@ -141,5 +141,5 @@ class FinetuneDao(FinetuneBase):
                 statement = statement.where(Finetune.server == finetune_list.server)
             if finetune_list.status:
                 statement = statement.where(Finetune.status.in_(finetune_list.status))
-            statement = statement.offset(offset).limit(finetune_list.limit)
+            statement = statement.offset(offset).limit(finetune_list.limit).order_by(Finetune.create_time.desc())
             return session.exec(statement).all()

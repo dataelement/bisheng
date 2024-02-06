@@ -200,4 +200,5 @@ class FinetuneCreateReq(BaseModel):
 
 class FinetuneInfoResponse(FinetuneBase):
     id: UUID = Field(description='唯一ID')
-    base_model_name: str = Field(description='基础模型名')
+    base_model_name: Optional[str] = Field(description='基础模型名')
+    server_name: Optional[str] = Field(default='未知', description='RT服务名')
