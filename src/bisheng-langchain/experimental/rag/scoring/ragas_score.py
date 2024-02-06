@@ -77,6 +77,7 @@ class RagScore:
             self.query_type_column,
         ]
         df.dropna(subset=[col for col in columns_to_check if col], inplace=True)
+        df = df.reset_index()
         print(f'删除含有na的行 {ori_row_nums - df.shape[0]} 个!')
         print(f'总计 {df.shape[0]} 个问题')
 

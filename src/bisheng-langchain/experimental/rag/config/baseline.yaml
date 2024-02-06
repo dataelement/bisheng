@@ -45,8 +45,10 @@ retrieval_rerank:
   delete_duplicate: False
   with_rank: False
   rerank:
-    type: 'BGEReranker'
-    model: 'bge-reranker-large'
+    type: 'CustomReranker'
+    model_path: '/home/public/llm/bge-reranker-large'
+    device_id: 'cuda:0'
+    threshold: 0.0
 
 generate:
   chain_type: 'stuff'
@@ -59,5 +61,3 @@ metric:
   query_type_column: '问题类型'
   metrics: ['answer_correctness_bisheng']
   batch_size: 5
-
-  

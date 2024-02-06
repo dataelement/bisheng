@@ -11,8 +11,7 @@ from langchain.vectorstores import Milvus
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from bisheng_langchain.retrievers import MixEsVectorRetriever
 from langchain.chains.question_answering import load_qa_chain
-from rerank import sort_and_filter_all_chunks
-from utils import import_by_type
+from utils import import_by_type, import_class
 from scoring.ragas_score import RagScore
 
 openai_api_key = os.environ.get('OPENAI_API_KEY', '')
@@ -165,9 +164,14 @@ class BishengRagPipeline():
             docs = docs_no_dup
             logger.info(f'delete duplicate docs: {len(docs)}')
 
-        # # todo: rerank
-        # if self.params['retrieval_rerank']['with_rank'] and len(docs):
-        #     docs = sort_and_filter_all_chunks(question, docs, th=0.0)
+        # rerank
+        if self.params['retrieval_rerank']['with_rank'] and len(docs):
+            if not hasattr(self, 'ranker'):
+                rerank_params = self.params['retrieval_rerank']['rerank']
+                rerank_type = rerank_params.pop('type')
+                rerank_object = import_class(f'rerank.rerank.{rerank_type}')
+                self.ranker = rerank_object(**rerank_params)
+            docs = getattr(self, 'ranker').sort_and_filter(question, docs)
         
         return docs
         

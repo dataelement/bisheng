@@ -1,6 +1,5 @@
-from .rerank import match_score, sort_and_filter_all_chunks
+from .rerank import CustomReranker
 
 __all__ = [
-    'match_score',
-    'sort_and_filter_all_chunks',
+    'CustomReranker',
 ]
