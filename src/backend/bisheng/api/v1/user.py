@@ -310,16 +310,17 @@ async def user_addrole(*, userRole: UserRoleCreate, Authorize: AuthJWT = Depends
         db_role = session.exec(select(UserRole).where(
             UserRole.user_id == userRole.user_id, )).all()
     role_ids = {role.role_id for role in db_role}
-    with session_getter() as session:
-        for role_id in userRole.role_id:
-            if role_id not in role_ids:
-                db_role = UserRole(user_id=userRole.user_id, role_id=role_id)
-                with session_getter() as session:
-                    session.add(db_role)
-
-            else:
-                role_ids.remove(role_id)
-        session.commit()
+    db_roles = []
+    for role_id in userRole.role_id:
+        if role_id not in role_ids:
+            db_role = UserRole(user_id=userRole.user_id, role_id=role_id)
+            db_roles.append(db_role)
+        else:
+            role_ids.remove(role_id)
+    if db_roles:
+        with session_getter() as session:
+            session.add_all(db_roles)
+            session.commit()
     if role_ids:
         with session_getter() as session:
             session.exec(
