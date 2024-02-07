@@ -540,8 +540,8 @@ class HostYuanChat(BaseHostChatLLM):
     # use custom llm chat api, api should compatiable with openai definition
     model_name: str = Field('Yuan2-2B-Janus-hf', alias='model')
 
-    temperature: float = 0.1
-    top_p: float = 0.1
+    temperature: float = 1
+    top_p: float = 0.9
     max_tokens: int = 4096
     host_base_url: str
 
@@ -554,8 +554,8 @@ class HostYiChat(BaseHostChatLLM):
     # use custom llm chat api, api should compatiable with openai definition
     model_name: str = Field('Yi-34B-Chat', alias='model')
 
-    temperature: float = 0.1
-    top_p: float = 0.1
+    temperature: float = 0.6
+    top_p: float = 0.8
     max_tokens: int = 4096
     host_base_url: str
 
