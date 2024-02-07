@@ -127,7 +127,8 @@ async def process_flow(
     """
     if inputs and isinstance(inputs, dict) and 'id' in inputs:
         inputs.pop('id')
-    logger.info(f'act=api_call sessionid={session_id} flow_id={flow_id} inputs={inputs}')
+    logger.info(
+        f'act=api_call sessionid={session_id} flow_id={flow_id} inputs={inputs} tweaks={tweaks}')
 
     try:
         with session_getter() as session:
