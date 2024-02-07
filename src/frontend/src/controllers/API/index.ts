@@ -300,8 +300,10 @@ export async function uploadFile(
  * 获取知识库下文件列表
  *
  */
-export async function serverListApi(): Promise<any[]> {
-  return await axios.get(`/api/v1/server/list`);
+export async function serverListApi(byRtName?: string): Promise<any[]> {
+  return await axios.get(`/api/v1/server/list`).then((list: any) => {
+    return byRtName ? list.filter(item => item.server === byRtName) : list
+  });
 }
 
 /**
