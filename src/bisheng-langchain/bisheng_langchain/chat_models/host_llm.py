@@ -535,3 +535,31 @@ class CustomLLMChat(BaseHostChatLLM):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return 'custom_llm_chat'
+
+class HostYuanChat(BaseHostChatLLM):
+    # use custom llm chat api, api should compatiable with openai definition
+    model_name: str = Field('Yuan2-2B-Janus-hf', alias='model')
+
+    temperature: float = 0.1
+    top_p: float = 0.1
+    max_tokens: int = 4096
+    host_base_url: str
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of chat model."""
+        return 'yuan2'
+    
+class HostYiChat(BaseHostChatLLM):
+    # use custom llm chat api, api should compatiable with openai definition
+    model_name: str = Field('Yi-34B-Chat', alias='model')
+
+    temperature: float = 0.1
+    top_p: float = 0.1
+    max_tokens: int = 4096
+    host_base_url: str
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of chat model."""
+        return 'yi_chat'

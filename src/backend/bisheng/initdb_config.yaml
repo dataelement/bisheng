@@ -42,10 +42,6 @@ llm_request:
   max_retries: 1
   stream: true
 
-office_url:
-  # office 组件访问地址，需要浏览器能直接访问
-  http://ip:8701
-
 
 # 是否需要验证码
 use_captcha:
@@ -54,3 +50,10 @@ use_captcha:
 # 聊天对话框配置
 dialog_tips:
   "内容由AI生成，仅供参考！"
+
+env:
+  # 聊天窗口支持快捷搜索的搜索引擎
+  # dialog_quick_search: http://www.baidu.com/s?wd=
+  # 可配置与http不一致的websocket地址
+  # websocket_url: 192.168.106.120:3003
+  office_url: http://IP:8701 # office 组件访问地址，需要浏览器能直接访问

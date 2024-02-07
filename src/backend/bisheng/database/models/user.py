@@ -37,6 +37,7 @@ class User(UserBase, table=True):
 class UserRead(UserBase):
     user_id: Optional[int]
     role: Optional[str]
+    access_token: Optional[str]
 
 
 class UserQuery(UserBase):

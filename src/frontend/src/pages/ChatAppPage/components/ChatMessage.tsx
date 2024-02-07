@@ -1,4 +1,4 @@
-import { Bot, Copy, File, User } from "lucide-react";
+import { Bot, Copy, File, PenLine, RefreshCw, Search, User } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
@@ -13,6 +13,7 @@ import { downloadFile } from "../../../util/utils";
 import { checkSassUrl } from "./FileView";
 import Thumbs from "./Thumbs";
 import { Button } from "../../../components/ui/button";
+import { locationContext } from "../../../contexts/locationContext";
 
 // 颜色列表
 const colorList = [
@@ -45,13 +46,19 @@ const enum SourceType {
 interface IProps {
     chat: ChatMessageType,
     userName: string,
+    disabledReSend: boolean
+    showSearch: boolean
     onSource: () => void
     onDislike?: (chatId) => void
+    onReSend: (msg) => void
+    onEdit: (msg) => void
+    onSearch: (msg) => void
 }
 
-export const ChatMessage = ({ chat, userName, onSource, onDislike }: IProps) => {
+export const ChatMessage = ({ chat, userName, disabledReSend, showSearch, onSource, onDislike, onEdit, onReSend, onSearch }: IProps) => {
     // const { user } = useContext(userContext);
     // console.log('chat :>> ', chat);
+    const { appConfig } = useContext(locationContext)
 
     const textRef = useRef(null)
     const { t } = useTranslation()
@@ -184,7 +191,7 @@ export const ChatMessage = ({ chat, userName, onSource, onDislike }: IProps) => 
                         }
                     </div>;
                 case SourceType.HAS_QA:
-                    return <p className="flex items-center text-gray-400 pb-2">{extra.qa}</p>;
+                    return <a className={`flex items-center text-gray-400 pb-2 ${extra.url && 'hover:underline'}`} target="_blank" href={extra.url}>{extra.qa}</a>;
                 default:
                     return null;
             }
@@ -218,9 +225,14 @@ export const ChatMessage = ({ chat, userName, onSource, onDislike }: IProps) => 
     if (chat.isSend) return <div className="chat chat-end">
         <div className="chat-image avatar"><div className="w-[40px] h-[40px] rounded-full bg-[rgba(53,126,249,.6)] flex items-center justify-center"><User color="#fff" size={28} /></div></div>
         <div className="chat-header text-gray-400 text-sm">{userName}</div>
-        <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)] dark:text-gray-100 whitespace-pre-line text-sm min-h-8">
+        <div className="chat-bubble chat-bubble-info bg-[rgba(53,126,249,.15)] dark:text-gray-100 whitespace-pre-line text-sm min-h-8 pb-8 relative min-w-[110px]">
             {chat.category === 'loading' && <span className="loading loading-spinner loading-xs mr-4 align-middle"></span>}
             {chat.message[chat.chatKey]}
+            <div className='flex gap-2 absolute w-full left-0 bottom-[8px] justify-end pr-5'>
+                {!disabledReSend && <PenLine size={18} className="cursor-pointer hover:text-blue-600 text-blue-400" onClick={() => !disabledReSend && onEdit(chat.message[chat.chatKey])}></PenLine>}
+                {!disabledReSend && <RefreshCw size={18} className="cursor-pointer hover:text-blue-600 text-blue-400" onClick={() => onReSend(chat.message[chat.chatKey])}></RefreshCw>}
+                {showSearch && <Search size={18} className="cursor-pointer hover:text-blue-600 text-blue-400" onClick={() => onSearch(chat.message[chat.chatKey])}></Search>}
+            </div>
         </div>
     </div>
     {/* 文件 */ }

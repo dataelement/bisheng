@@ -161,6 +161,8 @@ def import_chain(chain: str) -> Type[Chain]:
 
     if chain in CUSTOM_CHAINS:
         return CUSTOM_CHAINS[chain]
+    if chain == 'SQLDatabaseChain':
+        return import_class('langchain_experimental.sql.SQLDatabaseChain')
 
     from bisheng_langchain import chains
     if chain in chains.__all__:

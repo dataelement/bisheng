@@ -49,8 +49,9 @@ export const LoginPage = () => {
         });
 
         const encryptPwd = await handleEncrypt(pwd)
-        captureAndAlertRequestErrorHoc(loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(res => {
+        captureAndAlertRequestErrorHoc(loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then((res: any) => {
             // setUser(res.data)
+            localStorage.setItem('ws_token', res.access_token)
             localStorage.setItem('isLogin', '1')
             location.href = '/'
         }))

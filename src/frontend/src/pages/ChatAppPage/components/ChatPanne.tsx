@@ -44,7 +44,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
 
     const { appConfig } = useContext(locationContext)
 
-    // 开始构建&初始化会话
+    // 开始构建&切换初始化会话
     const initChat = async () => {
         await checkPrompt(flow)
         await build()
@@ -188,8 +188,16 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
                         key={c.id || i}
                         userName={sendUserName}
                         chat={c}
+                        disabledReSend={inputDisabled}
+                        showSearch={!!appConfig.dialogQuickSearch}
                         onSource={() => setSouce(c)}
                         onDislike={(chatId) => { thumbRef.current?.openModal(chatId) }}
+                        onReSend={(msg) => {
+                            inputRef.current.value = msg
+                            handleSend()
+                        }}
+                        onEdit={(msg) => { inputRef.current.value = msg; setInputEmpty(!msg) }}
+                        onSearch={(msg) => window.open(appConfig.dialogQuickSearch + encodeURIComponent(msg))}
                     ></ChatMessage>)
                 }
             </div>
@@ -324,15 +332,14 @@ const useFlowState = (flow: FlowType) => {
 const useMessages = (chatId, flow) => {
     const [chatHistory, setChatHistory] = useState<ChatMessageType[]>([]);
     const lastIdRef = useRef(0)
-    useEffect(() => {
-        setChatHistory([])
-        lastIdRef.current = 0
-    }, [flow])
     // 控制开启自动随消息滚动（临时方案）
     const changeHistoryByScroll = useRef(false)
 
+    const loadIdRef = useRef('') // 记录最后一个加载的 chatId
     // 获取聊天记录
     const loadHistory = async (lastId?: number) => {
+        loadIdRef.current = chatId
+
         const res = await getChatHistory(flow.id, chatId, lastId ? 10 : 30, lastId)
         const hisData = res.map(item => {
             // let count = 0
@@ -353,8 +360,15 @@ const useMessages = (chatId, flow) => {
                 noAccess: true
             }
         })
-        lastIdRef.current = hisData[hisData.length - 1]?.id || lastIdRef.current // 记录最后一个id
-        setChatHistory((history) => [...hisData.reverse(), ...history])
+        lastIdRef.current = hisData[hisData.length - 1]?.id || lastIdRef.current || 0 // 记录最后一个id
+        // 取消上一次
+        if (lastId) {
+            setChatHistory((history) => [...hisData.reverse(), ...history])
+        } else if (loadIdRef.current === chatId) { // 保证同一会话
+            setChatHistory(hisData.reverse())
+        } else {
+            setChatHistory([])
+        }
     }
 
     const loadLock = useRef(false)
@@ -391,7 +405,7 @@ const useMessages = (chatId, flow) => {
 
         messagesRef.current?.addEventListener('scroll', handleScroll);
         return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
-    }, [messagesRef.current]);
+    }, [messagesRef.current, chatId]);
 
     return {
         messages: chatHistory, messagesRef, loadHistory, setChatHistory, changeHistoryByScroll
@@ -410,6 +424,8 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
     const { setErrorData } = useContext(alertContext);
     const { t } = useTranslation()
 
+    const { appConfig } = useContext(locationContext)
+
     const chatIdRef = useRef(chatId);
     useEffect(() => {
         chatIdRef.current = chatId;
@@ -423,11 +439,13 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
     }
 
     function getWebSocketUrl(flowId, isDevelopment = false) {
+        const token = localStorage.getItem("ws_token");
+
         const isSecureProtocol = window.location.protocol === "https:";
         const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
-        const host = window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
-        const chatEndpoint = version === 'v1' ? `/api/v1/chat/${flowId}?type=L1&chat_id=${chatId}`
-            : `/api/v2/chat/ws/${flowId}?type=L1&chat_id=${chatId}${queryString}`
+        const host = appConfig.websocketHost || window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
+        const chatEndpoint = version === 'v1' ? `/api/v1/chat/${flowId}?type=L1&chat_id=${chatId}&t=${token}`
+            : `/api/v2/chat/ws/${flowId}?type=L1&chat_id=${chatId}${queryString}&t=${token}`
 
         return `${webSocketProtocol}://${host}${chatEndpoint}`;
     }
@@ -469,14 +487,19 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
                     const data = JSON.parse(event.data);
                     if (data.chat_id !== chatIdRef.current) return
                     console.log('newChatStart.current :>> ', newChatStart.current);
+
+                    const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
+
                     if (newChatStart.current) {
                         if (data.type === 'close') {
                             newChatStart.current = false
-                            return setInputState({ lock: false, errorMsg: '' })
+                            return setInputState({ lock: false, errorMsg })
                         } else {
-                            return setInputState({ lock: true, errorMsg: '' })
+                            return setInputState({ lock: true, errorMsg })
                         }
                     }
+                    // 异常类型处理，提示
+                    if (errorMsg) return setInputState({ lock: true, errorMsg })
 
                     handleWsMessage({ data, setIsStop, setInputState, changeHistoryByScroll });
                     // get chat history
@@ -518,11 +541,6 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
 
     var isStream = false;
     function handleWsMessage({ data, setIsStop, setInputState, changeHistoryByScroll }) {
-        // 异常类型处理，提示
-        if (data.category === 'error') {
-            return setInputState({ lock: true, errorMsg: data.intermediate_steps });
-        }
-
         if (Array.isArray(data) && data.length) return
         if (data.type === "begin") {
             setBegin(true)

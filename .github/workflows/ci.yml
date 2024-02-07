@@ -127,10 +127,21 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+      
+      - name: Process git message
+        id: process_message
+        run: |
+          message=""
+          IFS=$'\n'
+          for line in $(echo "${{ steps.git_message.outputs.message }}"); do
+            message+="$line\n"
+          done
+          echo "::set-output name=message::$message"
+        shell: bash
 
       - name: notify feishu
         uses: fjogeleit/http-request-action@v1
         with:
           url: ${{ secrets.FEISHU_WEBHOOK }}
           method: 'POST'
-          data: '{"msg_type":"text","content":{"text":" ${{ steps.get_version.outputs.VERSION }}发布成功"}}'
+          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{ steps.get_version.outputs.VERSION }}发布成功",  "content": [[{"tag":"text","text":"发布功能："}][{"tag":"text","text":"${{ steps.process_message.outputs.message }}"}]]}}}}'

@@ -194,6 +194,10 @@ llms:
     documentation: ""
   SenseChat:
     documentation: ""
+  # HostYuanChat:
+  #   documentation: ""
+  HostYiChat:
+    documentation: ""
   ###
   # There's a bug in this component deactivating until we get it sorted: _language_models.py", line 804, in send_message
   #     is_blocked=safety_attributes.get("blocked", False),
@@ -235,6 +239,8 @@ prompts:
     documentation: "https://python.langchain.com/docs/modules/model_io/models/chat/how_to/prompts"
   PromptTemplate:
     documentation: "https://python.langchain.com/docs/modules/model_io/prompts/prompt_templates/"
+  MessagesPlaceholder:
+    documentation: ""
 textsplitters:
   CharacterTextSplitter:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_transformers/text_splitters/character_text_splitter"
