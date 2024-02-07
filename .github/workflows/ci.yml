@@ -127,9 +127,21 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+      
+      - name: Process git message
+        id: process_message
+        run: |
+          message=""
+          IFS=$'\n'
+          for line in $(echo "${{ steps.git_message.outputs.message }}"); do
+            message+="$line\n"
+          done
+          echo "::set-output name=message::$message"
+        shell: bash
 
       - name: notify feishu
-        uses:  sozo-design/curl@v1.0.2
+        uses: fjogeleit/http-request-action@v1
         with:
-          args: -X POST -d '{"msg_type":"text","content":{"text":"latest version 编译成功"}}' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b 
-      
+          url: ${{ secrets.FEISHU_WEBHOOK }}
+          method: 'POST'
+          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{ steps.get_version.outputs.VERSION }}发布成功",  "content": [[{"tag":"text","text":"发布功能："}][{"tag":"text","text":"${{ steps.process_message.outputs.message }}"}]]}}}}'

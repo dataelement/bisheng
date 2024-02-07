@@ -5,7 +5,7 @@ from typing import Dict
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.utils import judge_source, process_graph, process_source_document
-from bisheng.database.base import get_session
+from bisheng.database.base import session_getter
 from bisheng.database.models.report import Report
 from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
@@ -76,9 +76,10 @@ class Handler:
             await session.send_json(client_id, chat_id, response)
 
         # build report
-        db_session = next(get_session())
-        template = db_session.exec(
-            select(Report).where(Report.flow_id == client_id).order_by(Report.id.desc())).first()
+        with session_getter() as db_session:
+            template = db_session.exec(
+                select(Report).where(Report.flow_id == client_id).order_by(
+                    Report.id.desc())).first()
         if not template:
             logger.error('template not support')
             return
@@ -215,13 +216,15 @@ class Handler:
         key = get_cache_key(client_id, chat_id)
         langchain_object = session.in_memory_cache.get(key)
         input_key = langchain_object.input_keys[0]
+        input_dict = {k: '' for k in langchain_object.input_keys}
 
         report = ''
         logger.info(f'process_file batch_question={batch_question}')
         for question in batch_question:
             if not question:
                 continue
-            payload = {'inputs': {input_key: question}, 'is_begin': False}
+            input_dict[input_key] = question
+            payload = {'inputs': input_dict, 'is_begin': False}
             start_resp.category == 'question'
             await session.send_json(client_id, chat_id, start_resp)
             step_resp = ChatResponse(type='end',
@@ -282,12 +285,19 @@ class Handler:
         if isinstance(intermediate_steps, list):
             # autogen produce multi dialog
             for message in intermediate_steps:
-                content = message.get('message')
-                log = message.get('log', '')
-                sender = message.get('sender')
-                receiver = message.get('receiver')
-                is_bot = False if receiver and receiver.get('is_bot') else True
-                category = message.get('category', 'processing')
+                # autogen produce message object
+                if isinstance(message, str):
+                    log = message
+                    is_bot = True
+                    category = 'processing'
+                    content = sender = receiver = None
+                else:
+                    content = message.get('message')
+                    log = message.get('log', '')
+                    sender = message.get('sender')
+                    receiver = message.get('receiver')
+                    is_bot = False if receiver and receiver.get('is_bot') else True
+                    category = message.get('category', 'processing')
                 msg = ChatResponse(message=content,
                                    intermediate_steps=log,
                                    sender=sender,

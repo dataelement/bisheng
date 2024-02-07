@@ -28,8 +28,8 @@ export default function Roles() {
     }
 
     const loadData = () => {
-        getRolesApi().then(res =>
-            setRoles(res.data)
+        getRolesApi().then(data =>
+            setRoles(data)
         )
     }
 

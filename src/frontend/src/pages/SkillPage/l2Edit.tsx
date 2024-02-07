@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronUp } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import L2ParameterComponent from "../../CustomNodes/GenericNode/components/parameterComponent/l2Index";
@@ -20,8 +20,11 @@ export default function l2Edit() {
     const { t } = useTranslation()
 
     const { id } = useParams()
-    const { flow, setFlow, saveFlow } = useContext(TabsContext);
+    const { flow: nextFlow, setFlow, saveFlow } = useContext(TabsContext);
     const { setErrorData, setSuccessData } = useContext(alertContext);
+    const flow = useMemo(() => {
+        return id ? nextFlow : null
+    }, [nextFlow])
 
     const [isL2, setIsL2] = useState(false)
     const [loading, setLoading] = useState(false)
@@ -78,14 +81,14 @@ export default function l2Edit() {
         if (isParamError(name, description, true)) return
         setLoading(true)
 
-        captureAndAlertRequestErrorHoc(createCustomFlowApi({
+        await captureAndAlertRequestErrorHoc(createCustomFlowApi({
             name,
             description
         }, user.user_name).then(newFlow => {
             setFlow('l2 create flow', newFlow)
             navigate("/flow/" + newFlow.id, { replace: true }); // l3
-            setLoading(false)
         }))
+        setLoading(false)
     }
 
 
@@ -134,7 +137,7 @@ export default function l2Edit() {
         <div className="p-6 pb-48 h-screen overflow-y-auto">
             <div className="flex justify-between w-full">
                 <ShadTooltip content={t('back')} side="right">
-                    <button className="extra-side-bar-buttons w-[36px]" onClick={() => navigate(-1)}>
+                    <button className="extra-side-bar-buttons w-[36px]" onClick={() => window.history.length < 3 ? navigate('/skills') : navigate(-1)}>
                         <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
                     </button>
                 </ShadTooltip>

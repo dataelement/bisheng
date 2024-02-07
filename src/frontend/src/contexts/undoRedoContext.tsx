@@ -34,9 +34,9 @@ type HistoryItem = {
 };
 
 const initialValue = {
-  undo: () => {},
-  redo: () => {},
-  takeSnapshot: () => {},
+  undo: () => { },
+  redo: () => { },
+  takeSnapshot: () => { },
 };
 
 const defaultOptions: UseUndoRedoOptions = {
@@ -95,6 +95,10 @@ export function UndoRedoProvider({ children }) {
         newFuture.push({ nodes: getNodes(), edges: getEdges() });
         return newFuture;
       });
+      // keep same id 
+      pastState.nodes.forEach(el => {
+        el.data.id = el.id
+      })
       // now we can set the graph to the past state
       setNodes(pastState.nodes);
       setEdges(pastState.edges);
@@ -124,6 +128,10 @@ export function UndoRedoProvider({ children }) {
         newPast.push({ nodes: getNodes(), edges: getEdges() });
         return newPast;
       });
+      // keep same id 
+      futureState.nodes.forEach(el => {
+        el.data.id = el.id
+      })
       setNodes(futureState.nodes);
       setEdges(futureState.edges);
     }

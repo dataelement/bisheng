@@ -2,7 +2,7 @@ import json
 from typing import Dict, List
 
 from bisheng.api.v1.schemas import ChatMessage
-from bisheng.database.base import get_session
+from bisheng.database.base import session_getter
 from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.interface.utils import try_setting_streaming_options
@@ -92,7 +92,10 @@ async def judge_source(result, source_document, chat_id, extra: Dict):
         question = result.page_content
         result = json.loads(metadata.get('extra', '{}')).get('answer')
         source = 4
-        extra.update({'qa': f'本答案来源于已有问答库: {question}'})
+        extra.update({
+            'qa': f'本答案来源于已有问答库: {question}',
+            'url': json.loads(metadata.get('extra', '{}')).get('url')
+        })
     elif source_document and chat_id:
         if any(not doc.metadata.get('right', True) for doc in source_document):
             source = 2
@@ -129,9 +132,9 @@ async def process_source_document(source_document: List[Document], chat_id, mess
     model = keyword_conf.get('model')
 
     if model and not host_base_url:
-        db_session = next(get_session())
-        model_deploy = db_session.exec(
-            select(ModelDeploy).where(ModelDeploy.model == model)).first()
+        with session_getter() as db_session:
+            model_deploy = db_session.exec(
+                select(ModelDeploy).where(ModelDeploy.model == model)).first()
         if model_deploy:
             model = model if model_deploy.status == '已上线' else None
             host_base_url = model_deploy.endpoint
@@ -139,10 +142,11 @@ async def process_source_document(source_document: List[Document], chat_id, mess
             logger.error('不能使用配置模型进行关键词抽取，配置不正确')
 
     answer_keywords = extract_answer_keys(answer, model, host_base_url)
+
+    batch_insert = []
     for doc in source_document:
         if 'bbox' in doc.metadata:
             # 表示支持溯源
-            db_session = next(get_session())
             content = doc.page_content
             recall_chunk = RecallChunk(chat_id=chat_id,
                                        keywords=json.dumps(answer_keywords),
@@ -150,6 +154,8 @@ async def process_source_document(source_document: List[Document], chat_id, mess
                                        file_id=doc.metadata.get('file_id'),
                                        meta_data=json.dumps(doc.metadata),
                                        message_id=message_id)
-            db_session.add(recall_chunk)
+            batch_insert.append(recall_chunk)
+    if batch_insert:
+        with session_getter() as db_session:
+            db_session.add_all(batch_insert)
             db_session.commit()
-            db_session.refresh(recall_chunk)

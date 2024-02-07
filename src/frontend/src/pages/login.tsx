@@ -49,8 +49,9 @@ export const LoginPage = () => {
         });
 
         const encryptPwd = await handleEncrypt(pwd)
-        captureAndAlertRequestErrorHoc(loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(res => {
+        captureAndAlertRequestErrorHoc(loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then((res: any) => {
             // setUser(res.data)
+            localStorage.setItem('ws_token', res.access_token)
             localStorage.setItem('isLogin', '1')
             location.href = '/'
         }))
@@ -64,7 +65,7 @@ export const LoginPage = () => {
         if (!mail) error.push(t('login.pleaseEnterAccount'))
         if (mail.length < 3) error.push(t('login.accountTooShort'))
         if (!/.{8,}/.test(pwd)) error.push(t('login.passwordTooShort'))
-        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^])[A-Za-z\d@$!%*?&#=_()^]{8,}$/.test(pwd)) error.push(t('login.passwordError'))
+        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(pwd)) error.push(t('login.passwordError'))
         if (pwd !== apwd) error.push(t('login.passwordMismatch'))
         if (captchaData.user_capthca && !captchaRef.current.value) error.push(t('login.pleaseEnterCaptcha'))
         if (error.length) return setErrorData({

@@ -1,5 +1,5 @@
 from bisheng.api.v1.schemas import StreamData
-from bisheng.database.base import get_session, session_getter
+from bisheng.database.base import session_getter
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
@@ -217,7 +217,7 @@ async def build_flow_no_yield(graph_data: dict,
 def access_check(payload: dict, owner_user_id: int, target_id: int, type: AccessType) -> bool:
     if payload.get('role') != 'admin':
         # role_access
-        with next(get_session()) as session:
+        with session_getter() as session:
             role_access = session.exec(
                 select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
                                          RoleAccess.type == type.value)).all()

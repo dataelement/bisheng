@@ -16,7 +16,7 @@ knowledges:
     Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
       connection_args: {'host': 'milvus', 'port': '19530', 'user': '', 'password': '', 'secure': False}
       # partiton-key model, 用于分区的字段，如果不配置默认True， 分区后，新的partiton不会新建collection，可以通过增加suffix强制增加collection
-      is_partition: True
+      is_partition: False
       partition_suffix: 1
     # 可选配置，有些类型的场景使用ES可以提高召回效果
     ElasticKeywordsSearch:
@@ -42,10 +42,6 @@ llm_request:
   max_retries: 1
   stream: true
 
-office_url:
-  # office 组件访问地址，需要浏览器能直接访问
-  http://ip:8701
-
 
 # 是否需要验证码
 use_captcha:
@@ -53,4 +49,11 @@ use_captcha:
 
 # 聊天对话框配置
 dialog_tips:
-  "欢迎使用bisheng，我们github地址：https://github.com/dataelement/bisheng, 有问题可以提issue，我们会尽快回复您。"
+  "内容由AI生成，仅供参考！"
+
+env:
+  # 聊天窗口支持快捷搜索的搜索引擎
+  # dialog_quick_search: http://www.baidu.com/s?wd=
+  # 可配置与http不一致的websocket地址
+  # websocket_url: 192.168.106.120:3003
+  office_url: http://IP:8701 # office 组件访问地址，需要浏览器能直接访问

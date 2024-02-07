@@ -273,7 +273,7 @@ class BaseHostChatLLM(BaseChatModel):
             try:
                 async with self.client.apost(url=self.host_base_url, json=kwargs) as response:
                     if response.status != 200:
-                        raise ValueError(f'Error: {response.status}')
+                        raise ValueError(f'Error: {response.status} contet: {response.text}')
                     async for txt in response.content.iter_any():
                         if b'\n' in txt:
                             for txt_ in txt.split(b'\n'):
@@ -313,7 +313,7 @@ class BaseHostChatLLM(BaseChatModel):
         """Generate chat completion with retry."""
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {**params, **kwargs}
-        if self.streaming:
+        if self.streaming and 'infer' not in self.host_base_url:
             inner_completion = ''
             role = 'assistant'
             params['stream'] = True
@@ -535,3 +535,31 @@ class CustomLLMChat(BaseHostChatLLM):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return 'custom_llm_chat'
+
+class HostYuanChat(BaseHostChatLLM):
+    # use custom llm chat api, api should compatiable with openai definition
+    model_name: str = Field('Yuan2-2B-Janus-hf', alias='model')
+
+    temperature: float = 1
+    top_p: float = 0.9
+    max_tokens: int = 4096
+    host_base_url: str
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of chat model."""
+        return 'yuan2'
+    
+class HostYiChat(BaseHostChatLLM):
+    # use custom llm chat api, api should compatiable with openai definition
+    model_name: str = Field('Yi-34B-Chat', alias='model')
+
+    temperature: float = 0.6
+    top_p: float = 0.8
+    max_tokens: int = 4096
+    host_base_url: str
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of chat model."""
+        return 'yi_chat'

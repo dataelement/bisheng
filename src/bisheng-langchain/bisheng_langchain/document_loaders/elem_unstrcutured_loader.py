@@ -63,7 +63,8 @@ class ElemUnstructuredLoader(BasePDFLoader):
                  unstructured_api_url: str = None,
                  start: int = 0,
                  n: int = None,
-                 verbose: bool = False) -> None:
+                 verbose: bool = False,
+                 kwargs: dict = {}) -> None:
         """Initialize with a file path."""
         self.unstructured_api_url = unstructured_api_url
         self.unstructured_api_key = unstructured_api_key
@@ -71,18 +72,18 @@ class ElemUnstructuredLoader(BasePDFLoader):
         self.file_name = file_name
         self.start = start
         self.n = n
+        self.extra_kwargs = kwargs
         super().__init__(file_path)
 
     def load(self) -> List[Document]:
         """Load given path as pages."""
         b64_data = base64.b64encode(open(self.file_path, 'rb').read()).decode()
+        parameters = {'start': self.start, 'n': self.n}
+        parameters.update(self.extra_kwargs)
         payload = dict(filename=os.path.basename(self.file_name),
                        b64_data=[b64_data],
                        mode='partition',
-                       parameters={
-                           'start': self.start,
-                           'n': self.n
-                       })
+                       parameters=parameters)
 
         resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload).json()
 
@@ -112,18 +113,23 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
                  unstructured_api_url: str = None,
                  start: int = 0,
                  n: int = None,
-                 verbose: bool = False) -> None:
+                 verbose: bool = False,
+                 kwargs: dict = {}) -> None:
         """Initialize with a file path."""
         self.unstructured_api_url = unstructured_api_url
         self.unstructured_api_key = unstructured_api_key
+        self.start = start
+        self.n = n
         self.headers = {'Content-Type': 'application/json'}
         self.file_name = file_name
+        self.extra_kwargs = kwargs
         super().__init__(file_path)
 
     def load(self) -> List[Document]:
         b64_data = base64.b64encode(open(self.file_path, 'rb').read()).decode()
         payload = dict(filename=os.path.basename(self.file_name), b64_data=[b64_data], mode='text')
-
+        payload.update({'start': self.start, 'n': self.n})
+        payload.update(self.extra_kwargs)
         resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload).json()
 
         if 200 != resp.get('status_code'):

@@ -72,7 +72,9 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         isDev: res.env === 'dev',
         libAccepts: res.uns_support,
         officeUrl: res.office_url,
-        dialogTips: res.dialog_tips
+        dialogTips: res.dialog_tips,
+        dialogQuickSearch: res.dialog_quick_search,
+        websocketHost: res.websocket_url
       })
     })
   }, [])

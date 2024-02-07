@@ -1,6 +1,5 @@
 import hashlib
 from contextlib import contextmanager
-from typing import Generator
 
 from bisheng.database.init_config import init_config
 from bisheng.database.models.role import Role
@@ -55,10 +54,6 @@ def init_default_data():
                 raise RuntimeError('Error creating DB and tables') from exc
         finally:
             redis_client.delete('init_default_data')
-
-
-def get_session() -> Generator['Session', None, None]:
-    yield from db_service.get_session()
 
 
 @contextmanager

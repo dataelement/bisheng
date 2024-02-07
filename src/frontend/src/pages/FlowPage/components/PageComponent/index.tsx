@@ -294,16 +294,24 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   // 修改组件id
   useEffect(() => {
     const handleChangeId = (data) => {
-      console.log('changeid')
       const detail = data.detail
-      const node = flow.data.nodes.find((node) => node.id === detail[1])
+      const node = flow.data.nodes.find((node) => node.data.id === detail[1])
       node.id = detail[0]
       node.data.id = detail[0]
+      // 更新线上 id 信息
+      flow.data.edges.forEach(edge => {
+        ['id', 'source', 'sourceHandle', 'target', 'targetHandle'].forEach(prop => {
+          if (edge[prop]) {
+            edge[prop] = edge[prop].replaceAll(detail[1], detail[0]);
+          }
+        });
+      });
+
       setFlow('changeid', { ...flow })
     }
     document.addEventListener('idChange', handleChangeId)
     return () => document.removeEventListener('idChange', handleChangeId)
-  }, [flow])
+  }, [flow.data]); // 修改 id后, 需要监听 data这一层
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -391,6 +399,8 @@ const useKeyBoard = (reactFlowWrapper) => {
   useEffect(() => {
     // this effect is used to attach the global event handlers
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target.tagName === 'INPUT') return // 排除输入框内复制粘贴
+
       if (
         (event.ctrlKey || event.metaKey) &&
         event.key === "c" &&

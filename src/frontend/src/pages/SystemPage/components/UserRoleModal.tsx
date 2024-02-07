@@ -16,8 +16,8 @@ export default function UserRoleModal({ id, onClose, onChange }) {
 
     useEffect(() => {
         if (!id) return
-        getRolesApi().then(res => {
-            const roleOptions = res.data.filter(role => role.id !== 1)
+        getRolesApi().then(data => {
+            const roleOptions = data.filter(role => role.id !== 1)
                 .map(role => ({ ...role, role_id: role.id }))
             setRoles(roleOptions);
 

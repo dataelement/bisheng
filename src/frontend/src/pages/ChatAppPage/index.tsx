@@ -10,6 +10,7 @@ import { generateUUID } from "../../utils";
 import SkillTemps from "../SkillPage/components/SkillTemps";
 import ChatPanne from "./components/ChatPanne";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { useDebounce } from "../../util/hook";
 
 export default function SkillChatPage() {
     const [open, setOpen] = useState(false)
@@ -49,7 +50,7 @@ export default function SkillChatPage() {
     }
 
     // select chat
-    const handleSelectChat = async (chat) => {
+    const handleSelectChat = useDebounce(async (chat) => {
         if (chat.chat_id === chatId) return
 
         chatIdRef.current = chat.chat_id
@@ -64,7 +65,7 @@ export default function SkillChatPage() {
         setFlow(flow)
         setChatId(chat.chat_id)
         setFace(false)
-    }
+    }, 100, false)
 
 
     // del
