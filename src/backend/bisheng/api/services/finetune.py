@@ -45,6 +45,12 @@ class FinetuneService:
         params['model_name_or_path'] = base_model.model
         params['finetuning_type'] = finetune.method
 
+        # 特殊处理cpu_load的格式，因为传参方式不一样 --cpu_load 即代表为True，无需额外参数值
+        if params.get('cpu_load') == 'false':
+            del params['cpu_load']
+        elif params.get('cpu_load') == 'true':
+            params['cpu_load'] = ''
+
         # 拼接训练集参数
         params['dataset'] = []
         params['max_samples'] = []
