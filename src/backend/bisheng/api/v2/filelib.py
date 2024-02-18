@@ -1,8 +1,8 @@
+import hashlib
 from typing import Optional
 
-from bisheng.api.services import knowledge_imp
-from bisheng.api.v1.knowledge import (addEmbedding, decide_vectorstores, file_knowledge,
-                                      text_knowledge)
+from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, decide_vectorstores,
+                                                text_knowledge)
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
@@ -15,9 +15,9 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
+from bisheng_langchain.vectorstores import Milvus
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
-from langchain.vectorstores import Milvus
 from sqlalchemy import func, or_
 from sqlmodel import select
 
@@ -29,7 +29,7 @@ router = APIRouter(prefix='/filelib')
 def creat(knowledge: KnowledgeCreate):
     """创建知识库."""
     user_id = knowledge.user_id or settings.get_from_db('default_operator').get('user')
-    db_knowldge = knowledge_imp.create_knowledge(knowledge, user_id)
+    db_knowldge = create_knowledge(knowledge, user_id)
     return db_knowldge
 
 
@@ -261,8 +261,43 @@ async def post_chunks(*,
     if not db_knowledge:
         raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
 
-    db_file = file_knowledge(db_knowledge, file_path, file_name, metadata)
+    # 重复判断
+    md5_ = file_path.rsplit('/', 1)[1].split('.')[0]
+    with session_getter() as session:
+        repeat = session.exec(
+            select(KnowledgeFile).where(KnowledgeFile.md5 == md5_,
+                                        KnowledgeFile.knowledge_id == knowledge_id)).all()
+    if repeat:
+        status = 3
+        remark = 'file repeat'
+        db_file = KnowledgeFile(knowledge_id=knowledge_id,
+                                file_name=file_name,
+                                status=status,
+                                md5=md5_,
+                                remark=remark)
+    else:
+        # 存储 mysql
+        db_file = KnowledgeFile(knowledge_id=db_knowledge.id,
+                                file_name=file_name,
+                                md5=md5_,
+                                status=1)
+    with session_getter() as session:
+        session.add(db_file)
+        session.commit()
+        session.refresh(db_file)
 
+    separator = ['\n\n', '\n', ' ', '']
+    chunk_size = 500
+    chunk_overlap = 50
+    index_name = db_knowledge.index_name or db_knowledge.collection_name
+    try:
+        addEmbedding(db_knowledge.collection_name, index_name, db_knowledge.id, db_knowledge.model,
+                     chunk_size, separator, chunk_overlap, [file_path], [db_file], None, metadata)
+    except Exception as e:
+        logger.error(e)
+
+    with session_getter() as session:
+        db_file = session.get(KnowledgeFile, db_file.id)
     return resp_200(db_file)
 
 
@@ -276,6 +311,28 @@ async def post_string_chunks(*, document: ChunkInput):
     if not db_knowledge:
         raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
 
-    db_file = text_knowledge(db_knowledge, document.documents)
+    m = hashlib.md5()
+    # 对字符串进行md5加密
+    content = ''.join([doc.page_content for doc in document.documents])
+    m.update(content.encode('utf-8'))
+    md5_ = m.hexdigest()
+    with session_getter() as session:
+        repeat = session.exec(
+            select(KnowledgeFile).where(
+                KnowledgeFile.md5 == md5_,
+                KnowledgeFile.knowledge_id == document.knowledge_id)).all()
+
+    status = 3 if repeat else 1
+    remark = 'file repeat' if repeat else ''
+    db_file = KnowledgeFile(knowledge_id=document.knowledge_id,
+                            status=status,
+                            md5=md5_,
+                            remark=remark)
+
+    with session_getter() as session:
+        session.add(db_file)
+        session.commit()
+        session.refresh(db_file)
+    db_file = text_knowledge(db_knowledge, db_file, document.documents)
 
     return resp_200(db_file)
