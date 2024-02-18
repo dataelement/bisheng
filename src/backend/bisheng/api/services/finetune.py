@@ -207,6 +207,7 @@ class FinetuneService:
             new_data.write(d)
         resp.close()
         resp.release_conn()
+        new_data.seek(0)
         return new_data.read().decode('utf-8')
 
     @classmethod
