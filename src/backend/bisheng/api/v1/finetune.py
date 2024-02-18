@@ -22,7 +22,9 @@ async def create_job(*,
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-    finetune = Finetune(**finetune.dict(), user_id=current_user.get('user_id'), user_name=current_user.get('user_name'))
+    finetune = Finetune(**finetune.dict(exclude={'method'}), method=finetune.method.value,
+                        user_id=current_user.get('user_id'),
+                        user_name=current_user.get('user_name'))
     return FinetuneService.create_job(finetune)
 
 
