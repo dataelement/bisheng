@@ -197,7 +197,7 @@ class FinetuneService:
         return log_path
 
     @classmethod
-    def get_job_log(cls, finetune: Finetune) -> io.BytesIO | None:
+    def get_job_log(cls, finetune: Finetune) -> str | None:
         minio_client = MinioClient()
         resp = minio_client.download_minio(finetune.log_path)
         if resp is None:
@@ -205,8 +205,9 @@ class FinetuneService:
         new_data = io.BytesIO()
         for d in resp.stream(32 * 1024):
             new_data.write(d)
-        new_data.seek(0)
-        return new_data
+        resp.close()
+        resp.release_conn()
+        return new_data.read().decode('utf-8')
 
     @classmethod
     def delete_published_model(cls, finetune: Finetune, server_endpoint: str) -> str | None:
@@ -376,11 +377,10 @@ class FinetuneService:
         })
 
     @classmethod
-    def parse_log_data(cls, log_data: io.BytesIO) -> List[Dict[str, str]]:
+    def parse_log_data(cls, log_data: str) -> List[Dict[str, str]]:
         if log_data is None:
             return []
         res_data = []
-        log_data = log_data.read().decode('utf-8')
         contents = log_data.split('\n')
         for elem in contents:
             if elem.strip() == '':
