@@ -4,12 +4,12 @@ database_url:
 
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
 # 普通模式:
-#redis_url: "redis://redis:6379/1"
+redis_url: "redis://redis:6379/1"
 # 集群模式:
-redis_url: 
-  mode: "cluster"
-  startup_nodes: 
-    - {"host": "192.168.106.115", "port": 6002}
+# redis_url: 
+#   mode: "cluster"
+#   startup_nodes: 
+#     - {"host": "192.168.106.115", "port": 6002}
   # password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
   # #sentinel
   # mode: "sentinel"
