@@ -215,11 +215,11 @@ class FinetuneService:
         """ 下线已发布模型，删除已发布模型数据，返回已发布模型名称 """
         # 判断训练任务状态
         if finetune.status != FinetuneStatus.PUBLISHED.value:
-            return None
+            return finetune.model_name
         # 查看已发布模型ID
         published_model = ModelDeployDao.find_model(finetune.model_id)
         if not published_model:
-            return None
+            return finetune.model_name
         if published_model.status == '已上线':
             # 调用RT接口下线模型
             ret = RTBackend.unload_model(parse_server_host(server_endpoint), published_model.model)
