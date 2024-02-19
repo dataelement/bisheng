@@ -6,8 +6,9 @@ from typing import Any, Dict, List
 from uuid import UUID
 
 from bisheng.api.errcode.finetune import (CancelJobError, ChangeModelNameError, CreateFinetuneError,
-                                          DeleteJobError, ExportJobError, JobStatusError,
-                                          NotFoundJobError, TrainDataNoneError, UnExportJobError)
+                                          DeleteJobError, ExportJobError, InvalidExtraParamsError,
+                                          JobStatusError, NotFoundJobError, TrainDataNoneError,
+                                          UnExportJobError)
 from bisheng.api.errcode.model_deploy import NotFoundModelError
 from bisheng.api.errcode.server import NotFoundServerError
 from bisheng.api.services.rt_backend import RTBackend
@@ -16,17 +17,17 @@ from bisheng.api.utils import parse_server_host
 from bisheng.api.v1.schemas import FinetuneInfoResponse, UnifiedResponseModel, resp_200
 from bisheng.cache import InMemoryCache
 from bisheng.database.models.finetune import (Finetune, FinetuneChangeModelName, FinetuneDao,
-                                              FinetuneList, FinetuneStatus)
+                                              FinetuneExtraParams, FinetuneList, FinetuneStatus)
 from bisheng.database.models.model_deploy import ModelDeploy, ModelDeployDao
 from bisheng.database.models.server import ServerDao
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
+from pydantic import ValidationError
 
 sync_job_thread_pool = ThreadPoolExecutor(3)
 
 
 class FinetuneService:
-
     ServerCache: InMemoryCache = InMemoryCache()
 
     @classmethod
@@ -35,6 +36,12 @@ class FinetuneService:
         # 个人训练集和预置训练集 最少使用一个
         if not finetune.train_data and not finetune.preset_data:
             return TrainDataNoneError.return_resp()
+        try:
+            # 校验额外参数值
+            FinetuneExtraParams(**finetune.extra_params.copy())
+        except ValidationError as e:
+            logger.error(f'Finetune extra_params is invalid {e}')
+            return InvalidExtraParamsError.return_resp()
         return None
 
     @classmethod

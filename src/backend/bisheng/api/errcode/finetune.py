@@ -47,6 +47,11 @@ class UnExportJobError(BaseErrorCode):
     Msg: str = '取消发布失败'
 
 
+class InvalidExtraParamsError(BaseErrorCode):
+    Code: int = 10109
+    Msg: str = '无效的训练参数'
+
+
 class TrainFileNotExistError(BaseErrorCode):
     Code: int = 10120
     Msg: str = '训练文件不存在'
