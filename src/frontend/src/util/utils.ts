@@ -8,13 +8,24 @@ export function classNames(...classes: Array<string>): string {
 
 export function downloadFile(url, label) {
     axios.get(url, { responseType: "blob" }).then((res: any) => {
-        const blob = new Blob([res.data], { type: res.headers['content-type'] });
+        const blob = new Blob([res.data]);
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = label;
         link.click();
         URL.revokeObjectURL(link.href);
     }).catch(console.error);
+}
+
+export function downloadJson(content) {
+    const jsonStr = JSON.stringify(content)
+    const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(jsonStr)}`;
+
+    const link = document.createElement("a");
+    link.href = jsonString;
+    link.download = `sample.json`;
+
+    link.click();
 }
 
 export function cn(...inputs: ClassValue[]): string {

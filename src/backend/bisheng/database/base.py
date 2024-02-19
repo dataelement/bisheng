@@ -57,7 +57,7 @@ def init_default_data():
 
 
 @contextmanager
-def session_getter():
+def session_getter() -> Session:
     """轻量级session context"""
     try:
         session = Session(db_service.engine)

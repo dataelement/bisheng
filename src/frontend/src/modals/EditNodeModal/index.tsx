@@ -184,7 +184,8 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
                             data.node.template[t].type === "code" ||
                             data.node.template[t].type === "prompt" ||
                             data.node.template[t].type === "file" ||
-                            data.node.template[t].type === "int")
+                            data.node.template[t].type === "int" ||
+                            data.node.template[t].type === "dict")
                       )
                       .map((n, i) => (
                         <TableRow key={i} className="h-10">
