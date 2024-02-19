@@ -92,6 +92,45 @@ class FinetuneChangeModelName(BaseModel):
     model_name: str
 
 
+class FinetuneExtraParams(BaseModel):
+    gpus: str = Field(..., description='需要使用的GPU卡号')
+    val_ratio: float = Field(0.1, ge=0, le=1, description='验证集占比')
+    per_device_train_batch_size: int = Field(1, description='批处理的大小')
+    learning_rate: float = Field(0.00005, ge=0, le=1, description='学习率')
+    num_train_epochs: int = Field(3, gt=0, description='迭代轮数')
+    max_seq_len: int = Field(8192, gt=0, description='最大序列长度')
+    cpu_load: str = Field('false', description='是否cpu载入')
+
+    @validator('per_device_train_batch_size')
+    def validate_batch_size(cls, v: str):
+        try:
+            batch_size = int(v)
+            if batch_size != 1:
+                if batch_size % 2 != 0:
+                    raise ValueError('per_device_train_batch_size must be 1 or even number')
+            return batch_size
+        except Exception as e:
+            raise ValueError(f'per_device_train_batch_size must be an integer {e}')
+
+    @validator('gpus')
+    def validate_gpus(cls, v: str):
+        try:
+            gpu_list = v.split(',')
+            gpus = ''
+            for one in gpu_list:
+                if not one:
+                    continue
+                if not one.isdigit():
+                    raise ValueError('gpus number must be integer')
+                gpus += one + ','
+            gpus = gpus[:-1]
+            if not gpus:
+                raise ValueError('gpus must not be empty')
+            return gpus
+        except Exception as e:
+            raise ValueError(f'gpus must be an str {e}')
+
+
 class FinetuneDao(FinetuneBase):
 
     @classmethod
