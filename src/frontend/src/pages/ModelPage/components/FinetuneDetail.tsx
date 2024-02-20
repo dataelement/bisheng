@@ -11,10 +11,15 @@ import { TaskDB } from "../../../types/api/finetune";
 import FinetuneResult from "./FinetuneResult";
 
 export const enum TaskStatus {
+    /** 训练中 */
     TRAINING_IN_PROGRESS = 1,
+    /** 训练失败 */
     TRAINING_FAILED,
+    /** 训练终止 */
     TASK_ABORTED,
+    /** 训练成功 */
     TRAIN_SUCCESS,
+    /** 训练成功 */
     PUBLISH_SUCCESS
 }
 
@@ -188,6 +193,15 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
                 }</small>
             </div>
         </div>
-        <FinetuneResult id={id} training={TaskStatus.TRAINING_IN_PROGRESS === baseInfo.status} failed={TaskStatus.TRAINING_FAILED === baseInfo.status}></FinetuneResult>
+        <FinetuneResult
+            id={id}
+            isStop={TaskStatus.TASK_ABORTED === baseInfo.status}
+            training={TaskStatus.TRAINING_IN_PROGRESS === baseInfo.status}
+            failed={TaskStatus.TRAINING_FAILED === baseInfo.status}
+            onChange={status => {
+                setBaseInfo({ ...baseInfo, status });
+                onStatusChange(status)
+            }}
+        ></FinetuneResult>
     </div>
 };

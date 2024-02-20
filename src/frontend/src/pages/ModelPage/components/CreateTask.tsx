@@ -145,11 +145,11 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
                             <Label htmlFor="r1">{t('finetune.fullFineTune')}</Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="comfortable" id="r2" />
+                            <RadioGroupItem value="freeze" id="r2" />
                             <Label htmlFor="r2">{t('finetune.freeze')}</Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="compact" id="r3" />
+                            <RadioGroupItem value="lora" id="r3" />
                             <Label htmlFor="r3">{t('finetune.lora')}</Label>
                         </div>
                     </RadioGroup>
