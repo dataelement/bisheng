@@ -60,11 +60,11 @@ class FinetuneService:
 
         # 拼接训练集参数
         params['dataset'] = []
-        params['max_samples'] = []
+        params['each_max_samples'] = []
         cls.parse_command_train_file(finetune.train_data, params)
         cls.parse_command_train_file(finetune.preset_data, params)
         params['dataset'] = ','.join(params['dataset'])
-        params['max_samples'] = ','.join(params['max_samples'])
+        params['each_max_samples'] = ','.join(params['each_max_samples'])
         return params
 
     @classmethod
@@ -75,7 +75,7 @@ class FinetuneService:
         minio_client = MinioClient()
         for i in train_data:
             params['dataset'].append(minio_client.get_share_link(i['url']))
-            params['max_samples'].append(str(i.get('num', 0)))
+            params['each_max_samples'].append(str(i.get('num', 0)))
 
     @classmethod
     def validate_status(cls, finetune: Finetune, new_status: int) -> UnifiedResponseModel | None:
