@@ -93,15 +93,24 @@ export async function readFileLibDatabase(page = 1, pageSize = 40) {
     throw error;
   }
 }
+
 /**
  * 获取知识库下文件列表
  *
  */
-export async function readFileByLibDatabase(id, page) {
+export async function readFileByLibDatabase(id, page, status) {
   const pageSize = 20
-  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}`);
+  const statusStr = status === 999 ? '' : `&status=${status}`;
+  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}${statusStr}`);
   const { data, total, writeable } = response
   return { data, writeable, pages: Math.ceil(total / pageSize) }
+}
+
+/**
+ * 重试解析文件
+ */
+export async function retryKnowledgeFileApi(id) {
+  await axios.post(`/api/v1/knowledge/retry`, { file_ids: [id] });
 }
 
 /**
