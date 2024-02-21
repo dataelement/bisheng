@@ -77,6 +77,7 @@ async def get_job(*,
                   server: int = Query(default=None, description='关联的RT服务ID'),
                   status: str = Query(default='', title='多个以英文逗号,分隔',
                                       description='训练任务的状态，1: 训练中 2: 训练失败 3: 任务中止 4: 训练成功 5: 发布完成'),
+                  model_name: Optional[str] = Query(default='', description='模型名称,模糊搜索'),
                   page: Optional[int] = Query(default=1, description='页码'),
                   limit: Optional[int] = Query(default=10, description='每页条数'),
                   Authorize: AuthJWT = Depends()):
@@ -85,7 +86,7 @@ async def get_job(*,
     status_list = []
     if status.strip():
         status_list = [int(one) for one in status.strip().split(',')]
-    req_data = FinetuneList(server=server, status=status_list, page=page, limit=limit)
+    req_data = FinetuneList(server=server, status=status_list, model_name=model_name, page=page, limit=limit)
     return FinetuneService.get_all_job(req_data)
 
 

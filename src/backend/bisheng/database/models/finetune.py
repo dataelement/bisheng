@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from pydantic import BaseModel, validator
-from sqlmodel import JSON, TEXT, Column, DateTime, Field, select, text, update
+from sqlmodel import JSON, TEXT, Column, DateTime, Field, func, select, text, update
 
 
 class TrainMethod(Enum):
@@ -83,6 +83,7 @@ class Finetune(FinetuneBase, table=True):
 class FinetuneList(BaseModel):
     server: Optional[int] = Field(description='关联的RT服务ID')
     status: Optional[List[int]] = Field(description='训练任务的状态')
+    model_name: Optional[str] = Field(description='模型名称, 模糊搜索')
     page: Optional[int] = Field(default=1, description='页码')
     limit: Optional[int] = Field(default=10, description='每页条数')
 
@@ -172,13 +173,20 @@ class FinetuneDao(FinetuneBase):
             return True
 
     @classmethod
-    def find_jobs(cls, finetune_list: FinetuneList) -> List[Finetune]:
+    def find_jobs(cls, finetune_list: FinetuneList) -> (List[Finetune], int):
         offset = (finetune_list.page - 1) * finetune_list.limit
         with session_getter() as session:
             statement = select(Finetune)
+            count_statement = session.query(func.count(Finetune.id))
             if finetune_list.server:
                 statement = statement.where(Finetune.server == finetune_list.server)
+                count_statement = count_statement.filter(Finetune.server == finetune_list.server)
             if finetune_list.status:
                 statement = statement.where(Finetune.status.in_(finetune_list.status))
+                count_statement = count_statement.filter(Finetune.status.in_(finetune_list.status))
+            if finetune_list.model_name:
+                statement = statement.where(Finetune.model_name.like(f'%{finetune_list.model_name}%'))
+                count_statement = count_statement.filter(Finetune.model_name.like(f'%{finetune_list.model_name}%'))
             statement = statement.offset(offset).limit(finetune_list.limit).order_by(Finetune.create_time.desc())
-            return session.exec(statement).all()
+            all_jobs = session.exec(statement).all()
+            return all_jobs, count_statement.scalar()

@@ -323,7 +323,7 @@ class FinetuneService:
 
     @classmethod
     def get_all_job(cls, req_data: FinetuneList) -> UnifiedResponseModel[List[FinetuneInfoResponse]]:
-        job_list = FinetuneDao.find_jobs(req_data)
+        job_list, total = FinetuneDao.find_jobs(req_data)
         ret = []
         for job in job_list:
             tmp = FinetuneInfoResponse(**job.dict())
@@ -333,7 +333,7 @@ class FinetuneService:
             ret.append(tmp)
         # 异步线程更新任务状态
         asyncio.get_event_loop().run_in_executor(sync_job_thread_pool, cls.sync_all_job_status, job_list)
-        return resp_200(data=ret)
+        return resp_200(data={'data': ret, 'total': total})
 
     @classmethod
     def sync_all_job_status(cls, job_list: List[Finetune]) -> None:
@@ -381,7 +381,7 @@ class FinetuneService:
             'finetune': FinetuneInfoResponse(**finetune.dict(), base_model_name=base_model_name),
             'log': log_data,
             'loss_data': res_data,  # like [{"step": 10, "loss": 0.5}, {"step": 20, "loss": 0.3}]
-            'report': finetune.report,
+            'report': finetune.report if finetune.report else None,
         })
 
     @classmethod
