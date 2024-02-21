@@ -105,6 +105,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         self,
         elasticsearch_url: str,
         index_name: str,
+        drop_old: Optional[bool] = False,
         *,
         ssl_verify: Optional[Dict[str, Any]] = None,
         llm_chain: Optional[LLMChain] = None,
@@ -123,6 +124,12 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         except ValueError as e:
             raise ValueError(f'Your elasticsearch client string is mis-formatted. Got error: {e} ')
 
+        if drop_old:
+            try:
+                self.client.indices.delete(index=index_name)
+            except elasticsearch.exceptions.NotFoundError:
+                pass
+        
     def add_texts(
         self,
         texts: Iterable[str],
@@ -245,6 +252,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         refresh_indices: bool = True,
         llm: Optional[BaseLLM] = None,
         prompt: Optional[PromptTemplate] = DEFAULT_PROMPT,
+        drop_old: Optional[bool] = False,
         **kwargs: Any,
     ) -> ElasticKeywordsSearch:
         """Construct ElasticKeywordsSearch wrapper from raw documents.
@@ -274,9 +282,9 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         index_name = index_name or uuid.uuid4().hex
         if llm:
             llm_chain = LLMChain(llm=llm, prompt=prompt)
-            vectorsearch = cls(elasticsearch_url, index_name, llm_chain=llm_chain, **kwargs)
+            vectorsearch = cls(elasticsearch_url, index_name, llm_chain=llm_chain, drop_old=drop_old, **kwargs)
         else:
-            vectorsearch = cls(elasticsearch_url, index_name, **kwargs)
+            vectorsearch = cls(elasticsearch_url, index_name, drop_old=drop_old, **kwargs)
         vectorsearch.add_texts(texts, metadatas=metadatas, ids=ids, refresh_indices=refresh_indices)
         return vectorsearch
 
