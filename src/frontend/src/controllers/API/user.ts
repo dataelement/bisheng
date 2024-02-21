@@ -35,8 +35,8 @@ export async function disableUserApi(userid, status) {
     return await axios.post(`/api/v1/user/update`, { user_id: userid, delete: status });
 }
 // 角色列表
-export async function getRolesApi(): Promise<{ data: ROLE[] }> {
-    return await axios.get(`/api/v1/role/list`)
+export async function getRolesApi(searchkey = ''): Promise<{ data: ROLE[] }> {
+    return await axios.get(`/api/v1/role/list?role_name=${searchkey}`)
 }
 /**
  * 获取配置

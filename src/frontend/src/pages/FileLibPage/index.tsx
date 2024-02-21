@@ -26,6 +26,8 @@ import { alertContext } from "../../contexts/alertContext";
 import { userContext } from "../../contexts/userContext";
 import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import PaginationComponent from "../../components/PaginationComponent";
+import { useTable } from "../../util/hook";
 
 function CreateModal({ datalist, open, setOpen }) {
     const { t } = useTranslation()
@@ -115,32 +117,18 @@ function CreateModal({ datalist, open, setOpen }) {
 
 export default function FileLibPage() {
     const [open, setOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(1);
-    const [datalist, setDataList] = useState([]);
-    const [pageEnd, setPageEnd] = useState(false);
-    const pages = useRef(1);
-
     const { user } = useContext(userContext);
 
-    const loadPage = (_page) => {
-        setLoading(true);
-        readFileLibDatabase(_page).then(res => {
-            const { data, pages: ps } = res;
-            pages.current = ps;
-            setDataList(data);
-            setPage(_page);
-            setPageEnd(!data.length);
-            setLoading(false);
-        });
-    };
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable((param) =>
+        readFileLibDatabase(param.page, param.pageSize, param.keyword)
+    )
 
     // Delete
     const { delShow, idRef, close, delConfirm } = useDelete();
 
     const handleDelete = () => {
         captureAndAlertRequestErrorHoc(deleteFileLib(idRef.current.id).then(res => {
-            loadPage(page);
+            reload();
             close();
         }));
     }
@@ -152,10 +140,10 @@ export default function FileLibPage() {
     useEffect(() => {
         const _page = window.LibPage
         if (_page) {
-            loadPage(_page);
+            setPage(_page);
             delete window.LibPage
         } else {
-            loadPage(1);
+            setPage(1);
         }
     }, [])
 
@@ -175,13 +163,20 @@ export default function FileLibPage() {
                 </TabsList>
 
                 <TabsContent value="account">
-                    <div className="flex justify-end"><Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('create')}</Button></div>
+                    <div className="flex justify-end gap-4 items-center">
+                        <Input placeholder={t('lib.libraryName')} className="w-[140px]" onChange={(e) => search(e.target.value)}></Input>
+                        <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('create')}</Button>
+                    </div>
                     <Table>
                         <TableCaption>
                             <p>{t('lib.libraryCollection')}</p>
-                            <div className="join grid grid-cols-2 w-[200px]">
-                                <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>{t('previousPage')}</button>
-                                <button disabled={page >= pages.current || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>{t('nextPage')}</button>
+                            <div className="">
+                                <PaginationComponent
+                                    page={page}
+                                    pageSize={pageSize}
+                                    total={total}
+                                    onChange={(newPage) => setPage(newPage)}
+                                />
                             </div>
                         </TableCaption>
 

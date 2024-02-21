@@ -83,11 +83,11 @@ export function updateTempApi(temp_id, data) {
  * 获取知识库列表
  *
  */
-export async function readFileLibDatabase(page = 1, pageSize = 40) {
+export async function readFileLibDatabase(page = 1, pageSize = 40, name = '') {
   try {
-    const response: { data: any[], total: number } = await axios.get(`/api/v1/knowledge/?page_num=${page}&page_size=${pageSize}`);
-    const { data, total } = response
-    return { data, pages: Math.ceil(total / pageSize) };
+    const response: { data: any[], total: number } = await axios.get(`/api/v1/knowledge/?page_num=${page}&page_size=${pageSize}&name=${name}`);
+    // const { data, total } = response
+    return response;
   } catch (error) {
     console.error(error);
     throw error;
@@ -97,11 +97,10 @@ export async function readFileLibDatabase(page = 1, pageSize = 40) {
  * 获取知识库下文件列表
  *
  */
-export async function readFileByLibDatabase(id, page) {
-  const pageSize = 20
-  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}`);
-  const { data, total, writeable } = response
-  return { data, writeable, pages: Math.ceil(total / pageSize) }
+export async function readFileByLibDatabase(id, page, pageSize = 40, name = '') {
+  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}&file_name=${name}`);
+  return response
+  // return { data, writeable, pages: Math.ceil(total / pageSize) }
 }
 
 /**

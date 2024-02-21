@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../../alerts/confirm";
 import { Button } from "../../../components/ui/button";
@@ -15,12 +15,14 @@ import { delRoleApi, getRolesApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { ROLE } from "../../../types/api/user";
 import EditRole from "./EditRole";
+import { Input } from "../../../components/ui/input";
 
 export default function Roles() {
     const { t } = useTranslation()
 
     const [role, setRole] = useState<Partial<ROLE> | null>(null)
     const [roles, setRoles] = useState<ROLE[]>([])
+    const allRolesRef = useRef([])
 
     const handleChange = (change: boolean) => {
         change && loadData()
@@ -28,9 +30,10 @@ export default function Roles() {
     }
 
     const loadData = () => {
-        getRolesApi().then(data =>
+        getRolesApi().then(data => {
             setRoles(data)
-        )
+            allRolesRef.current = data
+        })
     }
 
     useEffect(() => loadData(), [])
@@ -53,10 +56,19 @@ export default function Roles() {
             _role.role_name === name && role.id !== _role.id))
     }
 
+    // search
+    const handleSearch = (e) => {
+        const word = e.target.value
+        setRoles(allRolesRef.current.filter(item => item.role_name.includes(word)))
+    }
+
     if (role) return <EditRole id={role.id || -1} name={role.role_name || ''} onBeforeChange={checkSameName} onChange={handleChange}></EditRole>
 
     return <div className=" relative">
-        <Button className="h-8 rounded-full absolute right-0 top-[-40px]" onClick={() => setRole({})}>{t('create')}</Button>
+        <div className="flex gap-4 items-center justify-end">
+            <Input placeholder={t('system.roleName')} className="w-[140px]" onChange={handleSearch}></Input>
+            <Button className="h-8 rounded-full" onClick={() => setRole({})}>{t('create')}</Button>
+        </div>
         <Table>
             <TableCaption>{t('system.roleList')}.</TableCaption>
             <TableHeader>
