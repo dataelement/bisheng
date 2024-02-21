@@ -88,7 +88,8 @@
         "createFailureTitle": "创建失败",
         "createdBy": "创建用户",
         "offline": "下线",
-        "online": "上线"
+        "online": "上线",
+        "guideWords": "引导词"
     },
     "chat": {
         "newChat": "新建会话",

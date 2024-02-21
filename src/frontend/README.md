@@ -46,12 +46,9 @@ You can learn more in the [Create React App documentation](https://facebook.gith
 To learn React, check out the [React documentation](https://reactjs.org/).
 
 TODO
-表单重复使用，在输入框加表单按钮
-引导词；l2 设置 md 1000 字,会话新建时发送引导词；
 搜索：创建旁边加搜索；
 - 知识库页面：搜索知识库名称字段
 - 知识库内文件列表页：搜索文件名称
 - 用户列表页：搜索用户名
 - 角色列表页：搜索角色名
-大模型回复中的链接用新页面打开
 

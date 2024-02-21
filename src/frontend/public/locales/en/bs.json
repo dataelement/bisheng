@@ -91,7 +91,8 @@
         "createFailureTitle": "Creation failed",
         "createdBy": "Created by",
         "offline": "Offline",
-        "online": "Online"
+        "online": "Online",
+        "guideWords": "Guide Words"
     },
     "chat": {
         "newChat": "New Chat",

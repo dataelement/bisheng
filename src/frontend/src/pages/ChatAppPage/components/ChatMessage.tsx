@@ -87,6 +87,7 @@ export const ChatMessage = ({ chat, userName, disabledReSend, showSearch, onSour
             <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeMathjax]}
+                linkTarget="_blank"
                 className="markdown prose inline-block break-words text-primary dark:prose-invert max-w-full text-sm"
                 components={{
                     code: ({ node, inline, className, children, ...props }) => {
@@ -123,6 +124,7 @@ export const ChatMessage = ({ chat, userName, disabledReSend, showSearch, onSour
     const logMkdown = useMemo(
         () => (
             chat.thought && <ReactMarkdown
+                linkTarget="_blank"
                 className="markdown prose text-gray-600 inline-block break-words max-w-full text-sm"
             >
                 {chat.thought.toString()}

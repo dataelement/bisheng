@@ -7,12 +7,14 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import CreateTask from "./components/CreateTask";
 import FinetuneDetail, { BadgeView } from "./components/FinetuneDetail";
 import FinetuneHead from "./components/FinetuneHead";
+import PaginationComponent from "../../components/PaginationComponent";
 
 export const Finetune = ({ rtClick, gpuClick }) => {
     const { setSuccessData } = useContext(alertContext);
     const { t } = useTranslation()
 
-    const { tasks, searchTask, loadTasks } = useTasks()
+    const pageSize = 20
+    const { currentPage, tasks, searchTask, loadTasks } = useTasks(pageSize)
     // 详情
     const [taskId, setTaskId] = useState('')
 
@@ -56,6 +58,12 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                                 ))}
                             </TableBody>
                         </Table>
+                        <PaginationComponent
+                            page={currentPage}
+                            pageSize={pageSize}
+                            total={100}
+                            onChange={(newPage) => loadTasks(newPage)}
+                        />
                     </div>
                     <div className="flex-1 overflow-hidden">
                         {taskId ?
@@ -87,20 +95,27 @@ export const Finetune = ({ rtClick, gpuClick }) => {
     </div>
 };
 
-const useTasks = () => {
+const useTasks = (pageSize) => {
     const [tasks, setTasks] = useState([]);
-    const filterRef = useRef({ type: 'all', rt: 'all' }); // 当前选项
+    const filterRef = useRef({ keyword: '', type: 'all', rt: 'all' }); // 当前选项
+    // page
+    const [currentPage, setCurrentPage] = useState(1)
+    // search input
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
-    const handleSearchTask = (type, rt) => {
-        filterRef.current = { type, rt };
+    const handleSearchTask = (keyword, type, rt) => {
+        filterRef.current = { keyword, type, rt };
         loadTable()
     }
 
-    const loadTable = async () => {
-        const { type, rt } = filterRef.current
+    const loadTable = async (page?) => {
+        page && setCurrentPage(page)
+
+        const { type, rt, keyword } = filterRef.current
         const res = await getTasksApi({
-            page: 1,
-            limit: 100,
+            page: page || currentPage,
+            limit: pageSize,
+            keyword,
             server: rt,
             status: type
         })
@@ -109,7 +124,9 @@ const useTasks = () => {
     }
 
     return {
+        currentPage,
         tasks,
+        searchInputRef,
         searchTask: handleSearchTask,
         loadTasks: loadTable
     }
