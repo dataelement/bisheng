@@ -105,7 +105,7 @@ class ChatQWen(BaseChatModel):
         .. code-block:: python
 
             from bisheng_langchain.chat_models import ChatQWen
-            chat_miniamaxai = ChatQWen(model_name="qwen-turbo")
+            chat_qwen = ChatQWen(model_name="qwen-turbo")
     """
 
     client: Optional[Any]  #: :meta private:
@@ -192,7 +192,11 @@ class ChatQWen(BaseChatModel):
             return self.client.post(url=url, json=inp).json()
 
         rsp_dict = _completion_with_retry(**kwargs)
-        if 'output' not in rsp_dict:
+        if 'code' in rsp_dict and rsp_dict['code'] == 'DataInspectionFailed':
+            output_res = {'choices': [{'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': rsp_dict['message']}}]} 
+            usage_res = {'total_tokens': 2, 'output_tokens': 1, 'input_tokens': 1}
+            return output_res, usage_res
+        elif 'output' not in rsp_dict:
             logger.error(f'proxy_llm_error resp={rsp_dict}')
             message = rsp_dict['message']
             raise Exception(message)
