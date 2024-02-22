@@ -54,7 +54,7 @@ class SFTBackend:
         """ 发布训练任务 从训练路径到处到正式路径"""
         uri = '/v2.1/sft/job/publish'
         url = '/v2.1/models/sft_elem/infer'
-        res = requests.post(url, json={'uri': uri, 'job_id': job_id, 'model_name': model_name})
+        res = requests.post(f'{host}{url}', json={'uri': uri, 'job_id': job_id, 'model_name': model_name})
         return cls.handle_response(res)
 
     @classmethod
@@ -117,4 +117,11 @@ class SFTBackend:
         res = requests.post(f'{host}{url}',
                             json={'uri': uri, 'job_id': job_id, 'old_model_name': old_model_name,
                                   'model_name': model_name})
+        return cls.handle_response(res)
+
+    @classmethod
+    def get_gpu_info(cls, host) -> (bool, str):
+        """ 获取GPU信息 """
+        url = '/v2.1/sft/gpu'
+        res = requests.get(f'{host}{url}')
         return cls.handle_response(res)
