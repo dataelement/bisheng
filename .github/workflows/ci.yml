@@ -133,7 +133,7 @@ jobs:
         run: |
           message=""
           IFS=$'\n'
-          for line in $(echo "${{ steps.git_message.outputs.message }}"); do
+          for line in $(echo "${{ github.event.head_commit.message }}"); do
             message+="$line\n"
           done
           echo "::set-output name=message::$message"

@@ -51,14 +51,13 @@ async def regist(*, user: UserCreate):
         db_user.user_id = 1
         db_user_role = UserRole(user_id=db_user.user_id, role_id=1)
         with session_getter() as session:
-            session.add(db_user)
             session.add(db_user_role)
             session.commit()
 
     # check if user already exist
     with session_getter() as session:
         name_user = session.exec(select(User).where(User.user_name == user.user_name)).all()
-    if name_user:
+    if name_user and name_user[0].user_id != 1:
         raise HTTPException(status_code=500, detail='账号已存在')
     else:
         try:

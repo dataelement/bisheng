@@ -16,18 +16,19 @@ import {
     TabsTrigger,
 } from "../../components/ui/tabs";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Filter, RotateCw } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import ShadTooltip from "../../components/ShadTooltipComponent";
-import { locationContext } from "../../contexts/locationContext";
-import { deleteFile, readFileByLibDatabase } from "../../controllers/API";
-import UploadModal from "../../modals/UploadModal";
 import { bsconfirm } from "../../alerts/confirm";
+import ShadTooltip from "../../components/ShadTooltipComponent";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectIconTrigger } from "../../components/ui/select1";
+import { locationContext } from "../../contexts/locationContext";
+import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { Input } from "../../components/ui/input";
 import PaginationComponent from "../../components/PaginationComponent";
+import UploadModal from "../../modals/UploadModal";
 
 export default function FilesPage() {
     const { t } = useTranslation()
@@ -47,6 +48,21 @@ export default function FilesPage() {
     const [hasPermission, setHasPermission] = useState(true)
     const { appConfig } = useContext(locationContext)
 
+    // filter
+    const [filter, setFilter] = useState(999)
+
+    const loadPage = (_page) => {
+        setLoading(true)
+        readFileByLibDatabase(id, _page, filter).then(res => {
+            const { data, writeable, pages: ps } = res
+            pages.current = ps
+            setDataList(data)
+            setPage(_page)
+            setPageEnd(!data.length)
+            setLoading(false)
+            setHasPermission(writeable)
+        })
+    }
     useEffect(() => {
         // @ts-ignore
         setTitle(window.libname)
@@ -80,6 +96,23 @@ export default function FilesPage() {
                 next()
             }
         })
+    }
+
+    // 重试解析
+    const handleRetry = (id) => {
+        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(id).then(res => {
+            // 乐观更新
+            setDataList(list => {
+                return list.map(item => item.id === id ? { ...item, status: 1 } : item)
+            })
+        }))
+    }
+
+    useEffect(() => {
+        loadPage(1)
+    }, [filter])
+    const selectChange = (id) => {
+        setFilter(Number(id))
     }
 
     return <div className="w-full h-screen p-6 relative overflow-y-auto">
@@ -118,7 +151,22 @@ export default function FilesPage() {
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-[600px]">{t('lib.fileName')}</TableHead>
-                            <TableHead>{t('lib.status')}</TableHead>
+                            <TableHead className="flex items-center gap-4">{t('lib.status')}
+                                {/* Select component */}
+                                <Select onValueChange={selectChange}>
+                                    <SelectIconTrigger className="">
+                                        <Filter size={16} className={`cursor-pointer ${filter === 999 ? '' : 'text-gray-950'}`} />
+                                    </SelectIconTrigger>
+                                    <SelectContent className="">
+                                        <SelectGroup>
+                                            <SelectItem value={'999'}>{t('all')}</SelectItem>
+                                            <SelectItem value={'1'}>{t('lib.parsing')}</SelectItem>
+                                            <SelectItem value={'2'}>{t('lib.completed')}</SelectItem>
+                                            <SelectItem value={'3'}>{t('lib.parseFailed')}</SelectItem>
+                                        </SelectGroup>
+                                    </SelectContent>
+                                </Select>
+                            </TableHead>
                             <TableHead>{t('lib.uploadTime')}</TableHead>
                             <TableHead>{t('operations')}</TableHead>
                         </TableRow>
@@ -128,8 +176,11 @@ export default function FilesPage() {
                             <TableRow key={el.id}>
                                 <TableCell className="font-medium">{el.file_name}</TableCell>
                                 <TableCell>
-                                    {el.status === 3 ? <div className="tooltip" data-tip={el.remark}>
-                                        <span className='text-red-500'>{t('lib.parseFailed')}</span>
+                                    {el.status === 3 ? <div className="flex items-center">
+                                        <div className="tooltip" data-tip={el.remark}>
+                                            <span className='text-red-500'>{t('lib.parseFailed')}</span>
+                                        </div>
+                                        <Button variant="link"><RotateCw size={16} onClick={() => handleRetry(el.id)} /></Button>
                                     </div> :
                                         <span className={el.status === 3 && 'text-red-500'}>{[t('lib.parseFailed'), t('lib.parsing'), t('lib.completed'), t('lib.parseFailed')][el.status]}</span>
                                     }

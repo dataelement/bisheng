@@ -253,7 +253,7 @@ class ChatManager:
                                 erro_resp.intermediate_steps = f'File is parsed fail. error={str(e)}'
                             else:
                                 erro_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
-
+                            context['status'] == 'init'
                             await self.send_json(context.get('flow_id'), context.get('chat_id'),
                                                  erro_resp)
                             erro_resp.type = 'close'
