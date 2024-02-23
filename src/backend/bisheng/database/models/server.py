@@ -9,7 +9,7 @@ from sqlmodel import Field, select
 
 class ServerBase(SQLModelSerializable):
     endpoint: str = Field(index=False, unique=True)
-    sft_endpoint: str = Field(index=False, description='Finetune服务地址')
+    sft_endpoint: str = Field(default='', index=False, description='Finetune服务地址')
     server: str = Field(index=True)
     remark: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
