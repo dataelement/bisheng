@@ -7,9 +7,11 @@ from typing import List
 import requests
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import session_getter
-from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployDao, ModelDeployQuery,
-                                                  ModelDeployRead, ModelDeployUpdate)
+from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployDao, ModelDeployInfo,
+                                                  ModelDeployQuery, ModelDeployRead,
+                                                  ModelDeployUpdate)
 from bisheng.database.models.server import Server, ServerCreate, ServerRead
+from bisheng.database.models.sft_model import SftModelDao
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import delete
@@ -77,17 +79,20 @@ async def list(*, query: ModelDeployQuery = None):
             servers = session.exec(select(Server)).all()
         id2server = {server.id: server for server in servers}
         name2server = {server.server: server for server in servers}
+        all_sft_model = SftModelDao.get_all_sft_model()
+        sft_model_dict = {one.model_name: True for one in all_sft_model}
         for server in servers:
             await update_model(server.endpoint, server.id)
         sql = select(ModelDeploy)
         if query and query.server:
             sql = sql.where(ModelDeploy.server == str(name2server.get(query.server).id))
-        # get
         with session_getter() as session:
             db_model = session.exec(sql.order_by(ModelDeploy.model)).all()
+        res = []
         for model in db_model:
             model.server = id2server.get(int(model.server)).server
-        return resp_200(data=db_model)
+            res.append(ModelDeployInfo(**model.dict(), sft_support=sft_model_dict.get(model.model, False)))
+        return resp_200(data=res)
     except Exception as exc:
         logger.error(f'Error add server: {exc}', exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc)) from exc

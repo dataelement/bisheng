@@ -84,3 +84,7 @@ class ModelDeployCreate(ModelDeployBase):
 class ModelDeployUpdate(SQLModelSerializable):
     id: int
     config: Optional[str] = None
+
+
+class ModelDeployInfo(ModelDeploy):
+    sft_support: bool = Field(default=False, description='是否支持微调训练')

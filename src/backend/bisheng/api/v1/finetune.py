@@ -164,8 +164,7 @@ async def get_download_url(*,
 
 @router.get('/gpu', response_model=UnifiedResponseModel)
 async def get_gpu_info(*,
-                       server_id: int,
                        Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
-    return FinetuneService.get_gpu_info(server_id)
+    return FinetuneService.get_gpu_info()

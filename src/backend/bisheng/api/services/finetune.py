@@ -20,6 +20,7 @@ from bisheng.database.models.finetune import (Finetune, FinetuneChangeModelName,
                                               FinetuneExtraParams, FinetuneList, FinetuneStatus)
 from bisheng.database.models.model_deploy import ModelDeploy, ModelDeployDao
 from bisheng.database.models.server import Server, ServerDao
+from bisheng.database.models.sft_model import SftModelDao
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 from pydantic import ValidationError
@@ -279,6 +280,10 @@ class FinetuneService:
                                       server=str(server.id),
                                       endpoint=f'http://{server.endpoint}/v2.1/models')
         published_model = ModelDeployDao.insert_one(published_model)
+
+        # 记录可用于训练的模型名称
+        SftModelDao.insert_sft_model(published_model.model)
+
         # 更新训练任务状态
         logger.info('update sft job data')
         finetune.status = new_status
@@ -305,11 +310,12 @@ class FinetuneService:
 
         # 调用SFT-backend的API接口
         logger.info(f'start cancel export sft job: {job_id}, user: {user.get("user_name")}')
-        sft_ret = SFTBackend.publish_job(host=parse_server_host(server.sft_endpoint), job_id=job_id.hex,
-                                         model_name=finetune.model_name)
+        sft_ret = SFTBackend.cancel_publish_job(host=parse_server_host(server.sft_endpoint), job_id=job_id.hex,
+                                                model_name=finetune.model_name)
         if not sft_ret[0]:
             logger.error(f'cancel export sft job error: job_id: {job_id}, err: {sft_ret[1]}')
             return UnExportJobError.return_resp()
+        SftModelDao.delete_sft_model(finetune.model_name)
         # 删除发布的模型信息
         logger.info(f'delete published model: {finetune.model_id}')
         ModelDeployDao.delete_model_by_id(finetune.model_id)
@@ -495,22 +501,28 @@ class FinetuneService:
             logger.error(f'change model name error: job_id: {finetune.id.hex}, err: {sft_ret[1]}')
             return False
 
+        # 修改可预训练的模型名称
+        SftModelDao.change_sft_model(published_model.model, model_name)
+
         # 更新已发布模型的model_name
         published_model.model = model_name
         ModelDeployDao.update_model(published_model)
         return True
 
     @classmethod
-    def get_gpu_info(cls, server_id: int) -> UnifiedResponseModel:
+    def get_gpu_info(cls) -> UnifiedResponseModel:
         """ 获取GPU信息 """
-        server = cls.get_sft_server(server_id)
-        if not server:
-            return NoSftServerError.return_resp()
-
-        sft_ret = SFTBackend.get_gpu_info(parse_server_host(server.sft_endpoint))
-        if not sft_ret[0]:
-            logger.error(f'get gpu info error: server_id: {server_id}, err: {sft_ret[1]}')
-            return GetGPUInfoError.return_resp()
-
-        gpu_info = parse_gpus(sft_ret[1])
-        return resp_200(data=gpu_info)
+        all_server = ServerDao.find_all_server()
+        res = []
+        for server in all_server:
+            if not server.sft_endpoint:
+                continue
+            sft_ret = SFTBackend.get_gpu_info(parse_server_host(server.sft_endpoint))
+            if not sft_ret[0]:
+                logger.error(f'get gpu info error: server_id: {server.id}, err: {sft_ret[1]}')
+                return GetGPUInfoError.return_resp()
+            gpu_info = parse_gpus(sft_ret[1])
+            for one in gpu_info:
+                one['server'] = server.server
+                res.append(one)
+        return resp_200(data=res)
