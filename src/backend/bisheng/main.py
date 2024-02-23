@@ -8,7 +8,8 @@ from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
 from bisheng.utils.http_middleware import CustomMiddleware
 from bisheng.utils.logger import configure
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,7 +24,13 @@ def handle_http_exception(req: Request, exc: HTTPException) -> ORJSONResponse:
     return ORJSONResponse(content=msg)
 
 
-_EXCEPTION_HANDLERS = {HTTPException: handle_http_exception}
+def handle_request_validation_error(req: Request, exc: RequestValidationError) -> ORJSONResponse:
+    msg = {'status_code': status.HTTP_422_UNPROCESSABLE_ENTITY, 'status_message': exc.errors()}
+    logger.error(f'{req.method} {req.url} {exc.errors()} {exc.body}')
+    return ORJSONResponse(content=msg)
+
+
+_EXCEPTION_HANDLERS = {HTTPException: handle_http_exception, RequestValidationError: handle_request_validation_error}
 
 
 @asynccontextmanager
@@ -74,8 +81,6 @@ def create_app():
 
     app.include_router(router)
     app.include_router(router_rpc)
-    app.on_event('startup')(setup_llm_caching)
-    app.on_event('startup')(init_default_data)
     return app
 
 

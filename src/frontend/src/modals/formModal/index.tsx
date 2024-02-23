@@ -191,7 +191,7 @@ export default function FormModal({
     const host = appConfig.websocketHost || window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
     const chatEndpoint = `/api/v1/chat/${chatId}`;
 
-    const token = localStorage.getItem("ws_token");
+    const token = localStorage.getItem("ws_token") || '';
     return `${isDevelopment ? "ws" : webSocketProtocol
       }://${host}${chatEndpoint}?t=${token}`;
   }

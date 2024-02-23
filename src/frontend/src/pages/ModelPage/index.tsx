@@ -30,6 +30,7 @@ import { useCopyText } from "../../util/hook";
 import RTConfig from "./components/RTConfig";
 import { CpuDetail } from "./cpuInfo";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { Finetune } from "./finetune";
 
 enum STATUS {
     ONLINE,
@@ -206,12 +207,12 @@ export default function FileLibPage() {
     const copyText = useCopyText()
 
     return <div className="w-full h-screen p-6 overflow-y-auto">
-        <Tabs defaultValue="account" className="w-full">
+        <Tabs defaultValue="model" className="w-full">
             <TabsList className="">
-                <TabsTrigger value="account" className="roundedrounded-xl">{t('model.modelManagement')}</TabsTrigger>
-                <TabsTrigger disabled value="password">{t('model.modelFineTune')}</TabsTrigger>
+                <TabsTrigger value="model" className="roundedrounded-xl">{t('model.modelManagement')}</TabsTrigger>
+                <TabsTrigger value="finetune">{t('model.modelFineTune')}</TabsTrigger>
             </TabsList>
-            <TabsContent value="account">
+            <TabsContent value="model">
                 <div className="flex justify-end gap-4">
                     <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
                     {user.role === 'admin' && <Button className="h-8 rounded-full" onClick={() => setShowCpu(true)}>{t('model.gpuResourceUsage')}</Button>}
@@ -250,7 +251,10 @@ export default function FileLibPage() {
                 </Table>
                 {/* 分页 */}
             </TabsContent>
-            <TabsContent value="password"></TabsContent>
+            <TabsContent value="finetune">
+                {/* 微调 */}
+                <Finetune rtClick={() => setRTOpen(true)} gpuClick={() => setShowCpu(true)}></Finetune>
+            </TabsContent>
         </Tabs>
         {/* 编辑配置 */}
         <ConfigModal data={currentModel} readonly={readOnlyConfig || !appConfig.isDev} open={open} setOpen={setOpen} onSave={handleSave}></ConfigModal>

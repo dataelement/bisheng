@@ -286,3 +286,9 @@ def get_L2_param_from_flow(
             logger.exception(e)
             session.rollback()
             return False
+
+
+def parse_server_host(endpoint: str):
+    """ 将数据库中的endpoints解析为http请求的host """
+    endpoint = endpoint.replace('http://', '').split('/')[0]
+    return f'http://{endpoint}'
