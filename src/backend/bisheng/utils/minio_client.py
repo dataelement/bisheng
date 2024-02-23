@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import minio
 from bisheng.settings import settings
+from loguru import logger
 
 bucket = 'bisheng'
 tmp_bucket = 'tmp-dir'
@@ -35,10 +36,12 @@ class MinioClient():
     def upload_minio(self, object_name: str, file_path, content_type='application/text'):
         # 初始化minio
         if self.minio_client:
-            self.minio_client.fput_object(bucket_name=bucket,
-                                          object_name=object_name,
-                                          file_path=file_path,
-                                          content_type=content_type)
+            logger.debug('upload_file obj={} bucket={} file_paht={}', object_name, bucket,
+                         file_path)
+            return self.minio_client.fput_object(bucket_name=bucket,
+                                                 object_name=object_name,
+                                                 file_path=file_path,
+                                                 content_type=content_type)
 
     def upload_minio_data(self, object_name: str, data, length, content_type):
         # 初始化minio
@@ -70,21 +73,20 @@ class MinioClient():
         from minio.commonconfig import Filter
 
         if self.minio_client and not self.minio_client.get_bucket_lifecycle(tmp_bucket):
-            lifecycle_conf = LifecycleConfig(
-                [
-                    Rule(
-                        'Enabled',
-                        rule_filter=Filter(prefix='documents/'),
-                        rule_id='rule1',
-                        expiration=Expiration(days=1),
-                    ),
-                ],
-            )
+            lifecycle_conf = LifecycleConfig([
+                Rule(
+                    'Enabled',
+                    rule_filter=Filter(prefix='documents/'),
+                    rule_id='rule1',
+                    expiration=Expiration(days=1),
+                ),
+            ], )
             self.minio_client.set_bucket_lifecycle(tmp_bucket, lifecycle_conf)
 
         if self.minio_client:
             self.minio_client.put_object(bucket_name=tmp_bucket,
-                                         object_name=object_name, data=io.BytesIO(data),
+                                         object_name=object_name,
+                                         data=io.BytesIO(data),
                                          length=len(data))
 
     def delete_minio(self, object_name: str):

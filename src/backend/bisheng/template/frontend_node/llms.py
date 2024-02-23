@@ -10,6 +10,13 @@ from bisheng.template.frontend_node.constants import (CTRANSFORMERS_DEFAULT_CONF
 class LLMFrontendNode(FrontendNode):
 
     def add_extra_fields(self) -> None:
+        self.template.add_field(
+            TemplateField(field_type='bool',
+                          required=True,
+                          show=True,
+                          advanced=True,
+                          name='cache',
+                          value=True))
         if 'VertexAI' in self.template.type_name:
             # Add credentials field which should of type file.
             self.template.add_field(

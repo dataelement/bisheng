@@ -306,10 +306,13 @@ def get_filelist(*,
 
 
 @router.post('/retry', status_code=200)
-def retry(file_ids: List[int]):
+def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = Depends()):
     """失败重试"""
+    file_ids = data.get('file_ids')
     with session_getter() as session:
-        db_files = session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
+        db_files = session.exec(
+            select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids),
+                                        KnowledgeFile.status == 3)).all()
 
     separator = ['\n\n', '\n', ' ', '']
     chunk_size = 500
@@ -317,22 +320,48 @@ def retry(file_ids: List[int]):
     if db_files:
         minio = MinioClient()
         for file in db_files:
+            if file.remark == 'file repeat':
+                # 重复的文件不能重复解析
+                continue
             # file exist
             with session_getter() as session:
                 db_knowledge = session.get(Knowledge, file.knowledge_id)
+                file.status = 1  # 解析中
+                session.add(file)
+                session.commit()
+                session.refresh(file)
+                session.refresh(db_knowledge)
 
             index_name = db_knowledge.index_name or db_knowledge.collection_name
             original_file = file.object_name
-            file_path = file_download(minio.get_share_link(original_file))
+            file_url = minio.get_share_link(original_file)
+            if file_url:
+                file_path, _ = file_download(file_url)
+            else:
+                with session_getter() as session:
+                    db_knowledge = session.get(Knowledge, file.knowledge_id)
+                    file.status = 3  # 解析中
+                    file.remark = '原始文件丢失'
+                    session.commit()
+                continue
 
             try:
-                addEmbedding(db_knowledge.collection_name, index_name, db_knowledge.id,
-                             db_knowledge.model, chunk_size, separator, chunk_overlap, [file_path],
-                             [file], None)
+                background_tasks.add_task(addEmbedding,
+                                          collection_name=db_knowledge.collection_name,
+                                          index_name=index_name,
+                                          knowledge_id=db_knowledge.id,
+                                          model=db_knowledge.model,
+                                          chunk_size=chunk_size,
+                                          separator=separator,
+                                          chunk_overlap=chunk_overlap,
+                                          file_paths=[file_path],
+                                          knowledge_files=[file],
+                                          callback=None,
+                                          extra_meta=file.extra_meta)
             except Exception as e:
                 logger.error(e)
 
-    pass
+    return resp_200()
 
 
 @router.delete('/{knowledge_id}', status_code=200)
