@@ -5,6 +5,7 @@ database_url:
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
 # 普通模式:
 redis_url: "redis://redis:6379/1"
+
 # 集群模式或者哨兵模式（只能选其一）:
 # redis_url: 
 #   mode: "cluster"
