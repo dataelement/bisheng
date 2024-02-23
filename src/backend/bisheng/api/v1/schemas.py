@@ -74,9 +74,11 @@ def resp_200(data: Union[list, dict, str, Any] = None,
     # return data
 
 
-def resp_500(data: str = None, message: str = 'BAD REQUEST') -> UnifiedResponseModel:
+def resp_500(code: int = 500,
+             data: Union[list, dict, str, Any] = None,
+             message: str = 'BAD REQUEST') -> UnifiedResponseModel:
     """错误的逻辑回复"""
-    return UnifiedResponseModel(status_code=500, status_message=message, data=data)
+    return UnifiedResponseModel(status_code=code, status_message=message, data=data)
 
 
 class ProcessResponse(BaseModel):

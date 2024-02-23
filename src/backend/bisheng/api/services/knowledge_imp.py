@@ -9,6 +9,7 @@ import requests
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate
 from bisheng.database.models.knowledge_file import KnowledgeFile
+from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
@@ -16,6 +17,7 @@ from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.embeddings import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from fastapi import HTTPException
 from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
                                         UnstructuredMarkdownLoader, UnstructuredPowerPointLoader,
@@ -26,6 +28,8 @@ from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores.base import VectorStore
 from loguru import logger
+from pymilvus import Collection
+from sqlalchemy import delete
 from sqlmodel import select
 
 filetype_load_map = {
@@ -67,6 +71,85 @@ def create_knowledge(knowledge: KnowledgeCreate, user_id: int):
         session.commit()
         session.refresh(db_knowldge)
         return db_knowldge.copy()
+
+
+def delete_knowledge_by(knowledge: Knowledge):
+    # 处理vector
+    knowledge_id = knowledge.id
+    embeddings = FakeEmbedding()
+    vectore_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
+    if isinstance(vectore_client.col, Collection):
+        logger.info(f'delete_vectore col={knowledge.collection_name}')
+        if knowledge.collection_name.startswith('col'):
+            vectore_client.col.drop()
+        else:
+            pk = vectore_client.col.query(expr=f'knowledge_id=="{knowledge.id}"',
+                                          output_fields=['pk'])
+            vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
+            # 判断milvus 是否还有entity
+            if vectore_client.col.is_empty:
+                vectore_client.col.drop()
+
+    # 处理 es
+    # elastic
+    esvectore_client: 'ElasticKeywordsSearch' = decide_vectorstores(knowledge.index_name,
+                                                                    'ElasticKeywordsSearch',
+                                                                    embeddings)
+    if esvectore_client:
+        index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
+        res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
+        logger.info(f'act=delete_es index={index_name} res={res}')
+    # 处理knowledgefile
+    with session_getter() as session:
+        session.exec(delete(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
+        session.delete(knowledge)
+        session.commit()
+    return True
+
+
+def delete_knowledge_file_batch(file_ids: List[int]):
+    """ 删除知识文件信息 """
+    with session_getter() as session:
+        knowledge_files = session.exec(
+            select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
+        if not knowledge_files:
+            raise ValueError('文件ID不存在')
+
+    knowledge_ids = [file.knowledge_id for file in knowledge_files]
+    with session_getter() as session:
+        knowledges = session.exec(select(Knowledge).where(Knowledge.id.in_(knowledge_ids))).all()
+    knowledgeid_dict = {knowledge.id: knowledge for knowledge in knowledges}
+    # 处理vectordb
+    for file in knowledge_files:
+        knowledge = knowledgeid_dict.get(file.knowledge_id)
+        collection_name = knowledge.collection_name
+        embeddings = FakeEmbedding()
+        vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+        if isinstance(vectore_client, Milvus) and vectore_client.col:
+            pk = vectore_client.col.query(expr=f'file_id == {file.id}', output_fields=['pk'])
+            res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
+            logger.info(f'act=delete_vector file_id={file.id} res={res}')
+
+            # minio
+            minio_client = MinioClient()
+            minio_client.delete_minio(str(file.id))
+            if file.object_name:
+                minio_client.delete_minio(str(file.object_name))
+            # elastic
+            index_name = knowledge.index_name or collection_name
+            esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+
+            if esvectore_client:
+                res = esvectore_client.client.delete_by_query(
+                    index=index_name, query={'match': {
+                        'metadata.file_id': file.id
+                    }})
+                logger.info(f'act=delete_es file_id={file.id} res={res}')
+
+        with session_getter() as session:
+            session.delete(file)
+            session.commit()
+    return True
 
 
 def decide_embeddings(model: str) -> Embeddings:
@@ -130,7 +213,8 @@ def addEmbedding(collection_name,
     callback_obj = {}
     for index, path in enumerate(file_paths):
         ts1 = time.time()
-        knowledge_file = knowledge_files[index]
+        with session_getter() as session:
+            knowledge_file = session.get(KnowledgeFile, knowledge_files[index].id)
         logger.info('process_file_begin knowledge_id={} file_name={} file_size={} ',
                     knowledge_files[0].knowledge_id, knowledge_file.file_name, len(file_paths))
         # 原始文件保存
@@ -142,6 +226,7 @@ def addEmbedding(collection_name,
             session.refresh(knowledge_file)
         if not vectore_client and not es_client:
             # 设置错误
+            logger.error(f'no_vector_db_found err={error_msg}')
             with session_getter() as session:
                 db_file = session.get(KnowledgeFile, knowledge_file.id)
                 setattr(db_file, 'status', 3)
@@ -161,7 +246,8 @@ def addEmbedding(collection_name,
                 requests.post(url=callback, json=inp, timeout=3)
             continue
         try:
-            minio_client.upload_minio(knowledge_file.object_name, path)
+            res = minio_client.upload_minio(knowledge_file.object_name, path)
+            logger.info('upload_original_file path={} res={}', knowledge_file.object_name, res)
             texts, metadatas = read_chunk_text(path, knowledge_file.file_name, chunk_size,
                                                chunk_overlap, separator)
 
@@ -197,7 +283,7 @@ def addEmbedding(collection_name,
                         time.time() - ts1)
 
         except Exception as e:
-            logger.error('insert_metadata={} ', metadatas, e)
+            logger.error('add_vectordb {}', e)
             with session_getter() as session:
                 db_file = session.get(KnowledgeFile, knowledge_file.id)
                 setattr(db_file, 'status', 3)

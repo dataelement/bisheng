@@ -50,6 +50,9 @@ async def regist(*, user: UserCreate):
     if not admin:
         db_user.user_id = 1
         db_user_role = UserRole(user_id=db_user.user_id, role_id=1)
+        with session_getter() as session:
+            session.add(db_user_role)
+            session.commit()
 
     # check if user already exist
     with session_getter() as session:
