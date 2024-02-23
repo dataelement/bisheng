@@ -13,6 +13,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     md5: Optional[str] = Field(index=False)
     status: Optional[int] = Field(index=False)
     object_name: Optional[str] = Field(index=False)
+    extra_meta: Optional[str] = Field(index=False)
     remark: Optional[str] = Field(sa_column=Column(String(length=512)))
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))

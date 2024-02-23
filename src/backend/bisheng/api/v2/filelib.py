@@ -1,9 +1,9 @@
-from typing import Optional
+import hashlib
+from typing import List, Optional
 
-from bisheng.api.services import knowledge_imp
-from bisheng.api.v1.knowledge import (addEmbedding, decide_vectorstores, file_knowledge,
-                                      text_knowledge)
-from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200
+from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, delete_knowledge_by,
+                                                delete_knowledge_file_batch, text_knowledge)
+from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeRead,
@@ -11,13 +11,11 @@ from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, Knowl
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
-from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
-from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
+from bisheng.utils.minio_client import MinioClient
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
-from langchain.vectorstores import Milvus
 from sqlalchemy import func, or_
 from sqlmodel import select
 
@@ -29,7 +27,7 @@ router = APIRouter(prefix='/filelib')
 def creat(knowledge: KnowledgeCreate):
     """创建知识库."""
     user_id = knowledge.user_id or settings.get_from_db('default_operator').get('user')
-    db_knowldge = knowledge_imp.create_knowledge(knowledge, user_id)
+    db_knowldge = create_knowledge(knowledge, user_id)
     return db_knowldge
 
 
@@ -108,17 +106,18 @@ def get_knowledge(*, page_size: Optional[int], page_num: Optional[str]):
 
 
 @router.delete('/{knowledge_id}', status_code=200)
-def delete_knowledge(*, knowledge_id: int):
+def delete_knowledge_api(*, knowledge_id: int):
     """ 删除知识库信息. """
     with session_getter() as session:
         knowledge = session.get(Knowledge, knowledge_id)
     if not knowledge:
         raise HTTPException(status_code=404, detail='knowledge not found')
-
-    with session_getter() as session:
-        session.delete(knowledge)
-        session.commit()
-    return {'message': 'knowledge deleted successfully'}
+    try:
+        delete_knowledge_by(knowledge)
+        return {'message': 'knowledge deleted successfully'}
+    except Exception as e:
+        logger.exception(e)
+        return resp_500(message=f'错误 e={str(e)}')
 
 
 @router.post('/file/{knowledge_id}',
@@ -191,33 +190,26 @@ def delete_knowledge_file(*, file_id: int):
     if not knowledge_file:
         raise HTTPException(status_code=404, detail='文件不存在')
 
-    with session_getter() as session:
-        knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
+    try:
+        delete_knowledge_file_batch([file_id])
+        return resp_200()
+    except Exception as e:
+        return resp_500(message=f'error e={str(e)}')
 
-    # 处理vectordb
-    collection_name = knowledge.collection_name
-    embeddings = FakeEmbedding()
-    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-    if isinstance(vectore_client, Milvus) and vectore_client.col:
-        pk = vectore_client.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])
-        res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
-        logger.info(f'act=delete_vector file_id={file_id} res={res}')
 
-    # minio
-    minio_client.MinioClient().delete_minio(str(knowledge_file.id))
-    # elastic
-    index_name = knowledge.index_name or knowledge.collection_name
-    esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
-    if esvectore_client:
-        esvectore_client.client.delete_by_query(index=index_name,
-                                                query={'match': {
-                                                    'metadata.file_id': file_id
-                                                }})
-        logger.info(f'act=delete_es file_id={file_id} res={res}')
+@router.post('/delete_file', status_code=200)
+def delete_file_batch_api(file_ids: List[int]):
+    """ 批量删除知识文件信息 """
     with session_getter() as session:
-        session.delete(knowledge_file)
-        session.commit()
-    return resp_200()
+        knowledge_file = session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
+    if not knowledge_file:
+        raise HTTPException(status_code=404, detail='文件不存在')
+
+    try:
+        delete_knowledge_file_batch(file_ids)
+        return resp_200()
+    except Exception as e:
+        return resp_500(message=f'error e={str(e)}')
 
 
 @router.get('/file/{knowledge_id}', status_code=200)
@@ -259,10 +251,56 @@ async def post_chunks(*,
     with session_getter() as session:
         db_knowledge = session.get(Knowledge, knowledge_id)
     if not db_knowledge:
-        raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
+        raise HTTPException(status_code=404, detail='当前知识库不可用，返回上级目录')
 
-    db_file = file_knowledge(db_knowledge, file_path, file_name, metadata)
+    # 重复判断
+    md5_ = file_path.rsplit('/', 1)[1].split('.')[0]
+    with session_getter() as session:
+        repeat = session.exec(
+            select(KnowledgeFile).where(KnowledgeFile.md5 == md5_,
+                                        KnowledgeFile.knowledge_id == knowledge_id)).all()
+    if repeat:
+        return resp_500(code=422, message='文件重复')
 
+    # 存储 mysql
+    db_file = KnowledgeFile(knowledge_id=db_knowledge.id,
+                            file_name=file_name,
+                            md5=md5_,
+                            extra_meta=metadata,
+                            status=1)
+
+    with session_getter() as session:
+        session.add(db_file)
+        session.commit()
+        session.refresh(db_file)
+
+    separator = ['\n\n', '\n', ' ', '']
+    chunk_size = 500
+    chunk_overlap = 50
+    index_name = db_knowledge.index_name or db_knowledge.collection_name
+    try:
+        minio_client = MinioClient()
+        db_file.object_name = 'original/' + str(db_file.id) + '.' + file_name.rsplit('.', 1)[-1]
+        minio_client.upload_minio(db_file.object_name, file_path)
+        with session_getter() as session:
+            session.add(db_file)
+            session.commit()
+            session.refresh(db_file)
+    except Exception as e:
+        logger.exception(e)
+        return resp_500(code=400, data=db_file, message='文件上传失败')
+    try:
+        addEmbedding(db_knowledge.collection_name, index_name, db_knowledge.id, db_knowledge.model,
+                     chunk_size, separator, chunk_overlap, [file_path], [db_file], None, metadata)
+    except Exception as e:
+        logger.error(e)
+        return resp_500(code=500, data=db_file, message='文件解析失败')
+
+    with session_getter() as session:
+        db_file = session.get(KnowledgeFile, db_file.id)
+
+    if db_file.status == 3:
+        return resp_500(data=db_file, message='文件解析失败')
     return resp_200(db_file)
 
 
@@ -276,6 +314,51 @@ async def post_string_chunks(*, document: ChunkInput):
     if not db_knowledge:
         raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
 
-    db_file = text_knowledge(db_knowledge, document.documents)
+    m = hashlib.md5()
+    # 对字符串进行md5加密
+    content = '\n\n'.join([doc.page_content for doc in document.documents])
+    m.update(content.encode('utf-8'))
+    md5_ = m.hexdigest()
+    with session_getter() as session:
+        repeat = session.exec(
+            select(KnowledgeFile).where(
+                KnowledgeFile.md5 == md5_,
+                KnowledgeFile.knowledge_id == document.knowledge_id)).all()
 
+    status = 3 if repeat else 1
+    remark = 'file repeat' if repeat else ''
+
+    if repeat:
+        logger.info('upload_string_repeat md5={} history={}', md5_, repeat[0].id)
+        return resp_500(code=422, message='文件重复')
+
+    db_file = KnowledgeFile(knowledge_id=document.knowledge_id,
+                            status=status,
+                            md5=md5_,
+                            extra_meta=document.documents[0].metadata,
+                            remark=remark)
+    with session_getter() as session:
+        session.add(db_file)
+        session.commit()
+        session.refresh(db_file)
+
+    # 将文本保存为文件
+    minio_client = MinioClient()
+    db_file.object_name = 'original/' + str(db_file.id) + '.txt'
+    try:
+        content_byte = bytes(content, encoding='utf-8')
+        logger.info('content_byte={}', content_byte)
+        minio_client.upload_minio_data(db_file.object_name, content_byte, len(content_byte),
+                                       'application/octet-stream')
+        with session_getter() as session:
+            session.add(db_file)
+            session.commit()
+            session.refresh(db_file)
+    except Exception as e:
+        logger.exception(e)
+        return resp_500(code=400, data=db_file, message='文件上传失败')
+
+    db_file = text_knowledge(db_knowledge, db_file, document.documents)
+    if db_file['status'] == 3:
+        return resp_500(data=db_file, message='文件解析失败')
     return resp_200(db_file)

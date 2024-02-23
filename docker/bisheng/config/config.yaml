@@ -1,22 +1,24 @@
-# 数据库配置
+# 数据库配置， 当前加密串的密码是1234，
+# 密码加密参考 https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc#Gxitd1xEeof1TzxdhINcGS6JnXd
 database_url:
   "mysql+pymysql://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@mysql:3306/bisheng?charset=utf8mb4"
 
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
 # 普通模式:
-#redis_url: "redis://redis:6379/1"
-# 集群模式:
-redis_url: 
-  mode: "cluster"
-  startup_nodes: 
-    - {"host": "192.168.106.115", "port": 6002}
-  # password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
-  # #sentinel
-  # mode: "sentinel"
-  # sentinel_hosts: [("redis", 6379)]
-  # sentinel_master: "mymaster"
-  # sentinel_password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
-  # db: 1
+redis_url: "redis://redis:6379/1"
+
+# 集群模式或者哨兵模式（只能选其一）:
+# redis_url: 
+#   mode: "cluster"
+#   startup_nodes: 
+#     - {"host": "192.168.106.115", "port": 6002}
+#   password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
+#   #sentinel
+#   mode: "sentinel"
+#   sentinel_hosts: [("redis", 6379)]
+#   sentinel_master: "mymaster"
+#   sentinel_password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
+#   db: 1
 
 environment:
   env: dev

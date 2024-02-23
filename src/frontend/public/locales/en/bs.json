@@ -282,6 +282,7 @@
         "1008": "The current skill is not online, and direct conversation is not possible.",
         "1005": ""
     },
+    "all": "All",
     "finetune": {
         "modelName": "模型名称",
         "rtService": "RT服务",
