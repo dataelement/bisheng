@@ -159,9 +159,9 @@ export async function getServicesApi(): Promise<RTServer[]> {
 /**
  * 获取RT服务列表
  */
-export async function addServiceApi(name: string, url: string): Promise<{ id: number }> {
+export async function addServiceApi(name: string, url: string, ftUrl: string): Promise<{ id: number }> {
   return await axios.post(`/api/v1/server/add`,
-    { endpoint: url, server: name, remark: 'RT模块创建' });
+    { endpoint: url, sft_endpoint: ftUrl, server: name, remark: 'RT模块创建' });
 }
 
 /**
@@ -325,6 +325,9 @@ export async function updateConfigApi(id, config) {
  */
 export async function GPUlistApi(): Promise<any> {
   return await axios.get(`/api/v1/server/GPU`);
+}
+export async function GPUlistByFinetuneApi(): Promise<any> {
+  return await axios.get(`/api/v1/finetune/gpu`);
 }
 
 /***************************

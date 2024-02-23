@@ -109,7 +109,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
                             </SelectGroup>
                         </SelectContent>
                     </Select>
-                    <Button size="sm" className="rounded-full h-7 px-2 bg-gray-600" onClick={gpuClick}>{t('finetune.gpuResourceUsage')}</Button>
+                    <Button size="sm" className="rounded-full h-7 px-2" onClick={gpuClick}>{t('finetune.gpuResourceUsage')}</Button>
                 </div>
             </div>
             {/* datas */}
@@ -219,7 +219,7 @@ const useOptions = () => {
     const selectService = async (val) => {
         const rtName = services.find(item => item.id === val)?.name
         const res = await serverListApi(rtName)
-        setModels(res)
+        setModels(res.filter(item => item.sft_support))
     }
 
     return { services, models, selectService }

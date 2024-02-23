@@ -20,7 +20,7 @@ export default function FinetuneResult({ id, training, isStop, failed, onChange 
         clearTimeout(timerRef.current)
         timerRef.current = setTimeout(() => {
             console.log('2s');
-            loadData()
+            loadData(true)
 
             setCount(count + 1)
         }, 2000)
@@ -28,14 +28,14 @@ export default function FinetuneResult({ id, training, isStop, failed, onChange 
         return () => clearTimeout(timerRef.current)
     }, [id, training, count])
 
-    const loadData = () => {
+    const loadData = (loop?) => {
         getTaskInfoApi(id).then((data) => {
             const { log, report, loss_data, finetune } = data
             setLogs(log)
             setReport(report)
             setLoss(loss_data)
             // 状态变更停止轮训
-            finetune.status !== TaskStatus.TRAINING_IN_PROGRESS && onChange(finetune.status)
+            loop && finetune.status !== TaskStatus.TRAINING_IN_PROGRESS && onChange(finetune.status)
         })
     }
 
@@ -50,7 +50,7 @@ export default function FinetuneResult({ id, training, isStop, failed, onChange 
 
             {/* cards */}
             {
-                // 失败 终止不展示 cards
+                // 失败 中止不展示 cards
                 !failed && !isStop && report && <div className="flex gap-4 mt-4">
                     {
                         processKeys.map(key => <Card className="flex-row w-[25%]" key={key}>
@@ -59,7 +59,7 @@ export default function FinetuneResult({ id, training, isStop, failed, onChange 
                                 <CardDescription>{training ? '--' : report[`predict_${key}`].toFixed(2)}%</CardDescription>
                             </CardHeader>
                             <CardContent className="mt-4">
-                                <div className="radial-progress bg-gray-200" style={{ "--value": training ? 0 : report[`predict_${key}`], "--size": "1.4rem", }} role="progressbar"></div>
+                                <div className="radial-progress bg-gray-200 dark:bg-gray-950" style={{ "--value": training ? 0 : report[`predict_${key}`], "--size": "1.4rem", }} role="progressbar"></div>
                             </CardContent>
                         </Card>)
                     }
@@ -92,7 +92,7 @@ export default function FinetuneResult({ id, training, isStop, failed, onChange 
             <div className="flex gap-4 mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.trainingLogs')}</small>
             </div>
-            <div className="mt-4 rounded-md bg-gray-100 p-2 overflow-auto max-w-full h-[400px]">
+            <div className="mt-4 rounded-md bg-gray-100 dark:bg-gray-800 p-2 overflow-auto max-w-full h-[400px]">
                 <pre className="text-gray-500 text-sm">{logs}</pre>
             </div>
         </div>

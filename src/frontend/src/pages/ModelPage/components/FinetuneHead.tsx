@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/ui/button";
+import { Input } from "../../../components/ui/input";
 import {
     Select,
     SelectContent,
@@ -12,15 +13,15 @@ import {
 } from "../../../components/ui/select1";
 import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group";
 import { getServicesApi } from "../../../controllers/API";
-import { Input } from "../../../components/ui/input";
 import { useDebounce } from "../../../util/hook";
 
 interface IProps {
-    onChange: (searchkey, type, rt) => void,
+    onSearch: (searchkey) => void,
+    onFilter: ({ type, rt }) => void,
     rtClick: () => void,
     onCreate: () => void,
 }
-export default function FinetuneHead({ onChange, rtClick, onCreate }: IProps) {
+export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: IProps) {
     const { t } = useTranslation()
 
     const [type, setType] = useState('all')
@@ -29,12 +30,12 @@ export default function FinetuneHead({ onChange, rtClick, onCreate }: IProps) {
 
     const handleTypeChange = (val) => {
         setType(val)
-        onChange(inputRef.current.value, val, rt)
+        onFilter({ type: val, rt })
     }
 
     const handleRtChange = (val) => {
         setRt(val)
-        onChange(inputRef.current.value, type, val)
+        onFilter({ type, rt: val })
     }
 
     // rts
@@ -48,11 +49,11 @@ export default function FinetuneHead({ onChange, rtClick, onCreate }: IProps) {
             })))
         })
 
-        onChange(inputRef.current.value, type, rt)
+        onFilter({ type, rt })
     }, [])
 
     const handleSearch = () => {
-        onChange(inputRef.current.value, type, rt)
+        onSearch(inputRef.current.value)
     }
 
     return <div className="flex justify-between pb-4 border-b">
@@ -80,7 +81,7 @@ export default function FinetuneHead({ onChange, rtClick, onCreate }: IProps) {
         </div>
         <div className="flex gap-4">
             <Button size="sm" className="rounded-full h-8" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
-            <Button size="sm" className="rounded-full h-8 bg-gray-500" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+            <Button size="sm" className="rounded-full h-8" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
         </div>
     </div>
 };

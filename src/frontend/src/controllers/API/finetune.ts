@@ -6,6 +6,7 @@ interface Tasks_query {
      * 每页条数
      */
     limit?: number;
+    model_name: string;
     /**
      * 页码
      */

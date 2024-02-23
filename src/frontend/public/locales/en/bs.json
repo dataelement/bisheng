@@ -149,10 +149,9 @@
         "modelFineTune": "Model Finetune",
         "refreshButton": "Refresh",
         "gpuResourceUsage": "GPU Resource Usage",
-        "rtServiceManagement": "RT Service Management",
         "modelCollectionCaption": "Model Collection",
         "machine": "Machine",
-        "serviceAddress": "Service Address",
+        "serviceAddress": "Server Address",
         "status": "Status",
         "online": "Online",
         "offline": "Offline",
@@ -162,7 +161,7 @@
         "totalMemory": "Total Memory",
         "freeMemory": "Free Memory",
         "gpuUtilization": "GPU Utilization",
-        "machineName": "Machine Name",
+        "machineName": "Server Name",
         "addOne": "Add One"
     },
     "flow": {
@@ -296,7 +295,7 @@
         "inProgress": "进行中",
         "failedAborted": "失败/终止",
         "createTrainingTask": "创建训练任务",
-        "rtServiceManagement": "RT服务管理",
+        "rtServiceManagement": "服务管理",
         "confirmCancelPublish": "该模型正处于上线状态，是否仍然取消发布",
         "confirmDeleteModel": "确认要删除模型 {{name}} 吗？",
         "confirmDeleteOnlineModel": "该模型已上线，请将模型下线后再删除/确认要删除模型 {{name}} 吗？",
@@ -367,5 +366,6 @@
     "operations": "Operations",
     "previousPage": "Previous Page",
     "nextPage": "Next Page",
-    "formatError": "Format Error"
+    "formatError": "Format Error",
+    "port": "PORT"
 }
