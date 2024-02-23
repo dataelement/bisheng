@@ -31,6 +31,22 @@ const SelectTrigger = React.forwardRef<
 ));
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 
+const SelectIconTrigger = React.forwardRef<
+    React.ElementRef<typeof SelectPrimitive.Trigger>,
+    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
+>(({ className, children, ...props }, ref) => (
+    <SelectPrimitive.Trigger
+        ref={ref}
+        className={cn('focus:outline-none outline-none',
+            className
+        )}
+        {...props}
+    >
+        {children}
+    </SelectPrimitive.Trigger>
+));
+SelectIconTrigger.displayName = SelectPrimitive.Trigger.displayName;
+
 const SelectContent = React.forwardRef<
     React.ElementRef<typeof SelectPrimitive.Content>,
     React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
@@ -116,5 +132,6 @@ export {
     SelectLabel,
     SelectSeparator,
     SelectTrigger,
+    SelectIconTrigger,
     SelectValue,
 };
