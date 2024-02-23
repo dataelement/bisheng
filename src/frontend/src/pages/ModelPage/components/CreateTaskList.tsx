@@ -1,4 +1,4 @@
-import { HelpCircle } from "lucide-react";
+import { HelpCircle, Loader2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "../../../components/ui/badge";
@@ -20,6 +20,7 @@ export default function CreateTaskList({ onChange }) {
     const { openPopUp, closePopUp } = useContext(PopUpContext);
     // 预设集
     const { prsetList, handleChangePrsetList } = usePresetList(onChange)
+    const [downloadMap, setDownloadMap] = useState({}) // 下载loading
     // 个人数据集
     const { userList, setUserList, handleChangeUserList } = useUserList(onChange);
 
@@ -27,7 +28,9 @@ export default function CreateTaskList({ onChange }) {
 
     const handleDownloadFile = async (data) => {
         const res = await getFileUrlApi(data.dataSource)
-        downloadFile(checkSassUrl(res.url), data.name)
+        setDownloadMap(map => ({ ...map, [data.id]: true }))
+        await downloadFile(checkSassUrl(res.url), data.name)
+        setDownloadMap(map => ({ ...map, [data.id]: false }))
     }
 
     return <div>
@@ -57,19 +60,22 @@ export default function CreateTaskList({ onChange }) {
                 </TooltipProvider>
             </div>
         </div>
-        <div className="border rounded-md p-4 overflow-y-auto max-h-[400px] mt-4 shadow-md bg-gray-100">
+        <div className="border rounded-md p-4 overflow-y-auto max-h-[400px] mt-4 shadow-md bg-gray-100 dark:bg-gray-800">
             <p className="text-sm text-muted-foreground mt-4">{t('finetune.presetDatasets')}</p>
             {
                 prsetList.length ? prsetList.map((data, i) =>
-                    <div key={data.id} className="flex gap-4 items-center mt-2 h-8 hover:bg-gray-200">
+                    <div key={data.id} className="flex gap-4 items-center mt-2 h-8 hover:bg-gray-200 dark:hover:bg-gray-600">
                         <Checkbox
                             checked={data.checked}
                             onCheckedChange={(val: boolean) => handleChangePrsetList(data.id, 'checked', val)} />
                         <span className="text-sm">{data.name}</span>
                         <div className="flex ml-auto gap-4">
                             <Button size="sm" variant="outline"
+                                disabled={downloadMap[data.id]}
                                 onClick={() => handleDownloadFile(data)}
-                                className="rounded-full h-6 px-4 ml-auto">{t('finetune.download')}</Button>
+                                className="rounded-full h-6 px-4 ml-auto">
+                                {downloadMap[data.id] && <Loader2 className="animate-spin mr-2" size={14} />}
+                                {t('finetune.download')}</Button>
                             {isCustom ?
                                 <Input
                                     placeholder={t('finetune.sampleSize')}

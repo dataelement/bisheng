@@ -20,7 +20,7 @@ from loguru import logger
 
 def handle_http_exception(req: Request, exc: HTTPException) -> ORJSONResponse:
     msg = {'status_code': exc.status_code, 'status_message': exc.detail}
-    logger.error(f'{req.method} {req.url} {exc.status_code} {exc.detail}')
+    logger.error(f'{req.method} {req.url} {exc.status_code} {exc.detail}', exc_info=True)
     return ORJSONResponse(content=msg)
 
 

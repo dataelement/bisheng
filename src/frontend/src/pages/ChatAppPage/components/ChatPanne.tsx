@@ -375,11 +375,34 @@ const useMessages = (chatId, flow) => {
             }
         })
         lastIdRef.current = hisData[hisData.length - 1]?.id || lastIdRef.current || 0 // 记录最后一个id
-        // 取消上一次
+
         if (lastId) {
             setChatHistory((history) => [...hisData.reverse(), ...history])
         } else if (loadIdRef.current === chatId) { // 保证同一会话
-            setChatHistory(hisData.reverse())
+            setChatHistory(!hisData.length && flow.guide_word ? [{
+                "category": "system",
+                "chat_id": chatId,
+                "end": true,
+                "create_time": "",
+                "extra": "{}",
+                "files": [],
+                "flow_id": flow.id,
+                "id": 9999,
+                "thought": flow.guide_word,
+                "is_bot": true,
+                "liked": 0,
+                "message": '',
+                "receiver": null,
+                "remark": null,
+                "sender": "",
+                "solved": 0,
+                isSend: false,
+                "source": 0,
+                "type": "end",
+                "update_time": "",
+                noAccess: true,
+                "user_id": 0
+            }] : hisData.reverse())
         } else {
             setChatHistory([])
         }

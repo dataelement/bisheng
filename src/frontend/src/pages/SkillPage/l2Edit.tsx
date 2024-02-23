@@ -30,6 +30,7 @@ export default function l2Edit() {
     const [loading, setLoading] = useState(false)
     const nameRef = useRef(null)
     const descRef = useRef(null)
+    const guideRef = useRef(null)
 
     useEffect(() => {
         // 无id不再请求
@@ -39,6 +40,7 @@ export default function l2Edit() {
             setIsL2(true)
             nameRef.current.value = flow.name
             descRef.current.value = flow.description
+            guideRef.current.value = flow.guide_word
             return
         }
         // 无flow从db获取
@@ -48,6 +50,7 @@ export default function l2Edit() {
             setIsL2(true)
             nameRef.current.value = _flow.name
             descRef.current.value = _flow.description
+            guideRef.current.value = _flow.guide_word
         })
     }, [id])
 
@@ -77,13 +80,15 @@ export default function l2Edit() {
     // 创建新技能 
     const handleCreateNewSkill = async () => {
         const name = nameRef.current.value
+        const guideWords = guideRef.current.value
         const description = descRef.current.value
         if (isParamError(name, description, true)) return
         setLoading(true)
 
         await captureAndAlertRequestErrorHoc(createCustomFlowApi({
             name,
-            description
+            description,
+            guide_word: guideWords
         }, user.user_name).then(newFlow => {
             setFlow('l2 create flow', newFlow)
             navigate("/flow/" + newFlow.id, { replace: true }); // l3
@@ -98,13 +103,14 @@ export default function l2Edit() {
     const handleJumpFlow = async () => {
         const name = nameRef.current.value
         const description = descRef.current.value
+        const guideWords = guideRef.current.value
         // 高级配置信息有误直接跳转L3
         if (isParamError(name, description)) return navigate('/flow/' + id, { replace: true })
         // 保存在跳
         setLoading(true)
         formRef.current?.save()
 
-        await saveFlow({ ...flow, name, description })
+        await saveFlow({ ...flow, name, description, guide_word: guideWords })
         setLoading(false)
         navigate('/flow/' + id, { replace: true })
     }
@@ -112,11 +118,12 @@ export default function l2Edit() {
     const handleSave = async () => {
         const name = nameRef.current.value
         const description = descRef.current.value
+        const guideWords = guideRef.current.value
         if (isParamError(name, description)) return
         setLoading(true)
         formRef.current?.save()
 
-        await saveFlow({ ...flow, name, description })
+        await saveFlow({ ...flow, name, description, guide_word: guideWords })
         setLoading(false)
         setSuccessData({ title: t('success') });
         setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
@@ -164,6 +171,10 @@ export default function l2Edit() {
                         <div className="mt-4">
                             <Label htmlFor="username">{t('skills.description')}</Label>
                             <Textarea ref={descRef} id="name" placeholder={t('skills.description')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
+                        </div>
+                        <div className="mt-4">
+                            <Label htmlFor="username">{t('skills.guideWords')}</Label>
+                            <Textarea ref={guideRef} maxLength={1000} id="name" placeholder={t('skills.guideWords')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
                         </div>
                     </div>
                     {

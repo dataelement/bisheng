@@ -1,9 +1,11 @@
-import { useContext, useRef, useState } from "react";
+import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
+import PaginationComponent from "../../components/PaginationComponent";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { alertContext } from "../../contexts/alertContext";
 import { deleteTaskApi, getTasksApi } from "../../controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { useDebounce, useTable } from "../../util/hook";
 import CreateTask from "./components/CreateTask";
 import FinetuneDetail, { BadgeView } from "./components/FinetuneDetail";
 import FinetuneHead from "./components/FinetuneHead";
@@ -12,25 +14,36 @@ export const Finetune = ({ rtClick, gpuClick }) => {
     const { setSuccessData } = useContext(alertContext);
     const { t } = useTranslation()
 
-    const { tasks, searchTask, loadTasks } = useTasks()
+    const { page, pageSize, data: tasks, total, setPage, search, reload, filterData } = useTable((param) =>
+        getTasksApi({
+            page: param.page,
+            limit: param.pageSize,
+            model_name: param.keyword,
+            server: param.rt || 'all',
+            status: param.type || 'all'
+        })
+    )
     // 详情
     const [taskId, setTaskId] = useState('')
 
     // del
     const handleDeleteTask = async () => {
         const res = await captureAndAlertRequestErrorHoc(deleteTaskApi(taskId))
-        if (!res) return
+        if (res !== null) return
 
-        setSuccessData({ title: t('finetune.deleteSuccess') })
+        setSuccessData({ title: t('deleteSuccess') })
         setTaskId('')
-        loadTasks()
+        reload()
     }
 
     const [createOpen, setCreateOpen] = useState(false)
 
+    // useDebounce
+    const changeItem = useDebounce((id) => setTaskId(id), 600, false)
+
     return <div className="relative">
         <div className={createOpen ? 'hidden' : 'block'}>
-            <FinetuneHead onChange={searchTask} rtClick={rtClick} onCreate={() => setCreateOpen(true)}></FinetuneHead>
+            <FinetuneHead onSearch={search} onFilter={filterData} rtClick={rtClick} onCreate={() => setCreateOpen(true)}></FinetuneHead>
             {/* body */}
             {tasks?.length === 0 ?
                 <div className="mt-6 text-center text-gray-400">{t('finetune.noData')}</div>
@@ -47,7 +60,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                             </TableHeader>
                             <TableBody>
                                 {tasks.map((task) => (
-                                    <TableRow key={task.id} onClick={() => setTaskId(task.id)} className="cursor-pointer">
+                                    <TableRow key={task.id} onClick={() => changeItem(task.id)} className="cursor-pointer">
                                         <TableCell className="font-medium">{task.model_name}</TableCell>
                                         <TableCell><BadgeView value={task.status}></BadgeView></TableCell>
                                         <TableCell>{task.server_name}</TableCell>
@@ -56,10 +69,16 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                                 ))}
                             </TableBody>
                         </Table>
+                        <PaginationComponent
+                            page={page}
+                            pageSize={pageSize}
+                            total={total}
+                            onChange={(newPage) => setPage(newPage)}
+                        />
                     </div>
                     <div className="flex-1 overflow-hidden">
                         {taskId ?
-                            <FinetuneDetail id={taskId} onDelete={handleDeleteTask} onStatusChange={loadTasks}></FinetuneDetail> :
+                            <FinetuneDetail id={taskId} onDelete={handleDeleteTask} onStatusChange={reload}></FinetuneDetail> :
                             <div className="flex justify-center items-center h-full">
                                 <p className="text-sm text-muted-foreground">{t('finetune.selectModel')}</p>
                             </div>}
@@ -77,7 +96,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                         gpuClick={gpuClick}
                         onCancel={() => setCreateOpen(false)}
                         onCreate={(id) => {
-                            loadTasks();
+                            reload();
                             setCreateOpen(false);
                             setTaskId(id)
                         }}></CreateTask>
@@ -86,31 +105,3 @@ export const Finetune = ({ rtClick, gpuClick }) => {
         </div>
     </div>
 };
-
-const useTasks = () => {
-    const [tasks, setTasks] = useState([]);
-    const filterRef = useRef({ type: 'all', rt: 'all' }); // 当前选项
-
-    const handleSearchTask = (type, rt) => {
-        filterRef.current = { type, rt };
-        loadTable()
-    }
-
-    const loadTable = async () => {
-        const { type, rt } = filterRef.current
-        const res = await getTasksApi({
-            page: 1,
-            limit: 100,
-            server: rt,
-            status: type
-        })
-
-        setTasks(res)
-    }
-
-    return {
-        tasks,
-        searchTask: handleSearchTask,
-        loadTasks: loadTable
-    }
-}

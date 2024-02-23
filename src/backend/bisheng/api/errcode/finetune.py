@@ -55,3 +55,8 @@ class InvalidExtraParamsError(BaseErrorCode):
 class TrainFileNotExistError(BaseErrorCode):
     Code: int = 10120
     Msg: str = '训练文件不存在'
+
+
+class GetGPUInfoError(BaseErrorCode):
+    Code: int = 10125
+    Msg: str = '获取GPU信息失败'

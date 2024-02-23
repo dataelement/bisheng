@@ -9,12 +9,18 @@ import { cancelTaskApi, getTaskInfoApi, publishTaskApi, unPublishTaskApi, updata
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { TaskDB } from "../../../types/api/finetune";
 import FinetuneResult from "./FinetuneResult";
+import { Loader2 } from "lucide-react";
 
 export const enum TaskStatus {
+    /** 训练中 */
     TRAINING_IN_PROGRESS = 1,
+    /** 训练失败 */
     TRAINING_FAILED,
+    /** 训练中止 */
     TASK_ABORTED,
+    /** 训练成功 */
     TRAIN_SUCCESS,
+    /** 训练成功 */
     PUBLISH_SUCCESS
 }
 
@@ -30,15 +36,30 @@ export const BadgeView = ({ value }) => {
 
 const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete, onStop }) => {
     const { t } = useTranslation()
+    const [loading, setLoading] = useState(false)
 
-    const cancelPublish = () => {
-        online ? bsconfirm({
-            desc: t('finetune.confirmCancelPublish'),
-            onOk(next) {
-                onUnPublish()
-                next()
-            }
-        }) : onUnPublish()
+    const cancelPublish = async () => {
+        if (online) {
+            bsconfirm({
+                desc: t('finetune.confirmCancelPublish'),
+                async onOk(next) {
+                    next()
+                    setLoading(true)
+                    await onUnPublish()
+                    setLoading(false)
+                }
+            })
+        } else {
+            setLoading(true)
+            await onUnPublish()
+            setLoading(false)
+        }
+    }
+
+    const handlePublish = async () => {
+        setLoading(true)
+        await onPublish()
+        setLoading(false)
     }
 
     const deleteClick = () => {
@@ -69,9 +90,15 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
 
     return <div className="absolute right-4 flex gap-4">
         {status === TaskStatus.PUBLISH_SUCCESS ?
-            <Button size="sm" className="rounded-full h-7" onClick={cancelPublish}>{t('finetune.cancelPublish')}</Button> :
+            <Button size="sm" className="rounded-full h-7" disabled={loading} onClick={cancelPublish}>
+                {loading && <Loader2 className="animate-spin mr-2" size={14} />}
+                {t('finetune.cancelPublish')}
+            </Button> :
             status === TaskStatus.TRAIN_SUCCESS ?
-                <Button size="sm" className="rounded-full h-7" onClick={onPublish}>{t('finetune.publish')}</Button> : null
+                <Button size="sm" className="rounded-full h-7" disabled={loading} onClick={handlePublish}>
+                    {loading && <Loader2 className="animate-spin mr-2" size={14} />}
+                    {t('finetune.publish')}
+                </Button> : null
         }
         {status === TaskStatus.TRAINING_IN_PROGRESS ?
             <Button size="sm" className="rounded-full h-7 bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
@@ -92,8 +119,10 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
 
 
     useEffect(() => {
-        getTaskInfoApi(id).then((data) => {
+        captureAndAlertRequestErrorHoc(getTaskInfoApi(id).then((data) => {
             setBaseInfo(data.finetune)
+        }), (err) => {
+            setBaseInfo(null)
         })
     }, [id])
 
@@ -147,7 +176,7 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
                 <EditLabel
                     rule={[
                         {
-                            pattern: /^[a-zA-Z0-9-_]{1,50}$/,
+                            pattern: /^.{1,50}$/,
                             message: t('finetune.fillName'),
                         }
                     ]}
@@ -188,6 +217,15 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
                 }</small>
             </div>
         </div>
-        <FinetuneResult id={id} training={TaskStatus.TRAINING_IN_PROGRESS === baseInfo.status} failed={TaskStatus.TRAINING_FAILED === baseInfo.status}></FinetuneResult>
+        <FinetuneResult
+            id={id}
+            isStop={TaskStatus.TASK_ABORTED === baseInfo.status}
+            training={TaskStatus.TRAINING_IN_PROGRESS === baseInfo.status}
+            failed={TaskStatus.TRAINING_FAILED === baseInfo.status}
+            onChange={status => {
+                setBaseInfo({ ...baseInfo, status });
+                onStatusChange(status)
+            }}
+        ></FinetuneResult>
     </div>
 };

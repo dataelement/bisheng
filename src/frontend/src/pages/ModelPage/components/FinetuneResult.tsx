@@ -3,8 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { getTaskInfoApi } from "../../../controllers/API/finetune";
+import { TaskStatus } from "./FinetuneDetail";
 
-export default function FinetuneResult({ id, training, failed }) {
+export default function FinetuneResult({ id, training, isStop, failed, onChange }) {
     const { t } = useTranslation()
     const timerRef = useRef(null)
 
@@ -19,7 +20,7 @@ export default function FinetuneResult({ id, training, failed }) {
         clearTimeout(timerRef.current)
         timerRef.current = setTimeout(() => {
             console.log('2s');
-            loadData()
+            loadData(true)
 
             setCount(count + 1)
         }, 2000)
@@ -27,12 +28,14 @@ export default function FinetuneResult({ id, training, failed }) {
         return () => clearTimeout(timerRef.current)
     }, [id, training, count])
 
-    const loadData = () => {
+    const loadData = (loop?) => {
         getTaskInfoApi(id).then((data) => {
-            const { log, report, loss_data } = data
+            const { log, report, loss_data, finetune } = data
             setLogs(log)
             setReport(report)
             setLoss(loss_data)
+            // 状态变更停止轮训
+            loop && finetune.status !== TaskStatus.TRAINING_IN_PROGRESS && onChange(finetune.status)
         })
     }
 
@@ -42,12 +45,13 @@ export default function FinetuneResult({ id, training, failed }) {
         <div className="border-b pb-4">
             <div className="flex gap-4 mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.evaluationReport')}</small>
-                {failed && <small className="text-sm font-medium leading-none text-gray-700">--</small>}
+                {(failed || isStop) && <small className="text-sm font-medium leading-none text-gray-700">--</small>}
             </div>
 
             {/* cards */}
             {
-                !failed && report && <div className="flex gap-4 mt-4">
+                // 失败 中止不展示 cards
+                !failed && !isStop && report && <div className="flex gap-4 mt-4">
                     {
                         processKeys.map(key => <Card className="flex-row w-[25%]" key={key}>
                             <CardHeader>
@@ -55,7 +59,7 @@ export default function FinetuneResult({ id, training, failed }) {
                                 <CardDescription>{training ? '--' : report[`predict_${key}`].toFixed(2)}%</CardDescription>
                             </CardHeader>
                             <CardContent className="mt-4">
-                                <div className="radial-progress bg-gray-200" style={{ "--value": training ? 0 : report[`predict_${key}`], "--size": "1.4rem", }} role="progressbar"></div>
+                                <div className="radial-progress bg-gray-200 dark:bg-gray-950" style={{ "--value": training ? 0 : report[`predict_${key}`], "--size": "1.4rem", }} role="progressbar"></div>
                             </CardContent>
                         </Card>)
                     }
@@ -63,7 +67,7 @@ export default function FinetuneResult({ id, training, failed }) {
             }
             {/* chart */}
             {
-                !failed && report && <div className="mt-4">
+                !failed && !isStop && report && <div className="mt-4">
                     <ResponsiveContainer className="border rounded-md" width="100%" height={280}>
                         <AreaChart data={loss}
                             margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
@@ -88,8 +92,8 @@ export default function FinetuneResult({ id, training, failed }) {
             <div className="flex gap-4 mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.trainingLogs')}</small>
             </div>
-            <div className="mt-4 rounded-md bg-gray-100 p-2 overflow-auto max-w-full h-[400px]">
-                {/* <pre className="text-gray-500 text-sm">{logs}</pre> */}
+            <div className="mt-4 rounded-md bg-gray-100 dark:bg-gray-800 p-2 overflow-auto max-w-full h-[400px]">
+                <pre className="text-gray-500 text-sm">{logs}</pre>
             </div>
         </div>
     </div>

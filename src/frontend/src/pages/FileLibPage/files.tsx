@@ -25,6 +25,9 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectIconTrigger } fro
 import { locationContext } from "../../contexts/locationContext";
 import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { useTable } from "../../util/hook";
+import { Input } from "../../components/ui/input";
+import PaginationComponent from "../../components/PaginationComponent";
 import UploadModal from "../../modals/UploadModal";
 
 export default function FilesPage() {
@@ -33,13 +36,14 @@ export default function FilesPage() {
     const { id } = useParams()
     // 上传 上传成功添加到列表
     const [open, setOpen] = useState(false)
-    const [loading, setLoading] = useState(false)
-
     const [title, setTitle] = useState('')
-    const [page, setPage] = useState(1)
-    const [datalist, setDataList] = useState([])
-    const [pageEnd, setPageEnd] = useState(false)
-    const pages = useRef(1)
+
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable((param) =>
+        readFileByLibDatabase(id, param.page, param.pageSize, param.keyword).then(res => {
+            setHasPermission(res.writeable)
+            return res
+        })
+    )
 
     const [hasPermission, setHasPermission] = useState(true)
     const { appConfig } = useContext(locationContext)
@@ -62,12 +66,11 @@ export default function FilesPage() {
     useEffect(() => {
         // @ts-ignore
         setTitle(window.libname)
-        loadPage(1)
     }, [])
 
     const handleOpen = (e) => {
         setOpen(e)
-        loadPage(page)
+        reload()
     }
 
     // 删除
@@ -75,7 +78,7 @@ export default function FilesPage() {
 
     const handleDelete = () => {
         captureAndAlertRequestErrorHoc(deleteFile(idRef.current).then(res => {
-            loadPage(page)
+            reload()
             close()
         }))
     }
@@ -129,13 +132,20 @@ export default function FilesPage() {
             <TabsContent value="account">
                 <div className="flex justify-between items-center">
                     <span className=" text-gray-800">{title}</span>
-                    {hasPermission && <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
+                    <div className="flex gap-4 items-center">
+                        <Input placeholder={t('lib.fileName')} className="w-[140px]" onChange={(e) => search(e.target.value)}></Input>
+                        {hasPermission && <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
+                    </div>
                 </div>
                 <Table>
                     <TableCaption>
                         <div className="join grid grid-cols-2 w-[200px]">
-                            <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>{t('previousPage')}</button>
-                            <button disabled={page >= pages.current || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>{t('nextPage')}</button>
+                            <PaginationComponent
+                                page={page}
+                                pageSize={pageSize}
+                                total={total}
+                                onChange={(newPage) => setPage(newPage)}
+                            />
                         </div>
                     </TableCaption>
                     <TableHeader>

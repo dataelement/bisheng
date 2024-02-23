@@ -88,7 +88,8 @@
         "createFailureTitle": "创建失败",
         "createdBy": "创建用户",
         "offline": "下线",
-        "online": "上线"
+        "online": "上线",
+        "guideWords": "引导词"
     },
     "chat": {
         "newChat": "新建会话",
@@ -144,7 +145,6 @@
         "modelFineTune": "模型Finetune",
         "refreshButton": "刷新",
         "gpuResourceUsage": "GPU资源使用情况",
-        "rtServiceManagement": "RT服务管理",
         "modelCollectionCaption": "模型集合",
         "machine": "机器",
         "serviceAddress": "服务地址",
@@ -157,7 +157,7 @@
         "totalMemory": "总显存",
         "freeMemory": "空余显存",
         "gpuUtilization": "GPU利用率",
-        "machineName": "机器名",
+        "machineName": "服务名",
         "addOne": "加一条"
     },
     "flow": {
@@ -290,9 +290,9 @@
         "all": "全部",
         "successful": "成功",
         "inProgress": "进行中",
-        "failedAborted": "失败/终止",
+        "failedAborted": "失败/中止",
         "createTrainingTask": "创建训练任务",
-        "rtServiceManagement": "RT服务管理",
+        "rtServiceManagement": "服务管理",
         "confirmCancelPublish": "该模型正处于上线状态，是否仍然取消发布",
         "confirmDeleteModel": "确认要删除模型 {{name}} 吗？",
         "confirmDeleteOnlineModel": "该模型已上线，请将模型下线后再删除/确认要删除模型 {{name}} 吗？",
@@ -311,7 +311,7 @@
         "dataset": "数据集",
         "cancelPublish": "取消发布",
         "publish": "发布",
-        "stop": "终止",
+        "stop": "中止",
         "uploadDataset": "上传数据集",
         "downloadSampleFile": "下载示例文件",
         "customSampleSize": "自定义样本数（可选）",
@@ -336,8 +336,8 @@
         "finetuneModelName": "Finetune模型名称",
         "trainingMethod": "训练方法",
         "fullFineTune": "全量微调",
-        "freeze": "freeze",
-        "lora": "lora",
+        "freeze": "freeze微调",
+        "lora": "lora微调",
         "parameterConfiguration": "参数配置",
         "parameterConfigurationTooltip": "参数配置建议及实验参考数据详见产品文档。",
         "parameter": "参数",
@@ -364,5 +364,6 @@
     "operations": "操作",
     "previousPage": "上一页",
     "nextPage": "下一页",
-    "formatError": "格式错误"
+    "formatError": "格式错误",
+    "port": "服务端口"
 }
