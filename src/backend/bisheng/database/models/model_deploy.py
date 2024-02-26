@@ -3,7 +3,7 @@ from typing import Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, String, delete, text
+from sqlalchemy import Column, DateTime, String, UniqueConstraint, delete, text
 from sqlmodel import Field, select
 
 
@@ -26,6 +26,7 @@ class ModelDeployBase(SQLModelSerializable):
 
 
 class ModelDeploy(ModelDeployBase, table=True):
+    __table_args__ = (UniqueConstraint('model', 'server', name='model_server_uniq'),)
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
@@ -35,6 +36,12 @@ class ModelDeployDao(ModelDeployBase):
     def find_model(cls, model_id: int) -> ModelDeploy | None:
         with session_getter() as session:
             statement = select(ModelDeploy).where(ModelDeploy.id == model_id)
+            return session.exec(statement).first()
+
+    @classmethod
+    def find_model_by_server_and_name(cls, server: str, model: str) -> ModelDeploy | None:
+        with session_getter() as session:
+            statement = select(ModelDeploy).where(ModelDeploy.server == server, ModelDeploy.model == model)
             return session.exec(statement).first()
 
     @classmethod

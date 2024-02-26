@@ -279,7 +279,12 @@ class FinetuneService:
         published_model = ModelDeploy(model=finetune.model_name,
                                       server=str(server.id),
                                       endpoint=f'http://{server.endpoint}/v2.1/models')
-        published_model = ModelDeployDao.insert_one(published_model)
+        try:
+            published_model = ModelDeployDao.insert_one(published_model)
+        except Exception as e:
+            logger.error(f'create published model error: {e}', exc_info=True)
+            published_model = ModelDeployDao.find_model_by_server_and_name(published_model.server,
+                                                                           published_model.model)
 
         # 记录可用于训练的模型名称
         SftModelDao.insert_sft_model(published_model.model)
