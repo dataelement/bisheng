@@ -20,15 +20,15 @@ import { ArrowLeft, Filter, RotateCw } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
+import PaginationComponent from "../../components/PaginationComponent";
 import ShadTooltip from "../../components/ShadTooltipComponent";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectIconTrigger } from "../../components/ui/select1";
+import { Input } from "../../components/ui/input";
+import { Select, SelectContent, SelectGroup, SelectIconTrigger, SelectItem } from "../../components/ui/select1";
 import { locationContext } from "../../contexts/locationContext";
 import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-import { useTable } from "../../util/hook";
-import { Input } from "../../components/ui/input";
-import PaginationComponent from "../../components/PaginationComponent";
 import UploadModal from "../../modals/UploadModal";
+import { useTable } from "../../util/hook";
 
 export default function FilesPage() {
     const { t } = useTranslation()
@@ -38,8 +38,8 @@ export default function FilesPage() {
     const [open, setOpen] = useState(false)
     const [title, setTitle] = useState('')
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable((param) =>
-        readFileByLibDatabase(id, param.page, param.pageSize, param.keyword).then(res => {
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData, refreshData } = useTable((param) =>
+        readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
             setHasPermission(res.writeable)
             return res
         })
@@ -50,19 +50,10 @@ export default function FilesPage() {
 
     // filter
     const [filter, setFilter] = useState(999)
+    useEffect(() => {
+        filterData({ status: filter })
+    }, [filter])
 
-    const loadPage = (_page) => {
-        setLoading(true)
-        readFileByLibDatabase(id, _page, filter).then(res => {
-            const { data, writeable, pages: ps } = res
-            pages.current = ps
-            setDataList(data)
-            setPage(_page)
-            setPageEnd(!data.length)
-            setLoading(false)
-            setHasPermission(writeable)
-        })
-    }
     useEffect(() => {
         // @ts-ignore
         setTitle(window.libname)
@@ -102,15 +93,13 @@ export default function FilesPage() {
     const handleRetry = (id) => {
         captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(id).then(res => {
             // 乐观更新
-            setDataList(list => {
-                return list.map(item => item.id === id ? { ...item, status: 1 } : item)
-            })
+            refreshData(
+                (item) => item.id === id,
+                { status: 1 }
+            )
         }))
     }
 
-    useEffect(() => {
-        loadPage(1)
-    }, [filter])
     const selectChange = (id) => {
         setFilter(Number(id))
     }
@@ -151,6 +140,7 @@ export default function FilesPage() {
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-[600px]">{t('lib.fileName')}</TableHead>
+                            {/* 状态 */}
                             <TableHead className="flex items-center gap-4">{t('lib.status')}
                                 {/* Select component */}
                                 <Select onValueChange={selectChange}>

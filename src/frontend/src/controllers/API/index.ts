@@ -98,11 +98,11 @@ export async function readFileLibDatabase(page = 1, pageSize = 40, name = '') {
  * 获取知识库下文件列表
  *
  */
-export async function readFileByLibDatabase(id, page, pageSize = 40, name = '') {
-  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}&file_name=${name}`);
+export async function readFileByLibDatabase({ id, page, pageSize = 40, name = '', status }) {
+  const statusStr = status === 999 ? '' : `&status=${status}`;
+  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}&file_name=${name}${statusStr}`);
   return response
   // return { data, writeable, pages: Math.ceil(total / pageSize) }
-
 }
 
 /**

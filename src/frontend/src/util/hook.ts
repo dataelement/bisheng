@@ -100,6 +100,13 @@ export function useTable(apiFun) {
         filterData: (p) => {
             paramRef.current = { ...paramRef.current, ...p };
             loadData()
+        },
+        // 更新数据
+        refreshData: (compareFn, data) => {
+            // 乐观更新
+            setData(list => {
+                return list.map(item => compareFn(item) ? { ...item, ...data } : item)
+            })
         }
     }
 }
