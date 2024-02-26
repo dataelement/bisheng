@@ -9,7 +9,7 @@ from sqlmodel import Field, select
 
 # 可用于训练的model列表
 class SftModelBase(SQLModelSerializable):
-    id: str = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
+    id: int = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(sa_column=Column(
