@@ -194,8 +194,8 @@ llms:
     documentation: ""
   SenseChat:
     documentation: ""
-  # HostYuanChat:
-  #   documentation: ""
+  HostYuanChat:
+    documentation: ""
   HostYiChat:
     documentation: ""
   ###
