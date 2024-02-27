@@ -7,7 +7,8 @@ from uuid import UUID
 
 from bisheng.api.errcode.finetune import (CancelJobError, ChangeModelNameError, CreateFinetuneError,
                                           DeleteJobError, ExportJobError, GetGPUInfoError,
-                                          InvalidExtraParamsError, JobStatusError, NotFoundJobError,
+                                          InvalidExtraParamsError, JobStatusError,
+                                          ModelNameExistsError, NotFoundJobError,
                                           TrainDataNoneError, UnExportJobError)
 from bisheng.api.errcode.model_deploy import NotFoundModelError
 from bisheng.api.errcode.server import NoSftServerError
@@ -116,6 +117,15 @@ class FinetuneService:
         return server
 
     @classmethod
+    def verify_job_model_name(cls, model_name: str) -> bool:
+        """ 校验model_name 是否已存在 """
+        if ModelDeployDao.find_model_by_name(model_name):
+            return False
+        if FinetuneDao.find_job_by_model_name(model_name):
+            return False
+        return True
+
+    @classmethod
     def create_job(cls, finetune: Finetune) -> UnifiedResponseModel[Finetune]:
         # 校验额外参数
         validate_ret = cls.validate_params(finetune)
@@ -126,6 +136,10 @@ class FinetuneService:
         server = cls.get_sft_server(finetune.server)
         if not server:
             return NoSftServerError.return_resp()
+
+        # 校验模型名是否已存在
+        if not cls.verify_job_model_name(finetune.model_name):
+            return ModelNameExistsError.return_resp()
 
         # 查找基础模型是否存在
         base_model = ModelDeployDao.find_model(finetune.base_model)
@@ -444,6 +458,10 @@ class FinetuneService:
         finetune = FinetuneDao.find_job(req.id)
         if not finetune:
             return NotFoundJobError.return_resp()
+
+        # 校验模型名是否已存在
+        if not cls.verify_job_model_name(req.model_name):
+            return ModelNameExistsError.return_resp()
 
         # 修改已发布的模型名称
         if not cls.change_published_model_name(finetune, req.model_name):

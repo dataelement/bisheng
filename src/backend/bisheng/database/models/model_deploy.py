@@ -45,6 +45,12 @@ class ModelDeployDao(ModelDeployBase):
             return session.exec(statement).first()
 
     @classmethod
+    def find_model_by_name(cls, model: str) -> ModelDeploy | None:
+        with session_getter() as session:
+            statement = select(ModelDeploy).where(ModelDeploy.model == model)
+            return session.exec(statement).first()
+
+    @classmethod
     def delete_model(cls, model: ModelDeploy) -> bool:
         with session_getter() as session:
             session.delete(model)
