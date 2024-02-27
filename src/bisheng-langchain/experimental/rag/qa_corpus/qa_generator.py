@@ -64,6 +64,7 @@ class RagQAGenerator(object):
         save_path = os.path.join(self.qa_gen_folder, os.path.splitext(file_name)[0] + '_qa_gen.xlsx')
         df = trainset.to_pandas()
         df.to_excel(save_path, index=False)
+        return save_path
     
     def statistic_qa(self):
         total_qa_num = 0
@@ -135,7 +136,7 @@ class RagQAGenerator(object):
 
 if __name__ == '__main__':
     corpus_folder = '/home/public/rag_benchmark_v1.0/rag_benchmark_processed'
-    qa_gen_folder = '/home/public/rag_benchmark_v1.0/rag_qa_gen'
+    qa_gen_folder = '/home/public/rag_benchmark_v1.0/rag_qa_gen_filter'
     generator = RagQAGenerator(corpus_folder=corpus_folder, qa_gen_folder=qa_gen_folder)
     # generator.generate()
     # generator.statistic_qa()

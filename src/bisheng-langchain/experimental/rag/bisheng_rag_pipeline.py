@@ -1,21 +1,18 @@
 import os
-import json
-import shutil
+import copy
 import yaml
 import pandas as pd
 import httpx
 import argparse
 from loguru import logger
 from tqdm import tqdm
+import time
 from langchain.vectorstores import Milvus
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from bisheng_langchain.retrievers import MixEsVectorRetriever
 from langchain.chains.question_answering import load_qa_chain
-from utils import import_by_type, import_class
+from utils import import_by_type, import_class, import_module
 from scoring.ragas_score import RagScore
-
-openai_api_key = os.environ.get('OPENAI_API_KEY', '')
-openai_proxy = os.environ.get('OPENAI_PROXY', '')
 
 
 class BishengRagPipeline():
@@ -36,8 +33,7 @@ class BishengRagPipeline():
         if embedding_params['type'] == 'OpenAIEmbeddings':
             embedding_params.pop('type')
             self.embeddings = embedding_object(
-                openai_api_key=openai_api_key,
-                http_client=httpx.Client(proxies=openai_proxy),
+                http_client=httpx.Client(proxies=embedding_params['openai_proxy']),
                 **embedding_params
             )
         else:
@@ -50,14 +46,13 @@ class BishengRagPipeline():
         if llm_params['type'] == 'ChatOpenAI':
             llm_params.pop('type')
             self.llm = llm_object(
-                openai_api_key=openai_api_key,
-                http_client=httpx.Client(proxies=openai_proxy),
+                http_client=httpx.Client(proxies=llm_params['openai_proxy']),
                 **llm_params
             )
         else:
             llm_params.pop('type')
             self.llm = llm_object(**llm_params)
-    
+
     def file2knowledge(self):
         """
         file to knowledge
@@ -174,24 +169,65 @@ class BishengRagPipeline():
             docs = getattr(self, 'ranker').sort_and_filter(question, docs)
         
         return docs
+
+    def load_documents(self, file_name, max_content=100000):
+        file_path = os.path.join(self.origin_file_path, file_name)
+        if not os.path.exists(file_path):
+            raise Exception(f'{file_path} not exists.')
+
+        loader_params = copy.deepcopy(self.params['knowledge']['loader'])
+        loader_object = import_by_type(_type='documentloaders', name=loader_params.pop('type'))
+        loader = loader_object(file_name=file_name, file_path=file_path, **loader_params)
         
+        documents = loader.load()
+        logger.info(f'documents: {len(documents)}, page_content: {len(documents[0].page_content)}')
+        for doc in documents:
+            doc.page_content = doc.page_content[:max_content]
+        return documents
+
     def question_answering(self):   
         """
         question answer over knowledge
         """
         df = pd.read_excel(self.question_path)
         all_questions_info = df.to_dict('records')
-        qa_chain = load_qa_chain(llm=self.llm, chain_type=self.params['generate']['chain_type'], verbose=False)
+        if 'prompt_type' in self.params['generate']:
+            prompt_type = self.params['generate']['prompt_type']
+            prompt = import_module(f'from prompts.prompt import {prompt_type}')
+        else:
+            prompt = None
+        qa_chain = load_qa_chain(llm=self.llm, 
+                                 chain_type=self.params['generate']['chain_type'], 
+                                 prompt=prompt, 
+                                 verbose=False)
+        file2docs = dict()
         for questions_info in tqdm(all_questions_info):
             question = questions_info['问题']
             file_type = questions_info['文件类型']
+            file_name = questions_info['文件名']
             collection_name = questions_info['知识库名']
 
-            # retrieval and rerank
-            docs = self.retrieval_and_rerank(question, collection_name)
+            if self.params['generate']['with_retrieval']:
+                # retrieval and rerank
+                docs = self.retrieval_and_rerank(question, collection_name)
+            else:
+                # load all documents
+                if file_name not in file2docs:
+                    docs = self.load_documents(file_name)
+                    file2docs[file_name] = docs
+                else:
+                    docs = file2docs[file_name]
 
             # question answer
-            ans = qa_chain({"input_documents": docs, "question": question}, return_only_outputs=True)
+            try:
+                ans = qa_chain({"input_documents": docs, "question": question}, return_only_outputs=True)
+            except Exception as e:
+                logger.error(f'question: {question}\nerror: {e}')
+                ans = {'output_text': ''}
+            
+            # # for rate_limit
+            # time.sleep(15)
+
             rag_answer = ans['output_text']
             logger.info(f'question: {question}\nans: {rag_answer}\n')
             questions_info['rag_answer'] = rag_answer
@@ -237,8 +273,3 @@ if __name__ == '__main__':
         rag.question_answering()
     elif args.mode == 'score':
         rag.score()
-
-
-
-
-
