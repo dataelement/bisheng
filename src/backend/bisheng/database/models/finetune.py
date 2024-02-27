@@ -32,7 +32,11 @@ class FinetuneStatus(Enum):
 class FinetuneBase(SQLModelSerializable):
     id: str = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
     server: int = Field(default=0, index=True, description='关联的RT服务ID')
+    server_name: str = Field(default='', description='RT服务名称')
+    rt_endpoint: str = Field(default='', description='RT服务地址')
+    sft_endpoint: str = Field(default='', description='FT服务地址')
     base_model: int = Field(default=0, index=True, description='基础模型ID')
+    base_model_name: str = Field(max_length=50, description='基础模型名称')
     model_id: int = Field(default=0, index=True, description='已发布的模型ID')
     model_name: str = Field(index=True, max_length=50, description='训练模型的名称')
     method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description='训练方法')
