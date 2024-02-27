@@ -181,6 +181,14 @@ export async function deleteServiceApi(id) {
   return await axios.delete(`/api/v1/server/${id}`);
 }
 
+/**
+ * 获取发布模型的状态信息
+ */
+export async function getModelInfoApi(id) {
+  return await axios.get(`/api/v1/server/model/${id}`);
+}
+
+
 export async function postValidateCode(
   code: string
 ): Promise<any> {
@@ -344,7 +352,7 @@ export async function GPUlistByFinetuneApi(): Promise<any> {
  */
 // 分词
 export async function splitWordApi(word: string, messageId: string): Promise<string[]> {
-  return await axios.get(`/api/v1/qa/keyword?answer=${word}&message_id=${messageId}`)
+  return await axios.get(`/api/v1/qa/keyword?answer=${encodeURIComponent(word)}&message_id=${messageId}`)
 }
 
 // 获取 chunks

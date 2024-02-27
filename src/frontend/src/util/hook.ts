@@ -94,7 +94,7 @@ export function useTable(apiFun) {
         reload: loadData,
         // 检索
         search: useDebounce((keyword) => {
-            setPage({ ...page, keyword });
+            setPage({ ...page, page: 1, keyword });
         }, 600, false),
         // 数据过滤
         filterData: (p) => {

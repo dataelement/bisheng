@@ -210,7 +210,7 @@ export default function FileLibPage() {
     const copyText = useCopyText()
 
     return <div className="w-full h-screen p-6 overflow-y-auto">
-        <Tabs defaultValue="model" className="w-full">
+        <Tabs defaultValue="model" className="w-full" onValueChange={e => e === 'model' && loadData()}>
             <TabsList className="">
                 <TabsTrigger value="model" className="roundedrounded-xl">{t('model.modelManagement')}</TabsTrigger>
                 <TabsTrigger value="finetune" disabled={user.role !== 'admin'}>{t('model.modelFineTune')}</TabsTrigger>

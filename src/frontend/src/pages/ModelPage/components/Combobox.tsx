@@ -51,8 +51,9 @@ export default function Combobox({
         </PopoverTrigger>
         <PopoverContent className="w-[200px] p-0">
             <Command filter={(value, search) => {
-                // TODO 0.2.2使用 keywords 过滤
+                // TODO cmdk0.2.2使用 keywords 过滤
                 const name = options.find((option) => option[valueKey] + '' === value)?.[labelKey]
+                if (!name) return 0
                 if (name.toLocaleUpperCase().includes(search.toLocaleUpperCase())) return 1
                 return 0
             }}>
