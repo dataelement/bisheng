@@ -52,6 +52,11 @@ class InvalidExtraParamsError(BaseErrorCode):
     Msg: str = '无效的训练参数'
 
 
+class ModelNameExistsError(BaseErrorCode):
+    Code: int = 10110
+    Msg: str = '模型名已存在'
+
+
 class TrainFileNotExistError(BaseErrorCode):
     Code: int = 10120
     Msg: str = '训练文件不存在'

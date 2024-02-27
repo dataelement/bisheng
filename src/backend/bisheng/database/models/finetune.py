@@ -162,6 +162,12 @@ class FinetuneDao(FinetuneBase):
             return session.exec(statement).first()
 
     @classmethod
+    def find_job_by_model_name(cls, model_name: str) -> Finetune | None:
+        with session_getter() as session:
+            statement = select(Finetune).where(Finetune.model_name == model_name)
+            return session.exec(statement).first()
+
+    @classmethod
     def change_status(cls, job_id: UUID, old_status: int, status: int) -> bool:
         with session_getter() as session:
             update_statement = update(Finetune).where(
