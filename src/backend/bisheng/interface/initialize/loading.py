@@ -2,7 +2,6 @@ import json
 from typing import Any, Callable, Dict, Sequence, Type
 
 from bisheng.cache.utils import file_download
-from bisheng.chat.config import ChatConfig
 from bisheng.interface.agents.base import agent_creator
 from bisheng.interface.chains.base import chain_creator
 from bisheng.interface.custom_lists import CUSTOM_NODES
@@ -24,7 +23,6 @@ from langchain.agents import agent as agent_module
 from langchain.agents.agent import AgentExecutor
 from langchain.agents.agent_toolkits.base import BaseToolkit
 from langchain.agents.tools import BaseTool
-from langchain.base_language import BaseLanguageModel
 from langchain.chains.base import Chain
 from langchain.document_loaders.base import BaseLoader
 from langchain.vectorstores.base import VectorStore
@@ -214,18 +212,10 @@ def instantiate_llm(node_type, class_object, params: Dict):
             params['max_tokens'] = int(params['max_tokens'])
         elif not isinstance(params.get('max_tokens'), int):
             params.pop('max_tokens', None)
-    # 支持stream
-    llm = class_object(**params)
-    llm_config = settings.get_from_db('llm_request')
-    if isinstance(llm, BaseLanguageModel):
-        if hasattr(llm, 'streaming') and isinstance(llm.streaming, bool):
-            llm.streaming = llm_config.get(
-                'stream') if 'stream' in llm_config else ChatConfig.streaming
-        elif hasattr(llm, 'stream') and isinstance(llm.stream, bool):
-            llm.stream = llm_config.get(
-                'stream') if 'stream' in llm_config else ChatConfig.streaming
 
     # 支持request_timeout & max_retries
+    llm = class_object(**params)
+    llm_config = settings.get_from_db('llm_request')
     if hasattr(llm, 'request_timeout') and 'request_timeout' in llm_config:
         if isinstance(llm_config.get('request_timeout'), str):
             llm.request_timeout = eval(llm_config.get('request_timeout'))

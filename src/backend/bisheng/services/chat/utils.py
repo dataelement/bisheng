@@ -1,5 +1,4 @@
 from bisheng.api.v1.schemas import ChatMessage
-from bisheng.interface.utils import try_setting_streaming_options
 from bisheng.processing.base import get_result_and_steps
 from loguru import logger
 
@@ -10,7 +9,6 @@ async def process_graph(
     client_id: str,
     session_id: str,
 ):
-    langchain_object = try_setting_streaming_options(langchain_object)
     logger.debug('Loaded langchain object')
 
     if langchain_object is None:
