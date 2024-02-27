@@ -1,7 +1,7 @@
 data:
   origin_file_path: '/home/public/rag_benchmark_v1.0/rag_benchmark_processed'
   question: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample.xlsx'
-  save_answer: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample_gpt3.5_12chunk_test.xlsx'
+  save_answer: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample_gpt4_12chunk_test.xlsx'
 
 milvus:
   host: '192.168.106.116'
@@ -12,15 +12,32 @@ elasticsearch:
   url: 'http://192.168.106.116:9200'
   ssl_verify:
     basic_auth: ["elastic", "oSGL-zVvZ5P3Tm7qkDLC"]
+  drop_old: True
 
 embedding:
   type: 'OpenAIEmbeddings'
   model: 'text-embedding-ada-002'
+  openai_api_key: 'xxxx'
+  openai_proxy: 'http://118.195.232.223:39995'
 
 chat_llm:
   type: 'ChatOpenAI'
-  model: 'gpt-3.5-turbo-1106'
+  model: 'gpt-4-1106-preview'
+  openai_api_key: 'xxxx'
+  openai_proxy: 'http://118.195.232.223:39995'
   temperature: 0.0
+
+# chat_llm:
+#   type: 'ChatQWen'
+#   model_name: 'qwen-1.8b-chat'
+#   api_key: 'xxxx'
+#   temperature: 0.0
+
+# chat_llm:
+#   type: 'HostQwenChat'
+#   model_name: 'qwen-1_8B-benchmarkv1-ganrao-8192-epoch10-filter-export'
+#   host_base_url: 'http://34.142.140.180:7001/v2.1/models'
+#   temperature: 0.0
 
 knowledge:
   loader: 
@@ -33,7 +50,7 @@ knowledge:
     separators: ['\n\n', '\n', ' ', '']
   save_milvus: True
   save_es: True
-  suffix: 'test'
+  suffix: 'test_glx'
 
 retrieval_rerank:
   retrieval:
@@ -51,6 +68,7 @@ retrieval_rerank:
     threshold: 0.0
 
 generate:
+  with_retrieval: True
   chain_type: 'stuff'
 
 metric:
