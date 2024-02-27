@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from uuid import UUID
 
-from bisheng.database.models.finetune import FinetuneBase, TrainMethod
+from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from langchain.docstore.document import Document
 from pydantic import BaseModel, Field, validator
@@ -198,9 +198,3 @@ class FinetuneCreateReq(BaseModel):
     extra_params: Dict = Field(default_factory=dict, description='训练任务所需额外参数')
     train_data: Optional[List[Dict]] = Field(default=None, description='个人训练数据')
     preset_data: Optional[List[Dict]] = Field(default=None, description='预设训练数据')
-
-
-class FinetuneInfoResponse(FinetuneBase):
-    id: UUID = Field(description='唯一ID')
-    base_model_name: Optional[str] = Field(description='基础模型名')
-    server_name: Optional[str] = Field(default='未知', description='RT服务名')

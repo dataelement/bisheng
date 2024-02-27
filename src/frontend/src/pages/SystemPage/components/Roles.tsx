@@ -57,16 +57,18 @@ export default function Roles() {
     }
 
     // search
+    const [searchWord, setSearchWord] = useState('')
     const handleSearch = (e) => {
         const word = e.target.value
-        setRoles(allRolesRef.current.filter(item => item.role_name.includes(word)))
+        setSearchWord(word)
+        setRoles(allRolesRef.current.filter(item => item.role_name.toUpperCase().includes(word.toUpperCase())))
     }
 
     if (role) return <EditRole id={role.id || -1} name={role.role_name || ''} onBeforeChange={checkSameName} onChange={handleChange}></EditRole>
 
     return <div className=" relative">
         <div className="flex gap-4 items-center justify-end">
-            <Input placeholder={t('system.roleName')} className="w-[140px]" onChange={handleSearch}></Input>
+            <Input value={searchWord} placeholder={t('system.roleName')} className="w-[140px]" onChange={handleSearch}></Input>
             <Button className="h-8 rounded-full" onClick={() => setRole({})}>{t('create')}</Button>
         </div>
         <Table>

@@ -56,7 +56,7 @@ export default function FinetuneResult({ id, training, isStop, failed, onChange 
                         processKeys.map(key => <Card className="flex-row w-[25%]" key={key}>
                             <CardHeader>
                                 <CardTitle>{key}</CardTitle>
-                                <CardDescription>{training ? '--' : report[`predict_${key}`].toFixed(2)}%</CardDescription>
+                                <CardDescription>{training ? '--' : report[`predict_${key}`]?.toFixed(2) || '--'}%</CardDescription>
                             </CardHeader>
                             <CardContent className="mt-4">
                                 <div className="radial-progress bg-gray-200 dark:bg-gray-950" style={{ "--value": training ? 0 : report[`predict_${key}`], "--size": "1.4rem", }} role="progressbar"></div>

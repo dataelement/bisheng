@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../../alerts/confirm";
@@ -5,11 +6,11 @@ import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import EditLabel from "../../../components/ui/editLabel";
 import { alertContext } from "../../../contexts/alertContext";
+import { getModelInfoApi } from "../../../controllers/API";
 import { cancelTaskApi, getTaskInfoApi, publishTaskApi, unPublishTaskApi, updataTaskNameApi } from "../../../controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { TaskDB } from "../../../types/api/finetune";
 import FinetuneResult from "./FinetuneResult";
-import { Loader2 } from "lucide-react";
 
 export const enum TaskStatus {
     /** 训练中 */
@@ -117,10 +118,21 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
 
     const [baseInfo, setBaseInfo] = useState<TaskDB>(null)
 
+    // 上线状态
+    const [online, setOnline] = useState(false)
+    const getOnlineState = (modelId) => {
+        if (modelId) {
+            return getModelInfoApi(modelId).then((data) => {
+                console.log(data);
+                setOnline(data.status === '已上线')
+            })
+        }
+    }
 
     useEffect(() => {
         captureAndAlertRequestErrorHoc(getTaskInfoApi(id).then((data) => {
             setBaseInfo(data.finetune)
+            getOnlineState(data.finetune.model_id)
         }), (err) => {
             setBaseInfo(null)
         })
@@ -165,7 +177,7 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
         <HeadButtonView
             name={baseInfo.model_name}
             status={baseInfo.status}
-            online={false}
+            online={online}
             onPublish={handlePublish}
             onUnPublish={handleUnPublish}
             onDelete={onDelete}

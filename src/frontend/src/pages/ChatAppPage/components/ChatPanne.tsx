@@ -70,7 +70,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
             inputRef.current?.focus()
         }, 500);
 
-        setFormShow(false)
+        setFormShow(isForm)
     }
     useEffect(() => {
         initChat()
@@ -240,7 +240,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
         {/* 源文件类型 */}
         <ResouceModal chatId={chatId} open={!!souce} data={souce} setOpen={() => setSouce(null)}></ResouceModal>
         {/* 表单 */}
-        {isForm && formShow && !inputDisabled && <ChatReportForm flow={flow} onStart={sendReport} />}
+        {isForm && formShow && <ChatReportForm flow={flow} onStart={sendReport} />}
         {/* 踩 反馈 */}
         <ThumbsMessage ref={thumbRef}></ThumbsMessage>
     </div>

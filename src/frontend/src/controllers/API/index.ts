@@ -98,11 +98,11 @@ export async function readFileLibDatabase(page = 1, pageSize = 40, name = '') {
  * 获取知识库下文件列表
  *
  */
-export async function readFileByLibDatabase(id, page, pageSize = 40, name = '') {
-  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}&file_name=${name}`);
+export async function readFileByLibDatabase({ id, page, pageSize = 40, name = '', status }) {
+  const statusStr = status === 999 ? '' : `&status=${status}`;
+  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}&file_name=${name}${statusStr}`);
   return response
   // return { data, writeable, pages: Math.ceil(total / pageSize) }
-
 }
 
 /**
@@ -180,6 +180,14 @@ export async function addServiceApi(name: string, url: string, ftUrl: string): P
 export async function deleteServiceApi(id) {
   return await axios.delete(`/api/v1/server/${id}`);
 }
+
+/**
+ * 获取发布模型的状态信息
+ */
+export async function getModelInfoApi(id) {
+  return await axios.get(`/api/v1/server/model/${id}`);
+}
+
 
 export async function postValidateCode(
   code: string
@@ -344,7 +352,7 @@ export async function GPUlistByFinetuneApi(): Promise<any> {
  */
 // 分词
 export async function splitWordApi(word: string, messageId: string): Promise<string[]> {
-  return await axios.get(`/api/v1/qa/keyword?answer=${word}&message_id=${messageId}`)
+  return await axios.get(`/api/v1/qa/keyword?answer=${encodeURIComponent(word)}&message_id=${messageId}`)
 }
 
 // 获取 chunks

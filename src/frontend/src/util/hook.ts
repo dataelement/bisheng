@@ -94,12 +94,19 @@ export function useTable(apiFun) {
         reload: loadData,
         // 检索
         search: useDebounce((keyword) => {
-            setPage({ ...page, keyword });
+            setPage({ ...page, page: 1, keyword });
         }, 600, false),
         // 数据过滤
         filterData: (p) => {
             paramRef.current = { ...paramRef.current, ...p };
             loadData()
+        },
+        // 更新数据
+        refreshData: (compareFn, data) => {
+            // 乐观更新
+            setData(list => {
+                return list.map(item => compareFn(item) ? { ...item, ...data } : item)
+            })
         }
     }
 }
