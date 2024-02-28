@@ -52,6 +52,7 @@ class FinetuneService:
         params = finetune.extra_params.copy()
         # 需要在SFT-backend服务将model_name转为模型所在的绝对路径
         params['model_name_or_path'] = base_model.model
+        params['model_template'] = finetune.root_model_name
         params['finetuning_type'] = finetune.method
 
         # 特殊处理cpu_load的格式，因为传参方式不一样 --cpu_load 即代表为True，无需额外参数值
@@ -145,11 +146,15 @@ class FinetuneService:
         base_model = ModelDeployDao.find_model(finetune.base_model)
         if not base_model:
             return NotFoundModelError.return_resp()
+        root_model_name = base_model.model
+        if base_job := FinetuneDao.find_job_by_model_id(base_model.id):
+            root_model_name = base_job.root_model_name
 
         finetune.server_name = server.server
         finetune.rt_endpoint = server.endpoint
         finetune.sft_endpoint = server.sft_endpoint
         finetune.base_model_name = base_model.model
+        finetune.root_model_name = root_model_name
 
         # 调用SFT-backend的API新建任务
         logger.info(f'start create sft job: {finetune.id.hex}')

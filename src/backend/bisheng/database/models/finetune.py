@@ -37,7 +37,8 @@ class FinetuneBase(SQLModelSerializable):
     sft_endpoint: str = Field(default='', description='FT服务地址')
     base_model: int = Field(default=0, index=True, description='基础模型ID')
     base_model_name: str = Field(max_length=50, description='基础模型名称')
-    model_id: int = Field(default=0, index=True, description='已发布的模型ID')
+    root_model_name: str = Field(default='', description='根基础模型名称，即最初始的模型名称')
+    model_id: int = Field(default=0, index=True, description='已发布的训练模型ID')
     model_name: str = Field(index=True, max_length=50, description='训练模型的名称')
     method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description='训练方法')
     extra_params: Dict = Field(sa_column=Column(JSON), description='训练任务所需的额外参数')
@@ -165,6 +166,12 @@ class FinetuneDao(FinetuneBase):
     def find_job_by_model_name(cls, model_name: str) -> Finetune | None:
         with session_getter() as session:
             statement = select(Finetune).where(Finetune.model_name == model_name)
+            return session.exec(statement).first()
+
+    @classmethod
+    def find_job_by_model_id(cls, model_id: int) -> Finetune | None:
+        with session_getter() as session:
+            statement = select(Finetune).where(Finetune.model_id == model_id)
             return session.exec(statement).first()
 
     @classmethod
