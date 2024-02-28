@@ -42,7 +42,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
     // 输入框状态
     const { inputState, inputEmpty, inputDisabled, inputRef,
         formShow, setFormShow,
-        setInputState, setInputEmpty, handleTextAreaHeight } = useInputState({ flow, chatId, chating, messages, isReport })
+        setInputState, setInputEmpty, handleTextAreaHeight } = useInputState({ flow, chatId, chating, messages, isForm, isReport })
 
     const { appConfig } = useContext(locationContext)
 
@@ -50,7 +50,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
     const initChat = async () => {
         await checkPrompt(flow)
         await build()
-        loadHistory()
+        const historyData = await loadHistory()
         await connectWS({ setInputState, setIsStop, changeHistoryByScroll })
         setInputState({ lock: false, errorMsg: '' });
         // 第一条消息，用来初始化会话
@@ -70,7 +70,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
             inputRef.current?.focus()
         }, 500);
 
-        setFormShow(isForm)
+        setFormShow(!historyData.length && isForm)
     }
     useEffect(() => {
         initChat()
@@ -222,7 +222,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
                     <div className="absolute right-6 bottom-4 flex gap-2">
                         {
                             isForm && <ShadTooltip content={t('chat.sendTooltip')}>
-                                <button disabled={inputDisabled || chating} className=" disabled:text-gray-400" onClick={() => setFormShow(!formShow)}><FileInput /></button>
+                                <button disabled={chating} className=" disabled:text-gray-400" onClick={() => setFormShow(!formShow)}><FileInput /></button>
                             </ShadTooltip>
                         }
                         <ShadTooltip content={t('chat.sendTooltip')}>
@@ -251,7 +251,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
  * return 该技能含有表单、有报表、群聊
  * @returns 
  */
-const useInputState = ({ flow, chatId, chating, messages, isReport }) => {
+const useInputState = ({ flow, chatId, chating, messages, isForm, isReport }) => {
     const { tabsState } = useContext(TabsContext);
 
     const [inputState, setInputState] = useState({
@@ -286,7 +286,7 @@ const useInputState = ({ flow, chatId, chating, messages, isReport }) => {
     }
     // input disabled
     const inputDisabled = useMemo(() => {
-        return inputState.lock || (fileInputs?.length && messages.length === 0) || isReport
+        return inputState.lock || (isForm && messages.length === 0) || isReport
     }, [inputState, fileInputs, isReport])
 
     // 表单收起
@@ -376,10 +376,11 @@ const useMessages = (chatId, flow) => {
         })
         lastIdRef.current = hisData[hisData.length - 1]?.id || lastIdRef.current || 0 // 记录最后一个id
 
+        let historyData = []
         if (lastId) {
-            setChatHistory((history) => [...hisData.reverse(), ...history])
+            historyData = [...hisData.reverse(), ...chatHistory]
         } else if (loadIdRef.current === chatId) { // 保证同一会话
-            setChatHistory(!hisData.length && flow.guide_word ? [{
+            historyData = !hisData.length && flow.guide_word ? [{
                 "category": "system",
                 "chat_id": chatId,
                 "end": true,
@@ -402,10 +403,11 @@ const useMessages = (chatId, flow) => {
                 "update_time": "",
                 noAccess: true,
                 "user_id": 0
-            }] : hisData.reverse())
-        } else {
-            setChatHistory([])
+            }] : hisData.reverse()
         }
+
+        setChatHistory(historyData)
+        return historyData
     }
 
     const loadLock = useRef(false)

@@ -64,7 +64,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
         const errors = []
         if (!resultRef.current.server) errors.push(t('finetune.selectRTService'))
         if (!resultRef.current.base_model) errors.push(t('finetune.selectBaseModel'))
-        if (!resultRef.current.model_name) errors.push(t('finetune.enterModelName'))
+        if (!/^(?=.*[a-zA-Z])(?=.*\d)?[a-zA-Z\d_]+$/.test(resultRef.current.model_name)) errors.push(t('finetune.enterModelName'))
         if (errors.length) return setErrorData({ title: '', list: errors });
         // 合并数据
         console.log('object :>> ', resultRef.current);

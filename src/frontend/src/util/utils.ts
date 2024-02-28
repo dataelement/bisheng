@@ -48,3 +48,29 @@ export function intersectArrays(...arrays) {
 
     return intersection;
 }
+
+// 时间戳转换 天时分秒（dhms）
+export function formatMilliseconds(ms: number, format: string): string {
+    const secondsInMillisecond = 1;
+    const minutesInMillisecond = secondsInMillisecond * 60;
+    const hoursInMillisecond = minutesInMillisecond * 60;
+    const daysInMillisecond = hoursInMillisecond * 24;
+
+    const days = Math.floor(ms / daysInMillisecond);
+    const remainingHours = ms % daysInMillisecond;
+    const hours = Math.floor(remainingHours / hoursInMillisecond);
+    const remainingMinutes = remainingHours % hoursInMillisecond;
+    const minutes = Math.floor(remainingMinutes / minutesInMillisecond);
+    const remainingSeconds = remainingMinutes % minutesInMillisecond;
+    const seconds = Math.floor(remainingSeconds / secondsInMillisecond);
+
+    let formattedString = format.replace('dd', days.toString());
+    formattedString = formattedString.replace('hh', hours.toString());
+    formattedString = formattedString.replace('mm', minutes.toString());
+    formattedString = formattedString.replace('ss', seconds.toString());
+
+    // Remove any extra spaces
+    // formattedString = formattedString.replace(/\s+/g, ' ').trim();
+
+    return formattedString;
+}
