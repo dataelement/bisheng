@@ -39,7 +39,12 @@ export const Finetune = ({ rtClick, gpuClick }) => {
     const [createOpen, setCreateOpen] = useState(false)
 
     // useDebounce
-    const changeItem = useDebounce((id) => setTaskId(id), 600, false)
+    const changeItem = useDebounce((id) => {
+        // 滚动到顶部
+        const scorllDom = document.querySelector('#model-scroll')
+        scorllDom && (scorllDom.scrollTop = 0)
+        setTaskId(id)
+    }, 600, false)
 
     return <div className="relative">
         <div className={createOpen ? 'hidden' : 'block'}>
@@ -60,7 +65,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                             </TableHeader>
                             <TableBody>
                                 {tasks.map((task) => (
-                                    <TableRow key={task.id} onClick={() => changeItem(task.id)} className="cursor-pointer">
+                                    <TableRow key={task.id} onClick={() => changeItem(task.id)} className={`cursor-pointer ${task.id === taskId && 'bg-gray-100'}`}>
                                         <TableCell className="font-medium">{task.model_name}</TableCell>
                                         <TableCell><BadgeView value={task.status}></BadgeView></TableCell>
                                         <TableCell>{task.server_name}</TableCell>

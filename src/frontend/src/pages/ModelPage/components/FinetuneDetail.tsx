@@ -11,6 +11,7 @@ import { cancelTaskApi, getTaskInfoApi, publishTaskApi, unPublishTaskApi, updata
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { TaskDB } from "../../../types/api/finetune";
 import FinetuneResult from "./FinetuneResult";
+import { formatMilliseconds } from "../../../util/utils";
 
 export const enum TaskStatus {
     /** 训练中 */
@@ -214,7 +215,9 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
             </div>
             <div className="flex gap-4 mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.runtime')}</small>
-                <small className="text-sm font-medium leading-none text-gray-700">{TaskStatus.TRAINING_IN_PROGRESS === baseInfo.status ? '--' : baseInfo.report?.train_runtime || 0}</small>
+                <small className="text-sm font-medium leading-none text-gray-700">
+                    {TaskStatus.TRAINING_IN_PROGRESS === baseInfo.status ? '--' : formatMilliseconds(baseInfo.report?.train_runtime || 0, t('finetune.formatTime'))}
+                </small>
             </div>
             <div className="flex gap-4 mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.creator')}</small>
