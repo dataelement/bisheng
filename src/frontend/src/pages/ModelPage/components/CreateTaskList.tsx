@@ -93,7 +93,7 @@ export default function CreateTaskList({ onChange }) {
             {
                 userList.length ? userList.map(data =>
                     <div className="flex gap-4 items-center mt-2 h-8 hover:bg-gray-200">
-                        <Checkbox disabled checked={data.checked} />
+                        <Checkbox checked={data.checked} />
                         <span className="text-sm">{data.name}</span>
                         <div className="flex ml-auto gap-4">
                             <Button

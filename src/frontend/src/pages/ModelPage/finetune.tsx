@@ -53,7 +53,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
             {tasks?.length === 0 ?
                 <div className="mt-6 text-center text-gray-400">{t('finetune.noData')}</div>
                 : <div className="flex gap-4 mt-4">
-                    <div className="w-[40%] border-r">
+                    <div className="w-[40%] border-r overflow-y-auto max-h-[calc(100vh-180px)]">
                         <Table>
                             <TableHeader>
                                 <TableRow>
