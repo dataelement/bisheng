@@ -32,7 +32,7 @@ class FinetuneStatus(Enum):
 class FinetuneBase(SQLModelSerializable):
     id: str = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
     server: int = Field(default=0, index=True, description='关联的RT服务ID')
-    server_name: str = Field(default='', description='RT服务名称')
+    server_name: str = Field(default='', index=True, description='RT服务名称')
     rt_endpoint: str = Field(default='', description='RT服务地址')
     sft_endpoint: str = Field(default='', description='FT服务地址')
     base_model: int = Field(default=0, index=True, description='基础模型ID')
@@ -88,6 +88,7 @@ class Finetune(FinetuneBase, table=True):
 
 class FinetuneList(BaseModel):
     server: Optional[int] = Field(description='关联的RT服务ID')
+    server_name: Optional[str] = Field(description='关联的RT服务名称')
     status: Optional[List[int]] = Field(description='训练任务的状态')
     model_name: Optional[str] = Field(description='模型名称, 模糊搜索')
     page: Optional[int] = Field(default=1, description='页码')
@@ -199,6 +200,9 @@ class FinetuneDao(FinetuneBase):
             if finetune_list.server:
                 statement = statement.where(Finetune.server == finetune_list.server)
                 count_statement = count_statement.filter(Finetune.server == finetune_list.server)
+            if finetune_list.server_name:
+                statement = statement.where(Finetune.server_name == finetune_list.server_name)
+                count_statement = count_statement.filter(Finetune.server_name == finetune_list.server_name)
             if finetune_list.status:
                 statement = statement.where(Finetune.status.in_(finetune_list.status))
                 count_statement = count_statement.filter(Finetune.status.in_(finetune_list.status))
@@ -208,3 +212,10 @@ class FinetuneDao(FinetuneBase):
             statement = statement.offset(offset).limit(finetune_list.limit).order_by(Finetune.create_time.desc())
             all_jobs = session.exec(statement).all()
             return all_jobs, count_statement.scalar()
+
+    @classmethod
+    def get_server_filters(cls) -> List[str]:
+        with session_getter() as session:
+            statement = select(Finetune.server_name).distinct()
+            result = session.exec(statement).all()
+            return result

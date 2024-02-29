@@ -332,7 +332,7 @@
         "cpuLoadDesc": "是否将部分参数和优化器load到cpu上（默认不开启，显存不够的时候可以开启），开启之后会占用内存，详细的数据可以参考资源消耗相关说明文档",
         "selectRTService": "请选择 RT 服务",
         "selectBaseModel": "请选择基准模型",
-        "enterModelName": "模型名称中至少包含一个字母，并由数字、字母和下划线组成",
+        "enterModelName": "模型名称中至少包含一个字母，可以由数字、字母和横线组成",
         "rtServiceTooltip": "选择目标基准模型所在的RT服务，Finetune模型训练完成后也将部署在同一个RT服务内。",
         "finetuneModelName": "Finetune模型名称",
         "trainingMethod": "训练方法",
