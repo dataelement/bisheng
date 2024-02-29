@@ -74,7 +74,7 @@ async def cancel_publish_job(*,
 # 获取训练任务列表，支持分页
 @router.get('/job', response_model=UnifiedResponseModel[List[Finetune]])
 async def get_job(*,
-                  server: int = Query(default=None, description='关联的RT服务ID'),
+                  server: str = Query(default=None, description='关联的RT服务名字'),
                   status: str = Query(default='', title='多个以英文逗号,分隔',
                                       description='训练任务的状态，1: 训练中 2: 训练失败 3: 任务中止 4: 训练成功 5: 发布完成'),
                   model_name: Optional[str] = Query(default='', description='模型名称,模糊搜索'),
@@ -86,7 +86,7 @@ async def get_job(*,
     status_list = []
     if status.strip():
         status_list = [int(one) for one in status.strip().split(',')]
-    req_data = FinetuneList(server=server, status=status_list, model_name=model_name, page=page, limit=limit)
+    req_data = FinetuneList(server_name=server, status=status_list, model_name=model_name, page=page, limit=limit)
     return FinetuneService.get_all_job(req_data)
 
 
@@ -160,6 +160,14 @@ async def get_download_url(*,
     return resp_200(data={
         'url': download_url
     })
+
+
+@router.get('/server/filters', response_model=UnifiedResponseModel)
+async def get_server_filters(*,
+                             Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+
+    return FinetuneService.get_server_filters()
 
 
 @router.get('/gpu', response_model=UnifiedResponseModel)

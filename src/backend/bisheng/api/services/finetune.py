@@ -505,6 +505,18 @@ class FinetuneService:
         return True
 
     @classmethod
+    def get_server_filters(cls) -> UnifiedResponseModel:
+        """ 获取服务器过滤条件 """
+        server_filters = FinetuneDao.get_server_filters()
+        res = []
+        for one in server_filters:
+            res.append({
+                'id': one,
+                'server_name': one,
+            })
+        return resp_200(data=res)
+
+    @classmethod
     def get_gpu_info(cls) -> UnifiedResponseModel:
         """ 获取GPU信息 """
         all_server = ServerDao.find_all_server()
