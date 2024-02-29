@@ -70,7 +70,8 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
             inputRef.current?.focus()
         }, 500);
 
-        setFormShow(!historyData.length && isForm)
+        const isNewChat = historyData.length === 0 || historyData[0].id === 9999
+        setFormShow(isNewChat && isForm)
     }
     useEffect(() => {
         initChat()
@@ -286,7 +287,10 @@ const useInputState = ({ flow, chatId, chating, messages, isForm, isReport }) =>
     }
     // input disabled
     const inputDisabled = useMemo(() => {
-        return inputState.lock || (isForm && messages.length === 0) || isReport
+        return inputState.lock
+            // 表单 && 没回话或只有一个引导词
+            || (isForm && (messages.length === 0 || (messages.length === 1 && messages[0].id === 9999)))
+            || isReport
     }, [inputState, fileInputs, isReport])
 
     // 表单收起
@@ -444,7 +448,7 @@ const useMessages = (chatId, flow) => {
 
         messagesRef.current?.addEventListener('scroll', handleScroll);
         return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
-    }, [messagesRef.current, chatId]);
+    }, [messagesRef.current, chatHistory, chatId]);
 
     return {
         messages: chatHistory, messagesRef, loadHistory, setChatHistory, changeHistoryByScroll

@@ -26,7 +26,9 @@ export const getTasksApi = async (params: Tasks_query): Promise<TaskDB[]> => {
     const status = params.status === 'all'
         ? undefined :
         params.status === '2'
-            ? '2,3' : params.status;
+            ? '2,3' :
+            params.status === '4'
+                ? '4,5' : params.status;
     return await axios.get(`/api/v1/finetune/job`, { params: { ...params, server, status } });
 };
 
