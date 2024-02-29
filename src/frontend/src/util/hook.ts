@@ -69,9 +69,12 @@ export function useTable(apiFun) {
 
     const paramRef = useRef({});
 
+    const requestIdRef = useRef(0); // 控制请求响应顺序
     const loadData = () => {
         setLoading(true);
+        const requestId = ++requestIdRef.current
         apiFun({ ...page, ...paramRef.current }).then(res => {
+            if (requestId !== requestIdRef.current) return
             setData(res.data);
             setTotal(res.total);
             setLoading(false);

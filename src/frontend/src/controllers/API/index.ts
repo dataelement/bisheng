@@ -166,7 +166,14 @@ export async function getServicesApi(): Promise<RTServer[]> {
 }
 
 /**
- * 获取RT服务列表
+ * 获取RT服务列表（包含已删除data）
+ */
+export async function getAllServicesApi(): Promise<any[]> {
+  return await axios.get(`/api/v1/finetune/server/filters`);
+}
+
+/**
+ * 添加服务
  */
 export async function addServiceApi(name: string, url: string, ftUrl: string): Promise<{ id: number }> {
   return await axios.post(`/api/v1/server/add`,

@@ -12,7 +12,7 @@ import {
     SelectValue
 } from "../../../components/ui/select1";
 import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group";
-import { getServicesApi } from "../../../controllers/API";
+import { getAllServicesApi, getServicesApi } from "../../../controllers/API";
 import { useDebounce } from "../../../util/hook";
 
 interface IProps {
@@ -41,11 +41,10 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
     // rts
     const [services, setServices] = useState([])
     useEffect(() => {
-        getServicesApi().then(res => {
+        getAllServicesApi().then(res => {
             setServices(res.map(el => ({
                 id: el.id,
-                name: el.server,
-                url: el.endpoint
+                name: el.server_name
             })))
         })
 

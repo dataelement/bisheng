@@ -147,7 +147,8 @@ class FinetuneService:
         if not base_model:
             return NotFoundModelError.return_resp()
         root_model_name = base_model.model
-        if base_job := FinetuneDao.find_job_by_model_id(base_model.id):
+        # 能找到说明是基于已训练完成的模型进行的再次训练
+        if base_job := FinetuneDao.find_job_by_model_name(base_model.model):
             root_model_name = base_job.root_model_name
 
         finetune.server_name = server.server
