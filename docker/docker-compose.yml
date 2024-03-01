@@ -169,3 +169,7 @@ services:
     depends_on:
       - etcd
       - minio
+
+networks:
+  bisheng:
+    driver: bridge
