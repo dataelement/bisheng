@@ -22,6 +22,7 @@ knowledges:
     ElasticKeywordsSearch:
       elasticsearch_url: 'http://elasticsearch:9200'
       ssl_verify: "{'basic_auth': ('elastic', 'password')}"
+      #   ssl_verify: "{'ca_certs': False, 'basic_auth': ('elastic', 'F94h5JtdQn6EQB-G9Hjv'), 'verify_certs': False}"
   minio: # 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储
      SCHEMA: false         # 是否支持 https
      CERT_CHECK: false         # 是否校验 http证书
