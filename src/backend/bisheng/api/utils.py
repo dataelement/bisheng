@@ -315,6 +315,6 @@ def parse_gpus(gpu_str: str) -> List[Dict]:
             'gpu_id': gpu_id_elem.firstChild.data,
             'gpu_total_mem': '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
             'gpu_used_mem': '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
-            'gpu_utility': round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) * 100, 2)
+            'gpu_utility': round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
         })
     return res
