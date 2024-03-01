@@ -8,17 +8,19 @@ import {
     TableHeader,
     TableRow
 } from "../../components/ui/table";
-import { GPUlistApi } from "../../controllers/API";
+import { GPUlistApi, GPUlistByFinetuneApi } from "../../controllers/API";
 
-export const CpuDetail = () => {
+export const CpuDetail = ({ type }) => {
     const { t } = useTranslation()
 
     const [datalist, setDatalist] = useState([])
 
     const loadData = () => {
-        GPUlistApi().then(res => {
-            setDatalist(res.list.flat())
-        })
+        type === 'finetune'
+            ? GPUlistByFinetuneApi().then(setDatalist)
+            : GPUlistApi().then(res => {
+                setDatalist(res.list.flat())
+            })
     }
 
     useEffect(loadData, [])

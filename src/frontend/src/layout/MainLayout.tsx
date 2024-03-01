@@ -121,7 +121,7 @@ export default function MainLayout() {
                 </div>
             </div>
         </div>
-        <div className="flex-1">
+        <div className="flex-1 overflow-hidden">
             <ErrorBoundary
                 onReset={() => window.location.href = window.location.href}
                 FallbackComponent={CrashErrorComponent}

@@ -83,11 +83,11 @@ export function updateTempApi(temp_id, data) {
  * 获取知识库列表
  *
  */
-export async function readFileLibDatabase(page = 1, pageSize = 40) {
+export async function readFileLibDatabase(page = 1, pageSize = 40, name = '') {
   try {
-    const response: { data: any[], total: number } = await axios.get(`/api/v1/knowledge/?page_num=${page}&page_size=${pageSize}`);
-    const { data, total } = response
-    return { data, pages: Math.ceil(total / pageSize) };
+    const response: { data: any[], total: number } = await axios.get(`/api/v1/knowledge/?page_num=${page}&page_size=${pageSize}&name=${name}`);
+    // const { data, total } = response
+    return response;
   } catch (error) {
     console.error(error);
     throw error;
@@ -98,12 +98,11 @@ export async function readFileLibDatabase(page = 1, pageSize = 40) {
  * 获取知识库下文件列表
  *
  */
-export async function readFileByLibDatabase(id, page, status) {
-  const pageSize = 20
+export async function readFileByLibDatabase({ id, page, pageSize = 40, name = '', status }) {
   const statusStr = status === 999 ? '' : `&status=${status}`;
-  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}${statusStr}`);
-  const { data, total, writeable } = response
-  return { data, writeable, pages: Math.ceil(total / pageSize) }
+  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}&file_name=${name}${statusStr}`);
+  return response
+  // return { data, writeable, pages: Math.ceil(total / pageSize) }
 }
 
 /**
@@ -167,11 +166,18 @@ export async function getServicesApi(): Promise<RTServer[]> {
 }
 
 /**
- * 获取RT服务列表
+ * 获取RT服务列表（包含已删除data）
  */
-export async function addServiceApi(name: string, url: string): Promise<{ id: number }> {
+export async function getAllServicesApi(): Promise<any[]> {
+  return await axios.get(`/api/v1/finetune/server/filters`);
+}
+
+/**
+ * 添加服务
+ */
+export async function addServiceApi(name: string, url: string, ftUrl: string): Promise<{ id: number }> {
   return await axios.post(`/api/v1/server/add`,
-    { endpoint: url, server: name, remark: 'RT模块创建' });
+    { endpoint: url, sft_endpoint: ftUrl, server: name, remark: 'RT模块创建' });
 }
 
 /**
@@ -181,6 +187,14 @@ export async function addServiceApi(name: string, url: string): Promise<{ id: nu
 export async function deleteServiceApi(id) {
   return await axios.delete(`/api/v1/server/${id}`);
 }
+
+/**
+ * 获取发布模型的状态信息
+ */
+export async function getModelInfoApi(id) {
+  return await axios.get(`/api/v1/server/model/${id}`);
+}
+
 
 export async function postValidateCode(
   code: string
@@ -309,8 +323,10 @@ export async function uploadFile(
  * 获取知识库下文件列表
  *
  */
-export async function serverListApi(): Promise<any[]> {
-  return await axios.get(`/api/v1/server/list`);
+export async function serverListApi(byRtName?: string): Promise<any[]> {
+  return await axios.get(`/api/v1/server/list`).then((list: any) => {
+    return byRtName ? list.filter(item => item.server === byRtName) : list
+  });
 }
 
 /**
@@ -334,13 +350,16 @@ export async function updateConfigApi(id, config) {
 export async function GPUlistApi(): Promise<any> {
   return await axios.get(`/api/v1/server/GPU`);
 }
+export async function GPUlistByFinetuneApi(): Promise<any> {
+  return await axios.get(`/api/v1/finetune/gpu`);
+}
 
 /***************************
  * ************ 溯源 ************ 
  */
 // 分词
 export async function splitWordApi(word: string, messageId: string): Promise<string[]> {
-  return await axios.get(`/api/v1/qa/keyword?answer=${word}&message_id=${messageId}`)
+  return await axios.get(`/api/v1/qa/keyword?answer=${encodeURIComponent(word)}&message_id=${messageId}`)
 }
 
 // 获取 chunks

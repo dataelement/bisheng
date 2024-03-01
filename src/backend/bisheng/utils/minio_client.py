@@ -1,5 +1,6 @@
 import io
 from datetime import timedelta
+from typing import BinaryIO
 
 import minio
 from bisheng.settings import settings
@@ -97,3 +98,15 @@ class MinioClient():
         if self.minio_client:
             if not self.minio_client.bucket_exists(bucket):
                 self.minio_client.make_bucket(bucket)
+
+    def upload_minio_file(self, object_name: str, file: BinaryIO, length: int, **kwargs):
+        # 初始化minio
+        if self.minio_client:
+            self.minio_client.put_object(bucket_name=bucket,
+                                         object_name=object_name,
+                                         data=file,
+                                         length=length, **kwargs)
+
+    def download_minio(self, object_name: str):
+        if self.minio_client:
+            return self.minio_client.get_object(bucket_name=bucket, object_name=object_name)

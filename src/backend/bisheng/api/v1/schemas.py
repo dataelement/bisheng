@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from uuid import UUID
 
+from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from langchain.docstore.document import Document
 from pydantic import BaseModel, Field, validator
@@ -187,3 +188,13 @@ class StreamData(BaseModel):
 
     def __str__(self) -> str:
         return f'event: {self.event}\ndata: {json.dumps(self.data)}\n\n'
+
+
+class FinetuneCreateReq(BaseModel):
+    server: int = Field(description='关联的RT服务ID')
+    base_model: int = Field(description='基础模型ID')
+    model_name: str = Field(max_length=50, description='模型名称')
+    method: TrainMethod = Field(description='训练方法')
+    extra_params: Dict = Field(default_factory=dict, description='训练任务所需额外参数')
+    train_data: Optional[List[Dict]] = Field(default=None, description='个人训练数据')
+    preset_data: Optional[List[Dict]] = Field(default=None, description='预设训练数据')
