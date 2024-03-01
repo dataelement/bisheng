@@ -16,6 +16,7 @@ import CreateTemp from "./components/CreateTemp";
 import SkillTemps from "./components/SkillTemps";
 import Templates from "./temps";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { Search } from "lucide-react";
 
 export default function SkillPage() {
     const { t } = useTranslation()
@@ -73,13 +74,15 @@ export default function SkillPage() {
                     <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('skills.createNew')}</Button>
                 </div>
                 <span className="main-page-description-text">{t('skills.manageProjects')}</span>
-                <Input
-                    ref={inputRef}
-                    defaultValue={window.SearchSkillsPage?.key || ''}
-                    placeholder={t('skills.skillSearch')}
-                    className=" w-[400px] relative top-[-20px]"
-                    onChange={e => search(e.target.value)}></Input>
-
+                <div className="w-[400px] relative top-[-20px]">
+                    <Input
+                        ref={inputRef}
+                        defaultValue={window.SearchSkillsPage?.key || ''}
+                        placeholder={t('skills.skillSearch')}
+                        className=""
+                        onChange={e => search(e.target.value)}></Input>
+                    <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+                </div>
                 {/* cards */}
                 <div className="w-full flex flex-wrap mt-1">
                     {page.flows.map((flow) => (

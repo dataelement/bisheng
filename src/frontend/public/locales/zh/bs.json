@@ -97,6 +97,7 @@
         "inputPlaceholder": "请输入问题",
         "uploadFileTooltip": "上传文件",
         "sendTooltip": "发送",
+        "forms": "表单",
         "skillTempsTitle": "技能选择",
         "skillTempsDesc": "选择一个您想使用的线上技能",
         "networkError": "网络连接出现错误,请尝试以下方法",

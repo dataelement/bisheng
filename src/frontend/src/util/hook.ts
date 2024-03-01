@@ -4,7 +4,7 @@ import { alertContext } from "../contexts/alertContext";
 import { useTranslation } from "react-i18next";
 
 // 防抖
-export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): (any) => any {
+export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): (any?: any) => any {
     let timer = useRef<NodeJS.Timeout | null>();
     const fnRef = useRef<any>(func);
     useEffect(() => { fnRef.current = func; }, [func]);
@@ -82,9 +82,10 @@ export function useTable(apiFun) {
             setLoading(false);
         })
     }
+    const debounceLoad = useDebounce(loadData, 600, false)
 
     useEffect(() => {
-        loadData();
+        debounceLoad();
     }, [page])
 
     return {
@@ -94,15 +95,15 @@ export function useTable(apiFun) {
         loading,
         data,
         setPage: (p) => setPage({ ...page, page: p }),
-        reload: loadData,
+        reload: debounceLoad,
         // 检索
         search: useDebounce((keyword) => {
             setPage({ ...page, page: 1, keyword });
-        }, 600, false),
+        }, 100, false),
         // 数据过滤
         filterData: (p) => {
             paramRef.current = { ...paramRef.current, ...p };
-            loadData()
+            debounceLoad()
         },
         // 更新数据
         refreshData: (compareFn, data) => {

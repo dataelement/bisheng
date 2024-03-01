@@ -1,5 +1,5 @@
 import cloneDeep from "lodash-es/cloneDeep";
-import { FileInput, Send, StopCircle } from "lucide-react";
+import { ClipboardList, FileInput, FileText, Send, StopCircle } from "lucide-react";
 import { forwardRef, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ShadTooltip from "../../../components/ShadTooltipComponent";
@@ -222,8 +222,8 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
                         }}></textarea>
                     <div className="absolute right-6 bottom-4 flex gap-2">
                         {
-                            isForm && <ShadTooltip content={t('chat.sendTooltip')}>
-                                <button disabled={chating} className=" disabled:text-gray-400" onClick={() => setFormShow(!formShow)}><FileInput /></button>
+                            isForm && <ShadTooltip content={t('chat.forms')}>
+                                <button disabled={chating} className=" disabled:text-gray-400" onClick={() => setFormShow(!formShow)}><ClipboardList /></button>
                             </ShadTooltip>
                         }
                         <ShadTooltip content={t('chat.sendTooltip')}>
