@@ -105,6 +105,7 @@ class BishengRagPipeline():
                     self.embeddings, 
                     elasticsearch_url=self.params['elasticsearch']['url'],
                     index_name=index_name,
+                    drop_old=self.params['elasticsearch']['drop_old'],
                     ssl_verify=self.params['elasticsearch']['ssl_verify']
                 )
             
@@ -223,7 +224,7 @@ class BishengRagPipeline():
                 ans = qa_chain({"input_documents": docs, "question": question}, return_only_outputs=True)
             except Exception as e:
                 logger.error(f'question: {question}\nerror: {e}')
-                ans = {'output_text': ''}
+                ans = {'output_text': str(e)}
             
             # # for rate_limit
             # time.sleep(15)
@@ -231,6 +232,7 @@ class BishengRagPipeline():
             rag_answer = ans['output_text']
             logger.info(f'question: {question}\nans: {rag_answer}\n')
             questions_info['rag_answer'] = rag_answer
+            # questions_info['rag_context'] = '\n----------------\n'.join([doc.page_content for doc in docs])
 
         df = pd.DataFrame(all_questions_info)
         df.to_excel(self.save_answer_path, index=False)
