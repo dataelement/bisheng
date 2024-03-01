@@ -12,12 +12,37 @@ if not os.path.exists(tmpdir):
   os.makedirs(tmpdir)
 
 
-ellm_client = DocumentExtract(do_ellm=True, do_llm=False, llm_model_name='Qwen-72B-Chat-Int4')
-llm_client = DocumentExtract(do_ellm=False, do_llm=True, llm_model_name='Qwen-72B-Chat-Int4')
-ensemble_llm_first_client = DocumentExtract(do_ellm=True, do_llm=True,
-    ensemble_method='llm_first', llm_model_name='Qwen-72B-Chat-Int4')
-ensemble_ellm_first_client = DocumentExtract(do_ellm=True, do_llm=True,
-    ensemble_method='ellm_first', llm_model_name='Qwen-72B-Chat-Int4')
+unstructured_api_url = "https://bisheng.dataelem.com/api/v1/etl4llm/predict"
+ellm_api_base_url = 'http://192.168.106.20:3502/v2/idp/idp_app/infer'
+# llm_model_name = 'Qwen-72B-Chat-Int4'
+llm_model_name = 'qwen1.5-72b-chat'
+llm_model_api_url = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
+
+
+ellm_client = DocumentExtract(unstructured_api_url=unstructured_api_url, 
+                              ellm_api_base_url=ellm_api_base_url, 
+                              llm_model_name=llm_model_name, 
+                              llm_model_api_url=llm_model_api_url, 
+                              do_ellm=True,  do_llm=False)
+llm_client = DocumentExtract(unstructured_api_url=unstructured_api_url, 
+                             ellm_api_base_url=ellm_api_base_url, 
+                             llm_model_name=llm_model_name, 
+                             llm_model_api_url=llm_model_api_url, 
+                             do_ellm=False, do_llm=True)
+ensemble_llm_first_client = DocumentExtract(
+                             unstructured_api_url=unstructured_api_url, 
+                             ellm_api_base_url=ellm_api_base_url, 
+                             llm_model_name=llm_model_name, 
+                             llm_model_api_url=llm_model_api_url, 
+                             do_ellm=True, do_llm=True,
+                             ensemble_method='llm_first')
+ensemble_ellm_first_client = DocumentExtract(
+                             unstructured_api_url=unstructured_api_url, 
+                             ellm_api_base_url=ellm_api_base_url, 
+                             llm_model_name=llm_model_name, 
+                             llm_model_api_url=llm_model_api_url, 
+                             do_ellm=True, do_llm=True,
+                             ensemble_method='ellm_first')
 
 
 def ellm_run(pdf_path, schema):
@@ -82,5 +107,4 @@ with tempfile.TemporaryDirectory(dir='./tmp/extract_files') as tmpdir:
                 btn2 = gr.Button('Run ensemble_llm_first')
                 btn2.click(fn=ensemble_llm_first_run, inputs=[intput_file, schema], outputs=ensemble1_kv_results)
 
-        demo.launch(server_name='192.168.106.12', server_port=9118, share=True)
-
+        demo.launch(server_name='192.168.106.20', server_port=8118, share=True)
