@@ -22,7 +22,7 @@ export default function CreateTaskList({ onChange }) {
     const { prsetList, handleChangePrsetList } = usePresetList(onChange)
     const [downloadMap, setDownloadMap] = useState({}) // 下载loading
     // 个人数据集
-    const { userList, setUserList, handleChangeUserList } = useUserList(onChange);
+    const { userList, setUserList, handleChangeUserList, handleUploadUserList } = useUserList(onChange);
 
     const [isCustom, setIsCustom] = useState(false)
 
@@ -41,7 +41,7 @@ export default function CreateTaskList({ onChange }) {
                     accept={['json']}
                     onClose={closePopUp}
                     onUpload={uploadTaskFileApi}
-                    onSubmit={(res) => handleChangeUserList(res, closePopUp)}
+                    onSubmit={(res) => handleUploadUserList(res, closePopUp)}
                 />)}>{t('finetune.uploadDataset')}</Button>
                 <Button variant="link" onClick={() => downloadJson(sampleData)}>{t('finetune.downloadSampleFile')}</Button>
             </div>
@@ -93,7 +93,9 @@ export default function CreateTaskList({ onChange }) {
             {
                 userList.length ? userList.map(data =>
                     <div className="flex gap-4 items-center mt-2 h-8 hover:bg-gray-200">
-                        <Checkbox checked={data.checked} />
+                        <Checkbox
+                            checked={data.checked}
+                            onCheckedChange={(val: boolean) => handleChangeUserList(data.id, 'checked', val)} />
                         <span className="text-sm">{data.name}</span>
                         <div className="flex ml-auto gap-4">
                             <Button
@@ -113,14 +115,7 @@ export default function CreateTaskList({ onChange }) {
                                     placeholder={t('finetune.sampleSizePlaceholder')}
                                     type="number"
                                     value={data.sampleSize}
-                                    onChange={(e) => {
-                                        setUserList(prev => {
-                                            const newData = prev.map(item =>
-                                                item.id === data.id ? { ...item, sampleSize: Number(e.target.value) } : item);
-                                            onChange('train_data', newData)
-                                            return newData
-                                        })
-                                    }}
+                                    onChange={(e) => handleChangeUserList(data.id, 'sampleSize', e.target.value)}
                                     className="bg-[#fff] rounded-full w-28 h-6"
                                 ></Input> :
                                 <Badge variant="outline" className="text-sm">{t('finetune.sampleSize')}:{data.sampleSize}</Badge>}
@@ -158,7 +153,7 @@ export function usePresetList(onChange) {
 export function useUserList(onChange) {
     const [userList, setUserList] = useState([]);
 
-    const handleChangeUserList = (res, closePopUp) => {
+    const handleUploadUserList = (res, closePopUp) => {
         setUserList(state => {
             const newState = [...res[0], ...state];
             onChange('train_data', newState);
@@ -167,5 +162,15 @@ export function useUserList(onChange) {
         closePopUp();
     };
 
-    return { userList, setUserList, handleChangeUserList };
+    const handleChangeUserList = (id, key, val) => {
+        setUserList((prevState) => {
+            const newState = prevState.map(item =>
+                item.id === id ? { ...item, [key]: val } : item);
+
+            onChange('train_data', newState);
+            return newState;
+        });
+    };
+
+    return { userList, setUserList, handleChangeUserList, handleUploadUserList };
 }

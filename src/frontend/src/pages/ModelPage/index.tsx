@@ -225,7 +225,7 @@ export default function FileLibPage() {
                     <TableCaption>{t('model.modelCollectionCaption')}.</TableCaption>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-[200px]">{t('model.machine')}</TableHead>
+                            <TableHead className="w-[200px]">{t('model.machineName')}</TableHead>
                             <TableHead>{t('model.modelName')}</TableHead>
                             <TableHead>{t('model.serviceAddress')}</TableHead>
                             <TableHead>{t('model.status')}</TableHead>

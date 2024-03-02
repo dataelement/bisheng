@@ -1,0 +1,3 @@
+# Celery 的broker配置。存储ft指令执行结果。
+# 密码加密规则和backend一致, 暂不支持集群redis
+redis_url: "redis://bisheng-redis:6379/5"

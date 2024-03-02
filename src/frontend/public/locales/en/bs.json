@@ -100,6 +100,7 @@
         "inputPlaceholder": "Enter your question",
         "uploadFileTooltip": "Upload File",
         "sendTooltip": "Send",
+        "forms": "Forms",
         "skillTempsTitle": "Skill Selection",
         "skillTempsDesc": "Choose an online skill you want to use",
         "skillDeleted": "This skill has been deleted",
