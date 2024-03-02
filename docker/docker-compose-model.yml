@@ -34,7 +34,7 @@ services:
     environment:
       TZ: Asia/Shanghai
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng-ft/config_ft.yaml:/opt/bisheng-ft/sft_server/config.yaml  # 服务启动所需的配置文件地址
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng-ft/config.yaml:/opt/bisheng-ft/sft_server/config.yaml  # 服务启动所需的配置文件地址
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/llm:/opt/bisheng-ft/models/model_repository # 配置和RT服务同样的大模型目录
     security_opt:
       - seccomp:unconfined
@@ -69,7 +69,3 @@ services:
       retries: 3
     restart: on-failure
 
-
-networks:
-  bisheng:
-    external: true
