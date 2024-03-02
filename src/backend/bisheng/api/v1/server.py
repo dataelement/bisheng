@@ -90,7 +90,12 @@ async def list(*, query: ModelDeployQuery = None):
             db_model = session.exec(sql.order_by(ModelDeploy.model)).all()
         res = []
         for model in db_model:
-            model.server = id2server.get(int(model.server)).server
+            # 说明是在删除rt服务后，发布成功的模型，所以会写入到model deploy数据内，删除此遗留数据
+            model_server = id2server.get(int(model.server))
+            if not model_server:
+                ModelDeployDao.delete_model(model)
+                continue
+            model.server = model_server.server
             res.append(ModelDeployInfo(**model.dict(), sft_support=sft_model_dict.get(model.model, False)))
         return resp_200(data=res)
     except Exception as exc:
