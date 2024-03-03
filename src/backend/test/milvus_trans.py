@@ -22,23 +22,6 @@ database_url = 'mysql+pymysql://root:E1SkG0PaDMEPTAxY@192.168.106.109:3306/bishe
 engine = create_engine(database_url, connect_args={}, pool_pre_ping=True)
 
 
-def milvus_clean():
-    milvus_cli = MilvusClient(uri='http://192.168.106.109:19530')
-
-    collection = milvus_cli.list_collections()
-    for col in collection:
-        if col.startswith('tmp'):
-            print(col)
-            milvus_cli.drop_collection(col)
-        # if not col.startswith('rag'):
-        #     if milvus_cli.num_entities(col) < 10:
-        #         print(col)
-        #         milvus_cli.drop_collection(col)
-
-
-milvus_clean()
-
-
 def milvus_trans():
     params['collection_name'] = 'partition_textembeddingada002_knowledge_1'
     openai_target = Milvus.from_documents(embedding=embedding, **params)
@@ -161,6 +144,22 @@ def milvus_trans():
                 pass
 
 
+from pymilvus import Collection, MilvusClient, MilvusException
+import json
+
+import requests
+
+
+def milvus_clean():
+    milvus_cli = MilvusClient(uri='http://192.168.106.109:19530')
+
+    collection = milvus_cli.list_collections()
+    for col in collection:
+        if col.startswith('tmp'):
+            print(col)
+            milvus_cli.drop_collection(col)
+
+
 def elastic_clean():
     url = 'http://192.168.106.109:9200/_stats'
     user_name = 'elastic'
@@ -170,12 +169,12 @@ def elastic_clean():
     for c in col.get('indices').keys():
         if c.startswith('tmp'):
             print(c)
-            # x = requests.delete(del_url % c, headers=headers)
-            # url = f'http://
-        # elif col.get('indices').get(c).get('primaries').get('docs').get('count') == 0:
-        #     print(c)
-        #     x = requests.delete(del_url % c, headers=headers)
-        #     print(x)
+            x = requests.delete(del_url % c, auth=(user_name, auth))
+        elif col.get('indices').get(c).get('primaries').get('docs').get('count') == 0:
+            print(c)
+            x = requests.delete(del_url % c, auth=(user_name, auth))
+            print(x)
 
 
-# elastic_clean()
+elastic_clean()
+milvus_clean()
