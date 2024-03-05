@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Optional
 
+from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, String, text
-from sqlmodel import Field
+from sqlmodel import Field, func
 
 
 class KnowledgeFileBase(SQLModelSerializable):
@@ -34,3 +35,27 @@ class KnowledgeFileRead(KnowledgeFileBase):
 
 class KnowledgeFileCreate(KnowledgeFileBase):
     pass
+
+
+class KnowledgeFileDao(KnowledgeFileBase):
+
+    @classmethod
+    def get_file_simple_by_knowledge_id(cls, knowledge_id: int, page: int, page_size: int):
+        offset = (page - 1) * page_size
+        with session_getter() as session:
+            return session.query(
+                KnowledgeFile.id, KnowledgeFile.object_name
+            ).filter(
+                KnowledgeFile.knowledge_id == knowledge_id
+            ).order_by(
+                KnowledgeFile.id.asc()
+            ).offset(offset).limit(page_size).all()
+
+    @classmethod
+    def count_file_by_knowledge_id(cls, knowledge_id: int):
+        with session_getter() as session:
+            return session.query(
+                func.count(KnowledgeFile.id)
+            ).filter(
+                KnowledgeFile.knowledge_id == knowledge_id
+            ).scalar()

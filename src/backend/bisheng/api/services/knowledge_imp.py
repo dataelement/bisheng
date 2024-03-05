@@ -1,5 +1,6 @@
 import base64
 import json
+import math
 import re
 import time
 from typing import List
@@ -8,7 +9,7 @@ from uuid import uuid4
 import requests
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate
-from bisheng.database.models.knowledge_file import KnowledgeFile
+from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -73,7 +74,7 @@ def create_knowledge(knowledge: KnowledgeCreate, user_id: int):
         return db_knowldge.copy()
 
 
-def delete_knowledge_by(knowledge: Knowledge):
+def delete_knowledge_by(knowledge: Knowledge, only_clear: bool = False):
     # 处理vector
     knowledge_id = knowledge.id
     embeddings = FakeEmbedding()
@@ -99,12 +100,34 @@ def delete_knowledge_by(knowledge: Knowledge):
         index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
         res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
         logger.info(f'act=delete_es index={index_name} res={res}')
-    # 处理knowledgefile
+
+    # 清理minio的数据
+    delete_knowledge_file_in_minio(knowledge_id)
+
+    # 处理knowledge file
     with session_getter() as session:
         session.exec(delete(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
-        session.delete(knowledge)
+        # 清空知识库时，不删除知识库记录
+        if not only_clear:
+            session.delete(knowledge)
         session.commit()
     return True
+
+
+def delete_knowledge_file_in_minio(knowledge_id: int):
+    # 每1000条记录去删除minio文件
+    count = KnowledgeFileDao.count_file_by_knowledge_id(knowledge_id)
+    if count == 0:
+        return
+    page_size = 1000
+    page_num = math.ceil(count / page_size)
+    minio_client = MinioClient()
+    for i in range(page_num):
+        file_list = KnowledgeFileDao.get_file_simple_by_knowledge_id(knowledge_id, i + 1, page_size)
+        for file in file_list:
+            minio_client.delete_minio(str(file[0]))
+            if file[1]:
+                minio_client.delete_minio(file[1])
 
 
 def delete_knowledge_file_batch(file_ids: List[int]):
