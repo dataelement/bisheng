@@ -50,7 +50,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
     const initChat = async () => {
         await checkPrompt(flow)
         await build()
-        const historyData = await loadHistory()
+        const historyData = version === 'v1' ? await loadHistory() : []
         await connectWS({ setInputState, setIsStop, changeHistoryByScroll })
         setInputState({ lock: false, errorMsg: '' });
         // 第一条消息，用来初始化会话
@@ -683,7 +683,7 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
     // 发送ws
     async function sendAll(data: sendAllProps) {
         try {
-            if (ws) {
+            if (ws.current) {
                 if (JSON.stringify(data.inputs) !== '{}') {
                     newChatStart.current = false
                 }

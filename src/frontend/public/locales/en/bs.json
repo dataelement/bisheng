@@ -308,7 +308,6 @@
         "taskAborted": "Task aborted",
         "trainingSuccess": "Training succeed",
         "publishSuccess": "Publish succeed",
-        "fillName": "Please fill in the name",
         "taskId": "Task Id",
         "baseModel": "Base Model",
         "runtime": "Runtime",

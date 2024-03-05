@@ -304,7 +304,6 @@
         "taskAborted": "任务中止",
         "trainingSuccess": "训练成功",
         "publishSuccess": "发布成功",
-        "fillName": "请填写名称",
         "taskId": "任务ID",
         "baseModel": "基准模型",
         "runtime": "运行时长",
