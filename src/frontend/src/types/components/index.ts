@@ -70,7 +70,7 @@ export type TextAreaComponentType = {
   id?: number | '';
   field_name?: string;
   nodeClass?: APIClassType;
-  setNodeClass?: (value: APIClassType) => void;
+  setNodeClass?: (value: APIClassType, code: any) => void;
   disabled: boolean;
   onChange: (value: string[] | string) => void;
   value: string;

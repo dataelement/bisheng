@@ -126,7 +126,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                         </div>
                         <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
                     </div> :
-                        <div key={_file.id} className={`group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
+                        <div key={_file.id} className={`msk group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
                             <p className="text-sm blur-sm">是真的马赛克.msk</p>
                             <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
                         </div>

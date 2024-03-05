@@ -1,3 +1,4 @@
+import cloneDeep from "lodash-es/cloneDeep";
 import { Info } from "lucide-react";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -100,6 +101,7 @@ export default function ParameterComponent({
   const [myData, setMyData] = useState(useContext(typesContext).data);
 
   const handleOnNewValue = useCallback((newValue: any) => {
+    // TODO 使用setNodes 保存修改（onChange）
     data.node.template[name].value = ['float', 'int'].includes(type) ? Number(newValue) : newValue;
     // Set state to pending
     setTabsState((prev) => {
@@ -115,6 +117,7 @@ export default function ParameterComponent({
 
   // 临时处理知识库保存方法, 类似方法多了需要抽象
   const handleOnNewLibValue = (newValue: string, collectionId: number | '') => {
+    // TODO 使用setNodes 保存修改（onChange）
     data.node.template[name].value = newValue;
     data.node.template[name].collection_id = collectionId;
     // Set state to pending
@@ -379,18 +382,30 @@ export default function ParameterComponent({
           <div className="mt-2 w-full">
             <PromptAreaComponent
               field_name={name}
-              setNodeClass={(nodeClass) => {
-                data.node = nodeClass;
+              setNodeClass={(nodeClass, code) => {
                 if (reactFlowInstance) {
-                  cleanEdges({
-                    flow: {
-                      edges: reactFlowInstance.getEdges(),
-                      nodes: reactFlowInstance.getNodes(),
-                    },
-                    updateEdge: (edge) => reactFlowInstance.setEdges(edge),
-                  });
+                  reactFlowInstance.setNodes((nds) =>
+                    nds.map((nd) => {
+                      if (nd.id === data.id) {
+                        let newNode = cloneDeep(nd);
+                        newNode.data.node = nodeClass
+                        newNode.data.node.template[name].value = code;
+                        return newNode;
+                      }
+                      return nd
+                    })
+                  )
+                  // 清理线
+                  setTimeout(() => {
+                    cleanEdges({
+                      flow: {
+                        edges: reactFlowInstance.getEdges(),
+                        nodes: reactFlowInstance.getNodes(),
+                      },
+                      updateEdge: (edge) => reactFlowInstance.setEdges(edge),
+                    });
+                  }, 60);
                 }
-                // onChange?.()
               }}
               nodeClass={data.node}
               disabled={disabled}
