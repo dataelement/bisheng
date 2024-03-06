@@ -60,6 +60,8 @@ export default function ParameterComponent({
   const { closePopUp } = useContext(PopUpContext);
   const { setTabsState, flow } = useContext(TabsContext);
 
+  const groupedEdge = useRef(null); // 用yu过滤菜单的数据
+
   useEffect(() => {
     if (ref.current && ref.current.offsetTop && ref.current.clientHeight) {
       setPosition(ref.current.offsetTop + ref.current.clientHeight / 2);
@@ -147,55 +149,89 @@ export default function ParameterComponent({
   const [errorDuplicateKey, setErrorDuplicateKey] = useState(false);
 
   useEffect(() => {
-    const groupedObj = groupByFamily(myData, tooltipTitle, left, data.type);
+    let groupedObj: any = groupByFamily(myData, tooltipTitle!, left, flow.data.nodes);
+    groupedEdge.current = groupedObj;
 
-    refNumberComponents.current = groupedObj[0]?.type?.length;
+    if (groupedObj && groupedObj.length > 0) {
+      //@ts-ignore
+      refHtml.current = groupedObj.map((item, index) => {
+        const Icon: any =
+          nodeIconsLucide[item.family] ?? nodeIconsLucide["unknown"];
 
-    refHtml.current = groupedObj.map((item, i) => {
-      const Icon: any = nodeIconsLucide[item.family];
-
-      return (
-        <span
-          key={getRandomKeyByssmm() + item.family + i}
-          className={classNames(
-            i > 0 ? "mt-2 flex items-center" : "flex items-center"
-          )}
-        >
-          <div
-            className="h-5 w-5"
-            style={{
-              color: nodeColors[item.family],
-            }}
-          >
-            {/* <Icon
-              className="h-5 w-5"
-              strokeWidth={1.5}
-              style={{
-                color: nodeColors[item.family] ?? nodeColors.unknown,
-              }}
-            /> */}
-          </div>
-          <span className="ps-2 text-xs text-foreground">
-            {getNodeNames()[item.family] ?? ""}{" "}
-            <span className="text-xs">
-              {" "}
-              {item.type === "" ? "" : " - "}
-              {item.type.split(", ").length > 2
-                ? item.type.split(", ").map((el, i) => (
-                  <React.Fragment key={el + i}>
-                    <span>
-                      {i === item.type.split(", ").length - 1
-                        ? el
-                        : (el += `, `)}
-                    </span>
-                  </React.Fragment>
-                ))
-                : item.type}
+        return (
+          <div key={index}>
+            {index === 0 && (
+              <span>
+                {left
+                  ? "Avaliable input components:"
+                  : "Avaliable output components:"}
+              </span>
+            )}
+            <span
+              key={index}
+              className={classNames(
+                index > 0 ? "mt-2 flex items-center" : "mt-3 flex items-center"
+              )}
+            >
+              <div
+                className="h-5 w-5"
+                style={{
+                  color: nodeColors[item.family],
+                }}
+              >
+                <Icon
+                  className="h-5 w-5"
+                  strokeWidth={1.5}
+                  style={{
+                    color: nodeColors[item.family] ?? nodeColors.unknown,
+                  }}
+                />
+              </div>
+              <span className="ps-2 text-xs text-foreground">
+                {getNodeNames()[item.family] ?? "Other"}{" "}
+                {item?.display_name && item?.display_name?.length > 0 ? (
+                  <span className="text-xs">
+                    {" "}
+                    {item.display_name === "" ? "" : " - "}
+                    {item.display_name.split(", ").length > 2
+                      ? item.display_name.split(", ").map((el, index) => (
+                        <React.Fragment key={el + index}>
+                          <span>
+                            {index ===
+                              item.display_name.split(", ").length - 1
+                              ? el
+                              : (el += `, `)}
+                          </span>
+                        </React.Fragment>
+                      ))
+                      : item.display_name}
+                  </span>
+                ) : (
+                  <span className="text-xs">
+                    {" "}
+                    {item.type === "" ? "" : " - "}
+                    {item.type.split(", ").length > 2
+                      ? item.type.split(", ").map((el, index) => (
+                        <React.Fragment key={el + index}>
+                          <span>
+                            {index === item.type.split(", ").length - 1
+                              ? el
+                              : (el += `, `)}
+                          </span>
+                        </React.Fragment>
+                      ))
+                      : item.type}
+                  </span>
+                )}
+              </span>
             </span>
-          </span>
-        </span>
-      );
-    });
+          </div>
+        );
+      });
+    } else {
+      //@ts-ignore
+      refHtml.current = <span>No compatible components found.</span>;
+    }
   }, [tooltipTitle]);
 
   return (
@@ -238,11 +274,7 @@ export default function ParameterComponent({
           <></>
         ) : (
           <ShadTooltip
-            styleClasses={
-              refNumberComponents.current > MAX_LENGTH_TO_SCROLL_TOOLTIP
-                ? "tooltip-fixed-width custom-scroll overflow-y-scroll nowheel"
-                : "tooltip-fixed-width"
-            }
+            styleClasses={"tooltip-fixed-width custom-scroll nowheel"}
             delayDuration={0}
             content={refHtml.current}
             side={left ? "left" : "right"}
