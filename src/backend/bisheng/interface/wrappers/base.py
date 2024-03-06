@@ -1,9 +1,13 @@
-from typing import ClassVar, Dict, List, Optional
+from typing import ClassVar, Dict, List, Optional, Type
 
 from bisheng.interface.base import LangChainTypeCreator
+from bisheng.template.frontend_node.wrappers import WrappersFrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class, build_template_from_method
 from langchain import requests, sql_database
+# from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
+from langchain.utilities.dalle_image_generator import DallEAPIWrapper
+from sqlmodel import true
 
 
 class WrapperCreator(LangChainTypeCreator):
@@ -12,11 +16,17 @@ class WrapperCreator(LangChainTypeCreator):
     from_method_nodes: ClassVar[Dict] = {'SQLDatabase': 'from_uri'}
 
     @property
+    def frontend_node_class(self) -> Type[WrappersFrontendNode]:
+        """The class type of the FrontendNode created in frontend_node."""
+        return WrappersFrontendNode
+
+    @property
     def type_to_loader_dict(self) -> Dict:
         if self.type_dict is None:
             self.type_dict = {
                 wrapper.__name__: wrapper
-                for wrapper in [requests.TextRequestsWrapper, sql_database.SQLDatabase]
+                for wrapper in
+                [requests.TextRequestsWrapper, sql_database.SQLDatabase, DallEAPIWrapper]
             }
         return self.type_dict
 
@@ -30,7 +40,7 @@ class WrapperCreator(LangChainTypeCreator):
                     method_name=self.from_method_nodes[name],
                 )
 
-            return build_template_from_class(name, self.type_to_loader_dict)
+            return build_template_from_class(name, self.type_to_loader_dict, true)
         except ValueError as exc:
             raise ValueError('Wrapper not found') from exc
         except AttributeError as exc:

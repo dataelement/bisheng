@@ -1,6 +1,7 @@
 import json
 from typing import Any, Callable, Dict, Sequence, Type
 
+import httpx
 from bisheng.cache.utils import file_download
 from bisheng.chat.config import ChatConfig
 from bisheng.interface.agents.base import agent_creator
@@ -28,8 +29,9 @@ from langchain.base_language import BaseLanguageModel
 from langchain.chains.base import Chain
 from langchain.document_loaders.base import BaseLoader
 from langchain.vectorstores.base import VectorStore
+from langchain_community.utils.openai import is_openai_v1
 from loguru import logger
-from pydantic import ValidationError, create_model
+from pydantic import SecretStr, ValidationError, create_model
 from pydantic.fields import FieldInfo
 
 
@@ -189,6 +191,8 @@ def instantiate_wrapper(node_type, class_object, params):
         if class_method := getattr(class_object, method, None):
             return class_method(**params)
         raise ValueError(f'Method {method} not found in {class_object}')
+    if node_type == 'DallEAPIWrapper' and is_openai_v1():
+        params['http_client'] = httpx.Client(proxy=params.get('openai_proxy'))
 
     return class_object(**params)
 
@@ -206,6 +210,14 @@ def instantiate_llm(node_type, class_object, params: Dict):
     # This is a workaround so JinaChat works until streaming is implemented
     # if "openai_api_base" in params and "jina" in params["openai_api_base"]:
     # False if condition is True
+    if is_openai_v1():
+        http_client = httpx.Client(proxy=params.get('openai_api_proxy'))
+        params['http_client'] = http_client
+
+    if node_type == '':
+        anthropic_api_key = params.pop('anthropic_api_key', None)
+        params['anthropic_api_key'] = SecretStr(anthropic_api_key) if anthropic_api_key else None
+
     if node_type == 'VertexAI':
         return initialize_vertexai(class_object=class_object, params=params)
     # max_tokens sometimes is a string and should be an int

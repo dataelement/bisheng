@@ -4,7 +4,8 @@ import time
 from typing import List, Optional
 from uuid import uuid4
 
-from bisheng.api.services.knowledge_imp import addEmbedding, decide_vectorstores
+from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
+                                                delete_knowledge_file_vectors)
 from bisheng.api.utils import access_check
 from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200
 from bisheng.cache.utils import file_download, save_uploaded_file
@@ -26,7 +27,7 @@ from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
                                         UnstructuredWordDocumentLoader)
 from pymilvus import Collection
 from sqlalchemy import delete, func, or_
-from sqlmodel import select
+from sqlmodel import select, true
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Skills'])
@@ -109,30 +110,40 @@ async def process_knowledge(*,
     files = []
     file_paths = []
     result = []
+
     for path in file_path:
         filepath, file_name = file_download(path)
         md5_ = filepath.rsplit('/', 1)[1].split('.')[0].split('_')[0]
         # 是否包含重复文件
         with session_getter() as session:
             repeat = session.exec(
-                select(KnowledgeFile).where(KnowledgeFile.md5 == md5_, KnowledgeFile.status == 2,
+                select(KnowledgeFile).where(KnowledgeFile.md5 == md5_,
                                             KnowledgeFile.knowledge_id == knowledge_id)).all()
-        status = 3 if repeat else 1
-        remark = 'file repeat' if repeat else ''
-        db_file = KnowledgeFile(knowledge_id=knowledge_id,
-                                file_name=file_name,
-                                status=status,
-                                md5=md5_,
-                                remark=remark,
-                                user_id=payload.get('user_id'))
-        with session_getter() as session:
-            session.add(db_file)
-            session.commit()
-            session.refresh(db_file)
-        if not repeat:
+        if repeat:
+            # 用新文件覆盖老文件
+            MinioClient().upload_minio(repeat.object_name, file_path=file_path)
+            db_file = repeat[0]
+            db_file.status = 3
+            db_file.remark = 'repeat file'
+            repeat = true
+        else:
+            status = 1
+            remark = ''
+            db_file = KnowledgeFile(knowledge_id=knowledge_id,
+                                    file_name=file_name,
+                                    status=status,
+                                    md5=md5_,
+                                    remark=remark,
+                                    user_id=payload.get('user_id'))
+            with session_getter() as session:
+                session.add(db_file)
+                session.commit()
+                session.refresh(db_file)
             files.append(db_file.copy())
             file_paths.append(filepath)
-        logger.info(f'fileName={file_name} col={collection_name} file_id={db_file.id}')
+
+        logger.info(
+            f'fileName={file_name} col={collection_name} repeat={repeat} file_id={db_file.id}')
         result.append(db_file.copy())
 
     if files:
@@ -309,10 +320,9 @@ def get_filelist(*,
 def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = Depends()):
     """失败重试"""
     file_ids = data.get('file_ids')
+    delete_knowledge_file_vectors(file_ids=file_ids)
     with session_getter() as session:
-        db_files = session.exec(
-            select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids),
-                                        KnowledgeFile.status == 3)).all()
+        db_files = session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
 
     separator = ['\n\n', '\n', ' ', '']
     chunk_size = 500
@@ -339,9 +349,9 @@ def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = De
                 file_path, _ = file_download(file_url)
             else:
                 with session_getter() as session:
-                    db_knowledge = session.get(Knowledge, file.knowledge_id)
-                    file.status = 3  # 解析中
+                    file.status = 3
                     file.remark = '原始文件丢失'
+                    session.add(file)
                     session.commit()
                 continue
 

@@ -34,5 +34,5 @@ ALL_TOOLS_NAMES = {
     **CUSTOM_TOOLS,
     **FILE_TOOLS,  # type: ignore
     **OTHER_TOOLS,
-    **PYTHON_TOOLS,
+    **PYTHON_TOOLS
 }
