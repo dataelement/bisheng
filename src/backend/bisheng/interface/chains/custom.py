@@ -165,7 +165,7 @@ class SummarizeDocsChain(CustomChain):
 prompt_default = PromptTemplate(
     input_variables=['image_desc'],
     template="""Generate a detailed prompt to generate an image based on the following description:
-                                {image_desc}""")
+    {image_desc}""")
 
 
 class DalleGeneratorChain(CustomChain, BaseModel):
