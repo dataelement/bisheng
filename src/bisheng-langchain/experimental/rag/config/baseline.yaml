@@ -1,7 +1,7 @@
 data:
   origin_file_path: '/home/public/rag_benchmark_v1.0/rag_benchmark_processed'
   question: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample.xlsx'
-  save_answer: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample_gpt4_12chunk_test.xlsx'
+  save_answer: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample_gpt4_12chunk.xlsx'
 
 milvus:
   host: '192.168.106.116'
@@ -17,27 +17,15 @@ elasticsearch:
 embedding:
   type: 'OpenAIEmbeddings'
   model: 'text-embedding-ada-002'
-  openai_api_key: 'xxxx'
+  openai_api_key: 'xxxxxx'
   openai_proxy: 'http://118.195.232.223:39995'
 
 chat_llm:
   type: 'ChatOpenAI'
   model: 'gpt-4-1106-preview'
-  openai_api_key: 'xxxx'
+  openai_api_key: 'xxxxxx'
   openai_proxy: 'http://118.195.232.223:39995'
   temperature: 0.0
-
-# chat_llm:
-#   type: 'ChatQWen'
-#   model_name: 'qwen-1.8b-chat'
-#   api_key: 'xxxx'
-#   temperature: 0.0
-
-# chat_llm:
-#   type: 'HostQwenChat'
-#   model_name: 'qwen-1_8B-benchmarkv1-ganrao-8192-epoch10-filter-export'
-#   host_base_url: 'http://34.142.140.180:7001/v2.1/models'
-#   temperature: 0.0
 
 knowledge:
   loader: 
@@ -47,7 +35,7 @@ knowledge:
     type: 'ElemCharacterTextSplitter'
     chunk_size: 500
     chunk_overlap: 50
-    separators: ['\n\n', '\n', ' ', '']
+    separators: ["\n\n", "\n", " ", ""]
   save_milvus: True
   save_es: True
   suffix: 'test_glx'
@@ -70,6 +58,8 @@ retrieval_rerank:
 generate:
   with_retrieval: True
   chain_type: 'stuff'
+  # prompt_type: 'BASE_PROMPT'
+  prompt_type: 'CHAT_PROMPT'
 
 metric:
   type: 'bisheng-ragas'

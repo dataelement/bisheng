@@ -226,6 +226,9 @@ class BishengRagPipeline():
                 logger.error(f'question: {question}\nerror: {e}')
                 ans = {'output_text': str(e)}
             
+            # context = '\n\n'.join([doc.page_content for doc in docs])
+            # content = prompt.format(context=context, question=question)
+            
             # # for rate_limit
             # time.sleep(15)
 
@@ -233,6 +236,7 @@ class BishengRagPipeline():
             logger.info(f'question: {question}\nans: {rag_answer}\n')
             questions_info['rag_answer'] = rag_answer
             # questions_info['rag_context'] = '\n----------------\n'.join([doc.page_content for doc in docs])
+            # questions_info['rag_context'] = content
 
         df = pd.DataFrame(all_questions_info)
         df.to_excel(self.save_answer_path, index=False)
