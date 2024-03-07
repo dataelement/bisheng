@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import time
 from typing import List, Optional
@@ -111,7 +112,7 @@ async def process_knowledge(*,
     result = []
     for path in file_path:
         filepath, file_name = file_download(path)
-        md5_ = filepath.rsplit('/', 1)[1].split('.')[0].split('_')[0]
+        md5_ = os.path.splitext(os.path.basename(filepath))[0].split('_')[0]
         # 是否包含重复文件
         with session_getter() as session:
             repeat = session.exec(
