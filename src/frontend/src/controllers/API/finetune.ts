@@ -34,21 +34,19 @@ export const getTasksApi = async (params: Tasks_query): Promise<TaskDB[]> => {
 
 // 创建任务
 export const createTaskApi = async (data: any): Promise<TaskDB> => {
-    const train_data = data.train_data?.map(el => ({
-        id: el.id,
-        num: el.sampleSize,
-        url: el.dataSource,
-        name: el.name
-    })) || []
-    const preset_data = data.preset_data?.reduce((res, el) => {
-        const item = {
-            id: el.id,
-            num: el.sampleSize,
-            url: el.dataSource,
-            name: el.name
-        }
-        return el.checked ? [...res, item] : res
-    }, []) || []
+    const filterData = (arr) => {
+        return arr?.reduce((res, el) => {
+            const item = {
+                id: el.id,
+                num: el.sampleSize,
+                url: el.dataSource,
+                name: el.name
+            }
+            return el.checked ? [...res, item] : res
+        }, []) || []
+    }
+    const train_data = filterData(data.train_data)
+    const preset_data = filterData(data.preset_data)
     return await axios.post(`/api/v1/finetune/job`, { ...data, train_data, preset_data });
 };
 

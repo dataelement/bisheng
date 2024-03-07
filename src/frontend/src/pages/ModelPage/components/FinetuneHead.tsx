@@ -14,6 +14,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group";
 import { getAllServicesApi, getServicesApi } from "../../../controllers/API";
 import { useDebounce } from "../../../util/hook";
+import { Search } from "lucide-react";
 
 interface IProps {
     onSearch: (searchkey) => void,
@@ -76,7 +77,10 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
                     </SelectGroup>
                 </SelectContent>
             </Select>
-            <Input ref={inputRef} className="w-[140px]" placeholder={t('finetune.modelName')} onChange={useDebounce(handleSearch, 600, false)}></Input>
+            <div className="w-[180px] relative">
+                <Input ref={inputRef} placeholder={t('finetune.modelName')} onChange={useDebounce(handleSearch, 600, false)}></Input>
+                <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+            </div>
         </div>
         <div className="flex gap-4">
             <Button size="sm" className="rounded-full h-8" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>

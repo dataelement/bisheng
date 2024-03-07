@@ -77,6 +77,8 @@ chains:
   #   documentation: ""
   LoaderOutputChain:
     documentation: ""
+  DalleGeneratorChain:
+    documentation: ""
 documentloaders:
   CustomKVLoader:
     documentation: ""

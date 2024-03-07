@@ -16,6 +16,7 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import { Input } from "../../../components/ui/input";
 import PaginationComponent from "../../../components/PaginationComponent";
+import { Search } from "lucide-react";
 
 export default function Users(params) {
     const { user } = useContext(userContext);
@@ -49,7 +50,10 @@ export default function Users(params) {
 
     return <>
         <div className="flex justify-end">
-            <Input placeholder={t('system.username')} className="w-[140px]" onChange={(e) => search(e.target.value)}></Input>
+            <div className="w-[180px] relative">
+                <Input placeholder={t('system.username')} onChange={(e) => search(e.target.value)}></Input>
+                <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+            </div>
         </div>
         <Table>
             {/* <TableCaption>用户列表.</TableCaption> */}

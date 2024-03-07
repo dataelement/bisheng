@@ -16,7 +16,7 @@ import {
     TabsTrigger,
 } from "../../components/ui/tabs";
 
-import { ArrowLeft, Filter, RotateCw } from "lucide-react";
+import { ArrowLeft, Filter, RotateCw, Search } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
@@ -122,7 +122,10 @@ export default function FilesPage() {
                 <div className="flex justify-between items-center">
                     <span className=" text-gray-800">{title}</span>
                     <div className="flex gap-4 items-center">
-                        <Input placeholder={t('lib.fileName')} className="w-[140px]" onChange={(e) => search(e.target.value)}></Input>
+                        <div className="w-[180px] relative">
+                            <Input placeholder={t('lib.fileName')} onChange={(e) => search(e.target.value)}></Input>
+                            <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+                        </div>
                         {hasPermission && <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
                     </div>
                 </div>

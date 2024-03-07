@@ -189,8 +189,8 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
                 <EditLabel
                     rule={[
                         {
-                            pattern: /^.{1,50}$/,
-                            message: t('finetune.fillName'),
+                            pattern: /^(?=.*[a-zA-Z])(?=.*\d)?[a-zA-Z\d_-]+$/,
+                            message: t('finetune.enterModelName'),
                         }
                     ]}
                     str={baseInfo.model_name}

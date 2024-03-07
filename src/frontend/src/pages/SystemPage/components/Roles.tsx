@@ -16,6 +16,7 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { ROLE } from "../../../types/api/user";
 import EditRole from "./EditRole";
 import { Input } from "../../../components/ui/input";
+import { Search } from "lucide-react";
 
 export default function Roles() {
     const { t } = useTranslation()
@@ -68,7 +69,10 @@ export default function Roles() {
 
     return <div className=" relative">
         <div className="flex gap-4 items-center justify-end">
-            <Input value={searchWord} placeholder={t('system.roleName')} className="w-[140px]" onChange={handleSearch}></Input>
+            <div className="w-[180px] relative">
+                <Input value={searchWord} placeholder={t('system.roleName')} onChange={handleSearch}></Input>
+                <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+            </div>
             <Button className="h-8 rounded-full" onClick={() => setRole({})}>{t('create')}</Button>
         </div>
         <Table>

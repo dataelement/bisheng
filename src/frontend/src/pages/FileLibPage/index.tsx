@@ -28,6 +28,7 @@ import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } 
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import PaginationComponent from "../../components/PaginationComponent";
 import { useTable } from "../../util/hook";
+import { Search } from "lucide-react";
 
 function CreateModal({ datalist, open, setOpen }) {
     const { t } = useTranslation()
@@ -164,7 +165,10 @@ export default function FileLibPage() {
 
                 <TabsContent value="account">
                     <div className="flex justify-end gap-4 items-center">
-                        <Input placeholder={t('lib.libraryName')} className="w-[140px]" onChange={(e) => search(e.target.value)}></Input>
+                        <div className="w-[180px] relative">
+                            <Input placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)}></Input>
+                            <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+                        </div>
                         <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('create')}</Button>
                     </div>
                     <Table>

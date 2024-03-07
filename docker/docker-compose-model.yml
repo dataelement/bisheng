@@ -18,13 +18,41 @@ services:
       TZ: Asia/Shanghai
     command: ["./bin/rtserver", "f"]
     volumes:
-      - /home/public/llm:/opt/bisheng-rt/models/model_repository  # 冒号前为宿主机上放置模型目录的路径，请根据实际环境修改；冒号后为映射到容器内的路径，请勿修改
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/llm:/opt/bisheng-rt/models/model_repository  # 冒号前为宿主机上放置模型目录的路径，请根据实际环境修改；冒号后为映射到容器内的路径，请勿修改
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9001/v2"]
       interval: 30s
       timeout: 20s
       retries: 3
     restart: on-failure
+
+  ft_server:
+    container_name: bisheng-ft-server
+    image: dataelement/bisheng-ft:latest
+    ports:
+      - "8000:8000"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng-ft/config.yaml:/opt/bisheng-ft/sft_server/config.yaml  # 服务启动所需的配置文件地址
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/llm:/opt/bisheng-ft/models/model_repository # 配置和RT服务同样的大模型目录
+    security_opt:
+      - seccomp:unconfined
+    command: bash start-sft-server.sh # 启动服务
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      start_period: 30s
+      interval: 90s
+      timeout: 30s
+      retries: 3
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
 
   bisheng-unstructured:
     container_name: bisheng-unstructured
@@ -40,3 +68,4 @@ services:
       timeout: 20s
       retries: 3
     restart: on-failure
+
