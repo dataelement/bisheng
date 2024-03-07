@@ -36,10 +36,8 @@ jobs:
         with:
           url: ' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b'
           method: 'POST'
-          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{github.event.pusher.name}}提交代码，开始编译",  "content": [[{"tag":"text","text":"提交内容${{ env.message }}"}]]}}}}'
-
-
-      # 构建 bisheng-langchain
+          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{github.event.pusher.name}}提交代码，开始编译",  "content": [[{"tag":"text","text":"发布功能："},{"tag":"text","text":"${{ env.message }}"}]]}}}}'
+         
       - name: Set python version 3.8
         uses: actions/setup-python@v1
         with:
