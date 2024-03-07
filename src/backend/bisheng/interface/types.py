@@ -73,7 +73,7 @@ langchain_types_dict = build_langchain_types_dict()
 
 def get_all_types_dict():
     """Get all types dictionary combining native and custom components."""
-    BASE_COMPONENTS_PATH = str(Path(__file__) / 'custom' / 'components' / '')
+    BASE_COMPONENTS_PATH = str(Path(__file__).parent.parent / 'components')
     native_components = build_langchain_types_dict()
     custom_components_from_file = build_custom_components([BASE_COMPONENTS_PATH])
     return merge_nested_dicts_with_renaming(native_components, custom_components_from_file)
