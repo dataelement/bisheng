@@ -1,14 +1,15 @@
 # Path: src/backend/bisheng/database/models/flow.py
 
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
+from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 # if TYPE_CHECKING:
 from pydantic import validator
 from sqlalchemy import Column, DateTime, text
-from sqlmodel import JSON, Field
+from sqlmodel import JSON, Field, select
 
 
 class FlowBase(SQLModelSerializable):
@@ -74,3 +75,24 @@ class FlowUpdate(SQLModelSerializable):
     data: Optional[Dict] = None
     status: Optional[int] = None
     guide_word: Optional[str] = None
+
+
+class FlowDao(FlowBase):
+
+    @classmethod
+    def get_flow_by_id(cls, flow_id: str) -> Optional[Flow]:
+        with session_getter() as session:
+            statement = select(Flow).where(Flow.id == UUID(flow_id))
+            return session.exec(statement).first()
+
+    @classmethod
+    def get_flow_by_user(cls, user_id: int) -> List[Flow]:
+        with session_getter() as session:
+            statement = select(Flow).where(Flow.user_id == user_id)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_flow_by_name(cls, user_id: int, name: str) -> Optional[Flow]:
+        with session_getter() as session:
+            statement = select(Flow).where(Flow.user_id == user_id, Flow.name == name)
+            return session.exec(statement).first()
