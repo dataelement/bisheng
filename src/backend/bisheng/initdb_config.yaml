@@ -22,11 +22,12 @@ knowledges:
     ElasticKeywordsSearch:
       elasticsearch_url: 'http://elasticsearch:9200'
       ssl_verify: "{'basic_auth': ('elastic', 'password')}"
+      #   ssl_verify: "{'ca_certs': False, 'basic_auth': ('elastic', 'F94h5JtdQn6EQB-G9Hjv'), 'verify_certs': False}"
   minio: # 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储
      SCHEMA: false         # 是否支持 https
      CERT_CHECK: false         # 是否校验 http证书
-     MINIO_ENDPOINT: "minio:9000"       # 这个地址用来写请求
-     MINIO_SHAREPOIN: "minio:9000"      # 为保证外网和内网隔离。 浏览器获取连接是这个域名
+     MINIO_ENDPOINT: "minio:9000"       # 这个地址用来写请求, 使用同一个docker-compose 启动，能通过容器名访问
+     MINIO_SHAREPOIN: "minio:9000"      # 确保和nginx的代理地址一致。同一个docker-compose启动可以直接使用默认值
      MINIO_ACCESS_KEY: "minioadmin"
      MINIO_SECRET_KEY: "minioadmin"
   #

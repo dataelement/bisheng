@@ -2,13 +2,14 @@ import hashlib
 from typing import List, Optional
 
 from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, delete_knowledge_by,
-                                                delete_knowledge_file_batch, text_knowledge)
+                                                delete_knowledge_file_vectors, text_knowledge)
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeRead,
                                                KnowledgeUpdate)
-from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
+from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
+                                                    KnowledgeFileRead)
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.settings import settings
@@ -207,7 +208,8 @@ def delete_knowledge_file(*, file_id: int):
         raise HTTPException(status_code=404, detail='文件不存在')
 
     try:
-        delete_knowledge_file_batch([file_id])
+        delete_knowledge_file_vectors([file_id])
+        KnowledgeFileDao.delete_batch(file_ids=[file_id])
         return resp_200()
     except Exception as e:
         return resp_500(message=f'error e={str(e)}')
@@ -222,8 +224,8 @@ def delete_file_batch_api(file_ids: List[int]):
         raise HTTPException(status_code=404, detail='文件不存在')
 
     try:
-        delete_knowledge_file_batch(file_ids)
-        return resp_200()
+        delete_knowledge_file_vectors(file_ids)
+        KnowledgeFileDao.delete_batch(file_ids=file_ids)
     except Exception as e:
         return resp_500(message=f'error e={str(e)}')
 

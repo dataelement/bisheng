@@ -170,7 +170,8 @@ export async function deleteFlowFromDatabase(flowId: string) {
  */
 export const createCustomFlowApi = async (params: {
     name: string,
-    description: string
+    description: string,
+    guide_word: string
 }, userName: string) => {
     const response: FlowType = await axios.post("/api/v1/flows/", {
         ...params,
@@ -199,6 +200,7 @@ export async function updateFlowApi(
         name: updatedFlow.name,
         data: updatedFlow.data,
         description: updatedFlow.description,
+        guide_word: updatedFlow.guide_word
     });
 }
 

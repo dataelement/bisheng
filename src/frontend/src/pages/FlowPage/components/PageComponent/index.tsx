@@ -73,12 +73,12 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   const { setViewport } = useReactFlow();
   useEffect(() => {
     if (reactFlowInstance && flow) {
-      // 节点变化update flow
+      // 节点变化update flow(唯一修改口)
       flow.data = reactFlowInstance.toObject();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     /**
-     * 由于flow模块设计问题，临时通过把flow挂在到window上，来提供 reactflow 节点做重复 id校验使用
+     * 由于flow模块设计问题，临时通过把flow挂在到window上，来提供 reactflow 节点 做重复id校验使用
      */
     window._flow = flow;
   }, [nodes, edges]);
@@ -306,7 +306,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
           }
         });
       });
-
+      // TODO 修改 setNodes 来更新
       setFlow('changeid', { ...flow })
     }
     document.addEventListener('idChange', handleChangeId)
@@ -325,11 +325,12 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
               <div className="h-full w-full">
                 <ReactFlow
                   nodes={nodes}
+                  edges={edges}
                   onMove={() => {
                     if (reactFlowInstance)
+                      // 无用 待删
                       flow = { ...flow, data: reactFlowInstance.toObject() }
                   }}
-                  edges={edges}
                   onNodesChange={onNodesChangeMod}
                   onEdgesChange={onEdgesChangeMod}
                   onConnect={onConnect}

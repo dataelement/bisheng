@@ -1,15 +1,19 @@
-from typing import Dict, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from bisheng.interface.base import CustomChain
 from bisheng.interface.utils import extract_input_variables_from_prompt
 from bisheng_langchain.chains.question_answering import load_qa_chain
 from langchain.base_language import BaseLanguageModel
-from langchain.chains import ConversationChain
+from langchain.callbacks.manager import CallbackManagerForChainRun
+from langchain.chains import ConversationChain, LLMChain
 from langchain.chains.summarize import load_summarize_chain
 from langchain.memory.buffer import ConversationBufferMemory
+from langchain.prompts import PromptTemplate
 from langchain.schema import BaseMemory
 from langchain.schema.prompt_template import BasePromptTemplate
+from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
 from langchain_core.pydantic_v1 import Field, root_validator
+from pydantic import BaseModel
 
 DEFAULT_SUFFIX = """"
 Current conversation:
@@ -158,10 +162,56 @@ class SummarizeDocsChain(CustomChain):
         return super().run(*args, **kwargs)
 
 
+prompt_default = PromptTemplate(
+    input_variables=['image_desc'],
+    template="""Generate a detailed prompt to generate an image based on the following description:
+    {image_desc}""")
+
+
+class DalleGeneratorChain(CustomChain, BaseModel):
+    """Implementation of dall-e-2"""
+    dalle: DallEAPIWrapper
+    llm: Optional[BaseLanguageModel]
+    prompt: Optional[PromptTemplate]
+    input_key: str = 'image_desc'
+    output_key: str = 'response'  #: :meta private:
+
+    @property
+    def input_keys(self) -> List[str]:
+        """Use this since so some prompt vars come from history."""
+        return [self.input_key]
+
+    @property
+    def output_keys(self) -> List[str]:
+        return [self.output_key]
+
+    @staticmethod
+    def function_name():
+        return 'DalleGeneratorChain'
+
+    @classmethod
+    def initialize(cls, dalle: DallEAPIWrapper, **kwargs):
+        return DalleGeneratorChain(dalle=dalle, **kwargs)
+
+    def run(self, *args, **kwargs):
+        return super().run(*args, **kwargs)
+
+    def _call(self,
+              inputs: Dict[str, Any],
+              run_manager: Optional[CallbackManagerForChainRun] = None) -> Dict[str, Any]:
+        if self.llm:
+            prompt = self.prompt or prompt_default
+            llm_chain = LLMChain(llm=self.llm, prompt=prompt)
+            return {self.output_key: self.dalle.run(llm_chain.run(inputs)), 'type': 'image'}
+        else:
+            return {self.output_key: self.dalle.run(inputs.get(self.input_key)), 'type': 'image'}
+
+
 CUSTOM_CHAINS: Dict[str, Type[Union[ConversationChain, CustomChain]]] = {
     'CombineDocsChain': CombineDocsChain,
     'SummarizeDocsChain': SummarizeDocsChain,
     'SeriesCharacterChain': SeriesCharacterChain,
     'MidJourneyPromptChain': MidJourneyPromptChain,
     'TimeTravelGuideChain': TimeTravelGuideChain,
+    'DalleGeneratorChain': DalleGeneratorChain
 }

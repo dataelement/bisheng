@@ -131,12 +131,8 @@ jobs:
       - name: Process git message
         id: process_message
         run: |
-          message=""
-          IFS=$'\n'
-          for line in $(echo "${{ github.event.head_commit.message }}"); do
-            message+="$line\n"
-          done
-          echo "::set-output name=message::$message"
+          value=$(echo "${{ github.event.head_commit.message }}" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')
+          echo "message=${value}" >> $GITHUB_ENV
         shell: bash
 
       - name: notify feishu
@@ -144,4 +140,4 @@ jobs:
         with:
           url: ${{ secrets.FEISHU_WEBHOOK }}
           method: 'POST'
-          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{ steps.get_version.outputs.VERSION }}发布成功",  "content": [[{"tag":"text","text":"发布功能："}][{"tag":"text","text":"${{ steps.process_message.outputs.message }}"}]]}}}}'
+          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{ steps.get_version.outputs.VERSION }}发布成功",  "content": [[{"tag":"text","text":"发布功能："},{"tag":"text","text":"${{ env.message }}"}]]}}}}'

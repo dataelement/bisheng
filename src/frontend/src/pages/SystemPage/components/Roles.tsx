@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../../alerts/confirm";
 import { Button } from "../../../components/ui/button";
@@ -15,12 +15,15 @@ import { delRoleApi, getRolesApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { ROLE } from "../../../types/api/user";
 import EditRole from "./EditRole";
+import { Input } from "../../../components/ui/input";
+import { Search } from "lucide-react";
 
 export default function Roles() {
     const { t } = useTranslation()
 
     const [role, setRole] = useState<Partial<ROLE> | null>(null)
     const [roles, setRoles] = useState<ROLE[]>([])
+    const allRolesRef = useRef([])
 
     const handleChange = (change: boolean) => {
         change && loadData()
@@ -28,9 +31,10 @@ export default function Roles() {
     }
 
     const loadData = () => {
-        getRolesApi().then(data =>
+        getRolesApi().then(data => {
             setRoles(data)
-        )
+            allRolesRef.current = data
+        })
     }
 
     useEffect(() => loadData(), [])
@@ -53,10 +57,24 @@ export default function Roles() {
             _role.role_name === name && role.id !== _role.id))
     }
 
+    // search
+    const [searchWord, setSearchWord] = useState('')
+    const handleSearch = (e) => {
+        const word = e.target.value
+        setSearchWord(word)
+        setRoles(allRolesRef.current.filter(item => item.role_name.toUpperCase().includes(word.toUpperCase())))
+    }
+
     if (role) return <EditRole id={role.id || -1} name={role.role_name || ''} onBeforeChange={checkSameName} onChange={handleChange}></EditRole>
 
     return <div className=" relative">
-        <Button className="h-8 rounded-full absolute right-0 top-[-40px]" onClick={() => setRole({})}>{t('create')}</Button>
+        <div className="flex gap-4 items-center justify-end">
+            <div className="w-[180px] relative">
+                <Input value={searchWord} placeholder={t('system.roleName')} onChange={handleSearch}></Input>
+                <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+            </div>
+            <Button className="h-8 rounded-full" onClick={() => setRole({})}>{t('create')}</Button>
+        </div>
         <Table>
             <TableCaption>{t('system.roleList')}.</TableCaption>
             <TableHeader>

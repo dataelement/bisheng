@@ -118,6 +118,9 @@ class ChainFrontendNode(FrontendNode):
             field.required = True
             field.show = True
             field.advanced = False
+        if field.name == 'prompt' and name == 'DalleGeneratorChain':
+            field.show = True
+            field.required = False
         if field.name == 'condense_question_prompt':
             field.required = False
             field.show = True
@@ -135,7 +138,8 @@ class ChainFrontendNode(FrontendNode):
             field.advanced = False
             field.field_type = 'BaseLanguageModel'  # temporary fix
             field.is_list = False
-
+        if field.name == 'llm' and name == 'DalleGeneratorChain':
+            field.required = False
         if field.name == 'return_source_documents':
             field.required = False
             field.show = True

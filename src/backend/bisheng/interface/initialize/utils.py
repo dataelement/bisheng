@@ -65,7 +65,8 @@ def handle_variable(params: Dict, input_variable: str, format_kwargs: Dict):
             format_kwargs[input_variable] = ''
         elif len(variable) != 1:
             raise ValueError(f'VariableNode contains multi-key {variable.keys()}')
-        format_kwargs[input_variable] = list(variable.values())[0]
+        else:
+            format_kwargs[input_variable] = list(variable.values())[0]
     elif isinstance(variable, BaseOutputParser) and hasattr(variable, 'get_format_instructions'):
         format_kwargs[input_variable] = variable.get_format_instructions()
     elif is_instance_of_list_or_document(variable):

@@ -49,8 +49,17 @@ import { SlackIcon } from "./icons/Slack";
 import { VertexAIIcon } from "./icons/VertexAI";
 import { HackerNewsIcon } from "./icons/hackerNews";
 import { SupabaseIcon } from "./icons/supabase";
-import { APITemplateType } from "./types/api";
-import { IVarHighlightType } from "./types/components";
+import {
+  APIDataType,
+  APITemplateType,
+  TemplateVariableType
+} from "./types/api";
+import {
+  IVarHighlightType,
+  groupedObjType,
+  nodeGroupedObjType,
+  tweakType
+} from "./types/components";
 import { FlowType, NodeType } from "./types/flow";
 import i18next from "i18next";
 
@@ -848,119 +857,125 @@ export function updateIds(newFlow, getNodeId) {
   });
 }
 
-export function groupByFamily(data, baseClasses, left, type) {
-  let parentOutput: string;
-  let arrOfParent: string[] = [];
-  let arrOfType: { family: string; type: string; component: string }[] = [];
-  let arrOfLength: { length: number; type: string }[] = [];
-  let lastType = "";
-  Object.keys(data).map((d) => {
-    Object.keys(data[d]).map((n) => {
-      try {
-        if (
-          data[d][n].base_classes.some((r) =>
-            baseClasses.split("\n").includes(r)
-          )
-        ) {
-          arrOfParent.push(d);
-        }
-        if (n === type) {
-          parentOutput = d;
-        }
+export function groupByFamily(
+  data: any,
+  baseClasses: string,
+  left: boolean,
+  flow?: NodeType[]
+): groupedObjType[] {
+  const baseClassesSet = new Set(baseClasses.split("\n"));
+  let arrOfPossibleInputs: Array<{
+    category: string;
+    nodes: nodeGroupedObjType[];
+    full: boolean;
+    display_name?: string;
+  }> = [];
+  let arrOfPossibleOutputs: Array<{
+    category: string;
+    nodes: nodeGroupedObjType[];
+    full: boolean;
+    display_name?: string;
+  }> = [];
+  let checkedNodes = new Map();
+  const excludeTypes = new Set([
+    "str",
+    "bool",
+    "float",
+    "code",
+    "prompt",
+    "file",
+    "int",
+  ]);
 
-        if (d !== lastType) {
-          arrOfLength.push({
-            length: Object.keys(data[d]).length,
-            type: d,
-          });
+  const checkBaseClass = (template: TemplateVariableType) => {
+    return (
+      template.type &&
+      template.show &&
+      ((!excludeTypes.has(template.type) &&
+        baseClassesSet.has(template.type)) ||
+        (template.input_types &&
+          template.input_types.some((inputType) =>
+            baseClassesSet.has(inputType)
+          )))
+    );
+  };
 
-          lastType = d;
-        }
-      } catch (e) {
-        console.log(e);
+  if (flow) {
+    // se existir o flow
+    for (const node of flow) {
+      // para cada node do flow
+      if (node!.data!.node!.flow) break; // não faz nada se o node for um group
+      const nodeData = node.data;
+
+      const foundNode = checkedNodes.get(nodeData.type); // verifica se o tipo do node já foi checado
+      checkedNodes.set(nodeData.type, {
+        hasBaseClassInTemplate:
+          foundNode?.hasBaseClassInTemplate ||
+          Object.values(nodeData.node!.template).some(checkBaseClass),
+        hasBaseClassInBaseClasses:
+          foundNode?.hasBaseClassInBaseClasses ||
+          nodeData.node!.base_classes.some((baseClass) =>
+            baseClassesSet.has(baseClass)
+          ), //seta como anterior ou verifica se o node tem base class
+        displayName: nodeData.node?.display_name,
+      });
+    }
+  }
+
+  for (const [d, nodes] of Object.entries(data)) {
+    let tempInputs: nodeGroupedObjType[] = [],
+      tempOutputs: nodeGroupedObjType[] = [];
+
+    for (const [n, node] of Object.entries(nodes!)) {
+      let foundNode = checkedNodes.get(n);
+
+      if (!foundNode) {
+        foundNode = {
+          hasBaseClassInTemplate: Object.values(node!.template).some(
+            checkBaseClass
+          ),
+          hasBaseClassInBaseClasses: node!.base_classes.some((baseClass) =>
+            baseClassesSet.has(baseClass)
+          ),
+          displayName: node?.display_name,
+        };
       }
-    });
-  });
 
-  Object.keys(data).map((d) => {
-    Object.keys(data[d]).map((n) => {
-      try {
-        baseClasses.split("\n").forEach((tol) => {
-          data[d][n].base_classes.forEach((data) => {
-            if (tol == data) {
-              arrOfType.push({
-                family: d,
-                type: data,
-                component: n,
-              });
-            }
-          });
-        });
-      } catch (e) {
-        console.log(e);
-      }
-    });
-  });
-
-  if (left === false) {
-    let groupedBy = arrOfType.filter((object, index, self) => {
-      const foundIndex = self.findIndex(
-        (o) => o.family === object.family && o.type === object.type
-      );
-      return foundIndex === index;
-    });
-
-    return groupedBy.reduce((result, item) => {
-      const existingGroup = result.find(
-        (group) => group.family === item.family
-      );
-
-      if (existingGroup) {
-        existingGroup.type += `, ${item.type}`;
-      } else {
-        result.push({
-          family: item.family,
-          type: item.type,
-          component: item.component,
-        });
-      }
-
-      if (left === false) {
-        let resFil = result.filter((group) => group.family === parentOutput);
-        result = resFil;
-      }
-
-      return result;
-    }, []);
-  } else {
-    const groupedArray = [];
-    const groupedData = {};
-
-    arrOfType.forEach((item) => {
-      const { family, type, component } = item;
-      const key = `${family}-${type}`;
-
-      if (!groupedData[key]) {
-        groupedData[key] = { family, type, component: [component] };
-      } else {
-        groupedData[key].component.push(component);
-      }
-    });
-
-    for (const key in groupedData) {
-      groupedArray.push(groupedData[key]);
+      if (foundNode.hasBaseClassInTemplate)
+        tempInputs.push({ node: n, displayName: foundNode.displayName });
+      if (foundNode.hasBaseClassInBaseClasses)
+        tempOutputs.push({ node: n, displayName: foundNode.displayName });
     }
 
-    groupedArray.forEach((object, index, self) => {
-      const findObj = arrOfLength.find((x) => x.type === object.family);
-      if (object.component.length === findObj.length) {
-        self[index]["type"] = "";
-      } else {
-        self[index]["type"] = object.component.join(", ");
-      }
-    });
-    return groupedArray;
+    const totalNodes = Object.keys(nodes!).length;
+
+    if (tempInputs.length)
+      arrOfPossibleInputs.push({
+        category: d,
+        nodes: tempInputs,
+        full: tempInputs.length === totalNodes,
+      });
+    if (tempOutputs.length)
+      arrOfPossibleOutputs.push({
+        category: d,
+        nodes: tempOutputs,
+        full: tempOutputs.length === totalNodes,
+      });
   }
+
+  return left
+    ? arrOfPossibleOutputs.map((output) => ({
+      family: output.category,
+      type: output.full
+        ? ""
+        : output.nodes.map((item) => item.node).join(", "),
+      display_name: "",
+    }))
+    : arrOfPossibleInputs.map((input) => ({
+      family: input.category,
+      type: input.full ? "" : input.nodes.map((item) => item.node).join(", "),
+      display_name: input.nodes.map((item) => item.displayName).join(", "),
+    }));
 }
 
 export function buildInputs(tabsState, id) {
@@ -1113,26 +1128,37 @@ export const generateUUID = (length: number) => {
   return uuid
 }
 
+const copyTextInDom = (dom) => {
+  const range = document.createRange();
+
+  range.selectNode(dom);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+
+  return new Promise((res) => {
+    document.execCommand('copy');
+    window.getSelection().removeAllRanges();
+    res(dom.innerText);
+  })
+}
+
 // 复制到剪切板
-export const copyText = (text: string) => {
+export const copyText = (text: string | HTMLElement) => {
+  // 复制 dom 内文本
+  if (typeof text !== 'string') return copyTextInDom(text)
+  // 高级 API直接复制文本（需要 https 环境）
   if (navigator.clipboard && navigator.clipboard.writeText) {
     return navigator.clipboard.writeText(text)
   }
-
+  // 通过把文本写入 dom, 间接通过选中 dom 复制文本
   const areaDom = document.createElement("textarea");
   // 设置样式使其不在屏幕上显示
   areaDom.style.position = 'absolute';
   areaDom.style.left = '-9999px';
   areaDom.value = text;
-
   document.body.appendChild(areaDom);
-  areaDom.focus();
-  areaDom.select();
 
-  return new Promise((res) => {
-    document.execCommand('copy');
-    res(text);
-  }).then(() => {
+  return copyTextInDom(areaDom).then((str) => {
     document.body.removeChild(areaDom);
   })
 };

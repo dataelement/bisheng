@@ -1,5 +1,5 @@
 import cloneDeep from "lodash-es/cloneDeep";
-import { Send, StopCircle } from "lucide-react";
+import { ClipboardList, FileInput, FileText, Send, StopCircle } from "lucide-react";
 import { forwardRef, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ShadTooltip from "../../../components/ShadTooltipComponent";
@@ -40,7 +40,9 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
     // 停止状态
     const [isStop, setIsStop] = useState(true)
     // 输入框状态
-    const { inputState, inputEmpty, inputDisabled, inputRef, setInputState, setInputEmpty, handleTextAreaHeight } = useInputState({ flow, chatId, chating, messages, isReport })
+    const { inputState, inputEmpty, inputDisabled, inputRef,
+        formShow, setFormShow,
+        setInputState, setInputEmpty, handleTextAreaHeight } = useInputState({ flow, chatId, chating, messages, isForm, isReport })
 
     const { appConfig } = useContext(locationContext)
 
@@ -48,7 +50,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
     const initChat = async () => {
         await checkPrompt(flow)
         await build()
-        loadHistory()
+        const historyData = version === 'v1' ? await loadHistory() : []
         await connectWS({ setInputState, setIsStop, changeHistoryByScroll })
         setInputState({ lock: false, errorMsg: '' });
         // 第一条消息，用来初始化会话
@@ -67,6 +69,9 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
         setTimeout(() => {
             inputRef.current?.focus()
         }, 500);
+
+        const isNewChat = historyData.length === 0 || historyData[0].id === 9999
+        setFormShow(isNewChat && isForm)
     }
     useEffect(() => {
         initChat()
@@ -158,6 +163,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
         }))
 
         setIsStop(false)
+        setFormShow(false)
 
         sendAll({
             inputs: {
@@ -215,8 +221,13 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
                             if (event.key === "Enter" && !event.shiftKey) handleSend()
                         }}></textarea>
                     <div className="absolute right-6 bottom-4 flex gap-2">
+                        {
+                            isForm && <ShadTooltip content={t('chat.forms')}>
+                                <button disabled={chating} className=" disabled:text-gray-400" onClick={() => setFormShow(!formShow)}><ClipboardList /></button>
+                            </ShadTooltip>
+                        }
                         <ShadTooltip content={t('chat.sendTooltip')}>
-                            <button disabled={inputEmpty || inputDisabled} className=" disabled:text-gray-400" onClick={handleSend}><Send /></button>
+                            <button disabled={inputEmpty || inputDisabled || chating} className=" disabled:text-gray-400" onClick={handleSend}><Send /></button>
                         </ShadTooltip>
                     </div>
                     {inputState.errorMsg && <div className="bg-gray-200 absolute top-0 left-0 w-full h-full text-center text-gray-400 align-middle pt-4">{inputState.errorMsg}</div>}
@@ -230,8 +241,8 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
         {/* 源文件类型 */}
         <ResouceModal chatId={chatId} open={!!souce} data={souce} setOpen={() => setSouce(null)}></ResouceModal>
         {/* 表单 */}
-        {isForm && !messages.length && <ChatReportForm flow={flow} onStart={sendReport} />}
-        {/* 报表 */}
+        {isForm && formShow && <ChatReportForm flow={flow} onStart={sendReport} />}
+        {/* 踩 反馈 */}
         <ThumbsMessage ref={thumbRef}></ThumbsMessage>
     </div>
 });
@@ -241,7 +252,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
  * return 该技能含有表单、有报表、群聊
  * @returns 
  */
-const useInputState = ({ flow, chatId, chating, messages, isReport }) => {
+const useInputState = ({ flow, chatId, chating, messages, isForm, isReport }) => {
     const { tabsState } = useContext(TabsContext);
 
     const [inputState, setInputState] = useState({
@@ -276,11 +287,18 @@ const useInputState = ({ flow, chatId, chating, messages, isReport }) => {
     }
     // input disabled
     const inputDisabled = useMemo(() => {
-        return inputState.lock || (fileInputs?.length && messages.length === 0) || isReport
+        return inputState.lock
+            // 表单 && 没回话或只有一个引导词
+            || (isForm && (messages.length === 0 || (messages.length === 1 && messages[0].id === 9999)))
+            || isReport
     }, [inputState, fileInputs, isReport])
 
+    // 表单收起
+    const [formShow, setFormShow] = useState(true)
     return {
-        inputState, inputEmpty, inputDisabled, inputRef, setInputState, setInputEmpty, handleTextAreaHeight
+        inputState, inputEmpty, inputDisabled, inputRef,
+        formShow, setFormShow,
+        setInputState, setInputEmpty, handleTextAreaHeight
     }
 }
 
@@ -361,14 +379,39 @@ const useMessages = (chatId, flow) => {
             }
         })
         lastIdRef.current = hisData[hisData.length - 1]?.id || lastIdRef.current || 0 // 记录最后一个id
-        // 取消上一次
+
+        let historyData = []
         if (lastId) {
-            setChatHistory((history) => [...hisData.reverse(), ...history])
+            historyData = [...hisData.reverse(), ...chatHistory]
         } else if (loadIdRef.current === chatId) { // 保证同一会话
-            setChatHistory(hisData.reverse())
-        } else {
-            setChatHistory([])
+            historyData = !hisData.length && flow.guide_word ? [{
+                "category": "system",
+                "chat_id": chatId,
+                "end": true,
+                "create_time": "",
+                "extra": "{}",
+                "files": [],
+                "flow_id": flow.id,
+                "id": 9999,
+                "thought": flow.guide_word,
+                "is_bot": true,
+                "liked": 0,
+                "message": '',
+                "receiver": null,
+                "remark": null,
+                "sender": "",
+                "solved": 0,
+                isSend: false,
+                "source": 0,
+                "type": "end",
+                "update_time": "",
+                noAccess: true,
+                "user_id": 0
+            }] : hisData.reverse()
         }
+
+        setChatHistory(historyData)
+        return historyData
     }
 
     const loadLock = useRef(false)
@@ -405,7 +448,7 @@ const useMessages = (chatId, flow) => {
 
         messagesRef.current?.addEventListener('scroll', handleScroll);
         return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
-    }, [messagesRef.current, chatId]);
+    }, [messagesRef.current, chatHistory, chatId]);
 
     return {
         messages: chatHistory, messagesRef, loadHistory, setChatHistory, changeHistoryByScroll
@@ -439,7 +482,7 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
     }
 
     function getWebSocketUrl(flowId, isDevelopment = false) {
-        const token = localStorage.getItem("ws_token");
+        const token = localStorage.getItem("ws_token") || '';
 
         const isSecureProtocol = window.location.protocol === "https:";
         const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
@@ -640,7 +683,7 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
     // 发送ws
     async function sendAll(data: sendAllProps) {
         try {
-            if (ws) {
+            if (ws.current) {
                 if (JSON.stringify(data.inputs) !== '{}') {
                     newChatStart.current = false
                 }

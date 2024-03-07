@@ -30,6 +30,7 @@ import { useCopyText } from "../../util/hook";
 import RTConfig from "./components/RTConfig";
 import { CpuDetail } from "./cpuInfo";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { Finetune } from "./finetune";
 
 enum STATUS {
     ONLINE,
@@ -140,7 +141,7 @@ export default function FileLibPage() {
             <div className="badge"><span>{t('model.offlineStatus')}</span></div>,
             <div>
                 <span className="badge bg-warning" data-theme="light">{t('model.exceptionStatus')}</span>
-                <div className="tooltip tooltip-warning" data-tip={reason || t('model.warningTooltip')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
+                <div className="tooltip tooltip-warning before:break-words" data-tip={reason || t('model.warningTooltip')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
             </div>,
             <div className="badge badge-ghost"><span>{t('model.inProgressOnlineStatus')}</span></div>,
             <div className="badge badge-ghost"><span>{t('model.inProgressOfflineStatus')}</span></div>
@@ -194,7 +195,10 @@ export default function FileLibPage() {
 
     const { user } = useContext(userContext);
 
-    const [showCpu, setShowCpu] = useState(false)
+    const [showCpu, setShowCpu] = useState({
+        type: 'model',
+        show: false
+    })
 
     // RT 
     const [rtOpen, setRTOpen] = useState(false)
@@ -205,23 +209,23 @@ export default function FileLibPage() {
 
     const copyText = useCopyText()
 
-    return <div className="w-full h-screen p-6 overflow-y-auto">
-        <Tabs defaultValue="account" className="w-full">
+    return <div id="model-scroll" className="w-full h-screen p-6 overflow-y-auto">
+        <Tabs defaultValue="model" className="w-full" onValueChange={e => e === 'model' && loadData()}>
             <TabsList className="">
-                <TabsTrigger value="account" className="roundedrounded-xl">{t('model.modelManagement')}</TabsTrigger>
-                <TabsTrigger disabled value="password">{t('model.modelFineTune')}</TabsTrigger>
+                <TabsTrigger value="model" className="roundedrounded-xl">{t('model.modelManagement')}</TabsTrigger>
+                <TabsTrigger value="finetune" disabled={user.role !== 'admin'}>{t('model.modelFineTune')}</TabsTrigger>
             </TabsList>
-            <TabsContent value="account">
+            <TabsContent value="model">
                 <div className="flex justify-end gap-4">
                     <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
-                    {user.role === 'admin' && <Button className="h-8 rounded-full" onClick={() => setShowCpu(true)}>{t('model.gpuResourceUsage')}</Button>}
-                    {user.role === 'admin' && appConfig.isDev && <Button className="h-8 rounded-full" onClick={() => setRTOpen(true)}>{t('model.rtServiceManagement')}</Button>}
+                    {user.role === 'admin' && <Button className="h-8 rounded-full" onClick={() => setShowCpu({ type: 'model', show: true })}>{t('model.gpuResourceUsage')}</Button>}
+                    {user.role === 'admin' && appConfig.isDev && <Button className="h-8 rounded-full" onClick={() => setRTOpen(true)}>{t('finetune.rtServiceManagement')}</Button>}
                 </div>
                 <Table>
                     <TableCaption>{t('model.modelCollectionCaption')}.</TableCaption>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-[200px]">{t('model.machine')}</TableHead>
+                            <TableHead className="w-[200px]">{t('model.machineName')}</TableHead>
                             <TableHead>{t('model.modelName')}</TableHead>
                             <TableHead>{t('model.serviceAddress')}</TableHead>
                             <TableHead>{t('model.status')}</TableHead>
@@ -250,17 +254,20 @@ export default function FileLibPage() {
                 </Table>
                 {/* 分页 */}
             </TabsContent>
-            <TabsContent value="password"></TabsContent>
+            <TabsContent value="finetune">
+                {/* 微调 */}
+                <Finetune rtClick={() => setRTOpen(true)} gpuClick={() => setShowCpu({ type: 'finetune', show: true })}></Finetune>
+            </TabsContent>
         </Tabs>
         {/* 编辑配置 */}
         <ConfigModal data={currentModel} readonly={readOnlyConfig || !appConfig.isDev} open={open} setOpen={setOpen} onSave={handleSave}></ConfigModal>
         {/* CPU使用情况 */}
-        <dialog className={`modal bg-blur-shared ${showCpu ? 'modal-open' : 'modal-close'}`} onClick={() => setShowCpu(false)}>
+        <dialog className={`modal bg-blur-shared ${showCpu.show ? 'modal-open' : 'modal-close'}`} onClick={() => setShowCpu({ ...showCpu, show: false })}>
             <form method="dialog" className="max-w-[80%] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={e => e.stopPropagation()}>
-                <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={() => setShowCpu(false)}>✕</button>
+                <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={() => setShowCpu({ ...showCpu, show: false })}>✕</button>
                 <h3 className="font-bold text-lg mb-4">{t('model.gpuResourceUsageTitle')}</h3>
                 <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
-                    {showCpu && <CpuDetail />}
+                    {showCpu.show && <CpuDetail type={showCpu.type} />}
                 </div>
             </form>
         </dialog>

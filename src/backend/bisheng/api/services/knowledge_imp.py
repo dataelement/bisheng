@@ -130,7 +130,7 @@ def delete_knowledge_file_in_minio(knowledge_id: int):
                 minio_client.delete_minio(file[1])
 
 
-def delete_knowledge_file_batch(file_ids: List[int]):
+def delete_knowledge_file_vectors(file_ids: List[int]):
     """ 删除知识文件信息 """
     with session_getter() as session:
         knowledge_files = session.exec(
@@ -168,10 +168,6 @@ def delete_knowledge_file_batch(file_ids: List[int]):
                         'metadata.file_id': file.id
                     }})
                 logger.info(f'act=delete_es file_id={file.id} res={res}')
-
-        with session_getter() as session:
-            session.delete(file)
-            session.commit()
     return True
 
 

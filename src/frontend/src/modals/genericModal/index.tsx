@@ -41,7 +41,7 @@ export default function GenericModal({
   modalTitle: string;
   type: number;
   nodeClass?: APIClassType;
-  setNodeClass?: (Class: APIClassType) => void;
+  setNodeClass?: (Class: APIClassType, val: any) => void;
 }) {
   const [myButtonText] = useState(buttonText);
   const [myModalTitle] = useState(modalTitle);
@@ -136,7 +136,7 @@ export default function GenericModal({
     postValidatePrompt(field_name, inputValue, nodeClass)
       .then((apiReturn) => { 
         if (apiReturn) {
-          setNodeClass(apiReturn?.frontend_node);
+          setNodeClass(apiReturn?.frontend_node, inputValue);
           let inputVariables = apiReturn.input_variables ?? [];
           if (inputVariables && inputVariables.length === 0) {
             setIsEdit(true);

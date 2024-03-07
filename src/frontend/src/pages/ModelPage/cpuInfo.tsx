@@ -8,17 +8,19 @@ import {
     TableHeader,
     TableRow
 } from "../../components/ui/table";
-import { GPUlistApi } from "../../controllers/API";
+import { GPUlistApi, GPUlistByFinetuneApi } from "../../controllers/API";
 
-export const CpuDetail = () => {
+export const CpuDetail = ({ type }) => {
     const { t } = useTranslation()
 
     const [datalist, setDatalist] = useState([])
 
     const loadData = () => {
-        GPUlistApi().then(res => {
-            setDatalist(res.list.flat())
-        })
+        type === 'finetune'
+            ? GPUlistByFinetuneApi().then(setDatalist)
+            : GPUlistApi().then(res => {
+                setDatalist(res.list.flat())
+            })
     }
 
     useEffect(loadData, [])
@@ -33,7 +35,7 @@ export const CpuDetail = () => {
     return <Table className="w-full">
         <TableHeader>
             <TableRow>
-                <TableHead className="w-[200px]">{t('model.machine')}</TableHead>
+                <TableHead className="w-[200px]">{t('model.machineName')}</TableHead>
                 <TableHead>{t('model.gpuNumber')}</TableHead>
                 <TableHead>{t('model.gpuID')}</TableHead>
                 <TableHead>{t('model.totalMemory')}</TableHead>

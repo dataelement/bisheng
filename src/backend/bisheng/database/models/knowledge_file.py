@@ -1,10 +1,11 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, String, text
-from sqlmodel import Field, func
+from sqlmodel import Field, delete, func
+
 
 
 class KnowledgeFileBase(SQLModelSerializable):
@@ -59,3 +60,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
             ).filter(
                 KnowledgeFile.knowledge_id == knowledge_id
             ).scalar()
+          
+    @classmethod
+    def delete_batch(cls, file_ids: List[int]) -> bool:
+        with session_getter() as session:
+            session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
+            session.commit()
+            return True
+

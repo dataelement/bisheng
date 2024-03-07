@@ -13,43 +13,30 @@ import { userContext } from "../../../contexts/userContext";
 import { disableUserApi, getUsersApi } from "../../../controllers/API/user";
 import UserRoleModal from "./UserRoleModal";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { useTable } from "../../../util/hook";
+import { Input } from "../../../components/ui/input";
+import PaginationComponent from "../../../components/PaginationComponent";
+import { Search } from "lucide-react";
 
 export default function Users(params) {
-    const [users, setUsers] = useState([])
     const { user } = useContext(userContext);
     const { t } = useTranslation()
 
-    // 分页
-    const [page, setPage] = useState(1)
-    const [pageEnd, setPageEnd] = useState(false)
-    const pages = useRef(0)
-    const loadPage = (_page) => {
-        // setLoading(true)
-        const pageSize = 20
-        setPage(_page)
-        getUsersApi('', _page, pageSize).then(res => {
-            const { data, total } = res
-            pages.current = Math.ceil(total / pageSize)
-            setPageEnd(data.length < pageSize)
-            setUsers(data)
-            // setLoading(false)
-        })
-    }
-    useEffect(() => {
-        loadPage(1)
-    }, [])
+    const { page, pageSize, data: users, total, loading, setPage, search, reload } = useTable((param) =>
+        getUsersApi(param.keyword, param.page, param.pageSize)
+    )
 
     // 禁用
     const { delShow, idRef, close, delConfim } = useDelete()
     const handleDelete = () => {
         captureAndAlertRequestErrorHoc(disableUserApi(idRef.current.user_id, 1).then(res => {
-            loadPage(page)
+            reload()
             close()
         }))
     }
     const handleEnableUser = (user) => {
         captureAndAlertRequestErrorHoc(disableUserApi(user.user_id, 0).then(res => {
-            loadPage(page)
+            reload()
             close()
         }))
     }
@@ -58,10 +45,16 @@ export default function Users(params) {
     const [roleOpenId, setRoleOpenId] = useState(null)
     const handleRoleChange = () => {
         setRoleOpenId(null)
-        loadPage(page)
+        reload()
     }
 
     return <>
+        <div className="flex justify-end">
+            <div className="w-[180px] relative">
+                <Input placeholder={t('system.username')} onChange={(e) => search(e.target.value)}></Input>
+                <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+            </div>
+        </div>
         <Table>
             {/* <TableCaption>用户列表.</TableCaption> */}
             <TableHeader>
@@ -92,9 +85,13 @@ export default function Users(params) {
         </Table>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="join grid grid-cols-2 w-[200px] mx-auto">
-            <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>{t('previousPage')}</button>
-            <button disabled={page >= pages.current || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>{t('nextPage')}</button>
+        <div className="flex justify-center">
+            <PaginationComponent
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onChange={(newPage) => setPage(newPage)}
+            />
         </div>
 
         {/* 禁用确认 */}
