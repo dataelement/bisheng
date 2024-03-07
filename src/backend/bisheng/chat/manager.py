@@ -244,7 +244,7 @@ class ChatManager:
                             future.result()
                             logger.debug('task_complete key={}', future_key)
                         except Exception as e:
-                            logger.exception(e)
+                            logger.exception('feature_key={} {}', future_key, e)
                             erro_resp = ChatResponse(**base_param)
                             context = context_dict.get(future_key)
                             if context.get('status') == 'init':
@@ -253,7 +253,7 @@ class ChatManager:
                                 erro_resp.intermediate_steps = f'File is parsed fail. error={str(e)}'
                             else:
                                 erro_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
-                            context['status'] == 'init'
+                            context['status'] = 'init'
                             await self.send_json(context.get('flow_id'), context.get('chat_id'),
                                                  erro_resp)
                             erro_resp.type = 'close'

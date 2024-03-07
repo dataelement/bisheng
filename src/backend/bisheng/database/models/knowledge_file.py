@@ -4,7 +4,8 @@ from typing import List, Optional
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, String, text
-from sqlmodel import Field, delete
+from sqlmodel import Field, delete, func
+
 
 
 class KnowledgeFileBase(SQLModelSerializable):
@@ -40,8 +41,30 @@ class KnowledgeFileCreate(KnowledgeFileBase):
 class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
+    def get_file_simple_by_knowledge_id(cls, knowledge_id: int, page: int, page_size: int):
+        offset = (page - 1) * page_size
+        with session_getter() as session:
+            return session.query(
+                KnowledgeFile.id, KnowledgeFile.object_name
+            ).filter(
+                KnowledgeFile.knowledge_id == knowledge_id
+            ).order_by(
+                KnowledgeFile.id.asc()
+            ).offset(offset).limit(page_size).all()
+
+    @classmethod
+    def count_file_by_knowledge_id(cls, knowledge_id: int):
+        with session_getter() as session:
+            return session.query(
+                func.count(KnowledgeFile.id)
+            ).filter(
+                KnowledgeFile.knowledge_id == knowledge_id
+            ).scalar()
+          
+    @classmethod
     def delete_batch(cls, file_ids: List[int]) -> bool:
         with session_getter() as session:
             session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
             session.commit()
             return True
+
