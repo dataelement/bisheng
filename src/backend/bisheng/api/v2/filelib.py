@@ -121,6 +121,22 @@ def delete_knowledge_api(*, knowledge_id: int):
         return resp_500(message=f'错误 e={str(e)}')
 
 
+# 清空知识库的所有文件内容
+@router.delete('/clear/{knowledge_id}', status_code=200)
+def clear_knowledge_files(*, knowledge_id: int):
+    """ 删除知识库信息. """
+    with session_getter() as session:
+        knowledge = session.get(Knowledge, knowledge_id)
+    if not knowledge:
+        raise HTTPException(status_code=404, detail='knowledge not found')
+    try:
+        delete_knowledge_by(knowledge, only_clear=True)
+        return {'message': 'knowledge deleted successfully'}
+    except Exception as e:
+        logger.exception(e)
+        return resp_500(message=f'错误 e={str(e)}')
+
+
 @router.post('/file/{knowledge_id}',
              response_model=UnifiedResponseModel[KnowledgeFileRead],
              status_code=200)
