@@ -19,8 +19,10 @@ import {
 } from "../../utils";
 import ParameterComponent from "./components/parameterComponent";
 
-export default function GenericNode({ data, selected }: {
+export default function GenericNode({ data, xPos, yPos, selected }: {
   data: NodeDataType;
+  xPos: number;
+  yPos: number;
   selected: boolean;
 }) {
   const { id: flowId } = useParams();
@@ -69,18 +71,24 @@ export default function GenericNode({ data, selected }: {
   }
 
   const [_, fouceUpdateNode] = useState(false)
+  const isGroup = !!data.node?.flow;
 
   return (
     <>
       <NodeToolbar>
         <NodeToolbarComponent
+          position={{ x: xPos, y: yPos }}
           data={data}
           openPopUp={openPopUp}
           deleteNode={deleteNode}
         ></NodeToolbarComponent>
       </NodeToolbar>
 
-      <div className={classNames("border-4 generic-node-div", selected ? "border-ring" : "")} style={{ borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown }}>
+      <div className={classNames("border-4 generic-node-div relative", selected ? "border-ring" : "")} style={{ borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown }}>
+        {isGroup && <div className={`generic-node-div absolute border-2 w-full h-full left-3 top-3 z-[-1] ${selected ? "border-ring" : ""}`} style={{ borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown }}>
+          <div className={`generic-node-div absolute border-4 w-full h-full left-3 top-3 z-[-1] bg-transparent ${selected ? "border-ring" : ""}`} style={{ borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown }}>
+          </div>
+        </div>}
         <div className="generic-node-div-title">
           {/* title */}
           <div className="generic-node-title-arrangement">
