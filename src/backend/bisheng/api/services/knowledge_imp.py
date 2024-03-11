@@ -421,3 +421,23 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
         result['status'] = 3
         result['remark'] = str(e)[:500]
     return result
+
+
+def delete_vector(collection_name: str, partition_key: str):
+    embeddings = FakeEmbedding()
+    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+    if isinstance(vectore_client, Milvus) and vectore_client.col:
+        if partition_key:
+            pass
+        else:
+            res = vectore_client.col.drop(timeout=1)
+            logger.info('act=delete_milvus col={} res={}', collection_name, res)
+
+
+def delete_es(index_name: str):
+    embeddings = FakeEmbedding()
+    esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+
+    if esvectore_client:
+        res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
+        logger.info(f'act=delete_es index={index_name} res={res}')

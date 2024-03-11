@@ -1,14 +1,16 @@
 import hashlib
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, delete_knowledge_by,
-                                                delete_knowledge_file_batch, text_knowledge)
+from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, delete_es,
+                                                delete_knowledge_by, delete_knowledge_file_batch,
+                                                delete_vector, text_knowledge)
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeRead,
                                                KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
+from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.settings import settings
@@ -362,3 +364,34 @@ async def post_string_chunks(*, document: ChunkInput):
     if db_file['status'] == 3:
         return resp_500(data=db_file, message='文件解析失败')
     return resp_200(db_file)
+
+
+@router.post('/chunk_clear', status_code=200)
+async def clear_tmp_chunks_data(body: Dict):
+    # 通过接口删除milvus、es 数据
+    collection_name = body.get('collection_name')
+    index_name = body.get('index_name')
+    flow_id = body.get('flow_id')
+    chat_id = body.get('chat_id')
+
+    if collection_name:
+        delete_vector(collection_name, None)
+
+    if index_name:
+        delete_es(index_name=index_name)
+
+    if flow_id and not chat_id:
+        # 清理技能下的临时文件
+        flow_id = flow_id.replace('-', '')
+        collection_name = f'tmp_{flow_id}_1'
+        delete_es(collection_name)
+        delete_vector(collection_name, None)
+    if chat_id:
+        #  查询自动生成的
+        message = ChatMessageDao.get_latest_message_by_chatid(chat_id)
+        if message:
+            collection_name = f'tmp_{message.flow_id}_{chat_id}'
+            delete_es(collection_name)
+            delete_vector(collection_name, None)
+
+    return resp_200()

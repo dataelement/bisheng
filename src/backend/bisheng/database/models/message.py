@@ -2,10 +2,12 @@ from datetime import datetime
 from typing import Dict, Optional
 from uuid import UUID
 
+from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import JSON, Column, DateTime, String, Text, text
-from sqlmodel import Field
+from sqlmodel import Field, delete, select
 
 
 class MessageBase(SQLModelSerializable):
@@ -52,3 +54,30 @@ class ChatMessageQuery(BaseModel):
 
 class ChatMessageCreate(MessageBase):
     pass
+
+
+class ChatMessageDao(MessageBase):
+
+    @classmethod
+    def get_latest_message_by_chatid(cls, chat_id: str):
+        with session_getter() as session:
+            res = session.exec(
+                select(ChatMessage).where(ChatMessage.chat_id == chat_id).limit(1)).all()
+            if res:
+                return res[0]
+            else:
+                return None
+
+    @classmethod
+    def delete_by_user_chat_id(cls, user_id: int, chat_id: str):
+        if user_id is None or chat_id is None:
+            logger.info('delete_param_error user_id={} chat_id={}', user_id, chat_id)
+            return False
+
+        statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id,
+                                              ChatMessage.user_id == user_id)
+
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+        return True
