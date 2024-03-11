@@ -175,10 +175,11 @@ class CustomComponent(Component):
         return await build_sorted_vertices(graph_data, self.user_id)
 
     def list_flows(self, *, get_session: Optional[Callable] = None) -> List[Flow]:
+        print('-------', self._user_id)
         if not self._user_id:
             raise ValueError('Session is invalid')
         try:
-            return FlowDao.get_flow_by_user(int(self.user_id))
+            return FlowDao.get_flow_by_user(int(self._user_id))
         except Exception as e:
             raise ValueError('Session is invalid') from e
 
@@ -193,7 +194,7 @@ class CustomComponent(Component):
         if flow_id:
             flow = FlowDao.get_flow_by_id(flow_id)
         elif flow_name:
-            flow = FlowDao.get_flow_by_name(int(self.user_id), flow_name)
+            flow = FlowDao.get_flow_by_name(int(self._user_id), flow_name)
         else:
             raise ValueError('Either flow_name or flow_id must be provided')
 

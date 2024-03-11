@@ -2,8 +2,13 @@ import json
 from typing import List
 
 from bisheng.api.services.component import ComponentService
-from bisheng.api.v1.schemas import CreateComponentReq, UnifiedResponseModel
+from bisheng.api.utils import update_frontend_node_with_template_values
+from bisheng.api.v1.schemas import (CreateComponentReq, CustomComponentCode, UnifiedResponseModel,
+                                    resp_200, resp_500)
 from bisheng.database.models.component import Component
+from bisheng.interface.custom import CustomComponent
+from bisheng.interface.custom.directory_reader import DirectoryReader
+from bisheng.interface.custom.utils import build_custom_component_template
 from fastapi import APIRouter, Body, Depends
 from fastapi_jwt_auth import AuthJWT
 
@@ -49,3 +54,53 @@ def delete_component(*,
     current_user = json.loads(Authorize.get_jwt_subject())
 
     return ComponentService.delete_component(current_user.get('user_id'), name)
+
+
+@router.post('/custom_component', response_model=UnifiedResponseModel[Component])
+async def custom_component(
+        raw_code: CustomComponentCode,
+        Authorize: AuthJWT = Depends(),
+):
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+
+    component = CustomComponent(code=raw_code.code)
+
+    built_frontend_node = build_custom_component_template(component, user_id=current_user.get('user_id'))
+
+    built_frontend_node = update_frontend_node_with_template_values(built_frontend_node, raw_code.frontend_node)
+    return resp_200(data=built_frontend_node)
+
+
+@router.post('/custom_component/reload', response_model=UnifiedResponseModel[Component])
+async def reload_custom_component(path: str, Authorize: AuthJWT = Depends()):
+    from bisheng.interface.custom.utils import build_custom_component_template
+
+    try:
+        reader = DirectoryReader('')
+        valid, content = reader.process_file(path)
+        if not valid:
+            raise ValueError(content)
+        Authorize.jwt_required()
+        current_user = json.loads(Authorize.get_jwt_subject())
+
+        extractor = CustomComponent(code=content)
+        return resp_200(data=build_custom_component_template(extractor, user_id=current_user.get('user_id')))
+    except Exception as exc:
+        print(exc)
+        return resp_500(message=str(exc))
+
+
+@router.post('/custom_component/update', response_model=UnifiedResponseModel[Component])
+async def custom_component_update(
+        raw_code: CustomComponentCode,
+        Authorize: AuthJWT = Depends(),
+):
+    component = CustomComponent(code=raw_code.code)
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+
+    component_node = build_custom_component_template(component, user_id=current_user.get('user_id'),
+                                                     update_field=raw_code.field)
+    # Update the field
+    return resp_200(data=component_node)
