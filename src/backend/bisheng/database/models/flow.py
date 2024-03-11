@@ -25,7 +25,7 @@ class FlowBase(SQLModelSerializable):
                          onupdate=text('CURRENT_TIMESTAMP')))
     create_time: Optional[datetime] = Field(default=(datetime.now()).strftime('%Y-%m-%d %H:%M:%S'),
                                             index=True)
-    guide_word: Optional[str] = Field(sa_column=Column(String(length=1000)))
+    guide_word: Optional[str] = Field(sa_column=Column(String(length=10000)))
 
     @validator('data')
     def validate_json(v):
