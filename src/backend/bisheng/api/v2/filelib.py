@@ -390,7 +390,7 @@ async def clear_tmp_chunks_data(body: Dict):
         #  查询自动生成的
         message = ChatMessageDao.get_latest_message_by_chatid(chat_id)
         if message:
-            collection_name = f'tmp_{message.flow_id}_{chat_id}'
+            collection_name = f'tmp_{message.flow_id.hex}_{chat_id}'
             delete_es(collection_name)
             delete_vector(collection_name, None)
 
