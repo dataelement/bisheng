@@ -90,7 +90,7 @@ export default function L2ParameterComponent({
                         id={data.node.template[name].collection_id ?? ""}
                         value={data.node.template[name].value ?? ""}
                         onSelect={handleOnNewLibValue}
-                        onChange={() => {}}
+                        onChange={() => { }}
                     />
                 ) : (
                     <InputComponent
@@ -169,13 +169,11 @@ export default function L2ParameterComponent({
                     setNodeClass={(nodeClass) => {
                         data.node = nodeClass;
                         if (reactFlowInstance) {
-                            cleanEdges({
-                                flow: {
-                                    edges: reactFlowInstance.getEdges(),
-                                    nodes: reactFlowInstance.getNodes(),
-                                },
-                                updateEdge: (edge) => reactFlowInstance.setEdges(edge),
-                            });
+                            const edges = cleanEdges(
+                                reactFlowInstance.getNodes(),
+                                reactFlowInstance.getEdges()
+                            )
+                            reactFlowInstance.setEdges(edges)
                         }
                     }}
                     nodeClass={data.node}

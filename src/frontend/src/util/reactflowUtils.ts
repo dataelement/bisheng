@@ -46,6 +46,7 @@ export const LANGFLOW_SUPPORTED_TYPES = new Set([
   "NestedDict",
 ]);
 
+// edges (线)文档
 export function cleanEdges(nodes: Node[], edges: Edge[]) {
   let newEdges = cloneDeep(edges);
   edges.forEach((edge) => {
@@ -60,28 +61,26 @@ export function cleanEdges(nodes: Node[], edges: Edge[]) {
     const sourceHandle = edge.sourceHandle; //right
     const targetHandle = edge.targetHandle; //left
     if (targetHandle) {
-      const targetHandleObject: targetHandleType = scapeJSONParse(targetHandle);
-      const field = targetHandleObject.fieldName;
-      const id: targetHandleType = {
-        type: targetNode.data.node!.template[field]?.type,
-        fieldName: field,
-        id: targetNode.data.id,
-        inputTypes: targetNode.data.node!.template[field]?.input_types,
-      };
-      if (targetNode.data.node!.template[field]?.proxy) {
-        id.proxy = targetNode.data.node!.template[field]?.proxy;
-      }
-      if (scapedJSONStringfy(id) !== targetHandle) {
+      const field = targetHandle.split('|')[1]
+      const targetNodeTargetHandle =
+        targetNode.data.node!.template[field]?.type + '|' +
+        field + '|' +
+        targetNode.data.id
+
+      // if (targetNode.data.node!.template[field]?.proxy) {
+      //   id.proxy = targetNode.data.node!.template[field]?.proxy;
+      // }
+      if (targetNodeTargetHandle !== targetHandle) {
         newEdges = newEdges.filter((e) => e.id !== edge.id);
       }
     }
     if (sourceHandle) {
-      const id: sourceHandleType = {
-        id: sourceNode.data.id,
-        baseClasses: sourceNode.data.node!.base_classes,
-        dataType: sourceNode.data.type,
-      };
-      if (scapedJSONStringfy(id) !== sourceHandle) {
+      const sourceNodeSourceHandle =
+        sourceNode.data.type + '|' +
+        sourceNode.data.id + '|' +
+        sourceNode.data.node!.base_classes.join('|')
+
+      if (sourceNodeSourceHandle !== sourceHandle) {
         newEdges = newEdges.filter((e) => e.id !== edge.id);
       }
     }
@@ -97,6 +96,7 @@ export function unselectAllNodes({ updateNodes, data }: unselectAllNodesType) {
   updateNodes(newNodes!);
 }
 
+// utils中的新方法
 export function isValidConnection(
   { source, target, sourceHandle, targetHandle }: Connection,
   nodes: Node[],
@@ -178,7 +178,7 @@ export const processDataFromFlow = (flow: FlowType, refreshIds = true) => {
   }
   return data;
 };
-
+// utils中的新方法
 export function updateIds(newFlow: ReactFlowJsonObject) {
   let idsMap = {};
 
@@ -507,6 +507,7 @@ export function scapeJSONParse(json: string): any {
 }
 
 // this function receives an array of edges and return true if any of the handles are not a json string
+// 数据结构转新版本
 export function checkOldEdgesHandles(edges: Edge[]): boolean {
   return edges.some(
     (edge) =>
@@ -931,6 +932,7 @@ function updateEdgesIds(edges: Edge[], idsMap: { [key: string]: string }) {
   });
 }
 
+// （新）
 export function processFlowEdges(flow: FlowType) {
   if (!flow.data || !flow.data.edges) return;
   if (checkOldEdgesHandles(flow.data.edges)) {
