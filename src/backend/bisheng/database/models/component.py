@@ -4,7 +4,6 @@ from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from pydantic import validator
 from sqlmodel import JSON, Column, DateTime, Field, select, text
 
 
@@ -24,21 +23,6 @@ class ComponentBase(SQLModelSerializable):
 class Component(ComponentBase, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
     data: Optional[Any] = Field(default=None, sa_column=Column(JSON))
-
-    @validator('data')
-    def validate_json(cls, v):
-        # dict_keys(['description', 'name', 'id', 'data'])
-        if not v:
-            return v
-        if not isinstance(v, dict):
-            raise ValueError('Flow must be a valid JSON')
-
-        # data must contain nodes and edges
-        if 'nodes' not in v.keys():
-            raise ValueError('Flow must have nodes')
-        if 'edges' not in v.keys():
-            raise ValueError('Flow must have edges')
-        return v
 
 
 class ComponentDao(ComponentBase):
