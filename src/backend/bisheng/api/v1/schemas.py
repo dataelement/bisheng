@@ -204,6 +204,7 @@ class CreateComponentReq(BaseModel):
     name: str = Field(max_length=50, description='组件名称')
     data: Any = Field(default='', description='组件数据')
     description: Optional[str] = Field(default='', description='组件描述')
+    version: Optional[str] = Field(default='', description='组件版本')
 
 
 class CustomComponentCode(BaseModel):

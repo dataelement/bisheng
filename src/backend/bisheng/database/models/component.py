@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
@@ -12,6 +12,7 @@ class ComponentBase(SQLModelSerializable):
     name: str = Field(max_length=50, index=True, description='保存的组件名称')
     description: Optional[str] = Field(default='', description='组件描述')
     data: Optional[Any] = Field(default=None, description='组件数据')
+    version: str = Field(default='', index=True, description='组件版本')
     user_id: int = Field(default=None, index=True, description='创建人ID')
     user_name: str = Field(default=None, description='创建人姓名')
     create_time: Optional[datetime] = Field(sa_column=Column(
@@ -22,7 +23,7 @@ class ComponentBase(SQLModelSerializable):
 
 class Component(ComponentBase, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
-    data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    data: Optional[Any] = Field(default=None, sa_column=Column(JSON))
 
     @validator('data')
     def validate_json(cls, v):
