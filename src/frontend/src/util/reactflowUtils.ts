@@ -619,28 +619,25 @@ export function reconnectEdges(groupNode: NodeType, excludedEdges: Edge[]) {
   const { nodes, edges } = groupNode.data.node!.flow!.data!;
   const lastNode = findLastNode(groupNode.data.node!.flow!.data!);
   newEdges.forEach((edge) => {
+    // 选中的 node 有链接其他 node
     if (lastNode && edge.source === lastNode.id) {
       edge.source = groupNode.id;
-      let newSourceHandle: sourceHandleType = scapeJSONParse(
-        edge.sourceHandle!
-      );
-      newSourceHandle.id = groupNode.id;
-      edge.sourceHandle = scapedJSONStringfy(newSourceHandle);
-      edge.data.sourceHandle = newSourceHandle;
+      const sourceHandleArr = edge.sourceHandle.split('|')
+      sourceHandleArr[1] = groupNode.id
+      edge.sourceHandle = sourceHandleArr.join('|');
+      // edge.data.sourceHandle = newSourceHandle;
     }
+    // 选中的 node 有被链接的 node
     if (nodes.some((node) => node.id === edge.target)) {
       const targetNode = nodes.find((node) => node.id === edge.target)!;
-      console.log("targetNode", targetNode);
-      const targetHandle: targetHandleType = scapeJSONParse(edge.targetHandle!);
-      console.log("targetHandle", targetHandle);
-      const proxy = { id: targetNode.id, field: targetHandle.fieldName };
-      let newTargetHandle: targetHandleType = cloneDeep(targetHandle);
-      newTargetHandle.id = groupNode.id;
-      newTargetHandle.proxy = proxy;
+      const targetHandleArr = edge.targetHandle.split('|')
+      targetHandleArr[targetHandleArr.length - 1] = groupNode.id;
+      targetHandleArr[1] = targetHandleArr[1] + "_" + targetNode.id;
+      // const proxy = { id: targetNode.id, field: targetHandle.fieldName };
+      // newTargetHandle.proxy = proxy;
       edge.target = groupNode.id;
-      newTargetHandle.fieldName = targetHandle.fieldName + "_" + targetNode.id;
-      edge.targetHandle = scapedJSONStringfy(newTargetHandle);
-      edge.data.targetHandle = newTargetHandle;
+      edge.targetHandle = targetHandleArr.join('|');
+      // edge.data.targetHandle = newTargetHandle;
     }
   });
   return newEdges;
@@ -956,8 +953,6 @@ export function expandGroupNode(
   setNodes: (update: Node[] | ((oldState: Node[]) => Node[])) => void,
   setEdges: (update: Edge[] | ((oldState: Edge[]) => Edge[])) => void
 ) {
-  console.log(123);
-
   // const idsMap = updateIds(flow!.data!);
   // updateProxyIdsOnTemplate(template, idsMap);
   let flowEdges = edges;
@@ -968,42 +963,53 @@ export function expandGroupNode(
   let updatedEdges: Edge[] = [];
   flowEdges.forEach((edge) => {
     let newEdge = cloneDeep(edge);
+    // group 组件输入线
     if (newEdge.target === id) {
-      const targetHandle: targetHandleType = newEdge.data.targetHandle;
-      if (targetHandle.proxy) {
-        let type = targetHandle.type;
-        let field = targetHandle.proxy.field;
-        let proxyId = targetHandle.proxy.id;
-        let inputTypes = targetHandle.inputTypes;
-        let node: NodeType = gNodes.find((n) => n.id === proxyId)!;
-        if (node) {
-          newEdge.target = proxyId;
-          let newTargetHandle: targetHandleType = {
-            fieldName: field,
-            type,
-            id: proxyId,
-            inputTypes: inputTypes,
-          };
-          if (node.data.node?.flow) {
-            newTargetHandle.proxy = {
-              field: node.data.node.template[field].proxy?.field!,
-              id: node.data.node.template[field].proxy?.id!,
-            };
-          }
-          newEdge.data.targetHandle = newTargetHandle;
-          newEdge.targetHandle = scapedJSONStringfy(newTargetHandle);
-        }
-      }
+      const targetHandleArr = newEdge.targetHandle.split("|");
+      const _index = targetHandleArr[1].lastIndexOf('_');
+      const tempField = targetHandleArr[1].slice(0, _index)
+      const nodeId = targetHandleArr[1].slice(_index + 1)
+      targetHandleArr[1] = tempField
+      targetHandleArr[2] = nodeId
+
+      newEdge.target = nodeId
+      newEdge.targetHandle = targetHandleArr.join('|')
+
+      // const targetHandle: targetHandleType = newEdge.targetHandle;
+      // if (targetHandle.proxy) {
+      //   let type = targetHandle.type;
+      //   let field = targetHandle.proxy.field;
+      //   let proxyId = targetHandle.proxy.id;
+      //   let inputTypes = targetHandle.inputTypes;
+      //   let node: NodeType = gNodes.find((n) => n.id === proxyId)!;
+      //   if (node) {
+      //     newEdge.target = proxyId;
+      //     let newTargetHandle: targetHandleType = {
+      //       fieldName: field,
+      //       type,
+      //       id: proxyId,
+      //       inputTypes: inputTypes,
+      //     };
+      //     if (node.data.node?.flow) {
+      //       newTargetHandle.proxy = {
+      //         field: node.data.node.template[field].proxy?.field!,
+      //         id: node.data.node.template[field].proxy?.id!,
+      //       };
+      //     }
+      //     newEdge.data.targetHandle = newTargetHandle;
+      //     newEdge.targetHandle = scapedJSONStringfy(newTargetHandle);
+      //   }
+      // }
     }
+    // group 组件输出线
     if (newEdge.source === id) {
       const lastNode = cloneDeep(findLastNode(flow!.data!));
       newEdge.source = lastNode!.id;
-      let newSourceHandle: sourceHandleType = scapeJSONParse(
-        newEdge.sourceHandle!
-      );
-      newSourceHandle.id = lastNode!.id;
-      newEdge.data.sourceHandle = newSourceHandle;
-      newEdge.sourceHandle = scapedJSONStringfy(newSourceHandle);
+      const sourceHandleArr = newEdge.sourceHandle.split('|')
+      sourceHandleArr[1] = lastNode!.id;
+
+      // newEdge.data.sourceHandle = newSourceHandle;
+      newEdge.sourceHandle = sourceHandleArr.join('|');
     }
     if (edge.target === id || edge.source === id) {
       updatedEdges.push(newEdge);
@@ -1099,13 +1105,13 @@ export function createFlowComponent(
   return flowNode;
 }
 
-export function downloadNode(NodeFLow: FlowType) {
+export function downloadNode(NodeFLow: any) {
   const element = document.createElement("a");
   const file = new Blob([JSON.stringify(NodeFLow)], {
     type: "application/json",
   });
   element.href = URL.createObjectURL(file);
-  element.download = `${NodeFLow.name}.json`;
+  element.download = `${NodeFLow.name || NodeFLow.type}.json`;
   element.click();
 }
 

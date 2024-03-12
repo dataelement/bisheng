@@ -1,4 +1,5 @@
 import { Combine, Copy, Download, MoreHorizontal, SaveAll, Settings2, Trash2 } from "lucide-react";
+import cloneDeep from "lodash-es/cloneDeep";
 import { useContext, useState } from "react";
 import { useReactFlow } from "reactflow";
 import ShadTooltip from "../../../../components/ShadTooltipComponent";
@@ -7,7 +8,10 @@ import EditNodeModal from "../../../../modals/EditNodeModal";
 import { classNames } from "../../../../utils";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "../../../../components/ui/select-custom";
 import { undoRedoContext } from "../../../../contexts/undoRedoContext";
-import { expandGroupNode, updateFlowPosition } from "../../../../util/reactflowUtils";
+import { downloadNode, expandGroupNode, removeApiKeys, updateFlowPosition } from "../../../../util/reactflowUtils";
+import { userContext } from "../../../../contexts/userContext";
+import { bsconfirm } from "../../../../alerts/confirm";
+import { alertContext } from "../../../../contexts/alertContext";
 
 const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
   const [nodeLength, setNodeLength] = useState(
@@ -28,11 +32,18 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
 
   const { paste } = useContext(TabsContext);
   const reactFlowInstance = useReactFlow();
-
-  const isSaved = true
   const isGroup = !!data.node?.flow;
 
   const { takeSnapshot } = useContext(undoRedoContext);
+
+  const { setSuccessData } = useContext(alertContext);
+  const saveComponentSuccess = () => {
+    setSuccessData({
+      title: "已保存到本地组件/Saved",
+    });
+  }
+
+  const { addSavedComponent, checkComponentsName } = useContext(userContext)
   const handleSelectChange = (event) => {
     switch (event) {
       case "advanced":
@@ -43,11 +54,24 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
         // takeSnapshot();
         // setShowNode(data.showNode ?? true ? false : true);
         break;
-      case "Download":
-        // downloadNode(flowComponent!);
-        break;
-      case "SaveAll":
-        // saveComponent(cloneDeep(data), false);
+      case "saveCom":
+        if (checkComponentsName(data.type)) {
+          bsconfirm({
+            title: '组件已存在',
+            desc: `组件 ${data.type} 已存在，覆盖原有组件还是继续创新建组件？`,
+            okTxt: '覆盖',
+            canelTxt: '创建新组建',
+            onOk(next) {
+              addSavedComponent(cloneDeep(data), true).then(saveComponentSuccess)
+              next()
+            },
+            onCancel() {
+              addSavedComponent(cloneDeep(data), false).then(saveComponentSuccess)
+            }
+          })
+        } else {
+          addSavedComponent(cloneDeep(data), false, false).then(saveComponentSuccess)
+        }
         break;
       case "documentation":
         // if (data.node?.documentation) openInNewTab(data.node?.documentation);
@@ -65,9 +89,6 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
           reactFlowInstance.setNodes,
           reactFlowInstance.setEdges
         );
-        break;
-      case "override":
-        // setShowOverrideModal(true);
         break;
     }
   };
@@ -116,8 +137,8 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
               className={"-ml-px bg-background px-2 py-2 shadow-md ring-inset transition-all hover:bg-muted"}
               onClick={(event) => {
                 event.preventDefault();
-                // if (hasApiKey && hasStore && validApiKey)
-                //   setShowconfirmShare(true);
+                const cleanFlow = removeApiKeys({ data: { nodes: [{ data }] } } as any)
+                downloadNode(cleanFlow.data.nodes[0].data);
               }}
             >
               <Download className="h-4 w-4"></Download>
@@ -156,28 +177,12 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
                   </div>{" "}
                 </SelectItem>
               )}
-
-              {isSaved ? (
-                <SelectItem value={"override"}>
-                  <div className="flex" data-testid="save-button-modal">
-                    <SaveAll
-                      name="SaveAll"
-                      className="relative top-0.5 mr-2 h-4 w-4"
-                    />{" "}
-                    Save{" "}
-                  </div>{" "}
-                </SelectItem>
-              ) : (
-                <SelectItem value={"SaveAll"}>
-                  <div className="flex" data-testid="save-button-modal">
-                    <SaveAll
-                      name="SaveAll"
-                      className="relative top-0.5 mr-2 h-4 w-4"
-                    />{" "}
-                    Save{" "}
-                  </div>{" "}
-                </SelectItem>
-              )}
+              <SelectItem value={"saveCom"}>
+                <div className="flex" data-testid="save-button-modal">
+                  <SaveAll className="relative top-0.5 mr-2 h-4 w-4" />
+                  {" "}Save{" "}
+                </div>{" "}
+              </SelectItem>
               {isGroup && (
                 <SelectItem value="ungroup">
                   <div className="flex">

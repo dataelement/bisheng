@@ -799,6 +799,7 @@ const useBuild = (flow: FlowType, chatId: string) => {
         // Step 2: Use the session ID to establish an SSE connection using EventSource
         let validationResults = [];
         let finished = false;
+        let buildEnd = false
         const apiUrl = `/api/v1/build/stream/${flowId}?chat_id=${chatId}`;
         const eventSource = new EventSource(apiUrl);
 
@@ -811,6 +812,7 @@ const useBuild = (flow: FlowType, chatId: string) => {
             // if the event is the end of the stream, close the connection
             if (parsedData.end_of_stream) {
                 eventSource.close(); // 结束关闭链接
+                buildEnd = true
                 return;
             } else if (parsedData.log) {
                 // If the event is a log, log it
@@ -842,7 +844,7 @@ const useBuild = (flow: FlowType, chatId: string) => {
         // Step 3: Wait for the stream to finish
         while (!finished) {
             await new Promise((resolve) => setTimeout(resolve, 100));
-            finished = validationResults.length === flow.data.nodes.length;
+            finished = buildEnd // validationResults.length === flow.data.nodes.length;
         }
         // Step 4: Return true if all nodes are valid, false otherwise
         return validationResults.every((result) => result);
