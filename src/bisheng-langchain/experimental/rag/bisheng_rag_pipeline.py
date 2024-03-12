@@ -103,25 +103,25 @@ class BishengRagPipeline():
                 logger.info(f'split_docs: {len(split_docs)}')
 
                 if self.params['knowledge']['save_milvus']:
-                    collection_name = collection_name + '_milvus_' + self.params['knowledge']['suffix']
                     # 存入第一个文件的时候判断是否需要删除旧的collection
+                    drop_old = self.params['milvus']['drop_old'] if index == 0 else False
                     vector_store = Milvus.from_documents(
                         split_docs,
                         embedding=self.embeddings,
-                        collection_name=collection_name,
-                        drop_old=(self.params['milvus']['drop_old'] if index == 0 else False),
+                        collection_name=collection_name + '_milvus_' + self.params['knowledge']['suffix'],
+                        drop_old=drop_old,
                         connection_args={"host": self.params['milvus']['host'], "port": self.params['milvus']['port']}
                     )
 
                 if self.params['knowledge']['save_es']:
-                    index_name = collection_name + '_es_' + self.params['knowledge']['suffix']
                     # 存入第一个文件的时候判断是否需要删除旧的collection
+                    drop_old = self.params['elasticsearch']['drop_old'] if index == 0 else False
                     es_store = ElasticKeywordsSearch.from_documents(
                         split_docs, 
                         self.embeddings, 
                         elasticsearch_url=self.params['elasticsearch']['url'],
-                        index_name=index_name,
-                        drop_old=(self.params['elasticsearch']['drop_old'] if index == 0 else False),
+                        index_name=collection_name + '_es_' + self.params['knowledge']['suffix'],
+                        drop_old=drop_old,
                         ssl_verify=self.params['elasticsearch']['ssl_verify']
                     )
             
