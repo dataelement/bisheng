@@ -1,6 +1,7 @@
 import json
 from typing import List
 
+from bisheng import __version__
 from bisheng.api.services.component import ComponentService
 from bisheng.api.utils import update_frontend_node_with_template_values
 from bisheng.api.v1.schemas import (CreateComponentReq, CustomComponentCode, UnifiedResponseModel,
@@ -31,7 +32,10 @@ def save_components(*,
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-    component = Component(**data.dict(), user_id=current_user.get('user_id'), user_name=current_user.get('user_name'))
+    component = Component(**data.dict(),
+                          user_id=current_user.get('user_id'),
+                          user_name=current_user.get('user_name'),
+                          version=__version__)
     return ComponentService.save_component(component)
 
 
@@ -42,7 +46,10 @@ def update_component(*,
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-    component = Component(**data.dict(), user_id=current_user.get('user_id'), user_name=current_user.get('user_name'))
+    component = Component(**data.dict(),
+                          user_id=current_user.get('user_id'),
+                          user_name=current_user.get('user_name'),
+                          version=__version__)
     return ComponentService.update_component(component)
 
 
