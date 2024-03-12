@@ -4,9 +4,9 @@ import yaml
 import pandas as pd
 import httpx
 import argparse
+from collections import defaultdict
 from loguru import logger
 from tqdm import tqdm
-import time
 from langchain.vectorstores import Milvus
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from bisheng_langchain.retrievers import MixEsVectorRetriever
@@ -61,53 +61,69 @@ class BishengRagPipeline():
         if ('文件名' not in df.columns) or ('知识库名' not in df.columns):
             raise Exception(f'文件名 or 知识库名 not in {self.question_path}.')
         all_questions_info = df.to_dict('records')
-        filename2collectionname = dict()
+        collectionname2filename = defaultdict(set)
         for info in all_questions_info:
-            if info['文件名'] not in filename2collectionname:
-                filename2collectionname[info['文件名']] = info['知识库名']
-         
-        # knowledge params
+            # 存入set，去掉重复的文件名
+            collectionname2filename[info['知识库名']].add(info['文件名'])
+        
+         # knowledge params
         loader_params = self.params['knowledge']['loader']
         splitter_params = self.params['knowledge']['splitter']
         loader_object = import_by_type(_type='documentloaders', name=loader_params.pop('type'))
         splitter_object = import_by_type(_type='textsplitters', name=splitter_params.pop('type'))
 
-        for file_name in tqdm(filename2collectionname):
-            file_path = os.path.join(self.origin_file_path, file_name)
-            if not os.path.exists(file_path):
-                raise Exception(f'{file_path} not exists.')
+        for collection_name in tqdm(collectionname2filename):
+            all_file_paths = []
+            for file_name in collectionname2filename[collection_name]:
+                file_path = os.path.join(self.origin_file_path, file_name)
+                if not os.path.exists(file_path):
+                    raise Exception(f'{file_path} not exists.')
+                # file path可以是文件夹或者单个文件
+                if os.path.isdir(file_path):
+                    # 文件夹包含多个文件
+                    all_file_paths.extend([os.path.join(file_path, name) for name in os.listdir(file_path) if not name.startswith('.')])
+                else:
+                    # 单个文件
+                    all_file_paths.append(file_path)
+            
+            # 当前知识库需要存储的所有文件
+            for index, each_file_path in enumerate(all_file_paths):
+                logger.info(f'each_file_path: {each_file_path}')
+                loader = loader_object(file_name=os.path.basename(each_file_path), 
+                                       file_path=each_file_path, 
+                                       **loader_params)
+                documents = loader.load()
+                logger.info(f'documents: {len(documents)}')
 
-            loader = loader_object(file_name=file_name, file_path=file_path, **loader_params)
-            documents = loader.load()
-            logger.info(f'documents: {len(documents)}')
+                text_splitter = splitter_object(**splitter_params)
+                split_docs = text_splitter.split_documents(documents)
+                for split_doc in split_docs:
+                    if 'chunk_bboxes' in split_doc.metadata:
+                        split_doc.metadata.pop('chunk_bboxes')
+                logger.info(f'split_docs: {len(split_docs)}')
 
-            text_splitter = splitter_object(**splitter_params)
-            split_docs = text_splitter.split_documents(documents)
-            for split_doc in split_docs:
-                if 'chunk_bboxes' in split_doc.metadata:
-                    split_doc.metadata.pop('chunk_bboxes')
-            logger.info(f'split_docs: {len(split_docs)}')
+                if self.params['knowledge']['save_milvus']:
+                    collection_name = collection_name + '_milvus_' + self.params['knowledge']['suffix']
+                    # 存入第一个文件的时候判断是否需要删除旧的collection
+                    vector_store = Milvus.from_documents(
+                        split_docs,
+                        embedding=self.embeddings,
+                        collection_name=collection_name,
+                        drop_old=(self.params['milvus']['drop_old'] if index == 0 else False),
+                        connection_args={"host": self.params['milvus']['host'], "port": self.params['milvus']['port']}
+                    )
 
-            if self.params['knowledge']['save_milvus']:
-                collection_name = filename2collectionname[file_name] + '_milvus_' + self.params['knowledge']['suffix']
-                vector_store = Milvus.from_documents(
-                    split_docs,
-                    embedding=self.embeddings,
-                    collection_name=collection_name,
-                    drop_old=self.params['milvus']['drop_old'],
-                    connection_args={"host": self.params['milvus']['host'], "port": self.params['milvus']['port']}
-                )
-
-            if self.params['knowledge']['save_es']:
-                index_name = filename2collectionname[file_name] + '_es_' + self.params['knowledge']['suffix']
-                es_store = ElasticKeywordsSearch.from_documents(
-                    split_docs, 
-                    self.embeddings, 
-                    elasticsearch_url=self.params['elasticsearch']['url'],
-                    index_name=index_name,
-                    drop_old=self.params['elasticsearch']['drop_old'],
-                    ssl_verify=self.params['elasticsearch']['ssl_verify']
-                )
+                if self.params['knowledge']['save_es']:
+                    index_name = collection_name + '_es_' + self.params['knowledge']['suffix']
+                    # 存入第一个文件的时候判断是否需要删除旧的collection
+                    es_store = ElasticKeywordsSearch.from_documents(
+                        split_docs, 
+                        self.embeddings, 
+                        elasticsearch_url=self.params['elasticsearch']['url'],
+                        index_name=index_name,
+                        drop_old=(self.params['elasticsearch']['drop_old'] if index == 0 else False),
+                        ssl_verify=self.params['elasticsearch']['ssl_verify']
+                    )
             
     def retrieval_and_rerank(self, question, collection_name):
         """
@@ -172,9 +188,14 @@ class BishengRagPipeline():
         return docs
 
     def load_documents(self, file_name, max_content=100000):
+        """
+        max_content: max content len of llm
+        """
         file_path = os.path.join(self.origin_file_path, file_name)
         if not os.path.exists(file_path):
             raise Exception(f'{file_path} not exists.')
+        if os.path.isdir(file_path):
+            raise Exception(f'{file_path} is a directory.')
 
         loader_params = copy.deepcopy(self.params['knowledge']['loader'])
         loader_object = import_by_type(_type='documentloaders', name=loader_params.pop('type'))
@@ -204,7 +225,6 @@ class BishengRagPipeline():
         file2docs = dict()
         for questions_info in tqdm(all_questions_info):
             question = questions_info['问题']
-            file_type = questions_info['文件类型']
             file_name = questions_info['文件名']
             collection_name = questions_info['知识库名']
 
@@ -212,7 +232,7 @@ class BishengRagPipeline():
                 # retrieval and rerank
                 docs = self.retrieval_and_rerank(question, collection_name)
             else:
-                # load all documents
+                # load document
                 if file_name not in file2docs:
                     docs = self.load_documents(file_name)
                     file2docs[file_name] = docs
