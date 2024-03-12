@@ -187,8 +187,10 @@ def update_target_handle(
     Returns:
         dict: The updated edge.
     """
-    target_handle = new_edge['data']['targetHandle']
-    if target_handle.get('proxy'):
+    if not new_edge.get('data'):
+        return new_edge
+    target_handle = new_edge['data'].get('targetHandle')
+    if target_handle and target_handle.get('proxy'):
         proxy_id = target_handle['proxy']['id']
         if node := next((n for n in g_nodes if n['id'] == proxy_id), None):
             set_new_target_handle(proxy_id, new_edge, target_handle, node)
@@ -247,10 +249,10 @@ def update_source_handle(new_edge, g_nodes, g_edges):
     """
     last_node = copy.deepcopy(find_last_node(g_nodes, g_edges))
     new_edge['source'] = last_node['id']
+    if not new_edge.get('data'):
+        return new_edge
     new_source_handle = new_edge['data']['sourceHandle']
     new_source_handle['id'] = last_node['id']
-    if not new_edge.get('data'):
-        new_edge['data'] = {}
     new_edge['data']['sourceHandle'] = new_source_handle
     return new_edge
 
