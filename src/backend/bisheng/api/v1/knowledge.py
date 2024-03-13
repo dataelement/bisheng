@@ -11,7 +11,8 @@ from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, res
 from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
-from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
+from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
+                                                    KnowledgeFileRead)
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.interface.embeddings.custom import FakeEmbedding
@@ -122,7 +123,12 @@ async def process_knowledge(*,
         if repeat:
             # 用新文件覆盖老文件
             db_file = repeat[0]
-            MinioClient().upload_minio(db_file.object_name, file_path=file_path)
+            if db_file.object_name is None:
+                file_type = file_name.rsplit('.', 1)[-1]
+                obj_name = f'original/{db_file.id}.{file_type}'
+                db_file.object_name = obj_name
+                KnowledgeFileDao.update(db_file)
+            MinioClient().upload_minio(db_file.object_name, file_path=filepath)
             db_file.status = 3
             db_file.remark = 'repeat file'
             repeat = true
@@ -330,9 +336,6 @@ def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = De
     if db_files:
         minio = MinioClient()
         for file in db_files:
-            if file.remark == 'file repeat':
-                # 重复的文件不能重复解析
-                continue
             # file exist
             with session_getter() as session:
                 db_knowledge = session.get(Knowledge, file.knowledge_id)

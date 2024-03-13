@@ -85,9 +85,12 @@ class FrontendNode(BaseModel):
             format_func = self.format_field if self._format_template else None
             result['template'] = self.template.to_dict(format_func)
         name = result.pop('name')
-        result['display_name'] = result.get('display_name') if result.get('display_name') else self.name
-        result['base_classes'] = [base_class for base_class in result['base_classes'] if
-                                  base_class not in CLASSES_TO_REMOVE]
+        result['display_name'] = result.get('display_name') if result.get(
+            'display_name') else self.name
+        result['base_classes'] = [
+            base_class for base_class in result['base_classes']
+            if base_class not in CLASSES_TO_REMOVE
+        ]
 
         dump = {name: result}
         if not add_name:
@@ -170,7 +173,9 @@ class FrontendNode(BaseModel):
             field.value = value['default']
 
     @staticmethod
-    def handle_specific_field_values(field: TemplateField, key: str, name: Optional[str] = None) -> None:
+    def handle_specific_field_values(field: TemplateField,
+                                     key: str,
+                                     name: Optional[str] = None) -> None:
         """Handles specific field values for certain fields."""
         if key == 'headers':
             field.value = """{"Authorization": "Bearer <token>"}"""
@@ -178,7 +183,9 @@ class FrontendNode(BaseModel):
         FrontendNode._handle_api_key_specific_field_values(field, key, name)
 
     @staticmethod
-    def _handle_model_specific_field_values(field: TemplateField, key: str, name: Optional[str] = None) -> None:
+    def _handle_model_specific_field_values(field: TemplateField,
+                                            key: str,
+                                            name: Optional[str] = None) -> None:
         """Handles specific field values related to models."""
         model_dict = {
             'OpenAI': constants.OPENAI_MODELS,
@@ -191,7 +198,9 @@ class FrontendNode(BaseModel):
             field.is_list = True
 
     @staticmethod
-    def _handle_api_key_specific_field_values(field: TemplateField, key: str, name: Optional[str] = None) -> None:
+    def _handle_api_key_specific_field_values(field: TemplateField,
+                                              key: str,
+                                              name: Optional[str] = None) -> None:
         """Handles specific field values related to API keys."""
         if 'api_key' in key and 'OpenAI' in str(name):
             field.display_name = 'OpenAI API Key'
@@ -221,12 +230,8 @@ class FrontendNode(BaseModel):
     @staticmethod
     def should_show_field(key: str, required: bool) -> bool:
         """Determines whether the field should be shown."""
-        return (
-                (required and key not in ['input_variables'])
-                or key in FORCE_SHOW_FIELDS
-                or 'api' in key
-                or ('key' in key and 'input' not in key and 'output' not in key)
-        )
+        return ((required and key not in ['input_variables']) or key in FORCE_SHOW_FIELDS
+                or 'api' in key or ('key' in key and 'input' not in key and 'output' not in key))
 
     @staticmethod
     def should_be_password(key: str, show: bool) -> bool:

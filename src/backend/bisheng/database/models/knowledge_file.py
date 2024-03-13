@@ -7,7 +7,6 @@ from sqlalchemy import Column, DateTime, String, text
 from sqlmodel import Field, delete, func
 
 
-
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(index=True)
     knowledge_id: int = Field(index=True)
@@ -44,23 +43,16 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def get_file_simple_by_knowledge_id(cls, knowledge_id: int, page: int, page_size: int):
         offset = (page - 1) * page_size
         with session_getter() as session:
-            return session.query(
-                KnowledgeFile.id, KnowledgeFile.object_name
-            ).filter(
-                KnowledgeFile.knowledge_id == knowledge_id
-            ).order_by(
-                KnowledgeFile.id.asc()
-            ).offset(offset).limit(page_size).all()
+            return session.query(KnowledgeFile.id, KnowledgeFile.object_name).filter(
+                KnowledgeFile.knowledge_id == knowledge_id).order_by(
+                    KnowledgeFile.id.asc()).offset(offset).limit(page_size).all()
 
     @classmethod
     def count_file_by_knowledge_id(cls, knowledge_id: int):
         with session_getter() as session:
-            return session.query(
-                func.count(KnowledgeFile.id)
-            ).filter(
-                KnowledgeFile.knowledge_id == knowledge_id
-            ).scalar()
-          
+            return session.query(func.count(
+                KnowledgeFile.id)).filter(KnowledgeFile.knowledge_id == knowledge_id).scalar()
+
     @classmethod
     def delete_batch(cls, file_ids: List[int]) -> bool:
         with session_getter() as session:
@@ -68,3 +60,10 @@ class KnowledgeFileDao(KnowledgeFileBase):
             session.commit()
             return True
 
+    @classmethod
+    def update(cls, knowledge_file):
+        with session_getter() as session:
+            session.add(knowledge_file)
+            session.commit()
+            session.refresh(knowledge_file)
+        return knowledge_file
