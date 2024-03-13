@@ -341,7 +341,7 @@ class BaseHostChatLLM(BaseChatModel):
                                 function_call['arguments'] += _function_call['arguments']
             message = _convert_dict_to_message({
                 'content': inner_completion,
-                'role': role,
+                'role': role if role is not None else 'assistant',
                 'function_call': function_call,
             })
             return ChatResult(generations=[ChatGeneration(message=message)])

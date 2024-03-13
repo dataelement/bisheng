@@ -9,6 +9,7 @@ interface ConfirmParams {
   canelTxt?: string
   okTxt?: string
   onClose?: () => void
+  onCancel?: () => void
   onOk?: (next) => void
 }
 
@@ -28,6 +29,11 @@ function ConfirmWrapper() {
     setOpen(false)
   }
 
+  const handleCancelClick = () => {
+    paramRef.current?.onCancel?.()
+    close()
+  }
+
   const handleOkClick = () => {
     paramRef.current?.onOk
       ? paramRef.current?.onOk?.(close)
@@ -42,7 +48,7 @@ function ConfirmWrapper() {
       <h3 className="font-bold text-lg">{title}</h3>
       <p className="py-4">{desc}</p>
       <div className="modal-action">
-        <Button className="h-8 rounded-full" variant="outline" onClick={close}>{canelTxt}</Button>
+        <Button className="h-8 rounded-full" variant="outline" onClick={handleCancelClick}>{canelTxt}</Button>
         <Button className="h-8 rounded-full" variant="destructive" onClick={handleOkClick}>{okTxt}</Button>
       </div>
     </form>

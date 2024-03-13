@@ -20,7 +20,8 @@ import {
   TerminalSquare,
   Wand2,
   Wrench,
-  LayoutPanelLeft
+  LayoutPanelLeft,
+  Box
 } from "lucide-react";
 import { ComponentType, SVGProps } from "react";
 import { Connection, Edge, Node, ReactFlowInstance } from "reactflow";
@@ -143,6 +144,7 @@ export const nodeColors: { [char: string]: string } = {
   input_output: "#0ea5e9",
   autogen_roles: '#6366f1',
   unknown: "#9CA3AF",
+  custom_components: "#ab11ab",
 };
 
 const nodeNames: { [char: string]: string } = {
@@ -165,6 +167,7 @@ const nodeNames: { [char: string]: string } = {
   utilities: "通用工具/Utilities",
   output_parsers: "输出解析器/OutputParsers",
   autogen_roles: '多智能体角色/AutogenRole',
+  custom_components: "自定义/Custom",
   unknown: "Unknown",
 };
 
@@ -188,6 +191,7 @@ const nodeEnNames: { [char: string]: string } = {
   utilities: "Utilities",
   output_parsers: "OutputParsers",
   autogen_roles: 'AutogenRole',
+  custom_components: "Custom",
   unknown: "Unknown",
 };
 
@@ -352,7 +356,8 @@ export const nodeIconsLucide: {
   >,
   input_output: FileInput,
   // output: FileOutput,
-  autogen_roles: LayoutPanelLeft
+  autogen_roles: LayoutPanelLeft,
+  custom_components: Box
 };
 
 export const gradients = [

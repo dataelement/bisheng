@@ -3,6 +3,7 @@
 import importlib
 from typing import Any, ClassVar, Dict, Type
 
+from bisheng.interface.custom import CustomComponent
 from bisheng.interface.wrappers.base import wrapper_creator
 from bisheng.utils import validate
 from langchain.agents import Agent
@@ -213,3 +214,9 @@ def get_function(code):
     function_name = validate.extract_function_name(code)
 
     return validate.create_function(code, function_name)
+
+
+def eval_custom_component_code(code: str) -> Type[CustomComponent]:
+    """Evaluate custom component code"""
+    class_name = validate.extract_class_name(code)
+    return validate.create_class(code, class_name)

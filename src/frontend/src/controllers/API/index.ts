@@ -33,6 +33,30 @@ export async function getAll() {
 }
 
 /**
+ * 读取 saved 组件s
+ */
+export async function getComponents(): Promise<any[]> {
+  return await axios.get(`/api/v1/component`);
+}
+/**
+ * save 组件
+ */
+export async function saveComponent(data): Promise<any[]> {
+  return await axios.post(`/api/v1/component`, data);
+}
+/**
+ * 覆盖 组件
+ */
+export async function overridComponent(data): Promise<any[]> {
+  return await axios.patch(`/api/v1/component`, data);
+}
+/**
+ * 删除 组件
+ */
+export async function delComponentApi(name): Promise<any> {
+  return await axios.delete(`/api/v1/component`, { data: { name } });
+}
+/**
  * 获取平台配置
  */
 export async function getAppConfig(): Promise<AppConfig> {

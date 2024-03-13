@@ -47,7 +47,7 @@
     "i18next-http-backend": "^2.2.2",
     "jsencrypt": "^3.3.2",
     "lodash-es": "^4.17.21",
-    "lucide-react": "^0.233.0",
+    "lucide-react": "^0.352.0",
     "pdfjs-dist": "3.10.111",
     "react": "^18.2.0",
     "react-ace": "^10.1.0",

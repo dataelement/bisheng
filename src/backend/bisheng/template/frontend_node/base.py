@@ -1,15 +1,13 @@
 import re
 from collections import defaultdict
-from typing import ClassVar, Dict, List, Optional
+from typing import ClassVar, Dict, List, Optional, Union
 
 from bisheng.template.field.base import TemplateField
-from bisheng.template.frontend_node.constants import FORCE_SHOW_FIELDS
+from bisheng.template.frontend_node.constants import CLASSES_TO_REMOVE, FORCE_SHOW_FIELDS
 from bisheng.template.frontend_node.formatter import field_formatters
 from bisheng.template.template.base import Template
 from bisheng.utils import constants
 from pydantic import BaseModel, Field
-
-CLASSES_TO_REMOVE = ['Serializable', 'BaseModel', 'object']
 
 
 class FieldFormatters(BaseModel):
@@ -41,21 +39,21 @@ class FieldFormatters(BaseModel):
 
 
 class FrontendNode(BaseModel):
+    _format_template: bool = True
     template: Template
-    description: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
     base_classes: List[str]
     name: str = ''
-    display_name: str = ''
+    display_name: Optional[str] = ''
     documentation: str = ''
     custom_fields: Optional[Dict] = defaultdict(list)
     output_types: List[str] = []
+    full_path: Optional[str] = None
     field_formatters: FieldFormatters = Field(default_factory=FieldFormatters)
 
-    def process_base_classes(self) -> None:
-        """Removes unwanted base classes from the list of base classes."""
-        self.base_classes = [
-            base_class for base_class in self.base_classes if base_class not in CLASSES_TO_REMOVE
-        ]
+    beta: bool = False
+    error: Optional[str] = None
 
     # field formatters is an instance attribute but it is not used in the class
     # so we need to create a method to get it
@@ -67,26 +65,54 @@ class FrontendNode(BaseModel):
         """Sets the documentation of the frontend node."""
         self.documentation = documentation
 
-    def to_dict(self) -> dict:
+    # @field_serializer("base_classes")
+    # def process_base_classes(self, base_classes: List[str]) -> List[str]:
+    #     """Removes unwanted base classes from the list of base classes."""
+    #
+    #     return [base_class for base_class in base_classes if base_class not in CLASSES_TO_REMOVE]
+
+    # @field_serializer("display_name")
+    # def process_display_name(self, display_name: str) -> str:
+    #     """Sets the display name of the frontend node."""
+    #
+    #     return display_name or self.name
+
+    # For backwards compatibility
+    def to_dict(self, add_name=True) -> dict:
         """Returns a dict representation of the frontend node."""
-        self.process_base_classes()
-        return {
-            self.name: {
-                'template': self.template.to_dict(self.format_field),
-                'description': self.description,
-                'base_classes': self.base_classes,
-                'display_name': self.display_name or self.name,
-                'custom_fields': self.custom_fields,
-                'output_types': self.output_types,
-                'documentation': self.documentation,
-            },
-        }
+        result = self.dict(by_alias=True, exclude_none=True)
+        if hasattr(self, 'template') and hasattr(self.template, 'to_dict'):
+            format_func = self.format_field if self._format_template else None
+            result['template'] = self.template.to_dict(format_func)
+        name = result.pop('name')
+        result['display_name'] = result.get('display_name') if result.get('display_name') else self.name
+        result['base_classes'] = [base_class for base_class in result['base_classes'] if
+                                  base_class not in CLASSES_TO_REMOVE]
+
+        dump = {name: result}
+        if not add_name:
+            return dump.pop(self.name)
+        return dump
 
     def add_extra_fields(self) -> None:
         pass
 
     def add_extra_base_classes(self) -> None:
         pass
+
+    def add_base_class(self, base_class: Union[str, List[str]]) -> None:
+        """Adds a base class to the frontend node."""
+        if isinstance(base_class, str):
+            self.base_classes.append(base_class)
+        elif isinstance(base_class, list):
+            self.base_classes.extend(base_class)
+
+    def add_output_type(self, output_type: Union[str, List[str]]) -> None:
+        """Adds an output type to the frontend node."""
+        if isinstance(output_type, str):
+            self.output_types.append(output_type)
+        elif isinstance(output_type, list):
+            self.output_types.extend(output_type)
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
@@ -130,13 +156,11 @@ class FrontendNode(BaseModel):
     @staticmethod
     def handle_dict_type(field: TemplateField, _type: str) -> str:
         """Handles 'dict' type by replacing it with 'code' or 'file' based on the field name."""
-        if 'dict' in _type.lower():
-            if field.name == 'dict_':
-                field.field_type = 'file'
-                field.suffixes = ['.json', '.yaml', '.yml']
-                field.file_types = ['json', 'yaml', 'yml']
-            else:
-                field.field_type = 'code'
+        if 'dict' in _type.lower() and field.name == 'dict_':
+            field.field_type = 'file'
+            field.file_types = ['.json', '.yaml', '.yml']
+        elif _type.startswith('Dict') or _type.startswith('Mapping') or _type.startswith('dict'):
+            field.field_type = 'dict'
         return _type
 
     @staticmethod
@@ -146,19 +170,15 @@ class FrontendNode(BaseModel):
             field.value = value['default']
 
     @staticmethod
-    def handle_specific_field_values(field: TemplateField,
-                                     key: str,
-                                     name: Optional[str] = None) -> None:
+    def handle_specific_field_values(field: TemplateField, key: str, name: Optional[str] = None) -> None:
         """Handles specific field values for certain fields."""
         if key == 'headers':
-            field.value = """{'Authorization': 'Bearer <token>'}"""
+            field.value = """{"Authorization": "Bearer <token>"}"""
         FrontendNode._handle_model_specific_field_values(field, key, name)
         FrontendNode._handle_api_key_specific_field_values(field, key, name)
 
     @staticmethod
-    def _handle_model_specific_field_values(field: TemplateField,
-                                            key: str,
-                                            name: Optional[str] = None) -> None:
+    def _handle_model_specific_field_values(field: TemplateField, key: str, name: Optional[str] = None) -> None:
         """Handles specific field values related to models."""
         model_dict = {
             'OpenAI': constants.OPENAI_MODELS,
@@ -171,9 +191,7 @@ class FrontendNode(BaseModel):
             field.is_list = True
 
     @staticmethod
-    def _handle_api_key_specific_field_values(field: TemplateField,
-                                              key: str,
-                                              name: Optional[str] = None) -> None:
+    def _handle_api_key_specific_field_values(field: TemplateField, key: str, name: Optional[str] = None) -> None:
         """Handles specific field values related to API keys."""
         if 'api_key' in key and 'OpenAI' in str(name):
             field.display_name = 'OpenAI API Key'
@@ -184,7 +202,8 @@ class FrontendNode(BaseModel):
     @staticmethod
     def handle_kwargs_field(field: TemplateField) -> None:
         """Handles kwargs field by setting certain attributes."""
-        if 'kwargs' in field.name.lower():
+
+        if 'kwargs' in (field.name or '').lower():
             field.advanced = True
             field.required = False
             field.show = False
@@ -202,13 +221,17 @@ class FrontendNode(BaseModel):
     @staticmethod
     def should_show_field(key: str, required: bool) -> bool:
         """Determines whether the field should be shown."""
-        return ((required and key not in ['input_variables']) or key in FORCE_SHOW_FIELDS
-                or 'api' in key or ('key' in key and 'input' not in key and 'output' not in key))
+        return (
+                (required and key not in ['input_variables'])
+                or key in FORCE_SHOW_FIELDS
+                or 'api' in key
+                or ('key' in key and 'input' not in key and 'output' not in key)
+        )
 
     @staticmethod
     def should_be_password(key: str, show: bool) -> bool:
         """Determines whether the field should be a password field."""
-        return (any(text in key.lower() for text in {'password', 'token', 'api', 'key'}) and show)
+        return any(text in key.lower() for text in {'password', 'token', 'api', 'key'}) and show
 
     @staticmethod
     def should_be_multiline(key: str) -> bool:
@@ -224,21 +247,9 @@ class FrontendNode(BaseModel):
         }
 
     @staticmethod
-    def replace_dict_with_code_or_file(field: TemplateField, _type: str, key: str) -> str:
-        """Replaces 'dict' type with 'code' or 'file'."""
-        if 'dict' in _type.lower():
-            if key == 'dict_':
-                field.field_type = 'file'
-                field.suffixes = ['.json', '.yaml', '.yml']
-                field.file_types = ['json', 'yaml', 'yml']
-            else:
-                field.field_type = 'code'
-        return field.field_type
-
-    @staticmethod
     def set_field_default_value(field: TemplateField, value: dict, key: str) -> None:
         """Sets the field value with the default value if present."""
         if 'default' in value:
             field.value = value['default']
         if key == 'headers':
-            field.value = """{'Authorization': 'Bearer <token>'}"""
+            field.value = """{"Authorization": "Bearer <token>"}"""

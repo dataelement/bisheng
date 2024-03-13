@@ -14,7 +14,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.config import Config
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage
-from bisheng.interface.types import langchain_types_dict
+from bisheng.interface.types import get_all_types_dict
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
@@ -40,7 +40,7 @@ router = APIRouter(tags=['Base'])
 @router.get('/all')
 def get_all():
     """获取所有参数"""
-    return resp_200(langchain_types_dict)
+    return resp_200(get_all_types_dict())
 
 
 @router.get('/env')

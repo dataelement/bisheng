@@ -226,3 +226,14 @@ export async function readOnlineFlows(page: number = 1) {
     const { data, total }: { data: any, total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${100}&status=2`);
     return data;
 }
+
+
+// 解析 custom 组件节点
+export async function reloadCustom(code): Promise<any> {
+    const response = await axios.post("/api/v1/component/custom_component", {
+        code,
+        "field": "",
+        "frontend_node": {}
+    });
+    return response
+}

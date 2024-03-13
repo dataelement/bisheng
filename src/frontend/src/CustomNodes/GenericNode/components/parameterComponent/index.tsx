@@ -17,17 +17,17 @@ import KeypairListComponent from "../../../../components/keypairListComponent";
 import PromptAreaComponent from "../../../../components/promptComponent";
 import TextAreaComponent from "../../../../components/textAreaComponent";
 import ToggleShadComponent from "../../../../components/toggleShadComponent";
-import { MAX_LENGTH_TO_SCROLL_TOOLTIP } from "../../../../constants";
 import { PopUpContext } from "../../../../contexts/popUpContext";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
+import { reloadCustom } from "../../../../controllers/API/flow";
+import { captureAndAlertRequestErrorHoc } from "../../../../controllers/request";
 import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
 import { ParameterComponentType } from "../../../../types/components";
 import { cleanEdges, convertObjToArray, convertValuesToNumbers, hasDuplicateKeys } from "../../../../util/reactflowUtils";
 import {
   classNames,
   getNodeNames,
-  getRandomKeyByssmm,
   groupByFamily,
   isValidConnection,
   nodeColors,
@@ -133,6 +133,32 @@ export default function ParameterComponent({
       };
     });
   };
+
+  // custom 组件 reload
+  const handleReloadCustom = (code) => {
+    captureAndAlertRequestErrorHoc(reloadCustom(code)).then(res => {
+      if (res) {
+        reactFlowInstance.setNodes((nds) =>
+          nds.map((nd) => {
+            if (nd.id === data.id) {
+              let newNode = cloneDeep(nd);
+              newNode.data.node = res
+              return newNode;
+            }
+            return nd
+          })
+        )
+        // 清理线
+        setTimeout(() => {
+          const edges = cleanEdges(
+            reactFlowInstance.getNodes(),
+            reactFlowInstance.getEdges()
+          )
+          reactFlowInstance.setEdges(edges)
+        }, 60);
+      }
+    })
+  }
 
   useEffect(() => {
     infoHtml.current = (
@@ -380,12 +406,12 @@ export default function ParameterComponent({
           <div className="mt-2 w-full">
             <CodeAreaComponent
               setNodeClass={(nodeClass) => {
-                data.node = nodeClass;
+                data.node = nodeClass; // 无用
               }}
               nodeClass={data.node}
               disabled={disabled}
               value={data.node.template[name].value ?? ""}
-              onChange={handleOnNewValue}
+              onChange={handleReloadCustom}
             />
           </div>
         ) : left === true && type === "file" ? (
@@ -429,13 +455,11 @@ export default function ParameterComponent({
                   )
                   // 清理线
                   setTimeout(() => {
-                    cleanEdges({
-                      flow: {
-                        edges: reactFlowInstance.getEdges(),
-                        nodes: reactFlowInstance.getNodes(),
-                      },
-                      updateEdge: (edge) => reactFlowInstance.setEdges(edge),
-                    });
+                    const edges = cleanEdges(
+                      reactFlowInstance.getNodes(),
+                      reactFlowInstance.getEdges()
+                    )
+                    reactFlowInstance.setEdges(edges)
                   }, 60);
                 }
               }}
