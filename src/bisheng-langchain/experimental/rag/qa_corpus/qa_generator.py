@@ -128,9 +128,9 @@ class RagQAGenerator(object):
              
         logger.info(f'train_samples: {len(train_samples)} test_samples: {len(test_samples)}')
         save_folder = os.path.dirname(self.qa_gen_folder)
-        with open(os.path.join(save_folder, 'train_samples_ganrao.json'), 'w') as f:
+        with open(os.path.join(save_folder, f'train_samples_ganrao_chunk{max_context_num+1}.json'), 'w') as f:
             json.dump(train_samples, f, indent=2, ensure_ascii=False)
-        with open(os.path.join(save_folder, 'test_samples_ganrao.json'), 'w') as f:
+        with open(os.path.join(save_folder, f'test_samples_ganrao_chunk{max_context_num+1}.json'), 'w') as f:
             json.dump(test_samples, f, indent=2, ensure_ascii=False)
 
 
@@ -140,4 +140,4 @@ if __name__ == '__main__':
     generator = RagQAGenerator(corpus_folder=corpus_folder, qa_gen_folder=qa_gen_folder)
     # generator.generate()
     # generator.statistic_qa()
-    generator.format_qa_for_sft()
+    generator.format_qa_for_sft(min_context_num=5, max_context_num=11)
