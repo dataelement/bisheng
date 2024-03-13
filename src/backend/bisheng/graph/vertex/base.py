@@ -146,6 +146,10 @@ class Vertex:
             if not hasattr(edge, 'target_param'):
                 continue
             param_key = edge.target_param
+
+            # If the param_key is in the template_dict and the edge.target_id is the current node
+            # We check this to make sure params with the same name but different target_id
+            # don't get overwritten
             if param_key in template_dict and edge.target_id == self.id:
                 if template_dict[param_key]['list']:
                     if param_key not in params:
@@ -189,7 +193,7 @@ class Vertex:
         for key, value in template_dict.items():
             if key in params:
                 continue
-            if key == '_type' or (not value.get('show') and not value.get('value')):
+            if key == '_type' or (not value.get('show') and not value.get('value')) and key != 'code':
                 continue
             if value.get('collection_id'):
                 params['collection_id'] = value.get('collection_id')
