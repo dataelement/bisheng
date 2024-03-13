@@ -1,6 +1,10 @@
+from pathlib import Path
+
 from bisheng.interface.agents.base import agent_creator
 from bisheng.interface.autogenRole.base import autogenrole_creator
 from bisheng.interface.chains.base import chain_creator
+from bisheng.interface.custom.directory_reader.utils import merge_nested_dicts_with_renaming
+from bisheng.interface.custom.utils import build_custom_components
 from bisheng.interface.document_loaders.base import documentloader_creator
 from bisheng.interface.embeddings.base import embedding_creator
 from bisheng.interface.inputoutput.base import input_output_creator
@@ -69,7 +73,8 @@ langchain_types_dict = build_langchain_types_dict()
 
 def get_all_types_dict():
     """Get all types dictionary combining native and custom components."""
+    BASE_COMPONENTS_PATH = str(Path(__file__).parent.parent / 'components')
     native_components = build_langchain_types_dict()
-    # custom_components_from_file = build_custom_components(settings_service)
-    # return merge_nested_dicts_with_renaming(native_components, custom_components_from_file)
-    return native_components
+    custom_components_from_file = build_custom_components([BASE_COMPONENTS_PATH])
+    return merge_nested_dicts_with_renaming(native_components, custom_components_from_file)
+    # return native_components

@@ -26,6 +26,7 @@ class ComponentService:
             return ComponentNotExistError.return_resp()
         exist_component.data = component.data
         exist_component.description = component.description
+        exist_component.version = component.version
         component = ComponentDao.update_component(exist_component)
         return resp_200(data=component)
 
