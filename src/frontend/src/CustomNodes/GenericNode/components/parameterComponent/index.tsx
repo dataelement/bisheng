@@ -175,7 +175,7 @@ export default function ParameterComponent({
   const [errorDuplicateKey, setErrorDuplicateKey] = useState(false);
 
   useEffect(() => {
-    let groupedObj: any = groupByFamily(myData, tooltipTitle!, left, flow.data.nodes);
+    let groupedObj: any = groupByFamily(myData, tooltipTitle!, left, flow.data?.nodes || []);
     groupedEdge.current = groupedObj;
 
     if (groupedObj && groupedObj.length > 0) {
