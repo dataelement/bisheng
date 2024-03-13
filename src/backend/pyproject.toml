@@ -80,6 +80,7 @@ certifi = "^2023.5.7"
 psycopg = "^3.1.9"
 psycopg-binary = "^3.1.9"
 emoji = "^2.10.1"
+platformdirs = ">=2.5"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
