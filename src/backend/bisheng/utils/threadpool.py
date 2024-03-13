@@ -102,6 +102,9 @@ class ThreadPoolManager:
     # async def async_done_callback(self, future):
     #     self.async_task_result.append(future)
 
+    async def tear_down(self, ):
+        pass
+
 
 # 创建一个线程池管理器
 thread_pool = ThreadPoolManager(5)
