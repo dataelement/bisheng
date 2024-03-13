@@ -121,8 +121,8 @@ async def process_knowledge(*,
                                             KnowledgeFile.knowledge_id == knowledge_id)).all()
         if repeat:
             # 用新文件覆盖老文件
-            MinioClient().upload_minio(repeat.object_name, file_path=file_path)
             db_file = repeat[0]
+            MinioClient().upload_minio(db_file.object_name, file_path=file_path)
             db_file.status = 3
             db_file.remark = 'repeat file'
             repeat = true
