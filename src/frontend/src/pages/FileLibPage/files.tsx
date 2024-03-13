@@ -74,29 +74,36 @@ export default function FilesPage() {
         }))
     }
 
+    const [repeatFiles, setRepeatFiles] = useState([])
     // 上传结果展示
-    const handleUploadResult = (fileCount, failFiles) => {
-        failFiles.length && bsconfirm({
-            desc: <div>
-                <p>{t('lib.fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
-                <div className="max-h-[160px] overflow-y-auto no-scrollbar">
-                    {failFiles.map(str => <p className=" text-red-400" key={str}>{str}</p>)}
-                </div>
-            </div>,
-            onOk(next) {
-                next()
-            }
-        })
+    const handleUploadResult = (fileCount, failFiles, res) => {
+        const _repeatFiles = res.filter(e => e.status === 3)
+        if (_repeatFiles.length) {
+            setRepeatFiles(_repeatFiles)
+        } else {
+            failFiles.length && bsconfirm({
+                desc: <div>
+                    <p>{t('lib.fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
+                    <div className="max-h-[160px] overflow-y-auto no-scrollbar">
+                        {failFiles.map(str => <p className=" text-red-400" key={str}>{str}</p>)}
+                    </div>
+                </div>,
+                onOk(next) {
+                    next()
+                }
+            })
+        }
     }
 
     // 重试解析
-    const handleRetry = (id) => {
-        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(id).then(res => {
+    const handleRetry = (ids) => {
+        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(ids).then(res => {
             // 乐观更新
             refreshData(
                 (item) => item.id === id,
                 { status: 1 }
             )
+            setRepeatFiles([])
         }))
     }
 
@@ -173,7 +180,7 @@ export default function FilesPage() {
                                         <div className="tooltip" data-tip={el.remark}>
                                             <span className='text-red-500'>{t('lib.parseFailed')}</span>
                                         </div>
-                                        <Button variant="link"><RotateCw size={16} onClick={() => handleRetry(el.id)} /></Button>
+                                        <Button variant="link"><RotateCw size={16} onClick={() => handleRetry([el.id])} /></Button>
                                     </div> :
                                         <span className={el.status === 3 && 'text-red-500'}>{[t('lib.parseFailed'), t('lib.parsing'), t('lib.completed'), t('lib.parseFailed')][el.status]}</span>
                                     }
@@ -193,6 +200,22 @@ export default function FilesPage() {
         </Tabs>
         {/* upload modal */}
         <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen} onResult={handleUploadResult}></UploadModal>
+        {/* 重复文件提醒 */}
+        <dialog className={`modal ${repeatFiles.length && 'modal-open'}`}>
+            <div className="modal-box w-[560px] bg-[#fff] shadow-lg dark:bg-background">
+                <h3 className="font-bold text-lg">文件重复提示</h3>
+                <p className="py-4">以下文件在知识库中已存在，继续上传将会覆盖原有文件以及处理策略，是否覆盖？</p>
+                <ul className="overflow-y-auto max-h-[400px]">
+                    {repeatFiles.map(el => (
+                        <li key={el.id} className="py-2 text-red-500">{el.file_name}</li>
+                    ))}
+                </ul>
+                <div className="modal-action">
+                    <Button className="h-8 rounded-full" variant="outline" onClick={() => setRepeatFiles([])}>不覆盖，保留原文件</Button>
+                    <Button className="h-8 rounded-full" onClick={() => handleRetry(repeatFiles.map(el => el.id))}>覆盖</Button>
+                </div>
+            </div>
+        </dialog>
         {/* Delete confirmation */}
         <dialog className={`modal ${delShow && 'modal-open'}`}>
             <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
