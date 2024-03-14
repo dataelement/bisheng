@@ -16,6 +16,7 @@ export default function PersonalComponents({ onDragStart }) {
             bsconfirm({
                 title: '组件已存在',
                 desc: `组件 ${data.type} 已存在，覆盖原有组件还是继续创新建组件？`,
+                showClose: true,
                 okTxt: '覆盖',
                 canelTxt: '创建新组建',
                 onOk(next) {
@@ -71,33 +72,35 @@ export default function PersonalComponents({ onDragStart }) {
                     }}
                 > </DisclosureComponent>
             </TooltipTrigger>
-            <TooltipContent className="bg-gray-0 rounded-md max-h-[600px] overflow-y-auto no-scrollbar" side="right" collisionPadding={20}>
+            <TooltipContent className="bg-gray-0 rounded-md " side="right" collisionPadding={20}>
                 <div className="">
                     <Button variant="outline" className="w-full rounded-full" onClick={upFile}>导入本地组件</Button>
                 </div>
-                {
-                    savedComponents.map(comp => (
-                        <div key={comp.name}>
-                            <div key={comp.name} data-tooltip-id={comp.name}>
-                                <div draggable
-                                    className="side-bar-components-border bg-background mt-1 rounded-full border-l-red-500"
-                                    onDragStart={(event) => onDragStart(event, comp.data)}
-                                    onDragEnd={() => {
-                                        document.body.removeChild(
-                                            document.getElementsByClassName("cursor-grabbing")[0]
-                                        );
-                                    }}
-                                >
-                                    <div className="side-bar-components-div-form border-solid rounded-full">
-                                        <span className="side-bar-components-text"> {comp.name} </span>
-                                        <Menu className="side-bar-components-icon " />
-                                        <CircleX className="side-bar-components-icon ml-2 cursor-pointer" onClick={(e) => handleDel(e, comp)} />
+                <div className="max-h-[540px] overflow-y-auto no-scrollbar">
+                    {
+                        savedComponents.map(comp => (
+                            <div key={comp.name}>
+                                <div key={comp.name} data-tooltip-id={comp.name}>
+                                    <div draggable
+                                        className="side-bar-components-border bg-background mt-1 rounded-full border-l-red-500"
+                                        onDragStart={(event) => onDragStart(event, comp.data)}
+                                        onDragEnd={() => {
+                                            document.body.removeChild(
+                                                document.getElementsByClassName("cursor-grabbing")[0]
+                                            );
+                                        }}
+                                    >
+                                        <div className="side-bar-components-div-form border-solid rounded-full">
+                                            <span className="side-bar-components-text"> {comp.name} </span>
+                                            <Menu className="side-bar-components-icon " />
+                                            <CircleX className="side-bar-components-icon ml-2 cursor-pointer" onClick={(e) => handleDel(e, comp)} />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    ))
-                }
+                        ))
+                    }
+                </div>
             </TooltipContent>
         </Tooltip>
     </TooltipProvider>

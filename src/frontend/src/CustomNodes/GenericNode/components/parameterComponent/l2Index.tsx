@@ -79,7 +79,7 @@ export default function L2ParameterComponent({
                         value={data.node.template[name].value ?? ""}
                         onChange={handleOnNewValue}
                     />
-                ) : ['index_name', 'collection_name'].includes(name) ? (
+                ) : ['index_name', 'collection_name'].some(key => name.indexOf(key) === 0) ? (
                     // 知识库选择
                     <CollectionNameComponent
                         setNodeClass={(nodeClass) => {

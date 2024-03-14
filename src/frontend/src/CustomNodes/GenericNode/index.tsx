@@ -180,6 +180,7 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
                     !data.node.template[t].advanced ? (
                     <ParameterComponent
                       data={data}
+                      isGroup={isGroup}
                       color={
                         nodeColors[types[data.node.template[t].type]] ??
                         nodeColors[data.node.template[t].type] ??

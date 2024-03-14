@@ -97,13 +97,13 @@ export function useTable(apiFun) {
         setPage: (p) => setPage({ ...page, page: p }),
         reload: debounceLoad,
         // 检索
-        search: useDebounce((keyword) => {
+        search: (keyword) => {
             setPage({ ...page, page: 1, keyword });
-        }, 100, false),
+        },
         // 数据过滤
         filterData: (p) => {
             paramRef.current = { ...paramRef.current, ...p };
-            debounceLoad()
+            setPage({ ...page, page: 1 });
         },
         // 更新数据
         refreshData: (compareFn, data) => {

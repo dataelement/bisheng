@@ -851,16 +851,19 @@ export function generateNodeFromFlow(
   const position = getMiddlePoint(nodes);
   let data = cloneDeep(flow);
   const id = getNodeId(outputNode?.data.type!);
+  // 检查是否有 fileinput
+  const hasFileInput = flow.data.nodes.some((node) => node.data.type === "InputFileNode")
+  
   const newGroupNode: NodeType = {
     data: {
       id,
-      type: outputNode?.data.type!,
+      type: hasFileInput ? 'InputFileNode' : outputNode?.data.type!,
       node: {
         output_types: outputNode!.data.node!.output_types,
         display_name: "Group",
         documentation: "",
         base_classes: outputNode!.data.node!.base_classes,
-        description: "",
+        description: outputNode.data.node.description,
         template: generateNodeTemplate(data),
         flow: data,
       },

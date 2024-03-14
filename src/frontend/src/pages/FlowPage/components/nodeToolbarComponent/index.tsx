@@ -59,6 +59,7 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
           bsconfirm({
             title: '组件已存在',
             desc: `组件 ${data.type} 已存在，覆盖原有组件还是继续创新建组件？`,
+            showClose: true,
             okTxt: '覆盖',
             canelTxt: '创建新组建',
             onOk(next) {
