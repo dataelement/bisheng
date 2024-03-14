@@ -4,7 +4,7 @@ from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
 from bisheng.template.template.base import Template
 
-DEFAULT_CUSTOM_COMPONENT_CODE = """from bisheng.interface.custom import CustomComponent
+DEFAULT_CUSTOM_COMPONENT_CODE = """from bisheng import CustomComponent
 from typing import Optional, List, Dict, Union
 from bisheng.field_typing import (
     AgentExecutor,

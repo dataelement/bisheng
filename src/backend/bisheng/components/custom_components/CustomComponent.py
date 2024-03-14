@@ -1,12 +1,12 @@
-from bisheng.interface.custom import CustomComponent
+from bisheng import CustomComponent
 from bisheng.field_typing import Data
 
 
 class Component(CustomComponent):
-    documentation: str = "http://docs.langflow.org/components/custom"
+    documentation: str = 'http://docs.bisheng.org/components/custom'
 
     def build_config(self):
-        return {"param": {"display_name": "Parameter"}}
+        return {'param': {'display_name': 'Parameter'}}
 
     def build(self, param: Data) -> Data:
         return param

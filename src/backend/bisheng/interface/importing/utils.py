@@ -55,6 +55,7 @@ def import_by_type(_type: str, name: str) -> Any:
         'retrievers': import_retriever,
         'autogen_roles': import_autogenRoles,
         'input_output': import_inputoutput,
+        'custom_components': import_custom_component,
     }
     if _type == 'llms':
         key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(
@@ -64,6 +65,11 @@ def import_by_type(_type: str, name: str) -> Any:
         loaded_func = func_dict[_type]
 
     return loaded_func(name)
+
+
+def import_custom_component(custom_component: str) -> CustomComponent:
+    """Import custom component from custom component name"""
+    return import_class('bisheng.interface.custom.custom_component.CustomComponent')
 
 
 def import_inputoutput(input_output: str) -> Any:
