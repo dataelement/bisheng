@@ -508,6 +508,19 @@ class HostQwenChat(BaseHostChatLLM):
         return 'qwen_chat'
 
 
+class HostQwen1_5Chat(BaseHostChatLLM):
+    # Qwen-7B-Chat
+    model_name: str = Field('Qwen1.5-14B-Chat', alias='model')
+
+    temperature: float = 0
+    top_p: float = 1
+    max_tokens: int = 4096
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of chat model."""
+        return 'qwen_chat'
+
 class HostLlama2Chat(BaseHostChatLLM):
     # Llama-2-7b-chat-hf, Llama-2-13b-chat-hf, Llama-2-70b-chat-hf
     model_name: str = Field('Llama-2-7b-chat-hf', alias='model')
