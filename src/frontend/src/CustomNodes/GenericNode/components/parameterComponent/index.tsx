@@ -46,6 +46,7 @@ export default function ParameterComponent({
   required = false,
   optionalHandle = null,
   info = "",
+  isGroup = false,
   onChange
 }: ParameterComponentType) {
   // console.log('data, id :>> ', name, optionalHandle);
@@ -332,6 +333,7 @@ export default function ParameterComponent({
             {data.node.template[name].list ? (
               // input list
               <InputListComponent
+                isGroup={isGroup}
                 disabled={disabled}
                 value={
                   !data.node.template[name].value ||
