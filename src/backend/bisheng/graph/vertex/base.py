@@ -227,7 +227,7 @@ class Vertex:
                     elif isinstance(val, dict):
                         params[key] = val
                     elif isinstance(val, str):
-                        params[key] = json.loads(val)
+                        params[key] = json.loads(val) if val else {}
                 elif value.get('type') == 'int' and val is not None:
                     try:
                         params[key] = int(val)
