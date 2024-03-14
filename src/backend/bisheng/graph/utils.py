@@ -157,7 +157,7 @@ def update_template(template, g_nodes):
         node_index = next((i for i, n in enumerate(g_nodes) if n['id'] == id_), -1)
         if node_index != -1:
             display_name = None
-            show = g_nodes[node_index]['data']['node']['template'][field]['show']
+            show = g_nodes[node_index]['data']['node']['template'][field].get('show', False)
             advanced = g_nodes[node_index]['data']['node']['template'][field]['advanced']
             if 'display_name' in g_nodes[node_index]['data']['node']['template'][field]:
                 display_name = g_nodes[node_index]['data']['node']['template'][field][
