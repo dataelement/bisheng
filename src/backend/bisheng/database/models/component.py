@@ -30,7 +30,9 @@ class ComponentDao(ComponentBase):
     @classmethod
     def get_user_components(cls, user_id: int) -> List[Component]:
         with session_getter() as session:
-            statement = select(Component).where(Component.user_id == user_id)
+            statement = select(Component).where(
+                Component.user_id == user_id
+            ).order_by(Component.create_time.desc())
             return session.exec(statement).all()
 
     @classmethod
