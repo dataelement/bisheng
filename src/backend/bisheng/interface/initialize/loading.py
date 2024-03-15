@@ -1,5 +1,6 @@
+import inspect
 import json
-from typing import Any, Callable, Dict, Sequence, Type
+from typing import TYPE_CHECKING, Any, Callable, Dict, Sequence, Type
 
 import httpx
 from bisheng.cache.utils import file_download
@@ -7,7 +8,8 @@ from bisheng.chat.config import ChatConfig
 from bisheng.interface.agents.base import agent_creator
 from bisheng.interface.chains.base import chain_creator
 from bisheng.interface.custom_lists import CUSTOM_NODES
-from bisheng.interface.importing.utils import get_function, import_by_type
+from bisheng.interface.importing.utils import (eval_custom_component_code, get_function,
+                                               import_by_type)
 from bisheng.interface.initialize.llm import initialize_vertexai
 from bisheng.interface.initialize.utils import (handle_format_kwargs, handle_node_type,
                                                 handle_partial_variables)
@@ -33,6 +35,9 @@ from langchain_community.utils.openai import is_openai_v1
 from loguru import logger
 from pydantic import SecretStr, ValidationError, create_model
 from pydantic.fields import FieldInfo
+
+if TYPE_CHECKING:
+    from bisheng import CustomComponent
 
 
 def build_vertex_in_params(params: Dict) -> Dict:
@@ -125,6 +130,8 @@ async def instantiate_based_on_type(class_object,
         return instantiate_retriever(node_type, class_object, params)
     elif base_type == 'memory':
         return instantiate_memory(node_type, class_object, params)
+    elif base_type == 'custom_components':
+        return await instantiate_custom_component(node_type, class_object, params, user_id)
     elif base_type == 'wrappers':
         return instantiate_wrapper(node_type, class_object, params)
     elif base_type == 'input_output':
@@ -133,6 +140,27 @@ async def instantiate_based_on_type(class_object,
         return instantiate_autogen_roles(node_type, class_object, params)
     else:
         return class_object(**params)
+
+
+async def instantiate_custom_component(node_type, class_object, params, user_id):
+    params_copy = params.copy()
+    class_object: 'CustomComponent' = eval_custom_component_code(params_copy.pop('code'))
+    custom_component = class_object(user_id=user_id)
+
+    if 'retriever' in params_copy and hasattr(params_copy['retriever'], 'as_retriever'):
+        params_copy['retriever'] = params_copy['retriever'].as_retriever()
+
+    # Determine if the build method is asynchronous
+    is_async = inspect.iscoroutinefunction(custom_component.build)
+
+    if is_async:
+        # Await the build method directly if it's async
+        built_object = await custom_component.build(**params_copy)
+    else:
+        # Call the build method directly if it's sync
+        built_object = custom_component.build(**params_copy)
+
+    return built_object, {'repr': custom_component.custom_repr()}
 
 
 def instantiate_input_output(node_type, class_object, params, id_dict):
