@@ -192,6 +192,8 @@ llms:
     documentation: ""
   HostQwenChat:
     documentation: ""
+  HostQwen1_5Chat:
+    documentation: ""
   CustomLLMChat:
     documentation: ""
   SenseChat:

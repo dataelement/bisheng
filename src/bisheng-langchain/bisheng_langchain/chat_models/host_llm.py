@@ -519,7 +519,7 @@ class HostQwen1_5Chat(BaseHostChatLLM):
     @property
     def _llm_type(self) -> str:
         """Return type of chat model."""
-        return 'qwen_chat'
+        return 'qwen1.5_chat'
 
 class HostLlama2Chat(BaseHostChatLLM):
     # Llama-2-7b-chat-hf, Llama-2-13b-chat-hf, Llama-2-70b-chat-hf
