@@ -119,7 +119,7 @@ async def build_flow(graph_data: dict,
                     # es
                     vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
 
-            await vertex.build()
+            await vertex.build(user_id=graph_data.get('user_id'))
             params = vertex._built_object_repr()
             valid = True
             logger.debug(
