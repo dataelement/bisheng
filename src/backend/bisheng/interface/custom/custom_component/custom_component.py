@@ -174,8 +174,7 @@ class CustomComponent(Component):
             graph_data = process_tweaks(graph_data=graph_data, tweaks=tweaks)
         return await build_sorted_vertices(graph_data, self.user_id)
 
-    def list_flows(self, *, get_session: Optional[Callable] = None) -> List[Flow]:
-        print('-------', self._user_id)
+    def list_flows(self) -> List[Flow]:
         if not self._user_id:
             raise ValueError('Session is invalid')
         try:
@@ -189,7 +188,6 @@ class CustomComponent(Component):
             flow_name: Optional[str] = None,
             flow_id: Optional[str] = None,
             tweaks: Optional[dict] = None,
-            get_session: Optional[Callable] = None,
     ) -> Flow:
         if flow_id:
             flow = FlowDao.get_flow_by_id(flow_id)
