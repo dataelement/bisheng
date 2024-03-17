@@ -186,6 +186,7 @@ class Milvus(MilvusLangchain):
         self.index_params = index_params
         self.search_params = search_params
         self.consistency_level = consistency_level
+        self.connection_args = connection_args
 
         # In order for a collection to be compatible, pk needs to be auto'id and int
         self._primary_field = primary_field
@@ -846,6 +847,7 @@ class Milvus(MilvusLangchain):
         index_params: Optional[dict] = None,
         search_params: Optional[dict] = None,
         drop_old: bool = False,
+        no_embedding: bool = False,
         **kwargs: Any,
     ) -> Milvus:
         """Create a Milvus collection, indexes it with HNSW, and insert data.
@@ -881,7 +883,7 @@ class Milvus(MilvusLangchain):
             drop_old=drop_old,
             **kwargs,
         )
-        vector_db.add_texts(texts=texts, metadatas=metadatas)
+        vector_db.add_texts(texts=texts, metadatas=metadatas, no_embedding=no_embedding)
         return vector_db
     
     @staticmethod
