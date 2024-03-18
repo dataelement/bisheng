@@ -231,9 +231,9 @@ def instantiate_wrapper(node_type, class_object, params):
                 'default_headers': params.get('default_headers'),
                 'default_query': params.get('default_query')
             }
-            client_params['http_client'] = httpx.Client(proxy=params.get('openai_proxy'))
+            client_params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
             params['client'] = openai.OpenAI(**client_params).images
-            client_params['http_client'] = httpx.AsyncClient(proxy=params.get('openai_proxy'))
+            client_params['http_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
             params['async_client'] = openai.AsyncOpenAI(**client_params).images
 
     return class_object(**params)
@@ -485,9 +485,9 @@ def instantiate_embedding(class_object, params: Dict):
                 'default_headers': params.get('default_headers'),
                 'default_query': params.get('default_query')
             }
-            client_params['http_client'] = httpx.Client(proxy=params.get('openai_proxy'))
+            client_params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
             params['client'] = openai.OpenAI(**client_params).embeddings
-            client_params['http_client'] = httpx.AsyncClient(proxy=params.get('openai_proxy'))
+            client_params['http_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
             params['async_client'] = openai.AsyncOpenAI(**client_params).embeddings
 
         return class_object(**params)
