@@ -202,9 +202,11 @@ class DalleGeneratorChain(CustomChain, BaseModel):
         if self.llm:
             prompt = self.prompt or prompt_default
             llm_chain = LLMChain(llm=self.llm, prompt=prompt)
-            return {self.output_key: self.dalle.run(llm_chain.run(inputs)), 'type': 'image'}
+            pic_url = self.dalle.run(llm_chain.run(inputs))
+            return {self.output_key: f'![pic]({pic_url})', 'type': 'image'}
         else:
-            return {self.output_key: self.dalle.run(inputs.get(self.input_key)), 'type': 'image'}
+            pic_url = self.dalle.run(inputs.get(self.input_key))
+            return {self.output_key: f'![pic]({pic_url})', 'type': 'image'}
 
 
 CUSTOM_CHAINS: Dict[str, Type[Union[ConversationChain, CustomChain]]] = {

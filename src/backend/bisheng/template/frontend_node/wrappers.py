@@ -34,8 +34,10 @@ class WrappersFrontendNode(FrontendNode):
                 field.advanced = True
             elif field.name == 'size':
                 field.show = True
+                field.is_list = True
                 field.field_type = 'str'
-                field.value = '1024x1024'
+                field.options = ['256x256', '512x512', '1024x1024', '1024x1792', '1792x1024']
+                field.value = field.options[0]
                 field.advanced = True
             elif field.name == 'quality':
                 field.show = True

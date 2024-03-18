@@ -157,7 +157,7 @@ def milvus_clean():
 
     collection = milvus_cli.list_collections()
     for col in collection:
-        if col.endswith('base_rtvl'):
+        if col.startswith('tmp'):
             print(col)
             milvus_cli.drop_collection(col)
 
