@@ -10,7 +10,7 @@ from bisheng_langchain import document_loaders as contribute_loader
 from bisheng_langchain import embeddings as contribute_embeddings
 from langchain import document_loaders, embeddings, llms, memory, requests, text_splitter
 from langchain.agents import agent_toolkits
-from langchain.chat_models import AzureChatOpenAI, ChatAnthropic, ChatOpenAI, ChatVertexAI
+from langchain_community.chat_models import AzureChatOpenAI, ChatAnthropic, ChatOpenAI, ChatVertexAI
 
 # LLMs
 llm_type_to_cls_dict = {}

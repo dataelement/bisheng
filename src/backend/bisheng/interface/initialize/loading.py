@@ -220,7 +220,8 @@ def instantiate_wrapper(node_type, class_object, params):
             return class_method(**params)
         raise ValueError(f'Method {method} not found in {class_object}')
     if node_type == 'DallEAPIWrapper' and is_openai_v1():
-        params['http_client'] = httpx.Client(proxy=params.get('openai_proxy'))
+        if 'openai_proxy' in params:
+            params['http_client'] = httpx.Client(proxy=params.get('openai_proxy'))
 
     return class_object(**params)
 
