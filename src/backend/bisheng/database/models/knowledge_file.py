@@ -77,3 +77,14 @@ class KnowledgeFileDao(KnowledgeFileBase):
             if file_name:
                 sql = sql.where(KnowledgeFile.file_name == file_name)
             return session.exec(sql).all()
+
+    @classmethod
+    def select_list(cls, file_ids: List[int]):
+        if not file_ids:
+            return []
+        with session_getter() as session:
+            knowledge_files = session.exec(
+                select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
+        if not knowledge_files:
+            raise ValueError('文件ID不存在')
+        return knowledge_files
