@@ -4,7 +4,7 @@ from typing import List, Optional
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, String, text
-from sqlmodel import Field, delete, func
+from sqlmodel import Field, delete, func, select
 
 
 class KnowledgeFileBase(SQLModelSerializable):
@@ -67,3 +67,13 @@ class KnowledgeFileDao(KnowledgeFileBase):
             session.commit()
             session.refresh(knowledge_file)
         return knowledge_file
+
+    @classmethod
+    def get_file_by_condition(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
+        with session_getter() as session:
+            sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+            if md5_:
+                sql = sql.where(KnowledgeFile.md5 == md5_)
+            if file_name:
+                sql = sql.where(KnowledgeFile.file_name == file_name)
+            return session.exec(sql).all()

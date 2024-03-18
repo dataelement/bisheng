@@ -23,9 +23,10 @@ from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
-from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
-                                        UnstructuredMarkdownLoader, UnstructuredPowerPointLoader,
-                                        UnstructuredWordDocumentLoader)
+from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
+                                                  UnstructuredMarkdownLoader,
+                                                  UnstructuredPowerPointLoader,
+                                                  UnstructuredWordDocumentLoader)
 from pymilvus import Collection
 from sqlalchemy import delete, func, or_
 from sqlmodel import select, true
@@ -116,21 +117,24 @@ async def process_knowledge(*,
         filepath, file_name = file_download(path)
         md5_ = filepath.rsplit('/', 1)[1].split('.')[0].split('_')[0]
         # 是否包含重复文件
-        with session_getter() as session:
-            repeat = session.exec(
-                select(KnowledgeFile).where(KnowledgeFile.md5 == md5_,
-                                            KnowledgeFile.knowledge_id == knowledge_id)).all()
-        if repeat:
+        content_repeat = KnowledgeFileDao.get_file_by_condition(md5_=md5_,
+                                                                knowledge_id=knowledge_id)
+        name_repeat = KnowledgeFileDao.get_file_by_condition(file_name=file_name,
+                                                             knowledge_id=knowledge_id)
+        if content_repeat or name_repeat:
+            db_file = content_repeat[0] if content_repeat else name_repeat[0]
+            old_name = db_file.file_name
             # 用新文件覆盖老文件
-            db_file = repeat[0]
             if db_file.object_name is None:
                 file_type = file_name.rsplit('.', 1)[-1]
                 obj_name = f'original/{db_file.id}.{file_type}'
                 db_file.object_name = obj_name
+                db_file.remark = f'{file_name} 对应已存在文件 {old_name}'
                 KnowledgeFileDao.update(db_file)
             MinioClient().upload_minio(db_file.object_name, file_path=filepath)
+
             db_file.status = 3
-            db_file.remark = 'repeat file'
+
             repeat = true
         else:
             status = 1
@@ -337,6 +341,9 @@ def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = De
         minio = MinioClient()
         for file in db_files:
             # file exist
+            if file.remark and '对应已存在文件' in file.remark:
+                file.file_name = file.remark.split[0]
+                file.remark = ''
             with session_getter() as session:
                 db_knowledge = session.get(Knowledge, file.knowledge_id)
                 file.status = 1  # 解析中

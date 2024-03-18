@@ -3,6 +3,7 @@ import json
 from typing import TYPE_CHECKING, Any, Callable, Dict, Sequence, Type
 
 import httpx
+import openai
 from bisheng.cache.utils import file_download
 from bisheng.chat.config import ChatConfig
 from bisheng.interface.agents.base import agent_creator
@@ -221,7 +222,19 @@ def instantiate_wrapper(node_type, class_object, params):
         raise ValueError(f'Method {method} not found in {class_object}')
     if node_type == 'DallEAPIWrapper' and is_openai_v1():
         if 'openai_proxy' in params:
-            params['http_client'] = httpx.Client(proxy=params.get('openai_proxy'))
+            client_params = {
+                'api_key': params['api_key'],
+                'organization': params.get('openai_organization'),
+                'base_url': params.get('openai_api_base'),
+                'timeout': params.get('request_timeout'),
+                'max_retries': params.get('max_retries', 1),
+                'default_headers': params.get('default_headers'),
+                'default_query': params.get('default_query')
+            }
+            client_params['http_client'] = httpx.Client(proxy=params.get('openai_proxy'))
+            params['client'] = openai.OpenAI(**client_params).images
+            client_params['http_client'] = httpx.AsyncClient(proxy=params.get('openai_proxy'))
+            params['async_client'] = openai.AsyncOpenAI(**client_params).images
 
     return class_object(**params)
 
@@ -240,8 +253,19 @@ def instantiate_llm(node_type, class_object, params: Dict):
     # if "openai_api_base" in params and "jina" in params["openai_api_base"]:
     # False if condition is True
     if is_openai_v1() and 'openai_api_proxy' in params:
-        http_client = httpx.Client(proxies=params.get('openai_api_proxy'))
-        params['http_client'] = http_client
+        client_params = {
+            'api_key': params['openai_api_key'],
+            'organization': params.get('openai_organization'),
+            'base_url': params.get('openai_api_base'),
+            'timeout': params.get('request_timeout', 20),
+            'max_retries': params.get('max_retries', 1),
+            'default_headers': params.get('default_headers'),
+            'default_query': params.get('default_query')
+        }
+        client_params['http_client'] = httpx.Client(proxies=params.get('openai_api_proxy'))
+        params['client'] = openai.OpenAI(**client_params).chat.completions
+        client_params['http_client'] = httpx.AsyncClient(proxies=params.get('openai_api_proxy'))
+        params['async_client'] = openai.AsyncOpenAI(**client_params).chat.completions
 
     if node_type == '':
         anthropic_api_key = params.pop('anthropic_api_key', None)
@@ -451,6 +475,21 @@ def instantiate_toolkit(node_type, class_object: Type[BaseToolkit], params: Dict
 def instantiate_embedding(class_object, params: Dict):
     # params.pop('model', None)
     try:
+        if 'openai_proxy' in params:
+            client_params = {
+                'api_key': params['openai_api_key'],
+                'organization': params.get('openai_organization'),
+                'base_url': params.get('openai_api_base'),
+                'timeout': params.get('request_timeout', 20),
+                'max_retries': params.get('max_retries', 1),
+                'default_headers': params.get('default_headers'),
+                'default_query': params.get('default_query')
+            }
+            client_params['http_client'] = httpx.Client(proxy=params.get('openai_proxy'))
+            params['client'] = openai.OpenAI(**client_params).embeddings
+            client_params['http_client'] = httpx.AsyncClient(proxy=params.get('openai_proxy'))
+            params['async_client'] = openai.AsyncOpenAI(**client_params).embeddings
+
         return class_object(**params)
     except ValidationError:
         params = {key: value for key, value in params.items() if key in class_object.__fields__}
