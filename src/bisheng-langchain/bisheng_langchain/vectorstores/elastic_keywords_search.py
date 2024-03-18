@@ -119,6 +119,8 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         self.index_name = index_name
         self.llm_chain = llm_chain
         _ssl_verify = ssl_verify or {}
+        self.elasticsearch_url = elasticsearch_url
+        self.ssl_verify = _ssl_verify
         try:
             self.client = elasticsearch.Elasticsearch(elasticsearch_url, **_ssl_verify)
         except ValueError as e:
