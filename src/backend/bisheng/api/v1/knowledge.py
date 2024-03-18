@@ -10,7 +10,8 @@ from bisheng.api.utils import access_check
 from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200
 from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
+from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
+                                               KnowledgeRead)
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
                                                     KnowledgeFileRead)
 from bisheng.database.models.role_access import AccessType, RoleAccess
@@ -19,7 +20,7 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
@@ -330,7 +331,7 @@ def get_filelist(*,
 def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = Depends()):
     """失败重试"""
     file_ids = data.get('file_ids')
-    delete_knowledge_file_vectors(file_ids=file_ids)
+    delete_knowledge_file_vectors(file_ids=file_ids, clear_minio=False)
     with session_getter() as session:
         db_files = session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
 
@@ -438,40 +439,15 @@ def delete_knowledge_file(*, file_id: int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
 
-    with session_getter() as session:
-        knowledge_file = session.get(KnowledgeFile, file_id)
-        if not knowledge_file:
-            raise HTTPException(status_code=404, detail='文件不存在')
+    knowledge_file = KnowledgeFileDao.select_list([file_id])
+    if knowledge_file:
+        knowledge_file = knowledge_file[0]
+    knowledge = KnowledgeDao.query_by_id(knowledge_file.knowledge_id)
+    if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
+        raise HTTPException(status_code=404, detail='没有权限执行操作')
 
-        knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
-        if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
-            raise HTTPException(status_code=404, detail='没有权限执行操作')
     # 处理vectordb
-    collection_name = knowledge.collection_name
-    embeddings = FakeEmbedding()
-    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-    if isinstance(vectore_client, Milvus) and vectore_client.col:
-        pk = vectore_client.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])
-        res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
-        logger.info(f'act=delete_vector file_id={file_id} res={res}')
+    delete_knowledge_file_vectors([file_id])
+    KnowledgeFileDao.delete_batch([file_id])
 
-    # minio
-    minio_client = MinioClient()
-    minio_client.delete_minio(str(knowledge_file.id))
-    if knowledge_file.object_name:
-        minio_client.delete_minio(str(knowledge_file.object_name))
-    # elastic
-    index_name = knowledge.index_name or collection_name
-    esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
-
-    if esvectore_client:
-        res = esvectore_client.client.delete_by_query(
-            index=index_name, query={'match': {
-                'metadata.file_id': file_id
-            }})
-        logger.info(f'act=delete_es file_id={file_id} res={res}')
-
-    with session_getter() as session:
-        session.delete(knowledge_file)
-        session.commit()
     return resp_200(message='删除成功')

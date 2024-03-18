@@ -123,27 +123,32 @@ def delete_knowledge_file_in_minio(knowledge_id: int):
     page_num = math.ceil(count / page_size)
     minio_client = MinioClient()
     for i in range(page_num):
-        file_list = KnowledgeFileDao.get_file_simple_by_knowledge_id(knowledge_id, i + 1, page_size)
+        file_list = KnowledgeFileDao.get_file_simple_by_knowledge_id(knowledge_id, i + 1,
+                                                                     page_size)
         for file in file_list:
             minio_client.delete_minio(str(file[0]))
             if file[1]:
                 minio_client.delete_minio(file[1])
 
 
-def delete_knowledge_file_vectors(file_ids: List[int]):
+def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True):
     """ 删除知识文件信息 """
-    with session_getter() as session:
-        knowledge_files = session.exec(
-            select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
-        if not knowledge_files:
-            raise ValueError('文件ID不存在')
+    knowledge_files = KnowledgeFileDao.select_list(file_ids=file_ids)
 
     knowledge_ids = [file.knowledge_id for file in knowledge_files]
     with session_getter() as session:
         knowledges = session.exec(select(Knowledge).where(Knowledge.id.in_(knowledge_ids))).all()
     knowledgeid_dict = {knowledge.id: knowledge for knowledge in knowledges}
-    # 处理vectordb
+
     for file in knowledge_files:
+        # mino
+        if clear_minio:
+            # minio
+            minio_client = MinioClient()
+            minio_client.delete_minio(str(file.id))
+            if file.object_name:
+                minio_client.delete_minio(str(file.object_name))
+        # 处理vectordb
         knowledge = knowledgeid_dict.get(file.knowledge_id)
         collection_name = knowledge.collection_name
         embeddings = FakeEmbedding()
@@ -153,11 +158,6 @@ def delete_knowledge_file_vectors(file_ids: List[int]):
             res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
             logger.info(f'act=delete_vector file_id={file.id} res={res}')
 
-            # minio
-            minio_client = MinioClient()
-            minio_client.delete_minio(str(file.id))
-            if file.object_name:
-                minio_client.delete_minio(str(file.object_name))
             # elastic
             index_name = knowledge.index_name or collection_name
             esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)

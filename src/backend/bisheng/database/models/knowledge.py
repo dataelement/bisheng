@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
+from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field
@@ -38,3 +39,11 @@ class KnowledgeUpdate(KnowledgeBase):
 
 class KnowledgeCreate(KnowledgeBase):
     is_partition: Optional[bool] = None
+
+
+class KnowledgeDao(KnowledgeBase):
+
+    @classmethod
+    def query_by_id(cls, id: int):
+        with session_getter() as session:
+            return session.get(Knowledge, id)
