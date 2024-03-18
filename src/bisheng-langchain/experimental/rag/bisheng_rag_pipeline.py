@@ -160,8 +160,9 @@ class BishengRagPipeline:
                 vector_drop_old = self.params['milvus']['drop_old'] if index == 0 else False
                 keyword_drop_old = self.params['elasticsearch']['drop_old'] if index == 0 else False
                 collection_name = f"{collection_name}_{self.params['retriever']['suffix']}"
-                for retriever in self.retriever.retrievers:
-                    retriever.add_documents(documents, collection_name, vector_drop_old)
+                for idx, retriever in enumerate(self.retriever.retrievers):
+                    retriever.add_documents(documents, f"{collection_name}_{idx}", vector_drop_old)
+                    # retriever.add_documents(documents, collection_name, vector_drop_old)
 
     def retrieval_and_rerank(self, question, collection_name):
         """
@@ -172,8 +173,9 @@ class BishengRagPipeline:
         # EnsembleRetriever直接检索召回会默认去重
         # docs = self.retriever.get_relevant_documents(query=question, collection_name=collection_name)
         docs = []
-        for retriever in self.retriever.retrievers:
-            docs.extend(retriever.get_relevant_documents(query=question, collection_name=collection_name))
+        for idx, retriever in enumerate(self.retriever.retrievers):
+            docs.extend(retriever.get_relevant_documents(query=question, collection_name=f"{collection_name}_{idx}"))
+            # docs.extend(retriever.get_relevant_documents(query=question, collection_name=collection_name))
         logger.info(f'retrieval docs: {len(docs)}')
 
         # delete duplicate

@@ -17,36 +17,51 @@ elasticsearch:
 embedding:
   type: 'OpenAIEmbeddings'
   model: 'text-embedding-ada-002'
-  openai_api_key: 'xxxx'
+  openai_api_key: ''
   openai_proxy: 'http://118.195.232.223:39995'
 
 chat_llm:
   type: 'ChatOpenAI'
   model: 'gpt-4-1106-preview'
-  openai_api_key: 'xxxx'
+  openai_api_key: ''
   openai_proxy: 'http://118.195.232.223:39995'
   temperature: 0.0
 
-knowledge:
-  loader: 
-    type: 'ElemUnstructuredLoader'
-    unstructured_api_url: 'https://bisheng.dataelem.com/api/v1/etl4llm/predict'
-  splitter: 
-    type: 'ElemCharacterTextSplitter'
-    chunk_size: 500
-    chunk_overlap: 50
-    separators: ["\n\n", "\n", " ", ""]
-  save_milvus: True
-  save_es: True
-  suffix: 'v1'
+# chat_llm:
+#   type: 'ChatQWen'
+#   model_name: 'qwen1.5-72b-chat'
+#   api_key: ''
+#   temperature: 0.01
 
-retrieval_rerank:
-  retrieval:
-    type: 'base' 
-    mode: 'hybrid' # 'keyword' or 'vector' or 'hybrid'
-    combine_strategy: 'mix' # 'mix' or 'keyword_front' or 'vector_front'
-    search_type: 'similarity'
-    chunk_num: 10
+loader: 
+  type: 'ElemUnstructuredLoader'
+  unstructured_api_url: 'http://192.168.106.12:10001/v1/etl4llm/predict'
+
+retriever: 
+  type: 'EnsembleRetriever' # 不动
+  suffix: 'test_mix'
+  retrievers: 
+    - type: 'MixRetriever'
+      splitter:
+        vector_text_splitter:
+          type: 'ElemCharacterTextSplitter'
+          chunk_size: 500
+          chunk_overlap: 50
+          separators: ["\n\n", "\n", " ", ""]
+        keyword_text_splitter:
+          type: 'ElemCharacterTextSplitter'
+          chunk_size: 500
+          chunk_overlap: 50
+          separators: ["\n\n", "\n", " ", ""]
+      retrieval:
+        combine_strategy: 'mix'
+        search_type: 'similarity'
+        vector_search_kwargs: 
+          k: 10
+        keyword_search_kwargs: 
+          k: 10
+          
+post_retrieval:
   delete_duplicate: False
   with_rank: False
   rerank:
@@ -58,6 +73,7 @@ retrieval_rerank:
 generate:
   with_retrieval: True
   chain_type: 'stuff'
+  # prompt_type: 'BASE_PROMPT'
   prompt_type: 'CHAT_PROMPT'
 
 metric:

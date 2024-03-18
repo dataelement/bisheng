@@ -27,38 +27,40 @@ chat_llm:
   openai_proxy: 'http://118.195.232.223:39995'
   temperature: 0.0
 
-# chat_llm:
-#   type: 'ChatQWen'
-#   model_name: 'qwen1.5-72b-chat'
-#   api_key: ''
-#   temperature: 0.01
-
 loader: 
   type: 'ElemUnstructuredLoader'
   unstructured_api_url: 'http://192.168.106.12:10001/v1/etl4llm/predict'
 
 retriever: 
   type: 'EnsembleRetriever' # 不动
-  suffix: 'test_glx_mix'
+  suffix: 'test_mix_s2b'
   retrievers: 
-    - type: 'MixRetriever'
+    - type: 'SmallerChunksVectorRetriever'
       splitter:
-        vector_text_splitter:
+        parent_splitter:
           type: 'ElemCharacterTextSplitter'
-          chunk_size: 500
-          chunk_overlap: 50
+          chunk_size: 1024
+          chunk_overlap: 200
           separators: ["\n\n", "\n", " ", ""]
-        keyword_text_splitter:
-          type: 'ElemCharacterTextSplitter'
-          chunk_size: 500
-          chunk_overlap: 50
+        child_splitter:
+          type: 'RecursiveCharacterTextSplitter'
+          chunk_size: 216
+          chunk_overlap: 0
           separators: ["\n\n", "\n", " ", ""]
       retrieval:
-        combine_strategy: 'mix'
         search_type: 'similarity'
-        vector_search_kwargs: 
-          k: 6
-        keyword_search_kwargs: 
+        child_search_kwargs: 
+          k: 12
+    - type: 'KeywordRetriever'
+      splitter:
+        text_splitter:
+          type: 'ElemCharacterTextSplitter'
+          chunk_size: 1024
+          chunk_overlap: 200
+          separators: ["\n\n", "\n", " ", ""]
+      retrieval:
+        search_type: 'similarity'
+        search_kwargs: 
           k: 6
           
 post_retrieval:
