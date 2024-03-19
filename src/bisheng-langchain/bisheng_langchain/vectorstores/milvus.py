@@ -474,6 +474,9 @@ class Milvus(MilvusLangchain):
                 return []
         else:
             embeddings = [[0.0]] * len(texts)
+            if len(embeddings) == 0:
+                logger.debug('Nothing to insert, skipping.')
+                return []
 
         # If the collection hasn't been initialized yet, perform all steps to do so
         if not isinstance(self.col, Collection):

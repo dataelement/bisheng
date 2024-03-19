@@ -1,7 +1,7 @@
 data:
   origin_file_path: '/home/public/rag_benchmark_v1.0/rag_benchmark_processed'
   question: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample.xlsx'
-  save_answer: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample_gpt4_12chunk_test.xlsx'
+  save_answer: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample_gpt4_12chunk_s2b.xlsx'
 
 milvus:
   host: '192.168.106.116'
@@ -33,7 +33,7 @@ loader:
 
 retriever: 
   type: 'EnsembleRetriever' # 不动
-  suffix: 'test_mix_s2b'
+  suffix: 'test_s2b_mix'
   retrievers: 
     - type: 'SmallerChunksVectorRetriever'
       splitter:
@@ -64,7 +64,7 @@ retriever:
           k: 6
           
 post_retrieval:
-  delete_duplicate: False
+  delete_duplicate: True
   with_rank: False
   rerank:
     type: 'CustomReranker'

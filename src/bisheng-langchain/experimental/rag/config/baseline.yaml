@@ -39,7 +39,7 @@ loader:
 
 retriever: 
   type: 'EnsembleRetriever' # 不动
-  suffix: 'test_glx_mix'
+  suffix: 'test_mix'
   retrievers: 
     - type: 'MixRetriever'
       splitter:
