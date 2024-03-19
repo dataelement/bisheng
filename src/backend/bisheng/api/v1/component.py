@@ -17,8 +17,7 @@ router = APIRouter(prefix='/component', tags=['Component'])
 
 
 @router.get('', response_model=UnifiedResponseModel[List[Component]])
-def get_all_components(*,
-                       Authorize: AuthJWT = Depends()):
+def get_all_components(*, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
@@ -26,9 +25,7 @@ def get_all_components(*,
 
 
 @router.post('', response_model=UnifiedResponseModel[Component])
-def save_components(*,
-                    data: CreateComponentReq,
-                    Authorize: AuthJWT = Depends()):
+def save_components(*, data: CreateComponentReq, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
@@ -40,9 +37,7 @@ def save_components(*,
 
 
 @router.patch('', response_model=UnifiedResponseModel[Component])
-def update_component(*,
-                     data: CreateComponentReq,
-                     Authorize: AuthJWT = Depends()):
+def update_component(*, data: CreateComponentReq, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
@@ -73,9 +68,11 @@ async def custom_component(
 
     component = CustomComponent(code=raw_code.code)
 
-    built_frontend_node = build_custom_component_template(component, user_id=current_user.get('user_id'))
+    built_frontend_node = build_custom_component_template(component,
+                                                          user_id=current_user.get('user_id'))
 
-    built_frontend_node = update_frontend_node_with_template_values(built_frontend_node, raw_code.frontend_node)
+    built_frontend_node = update_frontend_node_with_template_values(built_frontend_node,
+                                                                    raw_code.frontend_node)
     return resp_200(data=built_frontend_node)
 
 
@@ -92,7 +89,8 @@ async def reload_custom_component(path: str, Authorize: AuthJWT = Depends()):
         current_user = json.loads(Authorize.get_jwt_subject())
 
         extractor = CustomComponent(code=content)
-        return resp_200(data=build_custom_component_template(extractor, user_id=current_user.get('user_id')))
+        return resp_200(
+            data=build_custom_component_template(extractor, user_id=current_user.get('user_id')))
     except Exception as exc:
         print(exc)
         return resp_500(message=str(exc))
@@ -107,7 +105,8 @@ async def custom_component_update(
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
 
-    component_node = build_custom_component_template(component, user_id=current_user.get('user_id'),
+    component_node = build_custom_component_template(component,
+                                                     user_id=current_user.get('user_id'),
                                                      update_field=raw_code.field)
     # Update the field
     return resp_200(data=component_node)

@@ -6,8 +6,6 @@ import time
 from typing import List
 from uuid import uuid4
 
-import httpx
-import openai
 import requests
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate
@@ -15,11 +13,10 @@ from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileD
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
-from bisheng.interface.initialize.utils import langchain_bug_openv1
 from bisheng.settings import settings
+from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
-from bisheng_langchain.embeddings import CustomHostEmbedding, HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from fastapi import HTTPException
@@ -27,11 +24,9 @@ from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
                                         UnstructuredMarkdownLoader, UnstructuredPowerPointLoader,
                                         UnstructuredWordDocumentLoader)
 from langchain.embeddings.base import Embeddings
-from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores.base import VectorStore
-from langchain_community.utils.openai import is_openai_v1
 from loguru import logger
 from pymilvus import Collection
 from sqlalchemy import delete
@@ -173,24 +168,6 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
                     }})
                 logger.info(f'act=delete_es file_id={file.id} res={res}')
     return True
-
-
-def decide_embeddings(model: str) -> Embeddings:
-    """embed method"""
-    model_list = settings.get_knowledge().get('embeddings')
-    params = model_list.get(model)
-    if model == 'text-embedding-ada-002' or params.get('component', '') == 'openai':
-        if is_openai_v1() and 'openai_proxy' in params:
-            client_params = langchain_bug_openv1(params)
-            client_params['http_client'] = httpx.Client(proxies=params['openai_proxy'])
-            params['client'] = openai.OpenAI(**client_params).embeddings
-            client_params['http_client'] = httpx.AsyncClient(proxies=params['openai_proxy'])
-            params['async_client'] = openai.AsyncOpenAI(**client_params).embeddings
-        return OpenAIEmbeddings(**params)
-    elif params.get('component', '') == 'custom':
-        return CustomHostEmbedding(**params)
-    else:
-        return HostEmbeddings(**model_list.get(model))
 
 
 def decide_vectorstores(collection_name: str, vector_store: str,

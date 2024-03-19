@@ -15,6 +15,7 @@ class WrappersFrontendNode(FrontendNode):
             if field.name == 'model_name':
                 field.show = True
                 field.name = 'model'
+                field.value = 'dall-e-3'
             elif field.name == 'openai_api_key':
                 field.show = true
                 field.name = 'api_key'
