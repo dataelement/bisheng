@@ -30,7 +30,7 @@ from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, Tex
                                                   UnstructuredWordDocumentLoader)
 from pymilvus import Collection
 from sqlalchemy import delete, func, or_
-from sqlmodel import select, true
+from sqlmodel import select
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Skills'])
@@ -135,8 +135,6 @@ async def process_knowledge(*,
             MinioClient().upload_minio(db_file.object_name, file_path=filepath)
 
             db_file.status = 3
-
-            repeat = true
         else:
             status = 1
             remark = ''
@@ -153,8 +151,7 @@ async def process_knowledge(*,
             files.append(db_file.copy())
             file_paths.append(filepath)
 
-        logger.info(
-            f'fileName={file_name} col={collection_name} repeat={repeat} file_id={db_file.id}')
+        logger.info(f'col={collection_name} repeat={db_file} file_id={db_file.id}')
         result.append(db_file.copy())
 
     if files:
@@ -343,7 +340,7 @@ def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = De
         for file in db_files:
             # file exist
             if file.remark and '对应已存在文件' in file.remark:
-                file.file_name = file.remark.split[0]
+                file.file_name = file.remark.split(' ')[0]
                 file.remark = ''
             with session_getter() as session:
                 db_knowledge = session.get(Knowledge, file.knowledge_id)
