@@ -169,7 +169,7 @@ prompt_default = PromptTemplate(
 
 
 class DalleGeneratorChain(CustomChain, BaseModel):
-    """Implementation of dall-e-2"""
+    """Implementation of dall-e generate images"""
     dalle: DallEAPIWrapper
     llm: Optional[BaseLanguageModel]
     prompt: Optional[PromptTemplate]
@@ -202,11 +202,17 @@ class DalleGeneratorChain(CustomChain, BaseModel):
         if self.llm:
             prompt = self.prompt or prompt_default
             llm_chain = LLMChain(llm=self.llm, prompt=prompt)
-            pic_url = self.dalle.run(llm_chain.run(inputs))
-            return {self.output_key: f'![pic]({pic_url})', 'type': 'image'}
+            pic_url = self.dalle.run(llm_chain.run(inputs)).split('\n')
         else:
-            pic_url = self.dalle.run(inputs.get(self.input_key))
-            return {self.output_key: f'![pic]({pic_url})', 'type': 'image'}
+            pic_url = self.dalle.run(inputs.get(self.input_key)).split('\n')
+        if len(pic_url) > 0:
+            pic_style = []
+            for url in pic_url:
+                pic_style.append(f'![{url}]({url})')
+            pic_url = ' \n'.join(pic_style)
+            return {self.output_key: pic_url, 'type': 'image'}
+        else:
+            return {self.output_key: f'![{pic_url}]({pic_url})', 'type': 'image'}
 
 
 CUSTOM_CHAINS: Dict[str, Type[Union[ConversationChain, CustomChain]]] = {
