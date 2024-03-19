@@ -12,7 +12,7 @@ class LLMFrontendNode(FrontendNode):
     def add_extra_fields(self) -> None:
         self.template.add_field(
             TemplateField(field_type='bool',
-                          required=True,
+                          required=False,
                           show=True,
                           advanced=True,
                           name='cache',

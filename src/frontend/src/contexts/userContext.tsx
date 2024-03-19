@@ -41,7 +41,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     const addSavedComponent = (component: any, overrid: boolean, rename: boolean = true) => {
         // return delComponent(component.type)
-        const nodeName = component.type
+        const nodeName = component.node.display_name
         const newNode = {
             ...component, node: { ...component.node, official: false }
         }
@@ -51,7 +51,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
             data: newNode,
             description: ''
         }
-
         // 覆盖
         if (overrid) {
             return captureAndAlertRequestErrorHoc(overridComponent(data)).then(res => {

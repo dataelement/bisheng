@@ -1,8 +1,7 @@
 from typing import List
 
-from bisheng.settings import settings
+from bisheng.utils.embedding import decide_embeddings
 from langchain.embeddings.base import Embeddings
-from langchain.embeddings.openai import OpenAIEmbeddings
 
 
 class OpenAIProxyEmbedding(Embeddings):
@@ -13,18 +12,18 @@ class OpenAIProxyEmbedding(Embeddings):
 
     @classmethod
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Embed search docs."""
         if not texts:
             return []
-        """Embed search docs."""
-        params = settings.get_knowledge().get('embeddings').get('text-embedding-ada-002')
-        embedding = OpenAIEmbeddings(**params)
+
+        embedding = decide_embeddings('text-embedding-ada-002')
         return embedding.embed_documents(texts)
 
     @classmethod
     def embed_query(self, text: str) -> List[float]:
         """Embed query text."""
-        params = settings.get_knowledge().get('embeddings').get('text-embedding-ada-002')
-        embedding = OpenAIEmbeddings(**params)
+
+        embedding = decide_embeddings('text-embedding-ada-002')
         return embedding.embed_query(text)
 
 

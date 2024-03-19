@@ -63,7 +63,7 @@ export default function CardItem(props: IProps) {
                     </Tooltip>
                 </TooltipProvider>
             </div>}
-            <CardTitle className="pl-[40px] box-content w-[180px]">{data.name}</CardTitle>
+            <CardTitle className="pl-[40px] box-content w-[180px] break-all">{data.name}</CardTitle>
             <CardDescription className="pl-[50px]">{data.description}</CardDescription>
             {data.user_name && <p className="absolute left-4 bottom-2 pl-[50px] text-xs text-gray-400">{t('skills.createdBy')}： {data.user_name}</p>}
             {/* footer */}

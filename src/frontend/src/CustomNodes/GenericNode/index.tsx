@@ -18,6 +18,7 @@ import {
   toTitleCase,
 } from "../../utils";
 import ParameterComponent from "./components/parameterComponent";
+import EditLabel from "../../components/ui/editLabel";
 
 export default function GenericNode({ data, xPos, yPos, selected }: {
   data: NodeDataType;
@@ -140,7 +141,14 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
             <div className="generic-node-tooltip-div">
               <ShadTooltip content={data.node.display_name}>
                 <div className="generic-node-tooltip-div text-primary">
-                  {data.node.display_name}
+                  {isGroup ? <EditLabel
+                    rule={[
+                      {required: true}
+                    ]}
+                    str={data.node.display_name}
+                    onChange={(val) => data.node.display_name = val}>
+                    {(val) => <>{val}</>}
+                  </EditLabel> : data.node.display_name}
                 </div>
               </ShadTooltip>
             </div>
@@ -148,7 +156,7 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
           {/* <div className="round-button-div">
             <button className="relative" onClick={(event) => { event.preventDefault(); openPopUp(<NodeModal data={data} />)}} ></button>
           </div> */}
-        </div>
+        </div >
 
         <div className="generic-node-desc nodrag">
           <div className="generic-node-desc-text">{data.node.description}</div>
@@ -238,7 +246,7 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
             </div>}
           </>
         </div>
-      </div>
+      </div >
     </>
   );
 }
