@@ -185,6 +185,7 @@ class Milvus(MilvusLangchain):
         self.index_params = index_params
         self.search_params = search_params
         self.consistency_level = consistency_level
+        self.connection_args = connection_args
 
         # In order for a collection to be compatible, pk needs to be auto'id and int
         self._primary_field = primary_field
@@ -430,6 +431,7 @@ class Milvus(MilvusLangchain):
         metadatas: Optional[List[dict]] = None,
         timeout: Optional[int] = None,
         batch_size: int = 1000,
+        no_embedding: bool = False,
         **kwargs: Any,
     ) -> List[str]:
         """Insert text data into Milvus.
@@ -460,15 +462,20 @@ class Milvus(MilvusLangchain):
         from pymilvus import Collection, MilvusException
 
         texts = list(texts)
+        if not no_embedding:
+            try:
+                embeddings = self.embedding_func.embed_documents(texts)
+            except NotImplementedError:
+                embeddings = [self.embedding_func.embed_query(x) for x in texts]
 
-        try:
-            embeddings = self.embedding_func.embed_documents(texts)
-        except NotImplementedError:
-            embeddings = [self.embedding_func.embed_query(x) for x in texts]
-
-        if len(embeddings) == 0:
-            logger.debug('Nothing to insert, skipping.')
-            return []
+            if len(embeddings) == 0:
+                logger.debug('Nothing to insert, skipping.')
+                return []
+        else:
+            embeddings = [[0.0]] * len(texts)
+            if len(embeddings) == 0:
+                logger.debug('Nothing to insert, skipping.')
+                return []
 
         # If the collection hasn't been initialized yet, perform all steps to do so
         if not isinstance(self.col, Collection):
@@ -842,6 +849,7 @@ class Milvus(MilvusLangchain):
         index_params: Optional[dict] = None,
         search_params: Optional[dict] = None,
         drop_old: bool = False,
+        no_embedding: bool = False,
         **kwargs: Any,
     ) -> Milvus:
         """Create a Milvus collection, indexes it with HNSW, and insert data.
@@ -877,7 +885,7 @@ class Milvus(MilvusLangchain):
             drop_old=drop_old,
             **kwargs,
         )
-        vector_db.add_texts(texts=texts, metadatas=metadatas)
+        vector_db.add_texts(texts=texts, metadatas=metadatas, no_embedding=no_embedding)
         return vector_db
 
     @staticmethod
@@ -888,3 +896,22 @@ class Milvus(MilvusLangchain):
 
     def _select_relevance_score_fn(self) -> Callable[[float], float]:
         return self._relevance_score_fn
+    
+    def query(self, expr: str, timeout: Optional[int] = None, **kwargs: Any) -> List[Document]:
+        output_fields = self.fields[:]
+        output_fields.remove(self._vector_field)
+        res = self.col.query(
+            expr=expr,
+            output_fields=output_fields,
+            timeout=timeout,
+            limit=1,
+            **kwargs,
+        )
+        # Organize results.
+        ret = []
+        for result in res:
+            meta = {x: result.get(x) for x in output_fields}
+            doc = Document(page_content=meta.pop(self._text_field), metadata=meta)
+            ret.append(doc)
+
+        return ret

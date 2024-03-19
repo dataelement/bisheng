@@ -102,34 +102,71 @@ class LlmExtract(object):
                  model_name: str = 'Qwen-14B-Chat',
                  model_api_url: str = 'https://bisheng.dataelem.com/api/v1/models/{}/infer',
                  unstructured_api_url: str = "https://bisheng.dataelem.com/api/v1/etl4llm/predict",
+                 server_type: str = 'qwen_api'
     ):
+        self.server_type = server_type # 'qwen_api', 'bisheng_api', 'openai_api'
         self.model_name = model_name
-        self.model_api_url = model_api_url.format(model_name)
+        if self.server_type == 'bisheng_api':
+            self.model_api_url = model_api_url.format(model_name)
+        else:
+            self.model_api_url = model_api_url
         self.unstructured_api_url = unstructured_api_url
 
-    def call_llm(self, prompt_info, max_tokens=8192):
-        input_template = {
-            'model': 'unknown',
-            'messages': [
-                {'role': 'system', 'content': '你是一个关键信息提取助手。'},
-                {
-                    'role': 'user',
-                    'content': prompt_info
-                }
-            ],
-            'max_tokens': max_tokens,
-        }
-        payload = copy.copy(input_template)
-        payload['model'] = self.model_name
-        try:
-            raw_response = requests.post(url=self.model_api_url, json=payload)
-            response = raw_response.json()
-            assert response['status_code'] == 200, response
-        except Exception as e:
-            # llm request error
-            logger.error(f'llm predict fail: {str(e)}')
-            logger.error(f'raw_response: {raw_response.text}')
-            return {}, len(raw_response.text)
+    def call_llm(self, prompt_info, max_tokens=1500):
+        if self.server_type == 'bisheng_api':
+            input_template = {
+                'model': 'unknown',
+                'messages': [
+                    {'role': 'system', 'content': '你是一个关键信息提取助手。'},
+                    {
+                        'role': 'user',
+                        'content': prompt_info
+                    }
+                ],
+                'max_tokens': max_tokens,
+            }
+            payload = copy.copy(input_template)
+            payload['model'] = self.model_name
+            try:
+                raw_response = requests.post(url=self.model_api_url, json=payload)
+                response = raw_response.json()
+                assert response['status_code'] == 200, response
+            except Exception as e:
+                # llm request error
+                logger.error(f'llm predict fail: {str(e)}')
+                logger.error(f'raw_response: {raw_response.text}')
+                return {}, len(raw_response.text)
+        elif self.server_type == 'qwen_api':
+            qwen_api_key = os.environ.get('QWEN_API_KEY', '')
+            header = {'Authorization': f'Bearer {qwen_api_key}', 'Content-Type': 'application/json'}
+            input = {
+                'messages': [
+                    {'role': 'system', 'content': '你是一个关键信息提取助手。'},
+                    {
+                        'role': 'user',
+                        'content': prompt_info
+                    }
+                ]
+            }
+            params = {
+                'temperature': 0.01,
+                'top_p': 0.01,
+                'seed': 1234,
+                'max_tokens': max_tokens,
+                'result_format': 'message', 
+                'repetition_penalty': 1.1,
+
+            }
+            inp = {'input': input, 'parameters': params, 'model': self.model_name}
+            try:
+                raw_response = requests.post(url=self.model_api_url, json=inp, headers=header)
+                response = raw_response.json()
+                response = response['output']
+            except Exception as e:
+                # llm request error
+                logger.error(f'llm predict fail: {str(e)}')
+                logger.error(f'raw_response: {raw_response.text}')
+                return {}, len(raw_response.text)
 
         choices = response.get('choices', [])
         logger.info(f'llm response: {response}')
@@ -214,7 +251,9 @@ class LlmExtract(object):
 
 
 if __name__ == '__main__':
-    llm_client = LlmExtract(model_name='Qwen-14B-Chat')
-    pdf_path = '/home/gulixin/workspace/datasets/huatai/流动资金借款合同_pdf/流动资金借款合同1.pdf'
+    model_name = 'qwen1.5-72b-chat'
+    model_api_url = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
+    llm_client = LlmExtract(model_name=model_name, model_api_url=model_api_url)
+    pdf_path = '/home/gulixin/workspace/datasets/huatai/流动资金借款合同_pdf/JYT11.pdf'
     schema = '合同标题|合同编号|借款人|贷款人|借款金额'
     llm_client.predict(pdf_path, schema)
