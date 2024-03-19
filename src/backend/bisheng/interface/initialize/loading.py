@@ -252,7 +252,7 @@ def instantiate_llm(node_type, class_object, params: Dict):
     # This is a workaround so JinaChat works until streaming is implemented
     # if "openai_api_base" in params and "jina" in params["openai_api_base"]:
     # False if condition is True
-    if is_openai_v1() and 'openai_api_proxy' in params:
+    if is_openai_v1() and 'openai_proxy' in params:
         client_params = {
             'api_key': params['openai_api_key'],
             'organization': params.get('openai_organization'),
@@ -262,9 +262,9 @@ def instantiate_llm(node_type, class_object, params: Dict):
             'default_headers': params.get('default_headers'),
             'default_query': params.get('default_query')
         }
-        client_params['http_client'] = httpx.Client(proxies=params.get('openai_api_proxy'))
+        client_params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
         params['client'] = openai.OpenAI(**client_params).chat.completions
-        client_params['http_client'] = httpx.AsyncClient(proxies=params.get('openai_api_proxy'))
+        client_params['http_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
         params['async_client'] = openai.AsyncOpenAI(**client_params).chat.completions
 
     if node_type == '':
