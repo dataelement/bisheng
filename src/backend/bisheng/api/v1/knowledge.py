@@ -130,8 +130,8 @@ async def process_knowledge(*,
                 file_type = file_name.rsplit('.', 1)[-1]
                 obj_name = f'original/{db_file.id}.{file_type}'
                 db_file.object_name = obj_name
-                db_file.remark = f'{file_name} 对应已存在文件 {old_name}'
-                KnowledgeFileDao.update(db_file)
+            db_file.remark = f'{file_name} 对应已存在文件 {old_name}'
+            KnowledgeFileDao.update(db_file)
             MinioClient().upload_minio(db_file.object_name, file_path=filepath)
 
             db_file.status = 3
