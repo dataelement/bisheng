@@ -30,7 +30,7 @@ class WrappersFrontendNode(FrontendNode):
                 field.show = True
                 field.field_type = 'int'
                 field.value = 1
-                field.info = 'Number of images to generate'
+                field.info = '生成图片数量，使用dalle3 只能填1'
                 field.advanced = True
             elif field.name == 'size':
                 field.show = True
