@@ -32,13 +32,16 @@ def get_root_node(graph):
     """
     Returns the root node of the template.
     """
-    incoming_edges = {edge.source for edge in graph.edges}
-    input_node = {edge.source for edge in graph.edges if edge.source.base_type == 'inputOutput'}
+    incoming_edges = {edge.source_id for edge in graph.edges}
+    input_node = {
+        edge.source_id
+        for edge in graph.edges if graph.get_vertex(edge.source_id).base_type == 'inputOutput'
+    }
 
-    if not incoming_edges and len(graph.nodes) == 1:
-        return graph.nodes[0]
+    if not incoming_edges and len(graph.vertices) == 1:
+        return graph.vertices[0]
 
-    node = {node for node in graph.nodes if node not in incoming_edges}
+    node = {node for node in graph.vertices if node.id not in incoming_edges}
     if input_node:
         if node:
             input_node = input_node.union(node)
@@ -50,12 +53,12 @@ def get_root_vertex(graph):
     """
     Returns the root node of the template.
     """
-    incoming_edges = {edge.source.id for edge in graph.edges}
+    incoming_edges = {edge.source_id for edge in graph.edges}
 
-    if not incoming_edges and len(graph.nodes) == 1:
-        return graph.nodes[0]
+    if not incoming_edges and len(graph.vertices) == 1:
+        return graph.vertices[0]
 
-    return next((node for node in graph.nodes if node.id not in incoming_edges), None)
+    return next((node for node in graph.vertices if node.id not in incoming_edges), None)
 
 
 def build_json(root, graph) -> Dict:

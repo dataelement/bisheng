@@ -1,5 +1,5 @@
 import clsx, { ClassValue } from "clsx";
-import _ from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
 import {
   Compass,
   Cpu,
@@ -659,7 +659,7 @@ export function isValidConnection(
 }
 
 export function removeApiKeys(flow: FlowType): FlowType {
-  let cleanFLow = _.cloneDeep(flow);
+  let cleanFLow = cloneDeep(flow);
   cleanFLow.data.nodes.forEach((node) => {
     for (const key in node.data.node.template) {
       if (node.data.node.template[key].password) {
@@ -674,7 +674,7 @@ export function updateObject<T extends Record<string, any>>(
   reference: T,
   objectToUpdate: T
 ): T {
-  let clonedObject = _.cloneDeep(objectToUpdate);
+  let clonedObject = cloneDeep(objectToUpdate);
   // Loop through each key in the object to update
   for (const key in clonedObject) {
     // If the key is not in the reference object, delete it
@@ -706,41 +706,40 @@ export function updateTemplate(
   reference: APITemplateType,
   objectToUpdate: APITemplateType
 ): APITemplateType {
-  let clonedObject: APITemplateType = _.cloneDeep(reference);
+  let clonedObject: APITemplateType = cloneDeep(reference); // temp clone
 
   // Loop through each key in the reference object
-  for (const key in clonedObject) {
-    // If the key is not in the object to update, add it
-    if (objectToUpdate[key] && objectToUpdate[key].value || objectToUpdate[key].type === 'bool') {
-      clonedObject[key].value = objectToUpdate[key].value;
+  for (const tmpkey in clonedObject) {
+    if (!objectToUpdate[tmpkey]) continue // 没有的 key直接使用template对象
+    // If the tmpkey is not in the object to update, add it
+    if (objectToUpdate[tmpkey] && (objectToUpdate[tmpkey].value || objectToUpdate[tmpkey].type === 'bool')) {
+      clonedObject[tmpkey].value = objectToUpdate[tmpkey].value;
     }
     if (
-      objectToUpdate[key] &&
-      objectToUpdate[key].advanced !== null &&
-      objectToUpdate[key].advanced !== undefined
+      objectToUpdate[tmpkey] &&
+      objectToUpdate[tmpkey].advanced !== null &&
+      objectToUpdate[tmpkey].advanced !== undefined
     ) {
-      clonedObject[key].advanced = objectToUpdate[key].advanced;
+      clonedObject[tmpkey].advanced = objectToUpdate[tmpkey].advanced;
     }
 
     // file_path的文件类型不覆盖
-    if (key === 'file_path') {
-      clonedObject[key].fileTypes = objectToUpdate[key].fileTypes
-      clonedObject[key].suffixes = objectToUpdate[key].suffixes
+    if (tmpkey === 'file_path') {
+      clonedObject[tmpkey].fileTypes = objectToUpdate[tmpkey].fileTypes
+      clonedObject[tmpkey].suffixes = objectToUpdate[tmpkey].suffixes
     }
-    // required与show不覆盖
-    if (clonedObject[key]?.required) {
-      clonedObject[key].required = objectToUpdate[key].required
+    if (objectToUpdate[tmpkey].hasOwnProperty('required')) {
+      clonedObject[tmpkey].required = objectToUpdate[tmpkey].required
     }
-    if (clonedObject[key]?.show) {
-      clonedObject[key].show = objectToUpdate[key]?.show
+    if (objectToUpdate[tmpkey].hasOwnProperty('show')) {
+      clonedObject[tmpkey].show = objectToUpdate[tmpkey].show
     }
-    // L2 覆盖
-    if (objectToUpdate[key]?.l2) {
-      clonedObject[key].l2 = objectToUpdate[key].l2
-      clonedObject[key].l2_name = objectToUpdate[key].l2_name
+    if (objectToUpdate[tmpkey].hasOwnProperty('l2')) {
+      clonedObject[tmpkey].l2 = objectToUpdate[tmpkey].l2
+      clonedObject[tmpkey].l2_name = objectToUpdate[tmpkey].l2_name
     }
-    if (objectToUpdate[key]?.collection_id) {
-      clonedObject[key].collection_id = objectToUpdate[key]?.collection_id
+    if (objectToUpdate[tmpkey].hasOwnProperty('collection_id')) {
+      clonedObject[tmpkey].collection_id = objectToUpdate[tmpkey].collection_id
     }
   }
   return clonedObject;
@@ -1114,26 +1113,37 @@ export const generateUUID = (length: number) => {
   return uuid
 }
 
+const copyTextInDom = (dom) => {
+  const range = document.createRange();
+
+  range.selectNode(dom);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+
+  return new Promise((res) => {
+    document.execCommand('copy');
+    window.getSelection().removeAllRanges();
+    res(dom.innerText);
+  })
+}
+
 // 复制到剪切板
-export const copyText = (text: string) => {
+export const copyText = (text: string | HTMLElement) => {
+  // 复制 dom 内文本
+  if (typeof text !== 'string') return copyTextInDom(text)
+  // 高级 API直接复制文本（需要 https 环境）
   if (navigator.clipboard && navigator.clipboard.writeText) {
     return navigator.clipboard.writeText(text)
   }
-
+  // 通过把文本写入 dom, 间接通过选中 dom 复制文本
   const areaDom = document.createElement("textarea");
   // 设置样式使其不在屏幕上显示
   areaDom.style.position = 'absolute';
   areaDom.style.left = '-9999px';
   areaDom.value = text;
-
   document.body.appendChild(areaDom);
-  areaDom.focus();
-  areaDom.select();
 
-  return new Promise((res) => {
-    document.execCommand('copy');
-    res(text);
-  }).then(() => {
+  return copyTextInDom(areaDom).then((str) => {
     document.body.removeChild(areaDom);
   })
 };

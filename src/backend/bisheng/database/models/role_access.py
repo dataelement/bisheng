@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union
 
 from bisheng.database.models.base import SQLModelSerializable
 from pydantic import BaseModel
@@ -45,5 +45,5 @@ class AccessType(Enum):
 
 class RoleRefresh(BaseModel):
     role_id: int
-    access_id: list[str, int]
+    access_id: list[Union[str, int]]
     type: int

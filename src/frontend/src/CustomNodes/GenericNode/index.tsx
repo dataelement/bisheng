@@ -1,8 +1,10 @@
 import { Zap } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { NodeToolbar } from "reactflow";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import Tooltip from "../../components/TooltipComponent";
+import { Button } from "../../components/ui/button";
 import { useSSE } from "../../contexts/SSEContext";
 import { alertContext } from "../../contexts/alertContext";
 import { PopUpContext } from "../../contexts/popUpContext";
@@ -16,8 +18,6 @@ import {
   toTitleCase,
 } from "../../utils";
 import ParameterComponent from "./components/parameterComponent";
-import { Link, useParams } from "react-router-dom";
-import { Button } from "../../components/ui/button";
 
 export default function GenericNode({ data, selected }: {
   data: NodeDataType;
@@ -67,7 +67,6 @@ export default function GenericNode({ data, selected }: {
     deleteNode(data.id);
     return;
   }
-  useEffect(() => { }, [closePopUp, data.node.template]);
 
   const [_, fouceUpdateNode] = useState(false)
 
@@ -143,9 +142,8 @@ export default function GenericNode({ data, selected }: {
           </div> */}
         </div>
 
-        <div className="generic-node-desc">
+        <div className="generic-node-desc nodrag">
           <div className="generic-node-desc-text">{data.node.description}</div>
-
           <>
             {Object.keys(data.node.template)
               .filter((t) => t.charAt(0) !== "_")

@@ -4,7 +4,7 @@ import { ChatType } from "../../types/chat";
 import BuildTrigger from "./buildTrigger";
 import ChatTrigger from "./chatTrigger";
 
-import * as _ from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
 import { TabsContext } from "../../contexts/tabsContext";
 import { getBuildStatus } from "../../controllers/API";
 import FormModal from "../../modals/formModal";
@@ -53,7 +53,7 @@ export default function Chat({ flow }: { flow: ChatType['flow'], reactFlowInstan
   useEffect(() => {
     const prevNodes = prevNodesRef.current;
     const currentNodes = nodes.map((node: NodeType) =>
-      _.cloneDeep(node.data.node.template)
+      cloneDeep(node.data.node.template)
     );
     if (
       tabsState &&

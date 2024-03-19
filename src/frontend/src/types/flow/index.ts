@@ -10,6 +10,7 @@ export type FlowType = {
   style?: FlowStyleType;
   user_name?: string;
   write: boolean;
+  guide_word: string
 };
 export type NodeType = {
   id: string;

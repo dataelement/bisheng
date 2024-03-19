@@ -1,5 +1,5 @@
 import i18next from "i18next";
-import { AppWindow, BookOpen, Github, HardDrive, Languages, Globe, LayoutDashboard, LogOut, MoonIcon, Puzzle, Settings, SunIcon } from "lucide-react";
+import { AppWindow, BookOpen, Github, Globe, HardDrive, Languages, LayoutDashboard, LogOut, MoonIcon, Puzzle, Settings, SunIcon } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useTranslation } from "react-i18next";
@@ -8,22 +8,20 @@ import CrashErrorComponent from "../components/CrashErrorComponent";
 import { Separator } from "../components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { darkContext } from "../contexts/darkContext";
-import { TabsContext } from "../contexts/tabsContext";
 import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
-import { User } from "../types/app";
+import { captureAndAlertRequestErrorHoc } from "../controllers/request";
+import { User } from "../types/api/user";
 
 export default function MainLayout() {
-    const { hardReset } = useContext(TabsContext);
     const { dark, setDark } = useContext(darkContext);
-    // const _location = useLocation()
     // 角色
     const { user, setUser } = useContext(userContext);
 
     const { language, options, changLanguage, t } = useLanguage(user)
 
     const handleLogout = () => {
-        logoutApi().then(_ => {
+        captureAndAlertRequestErrorHoc(logoutApi()).then(_ => {
             setUser(null)
             localStorage.removeItem('isLogin')
         })
@@ -123,14 +121,9 @@ export default function MainLayout() {
                 </div>
             </div>
         </div>
-        <div className="flex-1">
+        <div className="flex-1 overflow-hidden">
             <ErrorBoundary
-                onReset={() => {
-                    window.localStorage.removeItem("tabsData");
-                    // window.localStorage.clear();
-                    hardReset();
-                    window.location.href = window.location.href;
-                }}
+                onReset={() => window.location.href = window.location.href}
                 FallbackComponent={CrashErrorComponent}
             >
                 <Outlet />

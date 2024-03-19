@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useState } from "react";
 import { AlertItemType } from "../types/alerts";
-
-import _ from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
+import uniqueId from "lodash-es/uniqueId";
 
 //types for alertContextType
 type alertContextType = {
@@ -28,23 +28,23 @@ type alertContextType = {
 //initial values to alertContextType
 const initialValue: alertContextType = {
   errorData: { title: "", list: [] },
-  setErrorData: () => {},
+  setErrorData: () => { },
   errorOpen: false,
-  setErrorOpen: () => {},
+  setErrorOpen: () => { },
   noticeData: { title: "", link: "" },
-  setNoticeData: () => {},
+  setNoticeData: () => { },
   noticeOpen: false,
-  setNoticeOpen: () => {},
+  setNoticeOpen: () => { },
   successData: { title: "" },
-  setSuccessData: () => {},
+  setSuccessData: () => { },
   successOpen: false,
-  setSuccessOpen: () => {},
+  setSuccessOpen: () => { },
   notificationCenter: false,
-  setNotificationCenter: () => {},
+  setNotificationCenter: () => { },
   notificationList: [],
-  pushNotificationList: () => {},
-  clearNotificationList: () => {},
-  removeFromNotificationList: () => {},
+  pushNotificationList: () => { },
+  clearNotificationList: () => { },
+  removeFromNotificationList: () => { },
 };
 
 export const alertContext = createContext<alertContextType>(initialValue);
@@ -68,7 +68,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
   const [notificationList, setNotificationList] = useState([]);
   const pushNotificationList = (notification: AlertItemType) => {
     setNotificationList((old) => {
-      let newNotificationList = _.cloneDeep(old);
+      let newNotificationList = cloneDeep(old);
       newNotificationList.unshift(notification);
       return newNotificationList;
     });
@@ -78,17 +78,15 @@ export function AlertProvider({ children }: { children: ReactNode }) {
    * @param newState An object containing the new error data, including title and optional list of error messages
    */
   function setErrorData(newState: { title: string; list?: Array<string> }) {
-    if (newState.title && newState.title !== "") {
-      setErrorDataState(newState);
-      setErrorOpen(true);
-      setNotificationCenter(true);
-      pushNotificationList({
-        type: "error",
-        title: newState.title,
-        list: newState.list,
-        id: _.uniqueId(),
-      });
-    }
+    setErrorDataState(newState);
+    setErrorOpen(true);
+    setNotificationCenter(true);
+    pushNotificationList({
+      type: "error",
+      title: newState.title || " ",
+      list: newState.list,
+      id: uniqueId(),
+    });
   }
   /**
    * Sets the state of the notice data and opens the notice modal, also adds a new notice to the notification center if the title is defined.
@@ -104,7 +102,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         type: "notice",
         title: newState.title,
         link: newState.link,
-        id: _.uniqueId(),
+        id: uniqueId(),
       });
     }
   }
@@ -122,7 +120,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
         // add the new notification to the list
         type: "success",
         title: newState.title,
-        id: _.uniqueId(),
+        id: uniqueId(),
       });
     }
   }

@@ -1,51 +1,18 @@
-# from http.server import HTTPServer, BaseHTTPRequestHandler
-# import json
-# import time
-
-# class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-
-#     def do_POST(self, **kwargs):
-#         response = {
-#             'id':
-#             'chatcmpl-1016',
-#             'created':
-#             time.time(),
-#             'model':
-#             'Qwen-14B-Chat',
-#             'choices': [{
-#                 'index': 0,
-#                 'message': {
-#                     'role': 'assistant',
-#                     'content': 'ok'
-#                 },
-#                 'finish_reason': 'stop'
-#             }],
-#             'usage': {
-#                 'prompt_tokens': 34,
-#                 'total_tokens': 59,
-#                 'completion_tokens': 25
-#             }
-#         }
-#         time.sleep(2)  # 设置sleep
-#         self.send_response(200)
-#         self.send_header('Content-type', 'text/html')
-#         self.end_headers()
-#         self.wfile.write(json.dumps(response).encode())
-
-# def run(server_class=HTTPServer, handler_class=SimpleHTTPRequestHandler, port=8000):
-#     server_address = ('', port)
-#     httpd = server_class(server_address, handler_class)
-#     print(f'Starting httpd server on port {port}...')
-#     httpd.serve_forever()
-
-# if __name__ == '__main__':
-#     run()
-
 import asyncio
 import json
+import os
+import sys
 import time
 
 from aiohttp import web
+
+parent_dir = os.path.dirname(os.path.abspath(__file__)).replace('test', '')
+sys.path.append(parent_dir)
+os.environ['config'] = os.path.join(parent_dir, 'bisheng/config.dev.yaml')
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.user import User
+from sqlalchemy import select
 
 
 async def handle(request):
@@ -78,5 +45,15 @@ async def handle(request):
 app = web.Application()
 app.router.add_post('/', handle)
 
-if __name__ == '__main__':
-    web.run_app(app, host='127.0.0.1', port=8080)
+
+def mysql_session():
+    with session_getter() as session:
+        print(session.exec(select(User).where(User.user_id == 1)).first())
+
+    print(session.exec(select(User).where(User.user_id == 2)).first())
+
+
+mysql_session()
+
+# if __name__ == '__main__':
+#     web.run_app(app, host='127.0.0.1', port=8080)

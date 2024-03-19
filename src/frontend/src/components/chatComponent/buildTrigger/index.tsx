@@ -66,8 +66,7 @@ export default function BuildTrigger({
   }
   async function streamNodeData(flow: FlowType) {
     // Step 1: Make a POST request to send the flow data and receive a unique session ID
-    const response = await postBuildInit(flow);
-    const { flowId } = response.data;
+    const { flowId } = await postBuildInit(flow);
     // Step 2: Use the session ID to establish an SSE connection using EventSource
     let validationResults = [];
     let finished = false;

@@ -37,6 +37,7 @@ class User(UserBase, table=True):
 class UserRead(UserBase):
     user_id: Optional[int]
     role: Optional[str]
+    access_token: Optional[str]
 
 
 class UserQuery(UserBase):
@@ -47,10 +48,14 @@ class UserQuery(UserBase):
 class UserLogin(UserBase):
     password: str
     user_name: str
+    captcha_key: Optional[str]
+    captcha: Optional[str]
 
 
 class UserCreate(UserBase):
     password: str
+    captcha_key: Optional[str]
+    captcha: Optional[str]
 
 
 class UserUpdate(SQLModelSerializable):

@@ -1,6 +1,4 @@
 import { Trash2 } from "lucide-react";
-import { useContext } from "react";
-import { TabsContext } from "../../contexts/tabsContext";
 import { FlowType } from "../../types/flow";
 import { gradients } from "../../utils";
 import {
@@ -22,7 +20,6 @@ export const CardComponent = ({
   onDelete?: () => void;
   button?: JSX.Element;
 }) => {
-  const { removeFlow } = useContext(TabsContext);
 
   return (
     <Card className="group">

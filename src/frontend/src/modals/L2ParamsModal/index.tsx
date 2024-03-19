@@ -36,7 +36,7 @@ const Item = ({ name, data }: { name: string, data: TemplateVariableType }) => {
     }
 
     return (
-        <div className={`l2Param flex justify-between rounded-xl px-2 py-1 mb-2 ${data.l2 ? 'bg-gray-400 dark:bg-gray-100' : 'bg-gray-100 dark:bg-gray-500'}`}>
+        <div className={`l2Param flex justify-between rounded-xl px-2 py-1 mb-2 ${data.l2 ? 'bg-gray-400 dark:bg-gray-800' : 'bg-gray-100 dark:bg-gray-500'}`}>
             <div>
                 <div className="flex items-center">
                     <Label className="pr-2">{t('flow.parameterLabel')}:</Label>
@@ -54,7 +54,7 @@ const Item = ({ name, data }: { name: string, data: TemplateVariableType }) => {
                                 className="flex h-6 w-full rounded-xl border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                             />
                         </div>
-                        : <div className="flex items-center text-gray-900">
+                        : <div className="flex items-center text-gray-900 dark:text-gray-300">
                             <span>{val}</span>
                             <button className="l2Param-edit transition-all" title={t('flow.editAlias')} onClick={() => setEdit(true)}>
                                 <PenLine size={18} className="ml-2 cursor-pointer" />
@@ -104,7 +104,7 @@ const ComponentItem = ({ id, data }) => {
                                 />
                             </div>
                         ) : (
-                            <div className="flex items-center text-gray-900">
+                            <div className="flex items-center text-gray-900 dark:text-gray-300">
                                 <span>{val}</span>
                                 <button
                                     className="l2Param-edit transition-all"

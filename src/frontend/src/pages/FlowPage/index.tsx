@@ -1,33 +1,33 @@
-import _ from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
 import { useContext, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { TabsContext } from "../../contexts/tabsContext";
+import { getFlowApi } from "../../controllers/API/flow";
 import Page from "./components/PageComponent";
 
 export default function FlowPage() {
-  const { flows, setTabId } = useContext(TabsContext);
+  const { flow, setFlow } = useContext(TabsContext);
   const { id } = useParams();
-  useEffect(() => {
-    setTabId(id);
-  }, [id]);
 
-  // Initialize state variable for the version
-  // const [version, setVersion] = useState("");
-  // useEffect(() => {
-  //   getVersion().then((data) => {
-  //     setVersion(data.version);
-  //   });
-  // }, []);
-  const flow = useMemo(() => {
-    const _flow = flows.find((flow) => flow.id === id)
-    const copyFlow = _flow && _.cloneDeep(_flow)
-    return [copyFlow, JSON.stringify(copyFlow?.data || null)] as const
-  }, [flows, id])
+  useEffect(() => {
+    if (id && flow?.id !== id) {
+      // 切换技能重新加载flow数据
+      getFlowApi(id).then(_flow => setFlow('flow_init', _flow))
+    }
+  }, [])
+
+  const [copyFlow, preFlow] = useMemo(() => {
+    if (flow?.id === id) {
+      const copyFlow = cloneDeep(flow)
+      return [copyFlow, JSON.stringify(copyFlow?.data || null)] as const
+    }
+    return []
+  }, [flow, id])
 
 
   return (
     <div className="flow-page-positioning">
-      {flow[0] && <Page flow={flow[0]} preFlow={flow[1]} />}
+      {copyFlow && <Page flow={copyFlow} preFlow={preFlow} />}
     </div>
   );
 }

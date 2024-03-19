@@ -9,7 +9,7 @@ from langchain.chains.summarize import load_summarize_chain
 from langchain.memory.buffer import ConversationBufferMemory
 from langchain.schema import BaseMemory
 from langchain.schema.prompt_template import BasePromptTemplate
-from pydantic import Field, root_validator
+from langchain_core.pydantic_v1 import Field, root_validator
 
 DEFAULT_SUFFIX = """"
 Current conversation:

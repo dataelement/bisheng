@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, ClassVar, Dict, List, Optional, Type
 
 from bisheng.custom.customs import get_custom_nodes
 from bisheng.interface.base import LangChainTypeCreator
@@ -9,6 +9,7 @@ from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class, build_template_from_method
 from bisheng_langchain import chains as bisheng_chains
 from langchain import chains
+from langchain_experimental import sql
 
 # Assuming necessary imports for Field, Template, and FrontendNode classes
 
@@ -21,7 +22,7 @@ class ChainCreator(LangChainTypeCreator):
         return ChainFrontendNode
 
     # We need to find a better solution for this
-    from_method_nodes = {
+    from_method_nodes: ClassVar[Dict] = {
         'APIChain': 'from_llm_and_api_docs',
         'ConversationalRetrievalChain': 'from_llm',
         'LLMCheckerChain': 'from_llm',
@@ -43,6 +44,13 @@ class ChainCreator(LangChainTypeCreator):
                 for chain_name in bisheng_chains.__all__
             }
             self.type_dict.update(bisheng)
+
+            # sql community
+            community = {
+                chain_name: import_class(f'langchain_experimental.sql.{chain_name}')
+                for chain_name in sql.__all__
+            }
+            self.type_dict.update(community)
 
             from bisheng.interface.chains.custom import CUSTOM_CHAINS
 

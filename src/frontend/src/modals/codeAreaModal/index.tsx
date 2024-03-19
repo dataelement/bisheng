@@ -15,6 +15,7 @@ import { postValidateCode } from "../../controllers/API";
 import { APIClassType } from "../../types/api";
 import BaseModal from "../baseModal";
 import { useTranslation } from "react-i18next";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
 export default function CodeAreaModal({
   value,
@@ -41,15 +42,13 @@ export default function CodeAreaModal({
   }
 
   function handleClick() {
-    postValidateCode(code)
+    captureAndAlertRequestErrorHoc(postValidateCode(code)
       .then((apiReturn) => {
-        if (apiReturn.data) {
-          let importsErrors = apiReturn.data.imports.errors;
-          let funcErrors = apiReturn.data.function.errors;
+        if (apiReturn) {
+          let importsErrors = apiReturn.imports.errors;
+          let funcErrors = apiReturn.function.errors;
           if (funcErrors.length === 0 && importsErrors.length === 0) {
-            setSuccessData({
-              title: t('code.codeReadyToRun'),
-            });
+            setSuccessData({ title: t('code.codeReadyToRun') });
             setValue(code);
             setModalOpen(false);
           } else {
@@ -71,12 +70,7 @@ export default function CodeAreaModal({
             title: t('code.errorOccurred'),
           });
         }
-      })
-      .catch((_) => {
-        setErrorData({
-          title: t('code.codeError'),
-        });
-      });
+      }));
   }
 
   return (

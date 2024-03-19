@@ -1,12 +1,18 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from uuid import UUID
 
+from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from langchain.docstore.document import Document
 from pydantic import BaseModel, Field, validator
+
+
+class CaptchaInput(BaseModel):
+    captcha_key: str
+    captcha: str
 
 
 class ChunkInput(BaseModel):
@@ -51,6 +57,31 @@ class UpdateTemplateRequest(BaseModel):
     template: dict
 
 
+# 创建泛型变量
+DataT = TypeVar('DataT')
+
+
+class UnifiedResponseModel(Generic[DataT], BaseModel):
+    """统一响应模型"""
+    status_code: int
+    status_message: str
+    data: DataT = None
+
+
+def resp_200(data: Union[list, dict, str, Any] = None,
+             message: str = 'SUCCESS') -> UnifiedResponseModel:
+    """成功的代码"""
+    return UnifiedResponseModel(status_code=200, status_message=message, data=data)
+    # return data
+
+
+def resp_500(code: int = 500,
+             data: Union[list, dict, str, Any] = None,
+             message: str = 'BAD REQUEST') -> UnifiedResponseModel:
+    """错误的逻辑回复"""
+    return UnifiedResponseModel(status_code=code, status_message=message, data=data)
+
+
 class ProcessResponse(BaseModel):
     """Process response schema."""
 
@@ -58,6 +89,12 @@ class ProcessResponse(BaseModel):
     # task: Optional[TaskResponse] = None
     session_id: Optional[str] = None
     backend: Optional[str] = None
+
+
+class ChatInput(BaseModel):
+    message_id: int
+    comment: str = None
+    liked: int = 0
 
 
 class ChatList(BaseModel):
@@ -87,6 +124,8 @@ class ChatMessage(BaseModel):
     receiver: dict = None
     liked: int = 0
     extra: str = '{}'
+    flow_id: str = None
+    chat_id: str = None
 
 
 class ChatResponse(ChatMessage):
@@ -149,3 +188,13 @@ class StreamData(BaseModel):
 
     def __str__(self) -> str:
         return f'event: {self.event}\ndata: {json.dumps(self.data)}\n\n'
+
+
+class FinetuneCreateReq(BaseModel):
+    server: int = Field(description='关联的RT服务ID')
+    base_model: int = Field(description='基础模型ID')
+    model_name: str = Field(max_length=50, description='模型名称')
+    method: TrainMethod = Field(description='训练方法')
+    extra_params: Dict = Field(default_factory=dict, description='训练任务所需额外参数')
+    train_data: Optional[List[Dict]] = Field(default=None, description='个人训练数据')
+    preset_data: Optional[List[Dict]] = Field(default=None, description='预设训练数据')

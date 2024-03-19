@@ -1,6 +1,6 @@
 import re
 from collections import defaultdict
-from typing import List, Optional
+from typing import ClassVar, Dict, List, Optional
 
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.constants import FORCE_SHOW_FIELDS
@@ -13,10 +13,10 @@ CLASSES_TO_REMOVE = ['Serializable', 'BaseModel', 'object']
 
 
 class FieldFormatters(BaseModel):
-    formatters = {
+    formatters: ClassVar[Dict] = {
         'openai_api_key': field_formatters.OpenAIAPIKeyFormatter(),
     }
-    base_formatters = {
+    base_formatters: ClassVar[Dict] = {
         'kwargs': field_formatters.KwargsFormatter(),
         'optional': field_formatters.RemoveOptionalFormatter(),
         'list': field_formatters.ListTypeFormatter(),
@@ -47,16 +47,14 @@ class FrontendNode(BaseModel):
     name: str = ''
     display_name: str = ''
     documentation: str = ''
-    custom_fields: defaultdict = defaultdict(list)
+    custom_fields: Optional[Dict] = defaultdict(list)
     output_types: List[str] = []
     field_formatters: FieldFormatters = Field(default_factory=FieldFormatters)
 
     def process_base_classes(self) -> None:
         """Removes unwanted base classes from the list of base classes."""
         self.base_classes = [
-            base_class
-            for base_class in self.base_classes
-            if base_class not in CLASSES_TO_REMOVE
+            base_class for base_class in self.base_classes if base_class not in CLASSES_TO_REMOVE
         ]
 
     # field formatters is an instance attribute but it is not used in the class
@@ -124,9 +122,7 @@ class FrontendNode(BaseModel):
         return _type
 
     @staticmethod
-    def handle_special_field(
-        field, key: str, _type: str, SPECIAL_FIELD_HANDLERS
-    ) -> str:
+    def handle_special_field(field, key: str, _type: str, SPECIAL_FIELD_HANDLERS) -> str:
         """Handles special field by using the respective handler if present."""
         handler = SPECIAL_FIELD_HANDLERS.get(key)
         return handler(field) if handler else _type
@@ -150,9 +146,9 @@ class FrontendNode(BaseModel):
             field.value = value['default']
 
     @staticmethod
-    def handle_specific_field_values(
-        field: TemplateField, key: str, name: Optional[str] = None
-    ) -> None:
+    def handle_specific_field_values(field: TemplateField,
+                                     key: str,
+                                     name: Optional[str] = None) -> None:
         """Handles specific field values for certain fields."""
         if key == 'headers':
             field.value = """{'Authorization': 'Bearer <token>'}"""
@@ -160,9 +156,9 @@ class FrontendNode(BaseModel):
         FrontendNode._handle_api_key_specific_field_values(field, key, name)
 
     @staticmethod
-    def _handle_model_specific_field_values(
-        field: TemplateField, key: str, name: Optional[str] = None
-    ) -> None:
+    def _handle_model_specific_field_values(field: TemplateField,
+                                            key: str,
+                                            name: Optional[str] = None) -> None:
         """Handles specific field values related to models."""
         model_dict = {
             'OpenAI': constants.OPENAI_MODELS,
@@ -175,9 +171,9 @@ class FrontendNode(BaseModel):
             field.is_list = True
 
     @staticmethod
-    def _handle_api_key_specific_field_values(
-        field: TemplateField, key: str, name: Optional[str] = None
-    ) -> None:
+    def _handle_api_key_specific_field_values(field: TemplateField,
+                                              key: str,
+                                              name: Optional[str] = None) -> None:
         """Handles specific field values related to API keys."""
         if 'api_key' in key and 'OpenAI' in str(name):
             field.display_name = 'OpenAI API Key'
@@ -206,20 +202,13 @@ class FrontendNode(BaseModel):
     @staticmethod
     def should_show_field(key: str, required: bool) -> bool:
         """Determines whether the field should be shown."""
-        return (
-            (required and key not in ['input_variables'])
-            or key in FORCE_SHOW_FIELDS
-            or 'api' in key
-            or ('key' in key and 'input' not in key and 'output' not in key)
-        )
+        return ((required and key not in ['input_variables']) or key in FORCE_SHOW_FIELDS
+                or 'api' in key or ('key' in key and 'input' not in key and 'output' not in key))
 
     @staticmethod
     def should_be_password(key: str, show: bool) -> bool:
         """Determines whether the field should be a password field."""
-        return (
-            any(text in key.lower() for text in {'password', 'token', 'api', 'key'})
-            and show
-        )
+        return (any(text in key.lower() for text in {'password', 'token', 'api', 'key'}) and show)
 
     @staticmethod
     def should_be_multiline(key: str) -> bool:
@@ -235,9 +224,7 @@ class FrontendNode(BaseModel):
         }
 
     @staticmethod
-    def replace_dict_with_code_or_file(
-        field: TemplateField, _type: str, key: str
-    ) -> str:
+    def replace_dict_with_code_or_file(field: TemplateField, _type: str, key: str) -> str:
         """Replaces 'dict' type with 'code' or 'file'."""
         if 'dict' in _type.lower():
             if key == 'dict_':

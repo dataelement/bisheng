@@ -3,16 +3,16 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple, Callable
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import jieba.analyse
+from langchain.chains.llm import LLMChain
 from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
-from langchain.utils import get_from_dict_or_env
-from langchain.vectorstores.base import VectorStore
-from langchain.chains.llm import LLMChain
 from langchain.llms.base import BaseLLM
 from langchain.prompts.prompt import PromptTemplate
+from langchain.utils import get_from_dict_or_env
+from langchain.vectorstores.base import VectorStore
 
 if TYPE_CHECKING:
     from elasticsearch import Elasticsearch  # noqa: F401
@@ -23,7 +23,7 @@ def _default_text_mapping() -> Dict:
 
 
 DEFAULT_PROMPT = PromptTemplate(
-    input_variables=["question"],
+    input_variables=['question'],
     template="""分析给定Question，提取Question中包含的KeyWords，输出列表形式
 
 Examples:
@@ -118,6 +118,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
                               'Please install it with `pip install elasticsearch`.')
         self.index_name = index_name
         self.llm_chain = llm_chain
+        self.drop_old = drop_old
         _ssl_verify = ssl_verify or {}
         self.elasticsearch_url = elasticsearch_url
         self.ssl_verify = _ssl_verify
@@ -164,6 +165,9 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         # check to see if the index already exists
         try:
             self.client.indices.get(index=self.index_name)
+            if texts and self.drop_old:
+                self.client.indices.delete(index=self.index_name)
+                self.create_index(self.client, self.index_name, mapping)
         except NotFoundError:
             # TODO would be nice to create index before embedding,
             # just to save expensive steps for last
@@ -288,6 +292,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         else:
             vectorsearch = cls(elasticsearch_url, index_name, drop_old=drop_old, **kwargs)
         vectorsearch.add_texts(texts, metadatas=metadatas, ids=ids, refresh_indices=refresh_indices)
+
         return vectorsearch
 
     def create_index(self, client: Any, index_name: str, mapping: Dict) -> None:

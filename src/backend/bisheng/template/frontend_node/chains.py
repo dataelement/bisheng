@@ -91,6 +91,11 @@ class ChainFrontendNode(FrontendNode):
             field.show = False
             field.required = False
 
+        if name == 'APIChain' and field.name == 'limit_to_domains':
+            field.show = True
+            field.required = True
+            field.value = None
+
         field.advanced = False
         if 'key' in field.name:
             field.password = False
@@ -129,6 +134,7 @@ class ChainFrontendNode(FrontendNode):
             field.show = True
             field.advanced = False
             field.field_type = 'BaseLanguageModel'  # temporary fix
+            field.is_list = False
 
         if field.name == 'return_source_documents':
             field.required = False
@@ -145,9 +151,10 @@ class ChainFrontendNode(FrontendNode):
             field.show = False
         if name == 'TransformChain' and field.name == 'input_variables':
             field.show = True
-        if name == 'TransformChain' and field.name == 'transform':
+        if name == 'TransformChain' and field.name == 'transform_cb':
             field.show = True
             field.field_type = 'function'
+            field.name = 'transform'
 
 
 class SeriesCharacterChainNode(FrontendNode):

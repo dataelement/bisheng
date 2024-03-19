@@ -6,15 +6,14 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import requests
 from langchain.embeddings.base import Embeddings
 from langchain.utils import get_from_dict_or_env
-from pydantic import BaseModel, Extra, Field, root_validator
+from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
 
 logger = logging.getLogger(__name__)
 
 
-def _create_retry_decorator(
-        embeddings: HostEmbeddings) -> Callable[[Any], Any]:
+def _create_retry_decorator(embeddings: HostEmbeddings) -> Callable[[Any], Any]:
     min_seconds = 4
     max_seconds = 10
     # Wait 2^x * 1 second between each retry starting with
@@ -73,8 +72,7 @@ class HostEmbeddings(BaseModel, Embeddings):
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
-        values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url',
-                                                       'HostBaseUrl')
+        values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url', 'HostBaseUrl')
         model = values['model']
         try:
             url = values['host_base_url']
@@ -85,8 +83,7 @@ class HostEmbeddings(BaseModel, Embeddings):
         try:
             values['client'] = requests.post
         except AttributeError:
-            raise ValueError(
-                'Try upgrading it with `pip install --upgrade requests`.')
+            raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
         return values
 
     @property
@@ -104,19 +101,31 @@ class HostEmbeddings(BaseModel, Embeddings):
         if self.verbose:
             print('payload', inp)
 
+        max_text_to_split = 200
         outp = None
-        try:
-            outp = self.client(
-                url=self.url_ep, json=inp, timeout=self.request_timeout).json()
-        except requests.exceptions.Timeout:
-            raise Exception(
-                f'timeout in host embedding infer, url=[{self.url_ep}]')
-        except Exception as e:
-            raise Exception(f'exception in host embedding infer: [{e}]')
 
-        if outp['status_code'] != 200:
-            raise ValueError(
-                f"API returned an error: {outp['status_message']}")
+        start_index = 0
+        len_text = len(texts)
+        while start_index < len_text:
+            inp_local = {
+                'texts':texts[start_index:min(start_index + max_text_to_split, len_text)],
+                'model':self.model,
+                'type':emb_type
+                }
+            try:
+                outp_single = self.client(url=self.url_ep, json=inp_local, timeout=self.request_timeout).json()
+                if outp is None:
+                    outp = outp_single
+                else:
+                    outp['embeddings'] += outp_single['embeddings']
+            except requests.exceptions.Timeout:
+                raise Exception(f'timeout in host embedding infer, url=[{self.url_ep}]')
+            except Exception as e:
+                raise Exception(f'exception in host embedding infer: [{e}]')
+
+            if outp_single['status_code'] != 200:
+                raise ValueError(f"API returned an error: {outp['status_message']}")
+            start_index += max_text_to_split
         return outp['embeddings']
 
     def embed_documents(self,
@@ -156,8 +165,7 @@ class CustomHostEmbedding(HostEmbeddings):
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
-        values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url',
-                                                       'HostBaseUrl')
+        values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url', 'HostBaseUrl')
         try:
             values['url_ep'] = values['host_base_url']
         except Exception:
@@ -166,6 +174,5 @@ class CustomHostEmbedding(HostEmbeddings):
         try:
             values['client'] = requests.post
         except AttributeError:
-            raise ValueError(
-                'Try upgrading it with `pip install --upgrade requests`.')
+            raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
         return values

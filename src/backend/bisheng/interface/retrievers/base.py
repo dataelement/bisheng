@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, ClassVar, Dict, List, Optional, Type
 
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.importing.utils import import_class
@@ -13,7 +13,10 @@ from langchain import retrievers
 class RetrieverCreator(LangChainTypeCreator):
     type_name: str = 'retrievers'
 
-    from_method_nodes = {'MultiQueryRetriever': 'from_llm', 'ZepRetriever': '__init__'}
+    from_method_nodes: ClassVar[Dict] = {
+        'MultiQueryRetriever': 'from_llm',
+        'ZepRetriever': '__init__'
+    }
 
     @property
     def frontend_node_class(self) -> Type[RetrieverFrontendNode]:
@@ -28,7 +31,8 @@ class RetrieverCreator(LangChainTypeCreator):
             }
 
             self.type_dict.update({
-                retriever_name: import_class(f'bisheng_langchain.retrievers.{retriever_name}')
+                retriever_name:
+                import_class(f'bisheng_langchain.retrievers.{retriever_name}')
                 for retriever_name in bisheng_retrievers.__all__
             })
         return self.type_dict

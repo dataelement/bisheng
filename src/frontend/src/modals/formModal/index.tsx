@@ -9,7 +9,7 @@ import { classNames, validateNodes } from "../../utils";
 import ChatInput from "./chatInput";
 import ChatMessage from "./chatMessage";
 
-import _ from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
 import ToggleShadComponent from "../../components/toggleShadComponent";
 import {
   Accordion,
@@ -30,6 +30,7 @@ import { Textarea } from "../../components/ui/textarea";
 import { CHAT_FORM_DIALOG_SUBTITLE, THOUGHTS_ICON } from "../../constants";
 import { TabsContext } from "../../contexts/tabsContext";
 import { useTranslation } from "react-i18next";
+import { locationContext } from "../../contexts/locationContext";
 
 export default function FormModal({
   flow,
@@ -105,7 +106,7 @@ export default function FormModal({
     files?: Array<any>
   ) => {
     setChatHistory((old) => {
-      let newChat = _.cloneDeep(old);
+      let newChat = cloneDeep(old);
       if (files) {
         newChat.push({ message, isSend, files, thought, chatKey });
       } else if (thought) {
@@ -182,14 +183,17 @@ export default function FormModal({
     }
   }
 
+  const { appConfig } = useContext(locationContext)
+
   function getWebSocketUrl(chatId, isDevelopment = false) {
     const isSecureProtocol = window.location.protocol === "https:";
     const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
-    const host = window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
+    const host = appConfig.websocketHost || window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
     const chatEndpoint = `/api/v1/chat/${chatId}`;
 
+    const token = localStorage.getItem("ws_token") || '';
     return `${isDevelopment ? "ws" : webSocketProtocol
-      }://${host}${chatEndpoint}`;
+      }://${host}${chatEndpoint}?t=${token}`;
   }
 
   function handleWsMessage(data: any) {
@@ -344,7 +348,7 @@ export default function FormModal({
 
   // 消息滚动
   useEffect(() => {
-    if (ref.current) ref.current.scrollIntoView({ behavior: "smooth" });
+    // if (ref.current) ref.current.scrollIntoView({ behavior: "smooth" }); // iframe会影响父级滚动
   }, [chatHistory]);
 
   const ref = useRef(null);
@@ -381,7 +385,7 @@ export default function FormModal({
       });
       setTabsState((old) => {
         if (!chatKey) return old;
-        let newTabsState = _.cloneDeep(old);
+        let newTabsState = cloneDeep(old);
         // newTabsState[id.current].formKeysData.input_keys[chatKey] = "";
         return newTabsState;
       });
@@ -406,7 +410,7 @@ export default function FormModal({
   function handleOnCheckedChange(checked: boolean, i: string) {
     if (checked === true) {
       setChatKey(i);
-      const input = tabsState[flow.id].formKeysData.input_keys.find((el: any) => !el.type)  || {}
+      const input = tabsState[flow.id].formKeysData.input_keys.find((el: any) => !el.type) || {}
       setChatValue(input[i]);
     } else {
       setChatKey(null);
@@ -499,7 +503,7 @@ export default function FormModal({
                               }
                               onChange={(e) => {
                                 setTabsState((old) => {
-                                  let newTabsState = _.cloneDeep(old);
+                                  let newTabsState = cloneDeep(old);
                                   const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type) || {}
                                   input[i] = e.target.value;
                                   return newTabsState;
@@ -584,7 +588,7 @@ export default function FormModal({
                       setChatValue={(value) => {
                         setChatValue(value);
                         setTabsState((old) => {
-                          let newTabsState = _.cloneDeep(old);
+                          let newTabsState = cloneDeep(old);
                           const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type) || {}
                           input[chatKey] = value;
                           return newTabsState;

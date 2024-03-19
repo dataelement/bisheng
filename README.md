@@ -2,7 +2,8 @@
 
 <p align="center">
   <a href="./README.md">简体中文</a> |
-  <a href="./README_ENG.md">English</a> 
+  <a href="./README_ENG.md">English</a> |
+  <a href="./README_JPN.md">日本語</a>
 </p>
 <p align="center">
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>

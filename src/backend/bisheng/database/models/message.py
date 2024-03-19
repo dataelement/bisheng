@@ -2,10 +2,12 @@ from datetime import datetime
 from typing import Dict, Optional
 from uuid import UUID
 
+from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import JSON, Column, DateTime, String, Text, text
-from sqlmodel import Field
+from sqlmodel import Field, delete, select
 
 
 class MessageBase(SQLModelSerializable):
@@ -24,7 +26,7 @@ class MessageBase(SQLModelSerializable):
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
     intermediate_steps: Optional[str] = Field(sa_column=Column(Text), description='过程日志')
     files: Optional[str] = Field(sa_column=Column(String(length=4096)), description='上传的文件等')
-    # file_access: Optional[bool] = Field(index=False, default=True, description='召回文件是否可以访问')
+    remark: Optional[str] = Field(sa_column=Column(String(length=4096)), description='备注')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
@@ -52,3 +54,30 @@ class ChatMessageQuery(BaseModel):
 
 class ChatMessageCreate(MessageBase):
     pass
+
+
+class ChatMessageDao(MessageBase):
+
+    @classmethod
+    def get_latest_message_by_chatid(cls, chat_id: str):
+        with session_getter() as session:
+            res = session.exec(
+                select(ChatMessage).where(ChatMessage.chat_id == chat_id).limit(1)).all()
+            if res:
+                return res[0]
+            else:
+                return None
+
+    @classmethod
+    def delete_by_user_chat_id(cls, user_id: int, chat_id: str):
+        if user_id is None or chat_id is None:
+            logger.info('delete_param_error user_id={} chat_id={}', user_id, chat_id)
+            return False
+
+        statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id,
+                                              ChatMessage.user_id == user_id)
+
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+        return True

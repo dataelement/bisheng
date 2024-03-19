@@ -1,40 +1,55 @@
+import asyncio
 import json
 from typing import List
 
-from bisheng.database.base import get_session
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils.minio_client import MinioClient
-from fastapi import APIRouter, Depends
-from sqlmodel import Session, select
+from fastapi import APIRouter, HTTPException
+from sqlmodel import select
 
 # build router
 router = APIRouter(prefix='/qa', tags=['QA'])
 
 
-@router.get('/keyword', response_model=List[str], status_code=200)
-def get_answer_keyword(message_id: int, session: Session = Depends(get_session)):
+@router.get('/keyword', response_model=UnifiedResponseModel[List[str]], status_code=200)
+async def get_answer_keyword(message_id: int):
     # 获取命中的key
-    chunks = session.exec(select(RecallChunk).where(RecallChunk.message_id == message_id)).first()
-    # keywords
-    if chunks:
-        keywords = chunks.keywords
-        return json.loads(keywords)
-    else:
-        return []
+    conter = 3
+    while True:
+        with session_getter() as session:
+            chunks = session.exec(
+                select(RecallChunk).where(RecallChunk.message_id == message_id)).first()
+        # keywords
+        if chunks:
+            keywords = chunks.keywords
+            return resp_200(json.loads(keywords))
+        else:
+            # 延迟循环
+            if conter <= 0:
+                break
+            await asyncio.sleep(1)
+            conter -= 1
+    raise HTTPException(status_code=500, detail='后台处理中，稍后再试')
 
 
 @router.get('/chunk', status_code=200)
-def get_original_file(*, message_id: int, keys: str, session: Session = Depends(get_session)):
+def get_original_file(*, message_id: int, keys: str):
     # 获取命中的key
-    chunks = session.exec(select(RecallChunk).where(RecallChunk.message_id == message_id)).all()
+    with session_getter() as session:
+        chunks = session.exec(
+            select(RecallChunk).where(RecallChunk.message_id == message_id)).all()
 
     if not chunks:
-        return {'data': [], 'message': 'no chunk found'}
+        return resp_200(message='没有找到chunks')
 
     # chunk 的所有file
     file_ids = {chunk.file_id for chunk in chunks}
-    db_knowledge_files = session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
+    with session_getter() as session:
+        db_knowledge_files = session.exec(
+            select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
     id2file = {file.id: file for file in db_knowledge_files}
     # keywords
     keywords = keys.split(';') if keys else []
@@ -49,15 +64,20 @@ def get_original_file(*, message_id: int, keys: str, session: Session = Depends(
             chunk_res['source_url'] = minio_client.get_share_link(str(chunk.file_id))
             chunk_res['original_url'] = minio_client.get_share_link(
                 file.object_name if file.object_name else str(file.id))
+            chunk_res['source'] = file.file_name
+        else:
+            chunk_res['source_url'] = ''
+            chunk_res['original_url'] = ''
+            chunk_res['source'] = ''
+
         chunk_res['score'] = round(match_score(chunk.chunk, keywords),
                                    2) if len(keywords) > 0 else 0
         chunk_res['file_id'] = chunk.file_id
-        chunk_res['source'] = file.file_name
 
         result.append(chunk_res)
 
     # sort_and_filter_all_chunks(keywords, all_chunk)
-    return {'data': result, 'msg': 'success'}
+    return resp_200(result)
 
 
 def find_lcsubstr(s1, s2):

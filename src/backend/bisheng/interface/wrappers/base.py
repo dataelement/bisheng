@@ -1,16 +1,15 @@
-from typing import Dict, List, Optional
+from typing import ClassVar, Dict, List, Optional
 
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.utils.logger import logger
-from bisheng.utils.util import (build_template_from_class,
-                                build_template_from_method)
+from bisheng.utils.util import build_template_from_class, build_template_from_method
 from langchain import requests, sql_database
 
 
 class WrapperCreator(LangChainTypeCreator):
     type_name: str = 'wrappers'
 
-    from_method_nodes = {'SQLDatabase': 'from_uri'}
+    from_method_nodes: ClassVar[Dict] = {'SQLDatabase': 'from_uri'}
 
     @property
     def type_to_loader_dict(self) -> Dict:

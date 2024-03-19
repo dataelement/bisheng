@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/ui/button";
 import { alertContext } from "../../../contexts/alertContext";
 import { getSysConfigApi, setSysConfigApi } from "../../../controllers/API/user";
+import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 
 export default function Config() {
     const { setErrorData, setSuccessData } = useContext(alertContext);
@@ -12,10 +13,10 @@ export default function Config() {
     const { t } = useTranslation()
 
     useEffect(() => {
-        getSysConfigApi().then(res => {
-            setConfig(res.data)
-            codeRef.current = res.data
-        })
+        captureAndAlertRequestErrorHoc(getSysConfigApi().then(jsonstr => {
+            setConfig(jsonstr)
+            codeRef.current = jsonstr
+        }))
     }, [])
 
     const handleSave = () => {
@@ -26,10 +27,10 @@ export default function Config() {
             });
         }
 
-        setSysConfigApi({ data: codeRef.current }).then(res => {
+        captureAndAlertRequestErrorHoc(setSysConfigApi({ data: codeRef.current }).then(res => {
             setSuccessData({ title: t('success') })
             setConfig(codeRef.current)
-        })
+        }))
     }
 
     const codeRef = useRef('')

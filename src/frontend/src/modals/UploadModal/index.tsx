@@ -9,13 +9,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/ta
 import { alertContext } from "../../contexts/alertContext";
 import { subUploadLibFile } from "../../controllers/API";
 import { uploadFileWithProgress } from "./upload";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
 let qid = 1
-export default function UploadModal({ id, accept, open, desc = '', children = null, setOpen }) {
+export default function UploadModal({ id, accept, open, desc = '', setOpen, onResult }) {
     const { t } = useTranslation()
     // const [file, setFile] = useState(null);
     // const [progress, setProgress] = useState(0);
-    const { setErrorData, setSuccessData } = useContext(alertContext);
+    const { setErrorData } = useContext(alertContext);
     // size
     const [size, setSize] = useState('1000')
     // 符号
@@ -31,26 +32,30 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
             setProgressList([])
             progressCountRef.current = 0
             filePathsRef.current = []
+            failFilesRef.current = []
         }
     }, [open])
 
+    const failFilesRef = useRef([]) // 记录上传失败的文件
     const onDrop = (acceptedFiles) => {
-        const sizeLimit = 49900000;
+        const sizeLimit = 50 * 1024 * 1024;
         const errorFile = [];
+        const files = []
         acceptedFiles.forEach(file => {
-            if (file.size > sizeLimit) {
+            file.size < sizeLimit ?
+                files.push(file) :
                 errorFile.push(file.name);
-            }
         });
-        if (errorFile.length) return setErrorData({
+        errorFile.length && setErrorData({
             title: t('prompt'),
             list: errorFile.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit')}`),
         });
+        if (!files.length) return
         // if (acceptedFiles.length === 1 && acceptedFiles[0].type !== 'application/pdf') {
         //     return
         // }
         setProgressList((list) => {
-            return [...list, ...acceptedFiles.map(file => {
+            return [...list, ...files.map(file => {
                 return {
                     id: qid++,
                     file,
@@ -61,13 +66,13 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
                 }
             })];
         });
-        progressCountRef.current += acceptedFiles.length;
+        progressCountRef.current += files.length;
     }
 
     // 确定上传文件
     const filePathsRef = useRef([])
     const [loading, setLoading] = useState(false)
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         const errorList = [];
         // if (!/^\d+$/.test(size)) errorList.push(t('code.setSplitSize'));
         if (!filePathsRef.current.length) errorList.push(t('code.selectFileToUpload'));
@@ -92,9 +97,13 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
             params.auto = false;
             params.chunk_overlap = Number(/^\d+$/.test(overlap) ? overlap : '100') // 异常值使用默认值
         }
-        await subUploadLibFile(params);
-        setOpen(false);
-        setLoading(false);
+        // sub api
+        captureAndAlertRequestErrorHoc(subUploadLibFile(params).then(() => {
+            setOpen(false);
+            setLoading(false);
+
+            onResult?.(progressList.length, failFilesRef.current)
+        }), () => setLoading(false));
     }
 
     // 上传调度
@@ -102,49 +111,55 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
     useEffect(() => {
         const requestCount = 3
         // 分类
-        let awaits = []
-        let peddings = []
+        let awaits = [] // 排队上传的任务
+        let peddings = [] // 上传中的任务
         progressList.forEach(item => {
             if (item.await) {
                 awaits.push(item)
-            } else if (item.pros !== 100) {
+            } else if (item.pros !== 100 && !item.error) {
                 peddings.push(item)
             }
         })
 
+        // 处理未完成的任务
         if (peddings.length || awaits.length) {
             setEnd(false)
-            awaits.filter((e, i) => i < requestCount - peddings.length).forEach(item => {
-                // 上传任务
+            // 任务补位
+            awaits.filter((e, i) => i < requestCount - peddings.length).forEach(task => {
+                // task为补位任务
                 // 标记开始上传
                 setProgressList((oldState) => oldState.map(el => {
-                    return el.id !== item.id ? el : {
+                    return el.id !== task.id ? el : {
                         ...el,
                         await: false,
                         pros: 1
                     }
                 }))
                 // 上传
-                uploadFileWithProgress(item.file, (count) => {
+                uploadFileWithProgress(task.file, (count) => {
                     // 更新进度
                     setProgressList((oldState) => oldState.map(el => {
-                        return el.id !== item.id ? el : {
+                        return el.id !== task.id ? el : {
                             ...el,
                             pros: count
                         }
                     }))
                 }).then(data => {
-                    // console.log('item.file, end :>> ', item.file, 'end');
+                    // console.log('task.file, end :>> ', task.file, 'end');
                     // console.log('filePathsRef.current.length, progressCountRef.current :>> ', filePathsRef.current.length, progressCountRef.current);
-                    // setFilePaths
-                    if (!data) return setProgressList((oldState) => oldState.map(el => {
-                        return el.id !== item.id ? el : {
-                            ...el,
-                            error: true
-                        }
-                    }))
-                    filePathsRef.current.push(data.file_path)
-                    setEnd(filePathsRef.current.length === progressCountRef.current)
+                    if (data) {
+                        filePathsRef.current.push(data.file_path)
+                    } else {
+                        failFilesRef.current.push(task.file.name)
+                        setProgressList((oldState) => oldState.map(el => {
+                            return el.id !== task.id ? el : {
+                                ...el,
+                                error: true
+                            }
+                        }))
+                    }
+
+                    setEnd(filePathsRef.current.length + failFilesRef.current.length === progressCountRef.current)
                 })
             })
         }
@@ -201,7 +216,10 @@ export default function UploadModal({ id, accept, open, desc = '', children = nu
 
                     <div className="flex justify-end gap-4">
                         <Button variant='outline' className="h-8" onClick={() => setOpen(false)}>{t('cancel')}</Button>
-                        <Button type="submit" className="h-8" disabled={loading || !end} onClick={() => !loading && handleSubmit()}>{t('create')}</Button>
+                        <Button type="submit" className="h-8" disabled={loading || !end} onClick={() => !loading && handleSubmit()}>
+                            {loading && <span className="loading loading-spinner loading-xs"></span>}
+                            {t('create')}
+                        </Button>
                     </div>
                 </div>
             </div>

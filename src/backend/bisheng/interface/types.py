@@ -15,6 +15,7 @@ from bisheng.interface.tools.base import tool_creator
 from bisheng.interface.utilities.base import utility_creator
 from bisheng.interface.vector_store.base import vectorstore_creator
 from bisheng.interface.wrappers.base import wrapper_creator
+from cachetools import LRUCache, cached
 
 
 def get_type_list():
@@ -29,6 +30,7 @@ def get_type_list():
     return all_types
 
 
+@cached(LRUCache(maxsize=1))
 def build_langchain_types_dict():  # sourcery skip: dict-assign-update-to-union
     """Build a dictionary of all langchain types"""
 
@@ -63,3 +65,11 @@ def build_langchain_types_dict():  # sourcery skip: dict-assign-update-to-union
 
 
 langchain_types_dict = build_langchain_types_dict()
+
+
+def get_all_types_dict():
+    """Get all types dictionary combining native and custom components."""
+    native_components = build_langchain_types_dict()
+    # custom_components_from_file = build_custom_components(settings_service)
+    # return merge_nested_dicts_with_renaming(native_components, custom_components_from_file)
+    return native_components

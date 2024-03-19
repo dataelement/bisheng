@@ -3,13 +3,20 @@ import json
 from pathlib import Path
 from typing import Any, Coroutine, Dict, List, Optional, Tuple, Union
 
+from bisheng.database.base import session_getter
+from bisheng.database.models.message import ChatMessage
+from bisheng.database.models.report import Report as ReportModel
 from bisheng.interface.run import build_sorted_vertices, get_memory_key, update_memory_keys
 from bisheng.services.deps import get_session_service
+from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
+from bisheng.utils.minio_client import MinioClient
+from bisheng_langchain.input_output import Report
 from langchain.chains.base import Chain
 from langchain.schema import AgentAction, Document
 from langchain.vectorstores.base import VectorStore
 from pydantic import BaseModel
+from sqlmodel import select
 
 
 def fix_memory_inputs(langchain_object):
@@ -141,6 +148,8 @@ async def process_graph_cached(
     inputs: Optional[dict] = None,
     clear_cache=False,
     session_id=None,
+    flow_id=None,
+    history_count=10,
 ) -> Result:
     session_service = get_session_service()
     if clear_cache:
@@ -153,8 +162,67 @@ async def process_graph_cached(
     if not graph:
         raise ValueError('Graph not found in the session')
     built_object = await graph.abuild()
-    processed_inputs = process_inputs(inputs, artifacts or {})
-    result = generate_result(built_object, processed_inputs)
+    # memery input
+    if hasattr(built_object, 'memory') and built_object.memory is not None:
+        with session_getter() as session:
+            history = session.exec(
+                select(ChatMessage).where(
+                    ChatMessage.chat_id == session_id,
+                    ChatMessage.category.in_(['question', 'answer'])).order_by(
+                        ChatMessage.id.desc()).limit(history_count)).all()
+        history = list(reversed(history))
+        next_loop = -1
+        for index, chat_message in enumerate(history):
+            if index + 1 >= len(history):
+                continue
+            if index <= next_loop:
+                continue
+            if not chat_message.is_bot and history[index + 1].is_bot:
+                next_loop = index + 1
+                if not chat_message.message or not chat_message.message.startswith('{'):
+                    continue
+                inputs_hsitory = json.loads(chat_message.message)
+                outputs_history = {built_object.output_keys[0]: history[next_loop].message}
+                built_object.memory.save_context(inputs_hsitory, outputs_history)
+    if isinstance(built_object, Report):
+        processed_inputs = process_inputs(inputs, artifacts or {})
+        result = generate_result(built_object, processed_inputs)
+        # build report
+        with session_getter() as db_session:
+            template = db_session.exec(
+                select(ReportModel).where(ReportModel.flow_id == flow_id).order_by(
+                    ReportModel.id.desc())).first()
+        if not template:
+            logger.error('template not found flow_id={}', flow_id)
+            raise ValueError(f'template not found flow_id={flow_id}')
+        minio_client = MinioClient()
+        template_muban = minio_client.get_share_link(template.object_name)
+        report_name = built_object.report_name
+        report_name = report_name if report_name.endswith('.docx') else f'{report_name}.docx'
+        result = (result.get(built_object.output_keys[0]) if isinstance(result, dict) else result)
+        test_replace_string(template_muban, result, report_name)
+        result = {built_object.output_keys[0]: minio_client.get_share_link(report_name)}
+    elif any(
+        (vertex.id.startswith('InputNode')
+         for vertex in graph.vertices)) and (not inputs
+                                             or all(len(ins) == 0 for ins in inputs.values())):
+        input_batch = []
+        for vertex in graph.vertices:
+            if vertex.id.startswith('InputNode'):
+                questions = await vertex.get_result()
+                for question in questions:
+                    input_batch.append({built_object.input_keys[0]: question})
+        report = ''
+        for question in input_batch:
+            logger.info('produce auto question question={}', question)
+            processed_inputs = process_inputs(question, artifacts or {})
+            result = generate_result(built_object, processed_inputs)
+            report = f"""{report}### {question} \n {result} \n """
+        result = report
+    else:
+        processed_inputs = process_inputs(inputs, artifacts or {})
+        result = generate_result(built_object, processed_inputs)
+
     # langchain_object is now updated with the new memory
     # we need to update the cache with the updated langchain_object
     session_service.update_session(session_id, (graph, artifacts))
@@ -162,7 +230,9 @@ async def process_graph_cached(
     return Result(result=result, session_id=session_id)
 
 
-def load_flow_from_json(flow: Union[Path, str, dict], tweaks: Optional[dict] = None, build=True):
+async def load_flow_from_json(flow: Union[Path, str, dict],
+                              tweaks: Optional[dict] = None,
+                              build=True):
     """
     Load flow from a JSON file or a JSON object.
 
@@ -185,11 +255,11 @@ def load_flow_from_json(flow: Union[Path, str, dict], tweaks: Optional[dict] = N
     if tweaks is not None:
         graph_data = process_tweaks(graph_data, tweaks)
     from bisheng.api.utils import build_flow_no_yield
-    graph = build_flow_no_yield(graph_data=graph_data,
-                                artifacts={},
-                                process_file=True,
-                                flow_id='tmp',
-                                chat_id=None)
+    graph = await build_flow_no_yield(graph_data=graph_data,
+                                      artifacts={},
+                                      process_file=True,
+                                      flow_id='tmp',
+                                      chat_id=None)
 
     if build:
         langchain_object = graph.build()

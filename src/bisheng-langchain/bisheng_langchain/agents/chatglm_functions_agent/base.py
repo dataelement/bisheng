@@ -14,7 +14,7 @@ from langchain.schema import AgentAction, AgentFinish, BasePromptTemplate
 from langchain.schema.language_model import BaseLanguageModel
 from langchain.schema.messages import ChatMessage
 from langchain.tools import BaseTool, StructuredTool
-from pydantic import Field, root_validator
+from langchain_core.pydantic_v1 import Field, root_validator
 
 HUMAN_MESSAGE_TEMPLATE = '{input}\n\n{agent_scratchpad}'
 

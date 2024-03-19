@@ -23,7 +23,7 @@ const NodeToolbarComponent = (props) => {
     ).length
   );
 
-  const { setLastCopiedSelection, paste } = useContext(TabsContext);
+  const { paste } = useContext(TabsContext);
   const reactFlowInstance = useReactFlow();
   return (
     <>

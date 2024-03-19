@@ -1,4 +1,5 @@
-import _ from "lodash";
+import uniqueId from "lodash-es/uniqueId";
+import cloneDeep from "lodash-es/cloneDeep";
 import { useContext, useEffect, useState } from "react";
 import { RouterProvider, useSearchParams } from "react-router-dom";
 import "reactflow/dist/style.css";
@@ -60,7 +61,7 @@ export default function App() {
       setAlertsList((old) => {
         let newAlertsList = [
           ...old,
-          { type: "error", data: _.cloneDeep(errorData), id: _.uniqueId() },
+          { type: "error", data: cloneDeep(errorData), id: uniqueId() },
         ];
         return newAlertsList;
       });
@@ -78,7 +79,7 @@ export default function App() {
       setAlertsList((old) => {
         let newAlertsList = [
           ...old,
-          { type: "notice", data: _.cloneDeep(noticeData), id: _.uniqueId() },
+          { type: "notice", data: cloneDeep(noticeData), id: uniqueId() },
         ];
         return newAlertsList;
       });
@@ -96,13 +97,12 @@ export default function App() {
       setAlertsList((old) => {
         let newAlertsList = [
           ...old,
-          { type: "success", data: _.cloneDeep(successData), id: _.uniqueId() },
+          { type: "success", data: cloneDeep(successData), id: uniqueId() },
         ];
         return newAlertsList;
       });
     }
   }, [
-    _,
     errorData,
     errorOpen,
     noticeData,
@@ -113,6 +113,22 @@ export default function App() {
     successData,
     successOpen,
   ]);
+
+
+  /**
+   * 暴露弹窗全局使用
+   **/
+  useEffect(() => {
+    window.errorAlerts = (errorList: string[]) => {
+      setAlertsList((old) => {
+        let newAlertsList = [
+          ...old,
+          { type: "error", data: { title: '', list: errorList }, id: uniqueId() },
+        ];
+        return newAlertsList;
+      })
+    }
+  }, [])
 
   const removeAlert = (id: string) => {
     setAlertsList((prevAlertsList) =>
@@ -157,7 +173,6 @@ export default function App() {
   return (
     //need parent component with width and height
     <div className="flex h-full flex-col">
-      {/* <Header /> */}
       {(user?.user_id || noAuthPages.includes(path)) ? <RouterProvider router={router} />
         : user ? <div className="loading"></div>
           : <LoginPage></LoginPage>}

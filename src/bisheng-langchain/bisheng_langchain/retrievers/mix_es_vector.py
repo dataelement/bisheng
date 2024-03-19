@@ -49,13 +49,18 @@ class MixEsVectorRetriever(BaseRetriever):
         elif self.combine_strategy == 'vector_front':
             return vector_docs + keyword_docs
         elif self.combine_strategy == 'mix':
-            combine_docs = []
+            combine_docs_dict = {}
             min_len = min(len(keyword_docs), len(vector_docs))
             for i in range(min_len):
-                combine_docs.append(keyword_docs[i])
-                combine_docs.append(vector_docs[i])
-            combine_docs.extend(keyword_docs[min_len:])
-            combine_docs.extend(vector_docs[min_len:])
+                combine_docs_dict[keyword_docs[i].page_content] = keyword_docs[i]
+                combine_docs_dict[vector_docs[i].page_content] = vector_docs[i]
+            for doc in keyword_docs[min_len:]:
+                combine_docs_dict[doc.page_content] = doc
+            for doc in vector_docs[min_len:]:
+                combine_docs_dict[doc.page_content] = doc
+
+            # 将字典的值转换为列表
+            combine_docs = list(combine_docs_dict.values())
             return combine_docs
         else:
             raise ValueError(f'Expected combine_strategy to be one of '
@@ -88,13 +93,18 @@ class MixEsVectorRetriever(BaseRetriever):
         elif self.combine_strategy == 'vector_front':
             return vector_docs + keyword_docs
         elif self.combine_strategy == 'mix':
-            combine_docs = []
+            combine_docs_dict = {}
             min_len = min(len(keyword_docs), len(vector_docs))
             for i in range(min_len):
-                combine_docs.append(keyword_docs[i])
-                combine_docs.append(vector_docs[i])
-            combine_docs.extend(keyword_docs[min_len:])
-            combine_docs.extend(vector_docs[min_len:])
+                combine_docs_dict[keyword_docs[i].page_content] = keyword_docs[i]
+                combine_docs_dict[vector_docs[i].page_content] = vector_docs[i]
+            for doc in keyword_docs[min_len:]:
+                combine_docs_dict[doc.page_content] = doc
+            for doc in vector_docs[min_len:]:
+                combine_docs_dict[doc.page_content] = doc
+
+            # 将字典的值转换为列表
+            combine_docs = list(combine_docs_dict.values())
             return combine_docs
         else:
             raise ValueError(f'Expected combine_strategy to be one of '

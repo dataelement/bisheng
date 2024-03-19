@@ -25,6 +25,10 @@ import { Textarea } from "../../components/ui/textarea";
 import { alertContext } from "../../contexts/alertContext";
 import { userContext } from "../../contexts/userContext";
 import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "../../controllers/API";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import PaginationComponent from "../../components/PaginationComponent";
+import { useTable } from "../../util/hook";
+import { Search } from "lucide-react";
 
 function CreateModal({ datalist, open, setOpen }) {
     const { t } = useTranslation()
@@ -38,7 +42,7 @@ function CreateModal({ datalist, open, setOpen }) {
     // Fetch model data
     useEffect(() => {
         getEmbeddingModel().then(res => {
-            const models = res.data.data.models || []
+            const models = res.models || []
             setOptions(models)
             setModal(models[0] || '')
         })
@@ -64,18 +68,16 @@ function CreateModal({ datalist, open, setOpen }) {
         setError({ name: !!nameErrors, desc: errorlist.length > nameErrors })
         if (errorlist.length) return handleError(errorlist)
 
-        createFileLib({
+        captureAndAlertRequestErrorHoc(createFileLib({
             name,
             description: desc,
             model: modal
         }).then(res => {
             // @ts-ignore
             window.libname = name
-            navigate("/filelib/" + res.data.id);
+            navigate("/filelib/" + res.id);
             setOpen(false)
-        }).catch(e => {
-            handleError(e.response.data.detail);
-        })
+        }))
     }
 
     const handleError = (list) => {
@@ -116,36 +118,22 @@ function CreateModal({ datalist, open, setOpen }) {
 
 export default function FileLibPage() {
     const [open, setOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(1);
-    const [datalist, setDataList] = useState([]);
-    const [pageEnd, setPageEnd] = useState(false);
-    const pages = useRef(1);
-
     const { user } = useContext(userContext);
 
-    const loadPage = (_page) => {
-        setLoading(true);
-        readFileLibDatabase(_page).then(res => {
-            const { data, pages: ps } = res;
-            pages.current = ps;
-            setDataList(data);
-            setPage(_page);
-            setPageEnd(!data.length);
-            setLoading(false);
-        });
-    };
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable((param) =>
+        readFileLibDatabase(param.page, param.pageSize, param.keyword)
+    )
 
     // Delete
     const { delShow, idRef, close, delConfirm } = useDelete();
 
     const handleDelete = () => {
-        deleteFileLib(idRef.current.id).then(res => {
-            loadPage(page);
+        captureAndAlertRequestErrorHoc(deleteFileLib(idRef.current.id).then(res => {
+            reload();
             close();
-        });
+        }));
     }
-    
+
     // 进详情页前缓存 page, 临时方案
     const handleCachePage = () => {
         window.LibPage = page
@@ -153,10 +141,10 @@ export default function FileLibPage() {
     useEffect(() => {
         const _page = window.LibPage
         if (_page) {
-            loadPage(_page);
+            setPage(_page);
             delete window.LibPage
         } else {
-            loadPage(1);
+            setPage(1);
         }
     }, [])
 
@@ -176,13 +164,23 @@ export default function FileLibPage() {
                 </TabsList>
 
                 <TabsContent value="account">
-                    <div className="flex justify-end"><Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('create')}</Button></div>
+                    <div className="flex justify-end gap-4 items-center">
+                        <div className="w-[180px] relative">
+                            <Input placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)}></Input>
+                            <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+                        </div>
+                        <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('create')}</Button>
+                    </div>
                     <Table>
                         <TableCaption>
                             <p>{t('lib.libraryCollection')}</p>
-                            <div className="join grid grid-cols-2 w-[200px]">
-                                <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>{t('previousPage')}</button>
-                                <button disabled={page >= pages.current || pageEnd} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>{t('nextPage')}</button>
+                            <div className="">
+                                <PaginationComponent
+                                    page={page}
+                                    pageSize={pageSize}
+                                    total={total}
+                                    onChange={(newPage) => setPage(newPage)}
+                                />
                             </div>
                         </TableCaption>
 
@@ -210,7 +208,7 @@ export default function FileLibPage() {
                                         window.libname = el.name;
                                     }}>
                                         <Link to={`/filelib/${el.id}`} className="underline" onClick={handleCachePage}>{t('lib.details')}</Link>
-                                        {user.user_name === 'admin' || user.user_id === el.user_id ?
+                                        {user.role === 'admin' || user.user_id === el.user_id ?
                                             <a href="javascript:;" onClick={() => delConfirm(el)} className="underline ml-4">{t('delete')}</a> :
                                             <a href="javascript:;" className="underline ml-4 text-gray-400">{t('delete')}</a>
                                         }

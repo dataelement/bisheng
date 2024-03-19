@@ -1,6 +1,5 @@
 import hashlib
 from contextlib import contextmanager
-from typing import Generator
 
 from bisheng.database.init_config import init_config
 from bisheng.database.models.role import Role
@@ -11,7 +10,7 @@ from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from sqlmodel import Session, select
 
-db_service = DatabaseService(settings.database_url)
+db_service: 'DatabaseService' = DatabaseService(settings.database_url)
 
 
 def init_default_data():
@@ -31,7 +30,7 @@ def init_default_data():
                     session.commit()
 
                 user = session.exec(select(User).limit(1)).all()
-                if not user:
+                if not user and settings.admin:
                     md5 = hashlib.md5()
                     md5.update(settings.admin.get('password').encode('utf-8'))
                     user = User(
@@ -57,18 +56,14 @@ def init_default_data():
             redis_client.delete('init_default_data')
 
 
-def get_session() -> Generator['Session', None, None]:
-    yield from db_service.get_session()
-
-
 @contextmanager
-def session_getter():
+def session_getter() -> Session:
     """轻量级session context"""
     try:
         session = Session(db_service.engine)
         yield session
     except Exception as e:
-        print('Session rollback because of exception:', e)
+        logger.info('Session rollback because of exception:{}', e)
         session.rollback()
         raise
     finally:

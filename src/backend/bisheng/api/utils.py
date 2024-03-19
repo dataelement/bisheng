@@ -1,5 +1,8 @@
+import xml.dom.minidom
+from typing import Dict, List
+
 from bisheng.api.v1.schemas import StreamData
-from bisheng.database.base import get_session, session_getter
+from bisheng.database.base import session_getter
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
@@ -63,12 +66,12 @@ def build_input_keys_response(langchain_object, artifacts):
     return input_keys_response
 
 
-def build_flow(graph_data: dict,
-               artifacts,
-               process_file=False,
-               flow_id=None,
-               chat_id=None,
-               **kwargs) -> Graph:
+async def build_flow(graph_data: dict,
+                     artifacts,
+                     process_file=False,
+                     flow_id=None,
+                     chat_id=None,
+                     **kwargs) -> Graph:
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
@@ -78,7 +81,7 @@ def build_flow(graph_data: dict,
         yield str(StreamData(event='error', data={'error': error_message}))
         return
 
-    number_of_nodes = len(graph.nodes)
+    number_of_nodes = len(graph.vertices)
 
     for i, vertex in enumerate(graph.generator_build(), 1):
         try:
@@ -108,23 +111,26 @@ def build_flow(graph_data: dict,
                 if 'collection_name' in kwargs and 'index_name' in vertex.params:
                     vertex.params['index_name'] = kwargs['collection_name']
 
+                # 临时目录处理 tmp_{embeding}_{loader}_{chat_id}
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
                     vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
                 elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
                     # es
                     vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
 
-            vertex.build()
+            await vertex.build()
             params = vertex._built_object_repr()
             valid = True
             logger.debug(
-                f"Building node {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}")
+                f"Building node {vertex.vertex_type} {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}"
+            )
             if vertex.artifacts:
                 # The artifacts will be prompt variables
                 # passed to build_input_keys_response
                 # to set the input_keys values
                 artifacts.update(vertex.artifacts)
         except Exception as exc:
+            logger.exception(f'Error building node {vertex.id}', exc_info=True)
             params = str(exc)
             valid = False
             response = {
@@ -143,15 +149,15 @@ def build_flow(graph_data: dict,
             'progress': round(i / number_of_nodes, 2),
         }
         yield str(StreamData(event='message', data=response))
-    return graph
+    yield graph
 
 
-def build_flow_no_yield(graph_data: dict,
-                        artifacts,
-                        process_file=False,
-                        flow_id=None,
-                        chat_id=None,
-                        **kwargs):
+async def build_flow_no_yield(graph_data: dict,
+                              artifacts,
+                              process_file=False,
+                              flow_id=None,
+                              chat_id=None,
+                              **kwargs):
     try:
         # Some error could happen when building the graph
         graph = Graph.from_payload(graph_data)
@@ -198,7 +204,7 @@ def build_flow_no_yield(graph_data: dict,
             if vertex.base_type == 'chains' and 'retriever' in vertex.params:
                 vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
 
-            vertex.build()
+            await vertex.build()
             params = vertex._built_object_repr()
             logger.debug(
                 f"Building node {str(params)[:50]}{'...' if len(str(params)) > 50 else ''}")
@@ -215,7 +221,7 @@ def build_flow_no_yield(graph_data: dict,
 def access_check(payload: dict, owner_user_id: int, target_id: int, type: AccessType) -> bool:
     if payload.get('role') != 'admin':
         # role_access
-        with next(get_session()) as session:
+        with session_getter() as session:
             role_access = session.exec(
                 select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
                                          RoleAccess.type == type.value)).all()
@@ -233,7 +239,7 @@ def get_L2_param_from_flow(
     node_id = []
     variable_ids = []
     file_name = []
-    for node in graph.nodes:
+    for node in graph.vertices:
         if node.vertex_type in {'InputFileNode'}:
             node_id.append(node.id)
             file_name.append(node.params.get('file_type'))
@@ -284,3 +290,38 @@ def get_L2_param_from_flow(
             logger.exception(e)
             session.rollback()
             return False
+
+
+def parse_server_host(endpoint: str):
+    """ 将数据库中的endpoints解析为http请求的host """
+    endpoint = endpoint.replace('http://', '').split('/')[0]
+    return f'http://{endpoint}'
+
+
+# 将 nvidia-smi -q  -x 的输出解析为可视化数据
+def parse_gpus(gpu_str: str) -> List[Dict]:
+    dom_tree = xml.dom.minidom.parseString(gpu_str)
+    collections = dom_tree.documentElement
+    gpus = collections.getElementsByTagName('gpu')
+    res = []
+    for one in gpus:
+        fb_mem_elem = one.getElementsByTagName('fb_memory_usage')[0]
+        gpu_uuid_elem = one.getElementsByTagName('uuid')[0]
+        gpu_id_elem = one.getElementsByTagName('minor_number')[0]
+        gpu_total_mem = fb_mem_elem.getElementsByTagName('total')[0]
+        free_mem = fb_mem_elem.getElementsByTagName('free')[0]
+        gpu_utility_elem = one.getElementsByTagName('utilization')[0].getElementsByTagName(
+            'gpu_util')[0]
+        res.append({
+            'gpu_uuid':
+            gpu_uuid_elem.firstChild.data,
+            'gpu_id':
+            gpu_id_elem.firstChild.data,
+            'gpu_total_mem':
+            '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
+            'gpu_used_mem':
+            '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
+            'gpu_utility':
+            round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
+        })
+    return res

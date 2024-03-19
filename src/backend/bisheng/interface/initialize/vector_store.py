@@ -1,7 +1,6 @@
 import json
 import os
 from typing import Any, Callable, Dict, Type
-from venv import logger
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge
@@ -9,8 +8,9 @@ from bisheng.settings import settings
 from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.vectorstores import (FAISS, Chroma, Milvus, MongoDBAtlasVectorSearch, Pinecone,
-                                    Qdrant, SupabaseVectorStore, Weaviate)
+from langchain_community.vectorstores import (FAISS, Chroma, Milvus, MongoDBAtlasVectorSearch,
+                                              Pinecone, Qdrant, SupabaseVectorStore, Weaviate)
+from loguru import logger
 from sqlmodel import select
 
 
@@ -229,7 +229,7 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
                     select(Knowledge).where(Knowledge.collection_name == col)).first()
 
         if not knowledge:
-            raise Exception(f'不能找到知识库collection={col}')
+            raise ValueError(f'不能找到知识库collection={col} knowledge_id={collection_id}')
         model_param = settings.get_knowledge().get('embeddings').get(knowledge.model)
         if knowledge.model == 'text-embedding-ada-002':
             embedding = OpenAIEmbeddings(**model_param)
@@ -238,8 +238,8 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
         params['embedding'] = embedding
         if knowledge.collection_name.startswith('partition'):
             search_kwargs.update({'partition_key': knowledge.id})
-    logger.info(
-        f"init_milvus collection_name={params['collection_name']} partition={search_kwargs}")
+    logger.info('init_milvus collection_name={} partition={}', params['collection_name'],
+                search_kwargs)
     return class_object.from_documents(**params)
 
 

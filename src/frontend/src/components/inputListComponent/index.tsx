@@ -1,7 +1,7 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { InputListComponentType } from "../../types/components";
 
-import _ from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
 import { Plus, X } from "lucide-react";
 import { PopUpContext } from "../../contexts/popUpContext";
 
@@ -25,11 +25,22 @@ export default function InputListComponent({
     setInputList(value);
   }, [closePopUp]);
 
+  // list超出滚动，配合template-scrollbar使用（TODO 抽象为插槽）
+  const scrollBodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const scrollFun = (event) => {
+      event.stopPropagation();
+    }
+    scrollBodyRef.current.addEventListener('wheel', scrollFun);
+    return () => scrollBodyRef.current?.removeEventListener('wheel', scrollFun);
+  }, [])
+
   return (
     <div
+      ref={scrollBodyRef}
       className={
         (disabled ? "pointer-events-none cursor-not-allowed" : "") +
-        "flex flex-col gap-3"
+        "flex flex-col gap-3 template-scrollbar"
       }
     >
       {inputList.map((i, idx) => {
@@ -46,7 +57,7 @@ export default function InputListComponent({
               placeholder="input..."
               onChange={(e) => {
                 setInputList((old) => {
-                  let newInputList = _.cloneDeep(old);
+                  let newInputList = cloneDeep(old);
                   newInputList[idx] = e.target.value;
                   onChange(newInputList);
                   return newInputList;
@@ -57,7 +68,7 @@ export default function InputListComponent({
               <button
                 onClick={() => {
                   setInputList((old) => {
-                    let newInputList = _.cloneDeep(old);
+                    let newInputList = cloneDeep(old);
                     newInputList.push("");
                     onChange(newInputList);
                     return newInputList;
@@ -71,7 +82,7 @@ export default function InputListComponent({
               inputList.length !== 1 && <button
                 onClick={() => {
                   setInputList((old) => {
-                    let newInputList = _.cloneDeep(old);
+                    let newInputList = cloneDeep(old);
                     newInputList.splice(idx, 1);
                     onChange(newInputList);
                     return newInputList;

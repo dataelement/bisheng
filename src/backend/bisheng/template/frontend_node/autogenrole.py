@@ -15,53 +15,58 @@ class AutogenRoleFrontNode(FrontendNode):
         field.show = True
 
     def add_extra_fields(self) -> None:
-        if self.name in {'AutoGenAssistant',
-                         'AutoGenGroupChatManager',
-                         }:
+        if self.name in {
+                'AutoGenAssistant',
+                'AutoGenGroupChatManager',
+        }:
             self.template.add_field(
-                    TemplateField(
-                        field_type='float',
-                        required=True,
-                        show=True,
-                        name='temperature',
-                        advanced=False,
-                        value=0
-                    ))
+                TemplateField(field_type='float',
+                              required=True,
+                              show=True,
+                              name='temperature',
+                              advanced=False,
+                              value=0))
             self.template.add_field(
-                    TemplateField(
-                        field_type='str',
-                        required=True,
-                        show=True,
-                        name='model_name',
-                        value='gpt-4-0613',
-                        advanced=False,
-                    ))
+                TemplateField(field_type='str',
+                              required=True,
+                              show=True,
+                              name='model_name',
+                              value='gpt-4-0613',
+                              advanced=False))
             self.template.add_field(
-                    TemplateField(
-                        field_type='str',
-                        required=False,
-                        show=True,
-                        name='openai_api_base',
-                        value='',
-                        advanced=False,
-                    ))
+                TemplateField(field_type='str',
+                              required=False,
+                              show=True,
+                              name='openai_api_base',
+                              value='',
+                              advanced=False))
             self.template.add_field(
-                    TemplateField(
-                        field_type='str',
-                        required=False,
-                        show=True,
-                        name='openai_api_key',
-                        value='',
-                        advanced=False,
-                    ))
+                TemplateField(field_type='str',
+                              required=False,
+                              show=True,
+                              name='openai_api_key',
+                              value='',
+                              advanced=False))
             self.template.add_field(
-                    TemplateField(
-                        field_type='str',
-                        required=False,
-                        show=True,
-                        name='openai_proxy',
-                        advanced=False,
-                    ))
+                TemplateField(field_type='str',
+                              required=False,
+                              show=True,
+                              name='openai_proxy',
+                              advanced=False))
+            self.template.add_field(
+                TemplateField(field_type='str',
+                              required=False,
+                              show=True,
+                              name='api_type',
+                              info='azure',
+                              advanced=False))
+            self.template.add_field(
+                TemplateField(field_type='str',
+                              required=False,
+                              show=True,
+                              name='api_version',
+                              info='azure',
+                              advanced=False))
 
         if self.name == 'AutoGenGroupChatManager':
             self.template.add_field(
@@ -74,23 +79,19 @@ class AutogenRoleFrontNode(FrontendNode):
                     advanced=False,
                 ))
             self.template.add_field(
-                TemplateField(
-                    field_type='int',
-                    required=False,
-                    show=True,
-                    name='max_round',
-                    advanced=False,
-                    value=50
-                ))
+                TemplateField(field_type='int',
+                              required=False,
+                              show=True,
+                              name='max_round',
+                              advanced=False,
+                              value=50))
             self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=False,
-                    show=True,
-                    name='system_message',
-                    advanced=False,
-                    value='Group chat manager.'
-                ))
+                TemplateField(field_type='str',
+                              required=False,
+                              show=True,
+                              name='system_message',
+                              advanced=False,
+                              value='Group chat manager.'))
             self.template.add_field(
                 TemplateField(
                     field_type='str',
@@ -121,23 +122,19 @@ class AutogenRoleFrontNode(FrontendNode):
 
         if self.name == 'AutoGenUser':
             self.template.add_field(
-                TemplateField(
-                    field_type='int',
-                    required=False,
-                    show=True,
-                    name='max_consecutive_auto_reply',
-                    advanced=False,
-                    value=10
-                ))
+                TemplateField(field_type='int',
+                              required=False,
+                              show=True,
+                              name='max_consecutive_auto_reply',
+                              advanced=False,
+                              value=10))
             self.template.add_field(
-                TemplateField(
-                    field_type='str',
-                    required=True,
-                    show=True,
-                    name='human_input_mode',
-                    advanced=False,
-                    value='ALWAYS'
-                ))
+                TemplateField(field_type='str',
+                              required=True,
+                              show=True,
+                              name='human_input_mode',
+                              advanced=False,
+                              value='ALWAYS'))
         if self.name == 'AutoGenCustomRole':
             self.template.add_field(
                 TemplateField(

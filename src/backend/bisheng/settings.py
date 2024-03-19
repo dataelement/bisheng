@@ -1,10 +1,11 @@
 import os
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 import yaml
 from bisheng.database.models.config import Config
 from bisheng.utils.logger import logger
-from pydantic import BaseSettings, root_validator
+from cryptography.fernet import Fernet
+from pydantic import BaseSettings, root_validator, validator
 from sqlmodel import select
 
 
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
     dev: bool = False
     environment: Union[dict, str] = 'dev'
     database_url: Optional[str] = None
-    redis_url: Optional[str] = None
+    redis_url: Optional[Union[str, Dict]] = None
     redis: Optional[dict] = None
     admin: dict = {}
     cache: str = 'InMemoryCache'
@@ -39,46 +40,52 @@ class Settings(BaseSettings):
     default_llm: dict = {}
     jwt_secret: str = 'secret'
 
-    @root_validator(pre=True)
-    def set_database_url(cls, values):
-        if 'database_url' not in values:
+    @validator('database_url', pre=True)
+    def set_database_url(cls, value):
+        if not value:
             logger.debug('No database_url provided, trying bisheng_DATABASE_URL env variable')
             if bisheng_database_url := os.getenv('bisheng_DATABASE_URL'):
-                values['database_url'] = bisheng_database_url
+                value = bisheng_database_url
             else:
                 logger.debug('No DATABASE_URL env variable, using sqlite database')
-                values['database_url'] = 'sqlite:///./bisheng.db'
-        # else:
-        #     # 对密码进行加密
-        #     import re
-        #     pattern = r"(?<=:)[^:]+(?=@)"  # 匹配冒号后面到@符号前面的任意字符
-        #     match = re.search(pattern, values['database_url'])
-        #     if match:
-        #         password = match.group(0)
-        #         new_password = decrypt_token(password)
-        #         new_mysql_url = re.sub(pattern, f":{new_password}@", values['database_url'])
-        #         values['database_url'] = new_mysql_url
+                value = 'sqlite:///./bisheng.db'
+        else:
+            # 对密码进行加密
+            import re
+            pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
+            match = re.search(pattern, value)
+            if match:
+                password = match.group(0)
+                new_password = decrypt_token(password)
+                new_mysql_url = re.sub(pattern, f'{new_password}', value)
+                value = new_mysql_url
 
-        return values
+        return value
 
-    @root_validator(pre=True)
+    @root_validator()
     def set_redis_url(cls, values):
-        # if 'redis_url' in values:
-        #     import re
-        #     pattern = r"(?<=:)[^:]+(?=@)"  # 匹配冒号后面到@符号前面的任意字符
-        #     match = re.search(pattern, values['redis_url'])
-        #     if match:
-        #         password = match.group(0)
-        #         new_password = decrypt_token(password)
-        #         new_mysql_url = re.sub(pattern, f":{new_password}@", values['redis_url'])
-        #         values['redis_url'] = new_mysql_url
+        if 'redis_url' in values:
+            if isinstance(values['redis_url'], dict):
+                for k, v in values['redis_url'].items():
+                    if isinstance(v, str) and v.startswith('encrypt(') and v.endswith(')'):
+                        v = v[8:-1]
+                        values['redis_url'][k] = decrypt_token(v)
+            else:
+                import re
+                pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
+                match = re.search(pattern, values['redis_url'])
+                if match:
+                    password = match.group(0)
+                    new_password = decrypt_token(password)
+                    new_redis_url = re.sub(pattern, f'{new_password}', values['redis_url'])
+                    values['redis_url'] = new_redis_url
         return values
 
     class Config:
         validate_assignment = True
         extra = 'ignore'
 
-    @root_validator(allow_reuse=True)
+    @root_validator()
     def validate_lists(cls, values):
         for key, value in values.items():
             if key != 'dev' and not value:
@@ -87,15 +94,15 @@ class Settings(BaseSettings):
 
     def get_knowledge(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
-        from bisheng.database.base import get_session
+        from bisheng.database.base import session_getter
         from bisheng.cache.redis import redis_client
         redis_key = 'config_knowledges'
         cache = redis_client.get(redis_key)
         if cache:
             return yaml.safe_load(cache)
-        with next(get_session()) as session:
-            knowledge_config = session.exec(select(Config)
-                                            .where(Config.key == 'knowledges')).first()
+        with session_getter() as session:
+            knowledge_config = session.exec(
+                select(Config).where(Config.key == 'knowledges')).first()
             if knowledge_config:
                 redis_client.set(redis_key, knowledge_config.value, 100)
                 return yaml.safe_load(knowledge_config.value)
@@ -104,15 +111,14 @@ class Settings(BaseSettings):
 
     def get_default_llm(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
-        from bisheng.database.base import get_session
+        from bisheng.database.base import session_getter
         from bisheng.cache.redis import redis_client
         redis_key = 'config_default_llm'
         cache = redis_client.get(redis_key)
         if cache:
             return yaml.safe_load(cache)
-        with next(get_session()) as session:
-            llm_config = session.exec(select(Config)
-                                      .where(Config.key == 'default_llm')).first()
+        with session_getter() as session:
+            llm_config = session.exec(select(Config).where(Config.key == 'default_llm')).first()
             if llm_config:
                 redis_client.set(redis_key, llm_config.value, 100)
                 return yaml.safe_load(llm_config.value)
@@ -121,13 +127,13 @@ class Settings(BaseSettings):
 
     def get_from_db(self, key: str):
         # 直接从db中添加配置
-        from bisheng.database.base import get_session
+        from bisheng.database.base import session_getter
         from bisheng.cache.redis import redis_client
         redis_key = 'config_' + key
         cache = redis_client.get(redis_key)
         if cache:
             return yaml.safe_load(cache)
-        with next(get_session()) as session:
+        with session_getter() as session:
             llm_config = session.exec(select(Config).where(Config.key == key)).first()
             if llm_config:
                 redis_client.set(redis_key, llm_config.value, 100)
@@ -186,11 +192,15 @@ def load_settings_from_yaml(file_path: str) -> Settings:
     if '/' not in file_path:
         file_path = os.path.join(current_path, file_path)
 
-    with open(file_path, 'r') as f:
+    with open(file_path, 'r', encoding='utf-8') as f:
         settings_dict = yaml.safe_load(f)
 
-    with open(os.path.join(current_path, 'default_node.yaml')) as node:
+    with open(os.path.join(current_path, 'default_node.yaml'), 'r', encoding='utf-8') as node:
         settings_dict.update(yaml.safe_load(node))
+    for key in settings_dict:
+        if key not in Settings.__fields__.keys():
+            raise KeyError(f'Key {key} not found in settings')
+        logger.debug(f'Loading {len(settings_dict[key])} {key} from {file_path}')
 
     return Settings(**settings_dict)
 
@@ -202,7 +212,7 @@ def read_from_conf(file_path: str) -> str:
 
         file_path = os.path.join(current_path, file_path)
 
-    with open(file_path, 'r') as f:
+    with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
     return content
@@ -239,15 +249,16 @@ def parse_key(keys: list[str], setting_str: str = None) -> str:
     return ['\n'.join(value) for value in value_of_key]
 
 
-# from cryptography.fernet import Fernet
+secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
 
-# secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
 
-# def encrypt_token(token: str):
-#     return Fernet(secret_key).encrypt(token.encode())
+def encrypt_token(token: str):
+    return Fernet(secret_key).encrypt(token.encode())
 
-# def decrypt_token(token: str):
-#     return Fernet(secret_key).decrypt(token).decode()
+
+def decrypt_token(token: str):
+    return Fernet(secret_key).decrypt(token).decode()
+
 
 config_file = os.getenv('config', 'config.yaml')
 settings = load_settings_from_yaml(config_file)

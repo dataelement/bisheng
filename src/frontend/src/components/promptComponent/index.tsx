@@ -5,7 +5,6 @@ import { TextAreaComponentType } from "../../types/components";
 import { TypeModal } from "../../utils";
 
 import { ExternalLink } from "lucide-react";
-import { typesContext } from "../../contexts/typesContext";
 import { postValidatePrompt } from "../../controllers/API";
 
 export default function PromptAreaComponent({
@@ -19,25 +18,12 @@ export default function PromptAreaComponent({
 }: TextAreaComponentType) {
   const [myValue, setMyValue] = useState(value);
   const { openPopUp } = useContext(PopUpContext);
-  const { reactFlowInstance } = useContext(typesContext);
   useEffect(() => {
     if (disabled) {
       setMyValue("");
       onChange("");
     }
   }, [disabled, onChange]);
-
-  useEffect(() => {
-    setMyValue(value);
-    if (value !== "" && !editNode) {
-      postValidatePrompt(field_name, value, nodeClass).then((apiReturn) => {
-        if (apiReturn.data) {
-          setNodeClass(apiReturn.data.frontend_node);
-          // need to update reactFlowInstance to re-render the nodes.
-        }
-      });
-    }
-  }, [value, reactFlowInstance]);
 
   // useEffect(() => {
   //   if (value !== "" && myValue !== value && reactFlowInstance) {
@@ -56,6 +42,11 @@ export default function PromptAreaComponent({
   //       .catch((error) => {});
   //   }
   // }, [reactFlowInstance, field_name, myValue, nodeClass, setNodeClass, value]);
+
+  const handleSave = (t: string) => {
+    setMyValue(t);
+    onChange(t);
+  }
 
   return (
     <div className={disabled ? "pointer-events-none w-full " : " w-full"}>
@@ -95,10 +86,7 @@ export default function PromptAreaComponent({
                 value={myValue}
                 buttonText="check & Save"
                 modalTitle="Edit Prompt"
-                setValue={(t: string) => {
-                  setMyValue(t);
-                  onChange(t);
-                }}
+                setValue={handleSave}
                 nodeClass={nodeClass}
                 setNodeClass={setNodeClass}
               />

@@ -14,10 +14,10 @@ from langchain.schema import ChatGeneration, ChatResult
 from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
                                        HumanMessage, SystemMessage)
 from langchain.utils import get_from_dict_or_env
-from pydantic import Field, root_validator
+from langchain_core.language_models.llms import create_base_retry_decorator
+from langchain_core.pydantic_v1 import Field, root_validator
+
 # from requests.exceptions import HTTPError
-from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
-                      wait_exponential)
 
 # from .interface import MinimaxChatCompletion
 # from .interface.types import ChatInput
@@ -38,19 +38,15 @@ def _import_tiktoken() -> Any:
     return tiktoken
 
 
-def _create_retry_decorator(llm: BaseHostChatLLM) -> Callable[[Any], Any]:
+def _create_retry_decorator(
+    llm: BaseHostChatLLM,
+    run_manager: Optional[Union[AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun]] = None,
+) -> Callable[[Any], Any]:
 
-    min_seconds = 1
-    max_seconds = 20
-    # Wait 2^x * 1 second between each retry starting with
-    # 4 seconds, then up to 10 seconds, then 10 seconds afterwards
-    return retry(
-        reraise=True,
-        stop=stop_after_attempt(llm.max_retries),
-        wait=wait_exponential(multiplier=1, min=min_seconds, max=max_seconds),
-        retry=(retry_if_exception_type(Exception)),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-    )
+    errors = [requests.exceptions.ReadTimeout, ValueError]
+    return create_base_retry_decorator(error_types=errors,
+                                       max_retries=llm.max_retries,
+                                       run_manager=run_manager)
 
 
 def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
@@ -217,7 +213,7 @@ class BaseHostChatLLM(BaseChatModel):
             # print('messages:', messages)
             # print('functions:', kwargs.get('functions', []))
             if self.verbose:
-                logger.info(f'payload={params}')
+                logger.info('payload=%s', json.dumps(params, indent=2))
             try:
                 resp = self.client.post(url=self.host_base_url, json=params)
                 if resp.text.startswith('data:'):
@@ -277,7 +273,7 @@ class BaseHostChatLLM(BaseChatModel):
             try:
                 async with self.client.apost(url=self.host_base_url, json=kwargs) as response:
                     if response.status != 200:
-                        raise ValueError(f'Error: {response.status}')
+                        raise ValueError(f'Error: {response.status} contet: {response.text}')
                     async for txt in response.content.iter_any():
                         if b'\n' in txt:
                             for txt_ in txt.split(b'\n'):
@@ -295,7 +291,11 @@ class BaseHostChatLLM(BaseChatModel):
                 if response.startswith('event:error'):
                     is_error = True
                 elif response.startswith('data:'):
-                    yield (is_error, response[len('data:'):])
+                    text = response[len('data:'):].strip()
+                    if text.startswith('{'):
+                        yield (is_error, response[len('data:'):])
+                    else:
+                        logger.info('agenerate_no_json text=%s', text)
                     if is_error:
                         break
                 elif response.startswith('{'):
@@ -313,7 +313,7 @@ class BaseHostChatLLM(BaseChatModel):
         """Generate chat completion with retry."""
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {**params, **kwargs}
-        if self.streaming:
+        if self.streaming and 'infer' not in self.host_base_url:
             inner_completion = ''
             role = 'assistant'
             params['stream'] = True
@@ -535,3 +535,31 @@ class CustomLLMChat(BaseHostChatLLM):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return 'custom_llm_chat'
+
+class HostYuanChat(BaseHostChatLLM):
+    # use custom llm chat api, api should compatiable with openai definition
+    model_name: str = Field('Yuan2-2B-Janus-hf', alias='model')
+
+    temperature: float = 1
+    top_p: float = 0.9
+    max_tokens: int = 4096
+    host_base_url: str
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of chat model."""
+        return 'yuan2'
+    
+class HostYiChat(BaseHostChatLLM):
+    # use custom llm chat api, api should compatiable with openai definition
+    model_name: str = Field('Yi-34B-Chat', alias='model')
+
+    temperature: float = 0.6
+    top_p: float = 0.8
+    max_tokens: int = 4096
+    host_base_url: str
+
+    @property
+    def _llm_type(self) -> str:
+        """Return type of chat model."""
+        return 'yi_chat'

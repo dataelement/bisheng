@@ -1,13 +1,14 @@
 from typing import Dict, Generator, List, Type, Union
 
 from bisheng.graph.edge.base import Edge
-from bisheng.graph.graph.constants import VERTEX_TYPE_MAP
+from bisheng.graph.graph.constants import lazy_load_vertex_dict
 from bisheng.graph.utils import process_flow
 from bisheng.graph.vertex.base import Vertex
 from bisheng.graph.vertex.types import FileToolVertex, LLMVertex, ToolkitVertex
 from bisheng.interface.tools.constants import FILE_TOOLS
 from bisheng.utils import payload
 from langchain.chains.base import Chain
+from loguru import logger
 
 
 class Graph:
@@ -67,59 +68,71 @@ class Graph:
 
     def _build_graph(self) -> None:
         """Builds the graph from the nodes and edges."""
-        self.nodes = self._build_vertices()
+        self.vertices = self._build_vertices()
+        self.vertex_map = {vertex.id: vertex for vertex in self.vertices}
         self.edges = self._build_edges()
-        for edge in self.edges:
-            edge.source.add_edge(edge)
-            edge.target.add_edge(edge)
 
         # This is a hack to make sure that the LLM node is sent to
         # the toolkit node
-        self._build_node_params()
-        # remove invalid nodes
-        self._validate_nodes()
+        self._build_vertex_params()
+        # remove invalid vertices
+        self._validate_vertices()
 
-    def _build_node_params(self) -> None:
-        """Identifies and handles the LLM node within the graph."""
-        llm_node = None
-        for node in self.nodes:
-            node._build_params()
-            if isinstance(node, LLMVertex):
-                llm_node = node
+    def _build_vertex_params(self) -> None:
+        """Identifies and handles the LLM vertex within the graph."""
+        llm_vertex = None
+        for vertex in self.vertices:
+            vertex._build_params()
+            if isinstance(vertex, LLMVertex):
+                llm_vertex = vertex
 
-        if llm_node:
-            for node in self.nodes:
-                if isinstance(node, ToolkitVertex):
-                    node.params['llm'] = llm_node
+        if llm_vertex:
+            for vertex in self.vertices:
+                if isinstance(vertex, ToolkitVertex):
+                    vertex.params['llm'] = llm_vertex
 
-    def _validate_nodes(self) -> None:
-        """Check that all nodes have edges"""
-        for node in self.nodes:
-            if not self._validate_node(node):
-                raise ValueError(f'{node.vertex_type} is not connected to any other components')
+    def _validate_vertices(self) -> None:
+        """Check that all vertices have edges"""
+        if len(self.vertices) == 1:
+            return
+        for vertex in self.vertices:
+            if not self._validate_vertex(vertex):
+                raise ValueError(f'{vertex.vertex_type} is not connected to any other components')
 
-    def _validate_node(self, node: Vertex) -> bool:
-        """Validates a node."""
-        # All nodes that do not have edges are invalid
-        return len(node.edges) > 0
+    def _validate_vertex(self, vertex: Vertex) -> bool:
+        """Validates a vertex."""
+        # All vertices that do not have edges are invalid
+        return len(self.get_vertex_edges(vertex.id)) > 0
 
-    def get_node(self, node_id: str) -> Union[None, Vertex]:
-        """Returns a node by id."""
-        return next((node for node in self.nodes if node.id == node_id), None)
+    def get_vertex(self, vertex_id: str) -> Union[None, Vertex]:
+        """Returns a vertex by id."""
+        return self.vertex_map.get(vertex_id)
 
-    def get_nodes_with_target(self, node: Vertex) -> List[Vertex]:
-        """Returns the nodes connected to a node."""
-        connected_nodes: List[Vertex] = [edge.source for edge in self.edges if edge.target == node]
-        return connected_nodes
+    def get_vertex_edges(self, vertex_id: str) -> List[Edge]:
+        """Returns a list of edges for a given vertex."""
+        return [
+            edge for edge in self.edges
+            if edge.source_id == vertex_id or edge.target_id == vertex_id
+        ]
 
-    def build(self) -> Chain:
+    def get_vertices_with_target(self, vertex_id: str) -> List[Vertex]:
+        """Returns the vertices connected to a vertex."""
+        vertices: List[Vertex] = []
+        for edge in self.edges:
+            if edge.target_id == vertex_id:
+                vertex = self.get_vertex(edge.source_id)
+                if vertex is None:
+                    continue
+                vertices.append(vertex)
+        return vertices
+
+    def get_input_nodes(self) -> List[Vertex]:
         """Builds the graph."""
         # Get root node
-        root_node = payload.get_root_node(self)
-        if root_node is None:
-            raise ValueError('No root node found')
-        [node.build() for node in root_node]
-        return root_node
+        input_node = payload.get_root_node(self)
+        if input_node is None:
+            raise ValueError('No input root node found')
+        return input_node
 
     async def abuild(self) -> Chain:
         """Builds the graph."""
@@ -128,7 +141,7 @@ class Graph:
         if root_vertex is None:
             raise ValueError('No root node vertex found')
 
-        return root_vertex.build()
+        return await root_vertex.build()
 
     def topological_sort(self) -> List[Vertex]:
         """
@@ -141,7 +154,7 @@ class Graph:
             ValueError: If the graph contains a cycle.
         """
         # States: 0 = unvisited, 1 = visiting, 2 = visited
-        state = {node: 0 for node in self.nodes}
+        state = {node: 0 for node in self.vertices}
         sorted_vertices = []
 
         def dfs(node):
@@ -151,13 +164,13 @@ class Graph:
             if state[node] == 0:
                 state[node] = 1
                 for edge in node.edges:
-                    if edge.source == node:
-                        dfs(edge.target)
+                    if edge.source_id == node.id:
+                        dfs(self.get_vertex(edge.target_id))
                 state[node] = 2
                 sorted_vertices.append(node)
 
         # Visit each node
-        for node in self.nodes:
+        for node in self.vertices:
             if state[node] == 0:
                 dfs(node)
 
@@ -166,20 +179,24 @@ class Graph:
     def generator_build(self) -> Generator:
         """Builds each vertex in the graph and yields it."""
         sorted_vertices = self.topological_sort()
-        # logger.debug('Sorted vertices: %s', sorted_vertices)
+        logger.debug('There are %s vertices in the graph', len(sorted_vertices))
         yield from sorted_vertices
 
-    def get_node_neighbors(self, node: Vertex) -> Dict[Vertex, int]:
-        """Returns the neighbors of a node."""
+    def get_vertex_neighbors(self, vertex: Vertex) -> Dict[Vertex, int]:
+        """Returns the neighbors of a vertex."""
         neighbors: Dict[Vertex, int] = {}
         for edge in self.edges:
-            if edge.source == node:
-                neighbor = edge.target
+            if edge.source_id == vertex.id:
+                neighbor = self.get_vertex(edge.target_id)
+                if neighbor is None:
+                    continue
                 if neighbor not in neighbors:
                     neighbors[neighbor] = 0
                 neighbors[neighbor] += 1
-            elif edge.target == node:
-                neighbor = edge.source
+            elif edge.target_id == vertex.id:
+                neighbor = self.get_vertex(edge.source_id)
+                if neighbor is None:
+                    continue
                 if neighbor not in neighbors:
                     neighbors[neighbor] = 0
                 neighbors[neighbor] += 1
@@ -193,8 +210,8 @@ class Graph:
 
         edges: List[Edge] = []
         for edge in self._edges:
-            source = self.get_node(edge['source'])
-            target = self.get_node(edge['target'])
+            source = self.get_vertex(edge['source'])
+            target = self.get_vertex(edge['target'])
             if source is None:
                 raise ValueError(f"Source node {edge['source']} not found")
             if target is None:
@@ -202,24 +219,29 @@ class Graph:
             edges.append(Edge(source, target, edge))
         return edges
 
-    def _get_vertex_class(self, node_type: str, node_lc_type: str) -> Type[Vertex]:
+    def _get_vertex_class(self, node_type: str, vertex_base_type: str) -> Type[Vertex]:
         """Returns the node class based on the node type."""
         if node_type in FILE_TOOLS:
             return FileToolVertex
-        if node_type in VERTEX_TYPE_MAP:
-            return VERTEX_TYPE_MAP[node_type]
-        return (VERTEX_TYPE_MAP[node_lc_type] if node_lc_type in VERTEX_TYPE_MAP else Vertex)
+        if vertex_base_type == 'CustomComponent':
+            return lazy_load_vertex_dict.get_custom_component_vertex_type()
+        if vertex_base_type in lazy_load_vertex_dict.VERTEX_TYPE_MAP:
+            return lazy_load_vertex_dict.VERTEX_TYPE_MAP[vertex_base_type]
+        return (lazy_load_vertex_dict.VERTEX_TYPE_MAP[node_type]
+                if node_type in lazy_load_vertex_dict.VERTEX_TYPE_MAP else Vertex)
 
     def _build_vertices(self) -> List[Vertex]:
         """Builds the vertices of the graph."""
         nodes: List[Vertex] = []
-        for node in self._nodes:
+        for node in self._vertices:
             node_data = node['data']
             node_type: str = node_data['type']  # type: ignore
-            node_lc_type: str = node_data['node']['template']['_type']  # type: ignore
+            vertex_base_type: str = node_data['node']['template']['_type']  # type: ignore
 
-            VertexClass = self._get_vertex_class(node_type, node_lc_type)
-            nodes.append(VertexClass(node))
+            VertexClass = self._get_vertex_class(node_type, vertex_base_type)
+            vertex_instance = VertexClass(node, graph=self)
+            vertex_instance.set_top_level(self.top_level_vertices)
+            nodes.append(vertex_instance)
 
         return nodes
 
@@ -234,6 +256,6 @@ class Graph:
         return children
 
     def __repr__(self):
-        node_ids = [node.id for node in self.nodes]
-        edges_repr = '\n'.join([f'{edge.source.id} --> {edge.target.id}' for edge in self.edges])
+        node_ids = [node.id for node in self.vertices]
+        edges_repr = '\n'.join([f'{edge.source_id} --> {edge.target_id}' for edge in self.edges])
         return f'Graph:\nNodes: {node_ids}\nConnections:\n{edges_repr}'

@@ -23,3 +23,6 @@ i18n.use(Backend)
     });
 
 export default i18n;
+
+// 动态的加载命名空间
+// i18n.loadNamespaces(['bs']);

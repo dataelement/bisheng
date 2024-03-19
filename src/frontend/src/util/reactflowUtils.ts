@@ -1,11 +1,11 @@
-import _ from "lodash";
+import cloneDeep from "lodash-es/cloneDeep";
 import { cleanEdgesType } from "./../types/utils/reactflowUtils";
 
 export function cleanEdges({
   flow: { edges, nodes },
   updateEdge,
 }: cleanEdgesType) {
-  let newEdges = _.cloneDeep(edges);
+  let newEdges = cloneDeep(edges);
   edges.forEach((edge) => {
     // check if the source and target node still exists
     const sourceNode = nodes.find((node) => node.id === edge.source);

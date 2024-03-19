@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Type
+from typing import ClassVar, Dict, List, Optional, Type
 
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.importing.utils import import_class
@@ -11,7 +11,7 @@ from langchain import output_parsers
 
 class OutputParserCreator(LangChainTypeCreator):
     type_name: str = 'output_parsers'
-    from_method_nodes = {
+    from_method_nodes: ClassVar[Dict] = {
         'StructuredOutputParser': 'from_response_schemas',
     }
 
@@ -23,9 +23,7 @@ class OutputParserCreator(LangChainTypeCreator):
     def type_to_loader_dict(self) -> Dict:
         if self.type_dict is None:
             self.type_dict = {
-                output_parser_name: import_class(
-                    f'langchain.output_parsers.{output_parser_name}'
-                )
+                output_parser_name: import_class(f'langchain.output_parsers.{output_parser_name}')
                 # if output_parser_name is not lower case it is a class
                 for output_parser_name in output_parsers.__all__
             }

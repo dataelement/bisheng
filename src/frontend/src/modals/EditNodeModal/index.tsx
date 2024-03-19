@@ -1,4 +1,5 @@
 import { useContext, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import CodeAreaComponent from "../../components/codeAreaComponent";
 import Dropdown from "../../components/dropdownComponent";
 import FloatComponent from "../../components/floatComponent";
@@ -20,6 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../../components/ui/dialog";
+import EditLabel from "../../components/ui/editLabel";
 import {
   Table,
   TableBody,
@@ -54,7 +56,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
   const { closePopUp } = useContext(PopUpContext);
   const { types } = useContext(typesContext);
   const ref = useRef();
-  const { setTabsState, tabId } = useContext(TabsContext);
+  const { setTabsState, flow } = useContext(TabsContext);
   const { reactFlowInstance } = useContext(typesContext);
 
   let disabled =
@@ -89,14 +91,23 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
     setTabsState((prev) => {
       return {
         ...prev,
-        [tabId]: {
-          ...prev[tabId],
+        [flow.id]: {
+          ...prev[flow.id],
           isPending: true,
         },
       };
     });
   };
 
+  const idArr = data.id.split('-')
+  const handleChangeId = (id) => {
+    const oldId = data.id
+    const newId = `${idArr[0]}-${id}`
+    document.dispatchEvent(new CustomEvent('idChange', { detail: [newId, oldId] }))
+    setOpen(!open)
+  }
+
+  const { t } = useTranslation()
   return (
     <Dialog open={true} onOpenChange={setModalOpen}>
       <DialogTrigger asChild></DialogTrigger>
@@ -104,7 +115,32 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
         <DialogHeader>
           <DialogTitle className="flex items-center">
             <span className="pr-2">{data.type}</span>
-            <Badge variant="secondary">ID: {data.id}</Badge>
+            <Badge variant="secondary">ID:{idArr[0]}-
+              <EditLabel
+                rule={[
+                  {
+                    // 正则字母和数字 5 位数
+                    pattern: /^[a-zA-Z0-9]{5}$/,
+                    message: t('flow.incorrectIdFormatMessage'),
+                  },
+                  {
+                    // required: true,
+                    // 自定义函数校验
+                    validator: (val) => {
+                      const node = window._flow.data.nodes.find((node) =>
+                        node.data.id.split('-')[1] === val &&
+                        node.data.id !== data.id // 排除self
+                      )
+                      return !node
+                    },
+                    message: t('flow.idAlreadyExistsMessage'),
+                  }
+                ]}
+                str={idArr[1]}
+                onChange={handleChangeId}>
+                {(val) => <>{val}</>}
+              </EditLabel>
+            </Badge>
           </DialogTitle>
           <DialogDescription asChild>
             <div>
@@ -148,7 +184,8 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
                             data.node.template[t].type === "code" ||
                             data.node.template[t].type === "prompt" ||
                             data.node.template[t].type === "file" ||
-                            data.node.template[t].type === "int")
+                            data.node.template[t].type === "int" ||
+                            data.node.template[t].type === "dict")
                       )
                       .map((n, i) => (
                         <TableRow key={i} className="h-10">

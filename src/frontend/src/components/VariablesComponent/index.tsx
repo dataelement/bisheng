@@ -1,12 +1,13 @@
-import _ from "lodash";
-import { ExternalLink, Plus, Settings, X } from "lucide-react";
-import { useContext, useEffect, useState } from "react";
+import cloneDeep from "lodash-es/cloneDeep";
+import { ExternalLink, Plus, X } from "lucide-react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { alertContext } from "../../contexts/alertContext";
 import { PopUpContext } from "../../contexts/popUpContext";
 import { Variable, VariableType, delVariableApi, getVariablesApi, saveVariableApi } from "../../controllers/API/flow";
 import { generateUUID } from "../../utils";
 import VarDialog from "./VarDialog";
-import { useTranslation } from "react-i18next";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
 /**
  * @component 变量编辑，分文本和options类型
@@ -66,26 +67,37 @@ export default function VariablesComponent({ nodeId, flowId, onChange }: {
         if (_item.update) {
             param.id = _item.id
         }
-        const res = await saveVariableApi(param)
-        const _items = items.map(item => item.id === _item.id ? { ..._item, id: res.data.id } : item)
-        // const hasValue = _items.find(item => item.name)
-        // 保存时 id传出去保存，用来校验必填项
-        onChange(_items.map(el => el.name))
-        setItems(_items)
+        captureAndAlertRequestErrorHoc(saveVariableApi(param).then(res => {
+            const _items = items.map(item => item.id === _item.id ? { ..._item, id: res.id } : item)
+            // const hasValue = _items.find(item => item.name)
+            // 保存时 id传出去保存，用来校验必填项
+            onChange(_items.map(el => el.name))
+            setItems(_items)
+        }))
     }
 
     // 
     const handleDelClick = async (index) => {
-        let newItems = _.cloneDeep(items);
+        let newItems = cloneDeep(items);
         const item = newItems.splice(index, 1);
-        item[0].update && await delVariableApi(item[0].id)
+        item[0].update && await captureAndAlertRequestErrorHoc(delVariableApi(item[0].id))
         setItems(newItems)
         // 触发必填校验
         !newItems.length && onChange('')
     }
 
+    // list超出滚动，配合template-scrollbar使用（TODO 抽象为插槽）
+    const scrollBodyRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const scrollFun = (event) => {
+            event.stopPropagation();
+        }
+        scrollBodyRef.current.addEventListener('wheel', scrollFun);
+        return () => scrollBodyRef.current?.removeEventListener('wheel', scrollFun);
+    }, [])
+
     return (
-        <div className="flex flex-col gap-3" >
+        <div ref={scrollBodyRef} className="flex flex-col gap-3 template-scrollbar" >
             {items.map((item, idx) => {
                 return (
                     <div key={idx} className="flex w-full gap-3">
@@ -104,7 +116,7 @@ export default function VariablesComponent({ nodeId, flowId, onChange }: {
             <button
                 onClick={() => {
                     setItems((old) => {
-                        let newItems = _.cloneDeep(old);
+                        let newItems = cloneDeep(old);
                         newItems.push({
                             id: generateUUID(8),
                             name: "",
