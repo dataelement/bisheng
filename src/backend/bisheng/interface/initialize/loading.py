@@ -13,7 +13,7 @@ from bisheng.interface.importing.utils import (eval_custom_component_code, get_f
                                                import_by_type)
 from bisheng.interface.initialize.llm import initialize_vertexai
 from bisheng.interface.initialize.utils import (handle_format_kwargs, handle_node_type,
-                                                handle_partial_variables)
+                                                handle_partial_variables, langchain_bug_openv1)
 from bisheng.interface.initialize.vector_store import vecstore_initializer
 from bisheng.interface.output_parsers.base import output_parser_creator
 from bisheng.interface.retrievers.base import retriever_creator
@@ -222,15 +222,7 @@ def instantiate_wrapper(node_type, class_object, params):
         raise ValueError(f'Method {method} not found in {class_object}')
     if node_type == 'DallEAPIWrapper' and is_openai_v1():
         if 'openai_proxy' in params:
-            client_params = {
-                'api_key': params['api_key'],
-                'organization': params.get('openai_organization'),
-                'base_url': params.get('openai_api_base'),
-                'timeout': params.get('request_timeout'),
-                'max_retries': params.get('max_retries', 1),
-                'default_headers': params.get('default_headers'),
-                'default_query': params.get('default_query')
-            }
+            client_params = langchain_bug_openv1(params)
             client_params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
             params['client'] = openai.OpenAI(**client_params).images
             client_params['http_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))

@@ -8,6 +8,20 @@ from langchain.agents import ZeroShotAgent
 from langchain.schema import BaseOutputParser, Document
 
 
+def langchain_bug_openv1(params):
+    '''兼容openai v1'''
+    client_params = {
+        'api_key': params.get('openai_api_key') or params.get('api_key'),
+        'organization': params.get('openai_organization'),
+        'base_url': params.get('openai_api_base'),
+        'timeout': params.get('request_timeout', 10),
+        'max_retries': params.get('max_retries', 1),
+        'default_headers': params.get('default_headers'),
+        'default_query': params.get('default_query')
+    }
+    return client_params
+
+
 def handle_node_type(node_type, class_object, params: Dict):
     if node_type == 'ZeroShotPrompt':
         params = check_tools_in_params(params)
