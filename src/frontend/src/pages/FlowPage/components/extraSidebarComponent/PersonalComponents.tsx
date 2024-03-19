@@ -8,14 +8,13 @@ import { userContext } from "../../../../contexts/userContext";
 import DisclosureComponent from "../DisclosureComponent";
 
 export default function PersonalComponents({ onDragStart }) {
-    const { savedComponents } = useContext(userContext)
-    const { addSavedComponent, checkComponentsName, delComponent } = useContext(userContext)
+    const { addSavedComponent, checkComponentsName, delComponent, savedComponents } = useContext(userContext)
 
     const addComponent = (data) => {
-        if (checkComponentsName(data.type)) {
+        if (checkComponentsName(data.data.node.display_name)) {
             bsconfirm({
                 title: '组件已存在',
-                desc: `组件 ${data.type} 已存在，覆盖原有组件还是继续创新建组件？`,
+                desc: `组件 ${data.data.node.display_name} 已存在，覆盖原有组件还是继续创新建组件？`,
                 showClose: true,
                 okTxt: '覆盖',
                 canelTxt: '创建新组建',
@@ -60,7 +59,7 @@ export default function PersonalComponents({ onDragStart }) {
         delComponent(comp.name)
     }
 
-    return <TooltipProvider>
+    return <TooltipProvider delayDuration={0} skipDelayDuration={200}>
         <Tooltip>
             <TooltipTrigger>
                 <DisclosureComponent

@@ -16,7 +16,7 @@ import {
     TabsTrigger,
 } from "../../components/ui/tabs";
 
-import { ArrowLeft, Filter, RotateCw, Search } from "lucide-react";
+import { ArrowLeft, Filter, RotateCw, Search, X } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
@@ -203,11 +203,13 @@ export default function FilesPage() {
         {/* 重复文件提醒 */}
         <dialog className={`modal ${repeatFiles.length && 'modal-open'}`}>
             <div className="modal-box w-[560px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg">文件重复提示</h3>
+                <h3 className="font-bold text-lg relative">文件重复提示
+                    <X className="absolute right-0 top-0 text-gray-400 cursor-pointer" size={20} onClick={() => setRepeatFiles([])}></X>
+                </h3>
                 <p className="py-4">以下文件在知识库中已存在，继续上传将会覆盖原有文件以及处理策略，是否覆盖？</p>
                 <ul className="overflow-y-auto max-h-[400px]">
                     {repeatFiles.map(el => (
-                        <li key={el.id} className="py-2 text-red-500">{el.file_name}</li>
+                        <li key={el.id} className="py-2 text-red-500">{el.remark}</li>
                     ))}
                 </ul>
                 <div className="modal-action">
