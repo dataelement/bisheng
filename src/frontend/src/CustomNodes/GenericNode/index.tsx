@@ -147,7 +147,7 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
                     ]}
                     str={data.node.display_name}
                     onChange={(val) => {(data.node.display_name = val);fouceUpdateNode(!_)}}>
-                    {(val) => <>{val}</>}
+                    {(val) => <div className="w-[300px] overflow-hidden text-ellipsis">{val}</div>}
                   </EditLabel> : data.node.display_name}
                 </div>
               </ShadTooltip>

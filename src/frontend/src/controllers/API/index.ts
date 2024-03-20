@@ -132,8 +132,8 @@ export async function readFileByLibDatabase({ id, page, pageSize = 40, name = ''
 /**
  * 重试解析文件
  */
-export async function retryKnowledgeFileApi(ids) {
-  await axios.post(`/api/v1/knowledge/retry`, { file_ids: ids });
+export async function retryKnowledgeFileApi(objs) {
+  await axios.post(`/api/v1/knowledge/retry`, { file_objs: objs });
 }
 
 /**
