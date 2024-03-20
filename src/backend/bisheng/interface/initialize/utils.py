@@ -14,7 +14,7 @@ def langchain_bug_openv1(params):
         'api_key': params.get('openai_api_key') or params.get('api_key'),
         'organization': params.get('openai_organization'),
         'base_url': params.get('openai_api_base'),
-        'timeout': params.get('request_timeout', 10),
+        'timeout': params.get('request_timeout', 30),
         'max_retries': params.get('max_retries', 1),
         'default_headers': params.get('default_headers'),
         'default_query': params.get('default_query')

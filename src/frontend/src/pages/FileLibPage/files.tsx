@@ -56,7 +56,11 @@ export default function FilesPage() {
 
     useEffect(() => {
         // @ts-ignore
-        setTitle(window.libname)
+        const libname = window.libname // 临时记忆
+        if (libname) {
+            localStorage.setItem('libname', window.libname)
+        }
+        setTitle(window.libname || localStorage.getItem('libname'))
     }, [])
 
     const handleOpen = (e) => {
@@ -96,14 +100,18 @@ export default function FilesPage() {
     }
 
     // 重试解析
+    const [retryLoad, setRetryLoad] = useState(false)
     const handleRetry = (ids) => {
+        setRetryLoad(true)
         captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(ids).then(res => {
             // 乐观更新
-            refreshData(
-                (item) => item.id === id,
-                { status: 1 }
-            )
+            // refreshData(
+            //     (item) => ids.includes(item.id),
+            //     { status: 1 }
+            // )
+            reload()
             setRepeatFiles([])
+            setRetryLoad(false)
         }))
     }
 
@@ -185,7 +193,7 @@ export default function FilesPage() {
                                         <span className={el.status === 3 && 'text-red-500'}>{[t('lib.parseFailed'), t('lib.parsing'), t('lib.completed'), t('lib.parseFailed')][el.status]}</span>
                                     }
                                 </TableCell>
-                                <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
+                                <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                 <TableCell className="text-right">
                                     {hasPermission ? <a href="javascript:;" onClick={() => delConfim(el.id)} className="underline ml-4">{t('delete')}</a> :
                                         <a href="javascript:;" className="underline ml-4 text-gray-400">{t('delete')}</a>}
@@ -214,7 +222,9 @@ export default function FilesPage() {
                 </ul>
                 <div className="modal-action">
                     <Button className="h-8 rounded-full" variant="outline" onClick={() => setRepeatFiles([])}>不覆盖，保留原文件</Button>
-                    <Button className="h-8 rounded-full" onClick={() => handleRetry(repeatFiles.map(el => el.id))}>覆盖</Button>
+                    <Button className="h-8 rounded-full" disabled={retryLoad} onClick={() => handleRetry(repeatFiles.map(el => el.id))}>
+                        {retryLoad && <span className="loading loading-spinner loading-xs"></span>}覆盖
+                    </Button>
                 </div>
             </div>
         </dialog>

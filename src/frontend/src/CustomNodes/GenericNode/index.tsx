@@ -146,7 +146,7 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
                       {required: true}
                     ]}
                     str={data.node.display_name}
-                    onChange={(val) => data.node.display_name = val}>
+                    onChange={(val) => {(data.node.display_name = val);fouceUpdateNode(!_)}}>
                     {(val) => <>{val}</>}
                   </EditLabel> : data.node.display_name}
                 </div>
