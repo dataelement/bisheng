@@ -130,8 +130,8 @@ async def process_knowledge(*,
                 file_type = file_name.rsplit('.', 1)[-1]
                 obj_name = f'original/{db_file.id}.{file_type}'
                 db_file.object_name = obj_name
+                KnowledgeFileDao.update(db_file)
             db_file.remark = f'{file_name} 对应已存在文件 {old_name}'
-            KnowledgeFileDao.update(db_file)
             MinioClient().upload_minio(db_file.object_name, file_path=filepath)
 
             db_file.status = 3
@@ -327,10 +327,14 @@ def get_filelist(*,
 @router.post('/retry', status_code=200)
 def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = Depends()):
     """失败重试"""
+    Authorize.jwt_required()
     file_ids = data.get('file_ids')
+    db_files = data.get('file_objs')
+    if db_files:
+        file_ids = [file.id for file in db_files]
+    else:
+        db_files = KnowledgeFileDao.select_list(file_ids=file_ids)
     delete_knowledge_file_vectors(file_ids=file_ids, clear_minio=False)
-    with session_getter() as session:
-        db_files = session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
 
     separator = ['\n\n', '\n', ' ', '']
     chunk_size = 500
