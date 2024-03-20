@@ -88,10 +88,10 @@ function CreateModal({ datalist, open, setOpen }) {
     }
 
     return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => setOpen(false)}>
-        <form method="dialog" className="max-w-[600px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={e => e.stopPropagation()}>
+        <form method="dialog" className="max-w-[600px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background overflow-visible" onClick={e => e.stopPropagation()}>
             <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={() => setOpen(false)}>✕</button>
             <h3 className="font-bold text-lg">{t('lib.createLibrary')}</h3>
-            <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
+            <div className="flex flex-wrap justify-center">
                 <div className="grid gap-4 py-4 mt-2">
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="name" className="text-right">{t('lib.libraryName')}</Label>
