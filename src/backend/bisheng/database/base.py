@@ -1,7 +1,9 @@
 import hashlib
+import json
 from contextlib import contextmanager
 
 from bisheng.database.init_config import init_config
+from bisheng.database.models.component import Component
 from bisheng.database.models.role import Role
 from bisheng.database.models.user import User
 from bisheng.database.models.user_role import UserRole
@@ -44,6 +46,22 @@ def init_default_data():
                     db_userrole = UserRole(user_id=user.user_id, role_id=db_role.id)
                     session.add(db_userrole)
                     session.commit()
+
+                component_db = session.exec(select(Component).limit(1)).all()
+                if not component_db:
+                    with open('./sql.json', 'r', encoding='utf-8') as f:
+                        db_components = []
+                        json_items = json.loads(f.read())
+                        for item in json_items:
+                            for k, v in item.items():
+                                db_component = Component(k,
+                                                         user_id=1,
+                                                         user_name='admin',
+                                                         data=json.dumps(v))
+                                db_components.append(db_component)
+                        session.add(db_components)
+                        session.commit()
+
             # 初始化数据库config
             init_config()
         except Exception as exc:
