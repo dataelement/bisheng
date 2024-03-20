@@ -45,3 +45,6 @@ class WrappersFrontendNode(FrontendNode):
                 field.field_type = 'str'
                 field.advanced = True
                 field.value = 'standard'
+            elif field.name == 'request_timeout':
+                field.show = True
+                field.name = 'timeout'
