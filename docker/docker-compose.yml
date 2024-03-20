@@ -94,7 +94,7 @@ services:
 
   elasticsearch:
     container_name: bisheng-es
-    image: docker.io/bitnami/elasticsearch:8
+    image: docker.io/bitnami/elasticsearch:8.12.0
     user: root
     ports:
       - "9200:9200"
