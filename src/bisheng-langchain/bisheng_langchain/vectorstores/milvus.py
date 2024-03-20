@@ -140,7 +140,7 @@ class Milvus(MilvusLangchain):
             'HNSW': {
                 'metric_type': 'L2',
                 'params': {
-                    'ef': 10
+                    'ef': 100
                 }
             },
             'RHNSW_FLAT': {
