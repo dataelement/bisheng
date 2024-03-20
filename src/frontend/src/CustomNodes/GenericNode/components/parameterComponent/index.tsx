@@ -79,8 +79,8 @@ export default function ParameterComponent({
   const { reactFlowInstance } = useContext(typesContext);
   const disabled = useMemo(() => {
     let dis = reactFlowInstance?.getEdges().some((e) => e.targetHandle === id) ?? false;
-    // 特殊处理milvus、ElasticKeywordsSearch组件的 disabled
-    if (((data.type === "Milvus" && name === 'collection_name') || (data.type === "ElasticKeywordsSearch" && name === 'index_name'))
+    // 特殊处理含有知识库组件的 disabled
+    if (['index_name', 'collection_name'].includes(name)
       && reactFlowInstance?.getEdges().some((e) => e.targetHandle.indexOf('documents') !== -1
         && e.targetHandle.indexOf(data.id) !== -1)) {
       dis = true
@@ -89,16 +89,17 @@ export default function ParameterComponent({
   }, [id, data, reactFlowInstance])
   // milvus 组件，知识库不为空是 embbeding取消必填限制
   useEffect(() => {
-    if (data.type === "Milvus" && data.node.template.embedding) {
-      const hidden = disabled ? false : !!data.node.template.collection_name.value
+    const {embedding, index_name, collection_name, connection_args} = data.node.template
+    if ((index_name || collection_name) && embedding) {
+      const hidden = disabled ? false : !!(collection_name || index_name).value
       data.node.template.embedding.required = !hidden
       data.node.template.embedding.show = !hidden
-      if (hidden) data.node.template.connection_args.value = ''
+      if (hidden && connection_args) data.node.template.connection_args.value = ''
       onChange?.()
     }
   }, [data, disabled])
-  const handleRemoveMilvusEmbeddingEdge = () => {
-    const edges = reactFlowInstance.getEdges().filter(edge => edge.targetHandle.indexOf('Embeddings|embedding|Milvus') === -1)
+  const handleRemoveMilvusEmbeddingEdge = (nodeId) => {
+    const edges = reactFlowInstance.getEdges().filter(edge => edge.targetHandle.indexOf('Embeddings|embedding|'+nodeId) === -1)
     reactFlowInstance.setEdges(edges)
   }
   const [myData, setMyData] = useState(useContext(typesContext).data);
@@ -360,7 +361,7 @@ export default function ParameterComponent({
                 disabled={disabled}
                 id={data.node.template[name].collection_id ?? ""}
                 value={data.node.template[name].value ?? ""}
-                onSelect={(val, id) => { handleOnNewLibValue(val, id); val && handleRemoveMilvusEmbeddingEdge() }}
+                onSelect={(val, id) => { handleOnNewLibValue(val, id); val && handleRemoveMilvusEmbeddingEdge(data.id) }}
                 onChange={() => { }}
               />
             ) : (
@@ -413,7 +414,7 @@ export default function ParameterComponent({
               nodeClass={data.node}
               disabled={disabled}
               value={data.node.template[name].value ?? ""}
-              onChange={handleReloadCustom}
+              onChange={data.type === 'Data' ? handleReloadCustom : handleOnNewValue}
             />
           </div>
         ) : left === true && type === "file" ? (

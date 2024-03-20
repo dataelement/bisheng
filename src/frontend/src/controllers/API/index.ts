@@ -389,7 +389,8 @@ export async function splitWordApi(word: string, messageId: string): Promise<str
 // 获取 chunks
 export async function getSourceChunksApi(chatId: string, messageId: number, keys: string) {
   try {
-    const chunks: any[] = await axios.get(`/api/v1/qa/chunk?chat_id=${chatId}&message_id=${messageId}&keys=${keys}`)
+    let chunks: any[] = await axios.get(`/api/v1/qa/chunk?chat_id=${chatId}&message_id=${messageId}&keys=${keys}`)
+
     const fileMap = {}
     chunks.forEach(chunk => {
       const list = fileMap[chunk.file_id]
@@ -410,7 +411,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         }))
       const score = chunks[0].score
 
-      return { id, fileName, fileUrl, originUrl, chunks, score, ...other }
+      return { id, fileName, fileUrl, originUrl, chunks, ...other, score }
     }).sort((a, b) => b.score - a.score)
   } catch (error) {
     console.error(error);
