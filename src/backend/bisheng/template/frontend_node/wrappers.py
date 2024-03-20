@@ -48,3 +48,4 @@ class WrappersFrontendNode(FrontendNode):
             elif field.name == 'request_timeout':
                 field.show = True
                 field.name = 'timeout'
+                field.value = 30
