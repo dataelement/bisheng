@@ -3,10 +3,6 @@ import json
 from contextlib import contextmanager
 
 from bisheng.database.init_config import init_config
-from bisheng.database.models.component import Component
-from bisheng.database.models.role import Role
-from bisheng.database.models.user import User
-from bisheng.database.models.user_role import UserRole
 from bisheng.database.service import DatabaseService
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
@@ -18,6 +14,10 @@ db_service: 'DatabaseService' = DatabaseService(settings.database_url)
 def init_default_data():
     """初始化数据库"""
     from bisheng.cache.redis import redis_client
+    from bisheng.database.models.component import Component
+    from bisheng.database.models.role import Role
+    from bisheng.database.models.user import User
+    from bisheng.database.models.user_role import UserRole
     if redis_client.setNx('init_default_data', '1'):
         try:
             db_service.create_db_and_tables()
