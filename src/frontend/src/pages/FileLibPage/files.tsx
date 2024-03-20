@@ -101,9 +101,9 @@ export default function FilesPage() {
 
     // 重试解析
     const [retryLoad, setRetryLoad] = useState(false)
-    const handleRetry = (ids) => {
+    const handleRetry = (objs) => {
         setRetryLoad(true)
-        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(ids).then(res => {
+        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(objs).then(res => {
             // 乐观更新
             // refreshData(
             //     (item) => ids.includes(item.id),
@@ -188,7 +188,7 @@ export default function FilesPage() {
                                         <div className="tooltip" data-tip={el.remark}>
                                             <span className='text-red-500'>{t('lib.parseFailed')}</span>
                                         </div>
-                                        <Button variant="link"><RotateCw size={16} onClick={() => handleRetry([el.id])} /></Button>
+                                        <Button variant="link"><RotateCw size={16} onClick={() => handleRetry([el])} /></Button>
                                     </div> :
                                         <span className={el.status === 3 && 'text-red-500'}>{[t('lib.parseFailed'), t('lib.parsing'), t('lib.completed'), t('lib.parseFailed')][el.status]}</span>
                                     }
@@ -222,7 +222,7 @@ export default function FilesPage() {
                 </ul>
                 <div className="modal-action">
                     <Button className="h-8 rounded-full" variant="outline" onClick={() => setRepeatFiles([])}>不覆盖，保留原文件</Button>
-                    <Button className="h-8 rounded-full" disabled={retryLoad} onClick={() => handleRetry(repeatFiles.map(el => el.id))}>
+                    <Button className="h-8 rounded-full" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
                         {retryLoad && <span className="loading loading-spinner loading-xs"></span>}覆盖
                     </Button>
                 </div>

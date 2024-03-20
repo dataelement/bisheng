@@ -7,7 +7,7 @@ from uuid import uuid4
 from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
                                                 delete_knowledge_file_vectors)
 from bisheng.api.utils import access_check
-from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200
+from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500
 from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
@@ -18,6 +18,7 @@ from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
+from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
@@ -100,9 +101,8 @@ async def process_knowledge(*,
         separator = ['\n\n', '\n', ' ', '']
         chunk_size = 500
         chunk_overlap = 50
-    with session_getter() as session:
-        knowledge = session.exec(select(Knowledge).where(Knowledge.id == knowledge_id)).one()
 
+    knowledge = KnowledgeDao.query_by_id(knowledge_id)
     if not access_check(payload=payload,
                         owner_user_id=knowledge.user_id,
                         target_id=knowledge.id,
@@ -125,15 +125,12 @@ async def process_knowledge(*,
         if content_repeat or name_repeat:
             db_file = content_repeat[0] if content_repeat else name_repeat[0]
             old_name = db_file.file_name
-            # 用新文件覆盖老文件
-            if db_file.object_name is None:
-                file_type = file_name.rsplit('.', 1)[-1]
-                obj_name = f'original/{db_file.id}.{file_type}'
-                db_file.object_name = obj_name
-                KnowledgeFileDao.update(db_file)
+            file_type = file_name.rsplit('.', 1)[-1]
+            obj_name = f'tmp/{db_file.id}.{file_type}'
+            db_file.object_name = obj_name
             db_file.remark = f'{file_name} 对应已存在文件 {old_name}'
-            MinioClient().upload_minio(db_file.object_name, file_path=filepath)
-
+            with open(filepath, 'r') as file:
+                MinioClient().upload_tmp(db_file.object_name, file.read())
             db_file.status = 3
         else:
             status = 1
@@ -328,12 +325,13 @@ def get_filelist(*,
 def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = Depends()):
     """失败重试"""
     Authorize.jwt_required()
-    file_ids = data.get('file_ids')
-    db_files = data.get('file_objs')
-    if db_files:
-        file_ids = [file.id for file in db_files]
+    db_file_retry = data.get('file_objs')
+    if db_file_retry:
+        id2input = {file.get('id'): KnowledgeFile.validate(file) for file in db_file_retry}
     else:
-        db_files = KnowledgeFileDao.select_list(file_ids=file_ids)
+        return resp_500('参数错误')
+    file_ids = list(id2input.keys())
+    db_files = KnowledgeFileDao.select_list(file_ids=file_ids)
     delete_knowledge_file_vectors(file_ids=file_ids, clear_minio=False)
 
     separator = ['\n\n', '\n', ' ', '']
@@ -343,8 +341,9 @@ def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = De
         minio = MinioClient()
         for file in db_files:
             # file exist
-            if file.remark and '对应已存在文件' in file.remark:
-                file.file_name = file.remark.split(' ')[0]
+            input_file = id2input.get(file.id)
+            if input_file.remark and '对应已存在文件' in input_file.remark:
+                file.file_name = input_file.remark.split(' ')[0]
                 file.remark = ''
             with session_getter() as session:
                 db_knowledge = session.get(Knowledge, file.knowledge_id)
@@ -355,8 +354,10 @@ def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = De
                 session.refresh(db_knowledge)
 
             index_name = db_knowledge.index_name or db_knowledge.collection_name
-            original_file = file.object_name
-            file_url = minio.get_share_link(original_file)
+            original_file = input_file.object_name
+            file_url = minio.get_share_link(original_file,
+                                            minio_client.tmp_bucket) if original_file.startswith(
+                                                'tmp') else minio.get_share_link(original_file)
             if file_url:
                 file_path, _ = file_download(file_url)
             else:
