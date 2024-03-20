@@ -129,7 +129,7 @@ async def process_knowledge(*,
             obj_name = f'tmp/{db_file.id}.{file_type}'
             db_file.object_name = obj_name
             db_file.remark = f'{file_name} 对应已存在文件 {old_name}'
-            with open(filepath, 'r') as file:
+            with open(filepath, 'rb') as file:
                 MinioClient().upload_tmp(db_file.object_name, file.read())
             db_file.status = 3
         else:
