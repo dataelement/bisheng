@@ -48,8 +48,6 @@ async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwa
             result = output.get(langchain_object.output_keys[0])
         else:
             result = output
-        if len(result) == 0:
-            result = 'Warning: LLM 返回为空，请检查输入是否正确，可以尝使减少输入token数量'
 
         try:
             if intermediate_steps and isinstance(intermediate_steps[0], Tuple):
