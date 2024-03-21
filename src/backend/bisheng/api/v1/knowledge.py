@@ -5,7 +5,7 @@ from typing import List, Optional
 from uuid import uuid4
 
 from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
-                                                delete_knowledge_file_vectors)
+                                                delete_knowledge_file_vectors, retry_files)
 from bisheng.api.utils import access_check
 from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500
 from bisheng.cache.utils import file_download, save_uploaded_file
@@ -18,7 +18,6 @@ from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
-from bisheng.utils import minio_client
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
@@ -332,58 +331,7 @@ def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = De
         return resp_500('参数错误')
     file_ids = list(id2input.keys())
     db_files = KnowledgeFileDao.select_list(file_ids=file_ids)
-    delete_knowledge_file_vectors(file_ids=file_ids, clear_minio=False)
-
-    separator = ['\n\n', '\n', ' ', '']
-    chunk_size = 500
-    chunk_overlap = 50
-    if db_files:
-        minio = MinioClient()
-        for file in db_files:
-            # file exist
-            input_file = id2input.get(file.id)
-            if input_file.remark and '对应已存在文件' in input_file.remark:
-                file.file_name = input_file.remark.split(' 对应已存在文件 ')[0]
-                file.remark = ''
-            with session_getter() as session:
-                db_knowledge = session.get(Knowledge, file.knowledge_id)
-                file.status = 1  # 解析中
-                session.add(file)
-                session.commit()
-                session.refresh(file)
-                session.refresh(db_knowledge)
-
-            index_name = db_knowledge.index_name or db_knowledge.collection_name
-            original_file = input_file.object_name
-            file_url = minio.get_share_link(original_file,
-                                            minio_client.tmp_bucket) if original_file.startswith(
-                                                'tmp') else minio.get_share_link(original_file)
-            if file_url:
-                file_path, _ = file_download(file_url)
-            else:
-                with session_getter() as session:
-                    file.status = 3
-                    file.remark = '原始文件丢失'
-                    session.add(file)
-                    session.commit()
-                continue
-
-            try:
-                background_tasks.add_task(addEmbedding,
-                                          collection_name=db_knowledge.collection_name,
-                                          index_name=index_name,
-                                          knowledge_id=db_knowledge.id,
-                                          model=db_knowledge.model,
-                                          chunk_size=chunk_size,
-                                          separator=separator,
-                                          chunk_overlap=chunk_overlap,
-                                          file_paths=[file_path],
-                                          knowledge_files=[file],
-                                          callback=None,
-                                          extra_meta=file.extra_meta)
-            except Exception as e:
-                logger.error(e)
-
+    background_tasks.add_task(retry_files, db_files, id2input)
     return resp_200()
 
 
