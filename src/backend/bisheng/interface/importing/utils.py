@@ -212,7 +212,7 @@ def import_utility(utility: str) -> Any:
     """Import utility from utility name"""
     if utility == 'SQLDatabase':
         return import_class(f'langchain.sql_database.{utility}')
-    return import_class(f'langchain_comminity.utilities.{utility}')
+    return import_class(f'langchain_community.utilities.{utility}')
 
 
 def get_function(code):
