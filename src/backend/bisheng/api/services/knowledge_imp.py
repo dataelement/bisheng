@@ -9,7 +9,7 @@ from uuid import uuid4
 import requests
 from bisheng.cache.utils import file_download
 from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate
+from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeDao
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
@@ -447,16 +447,7 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
         for file in db_files:
             # file exist
             input_file = new_files.get(file.id)
-            if input_file.remark and '对应已存在文件' in input_file.remark:
-                file.file_name = input_file.remark.split(' 对应已存在文件 ')[0]
-                file.remark = ''
-            with session_getter() as session:
-                db_knowledge = session.get(Knowledge, file.knowledge_id)
-                file.status = 1  # 解析中
-                session.add(file)
-                session.commit()
-                session.refresh(file)
-                session.refresh(db_knowledge)
+            db_knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
 
             index_name = db_knowledge.index_name or db_knowledge.collection_name
             original_file = input_file.object_name

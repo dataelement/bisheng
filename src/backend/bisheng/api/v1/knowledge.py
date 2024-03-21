@@ -331,6 +331,14 @@ def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = De
         return resp_500('参数错误')
     file_ids = list(id2input.keys())
     db_files = KnowledgeFileDao.select_list(file_ids=file_ids)
+    for file in db_files:
+        # file exist
+        input_file = id2input.get(file.id)
+        if input_file.remark and '对应已存在文件' in input_file.remark:
+            file.file_name = input_file.remark.split(' 对应已存在文件 ')[0]
+            file.remark = ''
+        file.status = 1  # 解析中
+        file = KnowledgeFileDao.update(file)
     background_tasks.add_task(retry_files, db_files, id2input)
     return resp_200()
 
