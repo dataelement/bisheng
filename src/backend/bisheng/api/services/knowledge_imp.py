@@ -143,11 +143,24 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
     knowledgeid_dict = {knowledge.id: knowledge for knowledge in knowledges}
     embeddings = FakeEmbedding()
     collection_ = set([knowledge.collection_name for knowledge in knowledges])
+
     if len(collection_) > 1:
         raise ValueError('不支持多个collection')
-
-    vectore_client = decide_vectorstores(collection_.pop(), 'Milvus', embeddings)
-    pk = vectore_client.col.query(expr=f'file_id in {file_ids}', output_fields=['pk'])
+    collection_name = collection_.pop()
+    # 处理vectordb
+    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+    try:
+        pk = vectore_client.col.query(expr=f'file_id in {file_ids}',
+                                      output_fields=['pk'],
+                                      timeout=10)
+    except Exception:
+        # 重试一次
+        logger.error('timeout_except')
+        vectore_client.close_connection(vectore_client.alias)
+        vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+        pk = vectore_client.col.query(expr=f'file_id in {file_ids}',
+                                      output_fields=['pk'],
+                                      timeout=10)
     logger.info('query_milvus pk={}', pk)
     if pk:
         res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
@@ -162,9 +175,8 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
             minio.delete_minio(str(file.id))
             if file.object_name:
                 minio.delete_minio(str(file.object_name))
-        # 处理vectordb
+
         knowledge = knowledgeid_dict.get(file.knowledge_id)
-        collection_name = knowledge.collection_name
         # elastic
         index_name = knowledge.index_name or collection_name
         esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
