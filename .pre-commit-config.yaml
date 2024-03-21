@@ -1,4 +1,4 @@
-exclude: ^scripts|docs|docker|requirements|README.md|test
+exclude: ^scripts|docs|docker|requirements|README.md|test|experimental
 repos:
   - repo: https://github.com/PyCQA/flake8.git
     rev: 3.8.3
