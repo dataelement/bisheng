@@ -1116,7 +1116,7 @@ export function downloadNode(NodeFLow: any) {
     type: "application/json",
   });
   element.href = URL.createObjectURL(file);
-  element.download = `${NodeFLow.name || NodeFLow.type}.json`;
+  element.download = `${NodeFLow.name || NodeFLow.node.display_name}.json`;
   element.click();
 }
 

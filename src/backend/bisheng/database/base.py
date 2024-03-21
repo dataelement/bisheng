@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from contextlib import contextmanager
 
 from bisheng.database.init_config import init_config
@@ -49,18 +50,14 @@ def init_default_data():
 
                 component_db = session.exec(select(Component).limit(1)).all()
                 if not component_db:
-                    with open('./sql.json', 'r', encoding='utf-8') as f:
-                        db_components = []
-                        json_items = json.loads(f.read())
-                        for item in json_items:
-                            for k, v in item.items():
-                                db_component = Component(k,
-                                                         user_id=1,
-                                                         user_name='admin',
-                                                         data=json.dumps(v))
-                                db_components.append(db_component)
-                        session.add(db_components)
-                        session.commit()
+                    db_components = []
+                    json_items = json.loads(read_from_conf('component.json'))
+                    for item in json_items:
+                        for k, v in item.items():
+                            db_component = Component(name=k, user_id=1, user_name='admin', data=v)
+                            db_components.append(db_component)
+                    session.add_all(db_components)
+                    session.commit()
 
             # 初始化数据库config
             init_config()
@@ -86,3 +83,16 @@ def session_getter() -> Session:
         raise
     finally:
         session.close()
+
+
+def read_from_conf(file_path: str) -> str:
+    if '/' not in file_path:
+        # Get current path
+        current_path = os.path.dirname(os.path.abspath(__file__))
+
+        file_path = os.path.join(current_path, file_path)
+
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    return content

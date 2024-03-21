@@ -20,13 +20,14 @@ from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from fastapi import HTTPException
-from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
-                                        UnstructuredMarkdownLoader, UnstructuredPowerPointLoader,
-                                        UnstructuredWordDocumentLoader)
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores.base import VectorStore
+from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
+                                                  UnstructuredMarkdownLoader,
+                                                  UnstructuredPowerPointLoader,
+                                                  UnstructuredWordDocumentLoader)
 from loguru import logger
 from pymilvus import Collection
 from sqlalchemy import delete

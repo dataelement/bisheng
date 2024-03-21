@@ -7,7 +7,7 @@ from bisheng.template.frontend_node.retrievers import RetrieverFrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class, build_template_from_method
 from bisheng_langchain import retrievers as bisheng_retrievers
-from langchain import retrievers
+from langchain_community import retrievers
 
 
 class RetrieverCreator(LangChainTypeCreator):
@@ -26,7 +26,7 @@ class RetrieverCreator(LangChainTypeCreator):
     def type_to_loader_dict(self) -> Dict:
         if self.type_dict is None:
             self.type_dict: dict[str, Any] = {
-                retriever_name: import_class(f'langchain.retrievers.{retriever_name}')
+                retriever_name: import_class(f'langchain_community.retrievers.{retriever_name}')
                 for retriever_name in retrievers.__all__
             }
 
