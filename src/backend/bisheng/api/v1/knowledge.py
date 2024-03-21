@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import time
 from typing import List, Optional
@@ -115,7 +116,7 @@ async def process_knowledge(*,
 
     for path in file_path:
         filepath, file_name = file_download(path)
-        md5_ = filepath.rsplit('/', 1)[1].split('.')[0].split('_')[0]
+        md5_ = os.path.splitext(os.path.basename(filepath))[0].split('_')[0]
         # 是否包含重复文件
         content_repeat = KnowledgeFileDao.get_file_by_condition(md5_=md5_,
                                                                 knowledge_id=knowledge_id)

@@ -52,7 +52,7 @@ class EllmExtract(object):
             'sort_filter_boxes': True,
             'enable_huarong_box_adjust': True,
             'support_long_image_segment': True,
-            # 'checkbox': ['std_checkbox'],
+            'checkbox': ['std_checkbox'],
             'rotateupright': True
         }
 

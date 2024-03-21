@@ -1,5 +1,4 @@
-# from typing import Union
-
+from typing import Union, List
 from pydantic import BaseModel
 
 
@@ -16,14 +15,14 @@ class Function(BaseModel):
 
 class ChatInput(BaseModel):
     model: str
-    messages: list[Message] = []
+    messages: List[Message] = []
     top_p: float = None
     temperature: float = None
     n: int = 1
     stream: bool = False
     stop: str = None
     max_tokens: int = 256
-    functions: list[Function] = []
+    functions: List[Function] = []
     function_call: str = None
 
 
@@ -46,7 +45,7 @@ class ChatOutput(BaseModel):
     object: str = None
     model: str = None
     created: int = None
-    choices: list[Choice] = []
+    choices: List[Choice] = []
     usage: Usage = None
 
 
