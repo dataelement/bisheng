@@ -11,10 +11,10 @@ export default function PersonalComponents({ onDragStart }) {
     const { addSavedComponent, checkComponentsName, delComponent, savedComponents } = useContext(userContext)
 
     const addComponent = (data) => {
-        if (checkComponentsName(data.data.node.display_name)) {
+        if (checkComponentsName(data.node.display_name)) {
             bsconfirm({
                 title: '组件已存在',
-                desc: `组件 ${data.data.node.display_name} 已存在，覆盖原有组件还是继续创新建组件？`,
+                desc: `组件 ${data.node.display_name} 已存在，覆盖原有组件还是继续创新建组件？`,
                 showClose: true,
                 okTxt: '覆盖',
                 canelTxt: '创建新组建',
@@ -90,7 +90,7 @@ export default function PersonalComponents({ onDragStart }) {
                                         }}
                                     >
                                         <div className="side-bar-components-div-form border-solid rounded-full">
-                                            <span className="side-bar-components-text"> {comp.name} </span>
+                                            <span className="side-bar-components-text max-w-40"> {comp.name} </span>
                                             <Menu className="side-bar-components-icon " />
                                             <CircleX className="side-bar-components-icon ml-2 cursor-pointer" onClick={(e) => handleDel(e, comp)} />
                                         </div>
