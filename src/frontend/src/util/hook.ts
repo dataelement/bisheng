@@ -56,16 +56,16 @@ export function useCopyText() {
 }
 
 // 表格通用逻辑（分页展示、表格数据、关键词检索）
-export function useTable(apiFun) {
+export function useTable<T extends {}>(param, apiFun) {
 
     const [page, setPage] = useState({
         page: 1,
-        pageSize: 20,
+        pageSize: param.pageSize || 20,
         keyword: "",
     });
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
-    const [data, setData] = useState([]);
+    const [data, setData] = useState<T[]>([]);
 
     const paramRef = useRef({});
 

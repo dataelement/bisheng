@@ -147,9 +147,9 @@ export async function saveFlowToDatabase(newFlow: {
 * @returns {Promise<any>} The flows data.
 * @throws Will throw an error if reading fails.
 */
-export async function readFlowsFromDatabase(page: number = 1, search: string) {
-    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${20}&name=${search}`);
-    return { data, pages: Math.ceil(total / 20) };
+export async function readFlowsFromDatabase(page: number = 1, pageSize: number = 20, search: string) {
+    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${pageSize}&name=${search}`);
+    return { data, total };
 }
 
 /**

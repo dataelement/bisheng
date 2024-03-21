@@ -21,8 +21,8 @@
         "pleaseEnterCaptcha": "Please enter captcha"
     },
     "menu": {
-        "app": "App",
-        "skills": "Skills",
+        "app": "Chat",
+        "skills": "Build",
         "knowledge": "Knowledge",
         "models": "Models",
         "system": "System",
@@ -57,7 +57,7 @@
     },
     "skills": {
         "manageTemplate": "Manage Skill Templates",
-        "createNew": "Create New",
+        "createNew": "Create New Skill",
         "manageProjects": "Manage your personal projects here, including skill deployment and editing",
         "skillSearch": "Skill Search",
         "confirmDeleteSkill": "Confirm the deletion of this skill?",
