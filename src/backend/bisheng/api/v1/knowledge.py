@@ -343,7 +343,7 @@ def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = De
             # file exist
             input_file = id2input.get(file.id)
             if input_file.remark and '对应已存在文件' in input_file.remark:
-                file.file_name = input_file.remark.split(' ')[0]
+                file.file_name = input_file.remark.split(' 对应已存在文件 ')[0]
                 file.remark = ''
             with session_getter() as session:
                 db_knowledge = session.get(Knowledge, file.knowledge_id)

@@ -343,7 +343,7 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             resp = requests.post(settings.get_knowledge().get('unstructured_api_url'), json=inp)
             if not resp or resp.status_code != 200:
                 logger.error(f'file_pdf=not_success resp={resp.text}')
-                raise Exception(f"当前文件无法解析， {resp['status_message']}")
+                raise Exception(f'当前文件无法解析， {resp.text}')
             if len(resp.text) < 300:
                 logger.error(f'file_pdf=not_success resp={resp.text}')
             b64_data = resp.json()['b64_pdf']
@@ -376,6 +376,7 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
     try:
         embeddings = decide_embeddings(db_knowledge.model)
         vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
+        logger.info('vector_init_conn_done milvus={}', db_knowledge.collection_name)
         index_name = db_knowledge.index_name or db_knowledge.collection_name
         es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
     except Exception as e:
