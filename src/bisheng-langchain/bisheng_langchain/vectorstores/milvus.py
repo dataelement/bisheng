@@ -199,17 +199,15 @@ class Milvus(MilvusLangchain):
         # Create the connection to the server
         if connection_args is None:
             connection_args = DEFAULT_MILVUS_CONNECTION
-        if 'timeout' not in connection_args:
-            connection_args['timeout'] = 3
+        # if 'timeout' not in connection_args:
+        # connection_args['timeout'] = 30
 
         self.alias = self._create_connection_alias(connection_args)
         self.col: Optional[Collection] = None
 
         # Grab the existing collection if it exists
         try:
-            if utility.has_collection(self.collection_name,
-                                      using=self.alias,
-                                      timeout=connection_args['timeout']):
+            if utility.has_collection(self.collection_name, using=self.alias):
                 self.col = Collection(
                     self.collection_name,
                     using=self.alias,

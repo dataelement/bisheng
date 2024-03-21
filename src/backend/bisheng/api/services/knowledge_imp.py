@@ -20,7 +20,7 @@ from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from fastapi import HTTPException
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
@@ -141,35 +141,40 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
     with session_getter() as session:
         knowledges = session.exec(select(Knowledge).where(Knowledge.id.in_(knowledge_ids))).all()
     knowledgeid_dict = {knowledge.id: knowledge for knowledge in knowledges}
+    embeddings = FakeEmbedding()
+    collection_ = set([knowledge.collection_name for knowledge in knowledges])
+    if len(collection_) > 1:
+        raise ValueError('不支持多个collection')
+
+    vectore_client = decide_vectorstores(collection_.pop(), 'Milvus', embeddings)
+    pk = vectore_client.col.query(expr=f'file_id in {file_ids}', output_fields=['pk'])
+    logger.info('query_milvus pk={}', pk)
+    if pk:
+        res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
+        logger.info(f'act=delete_vector file_id={file_ids} res={res}')
+    vectore_client.close_connection(vectore_client.alias)
 
     for file in knowledge_files:
         # mino
         if clear_minio:
             # minio
-            minio_client = MinioClient()
-            minio_client.delete_minio(str(file.id))
+            minio = MinioClient()
+            minio.delete_minio(str(file.id))
             if file.object_name:
-                minio_client.delete_minio(str(file.object_name))
+                minio.delete_minio(str(file.object_name))
         # 处理vectordb
         knowledge = knowledgeid_dict.get(file.knowledge_id)
         collection_name = knowledge.collection_name
-        embeddings = FakeEmbedding()
-        vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-        if isinstance(vectore_client, Milvus) and vectore_client.col:
-            pk = vectore_client.col.query(expr=f'file_id == {file.id}', output_fields=['pk'])
-            res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
-            logger.info(f'act=delete_vector file_id={file.id} res={res}')
+        # elastic
+        index_name = knowledge.index_name or collection_name
+        esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
 
-            # elastic
-            index_name = knowledge.index_name or collection_name
-            esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
-
-            if esvectore_client:
-                res = esvectore_client.client.delete_by_query(
-                    index=index_name, query={'match': {
-                        'metadata.file_id': file.id
-                    }})
-                logger.info(f'act=delete_es file_id={file.id} res={res}')
+        if esvectore_client:
+            res = esvectore_client.client.delete_by_query(
+                index=index_name, query={'match': {
+                    'metadata.file_id': file.id
+                }})
+            logger.info(f'act=delete_es file_id={file.id} res={res}')
     return True
 
 
@@ -303,6 +308,7 @@ def addEmbedding(collection_name,
                 session.add(db_file)
                 callback_obj = db_file.copy()
                 session.commit()
+
         if callback:
             # asyn
             inp = {
@@ -437,7 +443,15 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
 
 
 def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
-    delete_knowledge_file_vectors(file_ids=list(new_files.keys()), clear_minio=False)
+    try:
+        delete_knowledge_file_vectors(file_ids=list(new_files.keys()), clear_minio=False)
+    except Exception as e:
+        logger.exception(e)
+        for file in db_files:
+            file.status = 3
+            file.remark = str(e)[:500]
+            KnowledgeFileDao.update(file)
+        return
 
     separator = ['\n\n', '\n', ' ', '']
     chunk_size = 500
@@ -457,11 +471,9 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             if file_url:
                 file_path, _ = file_download(file_url)
             else:
-                with session_getter() as session:
-                    file.status = 3
-                    file.remark = '原始文件丢失'
-                    session.add(file)
-                    session.commit()
+                file.status = 3
+                file.remark = '原始文件丢失'
+                KnowledgeFileDao.update(file)
                 continue
 
             try:
