@@ -214,7 +214,7 @@ class Milvus(MilvusLangchain):
                 )
         except Exception as e:
             logger.error(f'milvus operating error={str(e)}')
-            self._close_connection(self.alias)
+            self.close_connection(self.alias)
             raise e
         # If need to drop old, drop it
         if drop_old and isinstance(self.col, Collection):
@@ -224,7 +224,7 @@ class Milvus(MilvusLangchain):
         # Initialize the vector store
         self._init()
 
-    def _close_connection(self, using):
+    def close_connection(self, using):
         from pymilvus import connections
         connections.remove_connection(using)
 
