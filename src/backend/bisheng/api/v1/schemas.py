@@ -198,3 +198,15 @@ class FinetuneCreateReq(BaseModel):
     extra_params: Dict = Field(default_factory=dict, description='训练任务所需额外参数')
     train_data: Optional[List[Dict]] = Field(default=None, description='个人训练数据')
     preset_data: Optional[List[Dict]] = Field(default=None, description='预设训练数据')
+
+
+class CreateComponentReq(BaseModel):
+    name: str = Field(max_length=50, description='组件名称')
+    data: Any = Field(default='', description='组件数据')
+    description: Optional[str] = Field(default='', description='组件描述')
+
+
+class CustomComponentCode(BaseModel):
+    code: str
+    field: Optional[str] = None
+    frontend_node: Optional[dict] = None

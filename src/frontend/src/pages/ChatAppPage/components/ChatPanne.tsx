@@ -34,7 +34,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
     // build
     const build = useBuild(flow, chatId)
     // 消息列表
-    const { messages, messagesRef, loadHistory, setChatHistory, changeHistoryByScroll } = useMessages(chatId, flow)
+    const { messages, messagesRef, loadHistory, setChatHistory, initGuide, changeHistoryByScroll } = useMessages(chatId, flow)
     // ws通信
     const { stop, connectWS, begin: chating, checkReLinkWs, sendAll } = useWebsocket(chatId, flow, setChatHistory, queryString, version)
     // 停止状态
@@ -50,7 +50,7 @@ export default forwardRef(function ChatPanne({ chatId, flow, queryString, versio
     const initChat = async () => {
         await checkPrompt(flow)
         await build()
-        const historyData = await loadHistory()
+        const historyData = version === 'v1' ? await loadHistory() : (initGuide(), [])
         await connectWS({ setInputState, setIsStop, changeHistoryByScroll })
         setInputState({ lock: false, errorMsg: '' });
         // 第一条消息，用来初始化会话
@@ -384,33 +384,11 @@ const useMessages = (chatId, flow) => {
         if (lastId) {
             historyData = [...hisData.reverse(), ...chatHistory]
         } else if (loadIdRef.current === chatId) { // 保证同一会话
-            historyData = !hisData.length && flow.guide_word ? [{
-                "category": "system",
-                "chat_id": chatId,
-                "end": true,
-                "create_time": "",
-                "extra": "{}",
-                "files": [],
-                "flow_id": flow.id,
-                "id": 9999,
-                "thought": flow.guide_word,
-                "is_bot": true,
-                "liked": 0,
-                "message": '',
-                "receiver": null,
-                "remark": null,
-                "sender": "",
-                "solved": 0,
-                isSend: false,
-                "source": 0,
-                "type": "end",
-                "update_time": "",
-                noAccess: true,
-                "user_id": 0
-            }] : hisData.reverse()
+            historyData = hisData.reverse()
         }
-
         setChatHistory(historyData)
+        const pageSize = historyData.length < 30 ? 30 : 10 // 先偷懒
+        if (hisData.length < pageSize) initGuide()
         return historyData
     }
 
@@ -428,6 +406,36 @@ const useMessages = (chatId, flow) => {
         setTimeout(() => {
             changeHistoryByScroll.current = false
         }, 500);
+    }
+
+    const initGuide = () => {
+        const guideMsg = {
+            "category": "system",
+            "chat_id": chatId,
+            "end": true,
+            "create_time": "",
+            "extra": "{}",
+            "files": [],
+            "flow_id": flow.id,
+            "id": 9999,
+            "thought": flow.guide_word,
+            "is_bot": true,
+            "liked": 0,
+            "message": '',
+            "receiver": null,
+            "remark": null,
+            "sender": "",
+            "solved": 0,
+            isSend: false,
+            "source": 0,
+            "type": "end",
+            "update_time": "",
+            noAccess: true,
+            "user_id": 0
+        }
+        flow.guide_word && setChatHistory((chatHistory) =>
+            chatHistory[0]?.id === 9999 ? chatHistory : [guideMsg, ...chatHistory]
+        )
     }
 
     // 消息滚动
@@ -451,7 +459,7 @@ const useMessages = (chatId, flow) => {
     }, [messagesRef.current, chatHistory, chatId]);
 
     return {
-        messages: chatHistory, messagesRef, loadHistory, setChatHistory, changeHistoryByScroll
+        messages: chatHistory, messagesRef, loadHistory, setChatHistory, initGuide, changeHistoryByScroll
     }
 }
 
@@ -683,7 +691,7 @@ const useWebsocket = (chatId, flow, setChatHistory, queryString, version) => {
     // 发送ws
     async function sendAll(data: sendAllProps) {
         try {
-            if (ws) {
+            if (ws.current) {
                 if (JSON.stringify(data.inputs) !== '{}') {
                     newChatStart.current = false
                 }
@@ -799,6 +807,7 @@ const useBuild = (flow: FlowType, chatId: string) => {
         // Step 2: Use the session ID to establish an SSE connection using EventSource
         let validationResults = [];
         let finished = false;
+        let buildEnd = false
         const apiUrl = `/api/v1/build/stream/${flowId}?chat_id=${chatId}`;
         const eventSource = new EventSource(apiUrl);
 
@@ -811,6 +820,7 @@ const useBuild = (flow: FlowType, chatId: string) => {
             // if the event is the end of the stream, close the connection
             if (parsedData.end_of_stream) {
                 eventSource.close(); // 结束关闭链接
+                buildEnd = true
                 return;
             } else if (parsedData.log) {
                 // If the event is a log, log it
@@ -842,7 +852,7 @@ const useBuild = (flow: FlowType, chatId: string) => {
         // Step 3: Wait for the stream to finish
         while (!finished) {
             await new Promise((resolve) => setTimeout(resolve, 100));
-            finished = validationResults.length === flow.data.nodes.length;
+            finished = buildEnd // validationResults.length === flow.data.nodes.length;
         }
         // Step 4: Return true if all nodes are valid, false otherwise
         return validationResults.every((result) => result);

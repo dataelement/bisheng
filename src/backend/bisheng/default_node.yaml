@@ -77,6 +77,8 @@ chains:
   #   documentation: ""
   LoaderOutputChain:
     documentation: ""
+  DalleGeneratorChain:
+    documentation: ""
 documentloaders:
   CustomKVLoader:
     documentation: ""
@@ -189,6 +191,8 @@ llms:
   HostLlama2Chat:
     documentation: ""
   HostQwenChat:
+    documentation: ""
+  HostQwen1_5Chat:
     documentation: ""
   CustomLLMChat:
     documentation: ""

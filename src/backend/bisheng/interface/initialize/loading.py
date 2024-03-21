@@ -1,15 +1,19 @@
+import inspect
 import json
-from typing import Any, Callable, Dict, Sequence, Type
+from typing import TYPE_CHECKING, Any, Callable, Dict, Sequence, Type
 
+import httpx
+import openai
 from bisheng.cache.utils import file_download
 from bisheng.chat.config import ChatConfig
 from bisheng.interface.agents.base import agent_creator
 from bisheng.interface.chains.base import chain_creator
 from bisheng.interface.custom_lists import CUSTOM_NODES
-from bisheng.interface.importing.utils import get_function, import_by_type
+from bisheng.interface.importing.utils import (eval_custom_component_code, get_function,
+                                               import_by_type)
 from bisheng.interface.initialize.llm import initialize_vertexai
 from bisheng.interface.initialize.utils import (handle_format_kwargs, handle_node_type,
-                                                handle_partial_variables)
+                                                handle_partial_variables, langchain_bug_openv1)
 from bisheng.interface.initialize.vector_store import vecstore_initializer
 from bisheng.interface.output_parsers.base import output_parser_creator
 from bisheng.interface.retrievers.base import retriever_creator
@@ -28,9 +32,13 @@ from langchain.base_language import BaseLanguageModel
 from langchain.chains.base import Chain
 from langchain.document_loaders.base import BaseLoader
 from langchain.vectorstores.base import VectorStore
+from langchain_community.utils.openai import is_openai_v1
 from loguru import logger
-from pydantic import ValidationError, create_model
+from pydantic import SecretStr, ValidationError, create_model
 from pydantic.fields import FieldInfo
+
+if TYPE_CHECKING:
+    from bisheng import CustomComponent
 
 
 def build_vertex_in_params(params: Dict) -> Dict:
@@ -123,6 +131,8 @@ async def instantiate_based_on_type(class_object,
         return instantiate_retriever(node_type, class_object, params)
     elif base_type == 'memory':
         return instantiate_memory(node_type, class_object, params)
+    elif base_type == 'custom_components':
+        return await instantiate_custom_component(node_type, class_object, params, user_id)
     elif base_type == 'wrappers':
         return instantiate_wrapper(node_type, class_object, params)
     elif base_type == 'input_output':
@@ -131,6 +141,27 @@ async def instantiate_based_on_type(class_object,
         return instantiate_autogen_roles(node_type, class_object, params)
     else:
         return class_object(**params)
+
+
+async def instantiate_custom_component(node_type, class_object, params, user_id):
+    params_copy = params.copy()
+    class_object: 'CustomComponent' = eval_custom_component_code(params_copy.pop('code'))
+    custom_component = class_object(user_id=user_id)
+
+    if 'retriever' in params_copy and hasattr(params_copy['retriever'], 'as_retriever'):
+        params_copy['retriever'] = params_copy['retriever'].as_retriever()
+
+    # Determine if the build method is asynchronous
+    is_async = inspect.iscoroutinefunction(custom_component.build)
+
+    if is_async:
+        # Await the build method directly if it's async
+        built_object = await custom_component.build(**params_copy)
+    else:
+        # Call the build method directly if it's sync
+        built_object = custom_component.build(**params_copy)
+
+    return built_object, {'repr': custom_component.custom_repr()}
 
 
 def instantiate_input_output(node_type, class_object, params, id_dict):
@@ -189,6 +220,13 @@ def instantiate_wrapper(node_type, class_object, params):
         if class_method := getattr(class_object, method, None):
             return class_method(**params)
         raise ValueError(f'Method {method} not found in {class_object}')
+    if node_type == 'DallEAPIWrapper' and is_openai_v1():
+        if 'openai_proxy' in params:
+            client_params = langchain_bug_openv1(params)
+            client_params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
+            params['client'] = openai.OpenAI(**client_params).images
+            client_params['http_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
+            params['async_client'] = openai.AsyncOpenAI(**client_params).images
 
     return class_object(**params)
 
@@ -206,6 +244,25 @@ def instantiate_llm(node_type, class_object, params: Dict):
     # This is a workaround so JinaChat works until streaming is implemented
     # if "openai_api_base" in params and "jina" in params["openai_api_base"]:
     # False if condition is True
+    if is_openai_v1() and 'openai_proxy' in params:
+        client_params = {
+            'api_key': params['openai_api_key'],
+            'organization': params.get('openai_organization'),
+            'base_url': params.get('openai_api_base'),
+            'timeout': params.get('request_timeout', 20),
+            'max_retries': params.get('max_retries', 1),
+            'default_headers': params.get('default_headers'),
+            'default_query': params.get('default_query')
+        }
+        client_params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
+        params['client'] = openai.OpenAI(**client_params).chat.completions
+        client_params['http_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
+        params['async_client'] = openai.AsyncOpenAI(**client_params).chat.completions
+
+    if node_type == '':
+        anthropic_api_key = params.pop('anthropic_api_key', None)
+        params['anthropic_api_key'] = SecretStr(anthropic_api_key) if anthropic_api_key else None
+
     if node_type == 'VertexAI':
         return initialize_vertexai(class_object=class_object, params=params)
     # max_tokens sometimes is a string and should be an int
@@ -410,6 +467,21 @@ def instantiate_toolkit(node_type, class_object: Type[BaseToolkit], params: Dict
 def instantiate_embedding(class_object, params: Dict):
     # params.pop('model', None)
     try:
+        if 'openai_proxy' in params:
+            client_params = {
+                'api_key': params['openai_api_key'],
+                'organization': params.get('openai_organization'),
+                'base_url': params.get('openai_api_base'),
+                'timeout': params.get('request_timeout', 20),
+                'max_retries': params.get('max_retries', 1),
+                'default_headers': params.get('default_headers'),
+                'default_query': params.get('default_query')
+            }
+            client_params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
+            params['client'] = openai.OpenAI(**client_params).embeddings
+            client_params['http_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
+            params['async_client'] = openai.AsyncOpenAI(**client_params).embeddings
+
         return class_object(**params)
     except ValidationError:
         params = {key: value for key, value in params.items() if key in class_object.__fields__}

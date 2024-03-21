@@ -2,7 +2,7 @@ import abc
 from typing import Any, Type
 from langchain.agents import AgentType, Tool, initialize_agent
 from langchain.chat_models import ChatOpenAI
-from langchain.utilities import SerpAPIWrapper
+from langchain_community.utilities import SerpAPIWrapper
 from langchain.agents.agent import AgentExecutor
 from bisheng_langchain.chat_models.host_llm import HostQwenChat
 from bisheng_langchain.agents import LLMFunctionsAgent

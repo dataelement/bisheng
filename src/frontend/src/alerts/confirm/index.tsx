@@ -2,13 +2,16 @@ import i18next from "i18next";
 import { useRef, useState } from "react";
 import ReactDOM from "react-dom";
 import { Button } from "../../components/ui/button";
+import { X } from "lucide-react";
 
 interface ConfirmParams {
   title?: string
   desc: string | React.ReactNode
   canelTxt?: string
   okTxt?: string
+  showClose?: boolean
   onClose?: () => void
+  onCancel?: () => void
   onOk?: (next) => void
 }
 
@@ -28,6 +31,11 @@ function ConfirmWrapper() {
     setOpen(false)
   }
 
+  const handleCancelClick = () => {
+    paramRef.current?.onCancel?.()
+    close()
+  }
+
   const handleOkClick = () => {
     paramRef.current?.onOk
       ? paramRef.current?.onOk?.(close)
@@ -35,14 +43,15 @@ function ConfirmWrapper() {
   }
 
   if (!paramRef.current) return null
-  const { title, desc, okTxt, canelTxt } = paramRef.current
+  const { title, desc, okTxt, canelTxt, showClose = false } = paramRef.current
 
   return <dialog className={`modal ${open && 'modal-open'}`}>
-    <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
+    <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background relative">
+      {showClose && <X size={20} onClick={close} className="absolute right-4 cursor-pointer text-gray-400 hover:text-gray-600"></X>}
       <h3 className="font-bold text-lg">{title}</h3>
       <p className="py-4">{desc}</p>
       <div className="modal-action">
-        <Button className="h-8 rounded-full" variant="outline" onClick={close}>{canelTxt}</Button>
+        <Button className="h-8 rounded-full" variant="outline" onClick={handleCancelClick}>{canelTxt}</Button>
         <Button className="h-8 rounded-full" variant="destructive" onClick={handleOkClick}>{okTxt}</Button>
       </div>
     </form>

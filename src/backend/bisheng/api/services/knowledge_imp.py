@@ -1,32 +1,35 @@
 import base64
 import json
+import math
 import re
 import time
-from typing import List
+from typing import Dict, List
 from uuid import uuid4
 
 import requests
+from bisheng.cache.utils import file_download
 from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate
-from bisheng.database.models.knowledge_file import KnowledgeFile
+from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeDao
+from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
+from bisheng.utils import minio_client
+from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
-from bisheng_langchain.embeddings import HostEmbeddings
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from fastapi import HTTPException
-from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
-                                        UnstructuredMarkdownLoader, UnstructuredPowerPointLoader,
-                                        UnstructuredWordDocumentLoader)
 from langchain.embeddings.base import Embeddings
-from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores.base import VectorStore
+from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
+                                                  UnstructuredMarkdownLoader,
+                                                  UnstructuredPowerPointLoader,
+                                                  UnstructuredWordDocumentLoader)
 from loguru import logger
 from pymilvus import Collection
 from sqlalchemy import delete
@@ -73,7 +76,7 @@ def create_knowledge(knowledge: KnowledgeCreate, user_id: int):
         return db_knowldge.copy()
 
 
-def delete_knowledge_by(knowledge: Knowledge):
+def delete_knowledge_by(knowledge: Knowledge, only_clear: bool = False):
     # 处理vector
     knowledge_id = knowledge.id
     embeddings = FakeEmbedding()
@@ -99,66 +102,92 @@ def delete_knowledge_by(knowledge: Knowledge):
         index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
         res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
         logger.info(f'act=delete_es index={index_name} res={res}')
-    # 处理knowledgefile
+
+    # 清理minio的数据
+    delete_knowledge_file_in_minio(knowledge_id)
+
+    # 处理knowledge file
     with session_getter() as session:
         session.exec(delete(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
-        session.delete(knowledge)
+        # 清空知识库时，不删除知识库记录
+        if not only_clear:
+            session.delete(knowledge)
         session.commit()
     return True
 
 
-def delete_knowledge_file_batch(file_ids: List[int]):
+def delete_knowledge_file_in_minio(knowledge_id: int):
+    # 每1000条记录去删除minio文件
+    count = KnowledgeFileDao.count_file_by_knowledge_id(knowledge_id)
+    if count == 0:
+        return
+    page_size = 1000
+    page_num = math.ceil(count / page_size)
+    minio_client = MinioClient()
+    for i in range(page_num):
+        file_list = KnowledgeFileDao.get_file_simple_by_knowledge_id(knowledge_id, i + 1,
+                                                                     page_size)
+        for file in file_list:
+            minio_client.delete_minio(str(file[0]))
+            if file[1]:
+                minio_client.delete_minio(file[1])
+
+
+def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True):
     """ 删除知识文件信息 """
-    with session_getter() as session:
-        knowledge_files = session.exec(
-            select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
-        if not knowledge_files:
-            raise ValueError('文件ID不存在')
+    knowledge_files = KnowledgeFileDao.select_list(file_ids=file_ids)
 
     knowledge_ids = [file.knowledge_id for file in knowledge_files]
     with session_getter() as session:
         knowledges = session.exec(select(Knowledge).where(Knowledge.id.in_(knowledge_ids))).all()
     knowledgeid_dict = {knowledge.id: knowledge for knowledge in knowledges}
+    embeddings = FakeEmbedding()
+    collection_ = set([knowledge.collection_name for knowledge in knowledges])
+
+    if len(collection_) > 1:
+        raise ValueError('不支持多个collection')
+    collection_name = collection_.pop()
     # 处理vectordb
-    for file in knowledge_files:
-        knowledge = knowledgeid_dict.get(file.knowledge_id)
-        collection_name = knowledge.collection_name
-        embeddings = FakeEmbedding()
+    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+    try:
+        pk = vectore_client.col.query(expr=f'file_id in {file_ids}',
+                                      output_fields=['pk'],
+                                      timeout=10)
+    except Exception:
+        # 重试一次
+        logger.error('timeout_except')
+        vectore_client.close_connection(vectore_client.alias)
         vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-        if isinstance(vectore_client, Milvus) and vectore_client.col:
-            pk = vectore_client.col.query(expr=f'file_id == {file.id}', output_fields=['pk'])
-            res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
-            logger.info(f'act=delete_vector file_id={file.id} res={res}')
+        pk = vectore_client.col.query(expr=f'file_id in {file_ids}',
+                                      output_fields=['pk'],
+                                      timeout=10)
+    logger.info('query_milvus pk={}', pk)
+    if pk:
+        res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
+        logger.info(f'act=delete_vector file_id={file_ids} res={res}')
+    vectore_client.close_connection(vectore_client.alias)
 
+    for file in knowledge_files:
+        # mino
+        if clear_minio:
             # minio
-            minio_client = MinioClient()
-            minio_client.delete_minio(str(file.id))
+            minio = MinioClient()
+            minio.delete_minio(str(file.id))
             if file.object_name:
-                minio_client.delete_minio(str(file.object_name))
-            # elastic
-            index_name = knowledge.index_name or collection_name
-            esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+                minio.delete_minio(str(file.object_name))
 
-            if esvectore_client:
-                res = esvectore_client.client.delete_by_query(
-                    index=index_name, query={'match': {
-                        'metadata.file_id': file.id
-                    }})
-                logger.info(f'act=delete_es file_id={file.id} res={res}')
+        knowledge = knowledgeid_dict.get(file.knowledge_id)
+        # elastic
+        index_name = knowledge.index_name or collection_name
+        esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
 
-        with session_getter() as session:
-            session.delete(file)
-            session.commit()
+        if esvectore_client:
+            res = esvectore_client.client.delete_by_query(
+                index=index_name, query={'match': {
+                    'metadata.file_id': file.id
+                }})
+            logger.info(f'act=delete_es file_id={file.id} res={res}')
     return True
-
-
-def decide_embeddings(model: str) -> Embeddings:
-    """embed method"""
-    model_list = settings.get_knowledge().get('embeddings')
-    if model == 'text-embedding-ada-002':
-        return OpenAIEmbeddings(**model_list.get(model))
-    else:
-        return HostEmbeddings(**model_list.get(model))
 
 
 def decide_vectorstores(collection_name: str, vector_store: str,
@@ -291,6 +320,7 @@ def addEmbedding(collection_name,
                 session.add(db_file)
                 callback_obj = db_file.copy()
                 session.commit()
+
         if callback:
             # asyn
             inp = {
@@ -333,7 +363,7 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             resp = requests.post(settings.get_knowledge().get('unstructured_api_url'), json=inp)
             if not resp or resp.status_code != 200:
                 logger.error(f'file_pdf=not_success resp={resp.text}')
-                raise Exception(f"当前文件无法解析， {resp['status_message']}")
+                raise Exception(f'当前文件无法解析， {resp.text}')
             if len(resp.text) < 300:
                 logger.error(f'file_pdf=not_success resp={resp.text}')
             b64_data = resp.json()['b64_pdf']
@@ -366,6 +396,7 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
     try:
         embeddings = decide_embeddings(db_knowledge.model)
         vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
+        logger.info('vector_init_conn_done milvus={}', db_knowledge.collection_name)
         index_name = db_knowledge.index_name or db_knowledge.collection_name
         es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
     except Exception as e:
@@ -423,21 +454,51 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
     return result
 
 
-def delete_vector(collection_name: str, partition_key: str):
-    embeddings = FakeEmbedding()
-    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-    if isinstance(vectore_client, Milvus) and vectore_client.col:
-        if partition_key:
-            pass
-        else:
-            res = vectore_client.col.drop(timeout=1)
-            logger.info('act=delete_milvus col={} res={}', collection_name, res)
+def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
+    try:
+        delete_knowledge_file_vectors(file_ids=list(new_files.keys()), clear_minio=False)
+    except Exception as e:
+        logger.exception(e)
+        for file in db_files:
+            file.status = 3
+            file.remark = str(e)[:500]
+            KnowledgeFileDao.update(file)
+        return
 
+    separator = ['\n\n', '\n', ' ', '']
+    chunk_size = 500
+    chunk_overlap = 50
+    if db_files:
+        minio = MinioClient()
+        for file in db_files:
+            # file exist
+            input_file = new_files.get(file.id)
+            db_knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
 
-def delete_es(index_name: str):
-    embeddings = FakeEmbedding()
-    esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+            index_name = db_knowledge.index_name or db_knowledge.collection_name
+            original_file = input_file.object_name
+            file_url = minio.get_share_link(original_file,
+                                            minio_client.tmp_bucket) if original_file.startswith(
+                                                'tmp') else minio.get_share_link(original_file)
+            if file_url:
+                file_path, _ = file_download(file_url)
+            else:
+                file.status = 3
+                file.remark = '原始文件丢失'
+                KnowledgeFileDao.update(file)
+                continue
 
-    if esvectore_client:
-        res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
-        logger.info(f'act=delete_es index={index_name} res={res}')
+            try:
+                addEmbedding(collection_name=db_knowledge.collection_name,
+                             index_name=index_name,
+                             knowledge_id=db_knowledge.id,
+                             model=db_knowledge.model,
+                             chunk_size=chunk_size,
+                             separator=separator,
+                             chunk_overlap=chunk_overlap,
+                             file_paths=[file_path],
+                             knowledge_files=[file],
+                             callback=None,
+                             extra_meta=file.extra_meta)
+            except Exception as e:
+                logger.error(e)

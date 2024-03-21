@@ -5,7 +5,6 @@ import { TextAreaComponentType } from "../../types/components";
 import { TypeModal } from "../../utils";
 
 import { ExternalLink } from "lucide-react";
-import { postValidatePrompt } from "../../controllers/API";
 
 export default function PromptAreaComponent({
   field_name,

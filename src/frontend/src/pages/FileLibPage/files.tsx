@@ -16,7 +16,7 @@ import {
     TabsTrigger,
 } from "../../components/ui/tabs";
 
-import { ArrowLeft, Filter, RotateCw, Search } from "lucide-react";
+import { ArrowLeft, Filter, RotateCw, Search, X } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
@@ -56,7 +56,11 @@ export default function FilesPage() {
 
     useEffect(() => {
         // @ts-ignore
-        setTitle(window.libname)
+        const libname = window.libname // 临时记忆
+        if (libname) {
+            localStorage.setItem('libname', window.libname)
+        }
+        setTitle(window.libname || localStorage.getItem('libname'))
     }, [])
 
     const handleOpen = (e) => {
@@ -74,29 +78,40 @@ export default function FilesPage() {
         }))
     }
 
+    const [repeatFiles, setRepeatFiles] = useState([])
     // 上传结果展示
-    const handleUploadResult = (fileCount, failFiles) => {
-        failFiles.length && bsconfirm({
-            desc: <div>
-                <p>{t('lib.fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
-                <div className="max-h-[160px] overflow-y-auto no-scrollbar">
-                    {failFiles.map(str => <p className=" text-red-400" key={str}>{str}</p>)}
-                </div>
-            </div>,
-            onOk(next) {
-                next()
-            }
-        })
+    const handleUploadResult = (fileCount, failFiles, res) => {
+        const _repeatFiles = res.filter(e => e.status === 3)
+        if (_repeatFiles.length) {
+            setRepeatFiles(_repeatFiles)
+        } else {
+            failFiles.length && bsconfirm({
+                desc: <div>
+                    <p>{t('lib.fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
+                    <div className="max-h-[160px] overflow-y-auto no-scrollbar">
+                        {failFiles.map(str => <p className=" text-red-400" key={str}>{str}</p>)}
+                    </div>
+                </div>,
+                onOk(next) {
+                    next()
+                }
+            })
+        }
     }
 
     // 重试解析
-    const handleRetry = (id) => {
-        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(id).then(res => {
+    const [retryLoad, setRetryLoad] = useState(false)
+    const handleRetry = (objs) => {
+        setRetryLoad(true)
+        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(objs).then(res => {
             // 乐观更新
-            refreshData(
-                (item) => item.id === id,
-                { status: 1 }
-            )
+            // refreshData(
+            //     (item) => ids.includes(item.id),
+            //     { status: 1 }
+            // )
+            reload()
+            setRepeatFiles([])
+            setRetryLoad(false)
         }))
     }
 
@@ -173,12 +188,12 @@ export default function FilesPage() {
                                         <div className="tooltip" data-tip={el.remark}>
                                             <span className='text-red-500'>{t('lib.parseFailed')}</span>
                                         </div>
-                                        <Button variant="link"><RotateCw size={16} onClick={() => handleRetry(el.id)} /></Button>
+                                        <Button variant="link"><RotateCw size={16} onClick={() => handleRetry([el])} /></Button>
                                     </div> :
                                         <span className={el.status === 3 && 'text-red-500'}>{[t('lib.parseFailed'), t('lib.parsing'), t('lib.completed'), t('lib.parseFailed')][el.status]}</span>
                                     }
                                 </TableCell>
-                                <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
+                                <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                 <TableCell className="text-right">
                                     {hasPermission ? <a href="javascript:;" onClick={() => delConfim(el.id)} className="underline ml-4">{t('delete')}</a> :
                                         <a href="javascript:;" className="underline ml-4 text-gray-400">{t('delete')}</a>}
@@ -193,6 +208,26 @@ export default function FilesPage() {
         </Tabs>
         {/* upload modal */}
         <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen} onResult={handleUploadResult}></UploadModal>
+        {/* 重复文件提醒 */}
+        <dialog className={`modal ${repeatFiles.length && 'modal-open'}`}>
+            <div className="modal-box w-[560px] bg-[#fff] shadow-lg dark:bg-background">
+                <h3 className="font-bold text-lg relative">文件重复提示
+                    <X className="absolute right-0 top-0 text-gray-400 cursor-pointer" size={20} onClick={() => setRepeatFiles([])}></X>
+                </h3>
+                <p className="py-4">以下文件在知识库中已存在，继续上传将会覆盖原有文件以及处理策略，是否覆盖？</p>
+                <ul className="overflow-y-auto max-h-[400px]">
+                    {repeatFiles.map(el => (
+                        <li key={el.id} className="py-2 text-red-500">{el.remark}</li>
+                    ))}
+                </ul>
+                <div className="modal-action">
+                    <Button className="h-8 rounded-full" variant="outline" onClick={() => setRepeatFiles([])}>不覆盖，保留原文件</Button>
+                    <Button className="h-8 rounded-full" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
+                        {retryLoad && <span className="loading loading-spinner loading-xs"></span>}覆盖
+                    </Button>
+                </div>
+            </div>
+        </dialog>
         {/* Delete confirmation */}
         <dialog className={`modal ${delShow && 'modal-open'}`}>
             <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">

@@ -28,21 +28,11 @@ module.exports = {
       },
     },
     extend: {
-      keyframes: {
-        "accordion-down": {
-          from: { height: 0 },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: 0 },
-        },
-      },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-      },
       colors: {
+        "component-icon": "var(--component-icon)",
+        "flow-icon": "var(--flow-icon)",
+        "low-indigo": "var(--low-indigo)",
+        "chat-send": "var(--chat-send)",
         connection: "var(--connection)",
         "almost-dark-gray": "var(--almost-dark-gray)",
         "almost-light-blue": "var(--almost-light-blue)",
@@ -83,6 +73,8 @@ module.exports = {
         "status-yellow": "var(--status-yellow)",
         "success-background": "var(--success-background)",
         "success-foreground": "var(--success-foreground)",
+        "beta-background": "var(--beta-background)",
+        "beta-foreground": "var(--beta-foreground)",
         "chat-bot-icon": "var(--chat-bot-icon)",
         "chat-user-icon": "var(--chat-user-icon)",
 
@@ -129,20 +121,6 @@ module.exports = {
       fontFamily: {
         sans: ["var(--font-sans)", ...fontFamily.sans],
       },
-      keyframes: {
-        slideDown: {
-          from: { height: 0 },
-          to: { height: 100 },
-        },
-        slideUp: {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: 0 },
-        },
-      },
-      animation: {
-        "accordion-down": "slideDown 300ms ease-out",
-        "accordion-up": "slideUp 300ms ease-in",
-      },
     },
   },
 
@@ -179,7 +157,9 @@ module.exports = {
           overflow: "hidden",
           "text-overflow": "ellipsis",
         },
-
+        ".word-break-break-word": {
+          wordBreak: "break-word",
+        },
         ".arrow-hide": {
           "&::-webkit-inner-spin-button": {
             "-webkit-appearance": "none",
@@ -214,6 +194,7 @@ module.exports = {
           "&::-webkit-scrollbar-thumb:hover": {
             backgroundColor: "#bbb",
           },
+          cursor: "auto",
         },
         ".dark .theme-attribution .react-flow__attribution": {
           backgroundColor: "rgba(255, 255, 255, 0.2)",
@@ -221,6 +202,12 @@ module.exports = {
         },
         ".dark .theme-attribution .react-flow__attribution a": {
           color: "black",
+        },
+        ".text-align-last-left": {
+          "text-align-last": "left",
+        },
+        ".text-align-last-right": {
+          "text-align-last": "right",
         },
       });
     }),

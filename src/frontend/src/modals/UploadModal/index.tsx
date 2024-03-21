@@ -98,11 +98,10 @@ export default function UploadModal({ id, accept, open, desc = '', setOpen, onRe
             params.chunk_overlap = Number(/^\d+$/.test(overlap) ? overlap : '100') // 异常值使用默认值
         }
         // sub api
-        captureAndAlertRequestErrorHoc(subUploadLibFile(params).then(() => {
+        captureAndAlertRequestErrorHoc(subUploadLibFile(params).then((res) => {
             setOpen(false);
             setLoading(false);
-
-            onResult?.(progressList.length, failFilesRef.current)
+            onResult?.(progressList.length, failFilesRef.current, res)
         }), () => setLoading(false));
     }
 

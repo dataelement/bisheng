@@ -2,6 +2,7 @@ knowledges:
   unstructured_api_url: ""  # 毕昇非结构化数据解析服务地址，提供包括OCR文字识别、表格识别、版式分析等能力。非必填，溯源必填
   embeddings: # 配置知识库的embedding服务，以下示例填写了两类embedding服务的配置方法，第一个是openai的embedding模型服务的配置方法，第二个是本地部署的embedding模型服务的配置方法，如果有多个可以添加多个
     text-embedding-ada-002: # 知识库下拉框中显示的embedding模型的名称，可自定义
+      component: openai
       openai_api_base: "https://api.openai.com/v1"
       openai_proxy: "" # 如果是自己代理的服务地址，则填在这里
       openai_api_key: "" # 私有的，openai账号的key
@@ -11,6 +12,10 @@ knowledges:
     embedding-host: # 知识库下拉框中显示的embedding模型的名称，可自定义
       host_base_url: "" # 在模型管理页面中已上线的embedding服务的地址
       model: "" # 在模型管理页面中已上线的embedding模型的名称
+      component: host
+    custom-embedding:
+      component: custom
+    
   vectorstores:
     # Milvus 最低要求cpu 4C 8G 推荐4C 16G
     Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
@@ -26,8 +31,8 @@ knowledges:
   minio: # 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储
      SCHEMA: false         # 是否支持 https
      CERT_CHECK: false         # 是否校验 http证书
-     MINIO_ENDPOINT: "minio:9000"       # 这个地址用来写请求
-     MINIO_SHAREPOIN: "minio:9000"      # 为保证外网和内网隔离。 浏览器获取连接是这个域名
+     MINIO_ENDPOINT: "minio:9000"       # 这个地址用来写请求, 使用同一个docker-compose 启动，能通过容器名访问
+     MINIO_SHAREPOIN: "minio:9000"      # 确保和nginx的代理地址一致。同一个docker-compose启动可以直接使用默认值
      MINIO_ACCESS_KEY: "minioadmin"
      MINIO_SECRET_KEY: "minioadmin"
   #

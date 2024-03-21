@@ -158,6 +158,10 @@ class GTEEmbedding(HostEmbeddings):
     embedding_ctx_length: int = 512
 
 
+class JINAEmbedding(HostEmbeddings):
+    model: str = 'jina'
+    embedding_ctx_length: int = 512
+
 class CustomHostEmbedding(HostEmbeddings):
     model: str = Field('custom-embedding', alias='model')
     embedding_ctx_length: int = 512
