@@ -207,7 +207,7 @@ class Milvus(MilvusLangchain):
 
         # Grab the existing collection if it exists
         try:
-            logger.info('check_collection alias={}', self.alias)
+            logger.info(f'check_collection alias={self.alias}')
             if utility.has_collection(self.collection_name,
                                       using=self.alias,
                                       timeout=connection_args['timeout']):
