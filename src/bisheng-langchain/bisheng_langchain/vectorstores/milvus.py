@@ -207,7 +207,6 @@ class Milvus(MilvusLangchain):
 
         # Grab the existing collection if it exists
         try:
-            logger.info(f'check_collection alias={self.alias}')
             if utility.has_collection(self.collection_name,
                                       using=self.alias,
                                       timeout=connection_args['timeout']):
@@ -219,7 +218,6 @@ class Milvus(MilvusLangchain):
             logger.error(f'milvus operating error={str(e)}')
             self._close_connection(self.alias)
             raise e
-        logger.info('get_collection_done')
         # If need to drop old, drop it
         if drop_old and isinstance(self.col, Collection):
             self.col.drop()

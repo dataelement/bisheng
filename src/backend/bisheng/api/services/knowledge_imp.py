@@ -3,17 +3,19 @@ import json
 import math
 import re
 import time
-from typing import List
+from typing import Dict, List
 from uuid import uuid4
 
 import requests
+from bisheng.cache.utils import file_download
 from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate
+from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeDao
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
+from bisheng.utils import minio_client
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
@@ -432,3 +434,47 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
         result['status'] = 3
         result['remark'] = str(e)[:500]
     return result
+
+
+def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
+    delete_knowledge_file_vectors(file_ids=list(new_files.keys()), clear_minio=False)
+
+    separator = ['\n\n', '\n', ' ', '']
+    chunk_size = 500
+    chunk_overlap = 50
+    if db_files:
+        minio = MinioClient()
+        for file in db_files:
+            # file exist
+            input_file = new_files.get(file.id)
+            db_knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
+
+            index_name = db_knowledge.index_name or db_knowledge.collection_name
+            original_file = input_file.object_name
+            file_url = minio.get_share_link(original_file,
+                                            minio_client.tmp_bucket) if original_file.startswith(
+                                                'tmp') else minio.get_share_link(original_file)
+            if file_url:
+                file_path, _ = file_download(file_url)
+            else:
+                with session_getter() as session:
+                    file.status = 3
+                    file.remark = '原始文件丢失'
+                    session.add(file)
+                    session.commit()
+                continue
+
+            try:
+                addEmbedding(collection_name=db_knowledge.collection_name,
+                             index_name=index_name,
+                             knowledge_id=db_knowledge.id,
+                             model=db_knowledge.model,
+                             chunk_size=chunk_size,
+                             separator=separator,
+                             chunk_overlap=chunk_overlap,
+                             file_paths=[file_path],
+                             knowledge_files=[file],
+                             callback=None,
+                             extra_meta=file.extra_meta)
+            except Exception as e:
+                logger.error(e)
