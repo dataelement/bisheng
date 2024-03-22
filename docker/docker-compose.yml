@@ -45,6 +45,7 @@ services:
       - "8701:80"
     environment:
       TZ: Asia/Shanghai
+      JWT_ENABLED: false
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
     command: bash -c "supervisorctl restart all"
