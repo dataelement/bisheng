@@ -1,26 +1,22 @@
 import httpx
-import openai
-from bisheng.interface.initialize.utils import langchain_bug_openv1
 from bisheng.settings import settings
 from bisheng_langchain.embeddings import CustomHostEmbedding, HostEmbeddings
 from langchain.embeddings.base import Embeddings
-from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain_community.utils.openai import is_openai_v1
+from langchain_openai.embeddings import OpenAIEmbeddings
 
 
 def decide_embeddings(model: str) -> Embeddings:
     """embed method"""
     model_list = settings.get_knowledge().get('embeddings')
     params = model_list.get(model)
-    if model == 'text-embedding-ada-002' or params.get('component', '') == 'openai':
-        if is_openai_v1() and 'openai_proxy' in params:
-            client_params = langchain_bug_openv1(params)
-            client_params['http_client'] = httpx.Client(proxies=params['openai_proxy'])
-            params['client'] = openai.OpenAI(**client_params).embeddings
-            client_params['http_client'] = httpx.AsyncClient(proxies=params['openai_proxy'])
-            params['async_client'] = openai.AsyncOpenAI(**client_params).embeddings
+    component = params.pop('component', '')
+    if model == 'text-embedding-ada-002' or component == 'openai':
+        if is_openai_v1() and params.get('openai_proxy'):
+            params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
+            params['http_async_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
         return OpenAIEmbeddings(**params)
-    elif params.get('component', '') == 'custom':
+    elif component == 'custom':
         return CustomHostEmbedding(**params)
     else:
         return HostEmbeddings(**model_list.get(model))
