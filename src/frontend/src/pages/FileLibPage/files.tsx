@@ -38,7 +38,7 @@ export default function FilesPage() {
     const [open, setOpen] = useState(false)
     const [title, setTitle] = useState('')
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData, refreshData } = useTable((param) =>
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData, refreshData } = useTable({}, (param) =>
         readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
             setHasPermission(res.writeable)
             return res

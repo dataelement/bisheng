@@ -980,4 +980,21 @@
   .navlink.active{
     @apply bg-secondary/80
   }
+
+  /* new ui */
+  .bisheng-label {
+    @apply text-sm text-[#67728F] font-medium leading-none
+  }
+
+  .bisheng-tip {
+    @apply text-xs text-[#D8341E] ml-1
+  }
+
+  .bisheng-title {
+    @apply text-lg text-gray-950
+  }
+
+  .flex-between-center {
+    @apply flex justify-between items-center
+  }
 }

@@ -22,7 +22,7 @@ export default function Users(params) {
     const { user } = useContext(userContext);
     const { t } = useTranslation()
 
-    const { page, pageSize, data: users, total, loading, setPage, search, reload } = useTable((param) =>
+    const { page, pageSize, data: users, total, loading, setPage, search, reload } = useTable({}, (param) =>
         getUsersApi(param.keyword, param.page, param.pageSize)
     )
 

@@ -1,65 +1,124 @@
-import { Trash2 } from "lucide-react";
-import { FlowType } from "../../types/flow";
-import { gradients } from "../../utils";
-import {
-  Card,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "../ui/card";
+import { useState } from "react";
+import { DelIcon } from "../bs-icons/del";
+import { GoIcon } from "../bs-icons/go";
+import { PlusIcon } from "../bs-icons/plus";
+import { SettingIcon } from "../bs-icons/setting";
+import { SkillIcon } from "../bs-icons/skill";
+import { UserIcon } from "../bs-icons/user";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../bs-ui/card";
+import { Switch } from "../ui/switch";
+import { AddToIcon } from "../bs-icons/addTo";
 
-export const CardComponent = ({
-  flow,
-  id,
+interface IProps<T> {
+  data: T,
+  /** id为''时，表示新建 */
+  id?: number | string,
+  type: "skill" | "user" | "setting", // 类型
+  title: string,
+  edit?: boolean,
+  description: React.ReactNode | string,
+  checked?: boolean,
+  user?: string,
+  isAdmin?: boolean,
+  onClick?: () => void,
+  onAddTemp?: (data: T) => void,
+  onCheckedChange?: (b: boolean, data: T) => Promise<any>
+  onDelete?: (data: T) => void,
+  onSetting?: (data: T) => void,
+}
+
+const gradients = [
+  'bg-amber-500',
+  'bg-orange-600',
+  'bg-teal-500',
+  'bg-purple-600',
+  'bg-blue-700'
+]
+
+// 'bg-slate-600',
+// 'bg-amber-500',
+// 'bg-red-600',
+// 'bg-orange-600',
+// 'bg-teal-500',
+// 'bg-purple-600',
+// 'bg-blue-700',
+// 'bg-yellow-600',
+// 'bg-emerald-600',
+// 'bg-green-700',
+// 'bg-cyan-600',
+// 'bg-sky-600',
+// 'bg-indigo-600',
+// 'bg-violet-600',
+// 'bg-purple-600',
+// 'bg-fuchsia-700',
+// 'bg-pink-600',
+// 'bg-rose-600'
+
+export default function CardComponent<T>({
+  id = '',
+  data,
+  type,
+  edit = false,
+  user,
+  title,
+  checked,
+  isAdmin,
+  description,
+  onClick,
   onDelete,
-  button,
-}: {
-  flow: FlowType;
-  id: string;
-  onDelete?: () => void;
-  button?: JSX.Element;
-}) => {
+  onAddTemp,
+  onCheckedChange,
+  onSetting
+}: IProps<T>) {
 
-  return (
-    <Card className="group">
-      <CardHeader>
-        <CardTitle className="card-component-title-display">
-          <span
-            className={
-              "card-component-image " +
-              gradients[parseInt(flow.id.slice(0, 12), 16) % gradients.length]
-            }
-          ></span>
-          <span className="card-component-title-size">{flow.name}</span>
-          {onDelete && (
-            <button className="card-component-delete-button" onClick={onDelete}>
-              <Trash2 className="card-component-delete-icon" />
-            </button>
-          )}
-        </CardTitle>
-        <CardDescription className="card-component-desc">
-          <div className="card-component-desc-text">
-            {flow.description}
-            {/* {flow.description} */}
-          </div>
-        </CardDescription>
-      </CardHeader>
+  const [_checked, setChecked] = useState(checked)
 
-      <CardFooter>
-        <div className="card-component-footer-arrangement">
-          <div className="card-component-footer">
-            {/* <Badge variant="secondary">Agent</Badge>
-            <Badge variant="secondary">
-              <div className="w-3">
-                <OpenAiIcon />
-              </div>
-              <span className="text-base">&nbsp;</span>OpenAI+
-            </Badge> */}
-          </div>
-          {button && button}
+  const handleCheckedChange = async (bln) => {
+    const res = await onCheckedChange(bln, data)
+    if (res === false) return
+    setChecked(bln)
+  }
+
+  // 新建卡片
+  if (!id) return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-transparent" onClick={onClick}>
+    <CardHeader>
+      <div className="flex justify-between pb-2"><PlusIcon className="group-hover:text-primary transition-none" /></div>
+      <CardTitle className="">{title}</CardTitle>
+    </CardHeader>
+    <CardContent className="h-[140px] overflow-auto scrollbar-hide">
+      <CardDescription>{description}</CardDescription>
+    </CardContent>
+    <CardFooter className="flex justify-end h-10">
+      <div className="rounded cursor-pointer"><GoIcon className="group-hover:text-primary transition-none" /></div>
+    </CardFooter>
+  </Card>
+
+
+
+  return <Card className="group w-[320px] cursor-pointer" onClick={onClick}>
+    <CardHeader>
+      <div className="flex justify-between pb-2">
+        <div className={`rounded-sm ${gradients[parseInt(id + '', 16) % gradients.length]}`}><SkillIcon /></div>
+        {edit && <Switch checked={_checked} onCheckedChange={handleCheckedChange} onClick={e => e.stopPropagation()}></Switch>}
+      </div>
+      <CardTitle className="">{title}</CardTitle>
+    </CardHeader>
+    <CardContent className="h-[140px] overflow-auto scrollbar-hide">
+      <CardDescription>{description}</CardDescription>
+    </CardContent>
+    <CardFooter className="flex justify-between h-10">
+      <div className="flex gap-1 items-center">
+        <UserIcon />
+        <span className="text-sm text-muted-foreground">创建用户</span>
+        <span className="text-sm font-medium leading-none">{user}</span>
+      </div>
+      {edit
+        && <div className="hidden group-hover:flex">
+          <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>
+          {isAdmin && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
+          <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>
         </div>
-      </CardFooter>
-    </Card>
-  );
+      }
+    </CardFooter>
+  </Card>
 };

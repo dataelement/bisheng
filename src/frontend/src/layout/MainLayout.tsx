@@ -35,7 +35,7 @@ export default function MainLayout() {
                 <NavLink to='/' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
                     <AppWindow /><span className="mx-3 max-w-[48px]">{t('menu.app')}</span>
                 </NavLink>
-                <NavLink to='/skills' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
+                <NavLink to='/build/assis' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
                     <LayoutDashboard /><span className="mx-3 max-w-[48px]">{t('menu.skills')}</span>
                 </NavLink>
                 <NavLink to='/filelib' className="navlink inline-flex rounded-md text-sm px-4 py-2 mt-1 w-full hover:bg-secondary/80">
