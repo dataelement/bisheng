@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from uuid import UUID
 
+from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from langchain.docstore.document import Document
@@ -210,3 +211,31 @@ class CustomComponentCode(BaseModel):
     code: str
     field: Optional[str] = None
     frontend_node: Optional[dict] = None
+
+
+class AssistantCreateReq(BaseModel):
+    name: str = Field(max_length=50, description='助手名称')
+    desc: str = Field(min_length=20, max_length=1000, description='助手描述，可以做什么等')
+    logo: str = Field(description='logo文件的相对地址')
+
+
+class AssistantUpdateReq(BaseModel):
+    id: int = Field(description='助手ID')
+    name: Optional[str] = Field('', description='助手名称， 为空则不更新')
+    desc: Optional[str] = Field('', description='助手描述， 为空则不更新')
+    logo: Optional[str] = Field('', description='logo文件的相对地址，为空则不更新')
+    prompt: Optional[str] = Field('', description='用户可见prompt， 为空则不更新')
+    guide_word: Optional[str] = Field('', description='开场白， 为空则不更新')
+    guide_question: Optional[Dict] = Field({}, description='引导问题列表， 为空则不更新')
+    model_name: Optional[str] = Field('', description='选择的模型名， 为空则不更新')
+    temperature: Optional[float] = Field(0, description='模型温度， 为0则不更新')
+
+    tool_list: List[int] | None = Field(default=None, description='助手的工具ID列表, 为None则不更新')
+    skill_list: List[int] | None = Field(default=None, description='助手的技能ID列表，为None则不更新')
+    knowledge_list: List[int] | None = Field(default=None, description='知识库ID列表，为None则不更新')
+
+
+class AssistantInfo(Assistant):
+    tool_list: List[int] = Field(description='助手的工具ID列表')
+    skill_list: List[int] = Field(description='助手的技能ID列表')
+    knowledge_list: List[int] = Field(description='知识库ID列表')
