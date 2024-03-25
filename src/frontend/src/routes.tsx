@@ -9,6 +9,7 @@ import Report from "./pages/Report";
 import SkillChatPage from "./pages/ChatAppPage";
 import ChatShare from "./pages/ChatAppPage/chatShare";
 import SkillAssisPage from "./pages/SkillPage/tabAssistant";
+import EditAssistantPage from "./pages/SkillPage/editAssistant";
 import SkillsPage from "./pages/SkillPage/tabSkills";
 import SkillToolsPage from "./pages/SkillPage/tabTools";
 import L2Edit from "./pages/SkillPage/l2Edit";
@@ -50,6 +51,12 @@ const router = createBrowserRouter([
     path: "/flow/:id/",
     children: [
       { path: "", element: <FlowPage /> }
+    ]
+  },
+  {
+    path: "/assistant/:id/",
+    children: [
+      { path: "", element: <EditAssistantPage /> }
     ]
   },
   // 独立会话页

@@ -6,6 +6,8 @@ import CardComponent from "../../components/cardComponent";
 import { readFlowsFromDatabase } from "../../controllers/API/flow";
 import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
+import CreateAssistant from "./components/CreateAssistant";
+import { Dialog, DialogTrigger } from "../../components/bs-ui/dialog";
 
 export default function Assistants() {
     const { t } = useTranslation()
@@ -46,16 +48,22 @@ export default function Assistants() {
                         <span className="loading loading-infinity loading-lg"></span>
                     </div>
                     : <div className="mt-6 flex gap-2 flex-wrap pb-20 min-w-[980px]">
-                        <CardComponent<FlowType>
-                            data={null}
-                            type='skill'
-                            title="新建技能"
-                            description={(<>
-                                <p>没有想法？</p>
-                                <p>我们提供场景模板供您使用和参考</p>
-                            </>)}
-                            onClick={() => console.log('新建')}
-                        ></CardComponent>
+                        {/* 创建助手 */}
+                        <Dialog>
+                            <DialogTrigger asChild>
+                                <CardComponent<FlowType>
+                                    data={null}
+                                    type='skill'
+                                    title="新建助手"
+                                    description={(<>
+                                        <p>没有想法？</p>
+                                        <p>我们提供场景模板供您使用和参考</p>
+                                    </>)}
+                                    onClick={() => console.log('新建')}
+                                ></CardComponent>
+                            </DialogTrigger>
+                            <CreateAssistant ></CreateAssistant>
+                        </Dialog>
                         {
                             dataSource.map((item, i) => (
                                 <CardComponent<FlowType>

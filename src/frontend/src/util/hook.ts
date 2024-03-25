@@ -84,8 +84,12 @@ export function useTable<T extends {}>(param, apiFun) {
     }
     const debounceLoad = useDebounce(loadData, 600, false)
 
+    // 记录旧值
+    const prevValueRef = useRef(page);
     useEffect(() => {
-        debounceLoad();
+        // 排除页码防抖
+        prevValueRef.current.page === page.page ? debounceLoad() : loadData()
+        prevValueRef.current = page
     }, [page])
 
     return {
