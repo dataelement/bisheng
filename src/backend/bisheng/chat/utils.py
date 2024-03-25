@@ -5,7 +5,6 @@ from bisheng.api.v1.schemas import ChatMessage
 from bisheng.database.base import session_getter
 from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk
-from bisheng.interface.utils import try_setting_streaming_options
 from bisheng.processing.base import get_result_and_steps
 from bisheng.utils.logger import logger
 from bisheng_langchain.chat_models import HostQwenChat
@@ -21,7 +20,6 @@ async def process_graph(langchain_object,
                         websocket: WebSocket,
                         flow_id: str = None,
                         chat_id: str = None):
-    langchain_object = try_setting_streaming_options(langchain_object, websocket)
     logger.debug('Loaded langchain object')
 
     if langchain_object is None:
