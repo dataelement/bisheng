@@ -198,6 +198,6 @@ export const LoginPage = () => {
                 </div>
             </div>
         </div>
-        <div className='fixed z-5 whitespace-nowrap translate-x-[-50%] translate-y-[20%] left-[50%] top-[50%]  text-[440px] font-bold text-[#e7e9ee]'>{t('login.bottomText')}</div>
+        <div className='fixed z-5 whitespace-nowrap translate-x-[-50%] translate-y-[20%] left-[50%] top-[50%]  text-[440px] font-bold text-[#e7e9ee]'>{t('title')}</div>
     </div>
 };
