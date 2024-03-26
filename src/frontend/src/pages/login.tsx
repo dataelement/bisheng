@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import json from "../../package.json";
 import { Button } from "../components/bs-ui/button";
 import { Input } from "../components/bs-ui/input";
+import { GithubIcon } from '@/components/bs-icons/github';
+import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
 // import { alertContext } from "../contexts/alertContext";
 import { getPublicKeyApi, loginApi, getCaptchaApi, registerApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
@@ -112,11 +114,11 @@ export const LoginPage = () => {
     }
     return <div className='w-full h-full bg-[#F4F5F8]'>
         <div className='fixed z-10 sm:w-[1280px] w-full sm:h-[720px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden bg-[#fff]'>
-            <div className='w-[420px] h-[704px] m-[8px] hidden sm:block'><img src="login-logo-big.png" alt="logo_picture" className='w-full h-full' /></div>
+            <div className='w-[420px] h-[704px] m-[8px] hidden sm:block'><img src="/login-logo-big.png" alt="logo_picture" className='w-full h-full' /></div>
             <div className='absolute w-full h-full z-10 flex justify-end top-0'>
                 <div className='w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-[rgba(255,255,255,1)] dark:bg-gray-950 relative'>
                     <div>
-                        <img src="login-logo-small.png" alt="small_logo" className='block w-[114px] h-[36px] m-auto mt-[140px]' />
+                        <img src="/login-logo-small.png" alt="small_logo" className='block w-[114px] h-[36px] m-auto mt-[140px]' />
                         <span className='block w-fit m-auto font-normal text-[14px] text-[rgb(200,200,200)] mt-[24px]'>{t('login.slogen')}</span>
                     </div>
                     <div className="grid gap-[12px] mt-[68px]">
@@ -189,10 +191,10 @@ export const LoginPage = () => {
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <a href={"https://github.com/dataelement/bisheng"} target="_blank">
-                            <img className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px] mx-[8px] hover:bg-[#eeeeee] hover:cursor-pointer" src="login-link-left.svg" alt="github_picture" />
+                            <GithubIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px] mx-[8px] hover:bg-[#eeeeee] hover:cursor-pointer"/>
                         </a>
                         <a href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
-                            <img className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px]  hover:bg-[#eeeeee] hover:cursor-pointer" src="login-link-right.svg" alt="document_picture" />
+                            <BookOpenIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px]  hover:bg-[#eeeeee] hover:cursor-pointer"/>
                         </a>
                     </div>
                 </div>

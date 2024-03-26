@@ -50,8 +50,8 @@ export default function Setting(params) {
                                 defaultValue={0.5}
                                 max={10}
                                 min={0}
-                                step={0.1}
-                                onChang={(num) => console.log(num)}
+                                step={0.2}
+                                onChange={(num) => console.log(num)}
                             />
                         </div>
                     </div>

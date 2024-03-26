@@ -2,7 +2,7 @@ import * as React from "react"
 import { cname } from "../utils"
 import { SearchIcon } from "../../bs-icons/search"
 import { MinusCircleIcon } from "lucide-react"
-
+import { generateUUID } from "../utils"
 export interface InputProps
     extends React.InputHTMLAttributes<HTMLInputElement> { }
 
@@ -70,37 +70,40 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
 }>(
     ({ className, inputClassName, defaultValue, ...props }, ref) => {
         // TODO key
-        const [values, setValues] = React.useState<string[]>(defaultValue && defaultValue.length > 0 ? defaultValue : [''])
-
+        const [values, setValues] = React.useState<{ id: string; value: string }[]>(
+            defaultValue && defaultValue.length > 0
+                ? defaultValue.map((value) => ({ id: generateUUID(8), value }))
+                : [{ id: generateUUID(8), value: '' }]
+        )
         // input change
-        const handleChange = (value, index) => {
+        const handleChange = (value, id, index) => {
             let newValues = null
             // push
             if (index === values.length - 1) {
-                newValues = [...values, '']
+                newValues = [...values, {id:generateUUID(8),value:''}]
             }
-            newValues = (newValues || values).map((v, i) => i === index ? value : v)
+            newValues = (newValues || values).map((item) =>  item.id === id ? {id:id,value:value} : item)
             setValues(newValues)
-            props.onChange?.(newValues)
+            props.onChange?.(newValues.map((item)=>item.value))
         }
 
         // delete input
-        const handleDel = (index) => {
-            setValues(values.filter((_, i) => i !== index))
+        const handleDel = (id) => {
+            setValues(values.filter((item) =>  item.id !== id))
         }
 
         return <div className={cname('', className)}>
             {
-                values.map((value, index) => (
+                values.map((item,index) => (
                     <div className="relative mt-2">
                         <Input
-                            key={index}
-                            defaultValue={value}
+                            key={item.id}
+                            defaultValue={item.value}
                             className={cname('pr-8', inputClassName)}
                             placeholder={props.placeholder || ''}
-                            onChange={(e) => handleChange(e.target.value, index)}
+                            onChange={(e) => handleChange(e.target.value, item.id, index)}
                         ></Input>
-                        {index !== values.length - 1 && <MinusCircleIcon onClick={() => handleDel(index)} size={18} className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
+                        {index !== values.length - 1 && <MinusCircleIcon onClick={() => handleDel(item.id)} size={18} className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
                     </div>
                 ))
             }
