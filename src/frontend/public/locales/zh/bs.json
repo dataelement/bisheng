@@ -3,10 +3,11 @@
     "prompt": "提示",
     "login": {
         "slogen": "便捷、灵活、可靠的企业级大模型应用开发平台",
-        "account": "账号",
+        "bottomText":"文擎毕昇",
+        "account": "用户名",
         "password": "密码",
         "confirmPassword": "确认密码",
-        "noAccountRegister": "没有账号，注册",
+        "noAccountRegister": "没有账号？注册",
         "haveAccountLogin": "已有账号，登录",
         "loginButton": "登 录",
         "registerButton": "注 册",
