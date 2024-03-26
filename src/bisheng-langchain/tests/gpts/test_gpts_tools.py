@@ -55,13 +55,13 @@ def test_all_tools():
 def test_code_interpreter():
     from langchain_community.tools.bearly.tool import BearlyInterpreterTool
 
-    file_url = "../data/test_doc.txt"
+    file_url = "/app/bisheng/src/bisheng-langchain/version.txt"
     code_tool = BearlyInterpreterTool(api_key=bearly_api_key)
     code_tool.add_file(source_path=file_url, target_path="README_ENG.md", description="")
     tool = code_tool.as_tool()
     print(tool.description)
 
-    model_name = "gpt-4-1106-preview"
+    model_name = "gpt-4-0125-preview"
     # model_name = "gpt-3.5-turbo-1106"
     sys_msg = "You are a helpful assistant."
     agent = ConfigurableAgent(model_name=model_name, tools=[tool], system_message=sys_msg)
@@ -71,5 +71,27 @@ def test_code_interpreter():
     print(result)
 
 
-# test_all_tools()
-test_code_interpreter()
+def test_tianyancha():
+    tool_params = {
+        "tianyancha.search_company": {
+            "api_key": tyc_api_key,
+        },
+    }
+
+    tools = load_tools(tool_params)
+
+    model_name = "gpt-4-0125-preview"
+    # model_name = "gpt-3.5-turbo-1106"
+    sys_msg = "You are a helpful assistant."
+    agent = ConfigurableAgent(model_name=model_name, tools=tools, system_message=sys_msg)
+
+    inputs = [HumanMessage(content="查询云南白药公司的信息")]
+    result = asyncio.run(agent.ainvoke(inputs))
+    print(result)
+
+
+if __name__ == '__main__':
+    # test_all_tools()
+    # test_code_interpreter()
+    test_tianyancha()
+

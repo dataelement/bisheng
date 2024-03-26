@@ -87,7 +87,7 @@ def load_tools(
 ) -> List[BaseTool]:
     tools = []
     callbacks = _handle_callbacks(callback_manager=kwargs.get("callback_manager"), callbacks=callbacks)
-    for name, pramas in tool_params:
+    for name, pramas in tool_params.items():
         if name in _BASE_TOOLS:
             tools.append(_BASE_TOOLS[name]())
         elif name in _LLM_TOOLS:
@@ -115,7 +115,7 @@ def load_tools(
             missing_keys = set(extra_keys).difference(pramas)
             if missing_keys:
                 raise ValueError(f'Tool {name} requires some parameters that were not ' f'provided: {missing_keys}')
-            mini_kwargs = {k: kwargs[k] for k in extra_keys}
+            mini_kwargs = {k: pramas[k] for k in extra_keys}
             tool = _get_api_tool_func(name=name.split('.')[-1], **mini_kwargs)
             tools.append(tool)
         else:
