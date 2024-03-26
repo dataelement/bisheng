@@ -13,16 +13,16 @@ class AssistantService:
     def create_assistant(cls, assistant: Assistant) -> UnifiedResponseModel[AssistantInfo]:
 
         # 通过算法接口自动选择工具和技能
-        assistant, tool_list, skill_list = cls.get_auto_info(assistant)
+        assistant, tool_list, flow_list = cls.get_auto_info(assistant)
 
         # 保存数据到数据库
         assistant = AssistantDao.create_assistant(assistant)
         # 保存大模型自动选择的工具和技能
-        AssistantLinkDao.insert_batch(assistant.id, tool_list=tool_list, skill_list=skill_list)
+        AssistantLinkDao.insert_batch(assistant.id, tool_list=tool_list, flow_list=flow_list)
 
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
-                                           skill_list=skill_list))
+                                           flow_list=flow_list))
 
     @classmethod
     def auto_update(cls, assistant_id: int, prompt: str) -> UnifiedResponseModel[AssistantInfo]:
@@ -32,10 +32,10 @@ class AssistantService:
         if not assistant:
             return AssistantNotExistsError.return_resp()
         assistant.prompt = prompt
-        assistant, tool_list, skill_list = cls.get_auto_info(assistant)
+        assistant, tool_list, flow_list = cls.get_auto_info(assistant)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
-                                           skill_list=skill_list))
+                                           flow_list=flow_list))
 
     @classmethod
     def update_assistant(cls, req: AssistantUpdateReq) -> UnifiedResponseModel[AssistantInfo]:
@@ -63,20 +63,20 @@ class AssistantService:
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息
-        if req.tool_list is not None and req.skill_list is not None and req.knowledge_list is not None:
+        if req.tool_list is not None and req.flow_list is not None and req.knowledge_list is not None:
             AssistantLinkDao.update_assistant_link(assistant.id,
                                                    tool_list=req.tool_list,
-                                                   skill_list=req.skill_list,
+                                                   flow_list=req.flow_list,
                                                    knowledge_list=req.knowledge_list)
         elif req.tool_list is not None:
             AssistantLinkDao.update_assistant_tool(assistant.id, tool_list=req.tool_list)
-        elif req.skill_list is not None:
-            AssistantLinkDao.update_assistant_skill(assistant.id, skill_list=req.skill_list)
+        elif req.flow_list is not None:
+            AssistantLinkDao.update_assistant_flow(assistant.id, flow_list=req.flow_list)
         elif req.knowledge_list is not None:
             AssistantLinkDao.update_assistant_knowledge(assistant.id, knowledge_list=req.knowledge_list)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=req.tool_list,
-                                           skill_list=req.skill_list,
+                                           flow_list=req.flow_list,
                                            knowledge_list=req.knowledge_list))
 
     @classmethod
@@ -90,12 +90,12 @@ class AssistantService:
         return resp_200()
 
     @classmethod
-    def update_skill_list(cls, assistant_id: int, skill_list: List[int]) -> UnifiedResponseModel:
+    def update_flow_list(cls, assistant_id: int, flow_list: List[str]) -> UnifiedResponseModel:
         """  更新助手的技能列表 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
-        AssistantLinkDao.update_assistant_skill(assistant_id, skill_list=skill_list)
+        AssistantLinkDao.update_assistant_flow(assistant_id, flow_list=flow_list)
         return resp_200()
 
     @classmethod

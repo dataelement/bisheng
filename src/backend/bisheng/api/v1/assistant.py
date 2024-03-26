@@ -56,12 +56,12 @@ def update_prompt(*,
     return AssistantService.update_prompt(assistant_id, prompt)
 
 
-@router.post('/skill', response_model=UnifiedResponseModel)
-def update_skill_list(*,
-                      assistant_id: int = Body(description='助手唯一ID'),
-                      skill_list: List[int] = Body(description='用户选择的技能列表'),
-                      Authorize: AuthJWT = Depends()):
-    return AssistantService.update_skill_list(assistant_id, skill_list)
+@router.post('/flow', response_model=UnifiedResponseModel)
+def update_flow_list(*,
+                     assistant_id: int = Body(description='助手唯一ID'),
+                     flow_list: List[str] = Body(description='用户选择的技能列表'),
+                     Authorize: AuthJWT = Depends()):
+    return AssistantService.update_flow_list(assistant_id, flow_list)
 
 
 @router.post('/tool', response_model=UnifiedResponseModel)

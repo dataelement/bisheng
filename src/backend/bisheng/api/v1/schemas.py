@@ -231,11 +231,11 @@ class AssistantUpdateReq(BaseModel):
     temperature: Optional[float] = Field(0, description='模型温度， 为0则不更新')
 
     tool_list: List[int] | None = Field(default=None, description='助手的工具ID列表, 为None则不更新')
-    skill_list: List[int] | None = Field(default=None, description='助手的技能ID列表，为None则不更新')
+    flow_list: List[str] | None = Field(default=None, description='助手的技能ID列表，为None则不更新')
     knowledge_list: List[int] | None = Field(default=None, description='知识库ID列表，为None则不更新')
 
 
 class AssistantInfo(Assistant):
     tool_list: List[int] = Field(description='助手的工具ID列表')
-    skill_list: List[int] = Field(description='助手的技能ID列表')
+    flow_list: List[str] = Field(description='助手的技能ID列表')
     knowledge_list: List[int] = Field(description='知识库ID列表')

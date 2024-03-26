@@ -36,7 +36,7 @@ class AssistantLinkBase(SQLModelSerializable):
     id: Optional[int] = Field(nullable=False, primary_key=True, description='唯一ID')
     assistant_id: int = Field(index=True, description='助手ID')
     tool_id: Optional[int] = Field(default=0, index=True, description='工具ID')
-    skill_id: Optional[int] = Field(default=0, index=True, description='技能ID')
+    flow_id: Optional[str] = Field(default='', index=True, description='技能ID')
     knowledge_id: Optional[int] = Field(default=0, index=True, description='知识库ID')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -89,17 +89,17 @@ class AssistantLinkDao(AssistantLink):
     @classmethod
     def insert_batch(cls, assistant_id: int,
                      tool_list: List[int] = None,
-                     skill_list: List[int] = None,
+                     flow_list: List[str] = None,
                      knowledge_list: List[int] = None):
-        if not tool_list and not skill_list and not knowledge_list:
+        if not tool_list and not flow_list and not knowledge_list:
             return []
         with session_getter() as session:
             if tool_list:
                 for one in tool_list:
                     session.add(AssistantLink(assistant_id=assistant_id, tool_id=one))
-            if skill_list:
-                for one in skill_list:
-                    session.add(AssistantLink(assistant_id=assistant_id, skill_id=one))
+            if flow_list:
+                for one in flow_list:
+                    session.add(AssistantLink(assistant_id=assistant_id, flow_id=one))
             if knowledge_list:
                 for one in knowledge_list:
                     session.add(AssistantLink(assistant_id=assistant_id, knowledge_id=one))
@@ -108,14 +108,14 @@ class AssistantLinkDao(AssistantLink):
     @classmethod
     def update_assistant_link(cls, assistant_id: int,
                               tool_list: List[int],
-                              skill_list: List[int],
+                              flow_list: List[str],
                               knowledge_list: List[int]):
         with session_getter() as session:
             session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id).delete()
             for one in tool_list:
                 session.add(AssistantLink(assistant_id=assistant_id, tool_id=one))
-            for one in skill_list:
-                session.add(AssistantLink(assistant_id=assistant_id, skill_id=one))
+            for one in flow_list:
+                session.add(AssistantLink(assistant_id=assistant_id, flow_id=one))
             for one in knowledge_list:
                 session.add(AssistantLink(assistant_id=assistant_id, knowledge_id=one))
             session.commit()
@@ -137,13 +137,13 @@ class AssistantLinkDao(AssistantLink):
             session.commit()
 
     @classmethod
-    def update_assistant_skill(cls, assistant_id: int, skill_list: List[int]):
+    def update_assistant_flow(cls, assistant_id: int, flow_list: List[str]):
         with session_getter() as session:
             session.query(AssistantLink).filter(
                 AssistantLink.assistant_id == assistant_id,
-                AssistantLink.skill_id != 0).delete()
-            for one in skill_list:
-                session.add(AssistantLink(assistant_id=assistant_id, skill_id=one))
+                AssistantLink.flow_id != '').delete()
+            for one in flow_list:
+                session.add(AssistantLink(assistant_id=assistant_id, flow_id=one))
             session.commit()
 
     @classmethod
