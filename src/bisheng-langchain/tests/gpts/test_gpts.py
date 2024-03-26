@@ -29,11 +29,4 @@ agent = ConfigurableAgent(model_name=model_name, tools=tools, system_message=sys
 
 inputs = [HumanMessage(content="帮我找一下关于人工智能的文章，并帮我计算666/2")]
 result = asyncio.run(agent.ainvoke(inputs))
-
-from bisheng_langchain.gpts.load_tools import load_tools
-
-tools = load_tools([
-    "tianyancha.search_company",
-], api_key="224d0cd7-b87d-4f92-8dc6-132632c2d50a")
-
-tools
+# print(result)

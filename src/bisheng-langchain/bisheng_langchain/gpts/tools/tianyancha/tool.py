@@ -59,7 +59,8 @@ class CompanyInfo(BaseModel):
         """Run query through api and parse result."""
         self.params[self.input_key] = query
         param = '&'.join([f'{k}={v}' for k, v in self.params.items()])
-        resp = await self.async_client.aget(self.url + '?' + param)
+        # resp = await self.async_client.aget(self.url + '?' + param)
+        resp = self.async_client.get(self.url + '?' + param)
         if resp.status_code != 200:
             logger.info('api_call_fail res={}', resp.text)
         return resp.text
