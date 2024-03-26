@@ -14,7 +14,6 @@ from langchain_core.runnables import (
     RunnableBinding,
 )
 from bisheng_langchain.gpts.agent_types import get_openai_functions_agent_executor
-from bisheng_langchain.gpts.tools import arxiv_tool
 
 logger = logging.getLogger(__name__)
 
