@@ -1,12 +1,16 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Button, ButtonNumber } from "@/components/bs-ui/button";
-import { Input, InputList, Textarea } from "@/components/bs-ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectScrollUpButton, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { InputList, Textarea } from "@/components/bs-ui/input";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Slider } from "@/components/bs-ui/slider";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
+import { PlusCircledIcon, QuestionMarkCircledIcon, ReloadIcon, TriangleRightIcon } from "@radix-ui/react-icons";
 import { PlusIcon } from "lucide-react";
 import React from "react";
+import { Link } from "react-router-dom";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../../components/bs-ui/popover";
+import RadioCard from "../../../../components/bs-ui/radio/radioCard";
+import MultiSelect from "../../../../components/bs-ui/select/multi";
 
 export default function Setting(params) {
 
@@ -23,7 +27,6 @@ export default function Setting(params) {
                                 <SelectValue placeholder="选择一个模型" ></SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                                <Input></Input>
                                 <SelectGroup>
                                     <SelectLabel>123</SelectLabel>
                                     <SelectItem value="apple">Apple</SelectItem>
@@ -87,9 +90,42 @@ export default function Setting(params) {
         <h1 className="text-sm text-muted-foreground border leading-8 indent-4">知识</h1>
         <Accordion type="multiple" className="w-full">
             <AccordionItem value="item-1">
-                <AccordionTrigger>知识库</AccordionTrigger>
-                <AccordionContent>
-                    Yes. It adheres to the WAI-ARIA design pattern.
+                <AccordionTrigger>
+                    <div className="flex flex-1 justify-between items-center">
+                        <span>知识库</span>
+                        <Popover>
+                            <PopoverTrigger asChild className="group">
+                                <Button variant="link" size="sm"><TriangleRightIcon className="group-data-[state=open]:rotate-90" /> 自动调用 </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[560px]">
+                                <div className="flex justify-between">
+                                    <label htmlFor="model" className="bisheng-label">模型</label>
+                                    <div>
+                                        <RadioCard checked={false} title={'自动调用'} calssName="mb-4"></RadioCard>
+                                        <RadioCard checked title={'按需调用'} description={'按需调用按需调用按需调用按需调用按需调用按需调用按需调用'} calssName="mt-4"></RadioCard>
+                                    </div>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                </AccordionTrigger>
+                <AccordionContent className="py-2">
+                    <div className="px-6 mb-4">
+                        <div className="flex gap-4">
+                            <MultiSelect
+                                defaultValue={['2']}
+                                options={[{ label: '只是 1', value: '2' }, { label: '知识 34', value: '3' }]}
+                                placeholder={"请选择知识库"}
+                                searchPlaceholder={"搜索知识库名称"}>
+                                <div className="flex justify-between">
+                                    <Link to={'/filelib'} target="_blank">
+                                        <Button variant="link"><PlusCircledIcon className="mr-1" /> 新建知识库</Button>
+                                    </Link>
+                                    <Button variant="link"><ReloadIcon className="mr-1" /> 刷新</Button>
+                                </div>
+                            </MultiSelect>
+                        </div>
+                    </div>
                 </AccordionContent>
             </AccordionItem>
         </Accordion>
@@ -119,5 +155,5 @@ export default function Setting(params) {
                 </AccordionContent>
             </AccordionItem>
         </Accordion>
-    </div>
+    </div >
 };
