@@ -1,0 +1,32 @@
+assistant:
+  prompt_type: 'DEFAULT_SYSTEM_MESSAGE'
+  
+  llm:
+    type: 'ChatOpenAI'
+    # model: 'gpt-4-0125-preview'
+    model: 'gpt-3.5-turbo-0125'
+    openai_api_key: ''
+    openai_proxy: 'http://118.195.232.223:39995'
+    temperature: 0.0
+
+  # llm:
+  #   type: 'ChatQWen'
+  #   model_name: 'qwen-max'
+  #   api_key: ''
+  #   temperature: 0.01
+
+  # llm:
+  #   type: 'HostQwenChat'
+  #   model_name: 'Qwen-1_8B-Chat'
+  #   host_base_url: 'http://192.168.106.12:9001/v2.1/models'
+  #   temperature: 0.01
+
+  tools:
+    - type: 'arxiv'
+      
+  agent_executor:
+    type: 'get_openai_functions_agent_executor'
+    # type: 'get_qwen_local_functions_agent_executor'
+    interrupt_before_action: False
+    recursion_limit: 50
+
