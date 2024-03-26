@@ -19,7 +19,8 @@ export default function Prompt() {
             </Dialog>
         </div>
         <div>
-            <p className="text-sm text-muted-foreground">左侧包含返回按钮、名称；右侧包含保存按钮
+            <p className="text-sm text-muted-foreground">
+                左侧包含返回按钮、名称；右侧包含保存按钮
                 1. 返回按钮：点击退出回到助手管理页面
                 2. 助手名称：初始值为创建时填写名称。
                 3. 修改按钮：点击按钮，打开弹窗进行编辑</p>

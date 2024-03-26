@@ -53,4 +53,21 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 )
 Button.displayName = "Button"
 
-export { Button, buttonVariants }
+
+const ButtonNumber = React.forwardRef<HTMLButtonElement, any>(
+    ({ className, defaultValue, max, min, step, size = 'sm', onChange }, ref) => {
+
+        const [value, setValue] = React.useState(defaultValue)
+
+
+
+        return <div className="flex items-center border input-border bg-gray-50 rounded-md">
+            <Button variant="ghost" size={size}>-</Button>
+            <span className="min-w-10 block text-center">{value}</span>
+            <Button variant="ghost" size={size}>+</Button>
+        </div>
+    }
+)
+ButtonNumber.displayName = "ButtonNumber"
+
+export { Button, ButtonNumber, buttonVariants }
