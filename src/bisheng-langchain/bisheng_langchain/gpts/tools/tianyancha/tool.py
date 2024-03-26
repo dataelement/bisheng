@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from bisheng_langchain.utils.requests import Requests
+from bisheng_langchain.utils.requests import Requests, RequestsWrapper
 from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
 from loguru import logger
 
@@ -43,7 +43,8 @@ class CompanyInfo(BaseModel):
         if not values.get('client'):
             values['client'] = Requests(headers=values['headers'], request_timeout=timeout)
         if not values.get('async_client'):
-            values['async_client'] = Requests(headers=values['headers'], request_timeout=timeout)
+            values['async_client'] = RequestsWrapper(headers=values['headers'],
+                                                     request_timeout=timeout)
         return values
 
     def run(self, query: str) -> str:
@@ -59,11 +60,9 @@ class CompanyInfo(BaseModel):
         """Run query through api and parse result."""
         self.params[self.input_key] = query
         param = '&'.join([f'{k}={v}' for k, v in self.params.items()])
-        # resp = await self.async_client.aget(self.url + '?' + param)
-        resp = self.async_client.get(self.url + '?' + param)
-        if resp.status_code != 200:
-            logger.info('api_call_fail res={}', resp.text)
-        return resp.text
+        resp = await self.async_client.aget(self.url + '?' + param)
+        logger.info(resp)
+        return resp
 
     @classmethod
     def search_company(cls, api_key: str, pageNum: int = 1, pageSize: int = 20) -> CompanyInfo:
