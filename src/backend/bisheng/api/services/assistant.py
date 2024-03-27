@@ -4,12 +4,14 @@ from typing import Any, List, Optional
 from bisheng.api.errcode.assistant import AssistantNotExistsError
 from bisheng.api.services.utils import set_flow_knowledge_id
 from bisheng.api.utils import build_flow_no_yield
-from bisheng.api.v1.schemas import (AssistantInfo, AssistantUpdateReq, InputRequest,
-                                    UnifiedResponseModel, resp_200)
+from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
+                                    InputRequest, UnifiedResponseModel, resp_200)
+from bisheng.cache import InMemoryCache
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLink,
                                                AssistantLinkDao)
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
+from bisheng.database.models.user import UserDao
 from bisheng.settings import settings
 from bisheng_langchain.gpts.load_tools import load_tools
 from langchain_core.language_models import BaseLanguageModel
@@ -18,6 +20,48 @@ from loguru import logger
 
 
 class AssistantService:
+    UserCache: InMemoryCache = InMemoryCache()
+
+    @classmethod
+    def get_assistant(cls, user_id: int, name: str, page: int, limit: int) -> \
+            UnifiedResponseModel[List[AssistantSimpleInfo]]:
+        """
+        获取助手列表
+        """
+        data = []
+        res, total = AssistantDao.get_assistants(user_id, name, page, limit)
+        # TODO zgq: 补充上权限管理可见的助手信息
+        for one in res:
+            simple_dict = one.model_dump(include={'id', 'name', 'desc', 'logo',
+                                                  'user_id', 'create_time', 'update_time'})
+            simple_dict['user_name'] = cls.get_user_name(one.user_id)
+            data.append(AssistantSimpleInfo(**simple_dict))
+        return resp_200(data={'data': data, 'total': total})
+
+    @classmethod
+    def get_assistant_info(cls, assistant_id: int, user_id: str):
+        assistant = AssistantDao.get_one_assistant(assistant_id)
+        if not assistant:
+            return AssistantNotExistsError.return_resp()
+        tool_list = []
+        flow_list = []
+        knowledge_list = []
+
+        links = AssistantLinkDao.get_assistant_link(assistant_id)
+        for one in links:
+            if one.tool_id:
+                tool_list.append(one.tool_id)
+            elif one.flow_id:
+                flow_list.append(one.flow_id)
+            elif one.knowledge_id:
+                knowledge_list.append(one.knowledge_id)
+            else:
+                logger.error(f'not expect link info: {one.dict()}')
+
+        return resp_200(data=AssistantInfo(**assistant.dict(),
+                                           tool_list=tool_list,
+                                           flow_list=flow_list,
+                                           knowledge_list=knowledge_list))
 
     # 创建助手
     @classmethod
@@ -37,7 +81,7 @@ class AssistantService:
     @classmethod
     def auto_update(cls, assistant_id: int, prompt: str) -> UnifiedResponseModel[AssistantInfo]:
         """ 重新生成助手的提示词和工具选择, 只调用模型能力不修改数据库数据 """
-        # todo zgq: 改为流失返回
+        # todo zgq: 改为流式返回
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
@@ -109,6 +153,11 @@ class AssistantService:
         return resp_200()
 
     @classmethod
+    def get_all_tool(cls, user_id: int) -> UnifiedResponseModel:
+        tool_list = GptsToolsDao.get_list_by_user(user_id)
+        return resp_200(data={'data': tool_list, 'total': len(tool_list)})
+
+    @classmethod
     def update_tool_list(cls, assistant_id: int, tool_list: List[int]) -> UnifiedResponseModel:
         """  更新助手的工具列表 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
@@ -118,8 +167,21 @@ class AssistantService:
         return resp_200()
 
     @classmethod
+    def get_user_name(cls, user_id: int):
+        if not user_id:
+            return 'system'
+        user = cls.UserCache.get(user_id)
+        if user:
+            return user.user_name
+        user = UserDao.get_user(user_id)
+        if not user:
+            return f'{user_id}'
+        cls.UserCache.set(user_id, user)
+        return user.user_name
+
+    @classmethod
     def get_gpts_conf(cls, key=None):
-        gpts_conf = settings.get_from_db('gpts_conf')
+        gpts_conf = settings.get_from_db('gpts')
         if key:
             return gpts_conf.get(key)
         return gpts_conf
@@ -143,8 +205,8 @@ class AssistantService:
         llm_conf = cls.get_llm_conf(assistant.model_name)
 
         assistant.system_prompt = '临时生成的默认系统prompt'
-        assistant.prompt = '用户可见的临时prompt'
-        assistant.model_name = llm_conf['name']
+        assistant.prompt = assistant.prompt or '用户可见的临时prompt'
+        assistant.model_name = llm_conf['model_name']
         assistant.temperature = llm_conf['temperature']
 
         return assistant, [], []

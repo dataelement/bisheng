@@ -9,7 +9,8 @@ from bisheng.chat.types import WorkType
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.gpts_tools import GptsTools
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, Body, Depends, HTTPException, WebSocket, WebSocketException, status
+from fastapi import (APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException,
+                     status)
 from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/assistant', tags=['Assistant'])
@@ -17,8 +18,24 @@ chat_manager = ChatManager()
 
 
 @router.get('', response_model=UnifiedResponseModel[List[AssistantInfo]])
-def get_assistant():
-    pass
+def get_assistant(*,
+                  name: str = Query(default=None, description='助手名称，模糊匹配'),
+                  page: Optional[int] = Query(default=1, description='页码'),
+                  limit: Optional[int] = Query(default=10, description='每页条数'),
+                  Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+    return AssistantService.get_assistant(current_user.get('user_id'), name, page, limit)
+
+
+# 获取某个助手的详细信息
+@router.get('/info/{assistant_id}', response_model=UnifiedResponseModel[AssistantInfo])
+def get_assistant_info(*,
+                       assistant_id: int,
+                       Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+    return AssistantService.get_assistant_info(assistant_id, current_user.get('user_id'))
 
 
 @router.post('', response_model=UnifiedResponseModel[AssistantInfo])
@@ -62,6 +79,14 @@ async def update_flow_list(*,
                            flow_list: List[str] = Body(description='用户选择的技能列表'),
                            Authorize: AuthJWT = Depends()):
     return AssistantService.update_flow_list(assistant_id, flow_list)
+
+
+@router.get('/tool', response_model=UnifiedResponseModel)
+async def get_all_tool(*,
+                       Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+    return AssistantService.get_all_tool(current_user.get('user_id'))
 
 
 @router.post('/tool', response_model=UnifiedResponseModel)

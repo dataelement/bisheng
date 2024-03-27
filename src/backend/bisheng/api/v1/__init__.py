@@ -1,3 +1,4 @@
+from bisheng.api.v1.assistant import router as assistant_router
 from bisheng.api.v1.chat import router as chat_router
 from bisheng.api.v1.component import router as component_router
 from bisheng.api.v1.endpoints import router as endpoints_router
@@ -25,5 +26,6 @@ __all__ = [
     'variable_router',
     'report_router',
     'finetune_router',
-    'component_router'
+    'component_router',
+    'assistant_router',
 ]

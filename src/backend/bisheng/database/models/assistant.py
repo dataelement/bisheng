@@ -1,10 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import JSON, Column, DateTime, Text, text
+from sqlalchemy import JSON, Column, DateTime, Text, func, text
 from sqlmodel import Field, select
 
 
@@ -20,8 +20,8 @@ class AssistantBase(SQLModelSerializable):
     desc: str = Field(default='', sa_column=Column(Text), description='助手描述')
     system_prompt: str = Field(default='', sa_column=Column(Text), description='系统提示词')
     prompt: str = Field(default='', sa_column=Column(Text), description='用户可见描述词')
-    guide_word: str = Field(default='', sa_column=Column(Text), description='开场白')
-    guide_question: Dict = Field(sa_column=Column(JSON), description='引导问题')
+    guide_word: Optional[str] = Field(default='', sa_column=Column(Text), description='开场白')
+    guide_question: Optional[List] = Field(sa_column=Column(JSON), description='引导问题')
     model_name: str = Field(default='', description='选择的模型名')
     temperature: float = Field(default=0.5, description='模型温度')
     status: int = Field(default=AssistantStatus.OFFLINE.value, description='助手是否上线')
@@ -82,6 +82,17 @@ class AssistantDao(Assistant):
         with session_getter() as session:
             statement = select(Assistant).where(Assistant.id == assistant_id)
             return session.exec(statement).first()
+
+    @classmethod
+    def get_assistants(cls, user_id: int, name: str, page: int, limit: int) -> (List[Assistant], int):
+        with session_getter() as session:
+            statement = select(Assistant).where(Assistant.user_id == user_id)
+            count_statement = session.query(func.count(Assistant.id))
+            if name:
+                statement = statement.where(Assistant.name.like(f'%{name}%'))
+                count_statement = count_statement.where(Assistant.name.like(f'%{name}%'))
+            statement = statement.offset((page - 1) * limit).limit(limit).order_by(Assistant.create_time.desc())
+            return session.exec(statement).all(), session.exec(count_statement).scalar()
 
 
 class AssistantLinkDao(AssistantLink):

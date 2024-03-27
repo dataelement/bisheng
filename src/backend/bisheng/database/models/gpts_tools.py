@@ -18,7 +18,7 @@ class GptsToolsBase(SQLModelSerializable):
                                  description='用来存储额外信息，比如参数需求等')
     is_preset: bool = Field(default=True)
     is_delete: int = Field(default=0, description='1 表示逻辑删除')
-    user_id: Optional[int] = Field(index=True)
+    user_id: Optional[int] = Field(index=True, description='创建用户ID， null表示系统创建')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(

@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from uuid import UUID
 
+from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from langchain.docstore.document import Document
@@ -229,12 +230,24 @@ class AssistantUpdateReq(BaseModel):
     model_name: Optional[str] = Field('', description='选择的模型名， 为空则不更新')
     temperature: Optional[float] = Field(0, description='模型温度， 为0则不更新')
 
-    tool_list: List[int] | None = Field(default=None, description='助手的工具ID列表,空列表则清空绑定的工具，为None则不更新')
+    tool_list: List[int] | None = Field(default=None,
+                                        description='助手的工具ID列表,空列表则清空绑定的工具，为None则不更新')
     flow_list: List[str] | None = Field(default=None, description='助手的技能ID列表，为None则不更新')
     knowledge_list: List[int] | None = Field(default=None, description='知识库ID列表，为None则不更新')
 
 
-class AssistantInfo(BaseModel):
-    tool_list: List[int] = Field(description='助手的工具ID列表')
-    flow_list: List[str] = Field(description='助手的技能ID列表')
-    knowledge_list: List[int] = Field(description='知识库ID列表')
+class AssistantSimpleInfo(BaseModel):
+    id: int
+    name: str
+    desc: str
+    logo: str
+    user_id: int
+    user_name: str
+    create_time: datetime
+    update_time: datetime
+
+
+class AssistantInfo(AssistantBase):
+    tool_list: List[int] = Field(default=[], description='助手的工具ID列表')
+    flow_list: List[str] = Field(default=[], description='助手的技能ID列表')
+    knowledge_list: List[int] = Field(default=[], description='知识库ID列表')
