@@ -5,11 +5,7 @@ from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchRun
 from bisheng_langchain.gpts.tools.calculator.tool import calculater
 from bisheng_langchain.gpts.tools.dalle_image_generator.tool import DallEImageGenerator
-<<<<<<< HEAD
 from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
-=======
-from bisheng_langchain.gpts.tools.get_current_time import get_current_time
->>>>>>> 91e71a6 (update sina tool)
 from langchain_community.tools.arxiv.tool import ArxivQueryRun
 from langchain_community.tools.bearly.tool import BearlyInterpreterTool
 from langchain_community.utilities.arxiv import ArxivAPIWrapper
@@ -120,8 +116,9 @@ def load_tools(
             _get_api_tool_func, extra_keys = _API_TOOLS[name]
             missing_keys = set(extra_keys).difference(params)
             if missing_keys:
-                raise ValueError(f'Tool {name} requires some parameters that were not ' f'provided: {missing_keys}')
-            mini_kwargs = {k: pramas[k] for k in extra_keys}
+                raise ValueError(f'Tool {name} requires some parameters that were not '
+                                 f'provided: {missing_keys}')
+            mini_kwargs = {k: params[k] for k in extra_keys}
             tool = _get_api_tool_func(name=name.split('.')[-1], **mini_kwargs)
             tools.append(tool)
         else:
