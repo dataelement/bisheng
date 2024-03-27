@@ -114,7 +114,7 @@ export default function Setting(params) {
                         <div className="flex gap-4">
                             <MultiSelect
                                 defaultValue={['2']}
-                                options={[{ label: '只是 1', value: '2' }, { label: '知识 34', value: '3' }]}
+                                options={[{ label: '只', value: '0' },{ label: '只', value: '1' },{ label: '只是 1', value: '2' }, { label: '知识 34', value: '3' }, { label: 'sadas5544', value: '4' }, { label: 'dddSADsadas', value: '5' }]}
                                 placeholder={"请选择知识库"}
                                 searchPlaceholder={"搜索知识库名称"}>
                                 <div className="flex justify-between">
