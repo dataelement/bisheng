@@ -40,7 +40,7 @@ _LLM_TOOLS: Dict[str, Callable[[BaseLanguageModel], BaseTool]] = {}
 _EXTRA_LLM_TOOLS: Dict[
     str,
     Tuple[
-        Callable[[Arg(BaseLanguageModel, 'llm'), KwArg(Any)], BaseTool],  # noqa
+        Callable[[Arg(BaseLanguageModel, 'llm'), KwArg(Any)], BaseTool],  # noqa #type: ignore
         List[str]]] = {}
 
 
