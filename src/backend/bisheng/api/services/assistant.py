@@ -1,9 +1,20 @@
-from typing import List
+import json
+from typing import Any, List, Optional
 
 from bisheng.api.errcode.assistant import AssistantNotExistsError
-from bisheng.api.v1.schemas import AssistantInfo, AssistantUpdateReq, UnifiedResponseModel, resp_200
-from bisheng.database.models.assistant import Assistant, AssistantDao, AssistantLinkDao
+from bisheng.api.services.utils import set_flow_knowledge_id
+from bisheng.api.utils import build_flow_no_yield
+from bisheng.api.v1.schemas import (AssistantInfo, AssistantUpdateReq, InputRequest,
+                                    UnifiedResponseModel, resp_200)
+from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLink,
+                                               AssistantLinkDao)
+from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.settings import settings
+from bisheng_langchain.gpts.load_tools import load_tools
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.tools import BaseTool, Tool
+from loguru import logger
 
 
 class AssistantService:
@@ -20,9 +31,8 @@ class AssistantService:
         # 保存大模型自动选择的工具和技能
         AssistantLinkDao.insert_batch(assistant.id, tool_list=tool_list, flow_list=flow_list)
 
-        return resp_200(data=AssistantInfo(**assistant.dict(),
-                                           tool_list=tool_list,
-                                           flow_list=flow_list))
+        return resp_200(
+            data=AssistantInfo(**assistant.dict(), tool_list=tool_list, flow_list=flow_list))
 
     @classmethod
     def auto_update(cls, assistant_id: int, prompt: str) -> UnifiedResponseModel[AssistantInfo]:
@@ -33,9 +43,8 @@ class AssistantService:
             return AssistantNotExistsError.return_resp()
         assistant.prompt = prompt
         assistant, tool_list, flow_list = cls.get_auto_info(assistant)
-        return resp_200(data=AssistantInfo(**assistant.dict(),
-                                           tool_list=tool_list,
-                                           flow_list=flow_list))
+        return resp_200(
+            data=AssistantInfo(**assistant.dict(), tool_list=tool_list, flow_list=flow_list))
 
     @classmethod
     def update_assistant(cls, req: AssistantUpdateReq) -> UnifiedResponseModel[AssistantInfo]:
@@ -73,7 +82,8 @@ class AssistantService:
         elif req.flow_list is not None:
             AssistantLinkDao.update_assistant_flow(assistant.id, flow_list=req.flow_list)
         elif req.knowledge_list is not None:
-            AssistantLinkDao.update_assistant_knowledge(assistant.id, knowledge_list=req.knowledge_list)
+            AssistantLinkDao.update_assistant_knowledge(assistant.id,
+                                                        knowledge_list=req.knowledge_list)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=req.tool_list,
                                            flow_list=req.flow_list,
@@ -138,3 +148,55 @@ class AssistantService:
         assistant.temperature = llm_conf['temperature']
 
         return assistant, [], []
+
+    @classmethod
+    def get_gpts_tools(cls, user: Any) -> List[GptsTools]:
+        user_id = user.get('user_id')
+        return GptsToolsDao.get_list_by_user(user_id)
+
+    @classmethod
+    async def init_tools(cls, assistant: Assistant,
+                         llm: Optional[BaseLanguageModel]) -> List[BaseTool]:
+        """通过名称获取tool 列表
+           tools_name_param:: {name: params}
+        """
+        links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(assistant_id=assistant.id)
+
+        # tool
+        tools = []
+        tool_ids = [link.tool_id for link in links if link.tool_id]
+        if tool_ids:
+            tools: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
+            tool_name_param = {tool.tool_key: json.loads(tool.extra) for tool in tools}
+            tool_langchain = load_tools(tool_params=tool_name_param, llm=llm)
+            tools = tools + tool_langchain
+            logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
+
+        # flow
+        flow_ids = [link.flow_id for link in links if link.flow_id]
+        if flow_ids:
+            flow2knowledge = {link.flow_id: link for link in links if link.flow_id}
+            flow_data = FlowDao.get_flow_by_ids(flow_ids)
+            # 先查找替换collection_id
+            for flow in flow_data:
+                graph_data = flow.data
+                knowledge_id = flow2knowledge.get(flow.id).knowledge_id
+                try:
+                    artifacts = {}
+                    graph_data = set_flow_knowledge_id(graph_data, knowledge_id)
+                    graph = await build_flow_no_yield(graph_data=graph_data,
+                                                      artifacts=artifacts,
+                                                      process_file=True,
+                                                      flow_id=flow.id.hex,
+                                                      chat_id=assistant.id)
+                    built_object = await graph.abuild()
+                    logger.info('act=init_flow_tool build_end')
+                    flow_tool = Tool(name=flow.name,
+                                     func=built_object.call,
+                                     coroutine=built_object.acall,
+                                     description=flow.description,
+                                     args_schema=InputRequest)
+                    tools.append(flow_tool)
+                except Exception as exc:
+                    logger.error(f'Error processing tweaks: {exc}')
+        return tools

@@ -5,7 +5,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from numpy import integer
 from sqlalchemy import Column, DateTime, String, text
-from sqlmodel import Field, select
+from sqlmodel import Field, null, or_, select
 
 
 class GptsToolsBase(SQLModelSerializable):
@@ -67,3 +67,16 @@ class GptsToolsDao(GptsToolsBase):
         with session_getter() as session:
             statement = select(GptsTools).where(GptsTools.id == tool_id)
             return session.exec(statement).first()
+
+    @classmethod
+    def get_list_by_ids(cls, tool_ids: List[int]) -> List[GptsTools]:
+        with session_getter() as session:
+            statement = select(GptsTools).where(GptsTools.id.in_(tool_ids))
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_list_by_user(cls, user_id: int) -> List[GptsTools]:
+        with session_getter() as session:
+            statement = select(GptsTools).where(
+                or_(GptsTools.user_id == user_id, GptsTools.user_id is null))
+            return session.exec(statement).all()

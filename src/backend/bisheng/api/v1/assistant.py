@@ -3,10 +3,11 @@ from typing import List, Optional
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantInfo, AssistantUpdateReq,
-                                    UnifiedResponseModel)
+                                    UnifiedResponseModel, resp_200)
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.types import WorkType
 from bisheng.database.models.assistant import Assistant
+from bisheng.database.models.gpts_tools import GptsTools
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Body, Depends, HTTPException, WebSocket, WebSocketException, status
 from fastapi_jwt_auth import AuthJWT
@@ -21,22 +22,17 @@ def get_assistant():
 
 
 @router.post('', response_model=UnifiedResponseModel[AssistantInfo])
-async def create_assistant(*,
-                           req: AssistantCreateReq,
-                           Authorize: AuthJWT = Depends()):
+async def create_assistant(*, req: AssistantCreateReq, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
 
-    assistant = Assistant(**req.dict(),
-                          user_id=current_user.get('user_id'))
+    assistant = Assistant(**req.dict(), user_id=current_user.get('user_id'))
     return AssistantService.create_assistant(assistant)
 
 
 @router.put('', response_model=UnifiedResponseModel[AssistantInfo])
-async def update_assistant(*,
-                           req: AssistantUpdateReq,
-                           Authorize: AuthJWT = Depends()):
+async def update_assistant(*, req: AssistantUpdateReq, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     return AssistantService.update_assistant(req)
@@ -93,7 +89,8 @@ async def chat(*,
         payload = Authorize.get_jwt_subject()
         payload = json.loads(payload)
         user_id = payload.get('user_id')
-        await chat_manager.dispatch_client(str(assistant_id), chat_id, user_id, WorkType.GPTS, websocket)
+        await chat_manager.dispatch_client(str(assistant_id), chat_id, user_id, WorkType.GPTS,
+                                           websocket)
 
     except WebSocketException as exc:
         logger.error(f'Websocket exception: {str(exc)}')
@@ -105,3 +102,11 @@ async def chat(*,
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason='Unauthorized')
         else:
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=message)
+
+
+@router.get('/tool_list', response_model=UnifiedResponseModel[GptsTools])
+def get_tool_list(*, Authorize: AuthJWT = Depends()):
+    """查询所有可见的tool 列表"""
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+    return resp_200(AssistantService.get_gpts_tools(current_user))

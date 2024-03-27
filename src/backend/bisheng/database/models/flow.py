@@ -86,6 +86,14 @@ class FlowDao(FlowBase):
             return session.exec(statement).first()
 
     @classmethod
+    def get_flow_by_ids(cls, flow_ids: List[str]) -> List[Flow]:
+        if not flow_ids:
+            return []
+        with session_getter() as session:
+            statement = select(Flow).where(Flow.id.in_(flow_ids))
+            return session.exec(statement).first()
+
+    @classmethod
     def get_flow_by_user(cls, user_id: int) -> List[Flow]:
         with session_getter() as session:
             statement = select(Flow).where(Flow.user_id == user_id)

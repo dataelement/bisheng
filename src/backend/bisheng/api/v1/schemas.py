@@ -4,7 +4,6 @@ from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from uuid import UUID
 
-from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from langchain.docstore.document import Document
@@ -47,7 +46,7 @@ class ExportedFlow(BaseModel):
 
 
 class InputRequest(BaseModel):
-    input: dict
+    input: Union[dict, str] = Field(description='question or command asked LLM to do')
 
 
 class TweaksRequest(BaseModel):
@@ -235,7 +234,7 @@ class AssistantUpdateReq(BaseModel):
     knowledge_list: List[int] | None = Field(default=None, description='知识库ID列表，为None则不更新')
 
 
-class AssistantInfo(Assistant):
+class AssistantInfo(BaseModel):
     tool_list: List[int] = Field(description='助手的工具ID列表')
     flow_list: List[str] = Field(description='助手的技能ID列表')
     knowledge_list: List[int] = Field(description='知识库ID列表')

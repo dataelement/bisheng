@@ -166,8 +166,8 @@ async def build_flow_no_yield(graph_data: dict,
     except Exception as exc:
         logger.exception(exc)
         raise exc
-
-    for i, vertex in enumerate(graph.generator_build(), 1):
+    sorted_vertices = graph.topological_sort()
+    for vertex in sorted_vertices:
         try:
             # 如果存在文件，当前不操作文件，避免重复操作
             if not process_file and vertex.base_type == 'documentloaders':
@@ -302,7 +302,8 @@ def raw_frontend_data_is_valid(raw_frontend_data):
 def is_valid_data(frontend_node, raw_frontend_data):
     """Check if the data is valid for processing."""
 
-    return frontend_node and 'template' in frontend_node and raw_frontend_data_is_valid(raw_frontend_data)
+    return frontend_node and 'template' in frontend_node and raw_frontend_data_is_valid(
+        raw_frontend_data)
 
 
 def update_template_values(frontend_template, raw_template):
