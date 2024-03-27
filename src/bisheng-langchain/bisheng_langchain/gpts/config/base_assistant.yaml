@@ -3,8 +3,8 @@ assistant:
   
   llm:
     type: 'ChatOpenAI'
-    # model: 'gpt-4-0125-preview'
-    model: 'gpt-3.5-turbo-0125'
+    model: 'gpt-4-0125-preview'
+    # model: 'gpt-3.5-turbo-0125'
     openai_api_key: ''
     openai_proxy: 'http://118.195.232.223:39995'
     temperature: 0.0
@@ -22,7 +22,12 @@ assistant:
   #   temperature: 0.01
 
   tools:
-    - type: 'arxiv'
+    - type: "arxiv"
+    - type: "bing-search"
+      bing_subscription_key: ""
+      bing_search_url: "https://api.bing.microsoft.com/v7.0/search"
+    - type: "get_current_time"
+    - type: "calculator"
       
   agent_executor:
     type: 'get_openai_functions_agent_executor'

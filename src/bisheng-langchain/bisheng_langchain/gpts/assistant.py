@@ -12,7 +12,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableBinding
 from langchain_core.language_models.base import LanguageModelLike
 from bisheng_langchain.gpts.utils import import_by_type, import_class
-from bisheng_langchain.gpts.tools import TOOLS
+from bisheng_langchain.gpts.load_tools import load_tools, get_all_tool_names
 
 
 logger = logging.getLogger(__name__)
@@ -79,13 +79,14 @@ class BishengAssistant:
             llm = llm_object(**llm_params)
         
         # init tools
+        available_tools = get_all_tool_names()
         tools = []
         for tool in self.assistant_params['tools']:
             tool_type = tool.pop('type')
             tool_config = tool if tool else {}
-            if tool_type not in TOOLS:
+            if tool_type not in available_tools:
                 raise ValueError(f"Tool type {tool_type} not found in TOOLS")
-            _returned_tools = TOOLS[tool_type](**tool_config)
+            _returned_tools = load_tools({tool_type: tool_config})
             if isinstance(_returned_tools, list):
                 tools.extend(_returned_tools)
             else:
@@ -110,6 +111,6 @@ class BishengAssistant:
 
 
 if __name__ == "__main__":
-    query = "帮我查找一下关于人工智能的文章。再帮我查一下关于自然语言处理的文章。"
+    query = "帮我查一下去年这一天发生了哪些重大事情？"
     bisheng_assistant = BishengAssistant("config/base_assistant.yaml")
     bisheng_assistant.run(query)
