@@ -4,26 +4,14 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from bisheng_langchain.utils.requests import Requests, RequestsWrapper
-from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
-from loguru import logger
+from langchain_core.pydantic_v1 import root_validator
+
+from .base import APIToolBase
 
 
-class CompanyInfo(BaseModel):
+class CompanyInfo(APIToolBase):
     """Manage tianyancha company client."""
-
-    client: Any = Field(default=None, exclude=True)  #: :meta private:
-    async_client: Any = Field(default=None, exclude=True)  #: :meta private:
-    headers: Dict[str, Any] = {}
-    request_timeout: int = 30
-    url: str = None
     api_key: str = None
-    params: Dict[str, Any] = Field(default_factory=dict)
-    input_key: str = 'keyword'
-
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = Extra.forbid
 
     @root_validator(pre=True)
     def build_header(cls, values: Dict[str, Any]) -> Dict[str, Any]:
@@ -46,23 +34,6 @@ class CompanyInfo(BaseModel):
             values['async_client'] = RequestsWrapper(headers=values['headers'],
                                                      request_timeout=timeout)
         return values
-
-    def run(self, query: str) -> str:
-        """Run query through api and parse result."""
-        self.params[self.input_key] = query
-        param = '&'.join([f'{k}={v}' for k, v in self.params.items()])
-        resp = self.client.get(self.url + '?' + param)
-        if resp.status_code != 200:
-            logger.info('api_call_fail res={}', resp.text)
-        return resp.text
-
-    async def arun(self, query: str) -> str:
-        """Run query through api and parse result."""
-        self.params[self.input_key] = query
-        param = '&'.join([f'{k}={v}' for k, v in self.params.items()])
-        resp = await self.async_client.aget(self.url + '?' + param)
-        logger.info(resp)
-        return resp
 
     @classmethod
     def search_company(cls, api_key: str, pageNum: int = 1, pageSize: int = 20) -> CompanyInfo:
@@ -105,7 +76,7 @@ class CompanyInfo(BaseModel):
     @classmethod
     def law_suit_case(cls, api_key: str, pageSize: int = 20, pageNum: int = 1) -> CompanyInfo:
         """可以通过公司名称或ID获取企业法律诉讼信息，法律诉讼包括案件名称、案由、案件身份、案号等字段的详细信息"""
-        url = 'http://open.api.tianyancha.com/services/open/jr/lawSuit/2.0'
+        url = 'http://open.api.tianyancha.com/services/open/jr/lawSuit/3.0'
         params = {}
         params['pageSize'] = pageSize
         params['pageNum'] = pageNum
@@ -158,5 +129,5 @@ class CompanyInfo(BaseModel):
     @classmethod
     def riskinfo(cls, api_key: str) -> CompanyInfo:
         """可以通过关键字（公司名称、公司id、注册号或社会统一信用代码）获取企业相关天眼风险列表，包括企业自身/周边/预警风险信息。"""
-        url = 'http://open.api.tianyancha.com/services/v4/open/riskInfo'
+        url = 'http://open.api.tianyancha.com/services/open/risk/riskInfo/2.0'
         return cls(url=url, api_key=api_key)
