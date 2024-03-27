@@ -1,17 +1,23 @@
 """tianyancha api"""
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Type
 
 from bisheng_langchain.utils.requests import Requests, RequestsWrapper
-from langchain_core.pydantic_v1 import root_validator
+from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 
 from .base import APIToolBase
+
+
+class InputArgs(BaseModel):
+    """args_schema"""
+    query: str = Field(description='搜索关键字（公司名称、公司id、注册号或社会统一信用代码）')
 
 
 class CompanyInfo(APIToolBase):
     """Manage tianyancha company client."""
     api_key: str = None
+    args_schema: Type[BaseModel] = InputArgs
 
     @root_validator(pre=True)
     def build_header(cls, values: Dict[str, Any]) -> Dict[str, Any]:
@@ -43,6 +49,7 @@ class CompanyInfo(APIToolBase):
         params = {}
         params['pageSize'] = pageSize
         params['pageNum'] = pageNum
+
         return cls(url=url, api_key=api_key, input_key=input_key, params=params)
 
     @classmethod
@@ -51,6 +58,7 @@ class CompanyInfo(APIToolBase):
         url = 'http://open.api.tianyancha.com/services/open/ic/baseinfo/normal'
         input_key = 'keyword'
         params = {}
+
         return cls(url=url, api_key=api_key, input_key=input_key, params=params)
 
     @classmethod
@@ -58,6 +66,7 @@ class CompanyInfo(APIToolBase):
         """可以通过公司名称或ID获取包含商标、专利、作品著作权、软件著作权、网站备案等维度的相关信息"""
         url = 'http://open.api.tianyancha.com/services/open/cb/ipr/3.0'
         input_key = 'keyword'
+
         return cls(url=url, api_key=api_key, input_key=input_key, params={})
 
     @classmethod
@@ -111,7 +120,16 @@ class CompanyInfo(APIToolBase):
         params = {}
         params['pageSize'] = pageSize
         params['pageNum'] = pageNum
-        return cls(url=url, api_key=api_key, params=params, input_key=input_key)
+
+        class InputArgs(BaseModel):
+            """args_schema"""
+            query: str = Field(description='company name to query')
+
+        return cls(url=url,
+                   api_key=api_key,
+                   params=params,
+                   input_key=input_key,
+                   args_schema=InputArgs)
 
     @classmethod
     def all_companys_by_humanname(cls,
@@ -124,7 +142,16 @@ class CompanyInfo(APIToolBase):
         params = {}
         params['pageSize'] = pageSize
         params['pageNum'] = pageNum
-        return cls(url=url, api_key=api_key, params=params, input_key=input_key)
+
+        class InputArgs(BaseModel):
+            """args_schema"""
+            query: str = Field(description='human name to query')
+
+        return cls(url=url,
+                   api_key=api_key,
+                   params=params,
+                   input_key=input_key,
+                   args_schema=InputArgs)
 
     @classmethod
     def riskinfo(cls, api_key: str) -> CompanyInfo:

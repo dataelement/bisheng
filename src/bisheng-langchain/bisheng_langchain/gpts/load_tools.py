@@ -1,13 +1,12 @@
 import warnings
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from bisheng_langchain.gpts.tools.api_tools import TIAN_YAN_CHA_TOOLS
+from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchRun
 from bisheng_langchain.gpts.tools.calculator.tool import calculater
 from bisheng_langchain.gpts.tools.dalle_image_generator.tool import DallEImageGenerator
 <<<<<<< HEAD
 from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
-from bisheng_langchain.gpts.tools.tianyancha import TIAN_YAN_CHA_TOOLS
 =======
 from bisheng_langchain.gpts.tools.get_current_time import get_current_time
 >>>>>>> 91e71a6 (update sina tool)
@@ -68,7 +67,7 @@ _EXTRA_OPTIONAL_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[st
 }
 
 _API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {}  # type: ignore
-_API_TOOLS.update(TIAN_YAN_CHA_TOOLS)
+_API_TOOLS.update(ALL_API_TOOLS)
 
 
 def _handle_callbacks(callback_manager: Optional[BaseCallbackManager],
@@ -91,8 +90,9 @@ def load_tools(
     **kwargs: Any,
 ) -> List[BaseTool]:
     tools = []
-    callbacks = _handle_callbacks(callback_manager=kwargs.get("callback_manager"), callbacks=callbacks)
-    for name, pramas in tool_params.items():
+    callbacks = _handle_callbacks(callback_manager=kwargs.get('callback_manager'),
+                                  callbacks=callbacks)
+    for name, params in tool_params.items():
         if name in _BASE_TOOLS:
             tools.append(_BASE_TOOLS[name]())
         elif name in _LLM_TOOLS:
@@ -104,21 +104,21 @@ def load_tools(
             if llm is None:
                 raise ValueError(f'Tool {name} requires an LLM to be provided')
             _get_llm_tool_func, extra_keys = _EXTRA_LLM_TOOLS[name]
-            missing_keys = set(extra_keys).difference(pramas)
+            missing_keys = set(extra_keys).difference(params)
             if missing_keys:
                 raise ValueError(f'Tool {name} requires some parameters that were not '
                                  f'provided: {missing_keys}')
-            sub_kwargs = {k: pramas[k] for k in extra_keys}
+            sub_kwargs = {k: params[k] for k in extra_keys}
             tool = _get_llm_tool_func(llm=llm, **sub_kwargs)
             tools.append(tool)
         elif name in _EXTRA_OPTIONAL_TOOLS:
             _get_tool_func, extra_keys = _EXTRA_OPTIONAL_TOOLS[name]
-            sub_kwargs = {k: pramas[k] for k in extra_keys if k in pramas}
+            sub_kwargs = {k: params[k] for k in extra_keys if k in params}
             tool = _get_tool_func(**sub_kwargs)
             tools.append(tool)
         elif name in _API_TOOLS:
             _get_api_tool_func, extra_keys = _API_TOOLS[name]
-            missing_keys = set(extra_keys).difference(pramas)
+            missing_keys = set(extra_keys).difference(params)
             if missing_keys:
                 raise ValueError(f'Tool {name} requires some parameters that were not ' f'provided: {missing_keys}')
             mini_kwargs = {k: pramas[k] for k in extra_keys}
