@@ -68,14 +68,14 @@ env:
 gpts:
   #  助手可选大模型列表，第一个为默认模型
   llms:
-    - name: "gpt-4"
-      model: "gpt-4-turbo"
-      api_key: ""
-      url: "https://api.openai.com/v1/chat/completions"
-      temperature: 0.7
-    - name: "gpt-3.5"
-      model: "gpt-3.5-turbo"
-      api_key: ""
-      url: "https://api.openai.com/v1/chat/completions"
-      temperature: 0.7
+    - type: 'ChatOpenAI'
+      model_name: 'gpt-4-0125-preview'
+      # model: 'gpt-3.5-turbo-0125'
+      openai_api_key: ''
+      openai_proxy: 'http://118.195.232.223:39995'
+      temperature: 0.0
+    - type: 'HostQwenChat'
+      model_name: 'Qwen-1_8B-Chat'
+      host_base_url: 'http://192.168.106.12:9001/v2.1/models'
+      temperature: 0.01
 

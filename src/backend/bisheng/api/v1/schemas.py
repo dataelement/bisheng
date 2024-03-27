@@ -115,7 +115,7 @@ class ChatMessage(BaseModel):
     is_bot: bool = False
     message: Union[str, None, dict] = ''
     type: str = 'human'
-    category: str = 'processing'
+    category: str = 'processing'  # system processing answer
     intermediate_steps: str = None
     files: list = []
     user_id: int = None
@@ -230,7 +230,7 @@ class AssistantUpdateReq(BaseModel):
     model_name: Optional[str] = Field('', description='选择的模型名， 为空则不更新')
     temperature: Optional[float] = Field(0, description='模型温度， 为0则不更新')
 
-    tool_list: List[int] | None = Field(default=None, description='助手的工具ID列表, 为None则不更新')
+    tool_list: List[int] | None = Field(default=None, description='助手的工具ID列表,空列表则清空绑定的工具，为None则不更新')
     flow_list: List[str] | None = Field(default=None, description='助手的技能ID列表，为None则不更新')
     knowledge_list: List[int] | None = Field(default=None, description='知识库ID列表，为None则不更新')
 

@@ -118,9 +118,9 @@ class AssistantService:
     def get_llm_conf(cls, llm_name: str) -> dict:
         llm_list = cls.get_gpts_conf('llms')
         for one in llm_list:
-            if one['name'] == llm_name:
-                return one
-        return llm_list[0]
+            if one['model_name'] == llm_name:
+                return one.copy()
+        return llm_list[0].copy()
 
     @classmethod
     def get_auto_info(cls, assistant: Assistant) -> (Assistant, List[int], List[int]):
