@@ -1,9 +1,10 @@
+from ctypes import cast
 import warnings
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchRun
-from bisheng_langchain.gpts.tools.calculator.tool import calculater
+from bisheng_langchain.gpts.tools.calculator.tool import calculator
 from bisheng_langchain.gpts.tools.dalle_image_generator.tool import DallEImageGenerator
 from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
 from langchain_community.tools.arxiv.tool import ArxivQueryRun
@@ -22,7 +23,7 @@ def _get_current_time() -> BaseTool:
 
 
 def _get_calculator() -> BaseTool:
-    return calculater
+    return calculator
 
 
 _BASE_TOOLS: Dict[str, Callable[[], BaseTool]] = {
@@ -33,10 +34,8 @@ _BASE_TOOLS: Dict[str, Callable[[], BaseTool]] = {
 _LLM_TOOLS: Dict[str, Callable[[BaseLanguageModel], BaseTool]] = {}
 
 _EXTRA_LLM_TOOLS: Dict[
-    str,
-    Tuple[
-        Callable[[Arg(BaseLanguageModel, 'llm'), KwArg(Any)], BaseTool],  # noqa #type: ignore
-        List[str]]] = {}
+    str, Tuple[Callable[[Arg(BaseLanguageModel, 'llm'), KwArg(Any)], BaseTool], List[str]]  # noqa #type: ignore
+] = {}
 
 
 def _get_arxiv(**kwargs: Any) -> BaseTool:
@@ -66,8 +65,7 @@ _API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {}  
 _API_TOOLS.update(ALL_API_TOOLS)
 
 
-def _handle_callbacks(callback_manager: Optional[BaseCallbackManager],
-                      callbacks: Callbacks) -> Callbacks:
+def _handle_callbacks(callback_manager: Optional[BaseCallbackManager], callbacks: Callbacks) -> Callbacks:
     if callback_manager is not None:
         warnings.warn(
             'callback_manager is deprecated. Please use callbacks instead.',
@@ -86,8 +84,7 @@ def load_tools(
     **kwargs: Any,
 ) -> List[BaseTool]:
     tools = []
-    callbacks = _handle_callbacks(callback_manager=kwargs.get('callback_manager'),
-                                  callbacks=callbacks)
+    callbacks = _handle_callbacks(callback_manager=kwargs.get('callback_manager'), callbacks=callbacks)
     for name, params in tool_params.items():
         if name in _BASE_TOOLS:
             tools.append(_BASE_TOOLS[name]())
@@ -102,8 +99,7 @@ def load_tools(
             _get_llm_tool_func, extra_keys = _EXTRA_LLM_TOOLS[name]
             missing_keys = set(extra_keys).difference(params)
             if missing_keys:
-                raise ValueError(f'Tool {name} requires some parameters that were not '
-                                 f'provided: {missing_keys}')
+                raise ValueError(f'Tool {name} requires some parameters that were not ' f'provided: {missing_keys}')
             sub_kwargs = {k: params[k] for k in extra_keys}
             tool = _get_llm_tool_func(llm=llm, **sub_kwargs)
             tools.append(tool)
@@ -116,8 +112,7 @@ def load_tools(
             _get_api_tool_func, extra_keys = _API_TOOLS[name]
             missing_keys = set(extra_keys).difference(params)
             if missing_keys:
-                raise ValueError(f'Tool {name} requires some parameters that were not '
-                                 f'provided: {missing_keys}')
+                raise ValueError(f'Tool {name} requires some parameters that were not ' f'provided: {missing_keys}')
             mini_kwargs = {k: params[k] for k in extra_keys}
             tool = _get_api_tool_func(name=name.split('.')[-1], **mini_kwargs)
             tools.append(tool)
@@ -131,5 +126,8 @@ def load_tools(
 
 def get_all_tool_names() -> List[str]:
     """Get a list of all possible tool names."""
-    return list(_BASE_TOOLS) + list(_EXTRA_OPTIONAL_TOOLS) + list(_EXTRA_LLM_TOOLS) + list(
-        _LLM_TOOLS)
+    return (
+        list(_BASE_TOOLS) + list(_EXTRA_OPTIONAL_TOOLS) + list(_EXTRA_LLM_TOOLS) + list(_LLM_TOOLS) + list(_API_TOOLS)
+    )
+
+
