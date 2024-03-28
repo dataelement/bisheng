@@ -3,7 +3,6 @@ from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from numpy import integer
 from sqlalchemy import Column, DateTime, String, text
 from sqlmodel import Field, null, or_, select
 
@@ -13,7 +12,7 @@ class GptsToolsBase(SQLModelSerializable):
     logo: Optional[str] = Field(sa_column=Column(String(length=512), index=False))
     desc: Optional[str] = Field(sa_column=Column(String(length=2048), index=False))
     tool_key: str = Field(sa_column=Column(String(length=125), index=False))
-    type: integer = Field(default=0, description='表示工具是技能组装还是原生工具，type=1 表示技能')
+    type: int = Field(default=0, description='表示工具是技能组装还是原生工具，type=1 表示技能')
     extra: Optional[str] = Field(sa_column=Column(String(length=2048), index=False),
                                  description='用来存储额外信息，比如参数需求等')
     is_preset: bool = Field(default=True)
