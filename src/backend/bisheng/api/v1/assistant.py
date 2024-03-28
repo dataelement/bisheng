@@ -81,14 +81,6 @@ async def update_flow_list(*,
     return AssistantService.update_flow_list(assistant_id, flow_list)
 
 
-@router.get('/tool', response_model=UnifiedResponseModel)
-async def get_all_tool(*,
-                       Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    return AssistantService.get_all_tool(current_user.get('user_id'))
-
-
 @router.post('/tool', response_model=UnifiedResponseModel)
 async def update_tool_list(*,
                            assistant_id: int = Body(description='助手唯一ID'),

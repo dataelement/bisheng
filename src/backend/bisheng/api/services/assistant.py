@@ -1,6 +1,7 @@
 from typing import Any, List
 
 from bisheng.api.errcode.assistant import AssistantNotExistsError
+from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     UnifiedResponseModel, resp_200)
 from bisheng.cache import InMemoryCache
@@ -9,11 +10,10 @@ from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.database.models.role_access import AccessType, RoleAcessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
-from bisheng.settings import settings
 from loguru import logger
 
 
-class AssistantService:
+class AssistantService(AssistantUtils):
     UserCache: InMemoryCache = InMemoryCache()
 
     @classmethod
@@ -159,9 +159,10 @@ class AssistantService:
         return resp_200()
 
     @classmethod
-    def get_all_tool(cls, user_id: int) -> UnifiedResponseModel:
-        tool_list = GptsToolsDao.get_list_by_user(user_id)
-        return resp_200(data={'data': tool_list, 'total': len(tool_list)})
+    def get_gpts_tools(cls, user: Any) -> List[GptsTools]:
+        """ 获取用户可见的工具列表 """
+        user_id = user.get('user_id')
+        return GptsToolsDao.get_list_by_user(user_id)
 
     @classmethod
     def get_models(cls) -> UnifiedResponseModel:
@@ -194,27 +195,12 @@ class AssistantService:
         return user.user_name
 
     @classmethod
-    def get_gpts_conf(cls, key=None):
-        gpts_conf = settings.get_from_db('gpts')
-        if key:
-            return gpts_conf.get(key)
-        return gpts_conf
-
-    @classmethod
-    def get_llm_conf(cls, llm_name: str) -> dict:
-        llm_list = cls.get_gpts_conf('llms')
-        for one in llm_list:
-            if one['model_name'] == llm_name:
-                return one.copy()
-        return llm_list[0].copy()
-
-    @classmethod
     def get_auto_info(cls, assistant: Assistant) -> (Assistant, List[int], List[int]):
         """
         自动生成助手的prompt，自动选择工具和技能
         return：助手信息，工具ID列表，技能ID列表
         """
-        # todo zgq: 和算法联调自动生成prompt和工具列表
+        # todo zgq: 和算法联调自动生成prompt和工具列表 还有开场白
         # 根据助手 选择大模型配置
         llm_conf = cls.get_llm_conf(assistant.model_name)
 
@@ -224,8 +210,3 @@ class AssistantService:
         assistant.temperature = llm_conf['temperature']
 
         return assistant, [], []
-
-    @classmethod
-    def get_gpts_tools(cls, user: Any) -> List[GptsTools]:
-        user_id = user.get('user_id')
-        return GptsToolsDao.get_list_by_user(user_id)
