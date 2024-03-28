@@ -192,13 +192,14 @@ class ChatManager:
                                  websocket,
                                  graph_data=graph_data)
         await self.accept_client(client_key, chat_client, websocket)
+        logger.debug(f'act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}')
         try:
             while True:
                 try:
                     json_payload_receive = await asyncio.wait_for(websocket.receive_json(),
                                                                   timeout=2.0)
                 except asyncio.TimeoutError:
-                    json_payload_receive = ''
+                    continue
                 try:
                     payload = json.loads(json_payload_receive) if json_payload_receive else {}
                 except TypeError:

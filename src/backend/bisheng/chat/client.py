@@ -1,10 +1,15 @@
+import json
 from typing import Dict
 
 from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler, AsyncGptsLLMCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import WorkType
 from bisheng.database.models.assistant import AssistantDao
-from fastapi import WebSocket
+from bisheng.database.models.message import ChatMessage as ChatMessageModel
+from bisheng.database.models.message import ChatMessageDao
+from fastapi import WebSocket, status
+from loguru import logger
 
 
 class ChatClient:
@@ -32,26 +37,79 @@ class ChatClient:
         if self.work_type == WorkType.GPTS:
             await self.handle_gpts_message(message)
 
-    async def handle_gpts_message(self, message: Dict[any, any]):
-        # 处理智能助手业务
-        if self.chat_id and self.gpts_agent is None:
-            # 会话业务agent通过数据库数据固定生成,不用每次变化
-            assistant = AssistantDao.get_one_assistant(int(self.client_id))
-            self.gpts_agent = AssistantAgent(assistant, self.chat_id)
-        else:
-            # 每次都从数据库获取重新构造一个agent
-            # TODO zgq：后续可以和前端约定参数，决定是否要重新初始化agent
-            assistant = AssistantDao.get_one_assistant(int(self.client_id))
-            self.gpts_agent = AssistantAgent(assistant, self.chat_id)
-
-        # TODO zgq: 流式输出和 获取agent执行的每一个工具信息
-        inputs = message.get('inputs', {})
-        if input_msg := inputs.get('input'):
-            self.gpts_agent.run(input_msg)
-        await self.send_json(ChatResponse(
-            category='processing',
-            type='end',
-            is_bot=True,
-            message='',
+    async def add_message(self, msg_type: str, message: str, category: str):
+        if not self.chat_id:
+            # debug模式无需保存历史
+            return
+        is_bot = 0 if msg_type == 'human' else 1
+        ChatMessageDao.insert_one(ChatMessageModel(
+            is_bot=is_bot,
+            source=0,
+            message=message,
+            category=category,
+            type=msg_type,
+            extra=self.client_id,
+            flow_id=self.client_key,  # todo zgq:增加字段或者修改数据类型
+            chat_id=self.chat_id,
             user_id=self.user_id,
-            intermediate_steps=''))
+        ))
+
+    async def send_response(self, category: str, msg_type: str, message: str, intermediate_steps: str = ''):
+        is_bot = 0 if msg_type == 'human' else 1
+        await self.send_json(ChatResponse(
+            category=category,
+            type=msg_type,
+            is_bot=is_bot,
+            message=message,
+            user_id=self.user_id,
+            client_id=self.client_key,  # todo zgq:增加字段或者修改数据类型
+            chat_id=self.chat_id,
+            extra=self.client_id,
+            intermediate_steps=intermediate_steps,
+        ))
+
+    async def handle_gpts_message(self, message: Dict[any, any]):
+        if not message:
+            return
+        logger.debug(f'receive client message, client_key: {self.client_key} message: {message}')
+        try:
+            # 处理智能助手业务
+            if self.chat_id and self.gpts_agent is None:
+                # 会话业务agent通过数据库数据固定生成,不用每次变化
+                assistant = AssistantDao.get_one_assistant(int(self.client_id))
+                self.gpts_agent = AssistantAgent(assistant, self.chat_id)
+            else:
+                # 每次都从数据库获取重新构造一个agent
+                # TODO zgq：后续可以和前端约定参数，决定是否要重新初始化agent
+                assistant = AssistantDao.get_one_assistant(int(self.client_id))
+                self.gpts_agent = AssistantAgent(assistant, self.chat_id)
+        except Exception as e:
+            logger.error('agent init error %s' % str(e), exc_info=True)
+            await self.websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason='agent init error')
+            raise Exception('agent init error')
+
+        if self.chat_id:
+            async_callbacks = [AsyncGptsLLMCallbackHandler(**{
+                'websocket': self.websocket,
+                'flow_id': self.client_id,
+                'chat_id': self.chat_id
+            })]
+        else:
+            async_callbacks = [AsyncGptsDebugCallbackHandler(**{
+                'websocket': self.websocket,
+                'flow_id': self.client_id,
+                'chat_id': self.chat_id
+            })]
+
+        # TODO zgq: 流式输出和 获取agent执行的每一个工具信息。写入chatmessages
+        inputs = message.get('inputs', {})
+        await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
+
+        await self.send_response('processing', 'start', '')
+        if input_msg := inputs.get('input'):
+            result = await self.gpts_agent.run(input_msg, async_callbacks)
+            print('----- agent result -----', result)
+            await self.add_message('bot', result[1].content, 'answer')
+            await self.send_response('answer', 'start', '')
+            await self.send_response('answer', 'end', result[1].content)
+        await self.send_response('processing', 'end', '')
