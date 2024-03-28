@@ -288,9 +288,12 @@ class BishengRagPipeline:
                 'question_column': metric_params['question_column'],
                 'gt_column': metric_params['gt_column'],
                 'answer_column': metric_params['answer_column'],
-                'query_type_column': metric_params['query_type_column'],
+                'query_type_column': metric_params.get('query_type_column', None),
+                'contexts_column': metric_params.get('contexts_column', None),
                 'metrics': metric_params['metrics'],
                 'batch_size': metric_params['batch_size'],
+                'gt_split_column': metric_params.get('gt_split_column', None),
+                'whether_gtsplit': metric_params.get('whether_gtsplit', False), # 是否需要模型对gt进行要点拆分
             }
             rag_score = RagScore(**score_params)
             rag_score.score()

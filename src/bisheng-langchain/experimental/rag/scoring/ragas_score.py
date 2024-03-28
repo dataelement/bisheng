@@ -23,6 +23,7 @@ class RagScore:
     metrics: List[str]
     contexts_column: Optional[str] = None
     query_type_column: Optional[str] = None
+    gt_split_column: Optional[str] = None
     batch_size: int = 5
     whether_gtsplit: bool = False
 
@@ -87,6 +88,10 @@ class RagScore:
             self.contexts_column,
             self.query_type_column,
         ]
+        # 是否有要点拆分列
+        if self.gt_split_column:
+            columns_to_check.append(self.gt_split_column)
+
         df.dropna(subset=[col for col in columns_to_check if col], inplace=True)
         df = df.reset_index()
         print(f'删除含有na的行 {ori_row_nums - df.shape[0]} 个!')
@@ -103,12 +108,22 @@ class RagScore:
             else df[self.contexts_column].apply(lambda x: [x]).tolist()
         )
         # To dict
-        data: Dict[str, List[Any]] = {
-            "question": questions,
-            "answer": answers,
-            "contexts": contexts,
-            "ground_truths": ground_truths,
-        }
+        if self.gt_split_column:
+            gtsplit = df[self.gt_split_column].tolist()
+            data: Dict[str, List[Any]] = {
+                "question": questions,
+                "answer": answers,
+                "contexts": contexts,
+                "ground_truths": ground_truths,
+                'gt_split_point': gtsplit
+            }
+        else:
+            data: Dict[str, List[Any]] = {
+                "question": questions,
+                "answer": answers,
+                "contexts": contexts,
+                "ground_truths": ground_truths,
+            }
         # Convert dict to dataset
         dataset = Dataset.from_dict(data)
 
@@ -118,7 +133,10 @@ class RagScore:
         for metric_name in self.metrics:
             ragas_result = getattr(self, f'ragas_{metric_name}')(dataset)
             if metric_name =='answer_recall_bisheng':
-                df["gt_split_point"] = ragas_result["gt_split_point"]
+                if self.gt_split_column:
+                    df[self.gt_split_column] = ragas_result["gt_split_point"]
+                else:
+                    df["gt_split_point"] = ragas_result["gt_split_point"]
                 df["analyse"] = ragas_result["analyse"]
 
             score_map = dict().fromkeys(self.score_map_keys, ragas_result)
@@ -150,8 +168,8 @@ class RagScore:
 
 if __name__ == '__main__':
     params = {
-        'excel_path': '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample_qwen1.5_14b_12chunk_update.xlsx',
-        'save_path': './',
+        'excel_path': '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/test.xlsx',
+        'save_path': '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data',
         'question_column': '问题',
         'gt_column': 'GT',
         'answer_column': 'rag_answer',
@@ -159,7 +177,7 @@ if __name__ == '__main__':
         # 'metrics': ['answer_correctness_bisheng'],
         'metrics': ['answer_recall_bisheng'],
         'batch_size': 10,
-        'whether_gtsplit': True,
+        'whether_gtsplit': False,
     }
     rag_score = RagScore(**params)
     rag_score.score()
