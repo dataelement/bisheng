@@ -107,8 +107,8 @@ class FlowDao(FlowBase):
             return session.exec(statement).first()
 
     @classmethod
-    def get_knowledge_by_access(cls, role_id: int, name: str, page_size: int,
-                                page_num: int) -> List[Tuple[Flow, RoleAccess]]:
+    def get_flow_by_access(cls, role_id: int, name: str, page_size: int,
+                           page_num: int) -> List[Tuple[Flow, RoleAccess]]:
         statment = select(Flow, RoleAccess).join(RoleAccess,
                                                  and_(RoleAccess.role_id == role_id,
                                                       RoleAccess.type == AccessType.FLOW.value,
