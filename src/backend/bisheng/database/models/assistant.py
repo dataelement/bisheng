@@ -1,10 +1,11 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import JSON, Column, DateTime, Text, func, text
+from bisheng.database.models.role_access import AccessType, RoleAccess
+from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text
 from sqlmodel import Field, select
 
 
@@ -28,8 +29,10 @@ class AssistantBase(SQLModelSerializable):
     user_id: int = Field(default=0, description='创建用户ID')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(
+        sa_column=Column(DateTime,
+                         nullable=False,
+                         server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class AssistantLinkBase(SQLModelSerializable):
@@ -40,8 +43,10 @@ class AssistantLinkBase(SQLModelSerializable):
     knowledge_id: Optional[int] = Field(default=0, index=True, description='知识库ID')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(
+        sa_column=Column(DateTime,
+                         nullable=False,
+                         server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class Assistant(AssistantBase, table=True):
@@ -84,21 +89,59 @@ class AssistantDao(Assistant):
             return session.exec(statement).first()
 
     @classmethod
-    def get_assistants(cls, user_id: int, name: str, page: int, limit: int) -> (List[Assistant], int):
+    def get_assistants(cls, user_id: int, name: str, assistant_ids: List[int], page: int,
+                       limit: int) -> (List[Assistant], int):
         with session_getter() as session:
-            statement = select(Assistant).where(Assistant.user_id == user_id)
             count_statement = session.query(func.count(Assistant.id))
+            statement = select(Assistant)
+            if assistant_ids:
+                # 需要or 加入的条件
+                statement = statement.where(
+                    or_(Assistant.id.in_(assistant_ids), Assistant.user_id == user_id))
+                count_statement = count_statement.where(
+                    or_(Assistant.id.in_(assistant_ids), Assistant.user_id == user_id))
+            else:
+                statement = statement.where(Assistant.user_id == user_id)
+                count_statement = count_statement.where(Assistant.user_id == user_id)
+
             if name:
                 statement = statement.where(Assistant.name.like(f'%{name}%'))
                 count_statement = count_statement.where(Assistant.name.like(f'%{name}%'))
-            statement = statement.offset((page - 1) * limit).limit(limit).order_by(Assistant.create_time.desc())
+            statement = statement.offset(
+                (page - 1) * limit).limit(limit).order_by(Assistant.create_time.desc())
             return session.exec(statement).all(), session.exec(count_statement).scalar()
+
+    @classmethod
+    def get_assistants_by_access(cls, role_id: int, name: str, page_size: int,
+                                 page_num: int) -> List[Tuple[Assistant, RoleAccess]]:
+        statment = select(Assistant,
+                          RoleAccess).join(RoleAccess,
+                                           and_(RoleAccess.role_id == role_id,
+                                                RoleAccess.type == AccessType.FLOW.value,
+                                                RoleAccess.third_id == Assistant.id),
+                                           isouter=True)
+
+        if name:
+            statment = statment.where(Assistant.name.like('%' + name + '%'))
+        if page_num and page_size and page_num != 'undefined':
+            page_num = int(page_num)
+            statment = statment.order_by(RoleAccess.type.desc()).order_by(
+                Assistant.update_time.desc()).offset((page_num - 1) * page_size).limit(page_size)
+        with session_getter() as session:
+            return session.exec(statment).all()
+
+    @classmethod
+    def get_count_by_filters(cls, filters) -> int:
+        with session_getter() as session:
+            count_statement = session.query(func.count(Assistant.id))
+            return session.exec(count_statement.where(*filters)).scalar()
 
 
 class AssistantLinkDao(AssistantLink):
 
     @classmethod
-    def insert_batch(cls, assistant_id: int,
+    def insert_batch(cls,
+                     assistant_id: int,
                      tool_list: List[int] = None,
                      flow_list: List[str] = None,
                      knowledge_list: List[int] = None):
@@ -117,12 +160,11 @@ class AssistantLinkDao(AssistantLink):
             session.commit()
 
     @classmethod
-    def update_assistant_link(cls, assistant_id: int,
-                              tool_list: List[int],
-                              flow_list: List[str],
+    def update_assistant_link(cls, assistant_id: int, tool_list: List[int], flow_list: List[str],
                               knowledge_list: List[int]):
         with session_getter() as session:
-            session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id).delete()
+            session.query(AssistantLink).filter(
+                AssistantLink.assistant_id == assistant_id).delete()
             for one in tool_list:
                 session.add(AssistantLink(assistant_id=assistant_id, tool_id=one))
             for one in flow_list:
@@ -140,9 +182,8 @@ class AssistantLinkDao(AssistantLink):
     @classmethod
     def update_assistant_tool(cls, assistant_id: int, tool_list: List[int]):
         with session_getter() as session:
-            session.query(AssistantLink).filter(
-                AssistantLink.assistant_id == assistant_id,
-                AssistantLink.tool_id != 0).delete()
+            session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
+                                                AssistantLink.tool_id != 0).delete()
             for one in tool_list:
                 session.add(AssistantLink(assistant_id=assistant_id, tool_id=one))
             session.commit()
@@ -150,9 +191,8 @@ class AssistantLinkDao(AssistantLink):
     @classmethod
     def update_assistant_flow(cls, assistant_id: int, flow_list: List[str]):
         with session_getter() as session:
-            session.query(AssistantLink).filter(
-                AssistantLink.assistant_id == assistant_id,
-                AssistantLink.flow_id != '').delete()
+            session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
+                                                AssistantLink.flow_id != '').delete()
             for one in flow_list:
                 session.add(AssistantLink(assistant_id=assistant_id, flow_id=one))
             session.commit()
@@ -160,9 +200,8 @@ class AssistantLinkDao(AssistantLink):
     @classmethod
     def update_assistant_knowledge(cls, assistant_id: int, knowledge_list: List[int]):
         with session_getter() as session:
-            session.query(AssistantLink).filter(
-                AssistantLink.assistant_id == assistant_id,
-                AssistantLink.knowledge_id != 0).delete()
+            session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
+                                                AssistantLink.knowledge_id != 0).delete()
             for one in knowledge_list:
                 session.add(AssistantLink(assistant_id=assistant_id, knowledge_id=one))
             session.commit()

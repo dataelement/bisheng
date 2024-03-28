@@ -6,7 +6,9 @@ from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, Assistan
 from bisheng.cache import InMemoryCache
 from bisheng.database.models.assistant import Assistant, AssistantDao, AssistantLinkDao
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
+from bisheng.database.models.role_access import AccessType, RoleAcessDao
 from bisheng.database.models.user import UserDao
+from bisheng.database.models.user_role import UserRoleDao
 from bisheng.settings import settings
 from loguru import logger
 
@@ -15,17 +17,29 @@ class AssistantService:
     UserCache: InMemoryCache = InMemoryCache()
 
     @classmethod
-    def get_assistant(cls, user_id: int, name: str, page: int, limit: int) -> \
-            UnifiedResponseModel[List[AssistantSimpleInfo]]:
+    def get_assistant(cls,
+                      user_id: int,
+                      name: str = None,
+                      page: int = 1,
+                      limit: int = 20) -> UnifiedResponseModel[List[AssistantSimpleInfo]]:
         """
         获取助手列表
         """
         data = []
-        res, total = AssistantDao.get_assistants(user_id, name, page, limit)
-        # TODO zgq: 补充上权限管理可见的助手信息
+        # 权限管理可见的助手信息
+        assistant_ids_extra = []
+        user_role = UserRoleDao.get_user_roles(user_id)
+        if user_role:
+            role_ids = [role.id for role in user_role]
+            role_access = RoleAcessDao.get_role_acess(role_ids, AccessType.ASSITANT_READ)
+            if role_access:
+                assistant_ids_extra = [access.id for access in role_access]
+
+        res, total = AssistantDao.get_assistants(user_id, name, assistant_ids_extra, page, limit)
+
         for one in res:
-            simple_dict = one.model_dump(include={'id', 'name', 'desc', 'logo',
-                                                  'user_id', 'create_time', 'update_time'})
+            simple_dict = one.model_dump(
+                include={'id', 'name', 'desc', 'logo', 'user_id', 'create_time', 'update_time'})
             simple_dict['user_name'] = cls.get_user_name(one.user_id)
             data.append(AssistantSimpleInfo(**simple_dict))
         return resp_200(data={'data': data, 'total': total})

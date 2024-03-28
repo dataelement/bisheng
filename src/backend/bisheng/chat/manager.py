@@ -32,10 +32,10 @@ class ChatHistory(Subject):
         self.history: Dict[str, List[ChatMessage]] = defaultdict(list)
 
     def add_message(
-            self,
-            client_id: str,
-            chat_id: str,
-            message: ChatMessage,
+        self,
+        client_id: str,
+        chat_id: str,
+        message: ChatMessage,
     ):
         """Add a message to the chat history."""
         t1 = time.time()
@@ -184,7 +184,13 @@ class ChatManager:
                               websocket: WebSocket,
                               graph_data: dict = None):
         client_key = uuid.uuid4().hex
-        chat_client = ChatClient(client_key, client_id, chat_id, user_id, work_type, websocket, graph_data=graph_data)
+        chat_client = ChatClient(client_key,
+                                 client_id,
+                                 chat_id,
+                                 user_id,
+                                 work_type,
+                                 websocket,
+                                 graph_data=graph_data)
         await self.accept_client(client_key, chat_client, websocket)
         try:
             while True:
@@ -205,21 +211,25 @@ class ChatManager:
         except Exception as e:
             # Handle any exceptions that might occur
             logger.exception(str(e))
-            await self.close_client(client_key, code=status.WS_1011_INTERNAL_ERROR, reason='后端未知错误类型')
+            await self.close_client(client_key,
+                                    code=status.WS_1011_INTERNAL_ERROR,
+                                    reason='后端未知错误类型')
         finally:
             try:
-                await self.close_client(client_key, code=status.WS_1000_NORMAL_CLOSURE, reason='Client disconnected')
+                await self.close_client(client_key,
+                                        code=status.WS_1000_NORMAL_CLOSURE,
+                                        reason='Client disconnected')
             except Exception as e:
                 logger.exception(e)
             self.clear_client(client_key)
 
     async def handle_websocket(
-            self,
-            flow_id: str,
-            chat_id: str,
-            websocket: WebSocket,
-            user_id: int,
-            gragh_data: dict = None,
+        self,
+        flow_id: str,
+        chat_id: str,
+        websocket: WebSocket,
+        user_id: int,
+        gragh_data: dict = None,
     ):
         # 建立连接，并存储映射，兼容不复用ws 场景
         key_list = set([get_cache_key(flow_id, chat_id)])
@@ -335,6 +345,7 @@ class ChatManager:
                                         key_list=key_list)
 
         finally:
+            thread_pool.tear_down(key_list)  # 将进行中的任务进行cancel
             try:
                 await self.close_connection(flow_id=flow_id,
                                             chat_id=chat_id,
