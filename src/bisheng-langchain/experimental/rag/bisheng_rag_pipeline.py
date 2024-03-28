@@ -213,7 +213,7 @@ class BishengRagPipeline:
         if os.path.isdir(file_path):
             raise Exception(f'{file_path} is a directory.')
 
-        loader_params = copy.deepcopy(self.params['knowledge']['loader'])
+        loader_params = copy.deepcopy(self.params['loader'])
         loader_object = import_by_type(_type='documentloaders', name=loader_params.pop('type'))
         loader = loader_object(file_name=file_name, file_path=file_path, **loader_params)
 
