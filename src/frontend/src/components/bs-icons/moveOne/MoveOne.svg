@@ -1,0 +1,11 @@
+<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <g id="1">
+        <path id="Vector" fill-rule="evenodd" clip-rule="evenodd"
+            d="M11.6667 10.667L17.5001 11.8337L15.7501 13.0003L17.5001 14.7503L15.7501 16.5003L14.0001 14.7503L12.8334 16.5003L11.6667 10.667Z"
+            fill="currentColor" stroke="currentColor" stroke-width="1.66667" stroke-linecap="round"
+            stroke-linejoin="round" />
+        <path id="Vector_2"
+            d="M17.5 8.16667V4.33333C17.5 3.8731 17.1269 3.5 16.6667 3.5H3.33333C2.8731 3.5 2.5 3.8731 2.5 4.33333V15.6667C2.5 16.1269 2.8731 16.5 3.33333 16.5H8.75"
+            stroke="currentColor" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+</svg>

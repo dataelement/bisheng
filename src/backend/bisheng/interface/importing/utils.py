@@ -74,7 +74,8 @@ def import_custom_component(custom_component: str) -> CustomComponent:
 
 def import_inputoutput(input_output: str) -> Any:
     """Import output parser from output parser name"""
-    return import_module(f'from bisheng_langchain.input_output import {input_output}')
+    from bisheng.interface.inputoutput.base import input_output_creator
+    return input_output_creator.type_to_loader_dict[input_output]
 
 
 def import_output_parser(output_parser: str) -> Any:
@@ -84,7 +85,8 @@ def import_output_parser(output_parser: str) -> Any:
 
 def import_chat_llm(llm: str) -> BaseChatModel:
     """Import chat llm from llm name"""
-    return import_class(f'langchain_community.chat_models.{llm}')
+    from bisheng.interface.llms.base import llm_creator
+    return llm_creator.type_to_loader_dict[llm]
 
 
 def import_chain_contribute_llm(llm: str) -> BaseChatModel:
@@ -164,26 +166,14 @@ def import_tool(tool: str) -> BaseTool:
 
 def import_chain(chain: str) -> Type[Chain]:
     """Import chain from chain name"""
-    from bisheng.interface.chains.custom import CUSTOM_CHAINS
-
-    if chain in CUSTOM_CHAINS:
-        return CUSTOM_CHAINS[chain]
-    if chain == 'SQLDatabaseChain':
-        return import_class('langchain_experimental.sql.SQLDatabaseChain')
-
-    from bisheng_langchain import chains
-    if chain in chains.__all__:
-        return import_class(f'bisheng_langchain.chains.{chain}')
-
-    return import_class(f'langchain.chains.{chain}')
+    from bisheng.interface.chains.base import chain_creator
+    return chain_creator.type_to_loader_dict[chain]
 
 
 def import_embedding(embedding: str) -> Any:
     """Import embedding from embedding name"""
-    from bisheng_langchain import embeddings
-    if embedding in embeddings.__all__:
-        return import_class(f'bisheng_langchain.embeddings.{embedding}')
-    return import_class(f'langchain.embeddings.{embedding}')
+    from bisheng.interface.embeddings.base import embedding_creator
+    return embedding_creator.type_to_loader_dict[embedding]
 
 
 def import_vectorstore(vectorstore: str) -> Any:

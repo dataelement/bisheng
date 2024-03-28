@@ -120,7 +120,7 @@ export default function FileLibPage() {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable((param) =>
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
         readFileLibDatabase(param.page, param.pageSize, param.keyword)
     )
 

@@ -56,16 +56,16 @@ export function useCopyText() {
 }
 
 // 表格通用逻辑（分页展示、表格数据、关键词检索）
-export function useTable(apiFun) {
+export function useTable<T extends object>(param, apiFun) {
 
     const [page, setPage] = useState({
         page: 1,
-        pageSize: 20,
+        pageSize: param.pageSize || 20,
         keyword: "",
     });
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
-    const [data, setData] = useState([]);
+    const [data, setData] = useState<T[]>([]);
 
     const paramRef = useRef({});
 
@@ -84,8 +84,12 @@ export function useTable(apiFun) {
     }
     const debounceLoad = useDebounce(loadData, 600, false)
 
+    // 记录旧值
+    const prevValueRef = useRef(page);
     useEffect(() => {
-        debounceLoad();
+        // 排除页码防抖
+        prevValueRef.current.page === page.page ? debounceLoad() : loadData()
+        prevValueRef.current = page
     }, [page])
 
     return {

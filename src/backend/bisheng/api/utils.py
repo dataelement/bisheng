@@ -113,6 +113,7 @@ async def build_flow(graph_data: dict,
                 if 'collection_name' in kwargs and 'index_name' in vertex.params:
                     vertex.params['index_name'] = kwargs['collection_name']
 
+                # 临时目录处理 tmp_{embeding}_{loader}_{chat_id}
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
                     vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
                 elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
@@ -165,8 +166,8 @@ async def build_flow_no_yield(graph_data: dict,
     except Exception as exc:
         logger.exception(exc)
         raise exc
-
-    for i, vertex in enumerate(graph.generator_build(), 1):
+    sorted_vertices = graph.topological_sort()
+    for vertex in sorted_vertices:
         try:
             # 如果存在文件，当前不操作文件，避免重复操作
             if not process_file and vertex.base_type == 'documentloaders':
@@ -233,8 +234,8 @@ def access_check(payload: dict, owner_user_id: int, target_id: int, type: Access
 
 
 def get_L2_param_from_flow(
-        flow_data: dict,
-        flow_id: str,
+    flow_data: dict,
+    flow_id: str,
 ):
     graph = Graph.from_payload(flow_data)
     node_id = []
@@ -301,7 +302,8 @@ def raw_frontend_data_is_valid(raw_frontend_data):
 def is_valid_data(frontend_node, raw_frontend_data):
     """Check if the data is valid for processing."""
 
-    return frontend_node and 'template' in frontend_node and raw_frontend_data_is_valid(raw_frontend_data)
+    return frontend_node and 'template' in frontend_node and raw_frontend_data_is_valid(
+        raw_frontend_data)
 
 
 def update_template_values(frontend_template, raw_template):
@@ -385,12 +387,18 @@ def parse_gpus(gpu_str: str) -> List[Dict]:
         gpu_id_elem = one.getElementsByTagName('minor_number')[0]
         gpu_total_mem = fb_mem_elem.getElementsByTagName('total')[0]
         free_mem = fb_mem_elem.getElementsByTagName('free')[0]
-        gpu_utility_elem = one.getElementsByTagName('utilization')[0].getElementsByTagName('gpu_util')[0]
+        gpu_utility_elem = one.getElementsByTagName('utilization')[0].getElementsByTagName(
+            'gpu_util')[0]
         res.append({
-            'gpu_uuid': gpu_uuid_elem.firstChild.data,
-            'gpu_id': gpu_id_elem.firstChild.data,
-            'gpu_total_mem': '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
-            'gpu_used_mem': '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
-            'gpu_utility': round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
+            'gpu_uuid':
+            gpu_uuid_elem.firstChild.data,
+            'gpu_id':
+            gpu_id_elem.firstChild.data,
+            'gpu_total_mem':
+            '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
+            'gpu_used_mem':
+            '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
+            'gpu_utility':
+            round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
         })
     return res

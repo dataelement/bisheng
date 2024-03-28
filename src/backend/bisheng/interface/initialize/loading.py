@@ -221,7 +221,7 @@ def instantiate_wrapper(node_type, class_object, params):
             return class_method(**params)
         raise ValueError(f'Method {method} not found in {class_object}')
     if node_type == 'DallEAPIWrapper' and is_openai_v1():
-        if 'openai_proxy' in params:
+        if 'openai_proxy' in params and params['openai_proxy']:
             client_params = langchain_bug_openv1(params)
             client_params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
             params['client'] = openai.OpenAI(**client_params).images
@@ -244,20 +244,9 @@ def instantiate_llm(node_type, class_object, params: Dict):
     # This is a workaround so JinaChat works until streaming is implemented
     # if "openai_api_base" in params and "jina" in params["openai_api_base"]:
     # False if condition is True
-    if is_openai_v1() and 'openai_proxy' in params:
-        client_params = {
-            'api_key': params['openai_api_key'],
-            'organization': params.get('openai_organization'),
-            'base_url': params.get('openai_api_base'),
-            'timeout': params.get('request_timeout', 20),
-            'max_retries': params.get('max_retries', 1),
-            'default_headers': params.get('default_headers'),
-            'default_query': params.get('default_query')
-        }
-        client_params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
-        params['client'] = openai.OpenAI(**client_params).chat.completions
-        client_params['http_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
-        params['async_client'] = openai.AsyncOpenAI(**client_params).chat.completions
+    if is_openai_v1() and params.get('openai_proxy'):
+        params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
+        params['http_async_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
 
     if node_type == '':
         anthropic_api_key = params.pop('anthropic_api_key', None)
@@ -467,20 +456,9 @@ def instantiate_toolkit(node_type, class_object: Type[BaseToolkit], params: Dict
 def instantiate_embedding(class_object, params: Dict):
     # params.pop('model', None)
     try:
-        if 'openai_proxy' in params:
-            client_params = {
-                'api_key': params['openai_api_key'],
-                'organization': params.get('openai_organization'),
-                'base_url': params.get('openai_api_base'),
-                'timeout': params.get('request_timeout', 20),
-                'max_retries': params.get('max_retries', 1),
-                'default_headers': params.get('default_headers'),
-                'default_query': params.get('default_query')
-            }
-            client_params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
-            params['client'] = openai.OpenAI(**client_params).embeddings
-            client_params['http_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
-            params['async_client'] = openai.AsyncOpenAI(**client_params).embeddings
+        if params.get('openai_proxy'):
+            params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
+            params['http_async_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
 
         return class_object(**params)
     except ValidationError:

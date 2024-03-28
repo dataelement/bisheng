@@ -150,9 +150,12 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
     # 处理vectordb
     vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
     try:
-        pk = vectore_client.col.query(expr=f'file_id in {file_ids}',
-                                      output_fields=['pk'],
-                                      timeout=10)
+        if isinstance(vectore_client.col, Collection):
+            pk = vectore_client.col.query(expr=f'file_id in {file_ids}',
+                                          output_fields=['pk'],
+                                          timeout=10)
+        else:
+            pk = []
     except Exception:
         # 重试一次
         logger.error('timeout_except')
@@ -502,3 +505,23 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
                              extra_meta=file.extra_meta)
             except Exception as e:
                 logger.error(e)
+
+
+def delete_vector(collection_name: str, partition_key: str):
+    embeddings = FakeEmbedding()
+    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+    if isinstance(vectore_client.col, Collection):
+        if partition_key:
+            pass
+        else:
+            res = vectore_client.col.drop(timeout=1)
+            logger.info('act=delete_milvus col={} res={}', collection_name, res)
+
+
+def delete_es(index_name: str):
+    embeddings = FakeEmbedding()
+    esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+
+    if esvectore_client:
+        res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
+        logger.info(f'act=delete_es index={index_name} res={res}')

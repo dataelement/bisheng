@@ -3,10 +3,10 @@
     "prompt": "提示",
     "login": {
         "slogen": "便捷、灵活、可靠的企业级大模型应用开发平台",
-        "account": "账号",
+        "account": "用户名",
         "password": "密码",
         "confirmPassword": "确认密码",
-        "noAccountRegister": "没有账号，注册",
+        "noAccountRegister": "没有账号？注册",
         "haveAccountLogin": "已有账号，登录",
         "loginButton": "登 录",
         "registerButton": "注 册",
@@ -21,8 +21,8 @@
         "pleaseEnterCaptcha": "请输入验证码"
     },
     "menu": {
-        "app": "应 用",
-        "skills": "技 能",
+        "app": "会 话",
+        "skills": "构 建",
         "knowledge": "知 识",
         "models": "模 型",
         "system": "系 统",
@@ -57,9 +57,9 @@
     },
     "skills": {
         "manageTemplate": "管理技能模板",
-        "createNew": "新建",
+        "createNew": "新建技能",
         "manageProjects": "这里管理您的个人项目，对技能上下线、编辑等等",
-        "skillSearch": "技能搜索",
+        "skillSearch": "搜索您需要的技能",
         "confirmDeleteSkill": "确认删除该技能？",
         "backToSkillList": "返回技能列表",
         "skillTemplateManagement": "技能模板管理，模板对所有用户可见，支持拖拽排序、删除操作",

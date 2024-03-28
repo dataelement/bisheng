@@ -226,8 +226,15 @@ class ChatZhipuAI(BaseChatModel):
     ) -> ChatResult:
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {**params, **kwargs}
-
         response = self.completion_with_retry(messages=message_dicts, **params)
+        if response['code'] == 1301:
+            response = {'code': 200, 
+                        'msg': '操作成功', 
+                        'data': {'request_id': '0', 'task_id': '0', 'task_status': 'SUCCESS', 
+                                 'choices': [{'role': 'assistant', 'content': '""'}], 
+                                 'usage': {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}}, 
+                        'success': True}
+
         return self._create_chat_result(response)
 
     async def _agenerate(

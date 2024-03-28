@@ -13,7 +13,7 @@ from langchain.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackM
 from langchain.chat_models.base import BaseChatModel
 from langchain.schema import ChatGeneration, ChatResult
 from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
-                                       HumanMessage, SystemMessage)
+                                       HumanMessage, SystemMessage, ToolMessage)
 from langchain.utils import get_from_dict_or_env
 from langchain_core.pydantic_v1 import Field, root_validator
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
@@ -60,11 +60,24 @@ def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
             additional_kwargs = {'function_call': dict(_dict['function_call'])}
         else:
             additional_kwargs = {}
+        if _dict.get("tool_calls"):
+            additional_kwargs = {'tool_calls': _dict['tool_calls']}
+        else:
+            additional_kwargs = {}
         return AIMessage(content=content, additional_kwargs=additional_kwargs)
     elif role == 'system':
         return SystemMessage(content=_dict['content'])
     elif role == 'function':
         return FunctionMessage(content=_dict['content'], name=_dict['name'])
+    elif role == "tool":
+        additional_kwargs = {}
+        if "name" in _dict:
+            additional_kwargs["name"] = _dict["name"]
+        return ToolMessage(
+            content=_dict.get("content", ""),
+            tool_call_id=_dict.get("tool_call_id"),
+            additional_kwargs=additional_kwargs,
+        )
     else:
         return ChatMessage(content=_dict['content'], role=role)
 
@@ -78,6 +91,8 @@ def _convert_message_to_dict(message: BaseMessage) -> dict:
         message_dict = {'role': 'assistant', 'content': message.content}
         if 'function_call' in message.additional_kwargs:
             message_dict['function_call'] = message.additional_kwargs['function_call']
+        if "tool_calls" in message.additional_kwargs:
+            message_dict["tool_calls"] = message.additional_kwargs["tool_calls"]
     elif isinstance(message, SystemMessage):
         message_dict = {'role': 'system', 'content': message.content}
     elif isinstance(message, FunctionMessage):
@@ -85,6 +100,12 @@ def _convert_message_to_dict(message: BaseMessage) -> dict:
             'role': 'function',
             'content': message.content,
             'name': message.name,
+        }
+    elif isinstance(message, ToolMessage):
+        message_dict = {
+            "role": "tool",
+            "content": message.content,
+            "tool_call_id": message.tool_call_id,
         }
     else:
         raise ValueError(f'Got unknown type {message}')
@@ -105,7 +126,7 @@ class ChatQWen(BaseChatModel):
         .. code-block:: python
 
             from bisheng_langchain.chat_models import ChatQWen
-            chat_miniamaxai = ChatQWen(model_name="qwen-turbo")
+            chat_qwen = ChatQWen(model_name="qwen-turbo")
     """
 
     client: Optional[Any]  #: :meta private:
@@ -192,7 +213,11 @@ class ChatQWen(BaseChatModel):
             return self.client.post(url=url, json=inp).json()
 
         rsp_dict = _completion_with_retry(**kwargs)
-        if 'output' not in rsp_dict:
+        if 'code' in rsp_dict and rsp_dict['code'] == 'DataInspectionFailed':
+            output_res = {'choices': [{'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': rsp_dict['message']}}]} 
+            usage_res = {'total_tokens': 2, 'output_tokens': 1, 'input_tokens': 1}
+            return output_res, usage_res
+        elif 'output' not in rsp_dict:
             logger.error(f'proxy_llm_error resp={rsp_dict}')
             message = rsp_dict['message']
             raise Exception(message)
@@ -277,7 +302,7 @@ class ChatQWen(BaseChatModel):
             inner_completion = ''
             role = 'assistant'
             params['stream'] = True
-            function_call: Optional[dict] = None
+            tool_calls: Optional[list[dict]] = None
             async for is_error, stream_resp in self.acompletion_with_retry(messages=message_dicts,
                                                                            **params):
                 output = None
@@ -293,18 +318,18 @@ class ChatQWen(BaseChatModel):
                         role = choice['message'].get('role', role)
                         token = choice['message'].get('content', '')
                         inner_completion += token or ''
-                        _function_call = choice['message'].get('function_call')
+                        _tool_calls = choice['message'].get('tool_calls')
                         if run_manager:
                             await run_manager.on_llm_new_token(token)
-                        if _function_call:
-                            if function_call is None:
-                                function_call = _function_call
+                        if _tool_calls:
+                            if tool_calls is None:
+                                tool_calls = _tool_calls
                             else:
-                                function_call['arguments'] += _function_call['arguments']
+                                tool_calls[0]['arguments'] += _tool_calls[0]['arguments']
             message = _convert_dict_to_message({
                 'content': inner_completion,
                 'role': role,
-                'function_call': function_call,
+                'tool_calls': tool_calls,
             })
             return ChatResult(generations=[ChatGeneration(message=message)])
         else:

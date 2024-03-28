@@ -138,6 +138,7 @@ class TextRequestsWrapper(BaseModel):
     headers: Optional[Dict[str, str]] = None
     aiosession: Optional[aiohttp.ClientSession] = None
     auth: Optional[Any] = None
+    request_timeout: Union[float, Tuple[float, float]] = 120
 
     class Config:
         """Configuration for this pydantic object."""
@@ -147,7 +148,10 @@ class TextRequestsWrapper(BaseModel):
 
     @property
     def requests(self) -> Requests:
-        return Requests(headers=self.headers, aiosession=self.aiosession, auth=self.auth)
+        return Requests(headers=self.headers,
+                        aiosession=self.aiosession,
+                        auth=self.auth,
+                        request_timeout=self.request_timeout)
 
     def get(self, url: str, **kwargs: Any) -> str:
         """GET the URL and return the text."""

@@ -14,7 +14,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
     const { setSuccessData } = useContext(alertContext);
     const { t } = useTranslation()
 
-    const { page, pageSize, data: tasks, total, setPage, search, reload, filterData } = useTable((param) =>
+    const { page, pageSize, data: tasks, total, setPage, search, reload, filterData } = useTable({}, (param) =>
         getTasksApi({
             page: param.page,
             limit: param.pageSize,

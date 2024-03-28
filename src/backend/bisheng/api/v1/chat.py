@@ -3,6 +3,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from bisheng.api.services.chat_imp import comment_answer
+from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList, InitResponse,
                                     StreamData, UnifiedResponseModel, resp_200)
@@ -10,7 +11,7 @@ from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
-from bisheng.database.models.message import ChatMessage, ChatMessageRead
+from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
@@ -18,7 +19,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketException, sta
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import delete, func
+from sqlalchemy import func
 from sqlmodel import select
 
 router = APIRouter(tags=['Chat'])
@@ -54,12 +55,16 @@ def get_chatmessage(*,
 def del_chat_id(*, chat_id: str, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
+    # 获取一条消息
+    message = ChatMessageDao.get_latest_message_by_chatid(chat_id)
+    if message:
+        # 处理临时数据
+        col_name = f'tmp_{message.flow_id.hex}_{chat_id}'
+        logger.info('tmp_delete_milvus col={}', col_name)
+        delete_vector(col_name, None)
+        delete_es(col_name)
+        ChatMessageDao.delete_by_user_chat_id(payload.get('user_id'), chat_id)
 
-    statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id,
-                                          ChatMessage.user_id == payload.get('user_id'))
-    with session_getter() as session:
-        session.exec(statement)
-        session.commit()
     return resp_200(message='删除成功')
 
 

@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
 const apiRoutes = ["^/api/", "/health"];
-
+import path from "path";
 // Use environment variable to determine the target.
 const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
 
@@ -39,6 +39,11 @@ export default defineConfig(() => {
             reactdrop: ['react-window', 'react-beautiful-dnd', 'react-dropzone']
           }
         }
+      }
+    },
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src')
       }
     },
     plugins: [

@@ -1,7 +1,7 @@
 import axios from "axios";
-
+import { message,toast } from "@/components/bs-ui/toast/use-toast";
+import i18next from "i18next";
 axios.defaults.withCredentials = true;
-
 const customAxios = axios.create({
     // 配置
 });
@@ -23,7 +23,12 @@ customAxios.interceptors.response.use(function (response) {
         return Promise.reject(error);
     }
     // app 弹窗
-    window.errorAlerts([error.message])
+    toast({
+        title: `${i18next.t('prompt')}`,
+        variant: 'error',
+        description: error.message
+    })
+    // window.errorAlerts([error.message])
     return Promise.reject(null);
 })
 
@@ -38,7 +43,11 @@ export function captureAndAlertRequestErrorHoc(apiFunc, iocFunc?) {
         console.log('error :>> ', error);
         iocFunc?.(error)
         // 弹窗
-        window.errorAlerts([error])
+        toast({
+            title: `${i18next.t('prompt')}`,
+            variant: 'error',
+            description: error
+        })
         console.error('逻辑异常 :>> ', error);
         return false
     })

@@ -1,14 +1,15 @@
 # Path: src/backend/bisheng/database/models/flow.py
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from bisheng.database.models.role_access import AccessType, RoleAccess
 # if TYPE_CHECKING:
 from pydantic import validator
-from sqlalchemy import Column, DateTime, String, text
+from sqlalchemy import Column, DateTime, String, and_, func, text
 from sqlmodel import JSON, Field, select
 
 
@@ -86,6 +87,14 @@ class FlowDao(FlowBase):
             return session.exec(statement).first()
 
     @classmethod
+    def get_flow_by_ids(cls, flow_ids: List[str]) -> List[Flow]:
+        if not flow_ids:
+            return []
+        with session_getter() as session:
+            statement = select(Flow).where(Flow.id.in_(flow_ids))
+            return session.exec(statement).first()
+
+    @classmethod
     def get_flow_by_user(cls, user_id: int) -> List[Flow]:
         with session_getter() as session:
             statement = select(Flow).where(Flow.user_id == user_id)
@@ -96,3 +105,27 @@ class FlowDao(FlowBase):
         with session_getter() as session:
             statement = select(Flow).where(Flow.user_id == user_id, Flow.name == name)
             return session.exec(statement).first()
+
+    @classmethod
+    def get_flow_by_access(cls, role_id: int, name: str, page_size: int,
+                           page_num: int) -> List[Tuple[Flow, RoleAccess]]:
+        statment = select(Flow, RoleAccess).join(RoleAccess,
+                                                 and_(RoleAccess.role_id == role_id,
+                                                      RoleAccess.type == AccessType.FLOW.value,
+                                                      RoleAccess.third_id == Flow.id),
+                                                 isouter=True)
+
+        if name:
+            statment = statment.where(Flow.name.like('%' + name + '%'))
+        if page_num and page_size and page_num != 'undefined':
+            page_num = int(page_num)
+            statment = statment.order_by(RoleAccess.type.desc()).order_by(
+                Flow.update_time.desc()).offset((page_num - 1) * page_size).limit(page_size)
+        with session_getter() as session:
+            return session.exec(statment).all()
+
+    @classmethod
+    def get_count_by_filters(cls, filters) -> int:
+        with session_getter() as session:
+            count_statement = session.query(func.count(Flow.id))
+            return session.exec(count_statement.where(*filters)).scalar()
