@@ -222,8 +222,8 @@ export async function updataOnlineState(id, updatedFlow, open) {
  * @returns {Promise<any>}.
  * @throws .
  */
-export async function readOnlineFlows(page: number = 1) {
-    const { data, total }: { data: any, total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${100}&status=2`);
+export async function readOnlineFlows(page: number = 1, searchKey: string = "") {
+    const data: { data: any, total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${100}&status=2&name=${searchKey}`);
     return data;
 }
 

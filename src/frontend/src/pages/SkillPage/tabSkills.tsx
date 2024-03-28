@@ -6,7 +6,6 @@ import { MoveOneIcon } from "../../components/bs-icons/moveOne";
 import { Button } from "../../components/bs-ui/button";
 import { SearchInput } from "../../components/bs-ui/input";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
-import CardComponent from "../../components/cardComponent";
 import { userContext } from "../../contexts/userContext";
 import { readTempsDatabase } from "../../controllers/API";
 import { deleteFlowFromDatabase, readFlowsFromDatabase, saveFlowToDatabase, updataOnlineState } from "../../controllers/API/flow";
@@ -17,6 +16,7 @@ import { generateUUID } from "../../utils";
 import CreateTemp from "./components/CreateTemp";
 import SkillTemps from "./components/SkillTemps";
 import Templates from "./temps";
+import CardComponent from "../../components/bs-comp/cardComponent";
 
 export default function Skills() {
     const { t } = useTranslation()

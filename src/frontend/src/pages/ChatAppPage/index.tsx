@@ -22,7 +22,7 @@ export default function SkillChatPage() {
     const [flow, setFlow] = useState<FlowType>(null)
     const [onlineFlows, setOnlineFlows] = useState([])
     useEffect(() => {
-        readOnlineFlows().then(setOnlineFlows)
+        readOnlineFlows().then((res) => setOnlineFlows(res.data))
     }, [])
     // 对话列表
     const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat } = useChatList()

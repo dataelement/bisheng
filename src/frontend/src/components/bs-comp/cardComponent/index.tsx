@@ -1,25 +1,27 @@
 import { useState } from "react";
-import { DelIcon } from "../bs-icons/del";
-import { GoIcon } from "../bs-icons/go";
-import { PlusIcon } from "../bs-icons/plus";
-import { SettingIcon } from "../bs-icons/setting";
-import { SkillIcon } from "../bs-icons/skill";
-import { UserIcon } from "../bs-icons/user";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../bs-ui/card";
-import { Switch } from "../ui/switch";
-import { AddToIcon } from "../bs-icons/addTo";
+import { DelIcon } from "../../bs-icons/del";
+import { GoIcon } from "../../bs-icons/go";
+import { PlusIcon } from "../../bs-icons/plus";
+import { SettingIcon } from "../../bs-icons/setting";
+import { SkillIcon } from "../../bs-icons/skill";
+import { UserIcon } from "../../bs-icons/user";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
+import { Switch } from "../../ui/switch";
+import { AddToIcon } from "../../bs-icons/addTo";
+import { cname } from "@/components/bs-ui/utils";
 
 interface IProps<T> {
   data: T,
   /** id为''时，表示新建 */
   id?: number | string,
-  type: "skill" | "user" | "setting", // 类型
+  type: "skill" | "sheet" | "user" | "setting", // 技能列表｜侧边弹窗列表
   title: string,
   edit?: boolean,
   description: React.ReactNode | string,
   checked?: boolean,
   user?: string,
   isAdmin?: boolean,
+  footer?: React.ReactNode,
   onClick?: () => void,
   onAddTemp?: (data: T) => void,
   onCheckedChange?: (b: boolean, data: T) => Promise<any>
@@ -53,6 +55,10 @@ const gradients = [
 // 'bg-fuchsia-700',
 // 'bg-pink-600',
 // 'bg-rose-600'
+export function TitleIconBg({ id, className = '', children = <SkillIcon /> }) {
+  return <div className={cname(`rounded-sm flex justify-center items-center ${gradients[parseInt(id + '', 16) % gradients.length]}`, className)}>{children}</div>
+}
+
 
 export default function CardComponent<T>({
   id = '',
@@ -64,6 +70,7 @@ export default function CardComponent<T>({
   checked,
   isAdmin,
   description,
+  footer = null,
   onClick,
   onDelete,
   onAddTemp,
@@ -94,11 +101,31 @@ export default function CardComponent<T>({
   </Card>
 
 
+  // 侧边弹窗列表
+  if (type === 'sheet') return <Card className="group w-[320px] cursor-pointer bg-gray-100 hover:bg-gray-200 hover:shadow-none" onClick={onClick}>
+    <CardHeader className="pb-2">
+      <CardTitle>
+        <div className="flex gap-2 pb-2 items-center">
+          <TitleIconBg id={id}></TitleIconBg>
+          <p className=" align-middle">{title}</p>
+        </div>
+        {/* <span></span> */}
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="h-[60px] overflow-auto scrollbar-hide mb-2">
+      <CardDescription>{description}</CardDescription>
+    </CardContent>
+    <CardFooter className=" block">
+      {footer}
+    </CardFooter>
+  </Card>
 
+
+  // 技能组件
   return <Card className="group w-[320px] cursor-pointer" onClick={onClick}>
     <CardHeader>
       <div className="flex justify-between pb-2">
-        <div className={`rounded-sm ${gradients[parseInt(id + '', 16) % gradients.length]}`}><SkillIcon /></div>
+        <TitleIconBg id={id}></TitleIconBg>
         {edit && <Switch checked={_checked} onCheckedChange={handleCheckedChange} onClick={e => e.stopPropagation()}></Switch>}
       </div>
       <CardTitle className="">{title}</CardTitle>

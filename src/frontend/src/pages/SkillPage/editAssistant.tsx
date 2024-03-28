@@ -1,11 +1,17 @@
+import { useAssistantStore } from "@/store/assistantStore";
 import Header from "./components/editAssistant/Header";
 import Prompt from "./components/editAssistant/Prompt";
 import Setting from "./components/editAssistant/Setting";
 import TestChat from "./components/editAssistant/TestChat";
+import { useEffect } from "react";
 
 export default function editAssistant() {
 
-    // zuland
+    // assistant data
+    const loadData = useAssistantStore(state => state.loadAssistantState)
+    useEffect(() => {
+        loadData()
+    }, [])
 
     return <div className="bg-[#F4F5F8]">
         <Header></Header>

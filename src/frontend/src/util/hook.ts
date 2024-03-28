@@ -56,7 +56,7 @@ export function useCopyText() {
 }
 
 // 表格通用逻辑（分页展示、表格数据、关键词检索）
-export function useTable<T extends {}>(param, apiFun) {
+export function useTable<T extends object>(param, apiFun) {
 
     const [page, setPage] = useState({
         page: 1,

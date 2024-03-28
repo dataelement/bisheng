@@ -1,8 +1,8 @@
 import * as React from "react"
 import { cname } from "../utils"
 import { SearchIcon } from "../../bs-icons/search"
-import { MinusCircleIcon } from "lucide-react"
 import { generateUUID } from "../utils"
+import { MinusCircledIcon } from "@radix-ui/react-icons"
 export interface InputProps
     extends React.InputHTMLAttributes<HTMLInputElement> { }
 
@@ -64,37 +64,46 @@ Textarea.displayName = "Textarea"
  * input list
  */
 const InputList = React.forwardRef<HTMLDivElement, InputProps & {
+    value?: string[],
     inputClassName?: string,
     defaultValue?: string[],
     onChange?: (values: string[]) => void
 }>(
-    ({ className, inputClassName, defaultValue, ...props }, ref) => {
-        // TODO key
-        const [values, setValues] = React.useState<{ id: string; value: string }[]>(
-            defaultValue && defaultValue.length > 0
-                ? defaultValue.map((value) => ({ id: generateUUID(8), value }))
+    ({ className, inputClassName, value = [], defaultValue = [], ...props }, ref) => {
+
+        const initValue = (values) => {
+            return values && values.length > 0
+                ? values.map((value) => ({ id: generateUUID(8), value }))
                 : [{ id: generateUUID(8), value: '' }]
-        )
+        }
+        // 
+        const [values, setValues] = React.useState<{ id: string; value: string }[]>(initValue(defaultValue))
+        console.log(values);
+
+
+        React.useEffect(() => {
+            setValues(initValue(value))
+        }, [value])
         // input change
         const handleChange = (value, id, index) => {
             let newValues = null
             // push
             if (index === values.length - 1) {
-                newValues = [...values, {id:generateUUID(8),value:''}]
+                newValues = [...values, { id: generateUUID(8), value: '' }]
             }
-            newValues = (newValues || values).map((item) =>  item.id === id ? {id:id,value:value} : item)
+            newValues = (newValues || values).map((item) => item.id === id ? { id: id, value: value } : item)
             setValues(newValues)
-            props.onChange?.(newValues.map((item)=>item.value))
+            props.onChange?.(newValues.map((item) => item.value))
         }
 
         // delete input
         const handleDel = (id) => {
-            setValues(values.filter((item) =>  item.id !== id))
+            setValues(values.filter((item) => item.id !== id))
         }
 
         return <div className={cname('', className)}>
             {
-                values.map((item,index) => (
+                values.map((item, index) => (
                     <div className="relative mt-2">
                         <Input
                             key={item.id}
@@ -103,7 +112,7 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                             placeholder={props.placeholder || ''}
                             onChange={(e) => handleChange(e.target.value, item.id, index)}
                         ></Input>
-                        {index !== values.length - 1 && <MinusCircleIcon onClick={() => handleDel(item.id)} size={18} className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
+                        {index !== values.length - 1 && <MinusCircledIcon onClick={() => handleDel(item.id)} className="absolute top-2.5 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
                     </div>
                 ))
             }

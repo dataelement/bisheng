@@ -2,12 +2,12 @@ import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
 import { SearchInput } from "../../components/bs-ui/input";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
-import CardComponent from "../../components/cardComponent";
 import { readFlowsFromDatabase } from "../../controllers/API/flow";
 import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import CreateAssistant from "./components/CreateAssistant";
 import { Dialog, DialogTrigger } from "../../components/bs-ui/dialog";
+import CardComponent from "../../components/bs-comp/cardComponent";
 
 export default function Assistants() {
     const { t } = useTranslation()

@@ -1,26 +1,18 @@
-import { useEffect, useState } from "react";
 import { Button } from "@/components/bs-ui/button";
 import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { useEffect, useState } from "react";
 
-export default function EditAssistantDialog({ onOpenChange }) {
+export default function EditAssistantDialog({ name, desc, onSave }) {
 
     // State for form fields
-    const [formData, setFormData] = useState({
-        name: '',
-        desc: ''
-    });
+    const [formData, setFormData] = useState({ name: '', desc: '' });
 
-    // 初始化表单
     useEffect(() => {
-        console.log(111111);
-        
-        setFormData({
-            name: 'xxxxxx',
-            desc: 'ewwerwerwrwerwerwerwerweewwerwerwrwerwerwerwerwe'
-        })
-    }, [])
+        setFormData({ name, desc })
+    }, [name, desc])
+    // console.log(formData, name, desc);
 
     // State for errors
     const [errors, setErrors] = useState<any>({});
@@ -71,23 +63,15 @@ export default function EditAssistantDialog({ onOpenChange }) {
     const handleSubmit = (e) => {
         e.preventDefault();
         const isValid = validateForm();
+        // console.log('Form data:', errors);
+        if (!isValid) return toast({
+            title: '提示',
+            variant: 'error',
+            description: Object.keys(errors).map(key => errors[key]),
+        })
 
-        if (isValid) {
-            console.log('Form data:', formData);
-            // Proceed with form submission (e.g., API call)
-            // Reset form or show a success message
-            toast({
-                title: '提示',
-                variant: 'error',
-                description: ['您的助手已成功更2222新。您的助手已成功更2222新。您的助手已成功更2222新。', '您的助手已成功更2222新。']
-            })
-            // message({
-            //     title: '保存成功',
-            //     variant: 'success',
-            //     description: ''
-            // })
-            onOpenChange(false)
-        }
+            onSave(formData)
+        
     };
 
     return <DialogContent className="sm:max-w-[425px]">
