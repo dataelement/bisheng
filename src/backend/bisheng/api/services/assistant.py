@@ -1,21 +1,13 @@
-import json
-from typing import Any, List, Optional
+from typing import Any, List
 
 from bisheng.api.errcode.assistant import AssistantNotExistsError
-from bisheng.api.services.utils import set_flow_knowledge_id
-from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
-                                    InputRequest, UnifiedResponseModel, resp_200)
+                                    UnifiedResponseModel, resp_200)
 from bisheng.cache import InMemoryCache
-from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLink,
-                                               AssistantLinkDao)
-from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.assistant import Assistant, AssistantDao, AssistantLinkDao
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.database.models.user import UserDao
 from bisheng.settings import settings
-from bisheng_langchain.gpts.load_tools import load_tools
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.tools import BaseTool, Tool
 from loguru import logger
 
 
@@ -158,6 +150,14 @@ class AssistantService:
         return resp_200(data={'data': tool_list, 'total': len(tool_list)})
 
     @classmethod
+    def get_models(cls) -> UnifiedResponseModel:
+        llm_list = cls.get_gpts_conf('llms')
+        res = []
+        for one in llm_list:
+            res.append({'id': one['model_name'], 'model_name': one['model_name']})
+        return resp_200(data=res)
+
+    @classmethod
     def update_tool_list(cls, assistant_id: int, tool_list: List[int]) -> UnifiedResponseModel:
         """  更新助手的工具列表 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
@@ -215,50 +215,3 @@ class AssistantService:
     def get_gpts_tools(cls, user: Any) -> List[GptsTools]:
         user_id = user.get('user_id')
         return GptsToolsDao.get_list_by_user(user_id)
-
-    @classmethod
-    async def init_tools(cls, assistant: Assistant,
-                         llm: Optional[BaseLanguageModel]) -> List[BaseTool]:
-        """通过名称获取tool 列表
-           tools_name_param:: {name: params}
-        """
-        links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(assistant_id=assistant.id)
-
-        # tool
-        tools = []
-        tool_ids = [link.tool_id for link in links if link.tool_id]
-        if tool_ids:
-            tools: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
-            tool_name_param = {tool.tool_key: json.loads(tool.extra) for tool in tools}
-            tool_langchain = load_tools(tool_params=tool_name_param, llm=llm)
-            tools = tools + tool_langchain
-            logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
-
-        # flow
-        flow_ids = [link.flow_id for link in links if link.flow_id]
-        if flow_ids:
-            flow2knowledge = {link.flow_id: link for link in links if link.flow_id}
-            flow_data = FlowDao.get_flow_by_ids(flow_ids)
-            # 先查找替换collection_id
-            for flow in flow_data:
-                graph_data = flow.data
-                knowledge_id = flow2knowledge.get(flow.id).knowledge_id
-                try:
-                    artifacts = {}
-                    graph_data = set_flow_knowledge_id(graph_data, knowledge_id)
-                    graph = await build_flow_no_yield(graph_data=graph_data,
-                                                      artifacts=artifacts,
-                                                      process_file=True,
-                                                      flow_id=flow.id.hex,
-                                                      chat_id=assistant.id)
-                    built_object = await graph.abuild()
-                    logger.info('act=init_flow_tool build_end')
-                    flow_tool = Tool(name=flow.name,
-                                     func=built_object.call,
-                                     coroutine=built_object.acall,
-                                     description=flow.description,
-                                     args_schema=InputRequest)
-                    tools.append(flow_tool)
-                except Exception as exc:
-                    logger.error(f'Error processing tweaks: {exc}')
-        return tools

@@ -97,6 +97,15 @@ async def update_tool_list(*,
     return AssistantService.update_tool_list(assistant_id, tool_list)
 
 
+# 获取助手可用的模型列表
+@router.get('/models', response_model=UnifiedResponseModel)
+async def get_models(*,
+                     Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    return AssistantService.get_models()
+
+
+# 助手对话的websocket连接
 @router.websocket('/chat/{assistant_id}')
 async def chat(*,
                assistant_id: int,
