@@ -9,7 +9,7 @@ class CalculatorInput(BaseModel):
 
 
 @tool("calculator")
-def calculater(expression):
+def calculator(expression):
     """Useful to perform any mathematical calculations,
     like sum, minus, multiplication, division, etc.
 
