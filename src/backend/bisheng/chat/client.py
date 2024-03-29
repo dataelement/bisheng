@@ -10,6 +10,7 @@ from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
 from fastapi import WebSocket, status
+from langchain_core.messages import AIMessage
 from loguru import logger
 
 
@@ -79,11 +80,14 @@ class ChatClient:
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
                 assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
+                await self.gpts_agent.init_assistant()
             else:
                 # 每次都从数据库获取重新构造一个agent
                 # TODO zgq：后续可以和前端约定参数，决定是否要重新初始化agent
                 assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
+                await self.gpts_agent.init_assistant()
+
         except Exception as e:
             logger.error('agent init error %s' % str(e), exc_info=True)
             await self.websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason='agent init error')
@@ -109,8 +113,12 @@ class ChatClient:
         await self.send_response('processing', 'start', '')
         if input_msg := inputs.get('input'):
             result = await self.gpts_agent.run(input_msg, async_callbacks)
-            print('----- agent result -----', result)
-            await self.add_message('bot', result[1].content, 'answer')
+            logger.debug(f'gpts agent {self.client_key} result: {result}')
+            answer = ''
+            for one in result[1:]:
+                if isinstance(one, AIMessage):
+                    answer += one.content
+            await self.add_message('bot', answer, 'answer')
             await self.send_response('answer', 'start', '')
-            await self.send_response('answer', 'end', result[1].content)
+            await self.send_response('answer', 'end', answer)
         await self.send_response('processing', 'end', '')

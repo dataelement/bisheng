@@ -44,11 +44,11 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any],
                              **kwargs: Any) -> Any:
         """Run when chain starts running."""
-        logger.debug(f'on_chain_start inputs={inputs}')
+        logger.debug(f'on_chain_start serialized={serialized} inputs={inputs} kwargs={kwargs}')
 
     async def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
-        logger.debug(f'on_chain_end outputs={outputs}')
+        logger.debug(f'on_chain_end outputs={outputs} kwargs={kwargs}')
 
     async def on_chain_error(self, error: Union[Exception, KeyboardInterrupt],
                              **kwargs: Any) -> Any:
@@ -322,21 +322,26 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
 
 class AsyncGptsLLMCallbackHandler(AsyncStreamingLLMCallbackHandler):
 
+    async def on_chain_stream(self, kwargs: Any) -> Any:
+        """Run when chain starts running."""
+        logger.debug(f'on_chain_stream kwargs={kwargs}')
+        pass
+
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
-        print('--- tool start ---', kwargs)
+        logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
         pass
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
-        print('--- tool end ---', kwargs)
+        logger.debug(f'on_tool_end output={output} kwargs={kwargs}')
         pass
 
 
-class AsyncGptsDebugCallbackHandler(AsyncStreamingLLMCallbackHandler):
+class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
-        print('--- tool start ---', kwargs)
+        logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
         resp = ChatResponse(type='stream',
                             intermediate_steps=f'Tool input: {input_str}',
                             flow_id=self.flow_id,
@@ -347,7 +352,7 @@ class AsyncGptsDebugCallbackHandler(AsyncStreamingLLMCallbackHandler):
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
-        print('--- tool end ---', kwargs)
+        logger.debug(f'on_tool_end output={output} kwargs={kwargs}')
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
 
         # from langchain.docstore.document import Document # noqa
