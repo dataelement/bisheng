@@ -215,12 +215,12 @@ class CustomComponentCode(BaseModel):
 
 class AssistantCreateReq(BaseModel):
     name: str = Field(max_length=50, description='助手名称')
-    desc: str = Field(min_length=20, max_length=1000, description='助手描述，可以做什么等')
+    prompt: str = Field(min_length=20, max_length=1000, description='助手提示词')
     logo: str = Field(description='logo文件的相对地址')
 
 
 class AssistantUpdateReq(BaseModel):
-    id: int = Field(description='助手ID')
+    id: UUID = Field(description='助手ID')
     name: Optional[str] = Field('', description='助手名称， 为空则不更新')
     desc: Optional[str] = Field('', description='助手描述， 为空则不更新')
     logo: Optional[str] = Field('', description='logo文件的相对地址，为空则不更新')
@@ -237,7 +237,7 @@ class AssistantUpdateReq(BaseModel):
 
 
 class AssistantSimpleInfo(BaseModel):
-    id: int
+    id: UUID
     name: str
     desc: str
     logo: str

@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Tuple
+from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -15,7 +16,7 @@ class AssistantStatus(Enum):
 
 
 class AssistantBase(SQLModelSerializable):
-    id: Optional[int] = Field(nullable=False, primary_key=True, description='唯一ID')
+    id: Optional[UUID] = Field(nullable=False, primary_key=True, description='唯一ID')
     name: str = Field(default='', description='助手名称')
     logo: str = Field(default='', description='logo图片地址')
     desc: str = Field(default='', sa_column=Column(Text), description='助手描述')
@@ -27,6 +28,7 @@ class AssistantBase(SQLModelSerializable):
     temperature: float = Field(default=0.5, description='模型温度')
     status: int = Field(default=AssistantStatus.OFFLINE.value, description='助手是否上线')
     user_id: int = Field(default=0, description='创建用户ID')
+    is_delete: int = Field(default=0, description='删除标志')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
@@ -37,7 +39,7 @@ class AssistantBase(SQLModelSerializable):
 
 class AssistantLinkBase(SQLModelSerializable):
     id: Optional[int] = Field(nullable=False, primary_key=True, description='唯一ID')
-    assistant_id: int = Field(index=True, description='助手ID')
+    assistant_id: Optional[UUID] = Field(index=True, description='助手ID')
     tool_id: Optional[int] = Field(default=0, index=True, description='工具ID')
     flow_id: Optional[str] = Field(default='', index=True, description='技能ID')
     knowledge_id: Optional[int] = Field(default=0, index=True, description='知识库ID')
@@ -50,7 +52,7 @@ class AssistantLinkBase(SQLModelSerializable):
 
 
 class Assistant(AssistantBase, table=True):
-    pass
+    id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
 
 
 class AssistantLink(AssistantLinkBase, table=True):
@@ -78,22 +80,24 @@ class AssistantDao(Assistant):
     @classmethod
     def delete_assistant(cls, data: Assistant) -> Assistant:
         with session_getter() as session:
-            session.delete(data)
+            data.is_delete = 1
+            session.add(data)
             session.commit()
             return data
 
     @classmethod
-    def get_one_assistant(cls, assistant_id: int) -> Assistant:
+    def get_one_assistant(cls, assistant_id: UUID) -> Assistant:
         with session_getter() as session:
             statement = select(Assistant).where(Assistant.id == assistant_id)
             return session.exec(statement).first()
 
     @classmethod
-    def get_assistants(cls, user_id: int, name: str, assistant_ids: List[int], page: int,
+    def get_assistants(cls, user_id: int, name: str, assistant_ids: List[UUID], page: int,
                        limit: int) -> (List[Assistant], int):
         with session_getter() as session:
-            count_statement = session.query(func.count(Assistant.id))
-            statement = select(Assistant)
+            count_statement = session.query(func.count(
+                Assistant.id)).where(Assistant.is_delete == 0)
+            statement = select(Assistant).where(Assistant.is_delete == 0)
             if assistant_ids:
                 # 需要or 加入的条件
                 statement = statement.where(
@@ -141,7 +145,7 @@ class AssistantLinkDao(AssistantLink):
 
     @classmethod
     def insert_batch(cls,
-                     assistant_id: int,
+                     assistant_id: UUID,
                      tool_list: List[int] = None,
                      flow_list: List[str] = None,
                      knowledge_list: List[int] = None):
@@ -160,7 +164,7 @@ class AssistantLinkDao(AssistantLink):
             session.commit()
 
     @classmethod
-    def update_assistant_link(cls, assistant_id: int, tool_list: List[int], flow_list: List[str],
+    def update_assistant_link(cls, assistant_id: UUID, tool_list: List[int], flow_list: List[str],
                               knowledge_list: List[int]):
         with session_getter() as session:
             session.query(AssistantLink).filter(
@@ -174,13 +178,13 @@ class AssistantLinkDao(AssistantLink):
             session.commit()
 
     @classmethod
-    def get_assistant_link(cls, assistant_id: int) -> List[AssistantLink]:
+    def get_assistant_link(cls, assistant_id: UUID) -> List[AssistantLink]:
         with session_getter() as session:
             statement = select(AssistantLink).where(AssistantLink.assistant_id == assistant_id)
             return session.exec(statement).all()
 
     @classmethod
-    def update_assistant_tool(cls, assistant_id: int, tool_list: List[int]):
+    def update_assistant_tool(cls, assistant_id: UUID, tool_list: List[int]):
         with session_getter() as session:
             session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
                                                 AssistantLink.tool_id != 0).delete()
@@ -189,7 +193,7 @@ class AssistantLinkDao(AssistantLink):
             session.commit()
 
     @classmethod
-    def update_assistant_flow(cls, assistant_id: int, flow_list: List[str]):
+    def update_assistant_flow(cls, assistant_id: UUID, flow_list: List[str]):
         with session_getter() as session:
             session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
                                                 AssistantLink.flow_id != '').delete()
@@ -198,7 +202,7 @@ class AssistantLinkDao(AssistantLink):
             session.commit()
 
     @classmethod
-    def update_assistant_knowledge(cls, assistant_id: int, knowledge_list: List[int]):
+    def update_assistant_knowledge(cls, assistant_id: UUID, knowledge_list: List[int]):
         with session_getter() as session:
             session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
                                                 AssistantLink.knowledge_id != 0).delete()

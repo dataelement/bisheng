@@ -64,6 +64,12 @@ env:
 
 # 智能助手相关配置
 gpts:
+  prompt_type: "DEFAULT_SYSTEM_MESSAGE"
+  agent_executor:
+    type: 'get_openai_functions_agent_executor'
+    # type: 'get_qwen_local_functions_agent_executor'
+    interrupt_before_action: False
+    recursion_limit: 50
   #  助手可选大模型列表，第一个为默认模型
   llms:
     - type: 'ChatOpenAI'

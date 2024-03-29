@@ -1,6 +1,8 @@
 from typing import Any, List
+from uuid import UUID
 
 from bisheng.api.errcode.assistant import AssistantNotExistsError
+from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     UnifiedResponseModel, resp_200)
 from bisheng.cache import InMemoryCache
@@ -9,11 +11,10 @@ from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.database.models.role_access import AccessType, RoleAcessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
-from bisheng.settings import settings
 from loguru import logger
 
 
-class AssistantService:
+class AssistantService(AssistantUtils):
     UserCache: InMemoryCache = InMemoryCache()
 
     @classmethod
@@ -38,14 +39,15 @@ class AssistantService:
         res, total = AssistantDao.get_assistants(user_id, name, assistant_ids_extra, page, limit)
 
         for one in res:
-            simple_dict = one.model_dump(
-                include={'id', 'name', 'desc', 'logo', 'user_id', 'create_time', 'update_time'})
+            simple_dict = one.model_dump(include={
+                'id', 'name', 'desc', 'logo', 'status', 'user_id', 'create_time', 'update_time'
+            })
             simple_dict['user_name'] = cls.get_user_name(one.user_id)
             data.append(AssistantSimpleInfo(**simple_dict))
         return resp_200(data={'data': data, 'total': total})
 
     @classmethod
-    def get_assistant_info(cls, assistant_id: int, user_id: str):
+    def get_assistant_info(cls, assistant_id: UUID, user_id: str):
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
@@ -84,8 +86,20 @@ class AssistantService:
         return resp_200(
             data=AssistantInfo(**assistant.dict(), tool_list=tool_list, flow_list=flow_list))
 
+    # 删除助手
     @classmethod
-    def auto_update(cls, assistant_id: int, prompt: str) -> UnifiedResponseModel[AssistantInfo]:
+    def delete_assistant(cls, assistant_id: UUID, user_id: int) -> bool:
+
+        # 通过算法接口自动选择工具和技能
+        assistant = AssistantDao.get_one_assistant(assistant_id)
+        if assistant and assistant.user_id == user_id:
+            AssistantDao.delete_assistant(assistant)
+            return True
+        else:
+            raise ValueError('不满足删除条件')
+
+    @classmethod
+    def auto_update(cls, assistant_id: UUID, prompt: str) -> UnifiedResponseModel[AssistantInfo]:
         """ 重新生成助手的提示词和工具选择, 只调用模型能力不修改数据库数据 """
         # todo zgq: 改为流式返回
         assistant = AssistantDao.get_one_assistant(assistant_id)
@@ -140,7 +154,7 @@ class AssistantService:
                                            knowledge_list=req.knowledge_list))
 
     @classmethod
-    def update_prompt(cls, assistant_id: int, prompt: str) -> UnifiedResponseModel:
+    def update_prompt(cls, assistant_id: UUID, prompt: str) -> UnifiedResponseModel:
         """ 更新助手的提示词 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
@@ -150,7 +164,7 @@ class AssistantService:
         return resp_200()
 
     @classmethod
-    def update_flow_list(cls, assistant_id: int, flow_list: List[str]) -> UnifiedResponseModel:
+    def update_flow_list(cls, assistant_id: UUID, flow_list: List[str]) -> UnifiedResponseModel:
         """  更新助手的技能列表 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
@@ -159,9 +173,10 @@ class AssistantService:
         return resp_200()
 
     @classmethod
-    def get_all_tool(cls, user_id: int) -> UnifiedResponseModel:
-        tool_list = GptsToolsDao.get_list_by_user(user_id)
-        return resp_200(data={'data': tool_list, 'total': len(tool_list)})
+    def get_gpts_tools(cls, user: Any) -> List[GptsTools]:
+        """ 获取用户可见的工具列表 """
+        user_id = user.get('user_id')
+        return GptsToolsDao.get_list_by_user(user_id)
 
     @classmethod
     def get_models(cls) -> UnifiedResponseModel:
@@ -172,7 +187,7 @@ class AssistantService:
         return resp_200(data=res)
 
     @classmethod
-    def update_tool_list(cls, assistant_id: int, tool_list: List[int]) -> UnifiedResponseModel:
+    def update_tool_list(cls, assistant_id: UUID, tool_list: List[int]) -> UnifiedResponseModel:
         """  更新助手的工具列表 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
@@ -194,38 +209,18 @@ class AssistantService:
         return user.user_name
 
     @classmethod
-    def get_gpts_conf(cls, key=None):
-        gpts_conf = settings.get_from_db('gpts')
-        if key:
-            return gpts_conf.get(key)
-        return gpts_conf
-
-    @classmethod
-    def get_llm_conf(cls, llm_name: str) -> dict:
-        llm_list = cls.get_gpts_conf('llms')
-        for one in llm_list:
-            if one['model_name'] == llm_name:
-                return one.copy()
-        return llm_list[0].copy()
-
-    @classmethod
     def get_auto_info(cls, assistant: Assistant) -> (Assistant, List[int], List[int]):
         """
         自动生成助手的prompt，自动选择工具和技能
         return：助手信息，工具ID列表，技能ID列表
         """
-        # todo zgq: 和算法联调自动生成prompt和工具列表
+        # todo zgq: 和算法联调自动生成优化后的prompt、描述、工具、技能、开场白
         # 根据助手 选择大模型配置
         llm_conf = cls.get_llm_conf(assistant.model_name)
 
-        assistant.system_prompt = '临时生成的默认系统prompt'
-        assistant.prompt = assistant.prompt or '用户可见的临时prompt'
+        assistant.system_prompt = ''
+        assistant.prompt = assistant.prompt
         assistant.model_name = llm_conf['model_name']
         assistant.temperature = llm_conf['temperature']
 
         return assistant, [], []
-
-    @classmethod
-    def get_gpts_tools(cls, user: Any) -> List[GptsTools]:
-        user_id = user.get('user_id')
-        return GptsToolsDao.get_list_by_user(user_id)

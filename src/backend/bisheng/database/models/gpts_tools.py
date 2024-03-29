@@ -4,7 +4,7 @@ from typing import List, Optional
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, String, text
-from sqlmodel import Field, null, or_, select
+from sqlmodel import Field, or_, select
 
 
 class GptsToolsBase(SQLModelSerializable):
@@ -13,8 +13,6 @@ class GptsToolsBase(SQLModelSerializable):
     desc: Optional[str] = Field(sa_column=Column(String(length=2048), index=False))
     tool_key: str = Field(sa_column=Column(String(length=125), index=False))
     type: int = Field(default=0, description='表示工具是技能组装还是原生工具，type=1 表示技能')
-    extra: Optional[str] = Field(sa_column=Column(String(length=2048), index=False),
-                                 description='用来存储额外信息，比如参数需求等')
     is_preset: bool = Field(default=True)
     is_delete: int = Field(default=0, description='1 表示逻辑删除')
     user_id: Optional[int] = Field(index=True, description='创建用户ID， null表示系统创建')
@@ -29,7 +27,13 @@ class GptsToolsBase(SQLModelSerializable):
 
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
+    extra: Optional[str] = Field(sa_column=Column(String(length=2048), index=False),
+                                 description='用来存储额外信息，比如参数需求等')
     id: Optional[int] = Field(default=None, primary_key=True)
+
+
+class GptsToolsRead(GptsToolsBase):
+    id: int
 
 
 class GptsToolsDao(GptsToolsBase):
@@ -74,8 +78,10 @@ class GptsToolsDao(GptsToolsBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_list_by_user(cls, user_id: int) -> List[GptsTools]:
+    def get_list_by_user(cls, user_id: int) -> List[GptsToolsRead]:
         with session_getter() as session:
             statement = select(GptsTools).where(
-                or_(GptsTools.user_id == user_id, GptsTools.user_id is null))
-            return session.exec(statement).all()
+                or_(GptsTools.user_id == user_id,
+                    GptsTools.is_preset == 1)).where(GptsTools.is_delete == 0)
+            list_tools = session.exec(statement).all()
+            return [GptsToolsRead.validate(item) for item in list_tools]

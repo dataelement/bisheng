@@ -313,6 +313,9 @@ def apply_tweaks(node: Dict[str, Any], node_tweaks: Dict[str, Any]) -> None:
         if tweak_name and tweak_value and tweak_name in template_data:
             key = tweak_name if tweak_name == 'file_path' else 'value'
             template_data[tweak_name][key] = tweak_value
+        elif tweak_name and tweak_value:
+            template_data[tweak_name] = {}
+            template_data[tweak_name]['value'] = tweak_value
 
 
 def process_tweaks(graph_data: Dict[str, Any], tweaks: Dict[str, Dict[str,

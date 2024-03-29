@@ -81,3 +81,11 @@ class ChatMessageDao(MessageBase):
             session.exec(statement)
             session.commit()
         return True
+
+    @classmethod
+    def insert_one(cls, message: ChatMessage) -> ChatMessage:
+        with session_getter() as session:
+            session.add(message)
+            session.commit()
+            session.refresh(message)
+        return message

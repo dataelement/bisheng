@@ -1,4 +1,3 @@
-import inspect
 from typing import Any, Callable, Dict, List, Tuple
 
 # from .eastmoney import
@@ -11,7 +10,8 @@ from .tianyancha import CompanyInfo
 
 # 筛选出类方法
 tianyancha_class_methods = [
-    attr for attr in dir(CompanyInfo) if inspect.ismethod(getattr(CompanyInfo, attr))
+    method for method in CompanyInfo.__dict__
+    if isinstance(CompanyInfo.__dict__[method], classmethod)
 ]
 
 _TIAN_YAN_CHA_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
@@ -20,7 +20,7 @@ _TIAN_YAN_CHA_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]
 }
 
 sina_class_methods = [
-    attr for attr in dir(StockInfo) if inspect.ismethod(getattr(StockInfo, attr))
+    method for method in StockInfo.__dict__ if isinstance(StockInfo.__dict__[method], classmethod)
 ]
 
 _SINA_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
@@ -29,7 +29,7 @@ _SINA_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
 }
 
 macro_class_methods = [
-    attr for attr in dir(MacroData) if inspect.ismethod(getattr(MacroData, attr))
+    method for method in MacroData.__dict__ if isinstance(MacroData.__dict__[method], classmethod)
 ]
 
 _MACRO_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
