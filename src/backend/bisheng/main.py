@@ -8,6 +8,7 @@ from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
 from bisheng.utils.http_middleware import CustomMiddleware
 from bisheng.utils.logger import configure
+from bisheng.utils.threadpool import thread_pool
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,8 +20,10 @@ from loguru import logger
 
 
 def handle_http_exception(req: Request, exc: HTTPException) -> ORJSONResponse:
-    msg = {'status_code': exc.status_code,
-           'status_message': exc.detail['error'] if isinstance(exc.detail, dict) else exc.detail}
+    msg = {
+        'status_code': exc.status_code,
+        'status_message': exc.detail['error'] if isinstance(exc.detail, dict) else exc.detail
+    }
     logger.error(f'{req.method} {req.url} {exc.status_code} {exc.detail}')
     return ORJSONResponse(content=msg)
 
@@ -31,7 +34,10 @@ def handle_request_validation_error(req: Request, exc: RequestValidationError) -
     return ORJSONResponse(content=msg)
 
 
-_EXCEPTION_HANDLERS = {HTTPException: handle_http_exception, RequestValidationError: handle_request_validation_error}
+_EXCEPTION_HANDLERS = {
+    HTTPException: handle_http_exception,
+    RequestValidationError: handle_request_validation_error
+}
 
 
 @asynccontextmanager
@@ -42,6 +48,7 @@ async def lifespan(app: FastAPI):
     # LangfuseInstance.update()
     yield
     teardown_services()
+    thread_pool.tear_down()
 
 
 def create_app():

@@ -105,7 +105,7 @@ class ThreadPoolManager:
     # async def async_done_callback(self, future):
     #     self.async_task_result.append(future)
 
-    def tear_down(self, key_list: List[str]):
+    def cancel_task(self, key_list: List[str]):
         with self.lock:
             for key in key_list:
                 if self.async_task.get(key):
@@ -115,6 +115,11 @@ class ThreadPoolManager:
                 if self.future_dict.get(key):
                     for task in self.future_dict.get(key):
                         task.cancel()
+
+    def tear_down(self):
+        key_list = list(self.async_task.keys())
+        self.cancel_task(key_list)
+        self.executor.shutdown()
 
 
 # 创建一个线程池管理器

@@ -1,17 +1,16 @@
 import hashlib
 from typing import Dict, List, Optional
 
-from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, delete_knowledge_by,
-                                                delete_knowledge_file_vectors, text_knowledge)
+from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, delete_es,
+                                                delete_knowledge_by, delete_knowledge_file_vectors,
+                                                delete_vector, text_knowledge)
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeRead,
                                                KnowledgeUpdate)
-
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
                                                     KnowledgeFileRead)
-
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
@@ -146,6 +145,9 @@ def clear_knowledge_files(*, knowledge_id: int):
 async def upload_file(*,
                       knowledge_id: int,
                       callback_url: Optional[str] = Form(None),
+                      separator: List[str] = Form(default=['\n\n', '\n', ' ', '']),
+                      chunk_size: int = Form(default=500),
+                      chunk_overlap: int = Form(default=50),
                       file: UploadFile = File(...),
                       background_tasks: BackgroundTasks):
 
@@ -153,11 +155,7 @@ async def upload_file(*,
     # 缓存本地
     file_byte = await file.read()
     file_path = save_download_file(file_byte, 'bisheng', file_name)
-    auto_p = True
-    if auto_p:
-        separator = ['\n\n', '\n', ' ', '']
-        chunk_size = 500
-        chunk_overlap = 50
+
     with session_getter() as session:
         knowledge = session.get(Knowledge, knowledge_id)
 
@@ -264,6 +262,9 @@ def get_filelist(*, knowledge_id: int, page_size: int = 10, page_num: int = 1):
 async def post_chunks(*,
                       knowledge_id: int = Form(...),
                       metadata: str = Form(...),
+                      separator: List[str] = Form(default=['\n\n', '\n', ' ', '']),
+                      chunk_size: int = Form(default=500),
+                      chunk_overlap: int = Form(default=50),
                       file: UploadFile = File(...)):
     """ 获取知识库文件信息. """
     file_name = file.filename
@@ -295,9 +296,6 @@ async def post_chunks(*,
         session.commit()
         session.refresh(db_file)
 
-    separator = ['\n\n', '\n', ' ', '']
-    chunk_size = 500
-    chunk_overlap = 50
     index_name = db_knowledge.index_name or db_knowledge.collection_name
     try:
         minio_client = MinioClient()

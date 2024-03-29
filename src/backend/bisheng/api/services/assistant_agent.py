@@ -21,6 +21,7 @@ from loguru import logger
 
 
 class AssistantAgent(AssistantUtils):
+
     def __init__(self, assistant_info: Assistant, chat_id: str):
         self.assistant = assistant_info
         self.chat_id = chat_id
@@ -41,8 +42,10 @@ class AssistantAgent(AssistantUtils):
     def init_llm(self):
         llm_params = self.get_llm_conf(self.assistant.model_name)
         if not llm_params:
-            logger.error(f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
-            raise Exception(f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
+            logger.error(
+                f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
+            raise Exception(
+                f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
         llm_object = import_by_type(_type='llms', name=llm_params['type'])
 
         if llm_params['type'] == 'ChatOpenAI':
@@ -59,7 +62,8 @@ class AssistantAgent(AssistantUtils):
         """通过名称获取tool 列表
            tools_name_param:: {name: params}
         """
-        links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(assistant_id=self.assistant.id)
+        links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(
+            assistant_id=self.assistant.id)
 
         # tool
         tools: List[BaseTool] = []
@@ -100,6 +104,9 @@ class AssistantAgent(AssistantUtils):
                     logger.error(f'Error processing tweaks: {exc}')
         self.tools = tools
 
+    def setup_params(self):
+        pass
+
     def init_agent(self):
         """
         初始化智能体的agent
@@ -113,13 +120,11 @@ class AssistantAgent(AssistantUtils):
         agent_executor_type = agent_executor_params.pop('type')
 
         # 初始化agent
-        self.agent = ConfigurableAssistant(
-            agent_executor_type=agent_executor_type,
-            tools=self.tools,
-            llm=self.llm,
-            system_message=assistant_message,
-            **agent_executor_params
-        )
+        self.agent = ConfigurableAssistant(agent_executor_type=agent_executor_type,
+                                           tools=self.tools,
+                                           llm=self.llm,
+                                           system_message=assistant_message,
+                                           **agent_executor_params)
 
     async def run(self, query: str, callback: Callbacks = None):
         """
@@ -127,7 +132,5 @@ class AssistantAgent(AssistantUtils):
         """
         inputs = [HumanMessage(content=query)]
 
-        result = await self.agent.ainvoke(inputs, config=RunnableConfig(
-            callbacks=callback
-        ))
+        result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
         return result

@@ -192,7 +192,8 @@ class ChatManager:
                                  websocket,
                                  graph_data=graph_data)
         await self.accept_client(client_key, chat_client, websocket)
-        logger.debug(f'act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}')
+        logger.debug(
+            f'act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}')
         try:
             while True:
                 try:
@@ -346,7 +347,7 @@ class ChatManager:
                                         key_list=key_list)
 
         finally:
-            thread_pool.tear_down(key_list)  # 将进行中的任务进行cancel
+            thread_pool.cancel_task(key_list)  # 将进行中的任务进行cancel
             try:
                 await self.close_connection(flow_id=flow_id,
                                             chat_id=chat_id,
