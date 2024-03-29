@@ -322,11 +322,6 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
 
 class AsyncGptsLLMCallbackHandler(AsyncStreamingLLMCallbackHandler):
 
-    async def on_chain_stream(self, kwargs: Any) -> Any:
-        """Run when chain starts running."""
-        logger.debug(f'on_chain_stream kwargs={kwargs}')
-        pass
-
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
         logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
@@ -342,36 +337,29 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
         logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
-        resp = ChatResponse(type='stream',
+        resp = ChatResponse(type='start',
+                            category='tool',
                             intermediate_steps=f'Tool input: {input_str}',
+                            message={'tool_key': serialized['name'], 'serialized': serialized, 'input_str': input_str},
                             flow_id=self.flow_id,
                             chat_id=self.chat_id)
-        loop = asyncio.get_event_loop()
-        coroutine = self.websocket.send_json(resp.dict())
-        asyncio.run_coroutine_threadsafe(coroutine, loop)
+        await self.websocket.send_json(resp.dict())
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
         logger.debug(f'on_tool_end output={output} kwargs={kwargs}')
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
 
-        # from langchain.docstore.document import Document # noqa
-        # result = eval(output).get('result')
         result = output
         # Create a formatted message.
         intermediate_steps = f'{observation_prefix}{result}'
 
         # Create a ChatResponse instance.
-        resp = ChatResponse(type='stream',
+        resp = ChatResponse(type='end',
+                            category='tool',
                             intermediate_steps=intermediate_steps,
+                            message={'tool_key': kwargs.get('name'), 'output': output},
                             flow_id=self.flow_id,
                             chat_id=self.chat_id)
 
-        # Try to send the response, handle potential errors.
-
-        try:
-            loop = asyncio.get_event_loop()
-            coroutine = self.websocket.send_json(resp.dict())
-            asyncio.run_coroutine_threadsafe(coroutine, loop)
-        except Exception as e:
-            logger.error(e)
+        await self.websocket.send_json(resp.dict())

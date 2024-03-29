@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List
+from typing import List
 
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.utils import set_flow_knowledge_id
@@ -28,9 +28,9 @@ class AssistantAgent(AssistantUtils):
         self.llm: BaseLanguageModel | None = None
         self.debug: bool = True
 
-    async def init_assistant(self):
+    async def init_assistant(self, callbacks: Callbacks = None):
         self.init_llm()
-        await self.init_tools()
+        await self.init_tools(callbacks)
         self.init_agent()
 
     def init_llm(self):
@@ -50,22 +50,11 @@ class AssistantAgent(AssistantUtils):
             llm_params.pop('type')
             self.llm = llm_object(**llm_params)
 
-    async def init_tools(self):
+    async def init_tools(self, callbacks: Callbacks = None):
         """通过名称获取tool 列表
            tools_name_param:: {name: params}
         """
-        print('-------  init tool start -------', self.assistant.id)
-
         links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(assistant_id=self.assistant.id)
-
-        tools_params: Dict[str, Dict] = {
-            'sina.realtime_info': {},
-            'sina.history_KLine': {}
-        }
-        self.tools = load_tools(tool_params=tools_params, llm=self.llm)
-        print('----- init tools over -----', len(self.tools))
-        return
-
         # tool
         tools: List[BaseTool] = []
         tool_ids = [link.tool_id for link in links if link.tool_id]

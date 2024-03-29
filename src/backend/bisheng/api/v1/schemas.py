@@ -115,7 +115,7 @@ class ChatMessage(BaseModel):
     is_bot: bool = False
     message: Union[str, None, dict] = ''
     type: str = 'human'
-    category: str = 'processing'  # system processing answer
+    category: str = 'processing'  # system processing answer tool
     intermediate_steps: str = None
     files: list = []
     user_id: int = None
