@@ -220,7 +220,7 @@ class AssistantCreateReq(BaseModel):
 
 
 class AssistantUpdateReq(BaseModel):
-    id: int = Field(description='助手ID')
+    id: UUID = Field(description='助手ID')
     name: Optional[str] = Field('', description='助手名称， 为空则不更新')
     desc: Optional[str] = Field('', description='助手描述， 为空则不更新')
     logo: Optional[str] = Field('', description='logo文件的相对地址，为空则不更新')
@@ -237,7 +237,7 @@ class AssistantUpdateReq(BaseModel):
 
 
 class AssistantSimpleInfo(BaseModel):
-    id: int
+    id: UUID
     name: str
     desc: str
     logo: str

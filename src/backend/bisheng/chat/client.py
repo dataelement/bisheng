@@ -1,5 +1,6 @@
 import json
 from typing import Dict
+from uuid import UUID
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler, AsyncGptsLLMCallbackHandler
@@ -48,8 +49,8 @@ class ChatClient:
             message=message,
             category=category,
             type=msg_type,
-            extra=self.client_id,
-            flow_id=self.client_key,  # todo zgq:增加字段或者修改数据类型
+            extra=json.dumps({'client_key': self.client_key}, ensure_ascii=False),
+            flow_id=self.client_id,
             chat_id=self.chat_id,
             user_id=self.user_id,
         ))
@@ -62,9 +63,9 @@ class ChatClient:
             is_bot=is_bot,
             message=message,
             user_id=self.user_id,
-            client_id=self.client_key,  # todo zgq:增加字段或者修改数据类型
+            flow_id=self.client_id,
             chat_id=self.chat_id,
-            extra=self.client_id,
+            extra=json.dumps({'client_key': self.client_key}, ensure_ascii=False),
             intermediate_steps=intermediate_steps,
         ))
 
@@ -76,12 +77,12 @@ class ChatClient:
             # 处理智能助手业务
             if self.chat_id and self.gpts_agent is None:
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
-                assistant = AssistantDao.get_one_assistant(int(self.client_id))
+                assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
             else:
                 # 每次都从数据库获取重新构造一个agent
                 # TODO zgq：后续可以和前端约定参数，决定是否要重新初始化agent
-                assistant = AssistantDao.get_one_assistant(int(self.client_id))
+                assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
         except Exception as e:
             logger.error('agent init error %s' % str(e), exc_info=True)

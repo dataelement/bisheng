@@ -1,4 +1,5 @@
 from typing import Any, List
+from uuid import UUID
 
 from bisheng.api.errcode.assistant import AssistantNotExistsError
 from bisheng.api.services.assistant_base import AssistantUtils
@@ -45,7 +46,7 @@ class AssistantService(AssistantUtils):
         return resp_200(data={'data': data, 'total': total})
 
     @classmethod
-    def get_assistant_info(cls, assistant_id: int, user_id: str):
+    def get_assistant_info(cls, assistant_id: UUID, user_id: str):
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
@@ -85,7 +86,7 @@ class AssistantService(AssistantUtils):
             data=AssistantInfo(**assistant.dict(), tool_list=tool_list, flow_list=flow_list))
 
     @classmethod
-    def auto_update(cls, assistant_id: int, prompt: str) -> UnifiedResponseModel[AssistantInfo]:
+    def auto_update(cls, assistant_id: UUID, prompt: str) -> UnifiedResponseModel[AssistantInfo]:
         """ 重新生成助手的提示词和工具选择, 只调用模型能力不修改数据库数据 """
         # todo zgq: 改为流式返回
         assistant = AssistantDao.get_one_assistant(assistant_id)
@@ -140,7 +141,7 @@ class AssistantService(AssistantUtils):
                                            knowledge_list=req.knowledge_list))
 
     @classmethod
-    def update_prompt(cls, assistant_id: int, prompt: str) -> UnifiedResponseModel:
+    def update_prompt(cls, assistant_id: UUID, prompt: str) -> UnifiedResponseModel:
         """ 更新助手的提示词 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
@@ -150,7 +151,7 @@ class AssistantService(AssistantUtils):
         return resp_200()
 
     @classmethod
-    def update_flow_list(cls, assistant_id: int, flow_list: List[str]) -> UnifiedResponseModel:
+    def update_flow_list(cls, assistant_id: UUID, flow_list: List[str]) -> UnifiedResponseModel:
         """  更新助手的技能列表 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
@@ -173,7 +174,7 @@ class AssistantService(AssistantUtils):
         return resp_200(data=res)
 
     @classmethod
-    def update_tool_list(cls, assistant_id: int, tool_list: List[int]) -> UnifiedResponseModel:
+    def update_tool_list(cls, assistant_id: UUID, tool_list: List[int]) -> UnifiedResponseModel:
         """  更新助手的工具列表 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
