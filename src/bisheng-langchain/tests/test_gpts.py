@@ -26,11 +26,7 @@ def fake_arxiv_tool(query: str):
 
 def test_agent():
 
-    tools = load_tools(tool_params={
-        "tianyancha.law_suit_case": {
-            "api_key": "224d0cd7-b87d-4f92-8dc6-132632c2d50a"
-        }
-    }, )
+    tools = load_tools(tool_params={"tianyancha.law_suit_case": {"api_key": ""}}, )
     model_name = "gpt-4-0125-preview"
     sys_msg = "You are a helpful assistant."
     agent = ConfigurableAgent(model_name=model_name, tools=tools, system_message=sys_msg)

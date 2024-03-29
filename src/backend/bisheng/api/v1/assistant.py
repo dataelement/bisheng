@@ -4,11 +4,11 @@ from uuid import UUID
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantInfo, AssistantUpdateReq,
-                                    UnifiedResponseModel, resp_200)
+                                    UnifiedResponseModel, resp_200, resp_500)
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.types import WorkType
 from bisheng.database.models.assistant import Assistant
-from bisheng.database.models.gpts_tools import GptsTools
+from bisheng.database.models.gpts_tools import GptsToolsRead
 from bisheng.utils.logger import logger
 from fastapi import (APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException,
                      status)
@@ -31,12 +31,22 @@ def get_assistant(*,
 
 # 获取某个助手的详细信息
 @router.get('/info/{assistant_id}', response_model=UnifiedResponseModel[AssistantInfo])
-def get_assistant_info(*,
-                       assistant_id: UUID,
-                       Authorize: AuthJWT = Depends()):
+def get_assistant_info(*, assistant_id: UUID, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
     return AssistantService.get_assistant_info(assistant_id, current_user.get('user_id'))
+
+
+@router.post('/delete', response_model=UnifiedResponseModel)
+def delete_assistant(*, assistant_id: UUID, Authorize: AuthJWT = Depends()):
+    """删除助手"""
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+    try:
+        AssistantService.delete_assistant(assistant_id, current_user.get('user_id'))
+        return resp_200()
+    except Exception as e:
+        return resp_500(str(e))
 
 
 @router.post('', response_model=UnifiedResponseModel[AssistantInfo])
@@ -92,8 +102,7 @@ async def update_tool_list(*,
 
 # 获取助手可用的模型列表
 @router.get('/models', response_model=UnifiedResponseModel)
-async def get_models(*,
-                     Authorize: AuthJWT = Depends()):
+async def get_models(*, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     return AssistantService.get_models()
 
@@ -131,7 +140,7 @@ async def chat(*,
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=message)
 
 
-@router.get('/tool_list', response_model=UnifiedResponseModel[GptsTools])
+@router.get('/tool_list', response_model=UnifiedResponseModel[GptsToolsRead])
 def get_tool_list(*, Authorize: AuthJWT = Depends()):
     """查询所有可见的tool 列表"""
     Authorize.jwt_required()

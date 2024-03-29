@@ -39,8 +39,9 @@ class AssistantService(AssistantUtils):
         res, total = AssistantDao.get_assistants(user_id, name, assistant_ids_extra, page, limit)
 
         for one in res:
-            simple_dict = one.model_dump(
-                include={'id', 'name', 'desc', 'logo', 'user_id', 'create_time', 'update_time'})
+            simple_dict = one.model_dump(include={
+                'id', 'name', 'desc', 'logo', 'status', 'user_id', 'create_time', 'update_time'
+            })
             simple_dict['user_name'] = cls.get_user_name(one.user_id)
             data.append(AssistantSimpleInfo(**simple_dict))
         return resp_200(data={'data': data, 'total': total})
@@ -84,6 +85,18 @@ class AssistantService(AssistantUtils):
 
         return resp_200(
             data=AssistantInfo(**assistant.dict(), tool_list=tool_list, flow_list=flow_list))
+
+    # 删除助手
+    @classmethod
+    def delete_assistant(cls, assistant_id: UUID, user_id: int) -> bool:
+
+        # 通过算法接口自动选择工具和技能
+        assistant = AssistantDao.get_one_assistant(assistant_id)
+        if assistant and assistant.user_id == user_id:
+            AssistantDao.delete_assistant(assistant)
+            return True
+        else:
+            raise ValueError('不满足删除条件')
 
     @classmethod
     def auto_update(cls, assistant_id: UUID, prompt: str) -> UnifiedResponseModel[AssistantInfo]:

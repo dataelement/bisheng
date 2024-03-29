@@ -28,6 +28,7 @@ class AssistantBase(SQLModelSerializable):
     temperature: float = Field(default=0.5, description='模型温度')
     status: int = Field(default=AssistantStatus.OFFLINE.value, description='助手是否上线')
     user_id: int = Field(default=0, description='创建用户ID')
+    is_delete: int = Field(default=0, description='删除标志')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
@@ -79,7 +80,8 @@ class AssistantDao(Assistant):
     @classmethod
     def delete_assistant(cls, data: Assistant) -> Assistant:
         with session_getter() as session:
-            session.delete(data)
+            data.is_delete = 1
+            session.add(data)
             session.commit()
             return data
 
@@ -93,8 +95,9 @@ class AssistantDao(Assistant):
     def get_assistants(cls, user_id: int, name: str, assistant_ids: List[UUID], page: int,
                        limit: int) -> (List[Assistant], int):
         with session_getter() as session:
-            count_statement = session.query(func.count(Assistant.id))
-            statement = select(Assistant)
+            count_statement = session.query(func.count(
+                Assistant.id)).where(Assistant.is_delete == 0)
+            statement = select(Assistant).where(Assistant.is_delete == 0)
             if assistant_ids:
                 # 需要or 加入的条件
                 statement = statement.where(
