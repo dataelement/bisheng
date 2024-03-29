@@ -113,18 +113,18 @@ async def chat(*,
                assistant_id: str,
                websocket: WebSocket,
                t: Optional[str] = None,
-               chat_id: Optional[str] = None):
+               chat_id: Optional[str] = None,
+               Authorize: AuthJWT = Depends()):
     try:
-        # if t:
-        #     Authorize.jwt_required(auth_from='websocket', token=t)
-        #     Authorize._token = t
-        # else:
-        #     Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-        #
-        # payload = Authorize.get_jwt_subject()
-        # payload = json.loads(payload)
-        # user_id = payload.get('user_id')
-        user_id = 1
+        if t:
+            Authorize.jwt_required(auth_from='websocket', token=t)
+            Authorize._token = t
+        else:
+            Authorize.jwt_required(auth_from='websocket', websocket=websocket)
+
+        payload = Authorize.get_jwt_subject()
+        payload = json.loads(payload)
+        user_id = payload.get('user_id')
         await chat_manager.dispatch_client(assistant_id, chat_id, user_id, WorkType.GPTS,
                                            websocket)
 

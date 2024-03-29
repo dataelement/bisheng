@@ -1,6 +1,5 @@
-import asyncio
 import json
-from typing import List
+from typing import Dict, List
 
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.utils import set_flow_knowledge_id
@@ -21,7 +20,6 @@ from loguru import logger
 
 
 class AssistantAgent(AssistantUtils):
-
     def __init__(self, assistant_info: Assistant, chat_id: str):
         self.assistant = assistant_info
         self.chat_id = chat_id
@@ -29,23 +27,17 @@ class AssistantAgent(AssistantUtils):
         self.agent: ConfigurableAssistant | None = None
         self.llm: BaseLanguageModel | None = None
         self.debug: bool = True
-        # 有会话ID代表是非debug模式
-        if self.chat_id:
-            self.debug = False
 
+    async def init_assistant(self):
         self.init_llm()
-        loop = asyncio.get_event_loop()
-        coroutine = self.init_tools()
-        asyncio.run_coroutine_threadsafe(coroutine, loop)
+        await self.init_tools()
         self.init_agent()
 
     def init_llm(self):
         llm_params = self.get_llm_conf(self.assistant.model_name)
         if not llm_params:
-            logger.error(
-                f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
-            raise Exception(
-                f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
+            logger.error(f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
+            raise Exception(f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
         llm_object = import_by_type(_type='llms', name=llm_params['type'])
 
         if llm_params['type'] == 'ChatOpenAI':
@@ -62,8 +54,17 @@ class AssistantAgent(AssistantUtils):
         """通过名称获取tool 列表
            tools_name_param:: {name: params}
         """
-        links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(
-            assistant_id=self.assistant.id)
+        print('-------  init tool start -------', self.assistant.id)
+
+        links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(assistant_id=self.assistant.id)
+
+        tools_params: Dict[str, Dict] = {
+            'sina.realtime_info': {},
+            'sina.history_KLine': {}
+        }
+        self.tools = load_tools(tool_params=tools_params, llm=self.llm)
+        print('----- init tools over -----', len(self.tools))
+        return
 
         # tool
         tools: List[BaseTool] = []
@@ -104,9 +105,6 @@ class AssistantAgent(AssistantUtils):
                     logger.error(f'Error processing tweaks: {exc}')
         self.tools = tools
 
-    def setup_params(self):
-        pass
-
     def init_agent(self):
         """
         初始化智能体的agent
@@ -120,11 +118,13 @@ class AssistantAgent(AssistantUtils):
         agent_executor_type = agent_executor_params.pop('type')
 
         # 初始化agent
-        self.agent = ConfigurableAssistant(agent_executor_type=agent_executor_type,
-                                           tools=self.tools,
-                                           llm=self.llm,
-                                           system_message=assistant_message,
-                                           **agent_executor_params)
+        self.agent = ConfigurableAssistant(
+            agent_executor_type=agent_executor_type,
+            tools=self.tools,
+            llm=self.llm,
+            system_message=assistant_message,
+            **agent_executor_params
+        )
 
     async def run(self, query: str, callback: Callbacks = None):
         """
@@ -132,5 +132,13 @@ class AssistantAgent(AssistantUtils):
         """
         inputs = [HumanMessage(content=query)]
 
-        result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
+        result = {}
+        async for one in self.agent.astream_events(inputs, config=RunnableConfig(
+                callbacks=callback
+        ), version='v1'):
+            if one['event'] == 'on_chain_end':
+                result = one
+
+        # 最后一次输出的event即最终答案
+        result = result['data']['output']['__end__']
         return result
