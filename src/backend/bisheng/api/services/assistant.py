@@ -201,12 +201,12 @@ class AssistantService(AssistantUtils):
         自动生成助手的prompt，自动选择工具和技能
         return：助手信息，工具ID列表，技能ID列表
         """
-        # todo zgq: 和算法联调自动生成prompt和工具列表 还有开场白
+        # todo zgq: 和算法联调自动生成优化后的prompt、描述、工具、技能、开场白
         # 根据助手 选择大模型配置
         llm_conf = cls.get_llm_conf(assistant.model_name)
 
-        assistant.system_prompt = '临时生成的默认系统prompt'
-        assistant.prompt = assistant.prompt or '用户可见的临时prompt'
+        assistant.system_prompt = ''
+        assistant.prompt = assistant.prompt
         assistant.model_name = llm_conf['model_name']
         assistant.temperature = llm_conf['temperature']
 
