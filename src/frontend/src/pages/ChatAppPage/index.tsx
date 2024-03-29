@@ -1,5 +1,6 @@
 import { Trash2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
+import { NewApplicationIcon } from "@/components/bs-icons/newApplication";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
 import { TabsContext } from "../../contexts/tabsContext";
@@ -11,6 +12,7 @@ import SkillTemps from "../SkillPage/components/SkillTemps";
 import ChatPanne from "./components/ChatPanne";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useDebounce } from "../../util/hook";
+import "./bc.css"
 
 export default function SkillChatPage() {
     const [open, setOpen] = useState(false)
@@ -82,8 +84,8 @@ export default function SkillChatPage() {
     }
 
 
-    return <div className="flex">
-        <div className="h-screen w-[200px] relative border-r">
+    return <div className="flex h-full">
+        <div className="h-full w-[200px] relative border-r">
             <div className="absolute flex pt-2 ml-[20px] bg-[#fff] dark:bg-gray-950">
                 <div className="border rounded-lg px-4 py-2 text-center text-sm cursor-pointer w-[160px] bg-gray-50 hover:bg-gray-100 dark:hover:bg-gray-800 relative z-10" onClick={() => setOpen(true)}>{t('chat.newChat')}</div>
             </div>
@@ -103,10 +105,16 @@ export default function SkillChatPage() {
         </div>
         {/* chat */}
         {face
-            ? <div className="flex-1 chat-box h-screen overflow-hidden relative">
-                <p className="text-center mt-[100px] text-sm text-gray-600">{t('chat.selectChat')}</p>
+            ? <div className="flex-1 chat-box h-full overflow-hidden relative">
+                <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src="/application-start-logo.png" alt="" />
+                <p className="text-center mt-[40px] text-sm text-gray-600 text-[26px] w-[162px] whitespace-normal h-[64px] leading-[32px] text-[#111111] mx-auto mt-[20px] font-light">选择一个<b className="text-[#111111] font-semibold">对话</b>开始<b className="text-[#111111] font-semibold">文擎睿见</b></p>
+                <div className="relative z-50 w-[162px] h-[38px] bg-[#0055e3] rounded-lg text-[white] leading-[38px] flex cursor-pointer hover:bg-[#0165e6] justify-around mx-auto mt-[120px] text-[13px]" onClick={() => setOpen(true)}>
+                    <span className="block my-auto ml-[4px]"><NewApplicationIcon /></span>
+                    <span className="mr-[28px]">{t('chat.newChat')}</span>
+                </div>
+                {/* <div className="bc"></div> */}
             </div>
-            : <div className="flex-1 chat-box h-screen relative">
+            : <div className="flex-1 chat-box h-full relative">
                 {flow && <ChatPanne chatId={chatId} flow={flow} />}
             </div>}
         {/* 选择对话技能 */}
