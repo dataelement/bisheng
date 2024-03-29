@@ -157,7 +157,7 @@ def update_template(template, g_nodes):
         node_index = next((i for i, n in enumerate(g_nodes) if n['id'] == id_), -1)
         if node_index != -1:
             display_name = None
-            show = g_nodes[node_index]['data']['node']['template'][field]['show']
+            show = g_nodes[node_index]['data']['node']['template'][field].get('show', False)
             advanced = g_nodes[node_index]['data']['node']['template'][field]['advanced']
             if 'display_name' in g_nodes[node_index]['data']['node']['template'][field]:
                 display_name = g_nodes[node_index]['data']['node']['template'][field][
@@ -187,14 +187,11 @@ def update_target_handle(
     Returns:
         dict: The updated edge.
     """
-    target_handle = new_edge['data']['targetHandle']
-    if target_handle.get('proxy'):
-        proxy_id = target_handle['proxy']['id']
-        if node := next((n for n in g_nodes if n['id'] == proxy_id), None):
-            set_new_target_handle(proxy_id, new_edge, target_handle, node)
-        else:
-            raise ValueError(
-                f'Group node {group_node_id} has an invalid target proxy node {proxy_id}')
+    # 兼容逻辑
+    for node in g_nodes:
+        if node['id'] in new_edge['targetHandle']:
+            new_edge['target'] = node['id']
+            break
     return new_edge
 
 
@@ -229,6 +226,8 @@ def set_new_target_handle(proxy_id, new_edge, target_handle, node):
         }
     if input_types := target_handle.get('inputTypes'):
         new_target_handle['inputTypes'] = input_types
+    if not new_edge.get('data'):
+        new_edge['data'] = {}
     new_edge['data']['targetHandle'] = new_target_handle
 
 
@@ -244,10 +243,8 @@ def update_source_handle(new_edge, g_nodes, g_edges):
         dict: The updated edge with the new source handle.
     """
     last_node = copy.deepcopy(find_last_node(g_nodes, g_edges))
+    new_edge['sourceHandle'] = new_edge['sourceHandle'].replace(new_edge['source'], last_node['id'])
     new_edge['source'] = last_node['id']
-    new_source_handle = new_edge['data']['sourceHandle']
-    new_source_handle['id'] = last_node['id']
-    new_edge['data']['sourceHandle'] = new_source_handle
     return new_edge
 
 

@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     bisheng_rt: dict = {}
     default_llm: dict = {}
     jwt_secret: str = 'secret'
+    gpts: dict = {}
 
     @validator('database_url', pre=True)
     def set_database_url(cls, value):
@@ -164,6 +165,7 @@ class Settings(BaseSettings):
         self.admin = new_settings.admin or {}
         self.bisheng_rt = new_settings.bisheng_rt or {}
         self.default_llm = new_settings.default_llm or {}
+        self.gpts = new_settings.gpts or {}
         self.dev = dev
 
     def update_settings(self, **kwargs):

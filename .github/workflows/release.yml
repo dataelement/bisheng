@@ -24,20 +24,11 @@ jobs:
       - name: checkout
         uses: actions/checkout@v2 
 
-      - name: git message
-        id: git_message
-        run: |
-          echo "::set-output name=message::$( echo '${{github.event.head_commit.message}}' | sed ':a;N;$!ba;s/\n/\\n/g')"
-
       - name: Process git message
         id: process_message
         run: |
-          message=""
-          IFS=$'\n'
-          for line in $(echo "${{ steps.git_message.outputs.message }}"); do
-            message+="$line\n"
-          done
-          echo "::set-output name=message::$message"
+          value=$(echo "${{ github.event.head_commit.message }}" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/\\\\n/g')
+          echo "message=${value}" >> $GITHUB_ENV
         shell: bash
 
       - name: notify feishu
@@ -45,10 +36,8 @@ jobs:
         with:
           url: ' https://open.feishu.cn/open-apis/bot/v2/hook/2cfe0d8d-647c-4408-9f39-c59134035c4b'
           method: 'POST'
-          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{github.event.pusher.name}}提交代码，开始编译",  "content": [[{"tag":"text","text":"提交内容${{ steps.process_message.outputs.message }}"}]]}}}}'
-
-
-      # 构建 bisheng-langchain
+          data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{github.event.pusher.name}}提交代码，开始编译",  "content": [[{"tag":"text","text":"发布功能："},{"tag":"text","text":"${{ env.message }}"}]]}}}}'
+         
       - name: Set python version 3.8
         uses: actions/setup-python@v1
         with:

@@ -17,6 +17,7 @@ import { FlowType } from "../../../../types/flow";
 import { classNames, nodeColors, nodeIconsLucide, getNodeNames, } from "../../../../utils";
 import DisclosureComponent from "../DisclosureComponent";
 import { undoRedoContext } from "../../../../contexts/undoRedoContext";
+import PersonalComponents from "./PersonalComponents";
 
 export default function ExtraSidebar({ flow }: { flow: FlowType }) {
   const { t } = useTranslation()
@@ -69,6 +70,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
   const nodeNames = getNodeNames()
   return (
     <div className="side-bar-arrangement">
+      {/* 简化 */}
       <div className="flex absolute right-[80px] top-4 z-10">
         <ShadTooltip content={t('flow.simplifyConfig')} side="bottom">
           <button className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-l-full rounded-r-none" onClick={() => setOpen(true)}>
@@ -99,6 +101,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
           </button>
         </ShadTooltip>
       </div>
+      {/* 顶部按钮组 */}
       <div className="side-bar-buttons-arrangement">
         <ShadTooltip content={t('flow.import')} side="bottom">
           <button className="extra-side-bar-buttons" onClick={() => { takeSnapshot(); uploadFlow() }} >
@@ -142,6 +145,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
       </div>
 
       <div className="side-bar-components-div-arrangement">
+        <PersonalComponents onDragStart={onDragStart}></PersonalComponents>
         {Object.keys(dataFilter)
           .sort()
           .map((d: keyof APIObjectType, i) =>

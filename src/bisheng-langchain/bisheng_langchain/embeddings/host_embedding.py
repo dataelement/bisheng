@@ -6,7 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import requests
 from langchain.embeddings.base import Embeddings
 from langchain.utils import get_from_dict_or_env
-from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
+from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
 
@@ -64,11 +64,6 @@ class HostEmbeddings(BaseModel, Embeddings):
 
     url_ep: Optional[str] = None
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = Extra.forbid
-
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
@@ -108,12 +103,14 @@ class HostEmbeddings(BaseModel, Embeddings):
         len_text = len(texts)
         while start_index < len_text:
             inp_local = {
-                'texts':texts[start_index:min(start_index + max_text_to_split, len_text)],
-                'model':self.model,
-                'type':emb_type
-                }
+                'texts': texts[start_index:min(start_index + max_text_to_split, len_text)],
+                'model': self.model,
+                'type': emb_type
+            }
             try:
-                outp_single = self.client(url=self.url_ep, json=inp_local, timeout=self.request_timeout).json()
+                outp_single = self.client(url=self.url_ep,
+                                          json=inp_local,
+                                          timeout=self.request_timeout).json()
                 if outp is None:
                     outp = outp_single
                 else:
@@ -155,6 +152,11 @@ class BGEZhEmbedding(HostEmbeddings):
 
 class GTEEmbedding(HostEmbeddings):
     model: str = 'gte'
+    embedding_ctx_length: int = 512
+
+
+class JINAEmbedding(HostEmbeddings):
+    model: str = 'jina'
     embedding_ctx_length: int = 512
 
 

@@ -189,3 +189,11 @@
 .chat-bubble:before {
 	display: none;
 }
+
+.build-tab {
+}
+.build-tab a.active {
+	color: #024FE5;
+	/* background: #F4F5F8;
+	padding: 10px 40px; */
+}

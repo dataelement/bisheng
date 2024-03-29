@@ -104,7 +104,7 @@ def get_build_result(data_graph, session_id):
     return build_sorted_vertices(data_graph)
 
 
-def process_inputs(inputs: Optional[dict], artifacts: Dict[str, Any]) -> dict:
+def process_inputs(inputs: Optional[dict], artifacts: Dict[str, Any], input_key: str) -> dict:
     if inputs is None:
         inputs = {}
 
@@ -113,7 +113,11 @@ def process_inputs(inputs: Optional[dict], artifacts: Dict[str, Any]) -> dict:
             continue
         elif key not in inputs or not inputs[key]:
             inputs[key] = value
-
+    # 针对api设置default input，防止技能变更后，输入变化
+    if input_key not in inputs and 'default_input' in inputs:
+        inputs[input_key] = inputs.pop('default_input')
+    elif 'default_input' in inputs:
+        inputs.pop('default_input')
     return inputs
 
 
@@ -162,6 +166,7 @@ async def process_graph_cached(
     if not graph:
         raise ValueError('Graph not found in the session')
     built_object = await graph.abuild()
+    input_key_object = built_object.input_keys[0]
     # memery input
     if hasattr(built_object, 'memory') and built_object.memory is not None:
         with session_getter() as session:
@@ -185,7 +190,7 @@ async def process_graph_cached(
                 outputs_history = {built_object.output_keys[0]: history[next_loop].message}
                 built_object.memory.save_context(inputs_hsitory, outputs_history)
     if isinstance(built_object, Report):
-        processed_inputs = process_inputs(inputs, artifacts or {})
+        processed_inputs = process_inputs(inputs, artifacts or {}, input_key_object)
         result = generate_result(built_object, processed_inputs)
         # build report
         with session_getter() as db_session:
@@ -215,12 +220,12 @@ async def process_graph_cached(
         report = ''
         for question in input_batch:
             logger.info('produce auto question question={}', question)
-            processed_inputs = process_inputs(question, artifacts or {})
+            processed_inputs = process_inputs(question, artifacts or {}, input_key_object)
             result = generate_result(built_object, processed_inputs)
             report = f"""{report}### {question} \n {result} \n """
         result = report
     else:
-        processed_inputs = process_inputs(inputs, artifacts or {})
+        processed_inputs = process_inputs(inputs, artifacts or {}, input_key_object)
         result = generate_result(built_object, processed_inputs)
 
     # langchain_object is now updated with the new memory
@@ -308,6 +313,9 @@ def apply_tweaks(node: Dict[str, Any], node_tweaks: Dict[str, Any]) -> None:
         if tweak_name and tweak_value and tweak_name in template_data:
             key = tweak_name if tweak_name == 'file_path' else 'value'
             template_data[tweak_name][key] = tweak_value
+        elif tweak_name and tweak_value:
+            template_data[tweak_name] = {}
+            template_data[tweak_name]['value'] = tweak_value
 
 
 def process_tweaks(graph_data: Dict[str, Any], tweaks: Dict[str, Dict[str,

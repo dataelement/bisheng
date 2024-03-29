@@ -8,8 +8,8 @@ from uuid import uuid4
 import numpy as np
 from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
-from langchain.vectorstores.milvus import Milvus as MilvusLangchain
 from langchain.vectorstores.utils import maximal_marginal_relevance
+from langchain_community.vectorstores.milvus import Milvus as MilvusLangchain
 
 logger = logging.getLogger(__name__)
 
@@ -200,15 +200,23 @@ class Milvus(MilvusLangchain):
         # Create the connection to the server
         if connection_args is None:
             connection_args = DEFAULT_MILVUS_CONNECTION
+        # if 'timeout' not in connection_args:
+        # connection_args['timeout'] = 30
+
         self.alias = self._create_connection_alias(connection_args)
         self.col: Optional[Collection] = None
 
         # Grab the existing collection if it exists
-        if utility.has_collection(self.collection_name, using=self.alias):
-            self.col = Collection(
-                self.collection_name,
-                using=self.alias,
-            )
+        try:
+            if utility.has_collection(self.collection_name, using=self.alias):
+                self.col = Collection(
+                    self.collection_name,
+                    using=self.alias,
+                )
+        except Exception as e:
+            logger.error(f'milvus operating error={str(e)}')
+            self.close_connection(self.alias)
+            raise e
         # If need to drop old, drop it
         if drop_old and isinstance(self.col, Collection):
             self.col.drop()
@@ -216,6 +224,10 @@ class Milvus(MilvusLangchain):
 
         # Initialize the vector store
         self._init()
+
+    def close_connection(self, using):
+        from pymilvus import connections
+        connections.remove_connection(using)
 
     def _create_connection_alias(self, connection_args: dict) -> str:
         """Create the connection to the Milvus server."""

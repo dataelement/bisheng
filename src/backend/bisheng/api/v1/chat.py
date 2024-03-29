@@ -76,7 +76,8 @@ def like_response(*, data: ChatInput, Authorize: AuthJWT = Depends()):
     liked = data.liked
     with session_getter() as session:
         message = session.get(ChatMessage, message_id)
-    if message and message.user_id == payload.get('user_id'):
+    if message:
+        logger.info('act=add_liked user_id={} liked={}', payload.get('user_id'), liked)
         message.liked = liked
     with session_getter() as session:
         session.add(message)

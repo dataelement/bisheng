@@ -33,6 +33,30 @@ export async function getAll() {
 }
 
 /**
+ * 读取 saved 组件s
+ */
+export async function getComponents(): Promise<any[]> {
+  return await axios.get(`/api/v1/component`);
+}
+/**
+ * save 组件
+ */
+export async function saveComponent(data): Promise<any[]> {
+  return await axios.post(`/api/v1/component`, data);
+}
+/**
+ * 覆盖 组件
+ */
+export async function overridComponent(data): Promise<any[]> {
+  return await axios.patch(`/api/v1/component`, data);
+}
+/**
+ * 删除 组件
+ */
+export async function delComponentApi(name): Promise<any> {
+  return await axios.delete(`/api/v1/component`, { data: { name } });
+}
+/**
  * 获取平台配置
  */
 export async function getAppConfig(): Promise<AppConfig> {
@@ -108,8 +132,8 @@ export async function readFileByLibDatabase({ id, page, pageSize = 40, name = ''
 /**
  * 重试解析文件
  */
-export async function retryKnowledgeFileApi(id) {
-  await axios.post(`/api/v1/knowledge/retry`, { file_ids: [id] });
+export async function retryKnowledgeFileApi(objs) {
+  await axios.post(`/api/v1/knowledge/retry`, { file_objs: objs });
 }
 
 /**
@@ -365,7 +389,8 @@ export async function splitWordApi(word: string, messageId: string): Promise<str
 // 获取 chunks
 export async function getSourceChunksApi(chatId: string, messageId: number, keys: string) {
   try {
-    const chunks: any[] = await axios.get(`/api/v1/qa/chunk?chat_id=${chatId}&message_id=${messageId}&keys=${keys}`)
+    let chunks: any[] = await axios.get(`/api/v1/qa/chunk?chat_id=${chatId}&message_id=${messageId}&keys=${keys}`)
+
     const fileMap = {}
     chunks.forEach(chunk => {
       const list = fileMap[chunk.file_id]
@@ -386,7 +411,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         }))
       const score = chunks[0].score
 
-      return { id, fileName, fileUrl, originUrl, chunks, score, ...other }
+      return { id, fileName, fileUrl, originUrl, chunks, ...other, score }
     }).sort((a, b) => b.score - a.score)
   } catch (error) {
     console.error(error);

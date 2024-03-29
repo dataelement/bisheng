@@ -12,7 +12,7 @@ class LLMFrontendNode(FrontendNode):
     def add_extra_fields(self) -> None:
         self.template.add_field(
             TemplateField(field_type='bool',
-                          required=True,
+                          required=False,
                           show=True,
                           advanced=True,
                           name='cache',
@@ -100,6 +100,8 @@ class LLMFrontendNode(FrontendNode):
             field.show = True
             field.advanced = True
             field.value = 'chatgpt'
+        elif field.name == 'azure_ad_token_provider':
+            field.show = False
 
     @staticmethod
     def format_contribute_field(field: TemplateField):
@@ -129,6 +131,7 @@ class LLMFrontendNode(FrontendNode):
         ) or 'base' in field.name.lower():
             field.show = True
             field.advanced = False
+            field.field_type = 'str'
 
     @staticmethod
     def format_llama_field(field: TemplateField):

@@ -2,7 +2,7 @@ import os
 import sys
 
 import requests
-from bisheng.database.models.knowledge import KnowledgeCreate
+# from bisheng.database.models.knowledge import KnowledgeCreate
 
 parent_dir = os.path.dirname(os.path.abspath(__file__)).replace('test', '')
 sys.path.append(parent_dir)
@@ -16,7 +16,7 @@ def test_env():
 
 
 def test_upload():
-    file = {'file': open('/Users/huangly/Downloads/co2.pdf', 'rb')}
+    file = {'file': open('../../Downloads/合同.pdf', 'rb')}
     resp = requests.post('http://127.0.0.1:7860/api/v2/filelib/file/1',
                          json={'callback_url': '123'},
                          files=file)
@@ -74,7 +74,7 @@ def test_create():
     return resp
 
 
-# test_create()
-test_file(479)
-# string_knowledge(471)
-# test_upload()
+# # test_create()
+# test_file(479)
+# # string_knowledge(471)
+test_upload()

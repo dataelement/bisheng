@@ -5,9 +5,8 @@ from typing import Any, Callable, Dict, Type
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge
 from bisheng.settings import settings
-from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
+from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
-from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain_community.vectorstores import (FAISS, Chroma, Milvus, MongoDBAtlasVectorSearch,
                                               Pinecone, Qdrant, SupabaseVectorStore, Weaviate)
 from loguru import logger
@@ -230,12 +229,7 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
 
         if not knowledge:
             raise ValueError(f'不能找到知识库collection={col} knowledge_id={collection_id}')
-        model_param = settings.get_knowledge().get('embeddings').get(knowledge.model)
-        if knowledge.model == 'text-embedding-ada-002':
-            embedding = OpenAIEmbeddings(**model_param)
-        else:
-            embedding = HostEmbeddings(**model_param)
-        params['embedding'] = embedding
+        params['embedding'] = decide_embeddings(knowledge.model)
         if knowledge.collection_name.startswith('partition'):
             search_kwargs.update({'partition_key': knowledge.id})
     logger.info('init_milvus collection_name={} partition={}', params['collection_name'],
