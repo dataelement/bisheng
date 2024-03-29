@@ -8,7 +8,7 @@ class CalculatorInput(BaseModel):
     )
 
 
-@tool("calculator")
+@tool("calculator", args_schema=CalculatorInput)
 def calculator(expression):
     """Useful to perform any mathematical calculations,
     like sum, minus, multiplication, division, etc.
