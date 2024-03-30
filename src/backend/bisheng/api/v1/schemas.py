@@ -7,6 +7,8 @@ from uuid import UUID
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
+from bisheng.database.models.gpts_tools import GptsToolsRead
+from bisheng.database.models.knowledge import KnowledgeRead
 from langchain.docstore.document import Document
 from pydantic import BaseModel, Field, validator
 
@@ -248,6 +250,6 @@ class AssistantSimpleInfo(BaseModel):
 
 
 class AssistantInfo(AssistantBase):
-    tool_list: List[int] = Field(default=[], description='助手的工具ID列表')
-    flow_list: List[str] = Field(default=[], description='助手的技能ID列表')
-    knowledge_list: List[int] = Field(default=[], description='知识库ID列表')
+    tool_list: List[GptsToolsRead] = Field(default=[], description='助手的工具ID列表')
+    flow_list: List[FlowRead] = Field(default=[], description='助手的技能ID列表')
+    knowledge_list: List[KnowledgeRead] = Field(default=[], description='知识库ID列表')

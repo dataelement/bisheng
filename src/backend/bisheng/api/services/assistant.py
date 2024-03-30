@@ -7,7 +7,9 @@ from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, Assistan
                                     UnifiedResponseModel, resp_200)
 from bisheng.cache import InMemoryCache
 from bisheng.database.models.assistant import Assistant, AssistantDao, AssistantLinkDao
-from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
+from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead
+from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAcessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
@@ -65,7 +67,7 @@ class AssistantService(AssistantUtils):
                 knowledge_list.append(one.knowledge_id)
             else:
                 logger.error(f'not expect link info: {one.dict()}')
-
+        tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list, knowledge_list)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
                                            flow_list=flow_list,
@@ -82,9 +84,10 @@ class AssistantService(AssistantUtils):
         assistant = AssistantDao.create_assistant(assistant)
         # 保存大模型自动选择的工具和技能
         AssistantLinkDao.insert_batch(assistant.id, tool_list=tool_list, flow_list=flow_list)
+        tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list)
 
-        return resp_200(
-            data=AssistantInfo(**assistant.dict(), tool_list=tool_list, flow_list=flow_list))
+        return resp_200(data=AssistantInfo(**assistant.dict(), tool_list=tool_list,
+                                           flow_list=flow_list, knowledge_list=knowledge_list))
 
     # 删除助手
     @classmethod
@@ -148,10 +151,11 @@ class AssistantService(AssistantUtils):
         elif req.knowledge_list is not None:
             AssistantLinkDao.update_assistant_knowledge(assistant.id,
                                                         knowledge_list=req.knowledge_list)
+        tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list, req.knowledge_list)
         return resp_200(data=AssistantInfo(**assistant.dict(),
-                                           tool_list=req.tool_list,
-                                           flow_list=req.flow_list,
-                                           knowledge_list=req.knowledge_list))
+                                           tool_list=tool_list,
+                                           flow_list=flow_list,
+                                           knowledge_list=knowledge_list))
 
     @classmethod
     def update_prompt(cls, assistant_id: UUID, prompt: str) -> UnifiedResponseModel:
@@ -173,7 +177,7 @@ class AssistantService(AssistantUtils):
         return resp_200()
 
     @classmethod
-    def get_gpts_tools(cls, user: Any) -> List[GptsTools]:
+    def get_gpts_tools(cls, user: Any) -> List[GptsToolsRead]:
         """ 获取用户可见的工具列表 """
         user_id = user.get('user_id')
         return GptsToolsDao.get_list_by_user(user_id)
@@ -194,6 +198,13 @@ class AssistantService(AssistantUtils):
             return AssistantNotExistsError.return_resp()
         AssistantLinkDao.update_assistant_tool(assistant_id, tool_list=tool_list)
         return resp_200()
+
+    @classmethod
+    def get_link_info(cls, tool_list: List[int], flow_list: List[str], knowledge_list: List[int] = None):
+        tool_list = GptsToolsDao.get_list_by_ids(tool_list) if tool_list else []
+        flow_list = FlowDao.get_flow_by_ids(flow_list) if flow_list else []
+        knowledge_list = KnowledgeDao.get_list_by_ids(knowledge_list) if knowledge_list else []
+        return tool_list, flow_list, knowledge_list
 
     @classmethod
     def get_user_name(cls, user_id: int):

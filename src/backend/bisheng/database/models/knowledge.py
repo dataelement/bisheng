@@ -50,6 +50,11 @@ class KnowledgeDao(KnowledgeBase):
             return session.get(Knowledge, id)
 
     @classmethod
+    def get_list_by_ids(cls, ids: List[int]):
+        with session_getter() as session:
+            return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
+
+    @classmethod
     def get_knowledge_by_access(role_id: int, name: str, page_size: int,
                                 page_num: int) -> List[Tuple[Knowledge, RoleAccess]]:
         from bisheng.database.models.role_access import RoleAccess, AccessType
