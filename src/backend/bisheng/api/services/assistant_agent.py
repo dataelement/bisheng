@@ -1,6 +1,7 @@
 import json
 from typing import List
 
+import httpx
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.utils import set_flow_knowledge_id
 from bisheng.api.utils import build_flow_no_yield
@@ -29,24 +30,27 @@ class AssistantAgent(AssistantUtils):
         self.debug: bool = True
 
     async def init_assistant(self, callbacks: Callbacks = None):
-        self.init_llm()
+        await self.init_llm()
         await self.init_tools(callbacks)
-        self.init_agent()
+        await self.init_agent()
 
-    def init_llm(self):
+    async def init_llm(self):
         llm_params = self.get_llm_conf(self.assistant.model_name)
         if not llm_params:
             logger.error(f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
             raise Exception(f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
-        llm_object = import_by_type(_type='llms', name=llm_params['type'])
 
         if llm_params['type'] == 'ChatOpenAI':
+            llm_object = import_class('langchain_openai.ChatOpenAI')
             llm_params.pop('type')
             llm_params['model'] = llm_params.pop('model_name')
-            # if 'openai_proxy' in llm_params:
-            #     llm_params['http_client'] = httpx.AsyncClient(proxies=llm_params.pop('openai_proxy'))
+            if 'openai_proxy' in llm_params:
+                openai_proxy = llm_params.pop('openai_proxy')
+                llm_params['http_client'] = httpx.Client(proxies=openai_proxy)
+                llm_params['http_async_client'] = httpx.AsyncClient(proxies=openai_proxy)
             self.llm = llm_object(**llm_params)
         else:
+            llm_object = import_by_type(_type='llms', name=llm_params['type'])
             llm_params.pop('type')
             self.llm = llm_object(**llm_params)
 
@@ -94,7 +98,7 @@ class AssistantAgent(AssistantUtils):
                     logger.error(f'Error processing tweaks: {exc}')
         self.tools = tools
 
-    def init_agent(self):
+    async def init_agent(self):
         """
         初始化智能体的agent
         """
