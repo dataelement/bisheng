@@ -65,7 +65,7 @@ class AssistantAgent(AssistantUtils):
         if tool_ids:
             tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
             tool_name_param = {tool.tool_key: json.loads(tool.extra) if tool.extra else {} for tool in tools_model}
-            tool_langchain = load_tools(tool_params=tool_name_param, llm=self.llm)
+            tool_langchain = load_tools(tool_params=tool_name_param, llm=self.llm, callbacks=callbacks)
             tools += tool_langchain
             logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
 
@@ -92,7 +92,8 @@ class AssistantAgent(AssistantUtils):
                                      func=built_object.call,
                                      coroutine=built_object.acall,
                                      description=flow.description,
-                                     args_schema=InputRequest)
+                                     args_schema=InputRequest,
+                                     callbacks=callbacks)
                     tools.append(flow_tool)
                 except Exception as exc:
                     logger.error(f'Error processing tweaks: {exc}')
