@@ -105,7 +105,6 @@ class ChatClient:
             await self.websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason='agent init error')
             raise Exception('agent init error')
 
-        # TODO zgq: 流式输出和 获取agent执行的每一个工具信息。写入chatmessages
         inputs = message.get('inputs', {})
         await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
 

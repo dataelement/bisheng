@@ -59,10 +59,10 @@ class AssistantAgent(AssistantUtils):
         tools: List[BaseTool] = []
         tool_ids = [link.tool_id for link in links if link.tool_id]
         if tool_ids:
-            tools: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
-            tool_name_param = {tool.tool_key: json.loads(tool.extra) for tool in tools}
+            tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
+            tool_name_param = {tool.tool_key: json.loads(tool.extra) if tool.extra else {} for tool in tools_model}
             tool_langchain = load_tools(tool_params=tool_name_param, llm=self.llm)
-            tools = tools + tool_langchain
+            tools += tool_langchain
             logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
 
         # flow
