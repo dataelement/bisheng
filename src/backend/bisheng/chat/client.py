@@ -108,6 +108,7 @@ class ChatClient:
         inputs = message.get('inputs', {})
         await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
 
+        await self.send_response('processing', 'begin', '')
         await self.send_response('processing', 'start', '')
         if input_msg := inputs.get('input'):
             result = await self.gpts_agent.run(input_msg, async_callbacks)
@@ -120,3 +121,4 @@ class ChatClient:
             await self.send_response('answer', 'start', '')
             await self.send_response('answer', 'end', answer)
         await self.send_response('processing', 'end', '')
+        await self.send_response('processing', 'close', '')

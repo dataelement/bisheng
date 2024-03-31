@@ -10,6 +10,7 @@ from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatL
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import session_getter
+from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead
 from bisheng.graph.graph.base import Graph
@@ -108,20 +109,31 @@ def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
     flow_ids = [message.flow_id for message in db_message]
     with session_getter() as session:
         db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
+
+    assistant_chats = AssistantDao.get_assistants_by_ids(flow_ids)
+    assistant_dict = {assistant.id: assistant for assistant in assistant_chats}
     # set object
     chat_list = []
     flow_dict = {flow.id: flow for flow in db_flow}
     for i, message in enumerate(db_message):
-        if message.flow_id not in flow_dict:
-            # flow 被删除
-            continue
-        chat_list.append(
-            ChatList(flow_name=flow_dict[message.flow_id].name,
-                     flow_description=flow_dict[message.flow_id].description,
-                     flow_id=message.flow_id,
-                     chat_id=message.chat_id,
-                     create_time=message.create_time,
-                     update_time=message.update_time))
+        if message.flow_id in flow_dict:
+            chat_list.append(
+                ChatList(flow_name=flow_dict[message.flow_id].name,
+                         flow_description=flow_dict[message.flow_id].description,
+                         flow_id=message.flow_id,
+                         chat_id=message.chat_id,
+                         create_time=message.create_time,
+                         update_time=message.update_time))
+        elif message.flow_id in assistant_dict:
+            chat_list.append(
+                ChatList(flow_name=assistant_dict[message.flow_id].name,
+                         flow_description=assistant_dict[message.flow_id].desc,
+                         flow_id=message.flow_id,
+                         chat_id=message.chat_id,
+                         create_time=message.create_time,
+                         update_time=message.update_time))
+        else:
+            logger.warning(f'没有找到flow_id={message.flow_id}')
     return resp_200(chat_list)
 
 
