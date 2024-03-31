@@ -1,6 +1,7 @@
 import json
-from typing import Dict, List
+from typing import List
 
+import httpx
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.utils import set_flow_knowledge_id
 from bisheng.api.utils import build_flow_no_yield
@@ -28,52 +29,44 @@ class AssistantAgent(AssistantUtils):
         self.llm: BaseLanguageModel | None = None
         self.debug: bool = True
 
-    async def init_assistant(self):
-        self.init_llm()
-        await self.init_tools()
-        self.init_agent()
+    async def init_assistant(self, callbacks: Callbacks = None):
+        await self.init_llm()
+        await self.init_tools(callbacks)
+        await self.init_agent()
 
-    def init_llm(self):
+    async def init_llm(self):
         llm_params = self.get_llm_conf(self.assistant.model_name)
         if not llm_params:
             logger.error(f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
             raise Exception(f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
-        llm_object = import_by_type(_type='llms', name=llm_params['type'])
 
         if llm_params['type'] == 'ChatOpenAI':
+            llm_object = import_class('langchain_openai.ChatOpenAI')
             llm_params.pop('type')
             llm_params['model'] = llm_params.pop('model_name')
-            # if 'openai_proxy' in llm_params:
-            #     llm_params['http_client'] = httpx.AsyncClient(proxies=llm_params.pop('openai_proxy'))
+            if 'openai_proxy' in llm_params:
+                openai_proxy = llm_params.pop('openai_proxy')
+                llm_params['http_client'] = httpx.Client(proxies=openai_proxy)
+                llm_params['http_async_client'] = httpx.AsyncClient(proxies=openai_proxy)
             self.llm = llm_object(**llm_params)
         else:
+            llm_object = import_by_type(_type='llms', name=llm_params['type'])
             llm_params.pop('type')
             self.llm = llm_object(**llm_params)
 
-    async def init_tools(self):
+    async def init_tools(self, callbacks: Callbacks = None):
         """通过名称获取tool 列表
            tools_name_param:: {name: params}
         """
-        print('-------  init tool start -------', self.assistant.id)
-
         links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(assistant_id=self.assistant.id)
-
-        tools_params: Dict[str, Dict] = {
-            'sina.realtime_info': {},
-            'sina.history_KLine': {}
-        }
-        self.tools = load_tools(tool_params=tools_params, llm=self.llm)
-        print('----- init tools over -----', len(self.tools))
-        return
-
         # tool
         tools: List[BaseTool] = []
         tool_ids = [link.tool_id for link in links if link.tool_id]
         if tool_ids:
-            tools: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
-            tool_name_param = {tool.tool_key: json.loads(tool.extra) for tool in tools}
-            tool_langchain = load_tools(tool_params=tool_name_param, llm=self.llm)
-            tools = tools + tool_langchain
+            tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
+            tool_name_param = {tool.tool_key: json.loads(tool.extra) if tool.extra else {} for tool in tools_model}
+            tool_langchain = load_tools(tool_params=tool_name_param, llm=self.llm, callbacks=callbacks)
+            tools += tool_langchain
             logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
 
         # flow
@@ -99,13 +92,14 @@ class AssistantAgent(AssistantUtils):
                                      func=built_object.call,
                                      coroutine=built_object.acall,
                                      description=flow.description,
-                                     args_schema=InputRequest)
+                                     args_schema=InputRequest,
+                                     callbacks=callbacks)
                     tools.append(flow_tool)
                 except Exception as exc:
                     logger.error(f'Error processing tweaks: {exc}')
         self.tools = tools
 
-    def init_agent(self):
+    async def init_agent(self):
         """
         初始化智能体的agent
         """

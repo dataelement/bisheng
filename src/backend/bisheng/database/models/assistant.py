@@ -92,6 +92,12 @@ class AssistantDao(Assistant):
             return session.exec(statement).first()
 
     @classmethod
+    def get_assistants_by_ids(cls, assistant_ids: List[UUID]) -> List[Assistant]:
+        with session_getter() as session:
+            statement = select(Assistant).where(Assistant.id.in_(assistant_ids))
+            return session.exec(statement).all()
+
+    @classmethod
     def get_assistants(cls, user_id: int, name: str, assistant_ids: List[UUID], page: int,
                        limit: int) -> (List[Assistant], int):
         with session_getter() as session:
