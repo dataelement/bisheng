@@ -4,7 +4,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "."
 import { Badge } from "../badge"
 import { SearchInput } from "../input"
 
-
 const MultiItem = ({ active, children, value, onClick}) => {
 
     return <div key={value}
@@ -21,19 +20,22 @@ const MultiItem = ({ active, children, value, onClick}) => {
 
 
 interface IProps {
+    className?: string,
     options: { label: string, value: string }[],
     value?: string[],
     defaultValue?: string[],
     children?: React.ReactNode,
     placeholder: string,
     searchPlaceholder?: string,
+    lockedValues?:string[],
     onChange?: (value: string[]) => void
 }
 // 临时用 andt 设计方案封装组件
-const MultiSelect = ({ value = [], defaultValue = [], options = [], children = null, placeholder, searchPlaceholder = '', onChange, ...props }: IProps) => {
+const MultiSelect = ({className, value = [], defaultValue = [], options = [], children = null, placeholder, searchPlaceholder = '', lockedValues=[], onChange, ...props }: IProps) => {
 
     const [values, setValues] = React.useState(defaultValue)
     const [optionFilter, setOptionFilter] = React.useState(options)
+    
 
     const inputRef = useRef(null)
 
@@ -57,6 +59,9 @@ const MultiSelect = ({ value = [], defaultValue = [], options = [], children = n
     }
     // add
     const handleSwitch = (value: string) => {
+        if(lockedValues.includes(value)){
+            return
+        }
         if(values.includes(value)){
             const newValues = values.filter((item)=>{
                 return item !== value
@@ -77,17 +82,16 @@ const MultiSelect = ({ value = [], defaultValue = [], options = [], children = n
         })
         setOptionFilter(newValues)
     }
-
-    return <Select {...props} required>
+    return <Select {...props} required >
         <SelectTrigger className="mt-2 h-auto">
             {
                 values.length
                     ? <div className="flex flex-wrap">
                         {
                             options.filter(option => values.includes(option.value)).map(option =>
-                                <Badge  onPointerDown={(e) => e.stopPropagation()}  key={option.value} className="flex items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
+                                <Badge  onPointerDown={(e) => e.stopPropagation()}  key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
                                     {option.label}
-                                    <Cross1Icon className="h-3 w-3" onClick={() => handleDelete(option.value)}></Cross1Icon>
+                                    {lockedValues.includes(option.value)||<Cross1Icon className="h-3 w-3" onClick={() => handleDelete(option.value)}></Cross1Icon>}
                                 </Badge>
                             )
                         }
@@ -95,9 +99,8 @@ const MultiSelect = ({ value = [], defaultValue = [], options = [], children = n
                     : placeholder
             }
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className={className}>
             <SearchInput ref={inputRef}  inputClassName="h-8" placeholder={searchPlaceholder} onChange={(e)=>{handleSearch(e)}} iconClassName="w-4 h-4" />
-            <SelectItem value={"1"} className="hidden"></SelectItem>
             <div className="mt-2">
                 {
                     optionFilter.map((item, index) => (

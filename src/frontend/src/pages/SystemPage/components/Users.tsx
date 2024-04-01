@@ -103,8 +103,8 @@ export default function Users(params) {
                 <h3 className="font-bold text-lg">{t('prompt')}!</h3>
                 <p className="py-4">{t('system.confirmDisable')}</p>
                 <div className="modal-action">
-                    <Button className="h-8 rounded-lg" variant="outline" onClick={close}>{t('cancel')}</Button>
-                    <Button className="h-8 rounded-lg" variant="destructive" onClick={handleDelete}>{t('disable')}</Button>
+                    <Button className="h-8" variant="outline" onClick={close}>{t('cancel')}</Button>
+                    <Button className="h-8" variant="destructive" onClick={handleDelete}>{t('disable')}</Button>
                 </div>
             </form>
         </dialog>
