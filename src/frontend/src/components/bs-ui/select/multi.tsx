@@ -1,16 +1,15 @@
 import { CheckIcon, Cross1Icon } from "@radix-ui/react-icons"
-import React from "react"
+import React, { useEffect, useRef } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "."
 import { Badge } from "../badge"
 import { SearchInput } from "../input"
-
 
 const MultiItem = ({ active, children, value, onClick}) => {
 
     return <div key={value}
         className={`relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 mb-1 text-sm outline-none hover:bg-[#EBF0FF] hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 
     ${active && 'bg-[#EBF0FF]'}`}
-    onClick={()=>{onClick(value)}}
+    onClick={() => {onClick(value)}}
     >
         <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
             {active && <CheckIcon className="h-4 w-4"></CheckIcon>}
@@ -21,33 +20,58 @@ const MultiItem = ({ active, children, value, onClick}) => {
 
 
 interface IProps {
+    className?: string,
     options: { label: string, value: string }[],
+    value?: string[],
     defaultValue?: string[],
     children?: React.ReactNode,
     placeholder: string,
     searchPlaceholder?: string,
+    lockedValues?:string[],
+    onChange?: (value: string[]) => void
 }
 // 临时用 andt 设计方案封装组件
-const MultiSelect = ({ defaultValue = [], options = [], children = null, placeholder, searchPlaceholder = '', ...props }: IProps) => {
+const MultiSelect = ({className, value = [], defaultValue = [], options = [], children = null, placeholder, searchPlaceholder = '', lockedValues=[], onChange, ...props }: IProps) => {
 
     const [values, setValues] = React.useState(defaultValue)
-    const [optionFilter,setOptionFilter] = React.useState(options)
+    const [optionFilter, setOptionFilter] = React.useState(options)
+    
+
+    const inputRef = useRef(null)
+
+    useEffect(() => {
+        setValues(value)
+    }, [value])
+
+    useEffect(() => {
+        setOptionFilter(options)
+        if (inputRef.current) {
+            inputRef.current.value = ''
+        }
+    }, [options])
     // delete
     const handleDelete = (value: string) => {
         const newValues = values.filter((item)=>{
             return item !== value
         })
         setValues(newValues)
+        onChange?.(newValues)
     }
     // add
     const handleSwitch = (value: string) => {
+        if(lockedValues.includes(value)){
+            return
+        }
         if(values.includes(value)){
             const newValues = values.filter((item)=>{
                 return item !== value
             })
             setValues(newValues)
-        }else{
-            setValues([...values,value])
+            onChange?.(newValues)
+        } else {
+            const _newValues = [...values, value]
+            setValues(_newValues)
+            onChange?.(_newValues)
         }
     }
 
@@ -58,17 +82,16 @@ const MultiSelect = ({ defaultValue = [], options = [], children = null, placeho
         })
         setOptionFilter(newValues)
     }
-
-    return <Select {...props} required>
+    return <Select {...props} required >
         <SelectTrigger className="mt-2 h-auto">
             {
                 values.length
                     ? <div className="flex flex-wrap">
                         {
                             options.filter(option => values.includes(option.value)).map(option =>
-                                <Badge  onPointerDown={(e) => e.stopPropagation()}  key={option.value} className="flex items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
+                                <Badge  onPointerDown={(e) => e.stopPropagation()}  key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
                                     {option.label}
-                                    <Cross1Icon className="h-3 w-3" onClick={() => handleDelete(option.value)}></Cross1Icon>
+                                    {lockedValues.includes(option.value)||<Cross1Icon className="h-3 w-3" onClick={() => handleDelete(option.value)}></Cross1Icon>}
                                 </Badge>
                             )
                         }
@@ -76,9 +99,8 @@ const MultiSelect = ({ defaultValue = [], options = [], children = null, placeho
                     : placeholder
             }
         </SelectTrigger>
-        <SelectContent>
-            <SearchInput inputClassName="h-8" placeholder={searchPlaceholder} onChange={(e)=>{handleSearch(e)}} iconClassName="w-4 h-4" />
-            <SelectItem value={"1"} className="hidden"></SelectItem>
+        <SelectContent className={className}>
+            <SearchInput ref={inputRef}  inputClassName="h-8" placeholder={searchPlaceholder} onChange={(e)=>{handleSearch(e)}} iconClassName="w-4 h-4" />
             <div className="mt-2">
                 {
                     optionFilter.map((item, index) => (

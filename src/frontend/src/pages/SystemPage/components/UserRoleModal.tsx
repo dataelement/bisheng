@@ -30,6 +30,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                 }
                 setSelected(userRoles)
             })
+            // console.log(roles)
         })
         setError(false)
     }, [id])
@@ -44,16 +45,37 @@ export default function UserRoleModal({ id, onClose, onChange }) {
         console.log('res :>> ', res);
         onChange()
     }
-
-    return <dialog className={`modal ${id && 'modal-open'}`}>
+    return <dialog className={`modal ${id && 'modal-open'}  z-100`}>
         <div className="modal-box w-[600px] max-w-[600px] bg-[#fff] shadow-lg dark:bg-background relative overflow-visible">
             <p className="font-bold mt-8 mb-2">{t('system.roleSelect')}</p>
-            <Listbox multiple
+            <div className="">
+                <MultiSelect
+                value={selected.map(item=>{
+                    return item.role_id.toString()
+                })}
+                options={roles.map((item)=>{
+                    return{
+                        label:item.role_name,
+                        value:item.role_id.toString()
+                    }
+                })} 
+                placeholder="dasd" 
+                className="max-h-[200px] overflow-auto z-[1000] w-[553px]"
+                lockedValues={["2"]}
+                onChange={(values)=>{
+                    setSelected(roles.filter(item=>{
+                        return values.includes(item.role_id.toString())
+                    }))
+                }}
+                >
+                </MultiSelect>
+            </div>
+            {/* <Listbox multiple
                 value={selected}
                 onChange={setSelected}
                 by={compareDepartments} >
                 <div className="relative mt-1">
-                    <Listbox.Button className={`relative w-full cursor-default rounded-lg bg-white py-2 pl-3 pr-10 text-left shadow-md focus:outline-none border sm:text-sm h-[38px] ${error && 'border-red-400'}`}>
+                    <Listbox.Button className={`relative w-full cursor-default bg-white py-2 pl-3 pr-10 text-left shadow-md focus:outline-none border sm:text-sm h-[38px] ${error && 'border-red-400'}`}>
                         <div className="block truncate">{selected.map(el => el.role_name).join(';')}</div>
                         <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                             <ChevronsUpDown />
@@ -92,10 +114,10 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                         ))}
                     </Listbox.Options>
                 </div>
-            </Listbox>
+            </Listbox> */}
             <div className="mt-12 flex justify-center gap-4">
-                <Button variant="outline" className="h-10 w-[120px] rounded-lg px-16" onClick={onClose}>{t('cancel')}</Button>
-                <Button className="px-16 h-10 w-[120px] rounded-lg" onClick={handleSave}>{t('save')}</Button>
+                <Button variant="outline" className="h-10 w-[120px] px-16" onClick={onClose}>{t('cancel')}</Button>
+                <Button className="px-16 h-10 w-[120px]" onClick={handleSave}>{t('save')}</Button>
             </div>
         </div>
     </dialog>

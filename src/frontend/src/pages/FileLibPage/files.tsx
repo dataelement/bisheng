@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { Button } from "../../components/ui/button";
+import { Button } from "../../components/bs-ui/button";
 import {
     Table,
     TableBody,
@@ -8,13 +8,13 @@ import {
     TableHead,
     TableHeader,
     TableRow
-} from "../../components/ui/table";
+} from "../../components/bs-ui/table";
 import {
     Tabs,
     TabsContent,
     TabsList,
     TabsTrigger,
-} from "../../components/ui/tabs";
+} from "../../components/bs-ui/tabs";
 
 import { ArrowLeft, Filter, RotateCw, Search, X } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -22,8 +22,8 @@ import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
 import PaginationComponent from "../../components/PaginationComponent";
 import ShadTooltip from "../../components/ShadTooltipComponent";
-import { Input } from "../../components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectIconTrigger, SelectItem } from "../../components/ui/select1";
+import { Input } from "../../components/bs-ui/input";
+import { Select, SelectContent, SelectGroup, SelectTrigger, SelectItem } from "../../components/bs-ui/select";
 import { locationContext } from "../../contexts/locationContext";
 import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
@@ -141,7 +141,7 @@ export default function FilesPage() {
                             <Input placeholder={t('lib.fileName')} onChange={(e) => search(e.target.value)}></Input>
                             <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
                         </div>
-                        {hasPermission && <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
+                        {hasPermission && <Button className="h-10 px-9" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
                     </div>
                 </div>
                 <Table>
@@ -162,9 +162,9 @@ export default function FilesPage() {
                             <TableHead className="flex items-center gap-4">{t('lib.status')}
                                 {/* Select component */}
                                 <Select onValueChange={selectChange}>
-                                    <SelectIconTrigger className="">
+                                    <SelectTrigger className="">
                                         <Filter size={16} className={`cursor-pointer ${filter === 999 ? '' : 'text-gray-950'}`} />
-                                    </SelectIconTrigger>
+                                    </SelectTrigger>
                                     <SelectContent className="">
                                         <SelectGroup>
                                             <SelectItem value={'999'}>{t('all')}</SelectItem>
@@ -176,7 +176,7 @@ export default function FilesPage() {
                                 </Select>
                             </TableHead>
                             <TableHead>{t('lib.uploadTime')}</TableHead>
-                            <TableHead>{t('operations')}</TableHead>
+                            <TableHead className="text-right pr-6">{t('operations')}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -195,8 +195,8 @@ export default function FilesPage() {
                                 </TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                 <TableCell className="text-right">
-                                    {hasPermission ? <a href="javascript:;" onClick={() => delConfim(el.id)} className="underline ml-4">{t('delete')}</a> :
-                                        <a href="javascript:;" className="underline ml-4 text-gray-400">{t('delete')}</a>}
+                                    {hasPermission ? <Button variant="link" onClick={() => delConfim(el.id)} className="ml-4">{t('delete')}</Button> :
+                                        <Button variant="link" className="ml-4 text-gray-400">{t('delete')}</Button>}
                                 </TableCell>
                             </TableRow>
                         ))}

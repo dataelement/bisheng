@@ -16,7 +16,7 @@ const buttonVariants = cva(
                 secondary:
                     "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
                 ghost: "hover:bg-accent hover:text-accent-foreground",
-                link: "text-primary underline-offset-4 no-underline hover:underline",
+                link: "text-primary no-underline hover:underline",
             },
             size: {
                 default: "h-9 px-4 py-2",
@@ -55,17 +55,22 @@ Button.displayName = "Button"
 
 const ButtonNumber = React.forwardRef<HTMLButtonElement, {
     className?: string,
-    defaultValue: number,
+    defaultValue?: number,
+    value?: number,
     max?: number,
     min?: number,
     step?: number,
-    size?: string,
+    size?: "default" | "sm" | "lg" | "icon",
     onChange?: (value: number) => void
-    }>(({ className, defaultValue, max=100, min=0, step=1, size = 'sm', onChange }, ref) => {
+    }>(({ className, value: userValue, defaultValue, max = 100, min = 0, step = 1, size = 'sm', onChange }, ref) => {
         if (max <= min) {
             throw new Error('max must be greater than min');
         }
         const [value, setValue] = React.useState(defaultValue)
+        React.useEffect(() => {
+            setValue(userValue)
+        }, [userValue])
+
         const getDecimalCount = (value: number) => {
             return (String(value).split('.')[1] || '').length;
         }
@@ -74,19 +79,18 @@ const ButtonNumber = React.forwardRef<HTMLButtonElement, {
             return Math.round(value * rounder) / rounder;
         }
         const valueAdd = () => {
-            const sum = roundValue(value+step,getDecimalCount(step))
+            const sum = roundValue(value + step, getDecimalCount(step))
             const updateValue = sum > max ? max : sum
             setValue(updateValue)
             onChange?.(updateValue)
-
         }
         const valueReduce = () => {
-            const sum = roundValue(value-step,getDecimalCount(step))
+            const sum = roundValue(value - step, getDecimalCount(step))
             const updateValue = sum < min ? min : sum
             setValue(updateValue)
             onChange?.(updateValue)
         }
-        return (<div className={cname("flex items-center border input-border bg-gray-50 rounded-md",className)}>
+        return (<div className={cname("flex items-center border input-border bg-gray-50 rounded-md", className)}>
             <Button variant="ghost" size={size} disabled={value === min} onClick={valueReduce}>-</Button>
             <span className="min-w-10 block text-center">{value}</span>
             <Button variant="ghost" size={size} disabled={value === max} onClick={valueAdd}>+</Button>

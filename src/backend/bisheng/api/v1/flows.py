@@ -56,7 +56,7 @@ def read_flows(*,
                      Flow.update_time, Flow.description, Flow.guide_word)
         count_sql = select(func.count(Flow.id))
         if 'admin' != payload.get('role'):
-            role_access = RoleAcessDao.get_role_acess(payload.get('roles'), AccessType.FLOW)
+            role_access = RoleAcessDao.get_role_acess(payload.get('role'), AccessType.FLOW)
 
             if role_access:
                 flow_ids = [access.third_id for access in role_access]

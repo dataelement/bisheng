@@ -14,7 +14,7 @@ interface IProps<T> {
   data: T,
   /** id为''时，表示新建 */
   id?: number | string,
-  type: "skill" | "sheet" | "user" | "setting", // 技能列表｜侧边弹窗列表
+  type: "skill" | "sheet" | "assist" | "setting", // 技能列表｜侧边弹窗列表
   title: string,
   edit?: boolean,
   description: React.ReactNode | string,
@@ -142,7 +142,7 @@ export default function CardComponent<T>({
       {edit
         && <div className="hidden group-hover:flex">
           <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>
-          {isAdmin && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
+          {isAdmin && type === 'skill' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
           <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>
         </div>
       }

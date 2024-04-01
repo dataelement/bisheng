@@ -1,7 +1,7 @@
 import AceEditor from "react-ace";
 
-import { Button } from "../../components/ui/button";
-import { Label } from "../../components/ui/label";
+import { Button } from "../../components/bs-ui/button";
+import { Label } from "../../components/bs-ui/label";
 import {
     Table,
     TableBody,
@@ -10,7 +10,7 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "../../components/ui/table";
+} from "../../components/bs-ui/table";
 import {
     Tabs,
     TabsContent,
@@ -20,7 +20,7 @@ import {
 
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { bsconfirm } from "../../alerts/confirm";
 import { alertContext } from "../../contexts/alertContext";
 import { locationContext } from "../../contexts/locationContext";
@@ -31,6 +31,7 @@ import RTConfig from "./components/RTConfig";
 import { CpuDetail } from "./cpuInfo";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { Finetune } from "./finetune";
+import { QuestionMarkIcon } from "@/components/bs-icons/questionMark";
 
 enum STATUS {
     ONLINE,
@@ -42,6 +43,7 @@ enum STATUS {
 
 function ConfigModal({ data, readonly, open, setOpen, onSave }) {
     const { t } = useTranslation()
+    const navigate = useNavigate()
 
     const codeRef = useRef("")
     const validataRef = useRef([])
@@ -66,13 +68,13 @@ function ConfigModal({ data, readonly, open, setOpen, onSave }) {
             <h3 className="font-bold text-lg">{t('model.modelConfiguration')}</h3>
             <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
                 <div className="grid gap-4 py-4 mt-2 w-full">
-                    <div className="grid grid-cols-8 items-center gap-4">
-                        <Label htmlFor="name" className="text-right">{t('model.modelName')}</Label>
-                        <p className=" text-sm text-gray-500 col-span-7">{data.model}</p>
+                    <div className="grid grid-cols-8 items-center">
+                        <Label htmlFor="name" className="text-left">{t('model.modelName')}</Label>
+                        <p className=" text-sm text-gray-500 col-span-7 text-left ml-[-10px]">{data.model}</p>
                     </div>
                     <div className="grid grid-cols-8 items-center gap-4 mt-4">
-                        <Label htmlFor="desc" className="text-right self-start">{t('model.modelConfigLabel')}</Label>
-                        <div className="col-span-7">
+                        <Label htmlFor="desc" className="text-left self-start col-span-8">{t('model.modelConfigLabel')}</Label>
+                        <div className="col-span-8">
                             <AceEditor
                                 value={data.config || '{}'}
                                 mode="json"
@@ -90,14 +92,13 @@ function ConfigModal({ data, readonly, open, setOpen, onSave }) {
                             />
                         </div>
                     </div>
-                    <div className="grid grid-cols-8 items-center gap-4">
-                        <p></p>
-                        <Link to={'./doc'} target="_blank" className="link col-span-7">{t('model.modelConfigExplanationLink')}</Link>
+                    <div className="flex justify-start">
+                        <Button variant='link' onClick={()=>{navigate('./doc')}} className="link col-span-8 pl-0">{t('model.modelConfigExplanationLink')}</Button>
                     </div>
                     {readonly ? <div className="flex justify-end gap-4"><Button variant='outline' type="submit" className="mt-6 h-8 rounded-full px-8" onClick={() => setOpen(false)}>{t('close')}</Button></div>
                         : <div className="flex justify-end gap-4">
-                            <Button variant='outline' type="submit" className="mt-6 h-8 rounded-full px-8" onClick={() => setOpen(false)}>{t('cancel')}</Button>
-                            <Button type="submit" className="mt-6 h-8 rounded-full px-8" onClick={handleCreate}>{t('confirmButton')}</Button>
+                            <Button variant='outline' type="submit" className="mt-6 h-10 px-10" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+                            <Button type="submit" className="mt-6 h-10 px-10" onClick={handleCreate}>{t('confirmButton')}</Button>
                         </div>
                     }
                 </div>
@@ -137,11 +138,12 @@ export default function FileLibPage() {
     // 上线状态
     const statusComponets = (status: number, reason?: string) => {
         const comps = [
-            <div className="badge badge-accent"><span>{t('model.onlineStatus')}</span></div>,
-            <div className="badge"><span>{t('model.offlineStatus')}</span></div>,
-            <div>
-                <span className="badge bg-warning" data-theme="light">{t('model.exceptionStatus')}</span>
-                <div className="tooltip tooltip-warning before:break-words" data-tip={reason || t('model.warningTooltip')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
+            <div className="flex items-center text-[#00b58d]"><div className="w-2 h-2 bg-[#00b58d] mr-2 mt-[1px]"></div><span>{t('model.onlineStatus')}</span></div>,
+            <div className="flex items-center text-[#aeb7d3]"><div className="w-2 h-2 bg-[#aeb7d3] mr-2 mt-[1px]"></div><span>{t('model.offlineStatus')}</span></div>,
+            <div className="flex items-center text-[#ff7b2a]">
+                <div className="w-2 h-2 bg-[#ff7b2a] mr-2 mt-[1px]"></div>
+                <span>{t('model.exceptionStatus')}</span>
+                <div className="tooltip before:break-words" data-tip={reason || t('model.warningTooltip')}><span className="flex ml-[7px] mt-1 items-center justify-center w-[15px] h-[15px] rounded-full bg-[#aeb7d3] text-[#fff] text-[12px] font-bold">?</span></div>
             </div>,
             <div className="badge badge-ghost"><span>{t('model.inProgressOnlineStatus')}</span></div>,
             <div className="badge badge-ghost"><span>{t('model.inProgressOfflineStatus')}</span></div>
@@ -209,7 +211,7 @@ export default function FileLibPage() {
 
     const copyText = useCopyText()
 
-    return <div id="model-scroll" className="w-full h-screen p-6 overflow-y-auto">
+    return <div id="model-scroll" className="w-full h-full p-6 overflow-y-auto">
         <Tabs defaultValue="model" className="w-full" onValueChange={e => e === 'model' && loadData()}>
             <TabsList className="">
                 <TabsTrigger value="model" className="roundedrounded-xl">{t('model.modelManagement')}</TabsTrigger>
@@ -217,9 +219,9 @@ export default function FileLibPage() {
             </TabsList>
             <TabsContent value="model">
                 <div className="flex justify-end gap-4">
-                    <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
-                    {user.role === 'admin' && <Button className="h-8 rounded-full" onClick={() => setShowCpu({ type: 'model', show: true })}>{t('model.gpuResourceUsage')}</Button>}
-                    {user.role === 'admin' && appConfig.isDev && <Button className="h-8 rounded-full" onClick={() => setRTOpen(true)}>{t('finetune.rtServiceManagement')}</Button>}
+                    {user.role === 'admin' && <Button className="h-10 px-5 bg-[#111] hover:bg-[#48494d]" onClick={() => setShowCpu({ type: 'model', show: true })}>{t('model.gpuResourceUsage')}</Button>}
+                    {user.role === 'admin' && appConfig.isDev && <Button className="h-10 px-6 bg-[#111] hover:bg-[#48494d]" onClick={() => setRTOpen(true)}>{t('finetune.rtServiceManagement')}</Button>}
+                    <Button className="h-10 px-10 rounded-lg" onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
                 </div>
                 <Table>
                     <TableCaption>{t('model.modelCollectionCaption')}.</TableCaption>
@@ -229,7 +231,7 @@ export default function FileLibPage() {
                             <TableHead>{t('model.modelName')}</TableHead>
                             <TableHead>{t('model.serviceAddress')}</TableHead>
                             <TableHead>{t('model.status')}</TableHead>
-                            <TableHead>{t('operations')}</TableHead>
+                            <TableHead className="text-right">{t('operations')}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -243,10 +245,10 @@ export default function FileLibPage() {
                                 <TableCell>
                                     {statusComponets(el.status, el.remark)}
                                 </TableCell>
-                                {user.role === 'admin' ? <TableCell className="">
-                                    {appConfig.isDev && <a href="javascript:;" className={`link ${[STATUS.WAIT_ONLINE, STATUS.WAIT_OFFLINE].includes(el.status) && 'text-gray-400 cursor-default'}`}
-                                        onClick={() => handleSwitchOnline(el)}>{[STATUS.ERROR, STATUS.OFFLINE, STATUS.WAIT_ONLINE].includes(el.status) ? t('model.online') : t('model.offline')}</a>}
-                                    <a href="javascript:;" className={`link ml-4`} onClick={() => handleOpenConfig(el)} >{t('model.modelConfiguration')}</a> </TableCell> :
+                                {user.role === 'admin' ? <TableCell className="text-right">
+                                    {appConfig.isDev && <Button variant="link" className={`link ${[STATUS.WAIT_ONLINE, STATUS.WAIT_OFFLINE].includes(el.status) && 'text-gray-400 cursor-default'}`}
+                                        onClick={() => handleSwitchOnline(el)}>{[STATUS.ERROR, STATUS.OFFLINE, STATUS.WAIT_ONLINE].includes(el.status) ? t('model.online') : t('model.offline')}</Button>}
+                                    <Button variant="link" className={`link px-0 pl-6`} onClick={() => handleOpenConfig(el)} >{t('model.modelConfiguration')}</Button> </TableCell> :
                                     <TableCell className="">--</TableCell>}
                             </TableRow>
                         ))}

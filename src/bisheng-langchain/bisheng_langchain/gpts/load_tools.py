@@ -71,11 +71,19 @@ def _get_native_code_interpreter(**kwargs: Any) -> Tool:
 _EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {  # type: ignore
     'dalle_image_generator': (_get_dalle_image_generator, ['openai_api_key', 'openai_proxy']),
     'bing_search': (_get_bing_search, ['bing_subscription_key', 'bing_search_url']),
-    'native_code_interpreter': (_get_native_code_interpreter, ['files']),
+    'code_interpreter': (_get_native_code_interpreter, ['files']),
 }
 
 _API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {}  # type: ignore
 _API_TOOLS.update(ALL_API_TOOLS)
+
+
+_ALL_TOOLS = {}
+_ALL_TOOLS.update(_BASE_TOOLS)
+_ALL_TOOLS.update(_LLM_TOOLS)
+_ALL_TOOLS.update(_EXTRA_LLM_TOOLS)
+_ALL_TOOLS.update(_EXTRA_PARAM_TOOLS)
+_ALL_TOOLS.update(_API_TOOLS)
 
 
 def _handle_callbacks(callback_manager: Optional[BaseCallbackManager], callbacks: Callbacks) -> Callbacks:

@@ -1,13 +1,13 @@
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { getAssistantModelsApi } from "@/controllers/API/assistant";
 import { useEffect, useState } from "react";
 
 export default function ModelSelect({ value, onChange }) {
 
     const [configServers, setConfigServers] = useState([])
-    const loadModels = () => {
-        // api
-        setConfigServers([{ model_name: 'gpt-4-0125-preview' }, { model_name: 'gpt-4-0125-preview2' }])
-        // serverListApi().then(setServers)
+    const loadModels = async () => {
+        const data = await getAssistantModelsApi()
+        setConfigServers(data)
     }
 
     useEffect(() => {
@@ -21,7 +21,7 @@ export default function ModelSelect({ value, onChange }) {
         <SelectContent>
             <SelectGroup>
                 {
-                    configServers.map(server => <SelectItem key={server.model_name} value={server.model_name}>{server.model_name}</SelectItem>)
+                    configServers.map(server => <SelectItem key={server.id} value={server.model_name}>{server.model_name}</SelectItem>)
                 }
             </SelectGroup>
         </SelectContent>
