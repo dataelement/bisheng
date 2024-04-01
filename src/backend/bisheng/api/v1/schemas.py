@@ -112,6 +112,15 @@ class ChatList(BaseModel):
     flow_type: str = None  # flow: 技能 assistant：gpts助手
 
 
+class FlowGptsOnlineList(BaseModel):
+    id: str = Field('唯一ID')
+    name: str = None
+    desc: str = None
+    create_time: datetime = None
+    update_time: datetime = None
+    flow_type: str = None  # flow: 技能 assistant：gpts助手
+
+
 class ChatMessage(BaseModel):
     """Chat message schema."""
 
@@ -232,6 +241,7 @@ class AssistantUpdateReq(BaseModel):
     guide_question: Optional[Dict] = Field({}, description='引导问题列表， 为空则不更新')
     model_name: Optional[str] = Field('', description='选择的模型名， 为空则不更新')
     temperature: Optional[float] = Field(0, description='模型温度， 为0则不更新')
+    status: Optional[int] = Field(None, description='状态， 不传则不更新')
 
     tool_list: List[int] | None = Field(default=None,
                                         description='助手的工具ID列表,空列表则清空绑定的工具，为None则不更新')
@@ -246,6 +256,7 @@ class AssistantSimpleInfo(BaseModel):
     logo: str
     user_id: int
     user_name: str
+    status: int
     create_time: datetime
     update_time: datetime
 

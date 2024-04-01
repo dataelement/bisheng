@@ -337,6 +337,12 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
         logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
+        resp_end = ChatResponse(type='end',
+                                category='processing',
+                                intermediate_steps='prev chain end, will start tool',
+                                flow_id=self.flow_id,
+                                chat_id=self.chat_id)
+        await self.websocket.send_json(resp_end.dict())
         resp = ChatResponse(type='start',
                             category='tool',
                             intermediate_steps=f'Tool input: {input_str}',
@@ -363,3 +369,10 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             chat_id=self.chat_id)
 
         await self.websocket.send_json(resp.dict())
+
+        resp_start = ChatResponse(type='start',
+                                  category='processing',
+                                  intermediate_steps='tool exec end, will start next chain',
+                                  flow_id=self.flow_id,
+                                  chat_id=self.chat_id)
+        await self.websocket.send_json(resp_start.dict())

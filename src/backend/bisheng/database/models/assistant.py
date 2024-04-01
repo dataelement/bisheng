@@ -98,8 +98,8 @@ class AssistantDao(Assistant):
             return session.exec(statement).all()
 
     @classmethod
-    def get_assistants(cls, user_id: int, name: str, assistant_ids: List[UUID], page: int,
-                       limit: int) -> (List[Assistant], int):
+    def get_assistants(cls, user_id: int, name: str, assistant_ids: List[UUID],
+                       status: int | None, page: int, limit: int) -> (List[Assistant], int):
         with session_getter() as session:
             count_statement = session.query(func.count(
                 Assistant.id)).where(Assistant.is_delete == 0)
@@ -117,8 +117,15 @@ class AssistantDao(Assistant):
             if name:
                 statement = statement.where(Assistant.name.like(f'%{name}%'))
                 count_statement = count_statement.where(Assistant.name.like(f'%{name}%'))
-            statement = statement.offset(
-                (page - 1) * limit).limit(limit).order_by(Assistant.create_time.desc())
+            if status is not None:
+                statement = statement.where(Assistant.status == status)
+                count_statement = count_statement.where(Assistant.status == status)
+            if limit == 0:
+                # 获取全部，不分页
+                statement = statement.order_by(Assistant.update_time.desc())
+            else:
+                statement = statement.offset(
+                    (page - 1) * limit).limit(limit).order_by(Assistant.update_time.desc())
             return session.exec(statement).all(), session.exec(count_statement).scalar()
 
     @classmethod

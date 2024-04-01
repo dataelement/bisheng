@@ -71,7 +71,7 @@ class BishengAssistant:
         # init llm or agent
         llm_params = self.assistant_params['llm']
         llm_object = import_by_type(_type='llms', name=llm_params['type'])
-        if llm_params['type'] == 'ChatOpenAI':
+        if llm_params['type'] == 'ChatOpenAI' and llm_params['openai_proxy']:
             llm_params.pop('type')
             llm = llm_object(http_client=httpx.AsyncClient(proxies=llm_params['openai_proxy']), **llm_params)
         else:
@@ -106,11 +106,13 @@ class BishengAssistant:
     def run(self, query):
         inputs = [HumanMessage(content=query)]
         result = asyncio.run(self.assistant.ainvoke(inputs))
-        print(result)
         return result
 
 
 if __name__ == "__main__":
     query = "帮我查一下去年这一天发生了哪些重大事情？"
     bisheng_assistant = BishengAssistant("config/base_assistant.yaml")
-    bisheng_assistant.run(query)
+    result = bisheng_assistant.run(query)
+    for r in result:
+        print(f'------------------')
+        print(type(r), r)

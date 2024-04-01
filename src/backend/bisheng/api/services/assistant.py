@@ -23,6 +23,7 @@ class AssistantService(AssistantUtils):
     def get_assistant(cls,
                       user_id: int,
                       name: str = None,
+                      status: int | None = None,
                       page: int = 1,
                       limit: int = 20) -> UnifiedResponseModel[List[AssistantSimpleInfo]]:
         """
@@ -36,9 +37,9 @@ class AssistantService(AssistantUtils):
             role_ids = [role.id for role in user_role]
             role_access = RoleAcessDao.get_role_acess(role_ids, AccessType.ASSITANT_READ)
             if role_access:
-                assistant_ids_extra = [access.id for access in role_access]
+                assistant_ids_extra = [access.third_id for access in role_access]
 
-        res, total = AssistantDao.get_assistants(user_id, name, assistant_ids_extra, page, limit)
+        res, total = AssistantDao.get_assistants(user_id, name, assistant_ids_extra, status, page, limit)
 
         for one in res:
             simple_dict = one.model_dump(include={
@@ -136,6 +137,8 @@ class AssistantService(AssistantUtils):
             assistant.model_name = req.model_name
         if req.temperature:
             assistant.temperature = req.temperature
+        if req.status is not None:
+            assistant.status = req.status
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息
