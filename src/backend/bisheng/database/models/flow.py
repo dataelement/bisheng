@@ -1,6 +1,7 @@
 # Path: src/backend/bisheng/database/models/flow.py
 
 from datetime import datetime
+from enum import Enum
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
@@ -11,6 +12,11 @@ from bisheng.database.models.role_access import AccessType, RoleAccess
 from pydantic import validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select
+
+
+class FlowStatus(Enum):
+    OFFLINE = 1
+    ONLINE = 2
 
 
 class FlowBase(SQLModelSerializable):
@@ -133,7 +139,7 @@ class FlowDao(FlowBase):
     @classmethod
     def get_flows(cls, user_id: int, extra_ids: List[str], name: str) -> List[Flow]:
         with session_getter() as session:
-            statement = select(Flow)
+            statement = select(Flow).where(Flow.status == FlowStatus.ONLINE.value)
             if extra_ids:
                 statement = statement.where(or_(Flow.id.in_(extra_ids), Flow.user_id == user_id))
             else:
