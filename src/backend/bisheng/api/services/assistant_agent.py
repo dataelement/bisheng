@@ -1,6 +1,6 @@
 import json
 import uuid
-from typing import List
+from typing import Dict, List
 
 import httpx
 from bisheng.api.services.assistant_base import AssistantUtils
@@ -11,7 +11,12 @@ from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
+                                                      generate_opening_dialog,
+                                                      optimize_assistant_prompt)
+from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
 from bisheng_langchain.gpts.load_tools import load_tools
+from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
 from bisheng_langchain.gpts.utils import import_by_type, import_class
 from langchain_core.callbacks import Callbacks
 from langchain_core.language_models import BaseLanguageModel
@@ -28,7 +33,6 @@ class AssistantAgent(AssistantUtils):
         self.tools: List[BaseTool] = []
         self.agent: ConfigurableAssistant | None = None
         self.llm: BaseLanguageModel | None = None
-        self.debug: bool = True
 
     async def init_assistant(self, callbacks: Callbacks = None):
         await self.init_llm()
@@ -142,6 +146,42 @@ class AssistantAgent(AssistantUtils):
             system_message=assistant_message,
             **agent_executor_params
         )
+
+    async def optimize_assistant_prompt(self):
+        """ 自动优化生成prompt """
+        chain = (
+                {
+                    'assistant_name': lambda x: x['assistant_name'],
+                    'assistant_description': lambda x: x['assistant_description'],
+                }
+                | ASSISTANT_PROMPT_OPT
+                | self.llm
+        )
+        async for one in chain.astream({
+            'assistant_name': self.assistant.name,
+            'assistant_description': self.assistant.prompt,
+        }):
+            yield one
+
+    def sync_optimize_assistant_prompt(self):
+        return optimize_assistant_prompt(self.llm, self.assistant.name, self.assistant.desc)
+
+    def generate_guide(self):
+        """ 生成开场对话和开场问题 """
+        return generate_opening_dialog(self.llm, self.assistant.prompt)
+
+    def generate_description(self):
+        """ 生成描述对话 """
+        return generate_breif_description(self.llm, self.assistant.prompt)
+
+    def choose_tools(self, tool_list: List[Dict[str, str]], prompt: str) -> List[str]:
+        """
+         选择工具
+         tool_list: [{name: xxx, description: xxx}]
+        """
+        tool_list = [ToolInfo(name=one['name'], description=one['description']) for one in tool_list]
+        tool_selector = ToolSelector(llm=self.llm, tools=tool_list)
+        return tool_selector.select(self.assistant.name, prompt)
 
     async def run(self, query: str, callback: Callbacks = None):
         """

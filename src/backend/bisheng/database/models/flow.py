@@ -7,7 +7,8 @@ from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from bisheng.database.models.role_access import AccessType, RoleAccess
+from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAcessDao
+from bisheng.database.models.user_role import UserRoleDao
 # if TYPE_CHECKING:
 from pydantic import validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
@@ -137,9 +138,9 @@ class FlowDao(FlowBase):
             return session.exec(count_statement.where(*filters)).scalar()
 
     @classmethod
-    def get_flows(cls, user_id: int, extra_ids: List[str], name: str) -> List[Flow]:
+    def get_flows(cls, user_id: Optional[int], extra_ids: List[str], name: str, status: int) -> List[Flow]:
         with session_getter() as session:
-            statement = select(Flow).where(Flow.status == FlowStatus.ONLINE.value)
+            statement = select(Flow).where(Flow.status == status)
             if extra_ids:
                 statement = statement.where(or_(Flow.id.in_(extra_ids), Flow.user_id == user_id))
             else:
@@ -148,3 +149,14 @@ class FlowDao(FlowBase):
                 statement = statement.where(Flow.name.like(f'%{name}%'))
             statement = statement.order_by(Flow.update_time.desc())
             return session.exec(statement).all()
+
+    @classmethod
+    def get_user_access_online_flows(cls, user_id: int) -> List[Flow]:
+        user_role = UserRoleDao.get_user_roles(user_id)
+        flow_id_extra = []
+        if user_role:
+            role_ids = [role.id for role in user_role]
+            role_access = RoleAcessDao.get_role_acess(role_ids, AccessType.FLOW)
+            if role_access:
+                flow_id_extra = [access.third_id for access in role_access]
+        return FlowDao.get_flows(user_id, flow_id_extra, '', FlowStatus.ONLINE.value)

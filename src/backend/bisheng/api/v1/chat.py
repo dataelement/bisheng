@@ -15,8 +15,6 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import Flow, FlowDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead
-from bisheng.database.models.role_access import AccessType, RoleAcessDao
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
@@ -165,16 +163,8 @@ def get_online_chat(*, Authorize: AuthJWT = Depends()):
             )
         )
 
-    # 获取所有已上线的技能
-    user_role = UserRoleDao.get_user_roles(user_id)
-    flow_id_extra = []
-    if user_role:
-        role_ids = [role.id for role in user_role]
-        role_access = RoleAcessDao.get_role_acess(role_ids, AccessType.FLOW)
-        if role_access:
-            flow_id_extra = [access.third_id for access in role_access]
-
-    flows = FlowDao.get_flows(user_id, flow_id_extra, '')
+    # 获取用户可见的所有已上线的技能
+    flows = FlowDao.get_user_access_online_flows(user_id)
     for one in flows:
         res.append(
             FlowGptsOnlineList(
