@@ -112,6 +112,15 @@ class ChatList(BaseModel):
     flow_type: str = None  # flow: 技能 assistant：gpts助手
 
 
+class FlowGptsOnlineList(BaseModel):
+    id: str = Field('唯一ID')
+    name: str = None
+    desc: str = None
+    create_time: datetime = None
+    update_time: datetime = None
+    flow_type: str = None  # flow: 技能 assistant：gpts助手
+
+
 class ChatMessage(BaseModel):
     """Chat message schema."""
 

@@ -9,7 +9,7 @@ from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.role_access import AccessType, RoleAccess
 # if TYPE_CHECKING:
 from pydantic import validator
-from sqlalchemy import Column, DateTime, String, and_, func, text
+from sqlalchemy import Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select
 
 
@@ -129,3 +129,16 @@ class FlowDao(FlowBase):
         with session_getter() as session:
             count_statement = session.query(func.count(Flow.id))
             return session.exec(count_statement.where(*filters)).scalar()
+
+    @classmethod
+    def get_flows(cls, user_id: int, extra_ids: List[str], name: str) -> List[Flow]:
+        with session_getter() as session:
+            statement = select(Flow)
+            if extra_ids:
+                statement = statement.where(or_(Flow.id.in_(extra_ids), Flow.user_id == user_id))
+            else:
+                statement = statement.where(Flow.user_id == user_id)
+            if name:
+                statement = statement.where(Flow.name.like(f'%{name}%'))
+            statement = statement.order_by(Flow.update_time.desc())
+            return session.exec(statement).all()
