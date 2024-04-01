@@ -106,9 +106,10 @@ class ChatClient:
             raise Exception('agent init error')
 
         inputs = message.get('inputs', {})
-        await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
 
         if input_msg := inputs.get('input'):
+            await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
+
             await self.send_response('processing', 'begin', '')
             await self.send_response('processing', 'start', '')
             result = await self.gpts_agent.run(input_msg, async_callbacks)
