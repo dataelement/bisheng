@@ -23,10 +23,11 @@ def get_assistant(*,
                   name: str = Query(default=None, description='助手名称，模糊匹配'),
                   page: Optional[int] = Query(default=1, description='页码'),
                   limit: Optional[int] = Query(default=10, description='每页条数'),
+                  status: Optional[int] = Query(default=None, description='是否上线状态'),
                   Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-    return AssistantService.get_assistant(current_user.get('user_id'), name, page, limit)
+    return AssistantService.get_assistant(current_user.get('user_id'), name, status, page, limit)
 
 
 # 获取某个助手的详细信息

@@ -1,5 +1,5 @@
+import { toast } from "@/components/bs-ui/toast/use-toast";
 import axios from "axios";
-import { message,toast } from "@/components/bs-ui/toast/use-toast";
 import i18next from "i18next";
 axios.defaults.withCredentials = true;
 const customAxios = axios.create({
@@ -46,7 +46,7 @@ export function captureAndAlertRequestErrorHoc(apiFunc, iocFunc?) {
         toast({
             title: `${i18next.t('prompt')}`,
             variant: 'error',
-            description: error
+            description: typeof error === 'string' ? error : JSON.stringify(error)
         })
         console.error('逻辑异常 :>> ', error);
         return false

@@ -2,9 +2,9 @@ import { Loader2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../../alerts/confirm";
-import { Badge } from "../../../components/ui/badge";
-import { Button } from "../../../components/ui/button";
-import EditLabel from "../../../components/ui/editLabel";
+import { Badge } from "../../../components/bs-ui/badge";
+import { Button } from "../../../components/bs-ui/button";
+import EditLabel from "../../../components/bs-ui/editLabel";
 import { alertContext } from "../../../contexts/alertContext";
 import { getModelInfoApi } from "../../../controllers/API";
 import { cancelTaskApi, getTaskInfoApi, publishTaskApi, unPublishTaskApi, updataTaskNameApi } from "../../../controllers/API/finetune";
@@ -92,19 +92,19 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
 
     return <div className="absolute right-4 flex gap-4">
         {status === TaskStatus.PUBLISH_SUCCESS ?
-            <Button size="sm" className="rounded-full h-7" disabled={loading} onClick={cancelPublish}>
+            <Button size="sm" className="h-8" disabled={loading} onClick={cancelPublish}>
                 {loading && <Loader2 className="animate-spin mr-2" size={14} />}
                 {t('finetune.cancelPublish')}
             </Button> :
             status === TaskStatus.TRAIN_SUCCESS ?
-                <Button size="sm" className="rounded-full h-7" disabled={loading} onClick={handlePublish}>
+                <Button size="sm" className="h-8" disabled={loading} onClick={handlePublish}>
                     {loading && <Loader2 className="animate-spin mr-2" size={14} />}
                     {t('finetune.publish')}
                 </Button> : null
         }
         {status === TaskStatus.TRAINING_IN_PROGRESS ?
-            <Button size="sm" className="rounded-full h-7 bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
-            <Button size="sm" className="rounded-full h-7 bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('delete')}</Button>
+            <Button size="sm" className="h-8 bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
+            <Button size="sm" className="h-8 bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('delete')}</Button>
         }
     </div>
 }

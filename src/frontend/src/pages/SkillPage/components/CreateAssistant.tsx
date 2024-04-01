@@ -4,6 +4,8 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogT
 import { Input, Textarea } from "../../../components/bs-ui/input";
 import { LoadIcon } from "../../../components/bs-icons/loading";
 import { useNavigate } from "react-router-dom";
+import { createAssistantsApi } from "../../../controllers/API/assistant";
+import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 
 export default function CreateAssistant() {
 
@@ -60,19 +62,17 @@ export default function CreateAssistant() {
 
     // Handle form submission
     const navigate = useNavigate()
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         const isValid = validateForm();
 
         if (isValid) {
             console.log('Form data:', formData);
             setLoading(true)
-            // Proceed with form submission (e.g., API call)
-            // Reset form or show a success message
-
-            setTimeout(() => {
-                navigate('/assistant/1')
-            }, 2000);
+            const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.roleAndTasks))
+            if (res) {
+                navigate('/assistant/' + res.id)
+            }
         }
     };
 

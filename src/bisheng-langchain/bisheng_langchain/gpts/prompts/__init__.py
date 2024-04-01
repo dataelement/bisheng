@@ -4,6 +4,7 @@ from bisheng_langchain.gpts.prompts.breif_description_prompt import BREIF_DES_PR
 from bisheng_langchain.gpts.prompts.opening_dialog_prompt import OPENDIALOG_PROMPT
 from bisheng_langchain.gpts.prompts.select_tools_prompt import HUMAN_MSG, SYS_MSG
 
+
 __all__ = [
     "DEFAULT_SYSTEM_MESSAGE",
     "ASSISTANT_PROMPT_OPT",

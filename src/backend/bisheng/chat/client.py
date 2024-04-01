@@ -74,25 +74,6 @@ class ChatClient:
         if not message:
             return
         logger.debug(f'receive client message, client_key: {self.client_key} message: {message}')
-        try:
-            # 处理智能助手业务
-            if self.chat_id and self.gpts_agent is None:
-                # 会话业务agent通过数据库数据固定生成,不用每次变化
-                assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
-                self.gpts_agent = AssistantAgent(assistant, self.chat_id)
-                await self.gpts_agent.init_assistant()
-            else:
-                # 每次都从数据库获取重新构造一个agent
-                # TODO zgq：后续可以和前端约定参数，决定是否要重新初始化agent
-                assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
-                self.gpts_agent = AssistantAgent(assistant, self.chat_id)
-                await self.gpts_agent.init_assistant()
-
-        except Exception as e:
-            logger.error('agent init error %s' % str(e), exc_info=True)
-            await self.websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason='agent init error')
-            raise Exception('agent init error')
-
         if self.chat_id:
             async_callbacks = [AsyncGptsLLMCallbackHandler(**{
                 'websocket': self.websocket,
@@ -105,13 +86,31 @@ class ChatClient:
                 'flow_id': self.client_id,
                 'chat_id': self.chat_id
             })]
+        try:
+            # 处理智能助手业务
+            if self.chat_id and self.gpts_agent is None:
+                # 会话业务agent通过数据库数据固定生成,不用每次变化
+                assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
+                self.gpts_agent = AssistantAgent(assistant, self.chat_id)
+                await self.gpts_agent.init_assistant(async_callbacks)
+            else:
+                # 每次都从数据库获取重新构造一个agent
+                # TODO zgq：后续可以和前端约定参数，决定是否要重新初始化agent
+                assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
+                self.gpts_agent = AssistantAgent(assistant, self.chat_id)
+                await self.gpts_agent.init_assistant(async_callbacks)
 
-        # TODO zgq: 流式输出和 获取agent执行的每一个工具信息。写入chatmessages
+        except Exception as e:
+            logger.error('agent init error %s' % str(e), exc_info=True)
+            await self.websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=f'agent init error {str(e)}')
+            raise Exception('agent init error')
+
         inputs = message.get('inputs', {})
         await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
 
-        await self.send_response('processing', 'start', '')
         if input_msg := inputs.get('input'):
+            await self.send_response('processing', 'begin', '')
+            await self.send_response('processing', 'start', '')
             result = await self.gpts_agent.run(input_msg, async_callbacks)
             logger.debug(f'gpts agent {self.client_key} result: {result}')
             answer = ''
@@ -119,6 +118,10 @@ class ChatClient:
                 if isinstance(one, AIMessage):
                     answer += one.content
             await self.add_message('bot', answer, 'answer')
+
+            await self.send_response('processing', 'end', '')
+
             await self.send_response('answer', 'start', '')
             await self.send_response('answer', 'end', answer)
-        await self.send_response('processing', 'end', '')
+
+            await self.send_response('processing', 'close', '')

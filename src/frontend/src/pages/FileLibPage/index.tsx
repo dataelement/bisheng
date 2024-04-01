@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
+import { Button } from "../../components/bs-ui/button";
+import { Input } from "../../components/bs-ui/input";
+import { Label } from "../../components/bs-ui/label";
 import {
     Table,
     TableBody,
@@ -10,23 +10,24 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "../../components/ui/table";
+} from "../../components/bs-ui/table";
 import {
     Tabs,
     TabsContent,
     TabsList,
     TabsTrigger,
-} from "../../components/ui/tabs";
+} from "../../components/bs-ui/tabs";
 
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Dropdown from "../../components/dropdownComponent";
-import { Textarea } from "../../components/ui/textarea";
+import { Textarea } from "../../components/bs-ui/input";
 import { alertContext } from "../../contexts/alertContext";
 import { userContext } from "../../contexts/userContext";
 import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-import PaginationComponent from "../../components/PaginationComponent";
+// import PaginationComponent from "../../components/PaginationComponent";
+import AutoPagination from "../../components/bs-ui/pagination/autoPagination"
 import { useTable } from "../../util/hook";
 import { Search } from "lucide-react";
 
@@ -109,7 +110,7 @@ function CreateModal({ datalist, open, setOpen }) {
                             value={modal}
                         ></Dropdown>
                     </div>
-                    <Button type="submit" className="mt-6 h-8 rounded-full" onClick={handleCreate}>{t('create')}</Button>
+                    <Button type="submit" className="mt-6 h-10" onClick={handleCreate}>{t('create')}</Button>
                 </div>
             </div>
         </form>
@@ -169,13 +170,13 @@ export default function FileLibPage() {
                             <Input placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)}></Input>
                             <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
                         </div>
-                        <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('create')}</Button>
+                        <Button className="h-10 px-10" onClick={() => setOpen(true)}>{t('create')}</Button>
                     </div>
                     <Table>
                         <TableCaption>
                             <p>{t('lib.libraryCollection')}</p>
                             <div className="">
-                                <PaginationComponent
+                                <AutoPagination
                                     page={page}
                                     pageSize={pageSize}
                                     total={total}
@@ -191,7 +192,7 @@ export default function FileLibPage() {
                                 <TableHead>{t('createTime')}</TableHead>
                                 <TableHead>{t('updateTime')}</TableHead>
                                 <TableHead>{t('lib.createUser')}</TableHead>
-                                <TableHead className="text-right"></TableHead>
+                                <TableHead className="text-right">{t('operations')}</TableHead>
                             </TableRow>
                         </TableHeader>
 
@@ -207,10 +208,10 @@ export default function FileLibPage() {
                                         // @ts-ignore
                                         window.libname = el.name;
                                     }}>
-                                        <Link to={`/filelib/${el.id}`} className="underline" onClick={handleCachePage}>{t('lib.details')}</Link>
+                                        <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-[#0455e1]" onClick={handleCachePage}>{t('lib.details')}</Link>
                                         {user.role === 'admin' || user.user_id === el.user_id ?
-                                            <a href="javascript:;" onClick={() => delConfirm(el)} className="underline ml-4">{t('delete')}</a> :
-                                            <a href="javascript:;" className="underline ml-4 text-gray-400">{t('delete')}</a>
+                                            <Button variant="link" onClick={() => delConfirm(el)} className="ml-4 px-0">{t('delete')}</Button> :
+                                            <Button variant="link" className="ml-4 text-gray-400 px-0">{t('delete')}</Button>
                                         }
                                     </TableCell>
                                 </TableRow>
@@ -228,8 +229,8 @@ export default function FileLibPage() {
                     <h3 className="font-bold text-lg">{t('prompt')}</h3>
                     <p className="py-4">{t('lib.confirmDeleteLibrary')}</p>
                     <div className="modal-action">
-                        <Button className="h-8 rounded-full" variant="outline" onClick={close}>{t('cancel')}</Button>
-                        <Button className="h-8 rounded-full" variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
+                        <Button className="h-10" variant="outline" onClick={close}>{t('cancel')}</Button>
+                        <Button className="h-10" variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
                     </div>
                 </form>
             </dialog>

@@ -1,25 +1,22 @@
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
+import CardComponent from "../../components/bs-comp/cardComponent";
+import { Dialog, DialogTrigger } from "../../components/bs-ui/dialog";
 import { SearchInput } from "../../components/bs-ui/input";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
-import { readFlowsFromDatabase } from "../../controllers/API/flow";
+import { AssistantItemDB, getAssistantsApi } from "../../controllers/API/assistant";
 import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import CreateAssistant from "./components/CreateAssistant";
-import { Dialog, DialogTrigger } from "../../components/bs-ui/dialog";
-import CardComponent from "../../components/bs-comp/cardComponent";
+import { useNavigate } from "react-router-dom";
 
 export default function Assistants() {
     const { t } = useTranslation()
+    const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search } = useTable<FlowType>({ pageSize: 11 }, (param) =>
-        readFlowsFromDatabase(param.page, param.pageSize, param.keyword)
+    const { page, pageSize, data: dataSource, total, loading, setPage, search } = useTable<AssistantItemDB>({ pageSize: 11 }, (param) =>
+        getAssistantsApi(param.page, param.pageSize, param.keyword)
     )
-
-    const handleCheckedChange = (checked, data) => {
-        console.log('object :>> ', checked, data);
-        return Promise.resolve()
-    }
 
     const handleDelete = (data) => {
         console.log('data :>> ', data);
@@ -32,8 +29,8 @@ export default function Assistants() {
         })
     }
 
-    const handleSetting = (data) => {
-        console.log('data :>> ', data);
+    const handleCheckedChange = (id) => {
+        return Promise.resolve()
     }
 
     return <div className="h-full relative">
@@ -66,18 +63,18 @@ export default function Assistants() {
                         </Dialog>
                         {
                             dataSource.map((item, i) => (
-                                <CardComponent<FlowType>
+                                <CardComponent<AssistantItemDB>
                                     data={item}
                                     id={item.id}
-                                    type='skill'
+                                    edit
+                                    checked={false}
+                                    type='assist'
                                     title={item.name}
-                                    description={item.description}
-                                    checked={item.status === 2}
-                                    edit={item.write}
+                                    description={item.desc}
                                     user={item.user_name}
-                                    onCheckedChange={handleCheckedChange}
                                     onDelete={handleDelete}
-                                    onSetting={handleSetting}
+                                    onSetting={() => navigate('/assistant/' + item.id)}
+                                    onCheckedChange={() => handleCheckedChange(item.id)}
                                 ></CardComponent>
                             ))
                         }

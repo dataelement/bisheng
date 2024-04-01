@@ -2,16 +2,21 @@ import json
 from typing import List, Optional
 from uuid import UUID
 
+from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.utils import build_flow, build_input_keys_response
-from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList, InitResponse,
-                                    StreamData, UnifiedResponseModel, resp_200)
+from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList,
+                                    FlowGptsOnlineList, InitResponse, StreamData,
+                                    UnifiedResponseModel, resp_200)
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow
+from bisheng.database.models.assistant import AssistantDao, AssistantStatus
+from bisheng.database.models.flow import Flow, FlowDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead
+from bisheng.database.models.role_access import AccessType, RoleAcessDao
+from bisheng.database.models.user_role import UserRoleDao
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
@@ -108,21 +113,81 @@ def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
     flow_ids = [message.flow_id for message in db_message]
     with session_getter() as session:
         db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
+
+    assistant_chats = AssistantDao.get_assistants_by_ids(flow_ids)
+    assistant_dict = {assistant.id: assistant for assistant in assistant_chats}
     # set object
     chat_list = []
     flow_dict = {flow.id: flow for flow in db_flow}
     for i, message in enumerate(db_message):
-        if message.flow_id not in flow_dict:
-            # flow 被删除
-            continue
-        chat_list.append(
-            ChatList(flow_name=flow_dict[message.flow_id].name,
-                     flow_description=flow_dict[message.flow_id].description,
-                     flow_id=message.flow_id,
-                     chat_id=message.chat_id,
-                     create_time=message.create_time,
-                     update_time=message.update_time))
+        if message.flow_id in flow_dict:
+            chat_list.append(
+                ChatList(flow_name=flow_dict[message.flow_id].name,
+                         flow_description=flow_dict[message.flow_id].description,
+                         flow_id=message.flow_id,
+                         flow_type='flow',
+                         chat_id=message.chat_id,
+                         create_time=message.create_time,
+                         update_time=message.update_time))
+        elif message.flow_id in assistant_dict:
+            chat_list.append(
+                ChatList(flow_name=assistant_dict[message.flow_id].name,
+                         flow_description=assistant_dict[message.flow_id].desc,
+                         flow_id=message.flow_id,
+                         chat_id=message.chat_id,
+                         flow_type='assistant',
+                         create_time=message.create_time,
+                         update_time=message.update_time))
+        else:
+            logger.warning(f'没有找到flow_id={message.flow_id}')
     return resp_200(chat_list)
+
+
+# 获取所有已上线的技能和助手
+@router.get('/chat/online', response_model=UnifiedResponseModel[List[FlowGptsOnlineList]], status_code=200)
+def get_online_chat(*, Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    user_id = payload.get('user_id')
+    res = []
+    # 获取所有已上线的助手
+    assistants = AssistantService.get_assistant(user_id, None, AssistantStatus.ONLINE.value, 0, 0)
+    all_assistant = assistants.data.get('data')
+    for one in all_assistant:
+        res.append(
+            FlowGptsOnlineList(
+                id=one.id.hex,
+                name=one.name,
+                desc=one.desc,
+                create_time=one.create_time,
+                update_time=one.update_time,
+                flow_type='assistant'
+            )
+        )
+
+    # 获取所有已上线的技能
+    user_role = UserRoleDao.get_user_roles(user_id)
+    flow_id_extra = []
+    if user_role:
+        role_ids = [role.id for role in user_role]
+        role_access = RoleAcessDao.get_role_acess(role_ids, AccessType.FLOW)
+        if role_access:
+            flow_id_extra = [access.third_id for access in role_access]
+
+    flows = FlowDao.get_flows(user_id, flow_id_extra, '')
+    for one in flows:
+        res.append(
+            FlowGptsOnlineList(
+                id=one.id.hex,
+                name=one.name,
+                desc=one.description,
+                create_time=one.create_time,
+                update_time=one.update_time,
+                flow_type='flow'
+            )
+        )
+    res.sort(key=lambda x: x.update_time, reverse=True)
+    return resp_200(data=res)
 
 
 @router.websocket('/chat/{flow_id}')

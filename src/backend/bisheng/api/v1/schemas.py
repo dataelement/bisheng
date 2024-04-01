@@ -7,6 +7,8 @@ from uuid import UUID
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
+from bisheng.database.models.gpts_tools import GptsToolsRead
+from bisheng.database.models.knowledge import KnowledgeRead
 from langchain.docstore.document import Document
 from pydantic import BaseModel, Field, validator
 
@@ -107,6 +109,16 @@ class ChatList(BaseModel):
     chat_id: str = None
     create_time: datetime = None
     update_time: datetime = None
+    flow_type: str = None  # flow: 技能 assistant：gpts助手
+
+
+class FlowGptsOnlineList(BaseModel):
+    id: str = Field('唯一ID')
+    name: str = None
+    desc: str = None
+    create_time: datetime = None
+    update_time: datetime = None
+    flow_type: str = None  # flow: 技能 assistant：gpts助手
 
 
 class ChatMessage(BaseModel):
@@ -115,7 +127,7 @@ class ChatMessage(BaseModel):
     is_bot: bool = False
     message: Union[str, None, dict] = ''
     type: str = 'human'
-    category: str = 'processing'  # system processing answer
+    category: str = 'processing'  # system processing answer tool
     intermediate_steps: str = None
     files: list = []
     user_id: int = None
@@ -229,6 +241,7 @@ class AssistantUpdateReq(BaseModel):
     guide_question: Optional[Dict] = Field({}, description='引导问题列表， 为空则不更新')
     model_name: Optional[str] = Field('', description='选择的模型名， 为空则不更新')
     temperature: Optional[float] = Field(0, description='模型温度， 为0则不更新')
+    status: Optional[int] = Field(None, description='状态， 不传则不更新')
 
     tool_list: List[int] | None = Field(default=None,
                                         description='助手的工具ID列表,空列表则清空绑定的工具，为None则不更新')
@@ -243,11 +256,12 @@ class AssistantSimpleInfo(BaseModel):
     logo: str
     user_id: int
     user_name: str
+    status: int
     create_time: datetime
     update_time: datetime
 
 
 class AssistantInfo(AssistantBase):
-    tool_list: List[int] = Field(default=[], description='助手的工具ID列表')
-    flow_list: List[str] = Field(default=[], description='助手的技能ID列表')
-    knowledge_list: List[int] = Field(default=[], description='知识库ID列表')
+    tool_list: List[GptsToolsRead] = Field(default=[], description='助手的工具ID列表')
+    flow_list: List[FlowRead] = Field(default=[], description='助手的技能ID列表')
+    knowledge_list: List[KnowledgeRead] = Field(default=[], description='知识库ID列表')

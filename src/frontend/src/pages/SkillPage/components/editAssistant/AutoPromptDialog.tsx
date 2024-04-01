@@ -4,14 +4,16 @@ import { Button } from "@/components/bs-ui/button";
 import { DialogClose, DialogContent, DialogFooter } from "@/components/bs-ui/dialog";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { autoByPromptApi } from "@/controllers/API/assistant";
 import { useAssistantStore } from "@/store/assistantStore";
 import { AssistantTool } from "@/types/assistant";
 import { FlowType } from "@/types/flow";
 import { ReloadIcon } from "@radix-ui/react-icons";
 import { useEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 
 export default function AutoPromptDialog({ onOpenChange }) {
-
+    const { id } = useParams()
     const { assistantState, dispatchAssistant } = useAssistantStore()
 
     const init = () => {
@@ -36,11 +38,15 @@ export default function AutoPromptDialog({ onOpenChange }) {
     }
 
     // 获取可用工具和技能
-    const createTools = () => {
+    const createTools = async () => {
         const { prompt } = assistantState
-        // api
-        setTools([{ id: 1, name: '文档 OCR 识别' }, { id: 2, name: 'RPA扫描' },])
-        setFlows([])
+        const res = await autoByPromptApi(id, prompt)
+        // 临时
+        areaRef.current.value = res.prompt
+        guideAreaRef.current.value = res.guide_word
+        console.log('res :>> ', res);
+        setTools(res.tool_list)
+        setFlows(res.flow_list)
     }
 
     useEffect(() => {

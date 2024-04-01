@@ -3,6 +3,7 @@
     "prompt": "提示",
     "login": {
         "slogen": "便捷、灵活、可靠的企业级大模型应用开发平台",
+        "bottomText":"文擎毕昇",
         "account": "用户名",
         "password": "密码",
         "confirmPassword": "确认密码",
@@ -21,6 +22,9 @@
         "pleaseEnterCaptcha": "请输入验证码"
     },
     "menu": {
+        "user":"用户",
+        "bookopen":"帮助文档",
+        "github":"GitHub",
         "app": "会 话",
         "skills": "构 建",
         "knowledge": "知 识",
@@ -293,7 +297,7 @@
         "inProgress": "进行中",
         "failedAborted": "失败/中止",
         "createTrainingTask": "创建训练任务",
-        "rtServiceManagement": "服务管理",
+        "rtServiceManagement": "RT服务管理",
         "confirmCancelPublish": "该模型正处于上线状态，是否仍然取消发布",
         "confirmDeleteModel": "确认要删除模型 {{name}} 吗？",
         "confirmDeleteOnlineModel": "该模型已上线，确认要删除模型 {{name}} 吗？",

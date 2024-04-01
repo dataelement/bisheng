@@ -25,11 +25,11 @@ class SessionService(Service):
         # graph, artifacts = await build_sorted_vertices(data_graph)
         # 用自定义的初始化方法，完成api和聊天的对齐
         artifacts = {}
-        graph, artifacts = await build_flow_no_yield(graph_data=data_graph,
-                                                     artifacts=artifacts,
-                                                     process_file=True,
-                                                     flow_id=key,
-                                                     chat_id=key)
+        graph = await build_flow_no_yield(graph_data=data_graph,
+                                          artifacts=artifacts,
+                                          process_file=True,
+                                          flow_id=key,
+                                          chat_id=key)
 
         self.cache_service.set(key, (graph, artifacts))
 
