@@ -92,7 +92,7 @@ class FlowDao(FlowBase):
             return []
         with session_getter() as session:
             statement = select(Flow).where(Flow.id.in_(flow_ids))
-            return session.exec(statement).first()
+            return session.exec(statement).all()
 
     @classmethod
     def get_flow_by_user(cls, user_id: int) -> List[Flow]:

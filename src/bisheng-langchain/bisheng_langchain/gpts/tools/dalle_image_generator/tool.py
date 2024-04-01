@@ -12,7 +12,7 @@ class DallEInput(BaseModel):
 
 class DallEImageGenerator(BaseTool):
 
-    name: str = "Dall-E-Image-Generator"
+    name: str = "dalle_image_generator"
     description: str = (
         "A wrapper around OpenAI DALL-E API. Useful for when you need to generate images from a text description. Input should be an image description."
     )

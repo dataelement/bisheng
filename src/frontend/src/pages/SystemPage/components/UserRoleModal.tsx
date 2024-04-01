@@ -1,8 +1,9 @@
 import { Listbox } from "@headlessui/react"
+import MultiSelect from "@/components/bs-ui/select/multi"
 import { CheckIcon, ChevronsUpDown } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Button } from "../../../components/ui/button"
+import { Button } from "../../../components/bs-ui/button"
 import { getRolesApi, getUserRoles, updateUserRoles } from "../../../controllers/API/user"
 import { ROLE } from "../../../types/api/user"
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request"
@@ -67,7 +68,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                                     `relative select-none py-2 pl-10 pr-4
                                     ${active
                                         ? 'bg-blue-100 text-gray-700'
-                                        : 'text-gray-900 bg-gray-50 dark:bg-gray-900 dark:text-gray-100'} 
+                                        : 'text-gray-900 bg-gray-50 dark:bg-gray-900 dark:text-gray-100'}
                                     ${role.role_id === 2
                                         ? 'cursor-not-allowed text-gray-300'
                                         : "cursor-default"}`
@@ -93,8 +94,8 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                 </div>
             </Listbox>
             <div className="mt-12 flex justify-center gap-4">
-                <Button variant="outline" className="px-16 rounded-full" onClick={onClose}>{t('cancel')}</Button>
-                <Button className="px-16 rounded-full" onClick={handleSave}>{t('save')}</Button>
+                <Button variant="outline" className="h-10 w-[120px] rounded-lg px-16" onClick={onClose}>{t('cancel')}</Button>
+                <Button className="px-16 h-10 w-[120px] rounded-lg" onClick={handleSave}>{t('save')}</Button>
             </div>
         </div>
     </dialog>
