@@ -1,5 +1,5 @@
 import { Trash2 } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { NewApplicationIcon } from "@/components/bs-icons/newApplication";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
