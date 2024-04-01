@@ -137,6 +137,8 @@ class AssistantService(AssistantUtils):
             assistant.model_name = req.model_name
         if req.temperature:
             assistant.temperature = req.temperature
+        if req.status is not None:
+            assistant.status = req.status
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息
