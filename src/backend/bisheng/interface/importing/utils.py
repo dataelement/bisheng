@@ -86,7 +86,7 @@ def import_output_parser(output_parser: str) -> Any:
 def import_chat_llm(llm: str) -> BaseChatModel:
     """Import chat llm from llm name"""
     from bisheng.interface.llms.base import llm_creator
-    return llm_creator.type_to_loader_dict[llm]
+    return next(x for x in llm_creator.type_to_loader_dict.values() if x.__name__ == llm)
 
 
 def import_chain_contribute_llm(llm: str) -> BaseChatModel:
@@ -167,13 +167,14 @@ def import_tool(tool: str) -> BaseTool:
 def import_chain(chain: str) -> Type[Chain]:
     """Import chain from chain name"""
     from bisheng.interface.chains.base import chain_creator
-    return chain_creator.type_to_loader_dict[chain]
+    return next(x for x in chain_creator.type_to_loader_dict.values() if x.__name__ == chain)
 
 
 def import_embedding(embedding: str) -> Any:
     """Import embedding from embedding name"""
     from bisheng.interface.embeddings.base import embedding_creator
-    return embedding_creator.type_to_loader_dict[embedding]
+    return next(x for x in embedding_creator.type_to_loader_dict.values()
+                if x.__name__ == embedding)
 
 
 def import_vectorstore(vectorstore: str) -> Any:
