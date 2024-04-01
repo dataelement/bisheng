@@ -121,6 +121,7 @@ def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
                 ChatList(flow_name=flow_dict[message.flow_id].name,
                          flow_description=flow_dict[message.flow_id].description,
                          flow_id=message.flow_id,
+                         flow_type='flow',
                          chat_id=message.chat_id,
                          create_time=message.create_time,
                          update_time=message.update_time))
@@ -130,6 +131,7 @@ def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
                          flow_description=assistant_dict[message.flow_id].desc,
                          flow_id=message.flow_id,
                          chat_id=message.chat_id,
+                         flow_type='assistant',
                          create_time=message.create_time,
                          update_time=message.update_time))
         else:

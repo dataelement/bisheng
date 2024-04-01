@@ -109,6 +109,7 @@ class ChatList(BaseModel):
     chat_id: str = None
     create_time: datetime = None
     update_time: datetime = None
+    flow_type: str = None  # flow: 技能 assistant：gpts助手
 
 
 class ChatMessage(BaseModel):
