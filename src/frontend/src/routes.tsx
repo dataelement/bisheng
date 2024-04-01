@@ -37,7 +37,7 @@ const router = createBrowserRouter([
         path: "build",
         element: <BuildLayout />,
         children: [
-          { path: "assis", element: <SkillAssisPage /> },
+          { path: "assist", element: <SkillAssisPage /> },
           { path: "skills", element: <SkillsPage /> },
           { path: "tools", element: <SkillToolsPage /> },
         ]

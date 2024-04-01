@@ -7,6 +7,8 @@ import { ChevronLeftIcon, Pencil2Icon } from "@radix-ui/react-icons";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
+import { saveAssistanttApi } from "@/controllers/API/assistant";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 export default function Header() {
     const navigate = useNavigate()
@@ -23,11 +25,17 @@ export default function Header() {
     const { message, toast } = useToast()
     // 保存助手详细信息
     const handleSave = () => {
-        console.log('result => ', assistantState);
-        message({
-            title: '保存成功',
-            variant: 'success',
-            description: '未联调'
+        captureAndAlertRequestErrorHoc(saveAssistanttApi({
+            ...assistantState,
+            flow_list: assistantState.flow_list.map(item => item.id),
+            tool_list: assistantState.tool_list.map(item => item.id)
+        })).then(res => {
+            if (!res) return
+            message({
+                title: '提示',
+                variant: 'success',
+                description: '保存成功'
+            })
         })
     }
 

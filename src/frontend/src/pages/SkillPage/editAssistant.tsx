@@ -4,13 +4,14 @@ import Prompt from "./components/editAssistant/Prompt";
 import Setting from "./components/editAssistant/Setting";
 import TestChat from "./components/editAssistant/TestChat";
 import { useEffect } from "react";
+import { useParams } from "react-router";
 
 export default function editAssistant() {
-
+    const { id: assisId } = useParams()
     // assistant data
     const loadData = useAssistantStore(state => state.loadAssistantState)
     useEffect(() => {
-        loadData()
+        loadData(assisId)
     }, [])
 
     return <div className="bg-[#F4F5F8]">
@@ -24,7 +25,7 @@ export default function editAssistant() {
                 </div>
             </div>
             <div className="w-[40%] h-full bg-[#fff]">
-                <TestChat></TestChat>
+                <TestChat assisId={assisId}></TestChat>
             </div>
         </div>
     </div>

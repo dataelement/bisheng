@@ -1,5 +1,6 @@
 import { AssistantDetail } from '@/types/assistant'
 import { create } from 'zustand'
+import { getAssistantDetailApi } from '../controllers/API/assistant'
 
 /**
  * 助手编辑管理
@@ -11,7 +12,7 @@ type State = {
 
 type Actions = {
   dispatchAssistant: (action: Action, assistantState: Partial<AssistantDetail>) => void,
-  loadAssistantState: () => void
+  loadAssistantState: (id: string) => void
 }
 
 type Action = 'setBaseInfo' | 'setting' | 'setPrompt' | 'setGuideword' | 'setTools' | 'setFlows'
@@ -48,29 +49,9 @@ export const useAssistantStore = create<State & Actions>((set) => ({
   },
   dispatchAssistant: (action: Action, data: Partial<AssistantDetail>) => set((state) => assistantReducer(state, action, data)),
   // 加载助手状态
-  loadAssistantState: () => {
-    // api
-    set({
-      assistantState: {
-        id: 3,
-        name: "测试助手002",
-        desc: "这是一个示例助手描述。",
-        logo: "path/to/logo.png",
-        prompt: "用户可见的临时prompt",
-        guide_word: "欢迎使用我们的助手！",
-        guide_question: [],
-        model_name: "gpt-4-0125-preview2",
-        temperature: 0.5,
-        status: 0,
-        user_id: 1,
-        create_time: "2024-03-27T14:57:33",
-        update_time: "2024-03-27T14:57:33",
-        tool_list: [],
-        flow_list: [],
-        knowledge_list: [],
-      }
+  loadAssistantState: (id) => {
+    return getAssistantDetailApi(id).then(data => {
+      set({ assistantState: { ...data, guide_question: data.guide_question || [] } })
     })
-
-    return Promise.resolve()
   }
 }))

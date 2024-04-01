@@ -16,4 +16,10 @@ export type ChatMessageType = {
   noAccess?: boolean;
   user_name: string;
   at?: string;
+  /** 用户名 */
+  sender?: string;
+  /** @某人 */
+  receiver?: any;
+  liked?: boolean;
+  extra?: string;
 };

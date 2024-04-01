@@ -75,6 +75,7 @@ export function useTable<T extends object>(param, apiFun) {
         const requestId = ++requestIdRef.current
         apiFun({ ...page, ...paramRef.current }).then(res => {
             if (requestId !== requestIdRef.current) return
+            if (!res.total) return console.error('该接口不支持分页，无法正常使用 useTable')
             setData(res.data);
             setTotal(res.total);
             setLoading(false);
