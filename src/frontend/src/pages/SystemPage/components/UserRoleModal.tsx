@@ -30,6 +30,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                 }
                 setSelected(userRoles)
             })
+            console.log(roles)
         })
         setError(false)
     }, [id])
@@ -48,7 +49,19 @@ export default function UserRoleModal({ id, onClose, onChange }) {
     return <dialog className={`modal ${id && 'modal-open'}`}>
         <div className="modal-box w-[600px] max-w-[600px] bg-[#fff] shadow-lg dark:bg-background relative overflow-visible">
             <p className="font-bold mt-8 mb-2">{t('system.roleSelect')}</p>
-            <Listbox multiple
+            <MultiSelect 
+            defaultValue={selected.map(item=>{
+                console.log(item.role_id.toString(),"__")
+                return item.role_id.toString()
+            })} options={roles.map((item)=>{
+                return{
+                    label:item.role_name,
+                    value:item.role_id+""
+                }
+            })} placeholder="dasd">
+                
+            </MultiSelect>
+            {/* <Listbox multiple
                 value={selected}
                 onChange={setSelected}
                 by={compareDepartments} >
@@ -92,7 +105,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                         ))}
                     </Listbox.Options>
                 </div>
-            </Listbox>
+            </Listbox> */}
             <div className="mt-12 flex justify-center gap-4">
                 <Button variant="outline" className="h-10 w-[120px] rounded-lg px-16" onClick={onClose}>{t('cancel')}</Button>
                 <Button className="px-16 h-10 w-[120px] rounded-lg" onClick={handleSave}>{t('save')}</Button>

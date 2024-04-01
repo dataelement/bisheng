@@ -145,7 +145,7 @@ export default function SkillChatPage() {
             face && !flow
                 ? <div className="flex-1 chat-box h-full overflow-hidden relative">
                     <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src="/application-start-logo.png" alt="" />
-                    <p className="text-center text-sm text-[26px] w-[162px] whitespace-normal h-[64px] leading-[32px] text-[#111111] mx-auto mt-[20px] font-light">选择一个<b className="text-[#111111] font-semibold">对话</b>开始<b className="text-[#111111] font-semibold">文擎睿见</b></p>
+                    <p className="text-center text-sm text-[27px] w-[162px] whitespace-normal h-[64px] leading-[32px] text-[#111111] mx-auto mt-[20px] font-light">选择一个<b className="text-[#111111] font-semibold">对话</b>开始<b className="text-[#111111] font-semibold">文擎睿见</b></p>
                     <div className="relative z-50 w-[162px] h-[38px] bg-[#0055e3] rounded-lg text-[white] leading-[38px] flex cursor-pointer hover:bg-[#0165e6] justify-around mx-auto mt-[120px] text-[13px]" onClick={() => setOpen(true)}>
                         <span className="block my-auto ml-[4px]"><NewApplicationIcon /></span>
                         <span className="mr-[28px]">{t('chat.newChat')}</span>
