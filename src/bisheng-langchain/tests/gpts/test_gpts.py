@@ -16,10 +16,12 @@ set_debug(True)
 HTTP_ASYNC_CLIENT = httpx.AsyncClient(proxies=os.getenv('OPENAI_PROXY'))
 HTTP_CLIENT = httpx.Client(proxies=os.getenv('OPENAI_PROXY'))
 
+tyc_api_key = os.getenv("TIAN_YAN_CHA_API_KEY")
+
 
 def test_agent():
 
-    tools = load_tools(tool_params={"tianyancha.search_company": {"api_key": "224d0cd7-b87d-4f92-8dc6-132632c2d50a"}})
+    tools = load_tools(tool_params={"tianyancha.search_company": {"api_key": tyc_api_key}})
     agent_type = "get_openai_functions_agent_executor"
     llm = ChatOpenAI(model_name='gpt-4-0125-preview', http_client=HTTP_ASYNC_CLIENT)
 
@@ -42,5 +44,6 @@ def test_tools():
     tools[1].run(params)
 
 
-test_agent()
-# test_tools()
+if __name__ == '__main__':
+    test_agent()
+    # test_tools()
