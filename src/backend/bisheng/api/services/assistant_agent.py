@@ -1,14 +1,15 @@
 import json
+import uuid
 from typing import List
 
 import httpx
 from bisheng.api.services.assistant_base import AssistantUtils
-from bisheng.api.services.utils import set_flow_knowledge_id
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
+from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.load_tools import load_tools
 from bisheng_langchain.gpts.utils import import_by_type, import_class
@@ -61,7 +62,16 @@ class AssistantAgent(AssistantUtils):
         links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(assistant_id=self.assistant.id)
         # tool
         tools: List[BaseTool] = []
-        tool_ids = [link.tool_id for link in links if link.tool_id]
+        tool_ids = []
+        flow_ids = []
+        knowledge_ids = []
+        for link in links:
+            if link.tool_id:
+                tool_ids.append(link.tool_id)
+            elif link.flow_id:
+                flow_ids.append(link.flow_id)
+            elif link.knowledge_id:
+                knowledge_ids.append(link.knowledge_id)
         if tool_ids:
             tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
             tool_name_param = {tool.tool_key: json.loads(tool.extra) if tool.extra else {} for tool in tools_model}
@@ -70,17 +80,13 @@ class AssistantAgent(AssistantUtils):
             logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
 
         # flow
-        flow_ids = [link.flow_id for link in links if link.flow_id]
         if flow_ids:
-            flow2knowledge = {link.flow_id: link for link in links if link.flow_id}
             flow_data = FlowDao.get_flow_by_ids(flow_ids)
             # 先查找替换collection_id
             for flow in flow_data:
                 graph_data = flow.data
-                knowledge_id = flow2knowledge.get(flow.id.hex).knowledge_id
                 try:
                     artifacts = {}
-                    graph_data = set_flow_knowledge_id(graph_data, knowledge_id)
                     graph = await build_flow_no_yield(graph_data=graph_data,
                                                       artifacts=artifacts,
                                                       process_file=True,
@@ -97,6 +103,23 @@ class AssistantAgent(AssistantUtils):
                     tools.append(flow_tool)
                 except Exception as exc:
                     logger.error(f'Error processing tweaks: {exc}')
+        logger.info('start init knowledge tool')
+        knowledge_data = KnowledgeDao.get_list_by_ids(knowledge_ids)
+        for one in knowledge_data:
+            graph_data = {}
+            graph = await build_flow_no_yield(graph_data=graph_data,
+                                              artifacts={},
+                                              process_file=True,
+                                              flow_id=uuid.uuid4().hex,
+                                              chat_id=self.assistant.id)
+            built_object = await graph.abuild()
+            knowledge_tool = Tool(name=f'knowledge_id:{one.id}',
+                                  func=built_object.call,
+                                  coroutine=built_object.acall,
+                                  description=one.description,
+                                  args_schema=InputRequest,
+                                  callbacks=callbacks)
+            tools.append(knowledge_tool)
         self.tools = tools
 
     async def init_agent(self):
