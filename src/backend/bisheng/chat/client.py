@@ -102,14 +102,13 @@ class ChatClient:
 
         except Exception as e:
             logger.error('agent init error %s' % str(e), exc_info=True)
-            await self.websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason='agent init error')
+            await self.websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=f'agent init error {str(e)}')
             raise Exception('agent init error')
 
         inputs = message.get('inputs', {})
         await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
 
         await self.send_response('processing', 'begin', '')
-        await self.send_response('processing', 'start', '')
         if input_msg := inputs.get('input'):
             result = await self.gpts_agent.run(input_msg, async_callbacks)
             logger.debug(f'gpts agent {self.client_key} result: {result}')
@@ -120,5 +119,4 @@ class ChatClient:
             await self.add_message('bot', answer, 'answer')
             await self.send_response('answer', 'start', '')
             await self.send_response('answer', 'end', answer)
-        await self.send_response('processing', 'end', '')
         await self.send_response('processing', 'close', '')
