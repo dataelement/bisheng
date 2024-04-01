@@ -78,6 +78,13 @@ _API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {}  
 _API_TOOLS.update(ALL_API_TOOLS)
 
 
+_ALL_TOOLS = {}
+_ALL_TOOLS.update(_BASE_TOOLS)
+_ALL_TOOLS.update(_LLM_TOOLS)
+_ALL_TOOLS.update(_EXTRA_LLM_TOOLS)
+_ALL_TOOLS.update(_EXTRA_PARAM_TOOLS)
+_ALL_TOOLS.update(_API_TOOLS)
+
 def _handle_callbacks(callback_manager: Optional[BaseCallbackManager], callbacks: Callbacks) -> Callbacks:
     if callback_manager is not None:
         warnings.warn(
