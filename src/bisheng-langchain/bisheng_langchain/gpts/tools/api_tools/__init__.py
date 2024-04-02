@@ -15,7 +15,8 @@ tianyancha_class_methods = [
 ]
 
 _TIAN_YAN_CHA_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'tianyancha.{name}': (CompanyInfo.get_api_tool, ['api_key']) for name in tianyancha_class_methods
+    f'tianyancha_{name}': (CompanyInfo.get_api_tool, ['api_key'])
+    for name in tianyancha_class_methods
 }
 
 sina_class_methods = [
@@ -23,7 +24,8 @@ sina_class_methods = [
 ]
 
 _SINA_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'sina.{name}': (StockInfo.get_api_tool, []) for name in sina_class_methods
+    f'sina_{name}': (StockInfo.get_api_tool, [])
+    for name in sina_class_methods
 }
 
 macro_class_methods = [
@@ -31,7 +33,7 @@ macro_class_methods = [
 ]
 
 _MACRO_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'macro.{name}': (MacroData.get_api_tool, [])
+    f'macro_{name}': (MacroData.get_api_tool, [])
     for name in macro_class_methods
 }
 
