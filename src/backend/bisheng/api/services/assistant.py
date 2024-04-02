@@ -160,9 +160,9 @@ class AssistantService(AssistantUtils):
             assistant.guide_question = req.guide_question
         if req.model_name:
             assistant.model_name = req.model_name
-        if req.temperature:
+        if req.temperature is not None:
             assistant.temperature = req.temperature
-        if req.status:
+        if req.status is not None:
             assistant.status = req.status
         AssistantDao.update_assistant(assistant)
 
