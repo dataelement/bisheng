@@ -339,7 +339,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
         resp_end = ChatResponse(type='end',
                                 category='processing',
-                                intermediate_steps='prev chain end, will start tool',
+                                intermediate_steps='',
                                 flow_id=self.flow_id,
                                 chat_id=self.chat_id)
         await self.websocket.send_json(resp_end.dict())
@@ -372,7 +372,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
 
         resp_start = ChatResponse(type='start',
                                   category='processing',
-                                  intermediate_steps='tool exec end, will start next chain',
+                                  intermediate_steps='',
                                   flow_id=self.flow_id,
                                   chat_id=self.chat_id)
         await self.websocket.send_json(resp_start.dict())
