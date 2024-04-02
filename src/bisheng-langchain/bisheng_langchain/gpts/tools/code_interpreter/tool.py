@@ -3,6 +3,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from hashlib import md5
 from pathlib import Path
@@ -181,12 +182,18 @@ class CodeInterpreterTool:
         for i, code_block in enumerate(code_blocks):
             lang, code = code_block
             lang = infer_lang(code)
-            exitcode, logs, _ = execute_code(code, lang=lang)
+            temp_dir = tempfile.TemporaryDirectory()
+            exitcode, logs, _ = execute_code(
+                code,
+                work_dir=temp_dir.name,
+                lang=lang,
+            )
             logs_all += "\n" + logs
             if exitcode != 0:
                 return {'exitcode': exitcode, 'log': logs_all}
+            temp_dir.cleanup()
 
-        return {'exitcode': 0, 'log': logs_all, 'pic_list': []}
+        return {'exitcode': 0, 'log': logs_all, 'file_list': []}
 
     def as_tool(self) -> Tool:
         return Tool.from_function(
