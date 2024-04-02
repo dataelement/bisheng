@@ -334,6 +334,23 @@ class AsyncGptsLLMCallbackHandler(AsyncStreamingLLMCallbackHandler):
 
 
 class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
+
+    @staticmethod
+    def parse_tool_category(tool_name) -> (str, str):
+        """
+        将tool_name解析为tool_category和真正的tool_name
+        """
+        tool_category = 'tool'
+        if tool_name.startswith('flow_'):
+            # 说明是技能调用
+            tool_category = 'flow'
+            tool_name = tool_name.replace('flow_', '')
+        elif tool_name.startswith('knowledge_'):
+            # 说明是知识库调用
+            tool_category = 'knowledge'
+            tool_name = tool_name.replace('knowledge_', '')
+        return tool_name, tool_category
+
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
         logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
@@ -343,10 +360,12 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                                 flow_id=self.flow_id,
                                 chat_id=self.chat_id)
         await self.websocket.send_json(resp_end.dict())
+
+        tool_name, tool_category = self.parse_tool_category(serialized['name'])
         resp = ChatResponse(type='start',
-                            category='tool',
+                            category=tool_category,
                             intermediate_steps=f'Tool input: {input_str}',
-                            message={'tool_key': serialized['name'], 'serialized': serialized, 'input_str': input_str},
+                            message={'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str},
                             flow_id=self.flow_id,
                             chat_id=self.chat_id)
         await self.websocket.send_json(resp.dict())
@@ -360,11 +379,13 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         # Create a formatted message.
         intermediate_steps = f'{observation_prefix}{result}'
 
+        tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))
+
         # Create a ChatResponse instance.
         resp = ChatResponse(type='end',
-                            category='tool',
+                            category=tool_category,
                             intermediate_steps=intermediate_steps,
-                            message={'tool_key': kwargs.get('name'), 'output': output},
+                            message={'tool_key': tool_name, 'output': output},
                             flow_id=self.flow_id,
                             chat_id=self.chat_id)
 
