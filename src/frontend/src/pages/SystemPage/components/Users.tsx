@@ -87,7 +87,8 @@ export default function Users(params) {
         </Table>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="absolute bottom-0 left-[-10px] w-full border-t-[1px] py-4 bg-[white]">
+        <div className="flex justify-between items-center absolute bottom-0 right-0 w-[calc(100vw-184px)] border-t-[1px] py-4 bg-[white] pl-[60px] mr-5 h-[60px]">
+            <p className="whitespace-nowrap">用户列表</p>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"
                 page={page}

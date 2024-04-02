@@ -20,7 +20,8 @@ import { ArrowLeft, Filter, RotateCw, Search, X } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
-import PaginationComponent from "../../components/PaginationComponent";
+// import PaginationComponent from "../../components/PaginationComponent";
+import AutoPagination from "../../components/bs-ui/pagination/autoPagination"
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { Input } from "../../components/bs-ui/input";
 import { Select, SelectContent, SelectGroup, SelectTrigger, SelectItem } from "../../components/bs-ui/select";
@@ -119,7 +120,7 @@ export default function FilesPage() {
         setFilter(Number(id))
     }
 
-    return <div className="w-full h-screen p-6 relative overflow-y-auto">
+    return <div className="w-full h-full p-6 relative overflow-y-auto">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
@@ -147,7 +148,7 @@ export default function FilesPage() {
                 <Table>
                     <TableCaption>
                         <div className="join grid grid-cols-2 w-[200px]">
-                            <PaginationComponent
+                            <AutoPagination
                                 page={page}
                                 pageSize={pageSize}
                                 total={total}
@@ -162,10 +163,10 @@ export default function FilesPage() {
                             <TableHead className="flex items-center gap-4">{t('lib.status')}
                                 {/* Select component */}
                                 <Select onValueChange={selectChange}>
-                                    <SelectTrigger className="">
+                                    <SelectTrigger className="border-none w-16">
                                         <Filter size={16} className={`cursor-pointer ${filter === 999 ? '' : 'text-gray-950'}`} />
                                     </SelectTrigger>
-                                    <SelectContent className="">
+                                    <SelectContent className="w-fit">
                                         <SelectGroup>
                                             <SelectItem value={'999'}>{t('all')}</SelectItem>
                                             <SelectItem value={'1'}>{t('lib.parsing')}</SelectItem>
@@ -221,8 +222,8 @@ export default function FilesPage() {
                     ))}
                 </ul>
                 <div className="modal-action">
-                    <Button className="h-8 rounded-full" variant="outline" onClick={() => setRepeatFiles([])}>不覆盖，保留原文件</Button>
-                    <Button className="h-8 rounded-full" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
+                    <Button className="h-8" variant="outline" onClick={() => setRepeatFiles([])}>不覆盖，保留原文件</Button>
+                    <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
                         {retryLoad && <span className="loading loading-spinner loading-xs"></span>}覆盖
                     </Button>
                 </div>
@@ -234,8 +235,8 @@ export default function FilesPage() {
                 <h3 className="font-bold text-lg">{t('prompt')}</h3>
                 <p className="py-4">{t('lib.confirmDeleteFile')}</p>
                 <div className="modal-action">
-                    <Button className="h-8 rounded-full" variant="outline" onClick={close}>{t('cancel')}</Button>
-                    <Button className="h-8 rounded-full" variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
+                    <Button className="h-8" variant="outline" onClick={close}>{t('cancel')}</Button>
+                    <Button className="h-8" variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
                 </div>
             </form>
         </dialog>

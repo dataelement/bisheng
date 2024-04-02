@@ -66,7 +66,7 @@ export default function Roles() {
 
     if (role) return <EditRole id={role.id || -1} name={role.role_name || ''} onBeforeChange={checkSameName} onChange={handleChange}></EditRole>
 
-    return <div className=" relative">
+    return <div>
         <div className="flex gap-4 items-center justify-end">
             <div className="w-[180px] relative">
                 <SearchInput placeholder={t('system.roleName')} onChange={(e) => search(e.target.value)}></SearchInput>
@@ -76,8 +76,7 @@ export default function Roles() {
                 <span className="text-[white] mx-4">{t('create')}</span>
             </Button>
         </div>
-        <Table>
-            <TableCaption>{t('system.roleList')}.</TableCaption>
+        <Table className="mb-10">
             <TableHeader>
                 <TableRow>
                     <TableHead className="w-[200px]">{t('system.roleName')}</TableHead>
@@ -98,5 +97,6 @@ export default function Roles() {
                 ))}
             </TableBody>
         </Table>
+        <div className="flex justify-between items-center w-[calc(100vw-184px)] absolute right-0 bottom-0 bg-[#fff] h-[60px] pl-[60px] mr-5  border-t-[1px]">{t('system.roleList')}.</div>
     </div>
 };

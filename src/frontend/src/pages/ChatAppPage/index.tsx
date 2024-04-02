@@ -8,6 +8,7 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useDebounce } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import ChatPanne from "./components/ChatPanne";
+import { PlusBoxIcon } from "@/components/bs-icons/plusBox";
 
 export default function SkillChatPage() {
 
@@ -62,20 +63,23 @@ export default function SkillChatPage() {
 
 
     return <div className="flex h-full">
-        <div className="h-full w-[200px] relative border-r">
-            <div className="absolute flex pt-2 ml-[20px] bg-[#fff] dark:bg-gray-950">
+        <div className="h-full w-[220px] relative border-r">
+            <div className="absolute flex w-[210px] left-1 pt-2 dark:bg-gray-950">
                 <SkillChatSheet onSelect={handlerSelectFlow}>
-                    <div id="newchat" className="border rounded-lg px-4 py-2 text-center text-sm cursor-pointer w-[160px] bg-gray-50 hover:bg-gray-100 dark:hover:bg-gray-800 relative z-10">{t('chat.newChat')}</div>
+                    <div id="newchat" className="flex justify-around items-center w-[200px] h-[48px] rounded-lg px-10 py-2 mx-auto text-center text-sm cursor-pointer bg-[#fff] hover:bg-gray-100 dark:hover:bg-gray-800 relative z-10">
+                        <PlusBoxIcon></PlusBoxIcon>
+                        {t('chat.newChat')}
+                    </div>
                 </SkillChatSheet>
             </div>
-            <div ref={chatsRef} className="scroll p-4 h-full overflow-y-scroll no-scrollbar pt-12">
+            <div ref={chatsRef} className="scroll pl-1 h-full overflow-y-scroll no-scrollbar pt-14">
                 {
                     chatList.map((chat, i) => (
                         <div key={chat.chat_id}
-                            className={` group item rounded-xl mt-2 p-2 relative hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-gray-100 dark:bg-gray-800'}`}
+                            className={` group item w-[210px] rounded-lg mt-2 p-4 relative bg-[#f9f9fc] hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-[#edeff6] dark:bg-gray-800'}`}
                             onClick={() => handleSelectChat(chat)}>
-                            <p className="break-words text-sm font-bold text-gray-600">{chat.flow_name}</p>
-                            <span className="text-xs text-gray-500">{chat.flow_description}</span>
+                            <p className="break-words text-sm font-bold text-gray-600 leading-6"><span className="relative top-[-1px] inline-block w-2 h-2 bg-[#adb8d2] mr-2"></span>{chat.flow_name}</p>
+                            <span className="block text-xs text-[#111] mt-3">{chat.flow_description}</span>
                             <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
                         </div>
                     ))
