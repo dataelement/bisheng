@@ -89,14 +89,17 @@ class AssistantAgent(AssistantUtils):
             tools += tool_langchain
             logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
 
-        # flow
-        flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links])
-        flow_id2data = {flow.id: flow for flow in flow_data}
+        # flow, 当知识库的时候，flow_id 会重复
+        flow_links = [link for link in links if link.flow_id]
+        if flow_links:
+            flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links])
+            flow_id2data = {flow.id: flow for flow in flow_data}
+
         for link in flow_links:
             flow_graph_data = flow_id2data.get(UUID(link.flow_id)).data
             # 先查找替换collection_id
             knowledge_id = link.knowledge_id
-            tool_name = f'flow_{link.flow_id}'
+            tool_name = f'flow_{link.id}'
             if knowledge_id:
                 # 说明是关联的知识库，修改知识库检索技能的对应知识库ID参数
                 tool_name = f'knowledge_{link.knowledge_id}'
