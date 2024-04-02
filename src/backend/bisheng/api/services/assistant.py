@@ -106,7 +106,6 @@ class AssistantService(AssistantUtils):
     @classmethod
     async def auto_update_stream(cls, assistant_id: UUID, prompt: str):
         """ 重新生成助手的提示词和工具选择, 只调用模型能力不修改数据库数据 """
-        # todo zgq: 改为流式返回
         assistant = AssistantDao.get_one_assistant(assistant_id)
         assistant.prompt = prompt
 
@@ -131,11 +130,11 @@ class AssistantService(AssistantUtils):
 
         # 自动选择工具和技能
         tool_info = cls.get_auto_tool_info(assistant, auto_agent)
-        tool_info = [one.model_dump() for one in tool_info]
+        tool_info = [one.model_dump(mode='json', exclude={'create_time', 'update_time'}) for one in tool_info]
         yield str(StreamData(event='message', data={'type': 'tool_list', 'message': tool_info}))
 
         flow_info = cls.get_auto_flow_info(assistant, auto_agent)
-        flow_info = [one.model_dump() for one in flow_info]
+        flow_info = [one.model_dump(mode='json', exclude={'create_time', 'update_time'}) for one in flow_info]
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod
