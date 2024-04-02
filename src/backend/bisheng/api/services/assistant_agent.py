@@ -138,7 +138,7 @@ class AssistantAgent(AssistantUtils):
         self.agent = ConfigurableAssistant(agent_executor_type=agent_executor_type,
                                            tools=self.tools,
                                            llm=self.llm,
-                                           system_message=self.assistant.prompt,
+                                           assistant_message=self.assistant.prompt,
                                            **agent_executor_params)
 
     async def optimize_assistant_prompt(self):
