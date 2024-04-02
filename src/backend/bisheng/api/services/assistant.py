@@ -168,12 +168,7 @@ class AssistantService(AssistantUtils):
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息
-        if req.tool_list is not None and req.flow_list is not None and req.knowledge_list is not None:
-            AssistantLinkDao.update_assistant_link(assistant.id,
-                                                   tool_list=req.tool_list,
-                                                   flow_list=req.flow_list,
-                                                   knowledge_list=req.knowledge_list)
-        elif req.tool_list is not None:
+        if req.tool_list is not None:
             AssistantLinkDao.update_assistant_tool(assistant.id, tool_list=req.tool_list)
         elif req.flow_list is not None:
             AssistantLinkDao.update_assistant_flow(assistant.id, flow_list=req.flow_list)

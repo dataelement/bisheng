@@ -71,15 +71,12 @@ class AssistantAgent(AssistantUtils):
         # tool
         tools: List[BaseTool] = []
         tool_ids = []
-        flow_ids = []
-        knowledge_ids = []
+        flow_links = []
         for link in links:
             if link.tool_id:
                 tool_ids.append(link.tool_id)
-            elif link.flow_id:
-                flow_ids.append(link.flow_id)
-            elif link.knowledge_id:
-                knowledge_ids.append(link.knowledge_id)
+            else:
+                flow_links.append(link)
         if tool_ids:
             tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
             tool_name_param = {
@@ -92,24 +89,20 @@ class AssistantAgent(AssistantUtils):
             tools += tool_langchain
             logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
 
-        # flow, 当知识库的时候，flow_id 会重复
-        flow_links = [link for link in links if link.flow_id]
-        if flow_links:
-            flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links])
-            flow_id2data = {flow.id: flow for flow in flow_data}
-
+        # flow
+        flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links])
+        flow_id2data = {flow.id: flow for flow in flow_data}
         for link in flow_links:
             flow_graph_data = flow_id2data.get(UUID(link.flow_id)).data
             # 先查找替换collection_id
             knowledge_id = link.knowledge_id
+            tool_name = f'flow_{link.flow_id}'
             if knowledge_id:
+                # 说明是关联的知识库，修改知识库检索技能的对应知识库ID参数
+                tool_name = f'knowledge_{link.knowledge_id}'
                 flow_graph_data = set_flow_knowledge_id(flow_graph_data, knowledge_id)
-                # 使用新鲜的llm
-                # replace_flow_llm(flow_graph_data, self.llm)
-
             try:
                 artifacts = {}
-
                 graph = await build_flow_no_yield(graph_data=flow_graph_data,
                                                   artifacts=artifacts,
                                                   process_file=True,
@@ -117,7 +110,7 @@ class AssistantAgent(AssistantUtils):
                                                   chat_id=self.assistant.id)
                 built_object = await graph.abuild()
                 logger.info('act=init_flow_tool build_end')
-                flow_tool = Tool(name=f'flow_{link.id}',
+                flow_tool = Tool(name=tool_name,
                                  func=built_object,
                                  coroutine=built_object.acall,
                                  description=flow_id2data.get(UUID(link.flow_id)).description,
