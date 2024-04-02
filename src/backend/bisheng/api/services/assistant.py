@@ -81,18 +81,18 @@ class AssistantService(AssistantUtils):
     async def create_assistant(cls, assistant: Assistant) -> UnifiedResponseModel[AssistantInfo]:
 
         # 通过算法接口自动选择工具和技能
-        assistant, tool_list, flow_list = await cls.get_auto_info(assistant)
+        # assistant, tool_list, flow_list = await cls.get_auto_info(assistant)
 
         # 保存数据到数据库
         assistant = AssistantDao.create_assistant(assistant)
         # 保存大模型自动选择的工具和技能
-        AssistantLinkDao.insert_batch(assistant.id, tool_list=tool_list, flow_list=flow_list)
-        tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list)
+        # AssistantLinkDao.insert_batch(assistant.id, tool_list=tool_list, flow_list=flow_list)
+        # tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list)
 
         return resp_200(data=AssistantInfo(**assistant.dict(),
-                                           tool_list=tool_list,
-                                           flow_list=flow_list,
-                                           knowledge_list=knowledge_list))
+                                           tool_list=[],
+                                           flow_list=[],
+                                           knowledge_list=[]))
 
     # 删除助手
     @classmethod
