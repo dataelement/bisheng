@@ -129,10 +129,13 @@ def upload_minio(param: dict,
     import minio
     minio_client = minio.Minio(**param)
     logger.debug('upload_file obj={} bucket={} file_paht={}', object_name, bucket, file_path)
-    return minio_client.fput_object(bucket_name=bucket,
-                                    object_name=object_name,
-                                    file_path=file_path,
-                                    content_type=content_type)
+    minio_client.fput_object(bucket_name=bucket,
+                             object_name=object_name,
+                             file_path=file_path,
+                             content_type=content_type)
+    return minio_client.presigned_get_object(bucket_name=bucket,
+                                             object_name=object_name,
+                                             expires=30)
 
 
 class CodeInterpreterToolArguments(BaseModel):
