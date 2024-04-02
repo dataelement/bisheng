@@ -132,11 +132,11 @@ class AssistantService(AssistantUtils):
 
         # 自动选择工具和技能
         tool_info = cls.get_auto_tool_info(assistant, auto_agent)
-        tool_info = [one.model_dump(mode='json', exclude={'create_time', 'update_time'}) for one in tool_info]
+        tool_info = [one.to_dict() for one in tool_info]
         yield str(StreamData(event='message', data={'type': 'tool_list', 'message': tool_info}))
 
         flow_info = cls.get_auto_flow_info(assistant, auto_agent)
-        flow_info = [one.model_dump(mode='json', exclude={'create_time', 'update_time'}) for one in flow_info]
+        flow_info = [one.to_dict() for one in flow_info]
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod
