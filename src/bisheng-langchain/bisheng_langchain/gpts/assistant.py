@@ -22,7 +22,7 @@ class ConfigurableAssistant(RunnableBinding):
     agent_executor_type: str
     tools: Sequence[BaseTool]
     llm: LanguageModelLike
-    system_message: str
+    assistant_message: str
     interrupt_before_action: bool = False
     recursion_limit: int = 50
 
@@ -32,7 +32,7 @@ class ConfigurableAssistant(RunnableBinding):
         agent_executor_type: str, 
         tools: Sequence[BaseTool],
         llm: LanguageModelLike,
-        system_message: str,
+        assistant_message: str,
         interrupt_before_action: bool = False,
         recursion_limit: int = 50,
         kwargs: Optional[Mapping[str, Any]] = None,
@@ -42,13 +42,13 @@ class ConfigurableAssistant(RunnableBinding):
         others.pop("bound", None)
         agent_executor_object = import_class(f'bisheng_langchain.gpts.agent_types.{agent_executor_type}')
 
-        _agent_executor = agent_executor_object(tools, llm, system_message, interrupt_before_action)
+        _agent_executor = agent_executor_object(tools, llm, assistant_message, interrupt_before_action)
         agent_executor = _agent_executor.with_config({"recursion_limit": recursion_limit})
         super().__init__(
             agent_executor_type=agent_executor_type,
             tools=tools,
             llm=llm,
-            system_message=system_message,
+            assistant_message=assistant_message,
             bound=agent_executor,
             kwargs=kwargs or {},
             config=config or {},
@@ -99,7 +99,7 @@ class BishengAssistant:
             agent_executor_type=agent_executor_type, 
             tools=tools, 
             llm=llm, 
-            system_message=assistant_message, 
+            assistant_message=assistant_message, 
             **agent_executor_params
         )
 

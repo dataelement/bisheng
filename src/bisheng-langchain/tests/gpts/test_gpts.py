@@ -27,7 +27,7 @@ def test_agent():
         agent_executor_type=agent_type,
         tools=tools,
         llm=llm,
-        system_message="You are a helpful assistant.",
+        assistant_message="You are a helpful assistant.",
     )
 
     inputs = [HumanMessage(content="帮我查询云南白药公司的基本信息")]
