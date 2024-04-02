@@ -82,4 +82,5 @@ gpts:
       model_name: 'Qwen-1_8B-Chat'
       host_base_url: 'http://192.168.106.12:9001/v2.1/models'
       temperature: 0.01
-
+  default-retrieval:
+    c8f42e63-cb1a-4a27-ad1a-37abb53a1cf3

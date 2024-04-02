@@ -209,16 +209,19 @@ class AssistantLinkDao(AssistantLink):
     def update_assistant_flow(cls, assistant_id: UUID, flow_list: List[str]):
         with session_getter() as session:
             session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
-                                                AssistantLink.flow_id != '').delete()
+                                                AssistantLink.flow_id != '',
+                                                AssistantLink.knowledge_id == 0).delete()
             for one in flow_list:
                 session.add(AssistantLink(assistant_id=assistant_id, flow_id=one))
             session.commit()
 
     @classmethod
-    def update_assistant_knowledge(cls, assistant_id: UUID, knowledge_list: List[int]):
+    def update_assistant_knowledge(cls, assistant_id: UUID, knowledge_list: List[int],
+                                   flow_id: str):
         with session_getter() as session:
             session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
                                                 AssistantLink.knowledge_id != 0).delete()
             for one in knowledge_list:
-                session.add(AssistantLink(assistant_id=assistant_id, knowledge_id=one))
+                session.add(
+                    AssistantLink(assistant_id=assistant_id, knowledge_id=one, flow_id=flow_id))
             session.commit()

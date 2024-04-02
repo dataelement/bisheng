@@ -1,15 +1,15 @@
 import json
-import uuid
 from typing import Dict, List
+from uuid import UUID
 
 import httpx
 from bisheng.api.services.assistant_base import AssistantUtils
+from bisheng.api.services.utils import set_flow_knowledge_id
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
-from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
                                                       generate_opening_dialog,
@@ -27,6 +27,7 @@ from loguru import logger
 
 
 class AssistantAgent(AssistantUtils):
+
     def __init__(self, assistant_info: Assistant, chat_id: str):
         self.assistant = assistant_info
         self.chat_id = chat_id
@@ -42,8 +43,10 @@ class AssistantAgent(AssistantUtils):
     async def init_llm(self):
         llm_params = self.get_llm_conf(self.assistant.model_name)
         if not llm_params:
-            logger.error(f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
-            raise Exception(f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
+            logger.error(
+                f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
+            raise Exception(
+                f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
 
         if llm_params['type'] == 'ChatOpenAI':
             llm_object = import_class('langchain_openai.ChatOpenAI')
@@ -63,7 +66,8 @@ class AssistantAgent(AssistantUtils):
         """通过名称获取tool 列表
            tools_name_param:: {name: params}
         """
-        links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(assistant_id=self.assistant.id)
+        links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(
+            assistant_id=self.assistant.id)
         # tool
         tools: List[BaseTool] = []
         tool_ids = []
@@ -78,52 +82,50 @@ class AssistantAgent(AssistantUtils):
                 knowledge_ids.append(link.knowledge_id)
         if tool_ids:
             tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
-            tool_name_param = {tool.tool_key: json.loads(tool.extra) if tool.extra else {} for tool in tools_model}
-            tool_langchain = load_tools(tool_params=tool_name_param, llm=self.llm, callbacks=callbacks)
+            tool_name_param = {
+                tool.tool_key: json.loads(tool.extra) if tool.extra else {}
+                for tool in tools_model
+            }
+            tool_langchain = load_tools(tool_params=tool_name_param,
+                                        llm=self.llm,
+                                        callbacks=callbacks)
             tools += tool_langchain
             logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
 
-        # flow
-        if flow_ids:
-            flow_data = FlowDao.get_flow_by_ids(flow_ids)
+        # flow, 当知识库的时候，flow_id 会重复
+        flow_links = [link for link in links if link.flow_id]
+        if flow_links:
+            flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links])
+            flow_id2data = {flow.id: flow for flow in flow_data}
+
+        for link in flow_links:
+            flow_graph_data = flow_id2data.get(UUID(link.flow_id)).data
             # 先查找替换collection_id
-            for flow in flow_data:
-                graph_data = flow.data
-                try:
-                    artifacts = {}
-                    graph = await build_flow_no_yield(graph_data=graph_data,
-                                                      artifacts=artifacts,
-                                                      process_file=True,
-                                                      flow_id=flow.id.hex,
-                                                      chat_id=self.assistant.id)
-                    built_object = await graph.abuild()
-                    logger.info('act=init_flow_tool build_end')
-                    flow_tool = Tool(name=flow.name,
-                                     func=built_object.call,
-                                     coroutine=built_object.acall,
-                                     description=flow.description,
-                                     args_schema=InputRequest,
-                                     callbacks=callbacks)
-                    tools.append(flow_tool)
-                except Exception as exc:
-                    logger.error(f'Error processing tweaks: {exc}')
-        logger.info('start init knowledge tool')
-        knowledge_data = KnowledgeDao.get_list_by_ids(knowledge_ids)
-        for one in knowledge_data:
-            graph_data = {}
-            graph = await build_flow_no_yield(graph_data=graph_data,
-                                              artifacts={},
-                                              process_file=True,
-                                              flow_id=uuid.uuid4().hex,
-                                              chat_id=self.assistant.id)
-            built_object = await graph.abuild()
-            knowledge_tool = Tool(name=f'knowledge_id:{one.id}',
-                                  func=built_object.call,
-                                  coroutine=built_object.acall,
-                                  description=one.description,
-                                  args_schema=InputRequest,
-                                  callbacks=callbacks)
-            tools.append(knowledge_tool)
+            knowledge_id = link.knowledge_id
+            if knowledge_id:
+                flow_graph_data = set_flow_knowledge_id(flow_graph_data, knowledge_id)
+                # 使用新鲜的llm
+                # replace_flow_llm(flow_graph_data, self.llm)
+
+            try:
+                artifacts = {}
+
+                graph = await build_flow_no_yield(graph_data=flow_graph_data,
+                                                  artifacts=artifacts,
+                                                  process_file=True,
+                                                  flow_id=link.flow_id,
+                                                  chat_id=self.assistant.id)
+                built_object = await graph.abuild()
+                logger.info('act=init_flow_tool build_end')
+                flow_tool = Tool(name=f'flow_{link.id}',
+                                 func=built_object,
+                                 coroutine=built_object.acall,
+                                 description=flow_id2data.get(UUID(link.flow_id)).description,
+                                 args_schema=InputRequest,
+                                 callbacks=callbacks)
+                tools.append(flow_tool)
+            except Exception as exc:
+                logger.error(f'Error processing tweaks: {exc}')
         self.tools = tools
 
     async def init_agent(self):
@@ -139,27 +141,23 @@ class AssistantAgent(AssistantUtils):
         agent_executor_type = agent_executor_params.pop('type')
 
         # 初始化agent
-        self.agent = ConfigurableAssistant(
-            agent_executor_type=agent_executor_type,
-            tools=self.tools,
-            llm=self.llm,
-            system_message=assistant_message,
-            **agent_executor_params
-        )
+        self.agent = ConfigurableAssistant(agent_executor_type=agent_executor_type,
+                                           tools=self.tools,
+                                           llm=self.llm,
+                                           system_message=assistant_message,
+                                           **agent_executor_params)
 
     async def optimize_assistant_prompt(self):
         """ 自动优化生成prompt """
-        chain = (
-                {
-                    'assistant_name': lambda x: x['assistant_name'],
-                    'assistant_description': lambda x: x['assistant_description'],
-                }
-                | ASSISTANT_PROMPT_OPT
-                | self.llm
-        )
+        chain = ({
+            'assistant_name': lambda x: x['assistant_name'],
+            'assistant_description': lambda x: x['assistant_description'],
+        }
+                 | ASSISTANT_PROMPT_OPT
+                 | self.llm)
         async for one in chain.astream({
-            'assistant_name': self.assistant.name,
-            'assistant_description': self.assistant.prompt,
+                'assistant_name': self.assistant.name,
+                'assistant_description': self.assistant.prompt,
         }):
             yield one
 
@@ -179,7 +177,10 @@ class AssistantAgent(AssistantUtils):
          选择工具
          tool_list: [{name: xxx, description: xxx}]
         """
-        tool_list = [ToolInfo(tool_name=one['name'], tool_description=one['description']) for one in tool_list]
+        tool_list = [
+            ToolInfo(tool_name=one['name'], tool_description=one['description'])
+            for one in tool_list
+        ]
         tool_selector = ToolSelector(llm=self.llm, tools=tool_list)
         return tool_selector.select(self.assistant.name, prompt)
 
@@ -190,9 +191,9 @@ class AssistantAgent(AssistantUtils):
         inputs = [HumanMessage(content=query)]
 
         result = {}
-        async for one in self.agent.astream_events(inputs, config=RunnableConfig(
-                callbacks=callback
-        ), version='v1'):
+        async for one in self.agent.astream_events(inputs,
+                                                   config=RunnableConfig(callbacks=callback),
+                                                   version='v1'):
             if one['event'] == 'on_chain_end':
                 result = one
 

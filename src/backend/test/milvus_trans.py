@@ -158,12 +158,13 @@ def milvus_clean():
 
     collection = milvus_cli.list_collections()
     for col in collection:
-        if col.startswith("rag_"):
+        if col.startswith('rag'):
             print(col)
-            cole = Collection(col, using=milvus_cli._using)
+            collection_col = Collection(col, using=milvus_cli._using)
+            # milvus_cli.drop_collection(col)
             try:
-                cole.release(3)
-            except:
+                collection_col.release(timeout=1)
+            except Exception:
                 continue
 
 

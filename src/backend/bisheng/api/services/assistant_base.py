@@ -25,3 +25,7 @@ class AssistantUtils:
     @classmethod
     def get_agent_executor(cls):
         return cls.get_gpts_conf('agent_executor')
+
+    @classmethod
+    def get_default_retrieval(cls) -> str:
+        return cls.get_gpts_conf('default-retrieval')
