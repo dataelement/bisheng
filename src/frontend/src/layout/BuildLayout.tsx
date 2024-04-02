@@ -8,7 +8,7 @@ export default function BuildLayout(params) {
             <div className="px-20"><NavLink to={'skills'}>技能</NavLink></div>
             {/* <div className="px-20"><NavLink to={'tools'}>工具</NavLink></div> */}
         </div>
-        <div style={{ height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
+        <div style={{ height: 'calc(100vh - 125px)', overflow: 'hidden' }}>
             <Outlet />
         </div>
     </div>

@@ -1,7 +1,7 @@
 import i18next from "i18next";
 import { useRef, useState } from "react";
 import ReactDOM from "react-dom";
-import { Button } from "../../components/ui/button";
+import { Button } from "../../components/bs-ui/button";
 import { X } from "lucide-react";
 
 interface ConfirmParams {
@@ -51,8 +51,8 @@ function ConfirmWrapper() {
       <h3 className="font-bold text-lg">{title}</h3>
       <p className="py-4">{desc}</p>
       <div className="modal-action">
-        <Button className="h-8 rounded-full" variant="outline" onClick={handleCancelClick}>{canelTxt}</Button>
-        <Button className="h-8 rounded-full" variant="destructive" onClick={handleOkClick}>{okTxt}</Button>
+        <Button className="h-8" variant="outline" onClick={handleCancelClick}>{canelTxt}</Button>
+        <Button className="h-8" variant="destructive" onClick={handleOkClick}>{okTxt}</Button>
       </div>
     </form>
   </dialog>

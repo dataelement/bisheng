@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../alerts/confirm";
-import { Button } from "../../components/ui/button";
+import { Button } from "../../components/bs-ui/button";
 import {
     Table,
     TableBody,
@@ -10,7 +10,7 @@ import {
     TableHead,
     TableHeader,
     TableRow
-} from "../../components/ui/table";
+} from "../../components/bs-ui/table";
 import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
@@ -92,7 +92,7 @@ export default function Templates({ onBack, onChange = () => { } }) {
                                             <TableCell className="font-medium min-w-[400px]">{temp.name}</TableCell>
                                             <TableCell>{temp.description}</TableCell>
                                             <TableCell className="">
-                                                <a href="javascript:;" onClick={() => handleDelTemp(index, temp.id)} className="underline">{t('delete')}</a>
+                                                <Button variant="link" onClick={() => handleDelTemp(index, temp.id)} className="underline">{t('delete')}</Button>
                                             </TableCell>
                                         </tr>
                                     )}

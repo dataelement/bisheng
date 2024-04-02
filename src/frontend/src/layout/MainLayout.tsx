@@ -87,7 +87,7 @@ export default function MainLayout() {
                         <NavLink to='/'className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px] ${location.pathname === '/'?"bg-[white] text-[#0055e3] shadow-sm":""}`}>
                             <ApplicationIcon className="h-6 w-6 my-[12px]"/><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
                         </NavLink>
-                        <NavLink to='/build/assist' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px] ${location.pathname === '/build/assis'?"bg-[white] text-[#0055e3] shadow-sm":""}`}>
+                        <NavLink to='/build/assist' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px] ${location.pathname === '/build/assist'?"bg-[white] text-[#0055e3] shadow-sm":""}`}>
                             <TechnologyIcon className="h-6 w-6 my-[12px]"/><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.skills')}</span>
                         </NavLink>
                         <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px] ${location.pathname === '/filelib'?"bg-[white] text-[#0055e3] shadow-sm":""}`}>

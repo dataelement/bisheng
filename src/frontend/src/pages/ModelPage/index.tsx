@@ -212,7 +212,7 @@ export default function FileLibPage() {
     const copyText = useCopyText()
 
     return <div id="model-scroll" className="w-full h-full p-6 overflow-y-auto">
-        <Tabs defaultValue="model" className="w-full" onValueChange={e => e === 'model' && loadData()}>
+        <Tabs defaultValue="model" className="w-full mb-[40px]" onValueChange={e => e === 'model' && loadData()}>
             <TabsList className="">
                 <TabsTrigger value="model" className="roundedrounded-xl">{t('model.modelManagement')}</TabsTrigger>
                 <TabsTrigger value="finetune" disabled={user.role !== 'admin'}>{t('model.modelFineTune')}</TabsTrigger>
@@ -224,7 +224,6 @@ export default function FileLibPage() {
                     <Button className="h-10 px-10 rounded-lg" onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
                 </div>
                 <Table>
-                    <TableCaption>{t('model.modelCollectionCaption')}.</TableCaption>
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-[200px]">{t('model.machineName')}</TableHead>
@@ -255,6 +254,7 @@ export default function FileLibPage() {
                     </TableBody>
                 </Table>
                 {/* 分页 */}
+            <div className="flex justify-between items-center w-[calc(100vw-184px)] absolute right-0 bottom-0 bg-[#fff] h-[60px] pl-[60px] mr-5  border-t-[1px]">{t('model.modelCollectionCaption')}.</div>
             </TabsContent>
             <TabsContent value="finetune">
                 {/* 微调 */}

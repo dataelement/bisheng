@@ -153,12 +153,12 @@ export default function FileLibPage() {
     const { t } = useTranslation();
 
     return (
-        <div className="w-full h-screen p-6 overflow-y-auto">
+        <div className="w-full h-full p-6 overflow-y-auto">
             {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <span className="loading loading-infinity loading-lg"></span>
             </div>}
 
-            <Tabs defaultValue="account" className="w-full">
+            <Tabs defaultValue="account" className="w-full mb-[40px]">
                 <TabsList className="">
                     <TabsTrigger value="account" className="roundedrounded-xl">{t('lib.fileData')}</TabsTrigger>
                     <TabsTrigger disabled value="password">{t('lib.structuredData')}</TabsTrigger>
@@ -173,18 +173,6 @@ export default function FileLibPage() {
                         <Button className="h-10 px-10" onClick={() => setOpen(true)}>{t('create')}</Button>
                     </div>
                     <Table>
-                        <TableCaption>
-                            <p>{t('lib.libraryCollection')}</p>
-                            <div className="">
-                                <AutoPagination
-                                    page={page}
-                                    pageSize={pageSize}
-                                    total={total}
-                                    onChange={(newPage) => setPage(newPage)}
-                                />
-                            </div>
-                        </TableCaption>
-
                         <TableHeader>
                             <TableRow>
                                 <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
@@ -221,7 +209,17 @@ export default function FileLibPage() {
                 </TabsContent>
                 <TabsContent value="password"></TabsContent>
             </Tabs>
-
+            <div className="flex justify-between items-center absolute bottom-0 right-0 h-[60px] w-[calc(100vw-184px)] bg-[#fff] pl-[60px] mr-5 border-t-[1px]">
+                <p>{t('lib.libraryCollection')}</p>
+                <div>
+                    <AutoPagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={total}
+                        onChange={(newPage) => setPage(newPage)}
+                    />
+                </div>
+            </div>
             <CreateModal datalist={datalist} open={open} setOpen={setOpen}></CreateModal>
 
             <dialog className={`modal ${delShow && 'modal-open'}`}>
