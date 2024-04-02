@@ -126,7 +126,6 @@ class AssistantService(AssistantUtils):
         assistant.prompt = final_prompt
 
         # 生成开场白和开场问题
-
         guide_info = auto_agent.generate_guide(assistant.prompt)
         yield str(StreamData(event='message', data={'type': 'guide_word', 'message': guide_info['opening_lines']}))
         yield str(StreamData(event='message', data={'type': 'guide_question', 'message': guide_info['questions']}))
@@ -161,9 +160,9 @@ class AssistantService(AssistantUtils):
             assistant.guide_question = req.guide_question
         if req.model_name:
             assistant.model_name = req.model_name
-        if req.temperature:
+        if req.temperature is not None:
             assistant.temperature = req.temperature
-        if req.status:
+        if req.status is not None:
             assistant.status = req.status
         AssistantDao.update_assistant(assistant)
 
@@ -277,7 +276,7 @@ class AssistantService(AssistantUtils):
         assistant.guide_question = guide_info['questions']
 
         # 自动生成描述
-        assistant.description = auto_agent.generate_description(assistant.prompt)
+        assistant.desc = auto_agent.generate_description(assistant.prompt)
 
         # 自动选择工具
         tool_info = cls.get_auto_tool_info(assistant, auto_agent)
