@@ -1,8 +1,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
+import { Button } from "../../../components/bs-ui/button";
+import { Input } from "../../../components/bs-ui/input";
 import {
     Select,
     SelectContent,
@@ -10,7 +10,7 @@ import {
     SelectItem,
     SelectTrigger,
     SelectValue
-} from "../../../components/ui/select1";
+} from "../../../components/bs-ui/select";
 import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group";
 import { getAllServicesApi, getServicesApi } from "../../../controllers/API";
 import { useDebounce } from "../../../util/hook";
@@ -83,8 +83,8 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
             </div>
         </div>
         <div className="flex gap-4">
-            <Button size="sm" className="rounded-full h-8" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
-            <Button size="sm" className="rounded-full h-8" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+            <Button size="sm" className="h-10 px-5" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
+            <Button size="sm" className="h-10 px-5  bg-[#111] hover:bg-[#48494d]" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
         </div>
     </div>
 };

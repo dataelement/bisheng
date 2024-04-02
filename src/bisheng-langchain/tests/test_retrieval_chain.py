@@ -17,16 +17,15 @@ from langchain.document_loaders import PyPDFLoader
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-
 embeddings = OpenAIEmbeddings()
-
 
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple
 
-from langchain.vectorstores import Milvus as MilvusOrigin
+from langchain_community.vectorstores import Milvus as MilvusOrigin
 
 
 class Milvus(MilvusOrigin):
+
     @staticmethod
     def _relevance_score_fn(distance: float) -> float:
         """Normalize the distance to a score on a scale [0, 1]."""
@@ -57,7 +56,10 @@ def data_loader():
         embedding=embeddings,
         collection_name="dameng_vector_chunk500",
         drop_old=True,
-        connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT},
+        connection_args={
+            "host": MILVUS_HOST,
+            "port": MILVUS_PORT
+        },
     )
     print('embedding and vector store time:', time.time() - start_time)
 
@@ -70,12 +72,17 @@ def retrieval(query):
     vector_store = Milvus(
         embedding_function=embeddings,
         collection_name="jiumuwang_vector_chunk500",
-        connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT},
+        connection_args={
+            "host": MILVUS_HOST,
+            "port": MILVUS_PORT
+        },
     )
     # vector_retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-    vector_retriever = vector_store.as_retriever(
-        search_type="similarity_score_threshold", search_kwargs={"k": 4, "score_threshold": 1.0}
-    )
+    vector_retriever = vector_store.as_retriever(search_type="similarity_score_threshold",
+                                                 search_kwargs={
+                                                     "k": 4,
+                                                     "score_threshold": 1.0
+                                                 })
     # breakpoint()
     return vector_retriever.get_relevant_documents(query)
 
@@ -97,7 +104,10 @@ def qa_loader():
         embedding=embeddings,
         collection_name="dm_qa",
         drop_old=True,
-        connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT},
+        connection_args={
+            "host": MILVUS_HOST,
+            "port": MILVUS_PORT
+        },
     )
 
     return vector_store
@@ -111,16 +121,21 @@ def retrieval_chain():
     vector_store = Milvus(
         embedding_function=embeddings,
         collection_name="dm_qa",
-        connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT},
+        connection_args={
+            "host": MILVUS_HOST,
+            "port": MILVUS_PORT
+        },
     )
     qa = RetrievalChain(
         # output_key='result',
         retriever=vector_store.as_retriever(
             # search_type="similarity",
             search_type="similarity_score_threshold",
-            search_kwargs={"k": 1, "score_threshold": 0.9},
-        ),
-    )
+            search_kwargs={
+                "k": 1,
+                "score_threshold": 0.9
+            },
+        ), )
     return qa
 
 
@@ -130,12 +145,17 @@ def retrieval_qa_chain():
     vector_store = Milvus(
         embedding_function=embeddings,
         collection_name="dameng_vector_chunk500",
-        connection_args={"host": MILVUS_HOST, "port": MILVUS_PORT},
+        connection_args={
+            "host": MILVUS_HOST,
+            "port": MILVUS_PORT
+        },
     )
     # vector_retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-    vector_retriever = vector_store.as_retriever(
-        search_type="similarity_score_threshold", search_kwargs={"k": 4, "score_threshold": 0.5}
-    )
+    vector_retriever = vector_store.as_retriever(search_type="similarity_score_threshold",
+                                                 search_kwargs={
+                                                     "k": 4,
+                                                     "score_threshold": 0.5
+                                                 })
     llm = ChatOpenAI(
         model="gpt-3.5-turbo-16k-0613",
         temperature=0.0,

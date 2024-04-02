@@ -135,6 +135,7 @@ export default function FormModal({
     files?: Array<any>;
   }) {
     setChatHistory((old) => {
+      if (!old.length) return old // 拒绝 chatHistory无数据时接收数据
       let newChat = [...old];
       let prevChat = newChat[newChat.length - 2]
       // let lastChat = newChat[newChat.length - 1]
@@ -175,7 +176,7 @@ export default function FormModal({
 
   function handleOnClose(event: CloseEvent) {
     if (isOpen.current) {
-      setErrorData({ title: event.reason });
+      setErrorData({ title: 'ws is close;' + event.reason });
       setTimeout(() => {
         connectWS();
         setLockChat(false);

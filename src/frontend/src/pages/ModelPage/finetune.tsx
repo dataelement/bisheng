@@ -1,7 +1,8 @@
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import PaginationComponent from "../../components/PaginationComponent";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
+import AutoPagination from "../../components/bs-ui/pagination/autoPagination"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/bs-ui/table";
 import { alertContext } from "../../contexts/alertContext";
 import { deleteTaskApi, getTasksApi } from "../../controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
@@ -14,7 +15,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
     const { setSuccessData } = useContext(alertContext);
     const { t } = useTranslation()
 
-    const { page, pageSize, data: tasks, total, setPage, search, reload, filterData } = useTable((param) =>
+    const { page, pageSize, data: tasks, total, setPage, search, reload, filterData } = useTable({}, (param) =>
         getTasksApi({
             page: param.page,
             limit: param.pageSize,
@@ -76,7 +77,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                                 </TableBody>
                             </Table>
                         </div>
-                        <PaginationComponent
+                        <AutoPagination
                             page={page}
                             pageSize={pageSize}
                             total={total}

@@ -45,6 +45,7 @@ services:
       - "8701:80"
     environment:
       TZ: Asia/Shanghai
+      JWT_ENABLED: false
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
     command: bash -c "supervisorctl restart all"
@@ -94,7 +95,7 @@ services:
 
   elasticsearch:
     container_name: bisheng-es
-    image: docker.io/bitnami/elasticsearch:8
+    image: docker.io/bitnami/elasticsearch:8.12.0
     user: root
     ports:
       - "9200:9200"

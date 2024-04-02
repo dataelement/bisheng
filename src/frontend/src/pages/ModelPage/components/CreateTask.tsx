@@ -1,6 +1,6 @@
 import { HelpCircle } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Button } from "../../../components/ui/button";
+import { Button } from "../../../components/bs-ui/button";
 import {
     Select,
     SelectContent,
@@ -8,13 +8,13 @@ import {
     SelectItem,
     SelectTrigger,
     SelectValue
-} from "../../../components/ui/select1";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
+} from "../../../components/bs-ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/bs-ui/tooltip";
 
-import { Input } from "../../../components/ui/input";
-import { Label } from "../../../components/ui/label";
+import { Input } from "../../../components/bs-ui/input";
+import { Label } from "../../../components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/bs-ui/table";
 import { alertContext } from "../../../contexts/alertContext";
 import { getServicesApi, serverListApi } from "../../../controllers/API";
 import { createTaskApi } from "../../../controllers/API/finetune";
@@ -80,7 +80,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
     return <div className="pt-2">
         <div className="border-b pb-2 flex justify-between items-center">
             <h1 className="">{t('finetune.createTrainingTask')}</h1>
-            <Button size="sm" className="rounded-full h-7" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+            <Button size="sm" className="h-10 px-5 bg-[#111] hover:bg-[#48494d]" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
         </div>
         {/* base */}
         <div className="border-b pb-4">
@@ -109,7 +109,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
                             </SelectGroup>
                         </SelectContent>
                     </Select>
-                    <Button size="sm" className="rounded-full h-7 px-2" onClick={gpuClick}>{t('finetune.gpuResourceUsage')}</Button>
+                    <Button size="sm" className="h-9 px-5" onClick={gpuClick}>{t('finetune.gpuResourceUsage')}</Button>
                 </div>
             </div>
             {/* datas */}
@@ -195,8 +195,8 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             </div>
         </div>
         <div className="mt-6 flex gap-6">
-            <Button disabled={loading} className="rounded-full px-12" onClick={handleCreate}>{t('create')}</Button>
-            <Button disabled={loading} className="rounded-full px-12" variant="outline" onClick={onCancel}>{t('cancel')}</Button>
+            <Button disabled={loading} className="h-10 px-12" onClick={handleCreate}>{t('create')}</Button>
+            <Button disabled={loading} className="h-10 px-12" variant="outline" onClick={onCancel}>{t('cancel')}</Button>
         </div>
     </div>
 };

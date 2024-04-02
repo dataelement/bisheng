@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsconfirm } from "../../../alerts/confirm";
-import { Button } from "../../../components/ui/button";
+import { Button } from "../../../components/bs-ui/button";
 import {
     Table,
     TableBody,
@@ -10,14 +10,13 @@ import {
     TableHead,
     TableHeader,
     TableRow
-} from "../../../components/ui/table";
+} from "../../../components/bs-ui/table";
 import { delRoleApi, getRolesApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { ROLE } from "../../../types/api/user";
 import EditRole from "./EditRole";
-import { Input } from "../../../components/ui/input";
-import { Search } from "lucide-react";
-
+import { SearchInput } from "../../../components/bs-ui/input";
+import { PlusIcon } from "@/components/bs-icons/plus";
 export default function Roles() {
     const { t } = useTranslation()
 
@@ -67,16 +66,17 @@ export default function Roles() {
 
     if (role) return <EditRole id={role.id || -1} name={role.role_name || ''} onBeforeChange={checkSameName} onChange={handleChange}></EditRole>
 
-    return <div className=" relative">
+    return <div>
         <div className="flex gap-4 items-center justify-end">
             <div className="w-[180px] relative">
-                <Input value={searchWord} placeholder={t('system.roleName')} onChange={handleSearch}></Input>
-                <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+                <SearchInput placeholder={t('system.roleName')} onChange={(e) => search(e.target.value)}></SearchInput>
             </div>
-            <Button className="h-8 rounded-full" onClick={() => setRole({})}>{t('create')}</Button>
+            <Button className="flex justify-around h-10 w-[120px] ml-5"  onClick={() => setRole({})}>
+                <PlusIcon className="text-[#0053e1]"/>
+                <span className="text-[white] mx-4">{t('create')}</span>
+            </Button>
         </div>
-        <Table>
-            <TableCaption>{t('system.roleList')}.</TableCaption>
+        <Table className="mb-10">
             <TableHeader>
                 <TableRow>
                     <TableHead className="w-[200px]">{t('system.roleName')}</TableHead>
@@ -90,12 +90,13 @@ export default function Roles() {
                         <TableCell className="font-medium">{el.role_name}</TableCell>
                         <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                         <TableCell className="text-right">
-                            <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => setRole(el)}>{t('edit')}</Button>
-                            <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => handleDelete(el)} className="text-red-500">{t('delete')}</Button>
+                            <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => setRole(el)} className="px-0 pl-6">{t('edit')}</Button>
+                            <Button variant="link"  disabled={[1, 2].includes(el.id)} onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
                         </TableCell>
                     </TableRow>
                 ))}
             </TableBody>
         </Table>
+        <div className="flex justify-between items-center w-[calc(100vw-184px)] absolute right-0 bottom-0 bg-[#fff] h-[60px] pl-[60px] mr-5  border-t-[1px]">{t('system.roleList')}.</div>
     </div>
 };

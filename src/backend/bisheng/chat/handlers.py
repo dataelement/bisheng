@@ -237,7 +237,6 @@ class Handler:
                                          type='start',
                                          category='answer',
                                          user_id=user_id)
-            await session.send_json(client_id, chat_id, response_step)
             response_step.type = 'end'
             await session.send_json(client_id, chat_id, response_step)
             report = f"""{report}### {question} \n {result} \n """

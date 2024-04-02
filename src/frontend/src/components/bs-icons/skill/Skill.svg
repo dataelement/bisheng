@@ -1,0 +1,22 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <g id="Group 628">
+        <g id="Group 625">
+            <ellipse id="Ellipse 17" cx="13.0622" cy="13.4282" rx="6" ry="3" transform="rotate(-30 13.0622 13.4282)"
+                stroke="url(#paint0_linear_410_134)" stroke-width="2" />
+            <ellipse id="Ellipse 18" cx="11.0622" cy="9.9641" rx="7" ry="4" transform="rotate(-30 11.0622 9.9641)"
+                fill="url(#paint1_linear_410_134)" />
+        </g>
+    </g>
+    <defs>
+        <linearGradient id="paint0_linear_410_134" x1="13.0622" y1="9.42815" x2="13.0622" y2="17.4282"
+            gradientUnits="userSpaceOnUse">
+            <stop stop-color="white" stop-opacity="0.1" />
+            <stop offset="1" stop-color="white" />
+        </linearGradient>
+        <linearGradient id="paint1_linear_410_134" x1="11.0622" y1="5.9641" x2="11.0622" y2="13.9641"
+            gradientUnits="userSpaceOnUse">
+            <stop stop-color="white" stop-opacity="0.82" />
+            <stop offset="1" stop-color="white" />
+        </linearGradient>
+    </defs>
+</svg>

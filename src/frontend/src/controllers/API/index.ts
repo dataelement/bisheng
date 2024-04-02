@@ -33,6 +33,30 @@ export async function getAll() {
 }
 
 /**
+ * 读取 saved 组件s
+ */
+export async function getComponents(): Promise<any[]> {
+  return await axios.get(`/api/v1/component`);
+}
+/**
+ * save 组件
+ */
+export async function saveComponent(data): Promise<any[]> {
+  return await axios.post(`/api/v1/component`, data);
+}
+/**
+ * 覆盖 组件
+ */
+export async function overridComponent(data): Promise<any[]> {
+  return await axios.patch(`/api/v1/component`, data);
+}
+/**
+ * 删除 组件
+ */
+export async function delComponentApi(name): Promise<any> {
+  return await axios.delete(`/api/v1/component`, { data: { name } });
+}
+/**
  * 获取平台配置
  */
 export async function getAppConfig(): Promise<AppConfig> {
@@ -108,8 +132,8 @@ export async function readFileByLibDatabase({ id, page, pageSize = 40, name = ''
 /**
  * 重试解析文件
  */
-export async function retryKnowledgeFileApi(id) {
-  await axios.post(`/api/v1/knowledge/retry`, { file_ids: [id] });
+export async function retryKnowledgeFileApi(objs) {
+  await axios.post(`/api/v1/knowledge/retry`, { file_objs: objs });
 }
 
 /**
@@ -244,7 +268,36 @@ export const deleteChatApi = (chatId) => {
  * @param id flow_id chat_id - .
  * @returns {Promise<any>} his data.
  */
-export async function getChatHistory(flowId: string, chatId: string, pageSize: number, id?: number): Promise<any[]> {
+export interface MessageDB {
+  /** 场景 */
+  category: string;
+  chat_id: string;
+  create_time: string;
+  extra: string;
+  /** 文件列表 */
+  files: string;
+  flow_id: string;
+  id: number;
+  /** 日志 */
+  intermediate_steps: string;
+  /** 机器人回复 */
+  is_bot: boolean;
+  /** 已点赞 */
+  liked: number;
+  /** 消息内容 */
+  message: string;
+  receiver: null;
+  remark: null;
+  sender: string;
+  solved: number;
+  /** 有溯源 */
+  source: number;
+  type: string;
+  update_time: string;
+  user_id: number;
+}
+
+export async function getChatHistory(flowId: string, chatId: string, pageSize: number, id?: number): Promise<MessageDB[]> {
   return await axios.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=${pageSize}&id=${id || ''}`);
 }
 
@@ -365,7 +418,8 @@ export async function splitWordApi(word: string, messageId: string): Promise<str
 // 获取 chunks
 export async function getSourceChunksApi(chatId: string, messageId: number, keys: string) {
   try {
-    const chunks: any[] = await axios.get(`/api/v1/qa/chunk?chat_id=${chatId}&message_id=${messageId}&keys=${keys}`)
+    let chunks: any[] = await axios.get(`/api/v1/qa/chunk?chat_id=${chatId}&message_id=${messageId}&keys=${keys}`)
+
     const fileMap = {}
     chunks.forEach(chunk => {
       const list = fileMap[chunk.file_id]
@@ -386,7 +440,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         }))
       const score = chunks[0].score
 
-      return { id, fileName, fileUrl, originUrl, chunks, score, ...other }
+      return { id, fileName, fileUrl, originUrl, chunks, ...other, score }
     }).sort((a, b) => b.score - a.score)
   } catch (error) {
     console.error(error);

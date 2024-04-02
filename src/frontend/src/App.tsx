@@ -15,6 +15,7 @@ import { LoginPage } from "./pages/login";
 import router from "./routes";
 import { useTranslation } from "react-i18next";
 import i18next from "i18next";
+import { Toaster } from "./components/bs-ui/toast";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -207,6 +208,8 @@ export default function App() {
           </div>
         ))}
       </div>
+      {/* 新弹窗 */}
+      <Toaster></Toaster>
     </div>
   );
 }

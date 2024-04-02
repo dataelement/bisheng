@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+import uuid
 from collections import defaultdict
 from typing import Any, Dict, List
 from urllib.parse import unquote, urlparse
@@ -11,6 +12,8 @@ from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
 from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
 from bisheng.cache.manager import Subject
+from bisheng.chat.client import ChatClient
+from bisheng.chat.types import WorkType
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.user import User
@@ -46,7 +49,7 @@ class ChatHistory(Subject):
             files = json.dumps(msg.files) if msg.files else ''
             msg.__dict__.pop('files')
             db_message = ChatMessage(files=files, **msg.__dict__)
-            logger.info(f'chat={db_message} time={time.time()-t1}')
+            logger.info(f'chat={db_message} time={time.time() - t1}')
             with session_getter() as seesion:
                 seesion.add(db_message)
                 seesion.commit()
@@ -70,6 +73,8 @@ class ChatManager:
         self.cache_manager.attach(self.update)
         self.in_memory_cache = InMemoryCache()
         self.task_manager: List[asyncio.Task] = []
+        # 已连接的客户端
+        self.active_clients: Dict[str, ChatClient] = {}
 
     def update(self):
         if self.cache_manager.current_client_id in self.active_connections:
@@ -148,6 +153,77 @@ class ChatManager:
 
         self.in_memory_cache.set(client_id, langchain_object)
         return client_id in self.in_memory_cache
+
+    async def accept_client(self, client_key: str, chat_client: ChatClient, websocket: WebSocket):
+        await websocket.accept()
+        self.active_clients[client_key] = chat_client
+
+    def clear_client(self, client_key: str):
+        if client_key not in self.active_clients:
+            logger.warning('close_client client_key={} not in active_clients', client_key)
+            return
+        logger.info('close_client client_key={}', client_key)
+        self.active_clients.pop(client_key, None)
+
+    async def close_client(self, client_key: str, code: int, reason: str):
+        if chat_client := self.active_clients.get(client_key):
+            try:
+                await chat_client.websocket.close(code=code, reason=reason)
+                self.clear_client(client_key)
+            except RuntimeError as exc:
+                # This is to catch the following error:
+                #  Unexpected ASGI message 'websocket.close', after sending 'websocket.close'
+                if 'after sending' in str(exc):
+                    logger.error(exc)
+
+    async def dispatch_client(self,
+                              client_id: str,
+                              chat_id: str,
+                              user_id: int,
+                              work_type: WorkType,
+                              websocket: WebSocket,
+                              graph_data: dict = None):
+        client_key = uuid.uuid4().hex
+        chat_client = ChatClient(client_key,
+                                 client_id,
+                                 chat_id,
+                                 user_id,
+                                 work_type,
+                                 websocket,
+                                 graph_data=graph_data)
+        await self.accept_client(client_key, chat_client, websocket)
+        logger.debug(
+            f'act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}')
+        try:
+            while True:
+                try:
+                    json_payload_receive = await asyncio.wait_for(websocket.receive_json(),
+                                                                  timeout=2.0)
+                except asyncio.TimeoutError:
+                    continue
+                try:
+                    payload = json.loads(json_payload_receive) if json_payload_receive else {}
+                except TypeError:
+                    payload = json_payload_receive
+                # client内部处理自己的业务逻辑
+                # TODO zgq：这里可以增加线程池防止阻塞
+                await chat_client.handle_message(payload)
+        except WebSocketDisconnect as e:
+            logger.info('act=rcv_client_disconnect {}', str(e))
+        except Exception as e:
+            # Handle any exceptions that might occur
+            logger.exception(str(e))
+            await self.close_client(client_key,
+                                    code=status.WS_1011_INTERNAL_ERROR,
+                                    reason='后端未知错误类型')
+        finally:
+            try:
+                await self.close_client(client_key,
+                                        code=status.WS_1000_NORMAL_CLOSURE,
+                                        reason='Client disconnected')
+            except Exception as e:
+                logger.exception(e)
+            self.clear_client(client_key)
 
     async def handle_websocket(
         self,
@@ -244,7 +320,7 @@ class ChatManager:
                             future.result()
                             logger.debug('task_complete key={}', future_key)
                         except Exception as e:
-                            logger.exception(e)
+                            logger.exception('feature_key={} {}', future_key, e)
                             erro_resp = ChatResponse(**base_param)
                             context = context_dict.get(future_key)
                             if context.get('status') == 'init':
@@ -253,7 +329,7 @@ class ChatManager:
                                 erro_resp.intermediate_steps = f'File is parsed fail. error={str(e)}'
                             else:
                                 erro_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
-                            context['status'] == 'init'
+                            context['status'] = 'init'
                             await self.send_json(context.get('flow_id'), context.get('chat_id'),
                                                  erro_resp)
                             erro_resp.type = 'close'
@@ -271,6 +347,7 @@ class ChatManager:
                                         key_list=key_list)
 
         finally:
+            thread_pool.cancel_task(key_list)  # 将进行中的任务进行cancel
             try:
                 await self.close_connection(flow_id=flow_id,
                                             chat_id=chat_id,

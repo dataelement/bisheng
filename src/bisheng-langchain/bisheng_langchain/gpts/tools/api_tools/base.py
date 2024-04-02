@@ -80,8 +80,8 @@ class APIToolBase(BaseModel):
 
     @classmethod
     def get_api_tool(cls, name, **kwargs: Any) -> BaseTool:
-
-        class_method = getattr(cls, name)
+        attr_name = name.split('_', 1)[-1]
+        class_method = getattr(cls, attr_name)
 
         return MultArgsSchemaTool(name=name,
                                   description=class_method.__doc__,

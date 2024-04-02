@@ -21,6 +21,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         self.chat_id = chat_id
 
     async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        logger.debug(f'on_llm_new_token token={token} kwargs={kwargs}')
         resp = ChatResponse(message=token,
                             type='stream',
                             flow_id=self.flow_id,
@@ -38,23 +39,27 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
 
     async def on_llm_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> Any:
         """Run when LLM errors."""
+        logger.debug(f'on_llm_error error={error} kwargs={kwargs}')
 
     async def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any],
                              **kwargs: Any) -> Any:
         """Run when chain starts running."""
-        logger.debug(f'on_chain_start inputs={inputs}')
+        logger.debug(f'on_chain_start serialized={serialized} inputs={inputs} kwargs={kwargs}')
 
     async def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
-        logger.debug(f'on_chain_end outputs={outputs}')
+        logger.debug(f'on_chain_end outputs={outputs} kwargs={kwargs}')
 
     async def on_chain_error(self, error: Union[Exception, KeyboardInterrupt],
                              **kwargs: Any) -> Any:
         """Run when chain errors."""
+        logger.debug(f'on_chain_error error={error} kwargs={kwargs}')
 
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
                             **kwargs: Any) -> Any:
         """Run when tool starts running."""
+        logger.debug(f'on_tool_start  serialized={serialized} input_str={input_str} kwargs={kwargs}')
+
         resp = ChatResponse(type='stream',
                             intermediate_steps=f'Tool input: {input_str}',
                             flow_id=self.flow_id,
@@ -63,6 +68,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
+        logger.debug(f'on_tool_end  output={output} kwargs={kwargs}')
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
         # from langchain.docstore.document import Document # noqa
         # result = eval(output).get('result')
@@ -86,12 +92,14 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt],
                             **kwargs: Any) -> Any:
         """Run when tool errors."""
+        logger.debug(f'on_tool_error error={error} kwargs={kwargs}')
 
     async def on_text(self, text: str, **kwargs: Any) -> Any:
         """Run on arbitrary text."""
         # This runs when first sending the prompt
         # to the LLM, adding it will send the final prompt
         # to the frontend
+        logger.debug(f'on_text text={text} kwargs={kwargs}')
         sender = kwargs.get('sender')
         receiver = kwargs.get('receiver')
         if kwargs.get('sender'):
@@ -140,9 +148,10 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
                                    flow_id=self.flow_id,
                                    chat_id=self.chat_id)
                 await self.websocket.send_json(log.dict())
-        logger.debug(f'on_text text={text} kwargs={kwargs}')
 
     async def on_agent_action(self, action: AgentAction, **kwargs: Any):
+        logger.debug(f'on_agent_action action={action} kwargs={kwargs}')
+
         log = f'Thought: {action.log}'
         # if there are line breaks, split them and send them
         # as separate messages
@@ -163,6 +172,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
 
     async def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""
+        logger.debug(f'on_agent_finish finish={finish} kwargs={kwargs}')
         resp = ChatResponse(flow_id=self.flow_id,
                             chat_id=self.chat_id,
                             type='stream',
@@ -172,11 +182,12 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_retriever_start(self, serialized: Dict[str, Any], query: str,
                                  **kwargs: Any) -> Any:
         """Run when retriever start running."""
+        logger.debug(f'on_retriever_start serialized={serialized} query={query} kwargs={kwargs}')
 
     async def on_retriever_end(self, result: List[Document], **kwargs: Any) -> Any:
         """Run when retriever end running."""
         # todo 判断技能权限
-        logger.debug(f'retriver_result result={result}')
+        logger.debug(f'on_retriever_end result={result} kwargs={kwargs}')
 
     async def on_chat_model_start(self, serialized: Dict[str, Any],
                                   messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
@@ -184,7 +195,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
         # stream = ChatResponse(message=f'{content}', type='stream')
         # await self.websocket.send_json(stream.dict())
-        logger.debug(f'chat_message result={messages}')
+        logger.debug(f'on_chat_model_start serialized={serialized} messages={messages} kwargs={kwargs}')
 
 
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
@@ -307,3 +318,82 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
 
     def on_text(self, text: str, **kwargs) -> Any:
         logger.info(text)
+
+
+class AsyncGptsLLMCallbackHandler(AsyncStreamingLLMCallbackHandler):
+
+    async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
+        """Run when tool starts running."""
+        logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
+        pass
+
+    async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
+        """Run when tool ends running."""
+        logger.debug(f'on_tool_end output={output} kwargs={kwargs}')
+        pass
+
+
+class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
+
+    @staticmethod
+    def parse_tool_category(tool_name) -> (str, str):
+        """
+        将tool_name解析为tool_category和真正的tool_name
+        """
+        tool_category = 'tool'
+        if tool_name.startswith('flow_'):
+            # 说明是技能调用
+            tool_category = 'flow'
+            tool_name = tool_name.replace('flow_', '')
+        elif tool_name.startswith('knowledge_'):
+            # 说明是知识库调用
+            tool_category = 'knowledge'
+            tool_name = tool_name.replace('knowledge_', '')
+        return tool_name, tool_category
+
+    async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
+        """Run when tool starts running."""
+        logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
+        resp_end = ChatResponse(type='end',
+                                category='processing',
+                                intermediate_steps='',
+                                flow_id=self.flow_id,
+                                chat_id=self.chat_id)
+        await self.websocket.send_json(resp_end.dict())
+
+        tool_name, tool_category = self.parse_tool_category(serialized['name'])
+        resp = ChatResponse(type='start',
+                            category=tool_category,
+                            intermediate_steps=f'Tool input: {input_str}',
+                            message={'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str},
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        await self.websocket.send_json(resp.dict())
+
+    async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
+        """Run when tool ends running."""
+        logger.debug(f'on_tool_end output={output} kwargs={kwargs}')
+        observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
+
+        result = output
+        # Create a formatted message.
+        intermediate_steps = f'{observation_prefix}{result}'
+
+        tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))
+
+        # Create a ChatResponse instance.
+        resp = ChatResponse(type='end',
+                            category=tool_category,
+                            intermediate_steps=intermediate_steps,
+                            message={'tool_key': tool_name, 'output': output},
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+
+        await self.websocket.send_json(resp.dict())
+
+        resp_start = ChatResponse(type='start',
+                                  category='processing',
+                                  intermediate_steps='',
+                                  flow_id=self.flow_id,
+                                  chat_id=self.chat_id)
+        await self.websocket.send_json(resp_start.dict())

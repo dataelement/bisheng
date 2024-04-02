@@ -9,6 +9,7 @@ export default function InputListComponent({
   value,
   onChange,
   disabled,
+  isGroup = false,
   editNode = false
 }: InputListComponentType) {
   const [inputList, setInputList] = useState(value ?? [""]);
@@ -38,9 +39,9 @@ export default function InputListComponent({
   return (
     <div
       ref={scrollBodyRef}
-      className={
-        (disabled ? "pointer-events-none cursor-not-allowed" : "") +
-        "flex flex-col gap-3 template-scrollbar"
+      className={`${disabled ? "pointer-events-none cursor-not-allowed" : ""}
+       flex flex-col gap-3 template-scrollbar 
+       ${isGroup && "max-h-[170px]"}`
       }
     >
       {inputList.map((i, idx) => {
