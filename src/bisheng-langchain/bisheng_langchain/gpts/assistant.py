@@ -1,19 +1,18 @@
 import asyncio
+import logging
+from enum import Enum
+from functools import lru_cache
+from typing import Any, Mapping, Optional, Sequence
+from urllib.parse import urlparse
+
 import httpx
 import yaml
-import logging
-from urllib.parse import urlparse
-from functools import lru_cache
-from enum import Enum
-from typing import Any, Mapping, Optional, Sequence
-
+from bisheng_langchain.gpts.load_tools import get_all_tool_names, load_tools
+from bisheng_langchain.gpts.utils import import_by_type, import_class
 from langchain.tools import BaseTool
+from langchain_core.language_models.base import LanguageModelLike
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableBinding
-from langchain_core.language_models.base import LanguageModelLike
-from bisheng_langchain.gpts.utils import import_by_type, import_class
-from bisheng_langchain.gpts.load_tools import load_tools, get_all_tool_names
-
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,7 @@ class ConfigurableAssistant(RunnableBinding):
     def __init__(
         self,
         *,
-        agent_executor_type: str, 
+        agent_executor_type: str,
         tools: Sequence[BaseTool],
         llm: LanguageModelLike,
         system_message: str,
@@ -77,7 +76,7 @@ class BishengAssistant:
         else:
             llm_params.pop('type')
             llm = llm_object(**llm_params)
-        
+
         # init tools
         available_tools = get_all_tool_names()
         tools = []
@@ -91,16 +90,16 @@ class BishengAssistant:
                 tools.extend(_returned_tools)
             else:
                 tools.append(_returned_tools)
-        
+
         # init agent executor
         agent_executor_params = self.assistant_params['agent_executor']
         agent_executor_type = agent_executor_params.pop('type')
         self.assistant = ConfigurableAssistant(
-            agent_executor_type=agent_executor_type, 
-            tools=tools, 
-            llm=llm, 
-            system_message=assistant_message, 
-            **agent_executor_params
+            agent_executor_type=agent_executor_type,
+            tools=tools,
+            llm=llm,
+            system_message=assistant_message,
+            **agent_executor_params,
         )
 
     def run(self, query):
@@ -110,9 +109,12 @@ class BishengAssistant:
 
 
 if __name__ == "__main__":
-    query = "帮我查一下去年这一天发生了哪些重大事情？"
-    bisheng_assistant = BishengAssistant("config/base_assistant.yaml")
+    from langchain.globals import set_debug
+
+    set_debug(True)
+    query = "帮我生成一个小女孩画画的图片"
+    bisheng_assistant = BishengAssistant("config/base_scene.yaml")
     result = bisheng_assistant.run(query)
     for r in result:
         print(f'------------------')
-        print(type(r), r)
+        print(type(r))
