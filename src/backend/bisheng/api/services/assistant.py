@@ -169,9 +169,9 @@ class AssistantService(AssistantUtils):
         # 更新助手关联信息
         if req.tool_list is not None:
             AssistantLinkDao.update_assistant_tool(assistant.id, tool_list=req.tool_list)
-        elif req.flow_list is not None:
+        if req.flow_list is not None:
             AssistantLinkDao.update_assistant_flow(assistant.id, flow_list=req.flow_list)
-        elif req.knowledge_list is not None:
+        if req.knowledge_list is not None:
             # 使用配置的flow 进行技能补充
             flow_id_default = AssistantUtils.get_default_retrieval()
             AssistantLinkDao.update_assistant_knowledge(assistant.id,
