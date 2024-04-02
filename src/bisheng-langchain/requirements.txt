@@ -11,4 +11,4 @@ pymupdf==1.23.8
 shapely==2.0.2
 filetype==1.2.0
 langgraph==0.0.30
-
+openai

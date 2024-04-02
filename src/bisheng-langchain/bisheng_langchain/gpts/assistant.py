@@ -72,7 +72,11 @@ class BishengAssistant:
         llm_object = import_by_type(_type='llms', name=llm_params['type'])
         if llm_params['type'] == 'ChatOpenAI' and llm_params['openai_proxy']:
             llm_params.pop('type')
-            llm = llm_object(http_client=httpx.AsyncClient(proxies=llm_params['openai_proxy']), **llm_params)
+            llm = llm_object(
+                http_client=httpx.Client(proxies=llm_params['openai_proxy']),
+                http_async_client=httpx.AsyncClient(proxies=llm_params['openai_proxy']),
+                **llm_params,
+            )
         else:
             llm_params.pop('type')
             llm = llm_object(**llm_params)
@@ -112,7 +116,7 @@ if __name__ == "__main__":
     from langchain.globals import set_debug
 
     set_debug(True)
-    query = "帮我生成一个小女孩画画的图片"
+    query = "帮我画一个折线图，数据你随便编造"
     bisheng_assistant = BishengAssistant("config/base_scene.yaml")
     result = bisheng_assistant.run(query)
     for r in result:
