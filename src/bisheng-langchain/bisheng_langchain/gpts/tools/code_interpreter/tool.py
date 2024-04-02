@@ -62,6 +62,7 @@ def execute_code(
     filepath = os.path.join(work_dir, filename)
     file_dir = os.path.dirname(filepath)
     os.makedirs(file_dir, exist_ok=True)
+    (Path(file_dir) / 'output').mkdir(exist_ok=True, parents=True)
     if code is not None:
         with open(filepath, "w", encoding="utf-8") as fout:
             fout.write(code)
@@ -155,13 +156,11 @@ class CodeInterpreterTool:
 
     name = "code_interpreter"
     args_schema: Type[BaseModel] = CodeInterpreterToolArguments
-
-    def __init__(self, files: Optional[Dict[str, FileInfo]] = None):
-        self.files = files if files else {}
+    files: Dict[str, FileInfo] = {}
 
     @property
     def file_description(self) -> str:
-        if len(self.files) == 0:
+        if not isinstance(self.files, dict):
             return ""
         lines = ["The following files available in the evaluation environment:"]
         for source_path, file_info in self.files.items():
@@ -187,7 +186,7 @@ class CodeInterpreterTool:
             if exitcode != 0:
                 return {'exitcode': exitcode, 'log': logs_all}
 
-        return {'exitcode': 0, 'log': logs_all}
+        return {'exitcode': 0, 'log': logs_all, 'pic_list': []}
 
     def as_tool(self) -> Tool:
         return Tool.from_function(
