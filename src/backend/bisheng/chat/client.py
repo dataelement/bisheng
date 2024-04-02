@@ -106,22 +106,30 @@ class ChatClient:
             raise Exception('agent init error')
 
         inputs = message.get('inputs', {})
+        input_msg = inputs.get('input')
+        if not input_msg:
+            # 需要切换会话
+            logger.debug(f'need switch agent, client_key: {self.client_key} inputs: {inputs}')
+            self.client_id = inputs.get('data').get('id')
+            self.chat_id = inputs.get('data').get('chatId')
+            self.gpts_agent = None
+            return
+        # 有用户输入，处理用户问题
         await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
 
-        if input_msg := inputs.get('input'):
-            await self.send_response('processing', 'begin', '')
-            await self.send_response('processing', 'start', '')
-            result = await self.gpts_agent.run(input_msg, async_callbacks)
-            logger.debug(f'gpts agent {self.client_key} result: {result}')
-            answer = ''
-            for one in result[1:]:
-                if isinstance(one, AIMessage):
-                    answer += one.content
-            await self.add_message('bot', answer, 'answer')
+        await self.send_response('processing', 'begin', '')
+        await self.send_response('processing', 'start', '')
+        result = await self.gpts_agent.run(input_msg, async_callbacks)
+        logger.debug(f'gpts agent {self.client_key} result: {result}')
+        answer = ''
+        for one in result[1:]:
+            if isinstance(one, AIMessage):
+                answer += one.content
+        await self.add_message('bot', answer, 'answer')
 
-            await self.send_response('processing', 'end', '')
+        await self.send_response('processing', 'end', '')
 
-            await self.send_response('answer', 'start', '')
-            await self.send_response('answer', 'end', answer)
+        await self.send_response('answer', 'start', '')
+        await self.send_response('answer', 'end', answer)
 
-            await self.send_response('processing', 'close', '')
+        await self.send_response('processing', 'close', '')

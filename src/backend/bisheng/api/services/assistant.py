@@ -2,12 +2,13 @@ from typing import Any, List
 from uuid import UUID
 
 from bisheng.api.errcode.assistant import AssistantNotExistsError
+from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
-                                    UnifiedResponseModel, resp_200)
+                                    StreamData, UnifiedResponseModel, resp_200)
 from bisheng.cache import InMemoryCache
 from bisheng.database.models.assistant import Assistant, AssistantDao, AssistantLinkDao
-from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.flow import Flow, FlowDao
 from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAcessDao
@@ -76,10 +77,10 @@ class AssistantService(AssistantUtils):
 
     # 创建助手
     @classmethod
-    def create_assistant(cls, assistant: Assistant) -> UnifiedResponseModel[AssistantInfo]:
+    async def create_assistant(cls, assistant: Assistant) -> UnifiedResponseModel[AssistantInfo]:
 
         # 通过算法接口自动选择工具和技能
-        assistant, tool_list, flow_list = cls.get_auto_info(assistant)
+        assistant, tool_list, flow_list = await cls.get_auto_info(assistant)
 
         # 保存数据到数据库
         assistant = AssistantDao.create_assistant(assistant)
@@ -103,16 +104,37 @@ class AssistantService(AssistantUtils):
             raise ValueError('不满足删除条件')
 
     @classmethod
-    def auto_update(cls, assistant_id: UUID, prompt: str) -> UnifiedResponseModel[AssistantInfo]:
+    async def auto_update_stream(cls, assistant_id: UUID, prompt: str):
         """ 重新生成助手的提示词和工具选择, 只调用模型能力不修改数据库数据 """
         # todo zgq: 改为流式返回
         assistant = AssistantDao.get_one_assistant(assistant_id)
-        if not assistant:
-            return AssistantNotExistsError.return_resp()
         assistant.prompt = prompt
-        assistant, tool_list, flow_list = cls.get_auto_info(assistant)
-        return resp_200(
-            data=AssistantInfo(**assistant.dict(), tool_list=tool_list, flow_list=flow_list))
+
+        # 初始化llm
+        auto_agent = AssistantAgent(assistant, '')
+        await auto_agent.init_llm()
+
+        # 流式生成提示词
+        final_prompt = ''
+        async for one_prompt in auto_agent.optimize_assistant_prompt():
+            if one_prompt.content in ('```', 'markdown'):
+                continue
+            print('----one prompt----', one_prompt)
+            yield str(StreamData(event='message', data={'type': 'prompt', 'message': one_prompt.content}))
+            final_prompt += one_prompt.content
+        assistant.prompt = final_prompt
+
+        # 生成开场白和开场问题
+        guide_info = auto_agent.generate_guide()
+        yield str(StreamData(event='message', data={'type': 'guide_word', 'message': guide_info['opening_lines']}))
+        yield str(StreamData(event='message', data={'type': 'guide_question', 'message': guide_info['questions']}))
+
+        # 自动选择工具和技能
+        tool_info = cls.get_auto_tool_info(assistant, auto_agent)
+        yield str(StreamData(event='message', data={'type': 'tool_list', 'message': tool_info}))
+
+        flow_info = cls.get_auto_flow_info(assistant, auto_agent)
+        yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod
     def update_assistant(cls, req: AssistantUpdateReq) -> UnifiedResponseModel[AssistantInfo]:
@@ -180,9 +202,8 @@ class AssistantService(AssistantUtils):
         return resp_200()
 
     @classmethod
-    def get_gpts_tools(cls, user: Any) -> List[GptsToolsRead]:
+    def get_gpts_tools(cls, user_id: Any) -> List[GptsToolsRead]:
         """ 获取用户可见的工具列表 """
-        user_id = user.get('user_id')
         return GptsToolsDao.get_list_by_user(user_id)
 
     @classmethod
@@ -223,18 +244,78 @@ class AssistantService(AssistantUtils):
         return user.user_name
 
     @classmethod
-    def get_auto_info(cls, assistant: Assistant) -> (Assistant, List[int], List[int]):
+    async def get_auto_info(cls, assistant: Assistant) -> (Assistant, List[int], List[int]):
         """
         自动生成助手的prompt，自动选择工具和技能
         return：助手信息，工具ID列表，技能ID列表
         """
         # todo zgq: 和算法联调自动生成优化后的prompt、描述、工具、技能、开场白
-        # 根据助手 选择大模型配置
+        # 根据助手
         llm_conf = cls.get_llm_conf(assistant.model_name)
+        if not llm_conf:
+            raise Exception(f'未找到对应的llm配置: {assistant.model_name}')
 
-        assistant.system_prompt = ''
-        assistant.prompt = assistant.prompt
         assistant.model_name = llm_conf['model_name']
         assistant.temperature = llm_conf['temperature']
 
-        return assistant, [], []
+        # 初始化llm
+        auto_agent = AssistantAgent(assistant, '')
+        await auto_agent.init_llm()
+
+        # 根据llm初始化prompt
+        auto_prompt = auto_agent.sync_optimize_assistant_prompt()
+        assistant.prompt = auto_prompt
+
+        # 自动生成开场白和问题
+        guide_info = auto_agent.generate_guide()
+        assistant.guide_word = guide_info['opening_lines']
+        assistant.guide_question = guide_info['questions']
+
+        # 自动生成描述
+        assistant.description = auto_agent.generate_description()
+
+        # 自动选择工具
+        tool_info = cls.get_auto_tool_info(assistant, auto_agent)
+
+        # 自动选择技能
+        flow_info = cls.get_auto_flow_info(assistant, auto_agent)
+        return assistant, [one.id for one in tool_info], [one.id for one in flow_info]
+
+    @classmethod
+    def get_auto_tool_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[GptsToolsRead]:
+        # 自动选择工具
+        all_tool = cls.get_gpts_tools(user_id=assistant.user_id)
+        tool_list = []
+        all_tool_dict = {}
+        for one in all_tool:
+            all_tool_dict[one.name] = one
+            tool_list.append({
+                'name': one.name,
+                'description': one.desc,
+            })
+        tool_list = auto_agent.choose_tools(tool_list, assistant.prompt)
+        tool_info = []
+        for one in tool_list:
+            if all_tool_dict.get(one):
+                tool_info.append(all_tool_dict[one])
+        return tool_info
+
+    @classmethod
+    def get_auto_flow_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[Flow]:
+        # 自动选择技能
+        all_flow = FlowDao.get_user_access_online_flows(assistant.user_id)
+        flow_dict = {}
+        flow_list = []
+        for one in all_flow:
+            flow_dict[one.name] = one
+            flow_list.append({
+                'name': one.name,
+                'description': one.description,
+            })
+
+        flow_list = auto_agent.choose_tools(flow_list, assistant.prompt)
+        flow_info = []
+        for one in flow_list:
+            if flow_dict.get(one):
+                flow_info.append(flow_dict[one])
+        return flow_info

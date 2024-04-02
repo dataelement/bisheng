@@ -4,7 +4,7 @@ from uuid import UUID
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantInfo, AssistantUpdateReq,
-                                    UnifiedResponseModel, resp_200, resp_500)
+                                    StreamData, UnifiedResponseModel, resp_200, resp_500)
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.types import WorkType
 from bisheng.database.models.assistant import Assistant
@@ -12,6 +12,7 @@ from bisheng.database.models.gpts_tools import GptsToolsRead
 from bisheng.utils.logger import logger
 from fastapi import (APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException,
                      status)
+from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/assistant', tags=['Assistant'])
@@ -68,12 +69,24 @@ async def update_assistant(*, req: AssistantUpdateReq, Authorize: AuthJWT = Depe
 
 
 # 自动优化prompt和工具选择
-@router.post('/auto', response_model=UnifiedResponseModel[AssistantInfo])
+@router.get('/auto', response_class=StreamingResponse)
 async def auto_update_assistant(*,
-                                assistant_id: UUID = Body(description='助手唯一ID'),
-                                prompt: str = Body(description='用户填写的提示词'),
-                                Authorize: AuthJWT = Depends()):
-    return AssistantService.auto_update(assistant_id, prompt)
+                                assistant_id: UUID = Query(description='助手唯一ID'),
+                                prompt: str = Query(description='用户填写的提示词')):
+    async def event_stream():
+        try:
+            async for message in AssistantService.auto_update_stream(assistant_id, prompt):
+                yield message
+            yield str(StreamData(event='message', data={'type': 'end', 'data': ''}))
+        except Exception as e:
+            logger.error(f'assistant auto update error: {str(e)}')
+            yield str(StreamData(event='message', data={'type': 'end', 'message': str(e)}))
+
+    try:
+        return StreamingResponse(event_stream(), media_type='text/event-stream')
+    except Exception as exc:
+        logger.error(exc)
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # 更新助手的提示词
@@ -146,4 +159,4 @@ def get_tool_list(*, Authorize: AuthJWT = Depends()):
     """查询所有可见的tool 列表"""
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-    return resp_200(AssistantService.get_gpts_tools(current_user))
+    return resp_200(AssistantService.get_gpts_tools(current_user.get('user_id')))
