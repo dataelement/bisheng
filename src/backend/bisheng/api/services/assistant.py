@@ -69,7 +69,8 @@ class AssistantService(AssistantUtils):
                 knowledge_list.append(one.knowledge_id)
             else:
                 logger.error(f'not expect link info: {one.dict()}')
-        tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list, knowledge_list)
+        tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list,
+                                                                 knowledge_list)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
                                            flow_list=flow_list,
@@ -88,8 +89,10 @@ class AssistantService(AssistantUtils):
         AssistantLinkDao.insert_batch(assistant.id, tool_list=tool_list, flow_list=flow_list)
         tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list)
 
-        return resp_200(data=AssistantInfo(**assistant.dict(), tool_list=tool_list,
-                                           flow_list=flow_list, knowledge_list=knowledge_list))
+        return resp_200(data=AssistantInfo(**assistant.dict(),
+                                           tool_list=tool_list,
+                                           flow_list=flow_list,
+                                           knowledge_list=knowledge_list))
 
     # 删除助手
     @classmethod
@@ -165,19 +168,18 @@ class AssistantService(AssistantUtils):
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息
-        if req.tool_list is not None and req.flow_list is not None and req.knowledge_list is not None:
-            AssistantLinkDao.update_assistant_link(assistant.id,
-                                                   tool_list=req.tool_list,
-                                                   flow_list=req.flow_list,
-                                                   knowledge_list=req.knowledge_list)
-        elif req.tool_list is not None:
+        if req.tool_list is not None:
             AssistantLinkDao.update_assistant_tool(assistant.id, tool_list=req.tool_list)
         elif req.flow_list is not None:
             AssistantLinkDao.update_assistant_flow(assistant.id, flow_list=req.flow_list)
         elif req.knowledge_list is not None:
+            # 使用配置的flow 进行技能补充
+            flow_id_default = AssistantUtils.get_default_retrieval()
             AssistantLinkDao.update_assistant_knowledge(assistant.id,
-                                                        knowledge_list=req.knowledge_list)
-        tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list, req.knowledge_list)
+                                                        knowledge_list=req.knowledge_list,
+                                                        flow_id=flow_id_default)
+        tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list,
+                                                                 req.knowledge_list)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
                                            flow_list=flow_list,
@@ -225,7 +227,10 @@ class AssistantService(AssistantUtils):
         return resp_200()
 
     @classmethod
-    def get_link_info(cls, tool_list: List[int], flow_list: List[str], knowledge_list: List[int] = None):
+    def get_link_info(cls,
+                      tool_list: List[int],
+                      flow_list: List[str],
+                      knowledge_list: List[int] = None):
         tool_list = GptsToolsDao.get_list_by_ids(tool_list) if tool_list else []
         flow_list = FlowDao.get_flow_by_ids(flow_list) if flow_list else []
         knowledge_list = KnowledgeDao.get_list_by_ids(knowledge_list) if knowledge_list else []

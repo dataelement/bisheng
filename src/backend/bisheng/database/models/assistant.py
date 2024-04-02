@@ -160,9 +160,8 @@ class AssistantLinkDao(AssistantLink):
     def insert_batch(cls,
                      assistant_id: UUID,
                      tool_list: List[int] = None,
-                     flow_list: List[str] = None,
-                     knowledge_list: List[int] = None):
-        if not tool_list and not flow_list and not knowledge_list:
+                     flow_list: List[str] = None):
+        if not tool_list and not flow_list:
             return []
         with session_getter() as session:
             if tool_list:
@@ -171,23 +170,6 @@ class AssistantLinkDao(AssistantLink):
             if flow_list:
                 for one in flow_list:
                     session.add(AssistantLink(assistant_id=assistant_id, flow_id=one))
-            if knowledge_list:
-                for one in knowledge_list:
-                    session.add(AssistantLink(assistant_id=assistant_id, knowledge_id=one))
-            session.commit()
-
-    @classmethod
-    def update_assistant_link(cls, assistant_id: UUID, tool_list: List[int], flow_list: List[str],
-                              knowledge_list: List[int]):
-        with session_getter() as session:
-            session.query(AssistantLink).filter(
-                AssistantLink.assistant_id == assistant_id).delete()
-            for one in tool_list:
-                session.add(AssistantLink(assistant_id=assistant_id, tool_id=one))
-            for one in flow_list:
-                session.add(AssistantLink(assistant_id=assistant_id, flow_id=one))
-            for one in knowledge_list:
-                session.add(AssistantLink(assistant_id=assistant_id, knowledge_id=one))
             session.commit()
 
     @classmethod
@@ -209,16 +191,19 @@ class AssistantLinkDao(AssistantLink):
     def update_assistant_flow(cls, assistant_id: UUID, flow_list: List[str]):
         with session_getter() as session:
             session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
-                                                AssistantLink.flow_id != '').delete()
+                                                AssistantLink.flow_id != '',
+                                                AssistantLink.knowledge_id == 0).delete()
             for one in flow_list:
                 session.add(AssistantLink(assistant_id=assistant_id, flow_id=one))
             session.commit()
 
     @classmethod
-    def update_assistant_knowledge(cls, assistant_id: UUID, knowledge_list: List[int]):
+    def update_assistant_knowledge(cls, assistant_id: UUID, knowledge_list: List[int],
+                                   flow_id: str):
+        # 保存知识库关联时必须有技能ID
         with session_getter() as session:
-            session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
-                                                AssistantLink.knowledge_id != 0).delete()
+            session.query(AssistantLink).filter(AssistantLink.knowledge_id != 0).delete()
             for one in knowledge_list:
-                session.add(AssistantLink(assistant_id=assistant_id, knowledge_id=one))
+                session.add(
+                    AssistantLink(assistant_id=assistant_id, knowledge_id=one, flow_id=flow_id))
             session.commit()

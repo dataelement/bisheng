@@ -1,3 +1,8 @@
+from bisheng.template.field.base import TemplateField
+from langchain_core.language_models import BaseLanguageModel
+from openai import BaseModel
+
+
 def set_flow_knowledge_id(graph_data: dict, knowledge_id: int):
 
     for node in graph_data['nodes']:
@@ -7,3 +12,22 @@ def set_flow_knowledge_id(graph_data: dict, knowledge_id: int):
             if 'index_name' in node['data'].get('node').get('template').keys():
                 node['data']['node']['template']['index_name']['collection_id'] = knowledge_id
     return graph_data
+
+
+def replace_flow_llm(graph_data: dict, llm: BaseLanguageModel):
+    # 替换class, 替换template， 其他不动，
+    for node in graph_data['nodes']:
+        if 'BaseLanguageModel' in node['data']['node']['base_classes']:
+            node['data']['type'] = type(llm).__name__
+            node['data']['node']['template'] = trans_obj_to_json(llm)
+
+    return graph_data
+
+
+def trans_obj_to_json(obj: BaseModel):
+    # template 构建
+    template = {}
+    field_json = obj.__dict__
+    for k, v in field_json.items():
+        template[k] = TemplateField(field_type=type(v).__name__, name=k, value=v).to_dict
+    return template
