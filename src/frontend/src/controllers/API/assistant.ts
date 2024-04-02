@@ -10,6 +10,7 @@ export interface AssistantItemDB {
     update_time: string;
     user_id: number;
     user_name: string;
+    status: number;
 }
 // 获取助手列表
 export const getAssistantsApi = async (page, limit, name): Promise<AssistantItemDB[]> => {
@@ -45,6 +46,18 @@ export const saveAssistanttApi = async (data: Omit<AssistantDetail, 'flow_list' 
     return await axios.put(`/api/v1/assistant`, data)
 };
 
+// 删除助手
+export const deleteAssistantApi = async (id) => {
+    return await axios.post(`/api/v1/assistant/delete?assistant_id=${id}`)
+};
+
+
+
+
+// 获取会话选择列表
+export const getChatOnlineApi = async () => {
+    return await axios.get(`/api/v1/chat/online`)
+};
 
 
 // 获取工具集合

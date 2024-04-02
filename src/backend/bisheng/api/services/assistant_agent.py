@@ -166,20 +166,20 @@ class AssistantAgent(AssistantUtils):
     def sync_optimize_assistant_prompt(self):
         return optimize_assistant_prompt(self.llm, self.assistant.name, self.assistant.desc)
 
-    def generate_guide(self):
+    def generate_guide(self, prompt: str):
         """ 生成开场对话和开场问题 """
-        return generate_opening_dialog(self.llm, self.assistant.prompt)
+        return generate_opening_dialog(self.llm, prompt)
 
-    def generate_description(self):
+    def generate_description(self, prompt: str):
         """ 生成描述对话 """
-        return generate_breif_description(self.llm, self.assistant.prompt)
+        return generate_breif_description(self.llm, prompt)
 
     def choose_tools(self, tool_list: List[Dict[str, str]], prompt: str) -> List[str]:
         """
          选择工具
          tool_list: [{name: xxx, description: xxx}]
         """
-        tool_list = [ToolInfo(name=one['name'], description=one['description']) for one in tool_list]
+        tool_list = [ToolInfo(tool_name=one['name'], tool_description=one['description']) for one in tool_list]
         tool_selector = ToolSelector(llm=self.llm, tools=tool_list)
         return tool_selector.select(self.assistant.name, prompt)
 

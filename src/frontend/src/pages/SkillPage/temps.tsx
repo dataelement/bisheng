@@ -14,7 +14,7 @@ import {
 import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
-export default function Templates({ onBack, onChange }) {
+export default function Templates({ onBack, onChange = () => { } }) {
     const { t } = useTranslation()
 
     const [temps, setTemps] = useState([])

@@ -1,5 +1,5 @@
-import SkillSheet from "@/components/bs-comp/SkillSheet";
-import ToolsSheet from "@/components/bs-comp/ToolsSheet";
+import SkillSheet from "@/components/bs-comp/sheets/SkillSheet";
+import ToolsSheet from "@/components/bs-comp/sheets/ToolsSheet";
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
@@ -15,6 +15,7 @@ import Temperature from "./Temperature";
 export default function Setting() {
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
+    console.log('assistantState :>> ', assistantState);
 
     return <div className="w-[50%]">
         <h1 className="text-sm text-muted-foreground border leading-8 indent-4">基础配置</h1>

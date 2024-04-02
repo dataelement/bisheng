@@ -7,8 +7,9 @@ import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
 import cloneDeep from "lodash-es/cloneDeep";
 import { locationContext } from "@/contexts/locationContext";
+import { PaperPlaneIcon, ReaderIcon } from "@radix-ui/react-icons";
 
-export default function ChatInput({ wsUrl, onBeforSend }) {
+export default function ChatInput({ inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -179,7 +180,7 @@ export default function ChatInput({ wsUrl, onBeforSend }) {
             {
                 formShow && <div className="relative">
                     <div className="absolute right-0 border bottom-2 bg-[#fff] px-4 py-2 rounded-md w-[50%] min-w-80">
-                        1234
+                        {inputForm}
                     </div>
                 </div>
             }
@@ -199,14 +200,14 @@ export default function ChatInput({ wsUrl, onBeforSend }) {
             ></Textarea>
             <div className="flex gap-2 absolute right-3 bottom-4">
                 <div
-                    className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer`}
+                    className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                     onClick={() => setFormShow(!formShow)}
-                ><GoIcon className={inputLock.locked && 'text-gray-200'}></GoIcon></div>
+                ><ReaderIcon className={inputLock.locked && 'text-gray-200'}></ReaderIcon></div>
                 <div
                     id="bs-send-btn"
-                    className="w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer"
+                    className="w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center"
                     onClick={handleSendClick}
-                ><GoIcon className={inputLock.locked && 'text-gray-200'}></GoIcon></div>
+                ><PaperPlaneIcon className={inputLock.locked && 'text-gray-200'}></PaperPlaneIcon></div>
             </div>
         </div>
         <p className="text-center text-sm pt-2 pb-4 text-gray-400">{appConfig.dialogTips}</p>

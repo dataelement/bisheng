@@ -7,19 +7,21 @@ import { getAssistantDetailApi } from '../controllers/API/assistant'
  */
 
 type State = {
+  changed: boolean,
   assistantState: AssistantDetail
 }
 
 type Actions = {
   dispatchAssistant: (action: Action, assistantState: Partial<AssistantDetail>) => void,
   loadAssistantState: (id: string) => void
+  saveAfter: () => void
 }
 
 type Action = 'setBaseInfo' | 'setting' | 'setPrompt' | 'setGuideword' | 'setTools' | 'setFlows'
 
 const assistantReducer = (state: State, action: Action, data: Partial<AssistantDetail>) => {
   console.log('action :>> ', action, data);
-  return { assistantState: { ...state.assistantState, ...data } }
+  return { changed: true, assistantState: { ...state.assistantState, ...data } }
   // switch (action) {
   //   case 'setBaseInfo':
   //     return { assistantState: { ...state.assistantState, ...data } }
@@ -29,6 +31,7 @@ const assistantReducer = (state: State, action: Action, data: Partial<AssistantD
 }
 
 export const useAssistantStore = create<State & Actions>((set) => ({
+  changed: false,
   assistantState: {
     id: 3,
     name: "",
@@ -53,5 +56,8 @@ export const useAssistantStore = create<State & Actions>((set) => ({
     return getAssistantDetailApi(id).then(data => {
       set({ assistantState: { ...data, guide_question: data.guide_question || [] } })
     })
+  },
+  saveAfter() {
+    set({ changed: false })
   }
 }))

@@ -29,7 +29,7 @@ export default function MessageUser({ useName, data }: { data: ChatMessageType }
             {useName && <p className="text-primary text-xs mb-2 text-right">{useName}</p>}
             <div className="flex gap-2 ">
                 <div className="text-[#0D1638] text-sm">{msg}</div>
-                <div className="w-6 h-6 min-w-6 bg-gray-950"></div>
+                <div className="w-6 h-6 min-w-6"><img src="/user.png" alt="" /></div>
             </div>
             {/* 附加信息 */}
             <div className="flex justify-between mt-2">

@@ -4,33 +4,34 @@ import CardComponent from "../../components/bs-comp/cardComponent";
 import { Dialog, DialogTrigger } from "../../components/bs-ui/dialog";
 import { SearchInput } from "../../components/bs-ui/input";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
-import { AssistantItemDB, getAssistantsApi } from "../../controllers/API/assistant";
+import { AssistantItemDB, deleteAssistantApi, getAssistantsApi, saveAssistanttApi } from "../../controllers/API/assistant";
 import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import CreateAssistant from "./components/CreateAssistant";
 import { useNavigate } from "react-router-dom";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 export default function Assistants() {
     const { t } = useTranslation()
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search } = useTable<AssistantItemDB>({ pageSize: 11 }, (param) =>
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload } = useTable<AssistantItemDB>({ pageSize: 11 }, (param) =>
         getAssistantsApi(param.page, param.pageSize, param.keyword)
     )
 
     const handleDelete = (data) => {
-        console.log('data :>> ', data);
         bsconfirm({
             desc: '确认删除该助手？',
             okTxt: t('delete'),
             onOk(next) {
+                deleteAssistantApi(data.id).then(() => reload())
                 next()
             }
         })
     }
 
-    const handleCheckedChange = (id) => {
-        return Promise.resolve()
+    const handleCheckedChange = (checked, id) => {
+        return captureAndAlertRequestErrorHoc(saveAssistanttApi({ id, status: checked ? 1 : 0 }))
     }
 
     return <div className="h-full relative">
@@ -67,14 +68,14 @@ export default function Assistants() {
                                     data={item}
                                     id={item.id}
                                     edit
-                                    checked={false}
+                                    checked={item.status === 1}
                                     type='assist'
                                     title={item.name}
                                     description={item.desc}
                                     user={item.user_name}
                                     onDelete={handleDelete}
                                     onSetting={() => navigate('/assistant/' + item.id)}
-                                    onCheckedChange={() => handleCheckedChange(item.id)}
+                                    onCheckedChange={(checked) => handleCheckedChange(checked, item.id)}
                                 ></CardComponent>
                             ))
                         }

@@ -6,35 +6,73 @@ import MessageUser from "./MessageUser";
 import RunLog from "./RunLog";
 import Separator from "./Separator";
 import { useMessageStore } from "./messageStore";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import ResouceModal from "@/pages/ChatAppPage/components/ResouceModal";
 import { useTranslation } from "react-i18next";
 
-export default function MessagePanne({ useName, guideWord }) {
+export default function MessagePanne({ useName, guideWord, loadMore }) {
     const { t } = useTranslation()
-    const { messages } = useMessageStore()
+    const { chatId, messages } = useMessageStore()
 
     // 反馈
     const thumbRef = useRef(null)
     // 溯源
     const sourceRef = useRef(null)
 
-    return <div className="h-full overflow-y-auto scrollbar-hide pt-12 pb-52">
+    // 自动滚动
+    const messagesRef = useRef(null)
+    const scrollLockRef = useRef(false)
+    useEffect(() => {
+        scrollLockRef.current = false
+        queryLockRef.current = false
+    }, [chatId])
+    useEffect(() => {
+        if (scrollLockRef.current) return
+        messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+        // }
+    }, [messages])
+
+    // 消息滚动加载
+    const queryLockRef = useRef(false)
+    useEffect(() => {
+        function handleScroll() {
+            if (queryLockRef.current) return
+            const { scrollTop, clientHeight, scrollHeight } = messagesRef.current
+            // 距离底部 600px内，开启自动滚动
+            scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 600
+
+            if (messagesRef.current.scrollTop <= 90) {
+                console.log('请求 :>> ', 1);
+                queryLockRef.current = true
+                loadMore()
+                // TODO 翻页定位
+                // 临时处理防抖
+                setTimeout(() => {
+                    queryLockRef.current = false
+                }, 1000);
+            }
+        }
+
+        messagesRef.current?.addEventListener('scroll', handleScroll);
+        return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
+    }, [messagesRef.current, messages, chatId]);
+
+    return <div ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-52">
         {guideWord && <MessageSystem key={99999} data={{ category: '', thought: guideWord }} />}
         {
             messages.map(msg => {
                 // 工厂
                 let type = 'llm'
-                if (msg.thought) {
-                    type = 'system'
+                if (msg.isSend) {
+                    type = 'user'
                 } else if (msg.category === 'divider') {
                     type = 'separator'
-                } else if (msg.isSend) {
-                    type = 'user'
                 } else if (msg.files?.length) {
                     type = 'file'
                 } else if (msg.category === 'tool') {
                     type = 'runLog'
+                } else if (msg.thought) {
+                    type = 'system'
                 }
 
                 switch (type) {

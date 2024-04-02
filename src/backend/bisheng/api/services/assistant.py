@@ -106,7 +106,6 @@ class AssistantService(AssistantUtils):
     @classmethod
     async def auto_update_stream(cls, assistant_id: UUID, prompt: str):
         """ 重新生成助手的提示词和工具选择, 只调用模型能力不修改数据库数据 """
-        # todo zgq: 改为流式返回
         assistant = AssistantDao.get_one_assistant(assistant_id)
         assistant.prompt = prompt
 
@@ -119,21 +118,23 @@ class AssistantService(AssistantUtils):
         async for one_prompt in auto_agent.optimize_assistant_prompt():
             if one_prompt.content in ('```', 'markdown'):
                 continue
-            print('----one prompt----', one_prompt)
             yield str(StreamData(event='message', data={'type': 'prompt', 'message': one_prompt.content}))
             final_prompt += one_prompt.content
         assistant.prompt = final_prompt
 
         # 生成开场白和开场问题
-        guide_info = auto_agent.generate_guide()
+
+        guide_info = auto_agent.generate_guide(assistant.prompt)
         yield str(StreamData(event='message', data={'type': 'guide_word', 'message': guide_info['opening_lines']}))
         yield str(StreamData(event='message', data={'type': 'guide_question', 'message': guide_info['questions']}))
 
         # 自动选择工具和技能
         tool_info = cls.get_auto_tool_info(assistant, auto_agent)
+        tool_info = [one.model_dump(mode='json', exclude={'create_time', 'update_time'}) for one in tool_info]
         yield str(StreamData(event='message', data={'type': 'tool_list', 'message': tool_info}))
 
         flow_info = cls.get_auto_flow_info(assistant, auto_agent)
+        flow_info = [one.model_dump(mode='json', exclude={'create_time', 'update_time'}) for one in flow_info]
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod
@@ -249,7 +250,6 @@ class AssistantService(AssistantUtils):
         自动生成助手的prompt，自动选择工具和技能
         return：助手信息，工具ID列表，技能ID列表
         """
-        # todo zgq: 和算法联调自动生成优化后的prompt、描述、工具、技能、开场白
         # 根据助手
         llm_conf = cls.get_llm_conf(assistant.model_name)
         if not llm_conf:
@@ -267,12 +267,12 @@ class AssistantService(AssistantUtils):
         assistant.prompt = auto_prompt
 
         # 自动生成开场白和问题
-        guide_info = auto_agent.generate_guide()
+        guide_info = auto_agent.generate_guide(assistant.prompt)
         assistant.guide_word = guide_info['opening_lines']
         assistant.guide_question = guide_info['questions']
 
         # 自动生成描述
-        assistant.description = auto_agent.generate_description()
+        assistant.description = auto_agent.generate_description(assistant.prompt)
 
         # 自动选择工具
         tool_info = cls.get_auto_tool_info(assistant, auto_agent)
@@ -291,7 +291,7 @@ class AssistantService(AssistantUtils):
             all_tool_dict[one.name] = one
             tool_list.append({
                 'name': one.name,
-                'description': one.desc,
+                'description': one.desc if one.desc else '',
             })
         tool_list = auto_agent.choose_tools(tool_list, assistant.prompt)
         tool_info = []
@@ -310,7 +310,7 @@ class AssistantService(AssistantUtils):
             flow_dict[one.name] = one
             flow_list.append({
                 'name': one.name,
-                'description': one.description,
+                'description': one.description if one.description else '',
             })
 
         flow_list = auto_agent.choose_tools(flow_list, assistant.prompt)

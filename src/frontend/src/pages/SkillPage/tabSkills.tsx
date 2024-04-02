@@ -1,7 +1,9 @@
+import SkillTempSheet from "@/components/bs-comp/sheets/SkillTempSheet";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { bsconfirm } from "../../alerts/confirm";
+import CardComponent from "../../components/bs-comp/cardComponent";
 import { MoveOneIcon } from "../../components/bs-icons/moveOne";
 import { Button } from "../../components/bs-ui/button";
 import { SearchInput } from "../../components/bs-ui/input";
@@ -14,9 +16,7 @@ import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import CreateTemp from "./components/CreateTemp";
-import SkillTemps from "./components/SkillTemps";
 import Templates from "./temps";
-import CardComponent from "../../components/bs-comp/cardComponent";
 
 export default function Skills() {
     const { t } = useTranslation()
@@ -26,9 +26,6 @@ export default function Skills() {
     const { page, pageSize, data: dataSource, total, loading, setPage, search, reload } = useTable<FlowType>({ pageSize: 11 }, (param) =>
         readFlowsFromDatabase(param.page, param.pageSize, param.keyword)
     )
-
-    // template
-    const [temps, loadTemps] = useTemps()
     const [open, setOpen] = useState(false)
 
     const { open: tempOpen, flowRef, toggleTempModal } = useCreateTemp()
@@ -58,8 +55,8 @@ export default function Skills() {
     }
 
     // 选模板(创建技能)
-    const handldSelectTemp = async (el) => {
-        const [flow] = await readTempsDatabase(el.id)
+    const handldSelectTemp = async (tempId) => {
+        const [flow] = await readTempsDatabase(tempId)
 
         flow.name = `${flow.name}-${generateUUID(5)}`
         captureAndAlertRequestErrorHoc(saveFlowToDatabase({ ...flow, id: flow.flow_id }).then(res => {
@@ -70,7 +67,7 @@ export default function Skills() {
         }))
     }
     // 模板管理
-    if (isTempsPage) return <Templates onBack={() => setIsTempPage(false)} onChange={loadTemps}></Templates>
+    if (isTempsPage) return <Templates onBack={() => setIsTempPage(false)}></Templates>
 
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide">
@@ -89,16 +86,17 @@ export default function Skills() {
                         <span className="loading loading-infinity loading-lg"></span>
                     </div>
                     : <div className="mt-6 flex gap-2 flex-wrap pb-20 min-w-[980px]">
-                        <CardComponent<FlowType>
-                            data={null}
-                            type='skill'
-                            title={t('skills.createNew')}
-                            description={(<>
-                                <p>没有想法？</p>
-                                <p>我们提供场景模板供您使用和参考</p>
-                            </>)}
-                            onClick={() => setOpen(true)}
-                        ></CardComponent>
+                        <SkillTempSheet onSelect={handldSelectTemp}>
+                            <CardComponent<FlowType>
+                                data={null}
+                                type='skill'
+                                title={t('skills.createNew')}
+                                description={(<>
+                                    <p>没有想法？</p>
+                                    <p>我们提供场景模板供您使用和参考</p>
+                                </>)}
+                            ></CardComponent>
+                        </SkillTempSheet>
                         {
                             dataSource.map((item, i) => (
                                 <CardComponent<FlowType>
@@ -121,10 +119,8 @@ export default function Skills() {
                     </div>
             }
         </div>
-        {/* chose template */}
-        <SkillTemps flows={temps} isTemp open={open} setOpen={setOpen} onSelect={handldSelectTemp}></SkillTemps>
         {/* 添加模板 */}
-        <CreateTemp flow={flowRef.current} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={loadTemps} ></CreateTemp>
+        <CreateTemp flow={flowRef.current} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => {}} ></CreateTemp>
         {/* footer */}
         <div className="flex justify-between absolute bottom-0 left-0 w-full bg-[#F4F5F8] h-16 items-center px-10">
             <p className="text-sm text-muted-foreground break-keep">{t('skills.manageProjects')}</p>
@@ -147,18 +143,3 @@ const useCreateTemp = () => {
         }
     }
 }
-
-// 获取模板数据
-const useTemps = () => {
-    const [temps, setTemps] = useState([]);
-
-    const loadTemps = () => {
-        readTempsDatabase().then(setTemps);
-    };
-
-    useEffect(() => {
-        loadTemps();
-    }, []);
-
-    return [temps, loadTemps];
-};

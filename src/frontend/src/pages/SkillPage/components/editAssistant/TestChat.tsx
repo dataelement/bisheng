@@ -2,7 +2,7 @@ import { TitleIconBg } from "@/components/bs-comp/cardComponent";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { useAssistantStore } from "@/store/assistantStore";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 export default function TestChat({ assisId }) {
     const token = localStorage.getItem("ws_token") || '';
@@ -11,19 +11,20 @@ export default function TestChat({ assisId }) {
     const { messages, changeChatId } = useMessageStore()
     const { assistantState } = useAssistantStore()
 
-    // TODO DEL
-    const chatIdRef = useRef('xxxxkkkiiixxxxkkkiiixxxxkkkiiidd')
+    // 编辑页生成唯一id
+    // const chatIdRef = useRef(generateUUID(32))
     useEffect(() => {
         // 建立 websocket
-        changeChatId(chatIdRef.current)
+        changeChatId('')
     }, [])
 
+    // send 前获取参数用来做 params to send ws
     const getWsParamData = (action, msg, data) => {
         const inputKey = 'input';
         const msgData = {
             chatHistory: messages,
             flow_id: '',
-            chat_id: chatIdRef.current,
+            chat_id: '',
             name: assistantState.name,
             description: assistantState.desc,
             inputs: {}
