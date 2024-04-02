@@ -85,6 +85,21 @@ export default function CardComponent<T>({
     if (res === false) return
     setChecked(bln)
   }
+  
+  // 新建小卡片（sheet）
+  if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-transparent" onClick={onClick}>
+    <CardHeader>
+      <div className="flex justify-between pb-2"><PlusIcon className="group-hover:text-primary transition-none" /></div>
+      <CardTitle className="">{title}</CardTitle>
+    </CardHeader>
+    <CardContent className="h-0 overflow-auto scrollbar-hide p-2">
+      <CardDescription>{description}</CardDescription>
+    </CardContent>
+    <CardFooter className="flex justify-end h-10">
+      <div className="rounded cursor-pointer"><GoIcon className="group-hover:text-primary transition-none" /></div>
+    </CardFooter>
+  </Card>
+
 
   // 新建卡片
   if (!id) return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-transparent" onClick={onClick}>
@@ -101,8 +116,8 @@ export default function CardComponent<T>({
   </Card>
 
 
-  // 侧边弹窗列表
-  if (type === 'sheet') return <Card className="group w-[320px] cursor-pointer bg-gray-100 hover:bg-gray-200 hover:shadow-none" onClick={onClick}>
+  // 侧边弹窗列表（sheet）
+  if (type === 'sheet') return <Card className="group w-[320px] cursor-pointer bg-gray-100 hover:bg-gray-200 hover:shadow-none relative" onClick={onClick}>
     <CardHeader className="pb-2">
       <CardTitle>
         <div className="flex gap-2 pb-2 items-center">

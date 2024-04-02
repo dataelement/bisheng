@@ -1,16 +1,13 @@
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { useAssistantStore } from "@/store/assistantStore";
 import { ChevronLeftIcon, Pencil2Icon } from "@radix-ui/react-icons";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
-import { saveAssistanttApi } from "@/controllers/API/assistant";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
-export default function Header() {
+export default function Header({ onSave }) {
     const navigate = useNavigate()
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
@@ -20,32 +17,6 @@ export default function Header() {
     const handleEditSave = (form) => {
         dispatchAssistant('setBaseInfo', form)
         setEditShow(false)
-    }
-
-    const { message, toast } = useToast()
-    // 保存助手详细信息
-    const handleSave = () => {
-        captureAndAlertRequestErrorHoc(saveAssistanttApi({
-            ...assistantState,
-            flow_list: assistantState.flow_list.map(item => item.id),
-            tool_list: assistantState.tool_list.map(item => item.id)
-        })).then(res => {
-            if (!res) return
-            message({
-                title: '提示',
-                variant: 'success',
-                description: '保存成功'
-            })
-        })
-    }
-
-    const handleOnlineClick = () => {
-        console.log('result => ', assistantState);
-        message({
-            title: '未联调',
-            variant: 'error',
-            description: '未联调'
-        })
     }
 
     return <div className="flex justify-between items-center border-b px-4">
@@ -65,8 +36,8 @@ export default function Header() {
             </Dialog>
         </div>
         <div className="flex gap-4">
-            <Button variant="outline" className="px-10" type="button" onClick={handleSave}>保存</Button>
-            <Button type="submit" className="px-10" onClick={handleOnlineClick}>上线</Button>
+            <Button variant="outline" className="px-10" type="button" onClick={() => onSave({})}>保存</Button>
+            <Button type="submit" className="px-10" onClick={() => onSave({ status: 1 })}>上线</Button>
         </div>
     </div>
 };

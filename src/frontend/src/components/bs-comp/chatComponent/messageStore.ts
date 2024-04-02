@@ -1,4 +1,4 @@
-
+import { message } from '@/components/bs-ui/toast/use-toast';
 import { generateUUID } from '@/components/bs-ui/utils'
 import { MessageDB, getChatHistory } from '@/controllers/API'
 import { ChatMessageType } from '@/types/chat'
@@ -11,6 +11,10 @@ import { create } from 'zustand'
 
 type State = {
     running: boolean,
+    /**
+     * 会话 ID
+     * 变更会触发 ws建立，解锁滚动
+     */
     chatId: string,
     messages: ChatMessageType[]
 }
@@ -54,7 +58,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         async loadMoreHistoryMsg(flowid) {
             const chatId = get().chatId
             const prevMsgs = get().messages
-            const res = await getChatHistory(flowid, chatId, 30, prevMsgs[prevMsgs.length - 1]?.id || 0)
+            const res = await getChatHistory(flowid, chatId, 10, prevMsgs[0]?.id || 0)
             const msgs = handleHistoryMsg(res)
             set({ messages: [...msgs.reverse(), ...prevMsgs] })
         },
@@ -62,6 +66,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             set({ chatId: '', messages: [] })
         },
         createSendMsg(inputs, inputKey) {
+            console.log('change createSendMsg', inputs, inputKey);
+            
             set((state) => ({ messages: 
                 [...state.messages, {
                     isSend: true,
@@ -76,6 +82,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
              }))
         },
         createWsMsg(data) {
+            console.log('change createWsMsg');
             set((state) => {
                 let newChat = cloneDeep(state.messages);
                 newChat.push({
@@ -92,6 +99,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             })
         },
         updateCurrentMessage(wsdata) {
+            console.log('change updateCurrentMessage');
             const messages =  get().messages
             const currentMessage = messages[messages.length - 1];
 
@@ -112,15 +120,36 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 messages.pop()
             }
             // 无 messageid 删除
-            if (newCurrentMessage.end && !newCurrentMessage.id) {
-                messages.pop()
+            // if (newCurrentMessage.end && !newCurrentMessage.id) {
+            //     messages.pop()
+            // }
+            // 删除重复消息
+            const prevMessage = messages[messages.length - 2];
+            if (prevMessage && prevMessage.message === newCurrentMessage.message) {
+                const removedMsg = messages.pop()
+                prevMessage.id = removedMsg.id
             }
-            console.log(messages);
-            set((state) => ({ messages }))
+            set((state) => ({ messages: [...messages] }))
         },
         changeChatId(chatId) {
             set((state) => ({ chatId }))
         },
+        insetSeparator(text) {
+            const msgItem = {
+                id: Math.random() * 1000000,
+                isSend: false,
+                message: text,
+                chatKey: '',
+                thought: '',
+                category: 'divider',
+                files: [],
+                end: true,
+                user_name: ''
+            }
 
+            set((state) => ({
+                messages: [...state.messages, msgItem]
+            }))
+        }
     })
 )
