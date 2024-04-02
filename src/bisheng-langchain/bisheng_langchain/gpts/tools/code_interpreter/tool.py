@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from datetime import timedelta
 from hashlib import md5
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Type
@@ -135,7 +136,7 @@ def upload_minio(param: dict,
                              content_type=content_type)
     return minio_client.presigned_get_object(bucket_name=bucket,
                                              object_name=object_name,
-                                             expires=30)
+                                             expires=timedelta(days=30))
 
 
 class CodeInterpreterToolArguments(BaseModel):
