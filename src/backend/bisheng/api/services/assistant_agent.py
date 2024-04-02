@@ -34,6 +34,7 @@ class AssistantAgent(AssistantUtils):
         self.tools: List[BaseTool] = []
         self.agent: ConfigurableAssistant | None = None
         self.llm: BaseLanguageModel | None = None
+        self.llm_agent_executor = None
 
     async def init_assistant(self, callbacks: Callbacks = None):
         await self.init_llm()
@@ -47,6 +48,9 @@ class AssistantAgent(AssistantUtils):
                 f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
             raise Exception(
                 f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
+
+        if llm_params.get('agent_executor_type'):
+            self.llm_agent_executor = llm_params.pop('agent_executor_type')
 
         if llm_params['type'] == 'ChatOpenAI':
             llm_object = import_class('langchain_openai.ChatOpenAI')
@@ -90,16 +94,14 @@ class AssistantAgent(AssistantUtils):
             logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
 
         # flow, 当知识库的时候，flow_id 会重复
-        flow_links = [link for link in links if link.flow_id]
-        if flow_links:
-            flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links])
-            flow_id2data = {flow.id: flow for flow in flow_data}
+        flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links])
+        flow_id2data = {flow.id: flow for flow in flow_data}
 
         for link in flow_links:
             flow_graph_data = flow_id2data.get(UUID(link.flow_id)).data
             # 先查找替换collection_id
             knowledge_id = link.knowledge_id
-            tool_name = f'flow_{link.id}'
+            tool_name = f'flow_{link.flow_id}'
             if knowledge_id:
                 # 说明是关联的知识库，修改知识库检索技能的对应知识库ID参数
                 tool_name = f'knowledge_{link.knowledge_id}'
@@ -128,32 +130,28 @@ class AssistantAgent(AssistantUtils):
         """
         初始化智能体的agent
         """
-        # 引入默认prompt
-        prompt_type = self.get_prompt_type()
-        assistant_message = import_class(f'bisheng_langchain.gpts.prompts.{prompt_type}')
-
         # 引入agent执行参数
         agent_executor_params = self.get_agent_executor()
-        agent_executor_type = agent_executor_params.pop('type')
+        agent_executor_type = self.llm_agent_executor or agent_executor_params.pop('type')
 
         # 初始化agent
         self.agent = ConfigurableAssistant(agent_executor_type=agent_executor_type,
                                            tools=self.tools,
                                            llm=self.llm,
-                                           system_message=assistant_message,
+                                           system_message=self.assistant.prompt,
                                            **agent_executor_params)
 
     async def optimize_assistant_prompt(self):
         """ 自动优化生成prompt """
         chain = ({
-            'assistant_name': lambda x: x['assistant_name'],
-            'assistant_description': lambda x: x['assistant_description'],
-        }
+                     'assistant_name': lambda x: x['assistant_name'],
+                     'assistant_description': lambda x: x['assistant_description'],
+                 }
                  | ASSISTANT_PROMPT_OPT
                  | self.llm)
         async for one in chain.astream({
-                'assistant_name': self.assistant.name,
-                'assistant_description': self.assistant.prompt,
+            'assistant_name': self.assistant.name,
+            'assistant_description': self.assistant.prompt,
         }):
             yield one
 
