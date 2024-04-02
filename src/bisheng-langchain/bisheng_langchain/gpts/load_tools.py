@@ -44,7 +44,10 @@ _BASE_TOOLS: Dict[str, Callable[[], BaseTool]] = {
 _LLM_TOOLS: Dict[str, Callable[[BaseLanguageModel], BaseTool]] = {}
 
 _EXTRA_LLM_TOOLS: Dict[
-    str, Tuple[Callable[[Arg(BaseLanguageModel, 'llm'), KwArg(Any)], BaseTool], List[str]]  # noqa #type: ignore
+    str,
+    Tuple[
+        Callable[[Arg(BaseLanguageModel, 'llm'), KwArg(Any)], BaseTool],  # noqa
+        List[str]]  # noqa #type: ignore
 ] = {}
 
 
@@ -56,14 +59,12 @@ def _get_dalle_image_generator(**kwargs: Any) -> Tool:
     openai_api_key = kwargs.get('openai_api_key')
     http_async_client = httpx.AsyncClient(proxies=kwargs.get('openai_proxy'))
     httpc_client = httpx.Client(proxies=kwargs.get('openai_proxy'))
-    return DallEImageGenerator(
-        api_wrapper=DallEAPIWrapper(
-            model='dall-e-3',
-            api_key=openai_api_key,
-            http_client=httpc_client,
-            http_async_client=http_async_client,
-        )
-    )
+    return DallEImageGenerator(api_wrapper=DallEAPIWrapper(
+        model='dall-e-3',
+        api_key=openai_api_key,
+        http_client=httpc_client,
+        http_async_client=http_async_client,
+    ))
 
 
 def _get_bearly_code_interpreter(**kwargs: Any) -> Tool:
@@ -84,7 +85,6 @@ _EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optio
 _API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {}  # type: ignore
 _API_TOOLS.update(ALL_API_TOOLS)
 
-
 _ALL_TOOLS = {
     **_BASE_TOOLS,
     **_LLM_TOOLS,
@@ -94,7 +94,8 @@ _ALL_TOOLS = {
 }
 
 
-def _handle_callbacks(callback_manager: Optional[BaseCallbackManager], callbacks: Callbacks) -> Callbacks:
+def _handle_callbacks(callback_manager: Optional[BaseCallbackManager],
+                      callbacks: Callbacks) -> Callbacks:
     if callback_manager is not None:
         warnings.warn(
             'callback_manager is deprecated. Please use callbacks instead.',
@@ -113,7 +114,8 @@ def load_tools(
     **kwargs: Any,
 ) -> List[BaseTool]:
     tools = []
-    callbacks = _handle_callbacks(callback_manager=kwargs.get('callback_manager'), callbacks=callbacks)
+    callbacks = _handle_callbacks(callback_manager=kwargs.get('callback_manager'),
+                                  callbacks=callbacks)
     for name, params in tool_params.items():
         if name in _BASE_TOOLS:
             tools.append(_BASE_TOOLS[name]())
@@ -128,7 +130,8 @@ def load_tools(
             _get_llm_tool_func, extra_keys = _EXTRA_LLM_TOOLS[name]
             missing_keys = set(extra_keys).difference(params)
             if missing_keys:
-                raise ValueError(f'Tool {name} requires some parameters that were not ' f'provided: {missing_keys}')
+                raise ValueError(f'Tool {name} requires some parameters that were not '
+                                 f'provided: {missing_keys}')
             sub_kwargs = {k: params[k] for k in extra_keys}
             tool = _get_llm_tool_func(llm=llm, **sub_kwargs)
             tools.append(tool)
@@ -136,7 +139,8 @@ def load_tools(
             _get_tool_func, extra_keys, optional_keys = _EXTRA_PARAM_TOOLS[name]
             missing_keys = set(extra_keys).difference(params)
             if missing_keys:
-                raise ValueError(f'Tool {name} requires some parameters that were not ' f'provided: {missing_keys}')
+                raise ValueError(f'Tool {name} requires some parameters that were not '
+                                 f'provided: {missing_keys}')
             extra_kwargs = {k: params[k] for k in extra_keys}
             optional_kwargs = {k: params[k] for k in optional_keys if k in params}
             all_kwargs = {**extra_kwargs, **optional_kwargs}
@@ -146,9 +150,10 @@ def load_tools(
             _get_api_tool_func, extra_keys = _API_TOOLS[name]
             missing_keys = set(extra_keys).difference(params)
             if missing_keys:
-                raise ValueError(f'Tool {name} requires some parameters that were not ' f'provided: {missing_keys}')
+                raise ValueError(f'Tool {name} requires some parameters that were not '
+                                 f'provided: {missing_keys}')
             mini_kwargs = {k: params[k] for k in extra_keys}
-            tool = _get_api_tool_func(name=name.split('.')[-1], **mini_kwargs)
+            tool = _get_api_tool_func(name=name, **mini_kwargs)
             tools.append(tool)
         else:
             raise ValueError(f'Got unknown tool {name}')
