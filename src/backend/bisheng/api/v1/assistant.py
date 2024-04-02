@@ -79,7 +79,7 @@ async def auto_update_assistant(*,
                 yield message
             yield str(StreamData(event='message', data={'type': 'end', 'data': ''}))
         except Exception as e:
-            logger.error(f'assistant auto update error: {str(e)}')
+            logger.exception('assistant auto update error')
             yield str(StreamData(event='message', data={'type': 'end', 'message': str(e)}))
 
     try:
