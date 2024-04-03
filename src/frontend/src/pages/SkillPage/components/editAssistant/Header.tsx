@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
 
-export default function Header({ onSave }) {
+export default function Header({ onSave, onLine }) {
     const navigate = useNavigate()
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
@@ -36,8 +36,8 @@ export default function Header({ onSave }) {
             </Dialog>
         </div>
         <div className="flex gap-4">
-            <Button variant="outline" className="px-10" type="button" onClick={() => onSave({})}>保存</Button>
-            <Button type="submit" className="px-10" onClick={() => onSave({ status: 1 })}>上线</Button>
+            <Button variant="outline" className="px-10" type="button" onClick={onSave}>保存</Button>
+            <Button type="submit" className="px-10" onClick={onLine}>上线</Button>
         </div>
     </div>
 };

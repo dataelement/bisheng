@@ -48,7 +48,7 @@ export default function Setting() {
                         <label htmlFor="open" className="bisheng-label">开场白</label>
                         <Textarea name="open"
                             className="mt-2 min-h-[34px]"
-                            style={{ height: 34 }}
+                            style={{ height: 56 }}
                             placeholder="助手将在每次对话开始时发送此信息，支持markdown格式"
                             value={assistantState.guide_word}
                             onChange={(e) => dispatchAssistant('setting', { guide_word: e.target.value })}
@@ -71,7 +71,10 @@ export default function Setting() {
                         </label>
                         <InputList
                             value={assistantState.guide_question}
-                            onChange={(e) => dispatchAssistant('setting', { guide_question: e.target.value })}
+                            onChange={(list) => {
+                                dispatchAssistant('setting', { guide_question: list })
+                            }
+                            }
                             placeholder="请输入引导问题"
                         ></InputList>
                     </div>

@@ -4,7 +4,7 @@ import CardComponent from "../../components/bs-comp/cardComponent";
 import { Dialog, DialogTrigger } from "../../components/bs-ui/dialog";
 import { SearchInput } from "../../components/bs-ui/input";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
-import { AssistantItemDB, deleteAssistantApi, getAssistantsApi, saveAssistanttApi } from "../../controllers/API/assistant";
+import { AssistantItemDB, changeAssistantStatusApi, deleteAssistantApi, getAssistantsApi, saveAssistanttApi } from "../../controllers/API/assistant";
 import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import CreateAssistant from "./components/CreateAssistant";
@@ -15,7 +15,7 @@ export default function Assistants() {
     const { t } = useTranslation()
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload } = useTable<AssistantItemDB>({ pageSize: 11 }, (param) =>
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload } = useTable<AssistantItemDB>({ pageSize: 15 }, (param) =>
         getAssistantsApi(param.page, param.pageSize, param.keyword)
     )
 
@@ -31,11 +31,11 @@ export default function Assistants() {
     }
 
     const handleCheckedChange = (checked, id) => {
-        return captureAndAlertRequestErrorHoc(saveAssistanttApi({ id, status: checked ? 1 : 0 }))
+        return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(id, checked ? 1 : 0))
     }
 
     return <div className="h-full relative">
-        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide">
+        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative top-[-60px]">
             <div className="flex">
                 <SearchInput className="w-64" placeholder="搜索您需要的助手" onChange={(e) => search(e.target.value)}></SearchInput>
             </div>

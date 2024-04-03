@@ -29,7 +29,6 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
     useEffect(() => {
         if (scrollLockRef.current) return
         messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-        // }
     }, [messages])
 
     // 消息滚动加载
@@ -58,7 +57,7 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
     }, [messagesRef.current, messages, chatId]);
 
     return <div ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-52">
-        {guideWord && <MessageSystem key={99999} data={{ category: '', thought: guideWord }} />}
+        {guideWord && <MessageSystem key={99999} data={{ category: 'guide', thought: guideWord }} />}
         {
             messages.map(msg => {
                 // 工厂
@@ -69,7 +68,7 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
                     type = 'separator'
                 } else if (msg.files?.length) {
                     type = 'file'
-                } else if (msg.category === 'tool') {
+                } else if (['tool', 'flow', 'knowledge'].includes(msg.category)) {
                     type = 'runLog'
                 } else if (msg.thought) {
                     type = 'system'

@@ -36,10 +36,10 @@ export const getAssistantModelsApi = async (): Promise<any> => {
     return await axios.get(`/api/v1/assistant/models`)
 };
 
-// 自动优化
-// export const autoByPromptApi = async (id, prompt): Promise<any> => {
-//     return await axios.post(`/api/v1/assistant/auto`, { assistant_id: id, prompt })
-// };
+// 上下线助手
+export const changeAssistantStatusApi = async (id, status) => {
+    return await axios.post(`/api/v1/assistant/status`, { id, status })
+};
 
 // 保存助手
 export const saveAssistanttApi = async (data: Omit<AssistantDetail, 'flow_list' | 'tool_list'> & { flow_list: string[], tool_list: number[] }): Promise<any> => {

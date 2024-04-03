@@ -77,7 +77,7 @@ export default function SkillChatPage() {
                 {
                     chatList.map((chat, i) => (
                         <div key={chat.chat_id}
-                            className={` group item w-full rounded-lg mt-2 p-4 relative bg-[#f9f9fc] hover:bg-[#EDEFF6] cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-[#EDEFF6] dark:bg-gray-800'}`}
+                            className={` group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-gray-800 ${chatId === chat.chat_id ? 'bg-[#EDEFF6] dark:bg-gray-800' : 'bg-[#f9f9fc]'}`}
                             onClick={() => handleSelectChat(chat)}>
                             <p className="break-words text-sm font-bold text-gray-950 leading-6">
                                 <span className={`relative top-[-1px] inline-block w-2 h-2 bg-[#adb8d2] mr-2 ${gradients[parseInt(chat.flow_id + '', 16) % gradients.length]}`}></span>

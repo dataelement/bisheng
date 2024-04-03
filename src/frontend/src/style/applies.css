@@ -978,7 +978,7 @@
   }
 
   .navlink.active{
-    @apply bg-secondary/80
+    @apply bg-[#fff] text-[#0055e3] shadow-sm
   }
 
   /* new ui */

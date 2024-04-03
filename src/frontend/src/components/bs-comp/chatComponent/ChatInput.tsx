@@ -6,8 +6,9 @@ import { locationContext } from "@/contexts/locationContext";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
+import GuideQuestions from "./GuideQuestions";
 
-export default function ChatInput({ form, inputForm, wsUrl, onBeforSend }) {
+export default function ChatInput({ form, questions, inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -16,7 +17,7 @@ export default function ChatInput({ form, inputForm, wsUrl, onBeforSend }) {
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
 
-    const { messages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, setWs, destory } = useMessageStore()
+    const { messages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory } = useMessageStore()
     const inputRef = useRef(null)
 
     /**
@@ -45,6 +46,7 @@ export default function ChatInput({ form, inputForm, wsUrl, onBeforSend }) {
         changeChatedRef.current = true
         setFormShow(false)
         createWebSocket(chatId).then(() => {
+            // 切换会话默认发送一条空消息
             const [wsMsg] = onBeforSend('', '')
             sendWsMsg(wsMsg)
         })
@@ -191,6 +193,13 @@ export default function ChatInput({ form, inputForm, wsUrl, onBeforSend }) {
         }
     }, [inputLock.locked, showWhenLocked])
 
+    // 点击引导词
+    const handleClickGuideWord = (message) => {
+        if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
+        inputRef.current.value = message
+        handleSendClick()
+    }
+
     // auto input height
     const handleTextAreaHeight = (e) => {
         const textarea = e.target
@@ -209,6 +218,8 @@ export default function ChatInput({ form, inputForm, wsUrl, onBeforSend }) {
                     </div>
                 </div>
             }
+            {/* 引导问题 */}
+            <GuideQuestions locked={inputLock.locked} chatId={chatId} questions={questions} onClick={handleClickGuideWord} />
             <div className="flex absolute left-3 top-4 z-10">
                 {
                     form && <div

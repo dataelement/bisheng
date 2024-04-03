@@ -70,40 +70,44 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
     onChange?: (values: string[]) => void
 }>(
     ({ className, inputClassName, value = [], defaultValue = [], ...props }, ref) => {
-
-        const initValue = (values) => {
-            return values && values.length > 0
-                ? values.map((value) => ({ id: generateUUID(8), value }))
-                : [{ id: generateUUID(8), value: '' }]
-        }
-        // 
-        const [values, setValues] = React.useState<{ id: string; value: string }[]>(initValue(defaultValue))
-        console.log(values);
-
+        // 初始化 inputs 状态，为每个值分配唯一 ID
+        const [inputs, setInputs] = React.useState(() =>
+            value.map(val => ({ id: generateUUID(8), value: val }))
+        );
 
         React.useEffect(() => {
-            setValues(initValue(value))
-        }, [value])
-        // input change
-        const handleChange = (value, id, index) => {
-            let newValues = null
+            // 仅为新增的值分配新的 ID
+            const updatedInputs = value.map((val, index) => {
+                return inputs[index] && inputs[index].value === val
+                    ? inputs[index] // 如果当前输入项与外部值相同，则保持不变
+                    : { id: generateUUID(8), value: val }; // 否则，创建新的输入项
+            });
+            setInputs(updatedInputs);
+        }, [value]); // 依赖项中包含 value，确保外部 value 更新时同步更新
+
+
+        const handleChange = (newValue, id, index) => {
+            let newInputs = inputs.map(input =>
+                input.id === id ? { ...input, value: newValue } : input
+            );
             // push
-            if (index === values.length - 1) {
-                newValues = [...values, { id: generateUUID(8), value: '' }]
+            if (index === inputs.length - 1) {
+                newInputs = ([...inputs, { id: generateUUID(8), value: '' }]);
             }
-            newValues = (newValues || values).map((item) => item.id === id ? { id: id, value: value } : item)
-            setValues(newValues)
-            props.onChange?.(newValues.map((item) => item.value))
-        }
+            setInputs(newInputs);
+            props.onChange(newInputs.map(input => input.value));
+        };
 
         // delete input
-        const handleDel = (id) => {
-            setValues(values.filter((item) => item.id !== id))
-        }
+        const handleRemoveInput = (id) => {
+            const newInputs = inputs.filter(input => input.id !== id);
+            setInputs(newInputs);
+            props.onChange(newInputs.map(input => input.value));
+        };
 
         return <div className={cname('', className)}>
             {
-                values.map((item, index) => (
+                inputs.map((item, index) => (
                     <div className="relative mt-2">
                         <Input
                             key={item.id}
@@ -112,7 +116,7 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                             placeholder={props.placeholder || ''}
                             onChange={(e) => handleChange(e.target.value, item.id, index)}
                         ></Input>
-                        {index !== values.length - 1 && <MinusCircledIcon onClick={() => handleDel(item.id)} className="absolute top-2.5 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
+                        {index !== inputs.length - 1 && <MinusCircledIcon onClick={() => handleRemoveInput(item.id)} className="absolute top-2.5 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
                     </div>
                 ))
             }

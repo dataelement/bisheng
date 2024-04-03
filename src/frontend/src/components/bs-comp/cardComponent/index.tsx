@@ -85,7 +85,7 @@ export default function CardComponent<T>({
     if (res === false) return
     setChecked(bln)
   }
-  
+
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-transparent" onClick={onClick}>
     <CardHeader>
@@ -119,7 +119,7 @@ export default function CardComponent<T>({
   // 侧边弹窗列表（sheet）
   if (type === 'sheet') return <Card className="group w-[320px] cursor-pointer bg-gray-100 hover:bg-gray-200 hover:shadow-none relative" onClick={onClick}>
     <CardHeader className="pb-2">
-      <CardTitle>
+      <CardTitle className="truncate-doubleline">
         <div className="flex gap-2 pb-2 items-center">
           <TitleIconBg id={id}></TitleIconBg>
           <p className=" align-middle">{title}</p>
@@ -128,7 +128,7 @@ export default function CardComponent<T>({
       </CardTitle>
     </CardHeader>
     <CardContent className="h-[60px] overflow-auto scrollbar-hide mb-2">
-      <CardDescription>{description}</CardDescription>
+      <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className=" block">
       {footer}
@@ -143,10 +143,10 @@ export default function CardComponent<T>({
         <TitleIconBg id={id}></TitleIconBg>
         {edit && <Switch checked={_checked} onCheckedChange={handleCheckedChange} onClick={e => e.stopPropagation()}></Switch>}
       </div>
-      <CardTitle className="">{title}</CardTitle>
+      <CardTitle className="truncate-doubleline leading-5">{title}</CardTitle>
     </CardHeader>
     <CardContent className="h-[140px] overflow-auto scrollbar-hide">
-      <CardDescription>{description}</CardDescription>
+      <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className="flex justify-between h-10">
       <div className="flex gap-1 items-center">
@@ -156,7 +156,7 @@ export default function CardComponent<T>({
       </div>
       {edit
         && <div className="hidden group-hover:flex">
-          <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>
+          {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>}
           {isAdmin && type === 'skill' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
           <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>
         </div>

@@ -22,6 +22,10 @@ export default function SkillSheet({ select, children, onSelect }) {
         search(value)
     }
 
+    const toCreateFlow = () => {
+        window.open('/build/skills')
+    }
+
     return <Sheet>
         <SheetTrigger asChild>
             {children}
@@ -31,7 +35,7 @@ export default function SkillSheet({ select, children, onSelect }) {
                 <div className="w-fit pr-6">
                     <SheetTitle>添加技能</SheetTitle>
                     <SearchInput value={keyword} placeholder="搜索" className="my-6" onChange={handleSearch} />
-                    <Button className="w-full" >创建技能</Button>
+                    <Button className="w-full" onClick={toCreateFlow} >创建技能</Button>
                 </div>
                 <div className="flex-1 bg-[#fff] p-6 h-full flex flex-wrap gap-1 overflow-y-auto scrollbar-hide content-start">
                     {
@@ -53,7 +57,7 @@ export default function SkillSheet({ select, children, onSelect }) {
                             />
                         )) : <div className="flex flex-col items-center justify-center pt-40 w-full">
                             <p className="text-sm text-muted-foreground mb-3">空空如也</p>
-                            <Button className="w-[200px]" >创建技能</Button>
+                            <Button className="w-[200px]" onClick={toCreateFlow}>创建技能</Button>
                         </div>
                     }
                 </div>

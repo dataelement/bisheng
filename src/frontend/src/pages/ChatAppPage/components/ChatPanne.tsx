@@ -68,7 +68,7 @@ export default function ChatPanne({ data }) {
                 inputs: {}
             } as any
             if (msg) msgData.inputs = { ...input, [inputKey]: msg }
-            if (formDataRef.current) {
+            if (formDataRef.current?.length) {
                 msgData.inputs.data = formDataRef.current
                 formDataRef.current = null
             }
@@ -117,9 +117,9 @@ export default function ChatPanne({ data }) {
     }, [flow])
 
     // 发送表单 (提交-》event触发发送-》getWsParamData获取参数时追加 data)
-    const formDataRef = useRef<any>({})
+    const formDataRef = useRef<any>(null)
     const sendReport = (items: Variable[], str) => {
-        
+
         formDataRef.current = items.map(item => ({
             id: item.nodeId,
             name: item.name,
@@ -139,7 +139,7 @@ export default function ChatPanne({ data }) {
     if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden relative">
         <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src="/application-start-logo.png" alt="" />
         <p className="text-center text-sm text-[28px] w-[182px] whitespace-normal h-[64px] leading-[32px] text-[#111111] mx-auto mt-[20px] font-light">
-            选择一个<b className="text-[#111111] font-semibold">对话</b><br/>开始<b className="text-[#111111] font-semibold">文擎睿见</b>
+            选择一个<b className="text-[#111111] font-semibold">对话</b><br />开始<b className="text-[#111111] font-semibold">文擎睿见</b>
         </p>
         <div
             className="relative z-50 w-[162px] h-[38px] bg-[#0055e3] rounded-lg text-[white] leading-[38px] flex cursor-pointer hover:bg-[#0165e6] justify-around mx-auto mt-[120px] text-[13px]"
@@ -183,6 +183,7 @@ export default function ChatPanne({ data }) {
                 </div>
                 <ChatComponent
                     useName={sendUserName}
+                    questions={assistant.guide_question}
                     guideWord={assistant.guide_word}
                     wsUrl={wsUrl}
                     onBeforSend={getWsParamData}

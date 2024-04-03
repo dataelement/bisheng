@@ -178,7 +178,7 @@ export default function FormModal({
     if (isOpen.current) {
       setErrorData({ title: 'ws is close;' + event.reason });
       setTimeout(() => {
-        connectWS();
+        // connectWS();
         setLockChat(false);
       }, 1000);
     }
@@ -289,7 +289,7 @@ export default function FormModal({
       newWs.onerror = (ev) => {
         console.log(ev, "error");
         if (flow.id === "") {
-          connectWS();
+          // connectWS();
         } else {
           setErrorData({
             title: "Network connection error, please try the following methods:",
@@ -304,7 +304,7 @@ export default function FormModal({
       ws.current = newWs;
     } catch (error) {
       if (flow.id === "") {
-        connectWS();
+        // connectWS();
       }
       console.log(error);
     }

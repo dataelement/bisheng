@@ -84,21 +84,21 @@ export default function MainLayout() {
             <div className="flex" style={{ height: "calc(100vh - 64px)" }}>
                 <div className="relative z-10 bg-[#f4f5f8] h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
                     <nav className="">
-                        <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px] ${location.pathname === '/' ? "bg-[white] text-[#0055e3] shadow-sm" : ""}`}>
+                        <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px]`}>
                             <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
                         </NavLink>
-                        <NavLink to='/build/assist' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px] ${location.pathname === '/build/assist' ? "bg-[white] text-[#0055e3] shadow-sm" : ""}`}>
+                        <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px]`} >
                             <TechnologyIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.skills')}</span>
                         </NavLink>
-                        <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px] ${location.pathname === '/filelib' ? "bg-[white] text-[#0055e3] shadow-sm" : ""}`}>
+                        <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px]`}>
                             <KnowledgeIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.knowledge')}</span>
                         </NavLink>
-                        <NavLink to='/model' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px] ${location.pathname === '/model' ? "bg-[white] text-[#0055e3] shadow-sm" : ""}`}>
+                        <NavLink to='/model' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px]`}>
                             <ModelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.models')}</span>
                         </NavLink>
                         {
                             user.role === 'admin' && <>
-                                <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px] ${location.pathname === '/sys' ? "bg-[white] text-[#0055e3] shadow-sm" : ""}`}>
+                                <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px]`}>
                                     <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.system')}</span>
                                 </NavLink>
                             </>
