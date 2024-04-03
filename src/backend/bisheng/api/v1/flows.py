@@ -7,7 +7,7 @@ from bisheng.api.utils import (access_check, build_flow_no_yield, get_L2_param_f
 from bisheng.api.v1.schemas import FlowListCreate, FlowListRead, UnifiedResponseModel, resp_200
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate
-from bisheng.database.models.role_access import AccessType, RoleAcessDao
+from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
@@ -56,7 +56,7 @@ def read_flows(*,
                      Flow.update_time, Flow.description, Flow.guide_word)
         count_sql = select(func.count(Flow.id))
         if 'admin' != payload.get('role'):
-            role_access = RoleAcessDao.get_role_acess(payload.get('role'), AccessType.FLOW)
+            role_access = RoleAccessDao.get_role_access(payload.get('role'), AccessType.FLOW)
 
             if role_access:
                 flow_ids = [access.third_id for access in role_access]

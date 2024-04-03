@@ -1,9 +1,12 @@
 from typing import Any, List
 from uuid import UUID
 
-from bisheng.api.errcode.assistant import AssistantInitError, AssistantNotExistsError
+from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
+                                           AssistantNotExistsError)
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200)
 from bisheng.cache import InMemoryCache
@@ -12,7 +15,7 @@ from bisheng.database.models.assistant import (Assistant, AssistantDao, Assistan
 from bisheng.database.models.flow import Flow, FlowDao
 from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead
 from bisheng.database.models.knowledge import KnowledgeDao
-from bisheng.database.models.role_access import AccessType, RoleAcessDao
+from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
 from loguru import logger
@@ -37,7 +40,7 @@ class AssistantService(AssistantUtils):
         user_role = UserRoleDao.get_user_roles(user_id)
         if user_role:
             role_ids = [role.id for role in user_role]
-            role_access = RoleAcessDao.get_role_acess(role_ids, AccessType.ASSITANT_READ)
+            role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
             if role_access:
                 assistant_ids_extra = [access.third_id for access in role_access]
 
@@ -81,14 +84,15 @@ class AssistantService(AssistantUtils):
     @classmethod
     async def create_assistant(cls, assistant: Assistant) -> UnifiedResponseModel[AssistantInfo]:
 
-        # 通过算法接口自动选择工具和技能
-        # assistant, tool_list, flow_list = await cls.get_auto_info(assistant)
+        # 检查下是否有重名
+        if cls.judge_name_repeat(assistant.name, assistant.user_id):
+            return AssistantNameRepeatError.return_resp()
 
-        # 保存数据到数据库
+        # 保存数据到数据库, 补充用默认的模型
+        llm_conf = cls.get_llm_conf(assistant.model_name)
+        assistant.model_name = llm_conf['model_name']
+        assistant.temperature = llm_conf['temperature']
         assistant = AssistantDao.create_assistant(assistant)
-        # 保存大模型自动选择的工具和技能
-        # AssistantLinkDao.insert_batch(assistant.id, tool_list=tool_list, flow_list=flow_list)
-        # tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list)
 
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=[],
@@ -97,15 +101,17 @@ class AssistantService(AssistantUtils):
 
     # 删除助手
     @classmethod
-    def delete_assistant(cls, assistant_id: UUID, user_id: int) -> bool:
-
-        # 通过算法接口自动选择工具和技能
+    def delete_assistant(cls, assistant_id: UUID, user_payload: UserPayload) -> UnifiedResponseModel:
         assistant = AssistantDao.get_one_assistant(assistant_id)
-        if assistant and assistant.user_id == user_id:
-            AssistantDao.delete_assistant(assistant)
-            return True
-        else:
-            raise ValueError('不满足删除条件')
+        if not assistant:
+            return AssistantNotExistsError.return_resp()
+
+        # 判断授权
+        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+            return UnAuthorizedError.return_resp()
+
+        AssistantDao.delete_assistant(assistant)
+        return resp_200()
 
     @classmethod
     async def auto_update_stream(cls, assistant_id: UUID, prompt: str):
@@ -141,16 +147,24 @@ class AssistantService(AssistantUtils):
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod
-    async def update_assistant(cls, req: AssistantUpdateReq) -> UnifiedResponseModel[AssistantInfo]:
+    async def update_assistant(cls, req: AssistantUpdateReq, user_payload: UserPayload) \
+            -> UnifiedResponseModel[AssistantInfo]:
         """ 更新助手信息 """
         assistant = AssistantDao.get_one_assistant(req.id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
+
+        # 判断授权
+        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+            return UnAuthorizedError.return_resp()
+
         # 更新助手数据
-        if req.name:
+        if req.name and req.name != assistant.name:
+            # 检查下是否有重名
+            if cls.judge_name_repeat(req.name, assistant.user_id):
+                return AssistantNameRepeatError.return_resp()
             assistant.name = req.name
-        if req.desc:
-            assistant.desc = req.desc
+        assistant.desc = req.desc
         if req.logo:
             assistant.logo = req.logo
         if req.prompt:
@@ -197,21 +211,29 @@ class AssistantService(AssistantUtils):
                                            knowledge_list=knowledge_list))
 
     @classmethod
-    def update_prompt(cls, assistant_id: UUID, prompt: str) -> UnifiedResponseModel:
+    def update_prompt(cls, assistant_id: UUID, prompt: str, user_payload: UserPayload) -> UnifiedResponseModel:
         """ 更新助手的提示词 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
+        # 判断权限
+        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+            return UnAuthorizedError.return_resp()
+
         assistant.prompt = prompt
         AssistantDao.update_assistant(assistant)
         return resp_200()
 
     @classmethod
-    def update_flow_list(cls, assistant_id: UUID, flow_list: List[str]) -> UnifiedResponseModel:
+    def update_flow_list(cls, assistant_id: UUID, flow_list: List[str],
+                         user_payload: UserPayload) -> UnifiedResponseModel:
         """  更新助手的技能列表 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
+        # 判断权限
+        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+            return UnAuthorizedError.return_resp()
         AssistantLinkDao.update_assistant_flow(assistant_id, flow_list=flow_list)
         return resp_200()
 
@@ -229,11 +251,17 @@ class AssistantService(AssistantUtils):
         return resp_200(data=res)
 
     @classmethod
-    def update_tool_list(cls, assistant_id: UUID, tool_list: List[int]) -> UnifiedResponseModel:
+    def update_tool_list(cls, assistant_id: UUID, tool_list: List[int],
+                         user_payload: UserPayload) -> UnifiedResponseModel:
         """  更新助手的工具列表 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
+
+        # 判断权限
+        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+            return UnAuthorizedError.return_resp()
+
         AssistantLinkDao.update_assistant_tool(assistant_id, tool_list=tool_list)
         return resp_200()
 
@@ -259,6 +287,14 @@ class AssistantService(AssistantUtils):
             return f'{user_id}'
         cls.UserCache.set(user_id, user)
         return user.user_name
+
+    @classmethod
+    async def judge_name_repeat(cls, name: str, user_id: int) -> bool:
+        """ 判断助手名字是否重复 """
+        user = AssistantDao.get_assistant_by_name_user_id(name, user_id)
+        if user:
+            return True
+        return False
 
     @classmethod
     async def get_auto_info(cls, assistant: Assistant) -> (Assistant, List[int], List[int]):

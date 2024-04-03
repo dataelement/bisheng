@@ -98,6 +98,12 @@ class AssistantDao(Assistant):
             return session.exec(statement).all()
 
     @classmethod
+    def get_assistant_by_name_user_id(cls, name: str, user_id: int) -> Assistant:
+        with session_getter() as session:
+            statement = select(Assistant).where(Assistant.name == name, Assistant.user_id == user_id)
+            return session.exec(statement).first()
+
+    @classmethod
     def get_assistants(cls, user_id: int, name: str, assistant_ids: List[UUID],
                        status: Optional[int], page: int, limit: int) -> (List[Assistant], int):
         with session_getter() as session:

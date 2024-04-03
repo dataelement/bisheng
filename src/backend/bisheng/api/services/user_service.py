@@ -1,7 +1,28 @@
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeRead
+from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
+
+
+class UserPayload:
+    def __init__(self, **kwargs):
+        self.user_id = kwargs.get('user_id')
+        self.user_role = kwargs.get('role')
+
+    def is_admin(self):
+        return self.user_role == 'admin'
+
+    def access_check(self, owner_user_id: int, target_id: str, access_type: AccessType) -> bool:
+        if self.is_admin():
+            return True
+        # 判断是否属于本人资源
+        if self.user_id == owner_user_id:
+            return True
+        # 判断授权
+        if RoleAccessDao.judge_role_access(self.user_role, target_id, access_type):
+            return True
+        return False
 
 
 def get_knowledge_list_by_access(role_id: int, name: str, page_num: int, page_size: int):
