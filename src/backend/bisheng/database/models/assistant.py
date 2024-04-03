@@ -99,7 +99,7 @@ class AssistantDao(Assistant):
 
     @classmethod
     def get_assistants(cls, user_id: int, name: str, assistant_ids: List[UUID],
-                       status: int | None, page: int, limit: int) -> (List[Assistant], int):
+                       status: Optional[int], page: int, limit: int) -> (List[Assistant], int):
         with session_getter() as session:
             count_statement = session.query(func.count(
                 Assistant.id)).where(Assistant.is_delete == 0)
@@ -120,13 +120,21 @@ class AssistantDao(Assistant):
             if status is not None:
                 statement = statement.where(Assistant.status == status)
                 count_statement = count_statement.where(Assistant.status == status)
-            if limit == 0:
+            if limit == 0 and page == 0:
                 # 获取全部，不分页
                 statement = statement.order_by(Assistant.update_time.desc())
             else:
                 statement = statement.offset(
                     (page - 1) * limit).limit(limit).order_by(Assistant.update_time.desc())
             return session.exec(statement).all(), session.exec(count_statement).scalar()
+
+    @classmethod
+    def get_all_online_assistants(cls) -> List[Assistant]:
+        """ 获取所有已上线的助手 """
+        with session_getter() as session:
+            statement = select(Assistant).filter(Assistant.status == AssistantStatus.ONLINE.value,
+                                                 Assistant.is_delete == 0)
+            return session.exec(statement).all()
 
     @classmethod
     def get_assistants_by_access(cls, role_id: int, name: str, page_size: int,
@@ -166,9 +174,13 @@ class AssistantLinkDao(AssistantLink):
         with session_getter() as session:
             if tool_list:
                 for one in tool_list:
+                    if one == 0:
+                        continue
                     session.add(AssistantLink(assistant_id=assistant_id, tool_id=one))
             if flow_list:
                 for one in flow_list:
+                    if not one:
+                        continue
                     session.add(AssistantLink(assistant_id=assistant_id, flow_id=one))
             session.commit()
 
@@ -184,6 +196,8 @@ class AssistantLinkDao(AssistantLink):
             session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
                                                 AssistantLink.tool_id != 0).delete()
             for one in tool_list:
+                if one == 0:
+                    continue
                 session.add(AssistantLink(assistant_id=assistant_id, tool_id=one))
             session.commit()
 
@@ -194,6 +208,8 @@ class AssistantLinkDao(AssistantLink):
                                                 AssistantLink.flow_id != '',
                                                 AssistantLink.knowledge_id == 0).delete()
             for one in flow_list:
+                if not one:
+                    continue
                 session.add(AssistantLink(assistant_id=assistant_id, flow_id=one))
             session.commit()
 
@@ -202,8 +218,11 @@ class AssistantLinkDao(AssistantLink):
                                    flow_id: str):
         # 保存知识库关联时必须有技能ID
         with session_getter() as session:
-            session.query(AssistantLink).filter(AssistantLink.knowledge_id != 0).delete()
+            session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
+                                                AssistantLink.knowledge_id != 0).delete()
             for one in knowledge_list:
+                if one == 0:
+                    continue
                 session.add(
                     AssistantLink(assistant_id=assistant_id, knowledge_id=one, flow_id=flow_id))
             session.commit()

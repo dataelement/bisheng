@@ -6,13 +6,17 @@ from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchRun
 from bisheng_langchain.gpts.tools.calculator.tool import calculator
 from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
-from bisheng_langchain.gpts.tools.dalle_image_generator.tool import DallEImageGenerator
+
+# from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
+from bisheng_langchain.gpts.tools.dalle_image_generator.tool import (
+    DallEAPIWrapper,
+    DallEImageGenerator,
+)
 from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
 from langchain_community.tools.arxiv.tool import ArxivQueryRun
 from langchain_community.tools.bearly.tool import BearlyInterpreterTool
 from langchain_community.utilities.arxiv import ArxivAPIWrapper
 from langchain_community.utilities.bing_search import BingSearchAPIWrapper
-from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
 from langchain_core.callbacks import BaseCallbackManager, Callbacks
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.tools import BaseTool, Tool
@@ -40,7 +44,7 @@ _BASE_TOOLS: Dict[str, Callable[[], BaseTool]] = {
 _LLM_TOOLS: Dict[str, Callable[[BaseLanguageModel], BaseTool]] = {}
 
 _EXTRA_LLM_TOOLS: Dict[
-    str, Tuple[Callable[[Arg(BaseLanguageModel, 'llm'), KwArg(Any)], BaseTool], List[str]]  # noqa #type: ignore
+    str, Tuple[Callable[[Arg(BaseLanguageModel, 'llm'), KwArg(Any)], BaseTool], List[str]]  # noqa  # noqa #type: ignore
 ] = {}
 
 
@@ -50,12 +54,14 @@ def _get_bing_search(**kwargs: Any) -> BaseTool:
 
 def _get_dalle_image_generator(**kwargs: Any) -> Tool:
     openai_api_key = kwargs.get('openai_api_key')
-    http_client = httpx.Client(proxies=kwargs.get('openai_proxy'))
+    http_async_client = httpx.AsyncClient(proxies=kwargs.get('openai_proxy'))
+    httpc_client = httpx.Client(proxies=kwargs.get('openai_proxy'))
     return DallEImageGenerator(
         api_wrapper=DallEAPIWrapper(
             model='dall-e-3',
             api_key=openai_api_key,
-            http_client=http_client,
+            http_client=httpc_client,
+            http_async_client=http_async_client,
         )
     )
 
@@ -68,22 +74,23 @@ def _get_native_code_interpreter(**kwargs: Any) -> Tool:
     return CodeInterpreterTool(**kwargs).as_tool()
 
 
-_EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {  # type: ignore
-    'dalle_image_generator': (_get_dalle_image_generator, ['openai_api_key', 'openai_proxy']),
-    'bing_search': (_get_bing_search, ['bing_subscription_key', 'bing_search_url']),
-    'code_interpreter': (_get_native_code_interpreter, ['files']),
+# 第二个list内填必填参数，第三个list内填可选参数
+_EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optional[str]], List[Optional[str]]]] = {  # type: ignore
+    'dalle_image_generator': (_get_dalle_image_generator, ['openai_api_key', 'openai_proxy'], []),
+    'bing_search': (_get_bing_search, ['bing_subscription_key', 'bing_search_url'], []),
+    'code_interpreter': (_get_native_code_interpreter, ["minio"], ['files']),
 }
 
 _API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {}  # type: ignore
 _API_TOOLS.update(ALL_API_TOOLS)
 
-
-_ALL_TOOLS = {}
-_ALL_TOOLS.update(_BASE_TOOLS)
-_ALL_TOOLS.update(_LLM_TOOLS)
-_ALL_TOOLS.update(_EXTRA_LLM_TOOLS)
-_ALL_TOOLS.update(_EXTRA_PARAM_TOOLS)
-_ALL_TOOLS.update(_API_TOOLS)
+_ALL_TOOLS = {
+    **_BASE_TOOLS,
+    **_LLM_TOOLS,
+    **_EXTRA_LLM_TOOLS,
+    **_EXTRA_PARAM_TOOLS,
+    **_API_TOOLS,
+}
 
 
 def _handle_callbacks(callback_manager: Optional[BaseCallbackManager], callbacks: Callbacks) -> Callbacks:
@@ -125,12 +132,14 @@ def load_tools(
             tool = _get_llm_tool_func(llm=llm, **sub_kwargs)
             tools.append(tool)
         elif name in _EXTRA_PARAM_TOOLS:
-            _get_tool_func, extra_keys = _EXTRA_PARAM_TOOLS[name]
+            _get_tool_func, extra_keys, optional_keys = _EXTRA_PARAM_TOOLS[name]
             missing_keys = set(extra_keys).difference(params)
             if missing_keys:
                 raise ValueError(f'Tool {name} requires some parameters that were not ' f'provided: {missing_keys}')
-            sub_kwargs = {k: params[k] for k in extra_keys if k in params}
-            tool = _get_tool_func(**sub_kwargs)
+            extra_kwargs = {k: params[k] for k in extra_keys}
+            optional_kwargs = {k: params[k] for k in optional_keys if k in params}
+            all_kwargs = {**extra_kwargs, **optional_kwargs}
+            tool = _get_tool_func(**all_kwargs)
             tools.append(tool)
         elif name in _API_TOOLS:
             _get_api_tool_func, extra_keys = _API_TOOLS[name]
@@ -138,7 +147,7 @@ def load_tools(
             if missing_keys:
                 raise ValueError(f'Tool {name} requires some parameters that were not ' f'provided: {missing_keys}')
             mini_kwargs = {k: params[k] for k in extra_keys}
-            tool = _get_api_tool_func(name=name.split('.')[-1], **mini_kwargs)
+            tool = _get_api_tool_func(name=name, **mini_kwargs)
             tools.append(tool)
         else:
             raise ValueError(f'Got unknown tool {name}')
@@ -150,4 +159,4 @@ def load_tools(
 
 def get_all_tool_names() -> List[str]:
     """Get a list of all possible tool names."""
-    return list(_BASE_TOOLS) + list(_EXTRA_PARAM_TOOLS) + list(_EXTRA_LLM_TOOLS) + list(_LLM_TOOLS) + list(_API_TOOLS)
+    return list(_ALL_TOOLS.keys())

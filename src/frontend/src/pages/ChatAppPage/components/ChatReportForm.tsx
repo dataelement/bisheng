@@ -56,7 +56,7 @@ export default function ChatReportForm({ flow, onStart }) {
         onStart(obj, str)
     }
 
-    return <div className="absolute right-20 bottom-32 w-[90%] max-w-[680px] flex flex-col gap-6 rounded-xl p-4 md:p-6 border bg-gray-50">
+    return <div className="flex flex-col gap-6 rounded-xl p-4 ">
         <div className="max-h-[520px] overflow-y-auto">
             {items.map((item, i) => <div key={item.id} className="w-full text-sm">
                 {item.name}

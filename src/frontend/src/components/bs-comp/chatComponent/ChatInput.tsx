@@ -1,27 +1,49 @@
-import { GoIcon } from "@/components/bs-icons/go";
-import { Button } from "@/components/bs-ui/button";
+import { FormIcon } from "@/components/bs-icons/form";
+import { SendIcon } from "@/components/bs-icons/send";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { locationContext } from "@/contexts/locationContext";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
-import cloneDeep from "lodash-es/cloneDeep";
-import { locationContext } from "@/contexts/locationContext";
-import { PaperPlaneIcon, ReaderIcon } from "@radix-ui/react-icons";
 
-export default function ChatInput({ inputForm, wsUrl, onBeforSend }) {
+export default function ChatInput({ form, inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
 
     const [formShow, setFormShow] = useState(false)
+    const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
 
     const { messages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, setWs, destory } = useMessageStore()
     const inputRef = useRef(null)
 
+    /**
+     * 记录会话切换状态，等待消息加载完成时，控制表单在新会话自动展开
+     */
+    const changeChatedRef = useRef(false)
+    useEffect(() => {
+        // console.log('message msg', messages, form);
+
+        if (changeChatedRef.current) {
+            changeChatedRef.current = false
+            // 新建的 form 技能,弹出窗口并锁定 input
+            if (form && messages.length === 0) {
+                setInputLock({ locked: true, reason: '' })
+                setFormShow(true)
+                setShowWhenLocked(true)
+            }
+        }
+
+    }, [messages])
     useEffect(() => {
         if (!chatId) return
+        // console.log('message chatid', messages, form, chatId);
+        setShowWhenLocked(false)
+
+        changeChatedRef.current = true
+        setFormShow(false)
         createWebSocket(chatId).then(() => {
             const [wsMsg] = onBeforSend('', '')
             sendWsMsg(wsMsg)
@@ -39,6 +61,9 @@ export default function ChatInput({ inputForm, wsUrl, onBeforSend }) {
     }, [])
 
     const handleSendClick = async () => {
+        // 收起表单
+        formShow && setFormShow(false)
+
         const value = inputRef.current.value
         if (value.trim() === '') return
 
@@ -155,7 +180,7 @@ export default function ChatInput({ inputForm, wsUrl, onBeforSend }) {
     // 监听重发消息事件
     useEffect(() => {
         const handleCustomEvent = (e) => {
-            if (inputLock.locked) return
+            if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
             const { send, message } = e.detail
             inputRef.current.value = message
             if (send) handleSendClick()
@@ -164,7 +189,7 @@ export default function ChatInput({ inputForm, wsUrl, onBeforSend }) {
         return () => {
             document.removeEventListener('userResendMsgEvent', handleCustomEvent)
         }
-    }, [inputLock.locked])
+    }, [inputLock.locked, showWhenLocked])
 
     // auto input height
     const handleTextAreaHeight = (e) => {
@@ -179,11 +204,26 @@ export default function ChatInput({ inputForm, wsUrl, onBeforSend }) {
             {/* form */}
             {
                 formShow && <div className="relative">
-                    <div className="absolute right-0 border bottom-2 bg-[#fff] px-4 py-2 rounded-md w-[50%] min-w-80">
+                    <div className="absolute left-0 border bottom-2 bg-[#fff] px-4 py-2 rounded-md w-[50%] min-w-80">
                         {inputForm}
                     </div>
                 </div>
             }
+            <div className="flex absolute left-3 top-4 z-10">
+                {
+                    form && <div
+                        className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
+                        onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
+                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-950'}></FormIcon></div>
+                }
+            </div>
+            <div className="flex gap-2 absolute right-3 top-4 z-10">
+                <div
+                    id="bs-send-btn"
+                    className="w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center"
+                    onClick={() => { !inputLock.locked && handleSendClick() }}
+                ><SendIcon className={inputLock.locked ? 'text-gray-400' : 'text-gray-950'}></SendIcon></div>
+            </div>
             {/* question */}
             <Textarea
                 id="bs-send-input"
@@ -193,22 +233,11 @@ export default function ChatInput({ inputForm, wsUrl, onBeforSend }) {
                 disabled={inputLock.locked}
                 onInput={handleTextAreaHeight}
                 placeholder={inputLock.locked ? inputLock.reason : '请输入问题'}
-                className="resize-none py-4 text-md min-h-6 max-h-[200px] scrollbar-hide text-gray-800"
+                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) handleSendClick()
+                    if (event.key === "Enter" && !event.shiftKey) !inputLock.locked && handleSendClick()
                 }}
             ></Textarea>
-            <div className="flex gap-2 absolute right-3 bottom-4">
-                <div
-                    className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                    onClick={() => setFormShow(!formShow)}
-                ><ReaderIcon className={inputLock.locked && 'text-gray-200'}></ReaderIcon></div>
-                <div
-                    id="bs-send-btn"
-                    className="w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center"
-                    onClick={handleSendClick}
-                ><PaperPlaneIcon className={inputLock.locked && 'text-gray-200'}></PaperPlaneIcon></div>
-            </div>
         </div>
         <p className="text-center text-sm pt-2 pb-4 text-gray-400">{appConfig.dialogTips}</p>
     </div>

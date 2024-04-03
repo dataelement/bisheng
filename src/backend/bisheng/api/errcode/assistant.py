@@ -5,3 +5,8 @@ from bisheng.api.errcode.base import BaseErrorCode
 class AssistantNotExistsError(BaseErrorCode):
     Code: int = 10400
     Msg: str = '助手不存在'
+
+
+class AssistantInitError(BaseErrorCode):
+    Code: int = 10401
+    Msg: str = '助手上线失败'

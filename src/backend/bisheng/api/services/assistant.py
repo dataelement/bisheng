@@ -1,13 +1,14 @@
 from typing import Any, List
 from uuid import UUID
 
-from bisheng.api.errcode.assistant import AssistantNotExistsError
+from bisheng.api.errcode.assistant import AssistantInitError, AssistantNotExistsError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200)
 from bisheng.cache import InMemoryCache
-from bisheng.database.models.assistant import Assistant, AssistantDao, AssistantLinkDao
+from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
+                                               AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao
 from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead
 from bisheng.database.models.knowledge import KnowledgeDao
@@ -81,18 +82,18 @@ class AssistantService(AssistantUtils):
     async def create_assistant(cls, assistant: Assistant) -> UnifiedResponseModel[AssistantInfo]:
 
         # 通过算法接口自动选择工具和技能
-        assistant, tool_list, flow_list = await cls.get_auto_info(assistant)
+        # assistant, tool_list, flow_list = await cls.get_auto_info(assistant)
 
         # 保存数据到数据库
         assistant = AssistantDao.create_assistant(assistant)
         # 保存大模型自动选择的工具和技能
-        AssistantLinkDao.insert_batch(assistant.id, tool_list=tool_list, flow_list=flow_list)
-        tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list)
+        # AssistantLinkDao.insert_batch(assistant.id, tool_list=tool_list, flow_list=flow_list)
+        # tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list)
 
         return resp_200(data=AssistantInfo(**assistant.dict(),
-                                           tool_list=tool_list,
-                                           flow_list=flow_list,
-                                           knowledge_list=knowledge_list))
+                                           tool_list=[],
+                                           flow_list=[],
+                                           knowledge_list=[]))
 
     # 删除助手
     @classmethod
@@ -140,7 +141,7 @@ class AssistantService(AssistantUtils):
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod
-    def update_assistant(cls, req: AssistantUpdateReq) -> UnifiedResponseModel[AssistantInfo]:
+    async def update_assistant(cls, req: AssistantUpdateReq) -> UnifiedResponseModel[AssistantInfo]:
         """ 更新助手信息 """
         assistant = AssistantDao.get_one_assistant(req.id)
         if not assistant:
@@ -162,16 +163,16 @@ class AssistantService(AssistantUtils):
             assistant.model_name = req.model_name
         if req.temperature is not None:
             assistant.temperature = req.temperature
-        if req.status is not None:
+        if req.status == AssistantStatus.OFFLINE.value:  # 下线的话可以更新状态
             assistant.status = req.status
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息
         if req.tool_list is not None:
             AssistantLinkDao.update_assistant_tool(assistant.id, tool_list=req.tool_list)
-        elif req.flow_list is not None:
+        if req.flow_list is not None:
             AssistantLinkDao.update_assistant_flow(assistant.id, flow_list=req.flow_list)
-        elif req.knowledge_list is not None:
+        if req.knowledge_list is not None:
             # 使用配置的flow 进行技能补充
             flow_id_default = AssistantUtils.get_default_retrieval()
             AssistantLinkDao.update_assistant_knowledge(assistant.id,
@@ -179,6 +180,17 @@ class AssistantService(AssistantUtils):
                                                         flow_id=flow_id_default)
         tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list,
                                                                  req.knowledge_list)
+        # 需要先把助手信息保存，之后尝试初始化agent，初始化成功则上线、否则不上线
+        if req.status == AssistantStatus.ONLINE.value and assistant.status == AssistantStatus.OFFLINE.value:
+            tmp_agent = AssistantAgent(assistant, '')
+            try:
+                await tmp_agent.init_assistant()
+                assistant.status = req.status
+                AssistantDao.update_assistant(assistant)
+            except Exception as e:
+                logger.exception('online agent init failed')
+                return AssistantInitError.return_resp('助手编译报错：' + str(e))
+
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
                                            flow_list=flow_list,

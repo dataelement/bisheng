@@ -3,7 +3,7 @@ import { Slider } from "@/components/bs-ui/slider";
 
 export default function Temperature({ value, onChange }) {
 
-    const props = { max: 1, min: 0, step: 0.1 }
+    const props = { max: 2, min: 0, step: 0.1 }
 
     return <div className="flex gap-4 mt-2">
         <Slider

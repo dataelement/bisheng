@@ -3,10 +3,18 @@ import os
 import pathlib
 import subprocess
 import sys
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from datetime import timedelta
 from hashlib import md5
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Type
+from uuid import uuid4
+
+from autogen.code_utils import extract_code, infer_lang
+from langchain_community.tools import Tool
+from langchain_core.pydantic_v1 import BaseModel, Field
+from loguru import logger
 
 try:
     from termcolor import colored
@@ -16,26 +24,21 @@ except ImportError:
         return x
 
 
-from autogen.code_utils import extract_code, infer_lang
-from langchain_community.tools import Tool
-from langchain_core.pydantic_v1 import BaseModel, Field
-from loguru import logger
-
 DEFAULT_TIMEOUT = 600
-WIN32 = sys.platform == "win32"
-PATH_SEPARATOR = WIN32 and "\\" or "/"
-WORKING_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extensions")
-TIMEOUT_MSG = "Timeout"
+WIN32 = sys.platform == 'win32'
+PATH_SEPARATOR = WIN32 and '\\' or '/'
+WORKING_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'extensions')
+TIMEOUT_MSG = 'Timeout'
 
 
 def _cmd(lang):
-    if lang.startswith("python") or lang in ["bash", "sh", "powershell"]:
+    if lang.startswith('python') or lang in ['bash', 'sh', 'powershell']:
         return lang
-    if lang in ["shell"]:
-        return "sh"
-    if lang in ["ps1"]:
-        return "powershell"
-    raise NotImplementedError(f"{lang} not recognized in code execution")
+    if lang in ['shell']:
+        return 'sh'
+    if lang in ['ps1']:
+        return 'powershell'
+    raise NotImplementedError(f'{lang} not recognized in code execution')
 
 
 def execute_code(
@@ -43,10 +46,10 @@ def execute_code(
     timeout: Optional[int] = None,
     filename: Optional[str] = None,
     work_dir: Optional[str] = None,
-    lang: Optional[str] = "python",
+    lang: Optional[str] = 'python',
 ) -> Tuple[int, str, str]:
     if all((code is None, filename is None)):
-        error_msg = f"Either {code=} or {filename=} must be provided."
+        error_msg = f'Either {code=} or {filename=} must be provided.'
         logger.error(error_msg)
         raise AssertionError(error_msg)
 
@@ -62,16 +65,17 @@ def execute_code(
     filepath = os.path.join(work_dir, filename)
     file_dir = os.path.dirname(filepath)
     os.makedirs(file_dir, exist_ok=True)
+    (Path(file_dir) / 'output').mkdir(exist_ok=True, parents=True)
     if code is not None:
-        with open(filepath, "w", encoding="utf-8") as fout:
+        with open(filepath, 'w', encoding='utf-8') as fout:
             fout.write(code)
 
     cmd = [
-        sys.executable if lang.startswith("python") else _cmd(lang),
-        f".\\{filename}" if WIN32 else filename,
+        sys.executable if lang.startswith('python') else _cmd(lang),
+        f'.\\{filename}' if WIN32 else filename,
     ]
     if WIN32:
-        logger.warning("SIGALRM is not supported on Windows. No timeout will be enforced.")
+        logger.warning('SIGALRM is not supported on Windows. No timeout will be enforced.')
         result = subprocess.run(
             cmd,
             cwd=work_dir,
@@ -99,10 +103,10 @@ def execute_code(
         logs = result.stderr
         if original_filename is None:
             abs_path = str(pathlib.Path(filepath).absolute())
-            logs = logs.replace(str(abs_path), "").replace(filename, "")
+            logs = logs.replace(str(abs_path), '').replace(filename, '')
         else:
             abs_path = str(pathlib.Path(work_dir).absolute()) + PATH_SEPARATOR
-            logs = logs.replace(str(abs_path), "")
+            logs = logs.replace(str(abs_path), '')
     else:
         logs = result.stdout
     return result.returncode, logs, None
@@ -111,10 +115,22 @@ def execute_code(
 def head_file(path: str, n: int) -> List[str]:
     """Get the first n lines of a file."""
     try:
-        with open(path, "r") as f:
+        with open(path, 'r') as f:
             return [str(line) for line in itertools.islice(f, n)]
     except Exception:
         return []
+
+
+def upload_minio(param: dict, bucket: str, object_name: str, file_path, content_type='application/text'):
+    # 初始化minio
+    import minio
+
+    minio_client = minio.Minio(**param)
+    logger.debug('upload_file obj={} bucket={} file_paht={}', object_name, bucket, file_path)
+    minio_client.fput_object(
+        bucket_name=bucket, object_name=object_name, file_path=file_path, content_type=content_type
+    )
+    return minio_client.presigned_get_object(bucket_name=bucket, object_name=object_name, expires=timedelta(days=7))
 
 
 class CodeInterpreterToolArguments(BaseModel):
@@ -124,9 +140,9 @@ class CodeInterpreterToolArguments(BaseModel):
         ...,
         example="print('Hello World')",
         description=(
-            "The pure python script to be evaluated. "
-            "The contents will be in main.py. "
-            "It should not be in markdown format."
+            'The pure python script to be evaluated. '
+            'The contents will be in main.py. '
+            'It should not be in markdown format.'
         ),
     )
 
@@ -153,41 +169,65 @@ class FileInfo(BaseModel):
 class CodeInterpreterTool:
     """Tool for evaluating python code in native environment."""
 
-    name = "code_interpreter"
+    name = 'code_interpreter'
     args_schema: Type[BaseModel] = CodeInterpreterToolArguments
 
-    def __init__(self, files: Optional[Dict[str, FileInfo]] = None):
-        self.files = files if files else {}
+    def __init__(
+        self,
+        minio: Dict[str, any] = None,
+        files: Dict[str, FileInfo] = None,
+    ) -> None:
+        self.minio = minio if minio else {}
+        self.files = files if minio else {}
 
     @property
     def file_description(self) -> str:
-        if len(self.files) == 0:
-            return ""
-        lines = ["The following files available in the evaluation environment:"]
+        if not isinstance(self.files, dict):
+            return ''
+        lines = ['The following files available in the evaluation environment:']
         for source_path, file_info in self.files.items():
             peek_content = head_file(file_info.source_path, 4)
             lines.append(
-                f"- path: `{file_info.source_path}` \n first four lines: {peek_content}"
-                f" \n description: `{file_info.description}`"
+                f'- path: `{file_info.source_path}` \n first four lines: {peek_content}'
+                f' \n description: `{file_info.description}`'
             )
-        return "\n".join(lines)
+        return '\n'.join(lines)
 
     @property
     def description(self) -> str:
-        return (base_description + "\n\n" + self.file_description).strip()
+        return (base_description + '\n\n' + self.file_description).strip()
 
     def _run(self, code_string: str) -> dict:
         code_blocks = extract_code(code_string)
         logs_all = ''
+        file_list = []
         for i, code_block in enumerate(code_blocks):
             lang, code = code_block
             lang = infer_lang(code)
-            exitcode, logs, _ = execute_code(code, lang=lang)
-            logs_all += "\n" + logs
+            temp_dir = tempfile.TemporaryDirectory()
+            exitcode, logs, _ = execute_code(
+                code,
+                work_dir=temp_dir.name,
+                lang=lang,
+            )
+            logs_all += '\n' + logs
             if exitcode != 0:
                 return {'exitcode': exitcode, 'log': logs_all}
 
-        return {'exitcode': 0, 'log': logs_all}
+            # 获取文件
+            temp_output_dir = Path(temp_dir.name) / 'output'
+            for root, dirs, files in os.walk(temp_output_dir):
+                for name in files:
+                    file_name = os.path.join(root, name)
+                    if self.minio:
+                        file_type = file_name.rsplit('.', 1)[-1]
+                        object_name = uuid4().hex
+                        file_list.append(upload_minio(self.minio, 'bisheng', f'{object_name}.{file_type}', file_name))
+                    else:
+                        file_list.append(file_name)
+            temp_dir.cleanup()
+
+        return {'exitcode': 0, 'log': logs_all, 'file_list': file_list}
 
     def as_tool(self) -> Tool:
         return Tool.from_function(
@@ -208,13 +248,13 @@ if __name__ == '__main__':
         lang = infer_lang(code)
         print(
             colored(
-                f"\n>>>>>>>> EXECUTING CODE BLOCK {i} (inferred language is {lang})...",
-                "red",
+                f'\n>>>>>>>> EXECUTING CODE BLOCK {i} (inferred language is {lang})...',
+                'red',
             ),
             flush=True,
         )
         exitcode, logs, image = execute_code(code, lang=lang)
-        logs_all += "\n" + logs
+        logs_all += '\n' + logs
         if exitcode != 0:
             logger.error(f'{exitcode}, {logs_all}')
 

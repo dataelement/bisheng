@@ -45,7 +45,7 @@ export default function SkillChatSheet({ children, onSelect }) {
                                 id={i + 1}
                                 data={flow}
                                 title={flow.name}
-                                description={flow.id}
+                                description={flow.desc}
                                 type="sheet"
                                 footer={
                                     <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${flow.flow_type === 'flow' && 'bg-gray-950'}`}>

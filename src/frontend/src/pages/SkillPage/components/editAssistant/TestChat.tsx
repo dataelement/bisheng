@@ -38,7 +38,7 @@ export default function TestChat({ assisId }) {
     return <div className="relative h-full px-4">
         <div className="absolute flex top-2 gap-2 items-center">
             <TitleIconBg className="" id={assistantState.id}></TitleIconBg>
-            <span className="text-sm">{assistantState.name}</span>
+            <span className="text-sm">调试预览</span>
         </div>
         <ChatComponent useName='' guideWord='' wsUrl={wsUrl} onBeforSend={getWsParamData}></ChatComponent>
     </div>

@@ -4,12 +4,13 @@ import { MixerHorizontalIcon } from "@radix-ui/react-icons";
 import AutoPromptDialog from "./AutoPromptDialog";
 import { useState } from "react";
 import { useAssistantStore } from "@/store/assistantStore";
+import { Textarea } from "@/components/bs-ui/input";
 
 export default function Prompt() {
 
     const [open, setOpen] = useState(false);
 
-    const { assistantState } = useAssistantStore()
+    const { assistantState, dispatchAssistant } = useAssistantStore()
 
     return <div className="w-[50%] h-full bg-[#fff] shadow-sm p-4 overflow-y-auto scrollbar-hide">
         <div className="flex-between-center">
@@ -21,9 +22,12 @@ export default function Prompt() {
                 {open && <AutoPromptDialog onOpenChange={setOpen}></AutoPromptDialog>}
             </Dialog>
         </div>
-        <div>
+        <div className="h-[90%]">
             {assistantState.prompt ?
-                <p className="text-sm text-muted-foreground">{assistantState.prompt}</p>
+                <Textarea
+                    className="border-none bg-transparent scrollbar-hide h-full focus-visible:ring-0 resize-none text-sm text-muted-foreground"
+                    value={assistantState.prompt}
+                    onInput={(e => dispatchAssistant('setPrompt', { prompt: e.target.value }))}></Textarea>
                 : <p className="text-sm text-muted-foreground">
                     左侧包含返回按钮、名称；右侧包含保存按钮
                     1. 返回按钮：点击退出回到助手管理页面

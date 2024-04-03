@@ -17,7 +17,7 @@ type Actions = {
   saveAfter: () => void
 }
 
-type Action = 'setBaseInfo' | 'setting' | 'setPrompt' | 'setGuideword' | 'setTools' | 'setFlows'
+type Action = 'setBaseInfo' | 'setting' | 'setPrompt' | 'setGuideword' | 'setTools' | 'setFlows' | 'setQuestion'
 
 const assistantReducer = (state: State, action: Action, data: Partial<AssistantDetail>) => {
   console.log('action :>> ', action, data);
