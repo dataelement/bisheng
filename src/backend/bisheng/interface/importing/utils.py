@@ -137,7 +137,8 @@ def import_wrapper(wrapper: str) -> Any:
 
 def import_toolkit(toolkit: str) -> Any:
     """Import toolkit from toolkit name"""
-    return import_module(f'from langchain.agents.agent_toolkits import {toolkit}')
+    from bisheng.interface.toolkits.base import toolkits_creator
+    return toolkits_creator.type_to_loader_dict[toolkit]
 
 
 def import_agent(agent: str) -> Agent:
