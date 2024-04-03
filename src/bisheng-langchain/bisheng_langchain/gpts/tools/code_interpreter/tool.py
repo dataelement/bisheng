@@ -177,8 +177,8 @@ class CodeInterpreterTool:
         minio: Dict[str, any] = None,
         files: Dict[str, FileInfo] = None,
     ) -> None:
-        self.minio = minio if minio else None
-        self.files = files if minio else None
+        self.minio = minio if minio else {}
+        self.files = files if minio else {}
 
     @property
     def file_description(self) -> str:
