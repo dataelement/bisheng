@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from typing import Dict, List
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from bisheng.api.v1.schemas import InputRequest
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
+from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
                                                       generate_opening_dialog,
@@ -35,6 +37,8 @@ class AssistantAgent(AssistantUtils):
         self.agent: ConfigurableAssistant | None = None
         self.llm: BaseLanguageModel | None = None
         self.llm_agent_executor = None
+        self.knowledge_skill_path = str(Path(__file__).parent / 'knowledge_skill.json')
+        self.knowledge_skill_data = None
 
     async def init_assistant(self, callbacks: Callbacks = None):
         await self.init_llm()
@@ -69,6 +73,15 @@ class AssistantAgent(AssistantUtils):
             llm_params.pop('type')
             self.llm = llm_object(**llm_params)
 
+    async def get_knowledge_skill_data(self):
+        if self.knowledge_skill_data:
+            return self.knowledge_skill_data
+
+        with open(self.knowledge_skill_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        self.knowledge_skill_data = data
+        return data
+
     async def init_tools(self, callbacks: Callbacks = None):
         """通过名称获取tool 列表
            tools_name_param:: {name: params}
@@ -97,18 +110,26 @@ class AssistantAgent(AssistantUtils):
             logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
 
         # flow, 当知识库的时候，flow_id 会重复
-        flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links])
+        flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links if link.flow_id])
+        knowledge_data = KnowledgeDao.get_list_by_ids([link.knowledge_id for link in flow_links if link.knowledge_id])
+        knowledge_data = {knowledge.id: knowledge for knowledge in knowledge_data}
         flow_id2data = {flow.id: flow for flow in flow_data}
 
         for link in flow_links:
-            flow_graph_data = flow_id2data.get(UUID(link.flow_id)).data
-            # 先查找替换collection_id
             knowledge_id = link.knowledge_id
-            tool_name = f'flow_{link.flow_id}'
             if knowledge_id:
                 # 说明是关联的知识库，修改知识库检索技能的对应知识库ID参数
                 tool_name = f'knowledge_{link.knowledge_id}'
+                tool_description = (f'Tool Name: {knowledge_data[knowledge_id].name}\n '
+                                    f'Tool Description: {knowledge_data[knowledge_id].description}')
+                # 先查找替换collection_id
+                flow_graph_data = await self.get_knowledge_skill_data()
                 flow_graph_data = set_flow_knowledge_id(flow_graph_data, knowledge_id)
+            else:
+                one_flow_data = flow_id2data.get(UUID(link.flow_id))
+                flow_graph_data = one_flow_data.data
+                tool_name = f'flow_{link.flow_id}'
+                tool_description = f'Tool Name: {one_flow_data.name}\n Tool Description: {one_flow_data.description}'
             try:
                 artifacts = {}
                 graph = await build_flow_no_yield(graph_data=flow_graph_data,
@@ -121,7 +142,7 @@ class AssistantAgent(AssistantUtils):
                 flow_tool = Tool(name=tool_name,
                                  func=built_object,
                                  coroutine=built_object.acall,
-                                 description=flow_id2data.get(UUID(link.flow_id)).description,
+                                 description=tool_description,
                                  args_schema=InputRequest,
                                  callbacks=callbacks)
                 tools.append(flow_tool)
