@@ -49,6 +49,9 @@ class AssistantAgent(AssistantUtils):
             raise Exception(
                 f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
 
+        # 使用助手配置的 temperature
+        llm_params['temperature'] = self.assistant.temperature
+
         if llm_params.get('agent_executor_type'):
             self.llm_agent_executor = llm_params.pop('agent_executor_type')
 

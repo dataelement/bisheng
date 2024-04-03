@@ -302,15 +302,7 @@ class AssistantService(AssistantUtils):
         自动生成助手的prompt，自动选择工具和技能
         return：助手信息，工具ID列表，技能ID列表
         """
-        # 根据助手
-        llm_conf = cls.get_llm_conf(assistant.model_name)
-        if not llm_conf:
-            raise Exception(f'未找到对应的llm配置: {assistant.model_name}')
-
-        assistant.model_name = llm_conf['model_name']
-        assistant.temperature = llm_conf['temperature']
-
-        # 初始化llm
+        # 初始化agent
         auto_agent = AssistantAgent(assistant, '')
         await auto_agent.init_llm()
 
