@@ -23,7 +23,7 @@ assistant:
 
   tools:
     - type: "arxiv"
-    - type: "bing-search"
+    - type: "bing_search"
       bing_subscription_key: ""
       bing_search_url: "https://api.bing.microsoft.com/v7.0/search"
     - type: "get_current_time"
