@@ -39,7 +39,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
                                 <AccordionItem key={el.id} value={el.id} className="data-[state=open]:border-2 data-[state=open]:border-primary/20 data-[state=open]:rounded-md">
                                     {/* <AccordionTrigger> */}
                                         <div className="flex gap-2 text-start relative py-4 hover:bg-gray-100">
-                                            <TitleIconBg className="w-9 h-9" id={el.id} />
+                                            <TitleIconBg className="w-9 h-9 min-w-9" id={el.id} />
                                             <div>
                                                 <p className="text-sm font-medium leading-none">{el.name}</p>
                                                 <p className="text-sm text-muted-foreground mt-2">{el.desc}</p>

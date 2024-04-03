@@ -11,10 +11,11 @@ import remarkMath from "remark-math";
 import { copyText } from "@/utils";
 import MessageButtons from "./MessageButtons";
 import { useMessageStore } from "./messageStore";
+import { AvatarIcon } from "@/components/bs-icons/avatar";
 
 // 颜色列表
 const colorList = [
-    "#666",
+    "#111",
     "#FF5733",
     "#3498DB",
     "#27AE60",
@@ -81,7 +82,7 @@ export default function MessageBs({ data, onUnlike, onSource }: { data: ChatMess
         <div className="w-fit min-h-8 rounded-2xl px-6 py-4 max-w-[90%] bg-[#F5F6F8]">
             {data.sender && <p className="text-primary text-xs mb-2">{data.sender}</p>}
             <div className="flex gap-2 ">
-                <div className="w-6 h-6 min-w-6" style={{ background: avatarColor }} ></div>
+                <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} ><AvatarIcon /></div>
                 {data.message.toString() ?
                     <div ref={messageRef} className="text-[#111] text-sm">
                         {mkdown}

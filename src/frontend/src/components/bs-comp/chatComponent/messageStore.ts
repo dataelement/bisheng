@@ -100,14 +100,14 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         },
         updateCurrentMessage(wsdata) {
             console.log('change updateCurrentMessage');
-            const messages =  get().messages
+            const messages = get().messages
             const currentMessage = messages[messages.length - 1];
 
             const newCurrentMessage = {
                 ...currentMessage,
                 ...wsdata,
                 id: wsdata.messageId,
-                message: currentMessage.message + wsdata.message,
+                message: wsdata.category === 'tool' ? wsdata.message : currentMessage.message + wsdata.message,
                 thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
                 files: wsdata.files || null,
                 category: wsdata.category || '',

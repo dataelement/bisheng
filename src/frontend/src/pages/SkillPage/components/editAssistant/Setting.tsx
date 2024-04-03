@@ -17,12 +17,12 @@ export default function Setting() {
     const { assistantState, dispatchAssistant } = useAssistantStore()
     console.log('assistantState :>> ', assistantState);
 
-    return <div className="w-[50%]">
-        <h1 className="text-sm text-muted-foreground border leading-8 indent-4">基础配置</h1>
+    return <div className="w-[50%] h-full overflow-y-auto scrollbar-hide">
+        <h1 className="text-sm text-muted-foreground border leading-8 indent-4 bg-gray-50">基础配置</h1>
         <Accordion type="multiple" className="w-full">
             {/* 基础配置 */}
             <AccordionItem value="item-1">
-                <AccordionTrigger>AI模型配置</AccordionTrigger>
+                <AccordionTrigger><span>AI模型配置</span></AccordionTrigger>
                 <AccordionContent className="py-2">
                     <div className="px-6 mb-4">
                         <label htmlFor="model" className="bisheng-label">模型</label>
@@ -42,7 +42,7 @@ export default function Setting() {
             </AccordionItem>
             {/* 开场引导 */}
             <AccordionItem value="item-2">
-                <AccordionTrigger>开场引导</AccordionTrigger>
+                <AccordionTrigger><span>开场引导</span></AccordionTrigger>
                 <AccordionContent className="py-2">
                     <div className="px-6 mb-4" >
                         <label htmlFor="open" className="bisheng-label">开场白</label>
@@ -78,7 +78,7 @@ export default function Setting() {
                 </AccordionContent>
             </AccordionItem>
         </Accordion>
-        <h1 className="text-sm text-muted-foreground border leading-8 indent-4">知识</h1>
+        <h1 className="text-sm text-muted-foreground border-b leading-8 indent-4 bg-gray-50">知识</h1>
         <Accordion type="multiple" className="w-full">
             {/* 知识库 */}
             <AccordionItem value="item-1">
@@ -121,7 +121,7 @@ export default function Setting() {
                 </AccordionContent>
             </AccordionItem>
         </Accordion>
-        <h1 className="text-sm text-muted-foreground border leading-8 indent-4">能力</h1>
+        <h1 className="text-sm text-muted-foreground border-b leading-8 indent-4 bg-gray-50">能力</h1>
         <Accordion type="multiple" className="w-full">
             {/* 工具 */}
             <AccordionItem value="item-1">
@@ -160,7 +160,8 @@ export default function Setting() {
             <AccordionItem value="item-2">
                 <AccordionTrigger>
                     <div className="flex flex-1 justify-between items-center">
-                        <span className="flex items-center gap-1">技能
+                        <span className="flex items-center gap-1">
+                            <span>技能</span>
                             <TooltipProvider delayDuration={200}>
                                 <Tooltip>
                                     <TooltipTrigger asChild>

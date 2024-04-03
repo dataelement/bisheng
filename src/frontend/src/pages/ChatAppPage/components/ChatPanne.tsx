@@ -27,17 +27,17 @@ export default function ChatPanne({ data }) {
 
     const init = async () => {
         if (type === 'flow') {
+            setAssistant(null)
             const _flow = await getFlowApi(id)
             await build(_flow, chatId)
-            setFlow(_flow)
-            setAssistant(null)
             loadHistoryMsg(_flow.id, chatId)
+            setFlow(_flow)
             changeChatId(chatId) // ws
         } else {
+            setFlow(null)
             const _assistant = await getAssistantDetailApi(id)
             loadHistoryMsg(_assistant.id, chatId)
             setAssistant(_assistant)
-            setFlow(null)
             changeChatId(chatId) // ws
         }
     }
@@ -119,6 +119,7 @@ export default function ChatPanne({ data }) {
     // 发送表单 (提交-》event触发发送-》getWsParamData获取参数时追加 data)
     const formDataRef = useRef<any>({})
     const sendReport = (items: Variable[], str) => {
+        
         formDataRef.current = items.map(item => ({
             id: item.nodeId,
             name: item.name,
@@ -152,8 +153,6 @@ export default function ChatPanne({ data }) {
     </div>
 
 
-
-
     return <div className="flex-1">
         {/* 技能会话 */}
         {
@@ -164,6 +163,7 @@ export default function ChatPanne({ data }) {
                     <span className="text-sm">{flow.name}</span>
                 </div>
                 <ChatComponent
+                    form={flowSate.isForm}
                     useName={sendUserName}
                     guideWord={flow.guide_word}
                     wsUrl={wsUrl}

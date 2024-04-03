@@ -29,7 +29,7 @@ interface IProps<T> {
   onSetting?: (data: T) => void,
 }
 
-const gradients = [
+export const gradients = [
   'bg-amber-500',
   'bg-orange-600',
   'bg-teal-500',
