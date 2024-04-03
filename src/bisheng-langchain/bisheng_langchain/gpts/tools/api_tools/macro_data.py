@@ -4,15 +4,21 @@ from typing import Any
 
 import pandas as pd
 import requests
+from langchain.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import BaseTool
 
-from .base import ApiArg, APIToolBase, MultArgsSchemaTool
+from .base import MultArgsSchemaTool
 
 
-class MacroData(APIToolBase):
+class QueryArg(BaseModel):
+    start_date: str = Field(default='', description='开始月份, 使用YYYY-MM-DD 方式表示')
+    end_date: str = Field(default='', description='结束月份，使用YYYY-MM-DD 方式表示')
+
+
+class MacroData(BaseModel):
 
     @classmethod
-    def china_shrzgm(cls, query: str = None) -> pd.DataFrame:
+    def china_shrzgm(cls, query: QueryArg = None) -> pd.DataFrame:
         """
         商务数据中心-国内贸易-社会融资规模增量统计
         """
@@ -51,12 +57,17 @@ class MacroData(APIToolBase):
         temp_df['其中-企业债券'] = pd.to_numeric(temp_df['其中-企业债券'], errors='coerce')
         temp_df['其中-非金融企业境内股票融资'] = pd.to_numeric(temp_df['其中-非金融企业境内股票融资'], errors='coerce')
         temp_df.sort_values(['月份'], inplace=True)
+        if query:
+            start = query.start_date.split('-')[0] + '年' + query.start_date.split('-')[1] + '月份'
+            end = query.end_date.split('-')[0] + '年' + query.end_date.split('-')[1] + '月份'
+            temp_df = temp_df[(temp_df['月份'] >= start) & (temp_df['月份'] <= end)]
+
         temp_df.reset_index(drop=True, inplace=True)
         return temp_df.to_markdown()
 
     # 金十数据中心-经济指标-中国-国民经济运行状况-经济状况-中国GDP年率报告
     @classmethod
-    def china_gdp_yearly(cls, query: str = None) -> pd.DataFrame:
+    def china_gdp_yearly(cls, query: QueryArg = None) -> pd.DataFrame:
         """
         金十数据中心-中国 GDP 年率报告, 数据区间从 20110120-至今
         https://datacenter.jin10.com/reportType/dc_chinese_gdp_yoy
@@ -109,14 +120,16 @@ class MacroData(APIToolBase):
         temp_df.dropna(inplace=True)
         temp_df.sort_index(inplace=True)
         temp_df = temp_df.reset_index()
-        temp_df.drop_duplicates(subset='index', inplace=True)
         temp_df.columns = ['date', 'value']
-        temp_df['date'] = pd.to_datetime(temp_df['date']).dt.date
+        # temp_df['date'] = pd.to_datetime(temp_df['date']).dt.date
         temp_df['value'] = pd.to_numeric(temp_df['value'])
+        temp_df = temp_df.drop_duplicates()
+        temp_df = temp_df[(temp_df['date'] >= query.start_date)
+                          & (temp_df['date'] <= query.end_date)]
         return temp_df.to_markdown()
 
     @classmethod
-    def china_cpi(cls, query: str = None) -> pd.DataFrame:
+    def china_cpi(cls, query: QueryArg = None) -> pd.DataFrame:
         """
         东方财富-中国居民消费价格指数
         https://data.eastmoney.com/cjsj/cpi.html
@@ -185,11 +198,15 @@ class MacroData(APIToolBase):
         temp_df['农村-同比增长'] = pd.to_numeric(temp_df['农村-同比增长'], errors='coerce')
         temp_df['农村-环比增长'] = pd.to_numeric(temp_df['农村-环比增长'], errors='coerce')
         temp_df['农村-累计'] = pd.to_numeric(temp_df['农村-累计'], errors='coerce')
+        if query:
+            start = query.start_date.split('-')[0] + '年' + query.start_date.split('-')[1] + '月份'
+            end = query.end_date.split('-')[0] + '年' + query.end_date.split('-')[1] + '月份'
+            temp_df = temp_df[(temp_df['月份'] >= start) & (temp_df['月份'] <= end)]
 
         return temp_df.to_markdown()
 
     @classmethod
-    def china_ppi(cls, query: str = None) -> pd.DataFrame:
+    def china_ppi(cls, query: QueryArg = None) -> pd.DataFrame:
         """
         东方财富-中国工业品出厂价格指数
         https://data.eastmoney.com/cjsj/ppi.html
@@ -230,10 +247,14 @@ class MacroData(APIToolBase):
         temp_df['当月'] = pd.to_numeric(temp_df['当月'], errors='coerce')
         temp_df['当月同比增长'] = pd.to_numeric(temp_df['当月同比增长'], errors='coerce')
         temp_df['累计'] = pd.to_numeric(temp_df['累计'], errors='coerce')
+        if query:
+            start = query.start_date.split('-')[0] + '年' + query.start_date.split('-')[1] + '月份'
+            end = query.end_date.split('-')[0] + '年' + query.end_date.split('-')[1] + '月份'
+            temp_df = temp_df[(temp_df['月份'] >= start) & (temp_df['月份'] <= end)]
         return temp_df.to_markdown()
 
     @classmethod
-    def china_money_supply(cls, query: str = None) -> pd.DataFrame:
+    def china_money_supply(cls, query: QueryArg = None) -> pd.DataFrame:
         """
         东方财富-货币供应量
         https://data.eastmoney.com/cjsj/hbgyl.html
@@ -294,10 +315,14 @@ class MacroData(APIToolBase):
         temp_df['流通中的现金(M0)-数量(亿元)'] = pd.to_numeric(temp_df['流通中的现金(M0)-数量(亿元)'])
         temp_df['流通中的现金(M0)-同比增长'] = pd.to_numeric(temp_df['流通中的现金(M0)-同比增长'])
         temp_df['流通中的现金(M0)-环比增长'] = pd.to_numeric(temp_df['流通中的现金(M0)-环比增长'])
+        if query:
+            start = query.start_date.split('-')[0] + '年' + query.start_date.split('-')[1] + '月份'
+            end = query.end_date.split('-')[0] + '年' + query.end_date.split('-')[1] + '月份'
+            temp_df = temp_df[(temp_df['月份'] >= start) & (temp_df['月份'] <= end)]
         return temp_df.to_markdown()
 
     @classmethod
-    def china_consumer_goods_retail(cls, query: str = None) -> pd.DataFrame:
+    def china_consumer_goods_retail(cls, query: QueryArg = None) -> pd.DataFrame:
         """
         东方财富-经济数据-社会消费品零售总额
         https://data.eastmoney.com/cjsj/xfp.html
@@ -349,6 +374,11 @@ class MacroData(APIToolBase):
         temp_df['环比增长'] = pd.to_numeric(temp_df['环比增长'], errors='coerce')
         temp_df['累计'] = pd.to_numeric(temp_df['累计'], errors='coerce')
         temp_df['累计-同比增长'] = pd.to_numeric(temp_df['累计-同比增长'], errors='coerce')
+        if query:
+            start = query.start_date.split('-')[0] + '年' + query.start_date.split('-')[1] + '月份'
+            end = query.end_date.split('-')[0] + '年' + query.end_date.split('-')[1] + '月份'
+            temp_df = temp_df[(temp_df['月份'] >= start) & (temp_df['月份'] <= end)]
+
         return temp_df.to_markdown()
 
     @classmethod
@@ -359,8 +389,14 @@ class MacroData(APIToolBase):
         return MultArgsSchemaTool(name=name,
                                   description=class_method.__doc__,
                                   func=class_method,
-                                  args_schema=ApiArg)
+                                  args_schema=QueryArg)
 
 
 if __name__ == '__main__':
-    print(MacroData.china_consumer_goods_retail('x'))
+    query = QueryArg(start_date='2023-01-01', end_date='2023-05-01')
+    # print(MacroData.china_ppi(query))
+    # print(MacroData.china_shrzgm(query))
+    print(MacroData.china_consumer_goods_retail(query))
+    # print(MacroData.china_cpi(query))
+    # print(MacroData.china_money_supply(query))
+    # print(MacroData.china_gdp_yearly(query))
