@@ -2,7 +2,7 @@ from typing import Any, List
 from uuid import UUID
 
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
-                                           AssistantNotExistsError)
+                                           AssistantNotEditError, AssistantNotExistsError)
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
@@ -154,9 +154,9 @@ class AssistantService(AssistantUtils):
         if not assistant:
             return AssistantNotExistsError.return_resp()
 
-        # 判断授权
-        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
-            return UnAuthorizedError.return_resp()
+        check_result = cls.check_update_permission(assistant, user_payload)
+        if check_result is not None:
+            return check_result
 
         # 更新助手数据
         if req.name and req.name != assistant.name:
@@ -165,20 +165,12 @@ class AssistantService(AssistantUtils):
                 return AssistantNameRepeatError.return_resp()
             assistant.name = req.name
         assistant.desc = req.desc
-        if req.logo:
-            assistant.logo = req.logo
-        if req.prompt:
-            assistant.prompt = req.prompt
-        if req.guide_word:
-            assistant.guide_word = req.guide_word
-        if req.guide_question:
-            assistant.guide_question = req.guide_question
-        if req.model_name:
-            assistant.model_name = req.model_name
-        if req.temperature is not None:
-            assistant.temperature = req.temperature
-        if req.status == AssistantStatus.OFFLINE.value:  # 下线的话可以更新状态
-            assistant.status = req.status
+        assistant.logo = req.logo or assistant.logo
+        assistant.prompt = req.prompt or assistant.prompt
+        assistant.guide_word = req.guide_word or assistant.guide_word
+        assistant.guide_question = req.guide_question or assistant.guide_question
+        assistant.model_name = req.model_name or assistant.model_name
+        assistant.temperature = req.temperature or assistant.temperature
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息
@@ -194,21 +186,35 @@ class AssistantService(AssistantUtils):
                                                         flow_id=flow_id_default)
         tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list,
                                                                  req.knowledge_list)
-        # 需要先把助手信息保存，之后尝试初始化agent，初始化成功则上线、否则不上线
-        if req.status == AssistantStatus.ONLINE.value and assistant.status == AssistantStatus.OFFLINE.value:
-            tmp_agent = AssistantAgent(assistant, '')
-            try:
-                await tmp_agent.init_assistant()
-                assistant.status = req.status
-                AssistantDao.update_assistant(assistant)
-            except Exception as e:
-                logger.exception('online agent init failed')
-                return AssistantInitError.return_resp('助手编译报错：' + str(e))
-
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
                                            flow_list=flow_list,
                                            knowledge_list=knowledge_list))
+
+    @classmethod
+    async def update_status(cls, assistant_id: UUID, status: int, user_payload: UserPayload) -> UnifiedResponseModel:
+        """ 更新助手的状态 """
+        assistant = AssistantDao.get_one_assistant(assistant_id)
+        if not assistant:
+            return AssistantNotExistsError.return_resp()
+        # 判断权限
+        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+            return UnAuthorizedError.return_resp()
+        # 状态相等不做改动
+        if assistant.status == status:
+            return resp_200()
+
+        # 尝试初始化agent，初始化成功则上线、否则不上线
+        if status == AssistantStatus.ONLINE.value:
+            tmp_agent = AssistantAgent(assistant, '')
+            try:
+                await tmp_agent.init_assistant()
+            except Exception as e:
+                logger.exception('online agent init failed')
+                return AssistantInitError.return_resp('助手编译报错：' + str(e))
+        assistant.status = status
+        AssistantDao.update_assistant(assistant)
+        return resp_200()
 
     @classmethod
     def update_prompt(cls, assistant_id: UUID, prompt: str, user_payload: UserPayload) -> UnifiedResponseModel:
@@ -216,9 +222,10 @@ class AssistantService(AssistantUtils):
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
-        # 判断权限
-        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
-            return UnAuthorizedError.return_resp()
+
+        check_result = cls.check_update_permission(assistant, user_payload)
+        if check_result is not None:
+            return check_result
 
         assistant.prompt = prompt
         AssistantDao.update_assistant(assistant)
@@ -231,9 +238,11 @@ class AssistantService(AssistantUtils):
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
-        # 判断权限
-        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
-            return UnAuthorizedError.return_resp()
+
+        check_result = cls.check_update_permission(assistant, user_payload)
+        if check_result is not None:
+            return check_result
+
         AssistantLinkDao.update_assistant_flow(assistant_id, flow_list=flow_list)
         return resp_200()
 
@@ -258,12 +267,23 @@ class AssistantService(AssistantUtils):
         if not assistant:
             return AssistantNotExistsError.return_resp()
 
-        # 判断权限
-        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
-            return UnAuthorizedError.return_resp()
+        check_result = cls.check_update_permission(assistant, user_payload)
+        if check_result is not None:
+            return check_result
 
         AssistantLinkDao.update_assistant_tool(assistant_id, tool_list=tool_list)
         return resp_200()
+
+    @classmethod
+    def check_update_permission(cls, assistant: Assistant, user_payload: UserPayload) -> Any:
+        # 判断权限
+        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+            return AssistantNotExistsError.return_resp()
+
+        # 已上线不允许改动
+        if assistant.status == AssistantStatus.ONLINE.value:
+            return AssistantNotEditError.return_resp()
+        return None
 
     @classmethod
     def get_link_info(cls,
