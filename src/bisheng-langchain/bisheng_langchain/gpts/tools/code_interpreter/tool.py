@@ -174,15 +174,15 @@ class CodeInterpreterTool:
 
     def __init__(
         self,
-        minio: Dict[str, any] = None,
+        minio: Dict[str, any],
         files: Dict[str, FileInfo] = None,
     ) -> None:
-        self.minio = minio if minio else {}
-        self.files = files if minio else {}
+        self.minio = minio
+        self.files = files if files else {}
 
     @property
     def file_description(self) -> str:
-        if not isinstance(self.files, dict):
+        if not len(self.files) or not isinstance(self.files, dict):
             return ''
         lines = ['The following files available in the evaluation environment:']
         for source_path, file_info in self.files.items():
