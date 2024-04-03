@@ -464,7 +464,7 @@ class ChatManager:
             node_data = payload['inputs'].get('data', '') or [payload['inputs']]
             graph_data = self.refresh_graph_data(graph_data, node_data)
             self.set_cache(langchain_obj_key, None)  # rebuild object
-            has_file = any(['InputFile' in nd.get('id') for nd in node_data])
+            has_file = any(['InputFile' in nd.get('id', '') for nd in node_data])
         if has_file:
             step_resp.intermediate_steps = 'File upload complete and begin to parse'
             await self.send_json(client_id, chat_id, start_resp)
@@ -571,7 +571,7 @@ class ChatManager:
         for nd in node_data:
             if nd.get('id') not in tweak:
                 tweak[nd.get('id')] = {}
-            if 'InputFile' in nd.get('id'):
+            if 'InputFile' in nd.get('id', ''):
                 file_path = nd.get('file_path')
                 url_path = urlparse(file_path)
                 if url_path.netloc:
@@ -580,7 +580,7 @@ class ChatManager:
                     file_name = file_path.split('_', 1)[1] if '_' in file_path else ''
                 nd['value'] = file_name
                 tweak[nd.get('id')] = {'file_path': file_path, 'value': file_name}
-            elif 'VariableNode' in nd.get('id'):
+            elif 'VariableNode' in nd.get('id', ''):
                 # general key value
                 variables = nd.get('name')
                 variable_value = nd.get('value')

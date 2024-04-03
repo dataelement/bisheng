@@ -119,7 +119,7 @@ class ThreadPoolManager:
     def tear_down(self):
         key_list = list(self.async_task.keys())
         self.cancel_task(key_list)
-        self.executor.shutdown()
+        self.executor.shutdown(cancel_futures=True)
 
 
 # 创建一个线程池管理器

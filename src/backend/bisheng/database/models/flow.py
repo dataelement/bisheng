@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
@@ -138,17 +138,24 @@ class FlowDao(FlowBase):
             return session.exec(count_statement.where(*filters)).scalar()
 
     @classmethod
-    def get_flows(cls, user_id: Optional[int], extra_ids: List[str], name: str, status: int) -> List[Flow]:
+    def get_flows(cls, user_id: Optional[int], extra_ids: Union[List[str], str], name: str,
+                  status: int) -> List[Flow]:
         with session_getter() as session:
-            statement = select(Flow).where(Flow.status == status)
-            if extra_ids:
+            # data 数据量太大，对mysql 有影响
+            statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
+                               Flow.update_time, Flow.description,
+                               Flow.guide_word).where(Flow.status == status)
+            if extra_ids and isinstance(extra_ids, List):
                 statement = statement.where(or_(Flow.id.in_(extra_ids), Flow.user_id == user_id))
-            else:
+            elif not extra_ids:
                 statement = statement.where(Flow.user_id == user_id)
+
             if name:
                 statement = statement.where(Flow.name.like(f'%{name}%'))
             statement = statement.order_by(Flow.update_time.desc())
-            return session.exec(statement).all()
+            flows = session.exec(statement)
+            flows_partial = flows.mappings().all()
+            return [Flow.model_validate(f) for f in flows_partial]
 
     @classmethod
     def get_all_online_flows(cls):
@@ -162,7 +169,11 @@ class FlowDao(FlowBase):
         flow_id_extra = []
         if user_role:
             role_ids = [role.id for role in user_role]
-            role_access = RoleAccessDao.get_role_access(role_ids, AccessType.FLOW)
-            if role_access:
-                flow_id_extra = [access.third_id for access in role_access]
+            if 1 in role_ids:
+                # admin
+                flow_id_extra = 'admin'
+            else:
+                role_access = RoleAcessDao.get_role_acess(role_ids, AccessType.FLOW)
+                if role_access:
+                    flow_id_extra = [access.third_id for access in role_access]
         return FlowDao.get_flows(user_id, flow_id_extra, '', FlowStatus.ONLINE.value)
