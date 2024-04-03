@@ -241,7 +241,6 @@ class AssistantUpdateReq(BaseModel):
     guide_question: Optional[List] = Field([], description='引导问题列表， 为空则不更新')
     model_name: Optional[str] = Field('', description='选择的模型名， 为空则不更新')
     temperature: Optional[float] = Field(None, description='模型温度， 不传则不更新')
-    status: Optional[int] = Field(None, description='状态， 不传则不更新')
 
     tool_list: List[int] | None = Field(default=None,
                                         description='助手的工具ID列表,空列表则清空绑定的工具，为None则不更新')

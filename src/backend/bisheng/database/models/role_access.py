@@ -42,7 +42,8 @@ class AccessType(Enum):
     FLOW = 2
     KNOWLEDGE_WRITE = 3
     FLOW_WRITE = 4
-    ASSITANT_READ = 5
+    ASSISTANT_READ = 5
+    ASSISTANT_WRITE = 6
 
 
 class RoleRefresh(BaseModel):
@@ -51,13 +52,22 @@ class RoleRefresh(BaseModel):
     type: int
 
 
-class RoleAcessDao(RoleAccessBase):
+class RoleAccessDao(RoleAccessBase):
 
     @classmethod
-    def get_role_acess(cls, role_ids: List[int], access_type: AccessType) -> List[RoleAccess]:
+    def get_role_access(cls, role_ids: List[int], access_type: AccessType) -> List[RoleAccess]:
         with session_getter() as session:
             if access_type:
                 return session.exec(
                     select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
                                              RoleAccess.type == access_type.value)).all()
             return session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(role_ids))).all()
+
+    @classmethod
+    def judge_role_access(cls, role_ids: List[int], third_id: str, access_type: AccessType) -> Optional[RoleAccess]:
+        with session_getter() as session:
+            return session.exec(select(RoleAccess).filter(
+                RoleAccess.role_id.in_(role_ids),
+                RoleAccess.type == access_type.value,
+                RoleAccess.third_id == third_id
+            )).first()

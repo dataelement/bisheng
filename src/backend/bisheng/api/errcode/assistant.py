@@ -10,3 +10,13 @@ class AssistantNotExistsError(BaseErrorCode):
 class AssistantInitError(BaseErrorCode):
     Code: int = 10401
     Msg: str = '助手上线失败'
+
+
+class AssistantNameRepeatError(BaseErrorCode):
+    Code: int = 10402
+    Msg: str = '助手名称重复'
+
+
+class AssistantNotEditError(BaseErrorCode):
+    Code: int = 10403
+    Msg: str = '助手已上线，不可编辑'

@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAcessDao
+from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
 from bisheng.database.models.user_role import UserRoleDao
 # if TYPE_CHECKING:
 from pydantic import validator
@@ -162,7 +162,7 @@ class FlowDao(FlowBase):
         flow_id_extra = []
         if user_role:
             role_ids = [role.id for role in user_role]
-            role_access = RoleAcessDao.get_role_acess(role_ids, AccessType.FLOW)
+            role_access = RoleAccessDao.get_role_access(role_ids, AccessType.FLOW)
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
         return FlowDao.get_flows(user_id, flow_id_extra, '', FlowStatus.ONLINE.value)

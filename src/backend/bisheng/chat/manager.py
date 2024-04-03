@@ -13,7 +13,7 @@ from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
 from bisheng.cache.manager import Subject
 from bisheng.chat.client import ChatClient
-from bisheng.chat.types import WorkType
+from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.user import User
@@ -210,6 +210,9 @@ class ChatManager:
                 await chat_client.handle_message(payload)
         except WebSocketDisconnect as e:
             logger.info('act=rcv_client_disconnect {}', str(e))
+        except IgnoreException:
+            # client 内部自己关闭了ws链接，并无异常的情况
+            pass
         except Exception as e:
             # Handle any exceptions that might occur
             logger.exception(str(e))
