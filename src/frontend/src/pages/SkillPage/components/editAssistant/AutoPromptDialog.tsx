@@ -4,7 +4,6 @@ import { Button } from "@/components/bs-ui/button";
 import { DialogClose, DialogContent, DialogFooter } from "@/components/bs-ui/dialog";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { autoByPromptApi } from "@/controllers/API/assistant";
 import { useAssistantStore } from "@/store/assistantStore";
 import { AssistantTool } from "@/types/assistant";
 import { FlowType } from "@/types/flow";
@@ -13,41 +12,54 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 export default function AutoPromptDialog({ onOpenChange }) {
+    const { toast } = useToast()
     const { id } = useParams()
     const { assistantState, dispatchAssistant } = useAssistantStore()
 
     const init = () => {
-        // sse
-        createSSE()
-        // made tools
-        createTools()
+        const prompt = areaRef.current.value
+        const apiUrl = `/api/v1/assistant/auto?assistant_id=${id}&prompt=${prompt}`;
+        const eventSource = new EventSource(apiUrl);
+        areaRef.current.value = ''
+
+        eventSource.onmessage = (event) => {
+            // If the event is parseable, return
+            if (!event.data) {
+                return;
+            }
+            const parsedData = JSON.parse(event.data);
+            console.log('parsedData :>> ', parsedData);
+            switch (parsedData.type) {
+                case 'prompt':
+                    areaRef.current.value += parsedData.message.replace('```markdown', ''); break
+                case 'guide_word':
+                    guideAreaRef.current.value += parsedData.message; break
+                case 'guide_question':
+                    setQuestion(parsedData.message); break
+                case 'tool_list':
+                    setTools(parsedData.message); break
+                case 'flow_list':
+                    setFlows(parsedData.message); break
+                case 'end':
+                    setLoading(false); break
+            }
+        };
+
+        eventSource.onerror = (error: any) => {
+            console.error("EventSource failed:", error);
+            eventSource.close();
+            if (error.data) {
+                const parsedData = JSON.parse(error.data);
+                setLoading(false);
+                toast({
+                    title: parsedData.error,
+                    variant: 'error',
+                    description: ''
+                });
+            }
+        };
     }
 
-    // 流式读取引导词及开场白
-    const createSSE = () => {
-        const { prompt } = assistantState
-        // sse api
-        const timer = setInterval(() => {
-            areaRef.current.value += '打字'
-            guideAreaRef.current.value += '开场白'
-        }, 120)
-        setTimeout(() => {
-            clearInterval(timer)
-            setLoading(false)
-        }, 2000);
-    }
-
-    // 获取可用工具和技能
-    const createTools = async () => {
-        const { prompt } = assistantState
-        const res = await autoByPromptApi(id, prompt)
-        // 临时
-        areaRef.current.value = res.prompt
-        guideAreaRef.current.value = res.guide_word
-        console.log('res :>> ', res);
-        setTools(res.tool_list)
-        setFlows(res.flow_list)
-    }
 
     useEffect(() => {
         // api
@@ -60,10 +72,14 @@ export default function AutoPromptDialog({ onOpenChange }) {
         init()
     }
 
+    /**
+     * 使用
+     */
     const { message } = useToast()
     // state
     const areaRef = useRef(null)
     const guideAreaRef = useRef(null)
+    const [question, setQuestion] = useState<string[]>([])
     const [tools, setTools] = useState<AssistantTool[]>([])
     const [flows, setFlows] = useState<FlowType[]>([])
     // 更新提示词
@@ -77,7 +93,16 @@ export default function AutoPromptDialog({ onOpenChange }) {
         })
     }
 
-    const handleUseGuide = (params) => {
+    const handleUserQuestion = () => {
+        dispatchAssistant('setQuestion', { guide_question: question })
+        message({
+            variant: 'success',
+            title: '提示',
+            description: '引导词已替换'
+        })
+    }
+
+    const handleUseGuide = () => {
         const value = guideAreaRef.current.value
         dispatchAssistant('setGuideword', { guide_word: value })
         message({
@@ -110,6 +135,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
         dispatchAssistant('setGuideword', { guide_word: guideAreaRef.current.value })
         dispatchAssistant('setTools', { tool_list: tools })
         dispatchAssistant('setFlows', { flow_list: flows })
+        dispatchAssistant('setQuestion', { guide_question: question })
         // 收集结果
         message({
             variant: 'success',
@@ -144,9 +170,18 @@ export default function AutoPromptDialog({ onOpenChange }) {
                     {/* 开场白 */}
                     <div className="group relative pb-12 bg-gray-100 mt-4 px-4 py-2 rounded-md">
                         <div className="text-md mb-2 font-medium leading-none">开场白</div>
-                        <Textarea ref={guideAreaRef} className="bg-transparent border-none"></Textarea>
-                        {/* <p className="text-sm text-muted-foreground">开场白开场白开场白开场白开场白开场白开场白开场白开场白开场白开场白</p> */}
+                        <Textarea ref={guideAreaRef} className="bg-transparent border-none bg-gray-50"></Textarea>
                         <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={loading} size="sm" onClick={handleUseGuide}>使用</Button>
+                    </div>
+                    {/* 引导词 */}
+                    <div className="group relative pb-12 bg-gray-100 mt-4 px-4 py-2 rounded-md">
+                        <div className="text-md mb-2 font-medium leading-none">引导词</div>
+                        {
+                            question.map(qs => (
+                                <p key={qs} className="text-sm text-muted-foreground bg-gray-50 px-2 py-1 rounded-xl mb-2">{qs}</p>
+                            ))
+                        }
+                        <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={loading} size="sm" onClick={handleUserQuestion}>使用</Button>
                     </div>
                     {/* 工具 */}
                     <div className="group relative pb-10 bg-gray-100 mt-4 px-4 py-2 rounded-md">

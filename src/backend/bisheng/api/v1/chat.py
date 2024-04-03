@@ -149,8 +149,13 @@ def get_online_chat(*, Authorize: AuthJWT = Depends()):
     user_id = payload.get('user_id')
     res = []
     # 获取所有已上线的助手
-    assistants = AssistantService.get_assistant(user_id, None, AssistantStatus.ONLINE.value, 0, 0)
-    all_assistant = assistants.data.get('data')
+    if payload.get('role') == 'admin':
+        all_assistant = AssistantDao.get_all_online_assistants()
+        flows = FlowDao.get_all_online_flows()
+    else:
+        assistants = AssistantService.get_assistant(user_id, None, AssistantStatus.ONLINE.value, 0, 0)
+        all_assistant = assistants.data.get('data')
+        flows = FlowDao.get_user_access_online_flows(user_id)
     for one in all_assistant:
         res.append(
             FlowGptsOnlineList(
@@ -164,7 +169,6 @@ def get_online_chat(*, Authorize: AuthJWT = Depends()):
         )
 
     # 获取用户可见的所有已上线的技能
-    flows = FlowDao.get_user_access_online_flows(user_id)
     for one in flows:
         res.append(
             FlowGptsOnlineList(

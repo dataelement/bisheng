@@ -1,13 +1,14 @@
 from typing import Any, List
 from uuid import UUID
 
-from bisheng.api.errcode.assistant import AssistantNotExistsError
+from bisheng.api.errcode.assistant import AssistantInitError, AssistantNotExistsError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200)
 from bisheng.cache import InMemoryCache
-from bisheng.database.models.assistant import Assistant, AssistantDao, AssistantLinkDao
+from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
+                                               AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao
 from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead
 from bisheng.database.models.knowledge import KnowledgeDao
@@ -140,7 +141,7 @@ class AssistantService(AssistantUtils):
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod
-    def update_assistant(cls, req: AssistantUpdateReq) -> UnifiedResponseModel[AssistantInfo]:
+    async def update_assistant(cls, req: AssistantUpdateReq) -> UnifiedResponseModel[AssistantInfo]:
         """ 更新助手信息 """
         assistant = AssistantDao.get_one_assistant(req.id)
         if not assistant:
@@ -162,7 +163,7 @@ class AssistantService(AssistantUtils):
             assistant.model_name = req.model_name
         if req.temperature is not None:
             assistant.temperature = req.temperature
-        if req.status is not None:
+        if req.status == AssistantStatus.OFFLINE.value:  # 下线的话可以更新状态
             assistant.status = req.status
         AssistantDao.update_assistant(assistant)
 
@@ -179,6 +180,17 @@ class AssistantService(AssistantUtils):
                                                         flow_id=flow_id_default)
         tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list,
                                                                  req.knowledge_list)
+        # 需要先把助手信息保存，之后尝试初始化agent，初始化成功则上线、否则不上线
+        if req.status == AssistantStatus.ONLINE.value and assistant.status == AssistantStatus.OFFLINE.value:
+            tmp_agent = AssistantAgent(assistant, '')
+            try:
+                await tmp_agent.init_assistant()
+                assistant.status = req.status
+                AssistantDao.update_assistant(assistant)
+            except Exception as e:
+                logger.exception('online agent init failed')
+                return AssistantInitError.return_resp('助手编译报错：' + str(e))
+
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
                                            flow_list=flow_list,

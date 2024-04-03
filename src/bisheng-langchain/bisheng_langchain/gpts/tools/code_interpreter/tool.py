@@ -121,22 +121,16 @@ def head_file(path: str, n: int) -> List[str]:
         return []
 
 
-def upload_minio(param: dict,
-                 bucket: str,
-                 object_name: str,
-                 file_path,
-                 content_type='application/text'):
+def upload_minio(param: dict, bucket: str, object_name: str, file_path, content_type='application/text'):
     # 初始化minio
     import minio
+
     minio_client = minio.Minio(**param)
     logger.debug('upload_file obj={} bucket={} file_paht={}', object_name, bucket, file_path)
-    minio_client.fput_object(bucket_name=bucket,
-                             object_name=object_name,
-                             file_path=file_path,
-                             content_type=content_type)
-    return minio_client.presigned_get_object(bucket_name=bucket,
-                                             object_name=object_name,
-                                             expires=timedelta(days=30))
+    minio_client.fput_object(
+        bucket_name=bucket, object_name=object_name, file_path=file_path, content_type=content_type
+    )
+    return minio_client.presigned_get_object(bucket_name=bucket, object_name=object_name, expires=timedelta(days=7))
 
 
 class CodeInterpreterToolArguments(BaseModel):
@@ -145,9 +139,11 @@ class CodeInterpreterToolArguments(BaseModel):
     python_code: str = Field(
         ...,
         example="print('Hello World')",
-        description=('The pure python script to be evaluated. '
-                     'The contents will be in main.py. '
-                     'It should not be in markdown format.'),
+        description=(
+            'The pure python script to be evaluated. '
+            'The contents will be in main.py. '
+            'It should not be in markdown format.'
+        ),
     )
 
 
@@ -175,8 +171,14 @@ class CodeInterpreterTool:
 
     name = 'code_interpreter'
     args_schema: Type[BaseModel] = CodeInterpreterToolArguments
-    files: Dict[str, FileInfo] = {}
-    minio: Dict[str, str] = {}
+
+    def __init__(
+        self,
+        minio: Dict[str, any] = None,
+        files: Dict[str, FileInfo] = None,
+    ) -> None:
+        self.minio = minio if minio else None
+        self.files = files if minio else None
 
     @property
     def file_description(self) -> str:
@@ -185,8 +187,10 @@ class CodeInterpreterTool:
         lines = ['The following files available in the evaluation environment:']
         for source_path, file_info in self.files.items():
             peek_content = head_file(file_info.source_path, 4)
-            lines.append(f'- path: `{file_info.source_path}` \n first four lines: {peek_content}'
-                         f' \n description: `{file_info.description}`')
+            lines.append(
+                f'- path: `{file_info.source_path}` \n first four lines: {peek_content}'
+                f' \n description: `{file_info.description}`'
+            )
         return '\n'.join(lines)
 
     @property
@@ -211,15 +215,14 @@ class CodeInterpreterTool:
                 return {'exitcode': exitcode, 'log': logs_all}
 
             # 获取文件
-            for root, dirs, files in os.walk(temp_dir):
+            temp_output_dir = Path(temp_dir.name) / 'output'
+            for root, dirs, files in os.walk(temp_output_dir):
                 for name in files:
                     file_name = os.path.join(root, name)
                     if self.minio:
                         file_type = file_name.rsplit('.', 1)[-1]
                         object_name = uuid4().hex
-                        file_list.append(
-                            upload_minio(self.minio, 'bisheng', f'{object_name}.{file_type}',
-                                         file_name))
+                        file_list.append(upload_minio(self.minio, 'bisheng', f'{object_name}.{file_type}', file_name))
                     else:
                         file_list.append(file_name)
             temp_dir.cleanup()

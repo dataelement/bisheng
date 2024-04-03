@@ -151,6 +151,12 @@ class FlowDao(FlowBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_all_online_flows(cls):
+        with session_getter() as session:
+            statement = select(Flow).where(Flow.status == FlowStatus.ONLINE.value)
+            return session.exec(statement).all()
+
+    @classmethod
     def get_user_access_online_flows(cls, user_id: int) -> List[Flow]:
         user_role = UserRoleDao.get_user_roles(user_id)
         flow_id_extra = []

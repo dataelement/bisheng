@@ -9,6 +9,7 @@ import { useDebounce } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import ChatPanne from "./components/ChatPanne";
 import { PlusBoxIcon } from "@/components/bs-icons/plusBox";
+import { gradients } from "@/components/bs-comp/cardComponent";
 
 export default function SkillChatPage() {
 
@@ -64,7 +65,7 @@ export default function SkillChatPage() {
 
     return <div className="flex h-full">
         <div className="h-full w-[220px] relative border-r">
-            <div className="absolute flex w-[210px] left-1 pt-2 dark:bg-gray-950">
+            <div className="absolute flex top-0 w-full bg-[#fff] z-10 p-2">
                 <SkillChatSheet onSelect={handlerSelectFlow}>
                     <div id="newchat" className="flex justify-around items-center w-[200px] h-[48px] rounded-lg px-10 py-2 mx-auto text-center text-sm cursor-pointer bg-[#fff] hover:bg-gray-100 dark:hover:bg-gray-800 relative z-10">
                         <PlusBoxIcon></PlusBoxIcon>
@@ -72,14 +73,17 @@ export default function SkillChatPage() {
                     </div>
                 </SkillChatSheet>
             </div>
-            <div ref={chatsRef} className="scroll pl-1 h-full overflow-y-scroll no-scrollbar pt-14">
+            <div ref={chatsRef} className="scroll h-full overflow-y-scroll no-scrollbar p-2 pt-14">
                 {
                     chatList.map((chat, i) => (
                         <div key={chat.chat_id}
-                            className={` group item w-[210px] rounded-lg mt-2 p-4 relative bg-[#f9f9fc] hover:bg-gray-100 cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-[#edeff6] dark:bg-gray-800'}`}
+                            className={` group item w-full rounded-lg mt-2 p-4 relative bg-[#f9f9fc] hover:bg-[#EDEFF6] cursor-pointer  dark:hover:bg-gray-800  ${chatId === chat.chat_id && 'bg-[#EDEFF6] dark:bg-gray-800'}`}
                             onClick={() => handleSelectChat(chat)}>
-                            <p className="break-words text-sm font-bold text-gray-600 leading-6"><span className="relative top-[-1px] inline-block w-2 h-2 bg-[#adb8d2] mr-2"></span>{chat.flow_name}</p>
-                            <span className="block text-xs text-[#111] mt-3">{chat.flow_description}</span>
+                            <p className="break-words text-sm font-bold text-gray-950 leading-6">
+                                <span className={`relative top-[-1px] inline-block w-2 h-2 bg-[#adb8d2] mr-2 ${gradients[parseInt(chat.flow_id + '', 16) % gradients.length]}`}></span>
+                                {chat.flow_name}
+                            </p>
+                            <span className="block text-xs text-gray-600 mt-3">{chat.flow_description}</span>
                             <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
                         </div>
                     ))

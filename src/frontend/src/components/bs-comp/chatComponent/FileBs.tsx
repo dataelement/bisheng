@@ -1,3 +1,4 @@
+import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { checkSassUrl } from "@/pages/ChatAppPage/components/FileView";
 import { downloadFile } from "@/util/utils";
 import { FileIcon } from "@radix-ui/react-icons";
@@ -32,7 +33,7 @@ export default function FileBs({ data }) {
         <div className="w-fit min-h-8 rounded-2xl px-6 py-4 max-w-[90%]">
             {data.sender && <p className="text-primary text-xs mb-2" style={{ background: avatarColor }}>{data.sender}</p>}
             <div className="flex gap-2 ">
-                <div className="w-6 h-6 min-w-6 bg-gray-950"></div>
+                <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} ><AvatarIcon /></div>
                 <div
                     className="flex gap-2 w-52 border border-gray-200 shadow-sm bg-gray-50 px-4 py-2 rounded-sm cursor-pointer"
                     onClick={() => handleDownloadFile(data.files[0])}

@@ -104,13 +104,13 @@ class AssistantDao(Assistant):
             count_statement = session.query(func.count(
                 Assistant.id)).where(Assistant.is_delete == 0)
             statement = select(Assistant).where(Assistant.is_delete == 0)
-            if assistant_ids and user_id:
+            if assistant_ids:
                 # 需要or 加入的条件
                 statement = statement.where(
                     or_(Assistant.id.in_(assistant_ids), Assistant.user_id == user_id))
                 count_statement = count_statement.where(
                     or_(Assistant.id.in_(assistant_ids), Assistant.user_id == user_id))
-            elif user_id:
+            else:
                 statement = statement.where(Assistant.user_id == user_id)
                 count_statement = count_statement.where(Assistant.user_id == user_id)
 
@@ -120,13 +120,21 @@ class AssistantDao(Assistant):
             if status is not None:
                 statement = statement.where(Assistant.status == status)
                 count_statement = count_statement.where(Assistant.status == status)
-            if limit == 0:
+            if limit == 0 and page == 0:
                 # 获取全部，不分页
                 statement = statement.order_by(Assistant.update_time.desc())
             else:
                 statement = statement.offset(
                     (page - 1) * limit).limit(limit).order_by(Assistant.update_time.desc())
             return session.exec(statement).all(), session.exec(count_statement).scalar()
+
+    @classmethod
+    def get_all_online_assistants(cls) -> List[Assistant]:
+        """ 获取所有已上线的助手 """
+        with session_getter() as session:
+            statement = select(Assistant).filter(Assistant.status == AssistantStatus.ONLINE.value,
+                                                 Assistant.is_delete == 0)
+            return session.exec(statement).all()
 
     @classmethod
     def get_assistants_by_access(cls, role_id: int, name: str, page_size: int,
