@@ -221,13 +221,13 @@ export default function l2Edit() {
                         <Button disabled={loading} className="extra-side-bar-save-disable w-[70%]" onClick={handleSave}>
                             {t('save')}
                         </Button>
-                        <Button disabled={loading} className="w-[30%] rounded-full" variant="outline" onClick={() => handleJumpFlow()}>
+                        <Button disabled={loading} className="w-[30%]" variant="outline" onClick={() => handleJumpFlow()}>
                             {t('skills.advancedConfiguration')}
                         </Button>
                     </div>
                     :
                     <div className="flex justify-center w-[50%]">
-                        <Button disabled={loading} className="extra-side-bar-save-disable w-[50%] rounded-full" onClick={handleCreateNewSkill}>
+                        <Button disabled={loading} className="extra-side-bar-save-disable w-[50%]" onClick={handleCreateNewSkill}>
                             {t('skills.nextStep')}
                         </Button>
                     </div>

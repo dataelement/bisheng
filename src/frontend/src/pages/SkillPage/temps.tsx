@@ -64,7 +64,7 @@ export default function Templates({ onBack, onChange = () => { } }) {
 
     return <div className="p-6 h-screen overflow-y-auto">
         <div className="flex justify-end">
-            <Button className="h-8 rounded-full" onClick={onBack}>{t('skills.backToSkillList')}</Button>
+            <Button className="h-10 px-8" onClick={onBack}>{t('skills.backToSkillList')}</Button>
         </div>
         <p className="text-gray-500">{t('skills.skillTemplateManagement')}</p>
 
@@ -73,7 +73,7 @@ export default function Templates({ onBack, onChange = () => { } }) {
                 <TableRow>
                     <TableHead className="w-[400px]">{t('skills.templateName')}</TableHead>
                     <TableHead>{t('skills.templateDescription')}</TableHead>
-                    <TableHead>{t('operations')}</TableHead>
+                    <TableHead className="text-right pr-10">{t('operations')}</TableHead>
                 </TableRow>
             </TableHeader>
             <DragDropContext onDragEnd={handleDragEnd}>
@@ -91,8 +91,8 @@ export default function Templates({ onBack, onChange = () => { } }) {
                                         >
                                             <TableCell className="font-medium min-w-[400px]">{temp.name}</TableCell>
                                             <TableCell>{temp.description}</TableCell>
-                                            <TableCell className="">
-                                                <Button variant="link" onClick={() => handleDelTemp(index, temp.id)} className="underline">{t('delete')}</Button>
+                                            <TableCell className="text-right pr-5">
+                                                <Button variant="link" onClick={() => handleDelTemp(index, temp.id)}>{t('delete')}</Button>
                                             </TableCell>
                                         </tr>
                                     )}
