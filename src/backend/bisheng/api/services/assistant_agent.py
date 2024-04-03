@@ -114,8 +114,8 @@ class AssistantAgent(AssistantUtils):
                 graph = await build_flow_no_yield(graph_data=flow_graph_data,
                                                   artifacts=artifacts,
                                                   process_file=True,
-                                                  flow_id=link.flow_id,
-                                                  chat_id=self.assistant.id)
+                                                  flow_id=UUID(link.flow_id).hex,
+                                                  chat_id=self.assistant.id.hex)
                 built_object = await graph.abuild()
                 logger.info('act=init_flow_tool build_end')
                 flow_tool = Tool(name=tool_name,
