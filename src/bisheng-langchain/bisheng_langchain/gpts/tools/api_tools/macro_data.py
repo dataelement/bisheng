@@ -12,7 +12,7 @@ from .base import ApiArg, APIToolBase, MultArgsSchemaTool
 class MacroData(APIToolBase):
 
     @classmethod
-    def macro_china_shrzgm(cls, query: str = None) -> pd.DataFrame:
+    def china_shrzgm(cls, query: str = None) -> pd.DataFrame:
         """
         商务数据中心-国内贸易-社会融资规模增量统计
         """
@@ -56,7 +56,7 @@ class MacroData(APIToolBase):
 
     # 金十数据中心-经济指标-中国-国民经济运行状况-经济状况-中国GDP年率报告
     @classmethod
-    def macro_china_gdp_yearly(cls, query: str = None) -> pd.DataFrame:
+    def china_gdp_yearly(cls, query: str = None) -> pd.DataFrame:
         """
         金十数据中心-中国 GDP 年率报告, 数据区间从 20110120-至今
         https://datacenter.jin10.com/reportType/dc_chinese_gdp_yoy
@@ -116,7 +116,7 @@ class MacroData(APIToolBase):
         return temp_df.to_markdown()
 
     @classmethod
-    def macro_china_cpi(cls, query: str = None) -> pd.DataFrame:
+    def china_cpi(cls, query: str = None) -> pd.DataFrame:
         """
         东方财富-中国居民消费价格指数
         https://data.eastmoney.com/cjsj/cpi.html
@@ -189,7 +189,7 @@ class MacroData(APIToolBase):
         return temp_df.to_markdown()
 
     @classmethod
-    def macro_china_ppi(cls, query: str = None) -> pd.DataFrame:
+    def china_ppi(cls, query: str = None) -> pd.DataFrame:
         """
         东方财富-中国工业品出厂价格指数
         https://data.eastmoney.com/cjsj/ppi.html
@@ -233,7 +233,7 @@ class MacroData(APIToolBase):
         return temp_df.to_markdown()
 
     @classmethod
-    def macro_china_money_supply(cls, query: str = None) -> pd.DataFrame:
+    def china_money_supply(cls, query: str = None) -> pd.DataFrame:
         """
         东方财富-货币供应量
         https://data.eastmoney.com/cjsj/hbgyl.html
@@ -297,7 +297,7 @@ class MacroData(APIToolBase):
         return temp_df.to_markdown()
 
     @classmethod
-    def macro_china_consumer_goods_retail(cls, query: str = None) -> pd.DataFrame:
+    def china_consumer_goods_retail(cls, query: str = None) -> pd.DataFrame:
         """
         东方财富-经济数据-社会消费品零售总额
         https://data.eastmoney.com/cjsj/xfp.html
@@ -363,4 +363,4 @@ class MacroData(APIToolBase):
 
 
 if __name__ == '__main__':
-    print(MacroData.macro_china_consumer_goods_retail('x'))
+    print(MacroData.china_consumer_goods_retail('x'))
