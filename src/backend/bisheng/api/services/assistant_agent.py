@@ -119,11 +119,15 @@ class AssistantAgent(AssistantUtils):
         for link in flow_links:
             knowledge_id = link.knowledge_id
             if knowledge_id:
+                one_knowledge_data = knowledge_data.get(knowledge_id)
+                if not one_knowledge_data:
+                    logger.warning('act=init_tools not find knowledge_id: {}', knowledge_id)
+                    continue
                 # 说明是关联的知识库，修改知识库检索技能的对应知识库ID参数
                 tool_name = f'knowledge_{link.knowledge_id}'
                 tool_description = (
-                    f'Tool Name: {knowledge_data[knowledge_id].name}\n '
-                    f'Tool Description: {knowledge_data[knowledge_id].description}')
+                    f'Tool Name: {one_knowledge_data.name}\n '
+                    f'Tool Description: {one_knowledge_data.description}')
                 # 先查找替换collection_id
                 flow_graph_data = await self.get_knowledge_skill_data()
                 flow_graph_data = set_flow_knowledge_id(flow_graph_data, knowledge_id)
@@ -131,6 +135,9 @@ class AssistantAgent(AssistantUtils):
                                                    self.get_llm_conf(self.assistant.model_name))
             else:
                 one_flow_data = flow_id2data.get(UUID(link.flow_id))
+                if not one_flow_data:
+                    logger.warning('act=init_tools not find flow_id: {}', link.flow_id)
+                    continue
                 flow_graph_data = one_flow_data.data
                 tool_name = f'flow_{link.flow_id}'
                 tool_description = f'Tool Name: {one_flow_data.name}\n Tool Description: {one_flow_data.description}'
@@ -173,14 +180,14 @@ class AssistantAgent(AssistantUtils):
     async def optimize_assistant_prompt(self):
         """ 自动优化生成prompt """
         chain = ({
-            'assistant_name': lambda x: x['assistant_name'],
-            'assistant_description': lambda x: x['assistant_description'],
-        }
+                     'assistant_name': lambda x: x['assistant_name'],
+                     'assistant_description': lambda x: x['assistant_description'],
+                 }
                  | ASSISTANT_PROMPT_OPT
                  | self.llm)
         async for one in chain.astream({
-                'assistant_name': self.assistant.name,
-                'assistant_description': self.assistant.prompt,
+            'assistant_name': self.assistant.name,
+            'assistant_description': self.assistant.prompt,
         }):
             yield one
 
