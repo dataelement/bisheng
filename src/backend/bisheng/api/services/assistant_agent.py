@@ -5,7 +5,7 @@ from uuid import UUID
 
 import httpx
 from bisheng.api.services.assistant_base import AssistantUtils
-from bisheng.api.services.utils import set_flow_knowledge_id
+from bisheng.api.services.utils import replace_flow_llm, set_flow_knowledge_id
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
@@ -111,7 +111,8 @@ class AssistantAgent(AssistantUtils):
 
         # flow, 当知识库的时候，flow_id 会重复
         flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links if link.flow_id])
-        knowledge_data = KnowledgeDao.get_list_by_ids([link.knowledge_id for link in flow_links if link.knowledge_id])
+        knowledge_data = KnowledgeDao.get_list_by_ids(
+            [link.knowledge_id for link in flow_links if link.knowledge_id])
         knowledge_data = {knowledge.id: knowledge for knowledge in knowledge_data}
         flow_id2data = {flow.id: flow for flow in flow_data}
 
@@ -120,16 +121,20 @@ class AssistantAgent(AssistantUtils):
             if knowledge_id:
                 # 说明是关联的知识库，修改知识库检索技能的对应知识库ID参数
                 tool_name = f'knowledge_{link.knowledge_id}'
-                tool_description = (f'Tool Name: {knowledge_data[knowledge_id].name}\n '
-                                    f'Tool Description: {knowledge_data[knowledge_id].description}')
+                tool_description = (
+                    f'Tool Name: {knowledge_data[knowledge_id].name}\n '
+                    f'Tool Description: {knowledge_data[knowledge_id].description}')
                 # 先查找替换collection_id
                 flow_graph_data = await self.get_knowledge_skill_data()
                 flow_graph_data = set_flow_knowledge_id(flow_graph_data, knowledge_id)
+                flow_graph_data = replace_flow_llm(flow_graph_data, self.llm,
+                                                   self.get_llm_conf(self.assistant.model_name))
             else:
                 one_flow_data = flow_id2data.get(UUID(link.flow_id))
                 flow_graph_data = one_flow_data.data
                 tool_name = f'flow_{link.flow_id}'
                 tool_description = f'Tool Name: {one_flow_data.name}\n Tool Description: {one_flow_data.description}'
+
             try:
                 artifacts = {}
                 graph = await build_flow_no_yield(graph_data=flow_graph_data,
@@ -168,14 +173,14 @@ class AssistantAgent(AssistantUtils):
     async def optimize_assistant_prompt(self):
         """ 自动优化生成prompt """
         chain = ({
-                     'assistant_name': lambda x: x['assistant_name'],
-                     'assistant_description': lambda x: x['assistant_description'],
-                 }
+            'assistant_name': lambda x: x['assistant_name'],
+            'assistant_description': lambda x: x['assistant_description'],
+        }
                  | ASSISTANT_PROMPT_OPT
                  | self.llm)
         async for one in chain.astream({
-            'assistant_name': self.assistant.name,
-            'assistant_description': self.assistant.prompt,
+                'assistant_name': self.assistant.name,
+                'assistant_description': self.assistant.prompt,
         }):
             yield one
 
