@@ -289,10 +289,10 @@ class AssistantService(AssistantUtils):
         return user.user_name
 
     @classmethod
-    async def judge_name_repeat(cls, name: str, user_id: int) -> bool:
+    def judge_name_repeat(cls, name: str, user_id: int) -> bool:
         """ 判断助手名字是否重复 """
-        user = AssistantDao.get_assistant_by_name_user_id(name, user_id)
-        if user:
+        assistant = AssistantDao.get_assistant_by_name_user_id(name, user_id)
+        if assistant:
             return True
         return False
 
