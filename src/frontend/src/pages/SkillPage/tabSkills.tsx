@@ -23,7 +23,7 @@ export default function Skills() {
     const { user } = useContext(userContext);
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload } = useTable<FlowType>({ pageSize: 11 }, (param) =>
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload } = useTable<FlowType>({ pageSize: 14 }, (param) =>
         readFlowsFromDatabase(param.page, param.pageSize, param.keyword)
     )
     const [open, setOpen] = useState(false)
@@ -70,7 +70,7 @@ export default function Skills() {
     if (isTempsPage) return <Templates onBack={() => setIsTempPage(false)}></Templates>
 
     return <div className="h-full relative">
-        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide">
+        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide  relative top-[-60px]">
             <div className="flex gap-2">
                 <SearchInput className="w-64" placeholder={t('skills.skillSearch')} onChange={(e) => search(e.target.value)}></SearchInput>
                 {user.role === 'admin' && <Button

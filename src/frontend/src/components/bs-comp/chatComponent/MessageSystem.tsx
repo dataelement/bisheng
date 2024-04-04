@@ -16,11 +16,10 @@ export default function MessageSystem({ data }) {
         [data.thought]
     )
 
-    const border = { system: 'border-slate-500', question: 'border-amber-500', processing: 'border-cyan-600', answer: 'border-lime-600', report: 'border-slate-500' }
-    const color = { system: 'bg-slate-50', question: 'bg-slate-50', processing: 'bg-slate-50', answer: 'bg-slate-50', report: 'bg-slate-50' }
+    const border = { system: 'border-slate-500', question: 'border-amber-500', processing: 'border-cyan-600', answer: 'border-lime-600', report: 'border-slate-500', guide: 'border-none' }
 
     return <div className="py-1">
-        <div className={`rounded-sm px-6 py-4 border text-sm bg-slate-50 ${border[data.category || 'system']}`}>
+        <div className={`rounded-sm px-6 py-4 border text-sm ${data.category === 'guide' ? 'bg-[#EDEFF6]' : 'bg-slate-50'} ${border[data.category || 'system']}`}>
             {logMkdown}
         </div>
     </div>

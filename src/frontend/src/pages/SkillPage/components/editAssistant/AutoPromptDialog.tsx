@@ -41,6 +41,13 @@ export default function AutoPromptDialog({ onOpenChange }) {
                 case 'flow_list':
                     setFlows(parsedData.message); break
                 case 'end':
+                    if (parsedData.message) {
+                        toast({
+                            title: '提示',
+                            variant: 'error',
+                            description: parsedData.message
+                        });
+                    }
                     setLoading(false); break
             }
         };

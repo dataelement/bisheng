@@ -200,6 +200,7 @@ class BaseHostChatLLM(BaseChatModel):
             max_tokens = kwargs.get('max_tokens')
             do_sample = kwargs.get('do_sample')
             params = {
+                'stream': False,
                 'messages': messages,
                 'model': self.model_name,
                 'top_p': top_p,
@@ -521,6 +522,7 @@ class HostQwen1_5Chat(BaseHostChatLLM):
         """Return type of chat model."""
         return 'qwen1.5_chat'
 
+
 class HostLlama2Chat(BaseHostChatLLM):
     # Llama-2-7b-chat-hf, Llama-2-13b-chat-hf, Llama-2-70b-chat-hf
     model_name: str = Field('Llama-2-7b-chat-hf', alias='model')
@@ -549,6 +551,7 @@ class CustomLLMChat(BaseHostChatLLM):
         """Return type of chat model."""
         return 'custom_llm_chat'
 
+
 class HostYuanChat(BaseHostChatLLM):
     # use custom llm chat api, api should compatiable with openai definition
     model_name: str = Field('Yuan2-2B-Janus-hf', alias='model')
@@ -562,7 +565,8 @@ class HostYuanChat(BaseHostChatLLM):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return 'yuan2'
-    
+
+
 class HostYiChat(BaseHostChatLLM):
     # use custom llm chat api, api should compatiable with openai definition
     model_name: str = Field('Yi-34B-Chat', alias='model')

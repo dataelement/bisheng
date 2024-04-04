@@ -95,10 +95,11 @@ def import_chain_contribute_llm(llm: str) -> BaseChatModel:
 
 
 def import_retriever(retriever: str) -> Any:
+    """Import retriever from retriever name"""
     from bisheng.interface.retrievers.base import retriever_creator
     if retriever in retriever_creator.type_to_loader_dict:
         return retriever_creator.type_to_loader_dict[retriever]
-    """Import retriever from retriever name"""
+
     return import_module(f'from langchain_community.retrievers import {retriever}')
 
 
@@ -137,7 +138,8 @@ def import_wrapper(wrapper: str) -> Any:
 
 def import_toolkit(toolkit: str) -> Any:
     """Import toolkit from toolkit name"""
-    return import_module(f'from langchain.agents.agent_toolkits import {toolkit}')
+    from bisheng.interface.toolkits.base import toolkits_creator
+    return toolkits_creator.type_to_loader_dict[toolkit]
 
 
 def import_agent(agent: str) -> Agent:

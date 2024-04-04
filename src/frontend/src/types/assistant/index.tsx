@@ -38,5 +38,6 @@ export interface AssistantDetail {
 
 export interface AssistantTool {
     id: number;
+    tool_key: string;
     name: string;
 }

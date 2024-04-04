@@ -40,6 +40,7 @@ const router = createBrowserRouter([
           { path: "assist", element: <SkillAssisPage /> },
           { path: "skills", element: <SkillsPage /> },
           { path: "tools", element: <SkillToolsPage /> },
+          { path: "", element: <Navigate to="assist" replace /> },
         ]
       },
       { path: "model", element: <ModelPage /> },

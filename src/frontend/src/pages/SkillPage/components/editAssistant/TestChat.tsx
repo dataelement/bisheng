@@ -4,7 +4,7 @@ import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore
 import { useAssistantStore } from "@/store/assistantStore";
 import { useEffect } from "react";
 
-export default function TestChat({ assisId }) {
+export default function TestChat({ assisId, guideQuestion }) {
     const token = localStorage.getItem("ws_token") || '';
     const wsUrl = `${location.host}/api/v1/assistant/chat/${assisId}?t=${token}`
 
@@ -40,6 +40,6 @@ export default function TestChat({ assisId }) {
             <TitleIconBg className="" id={assistantState.id}></TitleIconBg>
             <span className="text-sm">调试预览</span>
         </div>
-        <ChatComponent useName='' guideWord='' wsUrl={wsUrl} onBeforSend={getWsParamData}></ChatComponent>
+        <ChatComponent questions={guideQuestion} useName='' guideWord='' wsUrl={wsUrl} onBeforSend={getWsParamData}></ChatComponent>
     </div>
 };

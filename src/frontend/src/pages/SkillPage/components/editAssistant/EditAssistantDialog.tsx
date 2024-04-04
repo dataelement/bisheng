@@ -74,11 +74,11 @@ export default function EditAssistantDialog({ name, desc, onSave }) {
         
     };
 
-    return <DialogContent className="sm:max-w-[425px]">
+    return <DialogContent className="sm:max-w-[625px] p-10">
         <DialogHeader>
             <DialogTitle>编辑助手</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-6 py-6">
+        <div className="flex flex-col gap-8 py-6">
             <div className="">
                 <label htmlFor="name" className="bisheng-label">助手名称<span className="bisheng-tip">*</span></label>
                 <Input id="name" name="name" placeholder="给助手取一个名字" className="mt-2" value={formData.name} onChange={handleChange} />

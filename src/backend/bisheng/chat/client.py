@@ -82,7 +82,7 @@ class ChatClient:
                     raise IgnoreException('该助手已被删除')
                     # 判断下agent是否上线
                 if assistant.status != AssistantStatus.ONLINE.value:
-                    raise IgnoreException('当前技能未上线，无法直接对话')
+                    raise IgnoreException('当前助手未上线，无法直接对话')
             else:
                 # 调试界面没测都重新生成
                 assistant = AssistantDao.get_one_assistant(UUID(self.client_id))

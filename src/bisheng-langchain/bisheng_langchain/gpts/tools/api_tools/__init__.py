@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, List, Tuple
 from langchain_core.tools import BaseTool
 from mypy_extensions import KwArg
 
+from .flow import FlowTools
 from .macro_data import MacroData
 from .sina import StockInfo
 from .tianyancha import CompanyInfo
@@ -37,7 +38,13 @@ _MACRO_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
     for name in macro_class_methods
 }
 
+_tmp_flow = ['knowledge_retrieve']
+_TMP_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
+    f'flow_{name}': (FlowTools.get_api_tool, ['collection_id'])
+    for name in _tmp_flow
+}
 ALL_API_TOOLS = {}
 ALL_API_TOOLS.update(_TIAN_YAN_CHA_TOOLS)
 ALL_API_TOOLS.update(_SINA_TOOLS)
 ALL_API_TOOLS.update(_MACRO_TOOLS)
+ALL_API_TOOLS.update(_TMP_TOOLS)

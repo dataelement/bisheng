@@ -81,8 +81,7 @@ _EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optio
     'code_interpreter': (_get_native_code_interpreter, ["minio"], ['files']),
 }
 
-_API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {}  # type: ignore
-_API_TOOLS.update(ALL_API_TOOLS)
+_API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {**ALL_API_TOOLS}  # type: ignore
 
 _ALL_TOOLS = {
     **_BASE_TOOLS,

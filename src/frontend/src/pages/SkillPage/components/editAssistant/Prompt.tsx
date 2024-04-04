@@ -2,7 +2,7 @@ import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { MixerHorizontalIcon } from "@radix-ui/react-icons";
 import AutoPromptDialog from "./AutoPromptDialog";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAssistantStore } from "@/store/assistantStore";
 import { Textarea } from "@/components/bs-ui/input";
 
@@ -11,6 +11,14 @@ export default function Prompt() {
     const [open, setOpen] = useState(false);
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
+
+    useEffect(() => {
+        // 新建助手自动开启优化
+        if (window.assistantCreate && assistantState.prompt) {
+            setOpen(true)
+            delete window.assistantCreate
+        }
+    }, [assistantState.prompt])
 
     return <div className="w-[50%] h-full bg-[#fff] shadow-sm p-4 overflow-y-auto scrollbar-hide">
         <div className="flex-between-center">
