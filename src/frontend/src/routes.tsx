@@ -15,6 +15,7 @@ import SkillToolsPage from "./pages/SkillPage/tabTools";
 import L2Edit from "./pages/SkillPage/l2Edit";
 import SystemPage from "./pages/SystemPage";
 import BuildLayout from "./layout/BuildLayout";
+import Templates from "./pages/SkillPage/temps";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -43,6 +44,7 @@ const router = createBrowserRouter([
           { path: "", element: <Navigate to="assist" replace /> },
         ]
       },
+      { path: "temps", element: <Templates /> },
       { path: "model", element: <ModelPage /> },
       { path: "sys", element: <SystemPage /> },
     ],

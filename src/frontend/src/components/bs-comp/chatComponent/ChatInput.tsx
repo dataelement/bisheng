@@ -70,7 +70,9 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         const value = inputRef.current.value
         if (value.trim() === '') return
 
+        const event = new Event('input', { bubbles: true, cancelable: true });
         inputRef.current.value = ''
+        inputRef.current.dispatchEvent(event); // 触发调节input高度
         const [wsMsg, inputKey] = onBeforSend('', value)
         // msg to store
         createSendMsg(wsMsg.inputs, inputKey)
@@ -256,7 +258,10 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 placeholder={inputLock.locked ? inputLock.reason : '请输入问题'}
                 className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) !inputLock.locked && handleSendClick()
+                    if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        !inputLock.locked && handleSendClick()
+                    }
                 }}
             ></Textarea>
         </div>

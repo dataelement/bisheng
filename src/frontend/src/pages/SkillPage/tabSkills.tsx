@@ -1,5 +1,5 @@
 import SkillTempSheet from "@/components/bs-comp/sheets/SkillTempSheet";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { bsconfirm } from "../../alerts/confirm";
@@ -16,7 +16,6 @@ import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import CreateTemp from "./components/CreateTemp";
-import Templates from "./temps";
 
 export default function Skills() {
     const { t } = useTranslation()
@@ -29,7 +28,6 @@ export default function Skills() {
     const [open, setOpen] = useState(false)
 
     const { open: tempOpen, flowRef, toggleTempModal } = useCreateTemp()
-    const [isTempsPage, setIsTempPage] = useState(false)
 
     // 上下线
     const handleCheckedChange = (checked, data) => {
@@ -66,8 +64,6 @@ export default function Skills() {
             navigate("/skill/" + res.id)
         }))
     }
-    // 模板管理
-    if (isTempsPage) return <Templates onBack={() => setIsTempPage(false)}></Templates>
 
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide  relative top-[-60px]">
@@ -76,7 +72,7 @@ export default function Skills() {
                 {user.role === 'admin' && <Button
                     variant="ghost"
                     className="hover:bg-gray-50 flex gap-2"
-                    onClick={() => setIsTempPage(true)}
+                    onClick={() => navigate('/temps')}
                 ><MoveOneIcon />{t('skills.manageTemplate')}</Button>}
             </div>
             {/* list */}
@@ -120,7 +116,7 @@ export default function Skills() {
             }
         </div>
         {/* 添加模板 */}
-        <CreateTemp flow={flowRef.current} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => {}} ></CreateTemp>
+        <CreateTemp flow={flowRef.current} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
         {/* footer */}
         <div className="flex justify-between absolute bottom-0 left-0 w-full bg-[#F4F5F8] h-16 items-center px-10">
             <p className="text-sm text-muted-foreground break-keep">{t('skills.manageProjects')}</p>

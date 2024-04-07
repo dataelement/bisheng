@@ -42,7 +42,9 @@ export const changeAssistantStatusApi = async (id, status) => {
 };
 
 // 保存助手
-export const saveAssistanttApi = async (data: Omit<AssistantDetail, 'flow_list' | 'tool_list'> & { flow_list: string[], tool_list: number[] }): Promise<any> => {
+export const saveAssistanttApi = async (
+    data: Omit<AssistantDetail, 'flow_list' | 'tool_list' | 'knowledge_list'> & { flow_list: string[], tool_list: number[], knowledge_list: number[] }
+): Promise<any> => {
     return await axios.put(`/api/v1/assistant`, data)
 };
 

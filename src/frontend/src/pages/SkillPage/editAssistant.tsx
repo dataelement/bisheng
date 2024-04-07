@@ -44,6 +44,7 @@ export default function editAssistant() {
             ...assistantState,
             flow_list: assistantState.flow_list.map(item => item.id),
             tool_list: assistantState.tool_list.map(item => item.id),
+            knowledge_list: assistantState.knowledge_list.map(item => item.id),
             guide_question: assistantState.guide_question.filter((item) => item)
         })).then(res => {
             if (!res) return
