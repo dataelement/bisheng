@@ -15,9 +15,8 @@ import Temperature from "./Temperature";
 export default function Setting() {
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
-    console.log('assistantState :>> ', assistantState);
 
-    return <div className="w-[50%] h-full overflow-y-auto scrollbar-hide">
+    return <div id="skill-scroll" className="w-[50%] h-full overflow-y-auto scrollbar-hide">
         <h1 className="text-sm text-muted-foreground border leading-8 indent-4 bg-gray-50">基础配置</h1>
         <Accordion type="multiple" className="w-full">
             {/* 基础配置 */}
@@ -57,7 +56,7 @@ export default function Setting() {
                     </div>
                     <div className="px-6 mb-4" >
                         <label htmlFor="open" className="bisheng-label flex gap-1">
-                            引导词
+                            引导问题
                             <TooltipProvider delayDuration={200}>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
@@ -70,11 +69,11 @@ export default function Setting() {
                             </TooltipProvider>
                         </label>
                         <InputList
+                            rules={[{ maxLength: 50, message: '最多50个字符' }]}
                             value={assistantState.guide_question}
                             onChange={(list) => {
                                 dispatchAssistant('setting', { guide_question: list })
-                            }
-                            }
+                            }}
                             placeholder="请输入引导问题"
                         ></InputList>
                     </div>
@@ -125,7 +124,7 @@ export default function Setting() {
             </AccordionItem>
         </Accordion>
         <h1 className="text-sm text-muted-foreground border-b leading-8 indent-4 bg-gray-50">能力</h1>
-        <Accordion type="multiple" className="w-full">
+        <Accordion type="multiple" className="w-full" onValueChange={(e) => e.includes('skill') && document.getElementById('skill-scroll').scrollTo({ top: 9999 })}>
             {/* 工具 */}
             <AccordionItem value="item-1">
                 <AccordionTrigger>
@@ -160,7 +159,7 @@ export default function Setting() {
                 </AccordionContent>
             </AccordionItem>
             {/* 技能 */}
-            <AccordionItem value="item-2">
+            <AccordionItem value="skill">
                 <AccordionTrigger>
                     <div className="flex flex-1 justify-between items-center">
                         <span className="flex items-center gap-1">

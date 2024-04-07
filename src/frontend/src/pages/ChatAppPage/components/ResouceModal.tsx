@@ -166,9 +166,9 @@ const ResouceModal = forwardRef((props, ref) => {
 
     return <Dialog open={open} onOpenChange={setOpen} >
         <DialogContent className="min-w-[80%]">
-            <DialogHeader>
+            {/* <DialogHeader>
                 <DialogTitle>{t('chat.feedback')}</DialogTitle>
-            </DialogHeader>
+            </DialogHeader> */}
             {open && <div>
                 <Anwser id={data.messageId} msg={data.message} onInit={setKeywords} onAdd={handleAddWord}></Anwser>
                 <ResultPanne words={keywords} chatId={data.chatId} data={data} onClose={handleDelKeyword} onAdd={handleAddWord}>

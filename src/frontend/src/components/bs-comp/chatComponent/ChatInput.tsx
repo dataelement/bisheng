@@ -7,8 +7,9 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
 import GuideQuestions from "./GuideQuestions";
+import { ClearIcon } from "@/components/bs-icons/clear";
 
-export default function ChatInput({ form, questions, inputForm, wsUrl, onBeforSend }) {
+export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -208,8 +209,8 @@ export default function ChatInput({ form, questions, inputForm, wsUrl, onBeforSe
         // setInputEmpty(textarea.value.trim() === '')
     }
 
-    return <div className="absolute bottom-0 w-full">
-        <div className="relative">
+    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff]">
+        <div className={`relative ${clear && 'pl-9'}`}>
             {/* form */}
             {
                 formShow && <div className="relative">
@@ -220,6 +221,15 @@ export default function ChatInput({ form, questions, inputForm, wsUrl, onBeforSe
             }
             {/* 引导问题 */}
             <GuideQuestions locked={inputLock.locked} chatId={chatId} questions={questions} onClick={handleClickGuideWord} />
+            {/* clear */}
+            <div className="flex absolute left-0 top-4 z-10">
+                {
+                    clear && <div
+                        className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
+                        onClick={destory}
+                    ><ClearIcon ></ClearIcon></div>
+                }
+            </div>
             <div className="flex absolute left-3 top-4 z-10">
                 {
                     form && <div
