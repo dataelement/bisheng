@@ -1,0 +1,37 @@
+assistant:
+  prompt_type: 'DEFAULT_SYSTEM_MESSAGE'
+  
+  llm:
+    type: 'ChatOpenAI'
+    model: 'gpt-4-0125-preview'
+    openai_api_key: ''
+    openai_proxy: 'http://118.195.232.223:39995'
+    temperature: 0.0
+
+  tools:
+    - type: "sina_realtime_info"
+    - type: "sina_history_KLine"
+    - type: "code_interpreter"
+      minio:
+        endpoint: "192.168.106.116:9000"
+        access_key: "minioadmin"
+        secret_key: "minioadmin"
+        secure: False
+        cert_check: False
+    - type: "bing_search"
+      bing_subscription_key: ""
+      bing_search_url: "https://api.bing.microsoft.com/v7.0/search"
+    - type: "get_current_time"
+    - type: "calculator"
+    - type: "dalle_image_generator"
+      openai_api_key: ''
+      openai_proxy: 'http://118.195.232.223:39995'
+    - type: macro_china_money_supply
+    - type: macro_china_shrzgm
+
+  agent_executor:
+    type: 'get_openai_functions_agent_executor'
+    # type: 'get_qwen_local_functions_agent_executor'
+    interrupt_before_action: False
+    recursion_limit: 50
+

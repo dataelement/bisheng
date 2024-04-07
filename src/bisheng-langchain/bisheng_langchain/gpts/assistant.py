@@ -116,8 +116,8 @@ if __name__ == "__main__":
     from langchain.globals import set_debug
 
     set_debug(True)
-    query = "帮我查一下去年这一天发生了哪些重大事情？"
-    bisheng_assistant = BishengAssistant("config/base_assistant.yaml")
+    query = "最近12个月M2和社融同比增长数据折线图"
+    bisheng_assistant = BishengAssistant("config/base_scene.yaml")
     result = bisheng_assistant.run(query)
     for r in result:
         print(f'------------------')
