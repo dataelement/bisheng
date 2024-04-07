@@ -28,6 +28,8 @@ assistant:
       openai_proxy: 'http://118.195.232.223:39995'
     - type: macro_china_money_supply
     - type: macro_china_shrzgm
+    - type: flow_knowledge_retrieve
+      collection_id: 713
 
   agent_executor:
     type: 'get_openai_functions_agent_executor'
