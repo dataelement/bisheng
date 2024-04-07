@@ -53,7 +53,7 @@ class CompanyInfo(APIToolBase):
         return cls(url=url, api_key=api_key, input_key=input_key, params=params)
 
     @classmethod
-    def get_companey_baseinfo(cls, api_key: str) -> CompanyInfo:
+    def get_company_baseinfo(cls, api_key: str) -> CompanyInfo:
         """可以通过公司名称或ID获取企业基本信息，企业基本信息包括公司名称或ID、类型、成立日期、经营状态、注册资本、法人、工商注册号、统一社会信用代码、组织机构代码、纳税人识别号等字段信息"""
         url = 'http://open.api.tianyancha.com/services/open/ic/baseinfo/normal'
         input_key = 'keyword'
