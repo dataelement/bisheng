@@ -486,6 +486,10 @@ class ChatManager:
             await self.send_json(client_id, chat_id, step_resp)
         elif 'action' in payload:
             action = 'autogen'
+        elif 'clear_history' in payload and payload['clear_history']:
+            self.chat_history.empty_history(client_id, chat_id)
+            action = 'clear_history'
+            over = True
         elif 'data' in payload['inputs'] or 'file_path' in payload['inputs']:
             action = 'auto_file'
             batch_question = self.in_memory_cache.get(langchain_obj_key + '_question')
