@@ -34,7 +34,6 @@ def import_class(class_path: str) -> Any:
 
 def import_by_type(_type: str, name: str) -> Any:
     from bisheng_langchain import chat_models
-
     """Import class by type and name"""
     if _type is None:
         raise ValueError(f'Type cannot be None. Check if {name} is in the config file.')
@@ -65,7 +64,8 @@ def import_by_type(_type: str, name: str) -> Any:
         if name.lower() == 'chatopenai':
             key = 'chatopenai'
         else:
-            key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower() else 'llm'
+            key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(
+            ) else 'llm'
         loaded_func = func_dict[_type][key]  # type: ignore
     else:
         loaded_func = func_dict[_type]
@@ -116,7 +116,8 @@ def import_prompt(prompt: str) -> Type[PromptTemplate]:
 
 def import_toolkit(toolkit: str) -> Any:
     """Import toolkit from toolkit name"""
-    return import_module(f'from langchain.agents.agent_toolkits import {toolkit}')
+    from bisheng.interface.toolkits.base import toolkits_creator
+    return toolkits_creator[toolkit]
 
 
 def import_agent(agent: str) -> Agent:

@@ -150,7 +150,7 @@ class AssistantDao(Assistant):
         statment = select(Assistant,
                           RoleAccess).join(RoleAccess,
                                            and_(RoleAccess.role_id == role_id,
-                                                RoleAccess.type == AccessType.FLOW.value,
+                                                RoleAccess.type == AccessType.ASSISTANT_READ.value,
                                                 RoleAccess.third_id == Assistant.id),
                                            isouter=True)
 

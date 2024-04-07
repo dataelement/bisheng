@@ -248,6 +248,40 @@ class VectorStoreFrontendNode(FrontendNode):
             )
             extra_fields.extend((extra_field, extra_field2, extra_field3, extra_field4))
 
+        elif self.template.type_name == 'ElasticsearchStore':
+            extra_fields.append(
+                TemplateField(
+                    name='embedding',
+                    field_type='str',
+                    required=False,
+                    placeholder='',
+                    show=True,
+                    advanced=False,
+                    multiline=False,
+                    value='',
+                ))
+            extra_fields.append(
+                TemplateField(
+                    name='connect_kwargs',
+                    field_type='dict',
+                    required=True,
+                    show=True,
+                    advanced=False,
+                    multiline=False,
+                    value={
+                        'es_url': 'http://bisheng-es:9200',
+                        'es_user': 'elastic',
+                        'es_password': ''
+                    },
+                ))
+            extra_fields.append(
+                TemplateField(name='index_name',
+                              field_type='str',
+                              required=True,
+                              show=True,
+                              advanced=False,
+                              multiline=False))
+
         if extra_fields:
             for field in extra_fields:
                 self.template.add_field(field)
@@ -263,7 +297,7 @@ class VectorStoreFrontendNode(FrontendNode):
             'work_dir', 'collection_name', 'api_key', 'location', 'persist_directory', 'persist',
             'weaviate_url', 'index_name', 'namespace', 'folder_path', 'table_name', 'query_name',
             'supabase_url', 'supabase_service_key', 'mongodb_atlas_cluster_uri', 'collection_name',
-            'db_name', 'ssl_verify', 'elasticsearch_url', 'llm', 'prompt'
+            'db_name', 'ssl_verify', 'elasticsearch_url', 'llm', 'prompt', 'connect_kwargs'
         ]
         advanced_fields = [
             'n_dim', 'key', 'prefix', 'distance_func', 'content_payload_key',

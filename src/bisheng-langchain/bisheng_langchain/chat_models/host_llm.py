@@ -286,6 +286,7 @@ class BaseHostChatLLM(BaseChatModel):
             except Exception as e:
                 raise ValueError(f'exception in host llm infer: [{e}]') from e
 
+        text_haf = ''
         async for response in _acompletion_with_retry(**kwargs):
             is_error = False
             if response:
@@ -293,8 +294,15 @@ class BaseHostChatLLM(BaseChatModel):
                     is_error = True
                 elif response.startswith('data:'):
                     text = response[len('data:'):].strip()
-                    if text.startswith('{'):
+                    if text.startswith('{') and text.endswith('}'):
                         yield (is_error, response[len('data:'):])
+                    elif text.startswith('{'):
+                        # 拆包了
+                        text_haf = text
+                        continue
+                    elif text_haf != '':
+                        yield (is_error, response(text_haf + text))
+                        text_haf = ''
                     else:
                         logger.info('agenerate_no_json text=%s', text)
                     if is_error:
