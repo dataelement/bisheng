@@ -67,10 +67,10 @@ class AssistantService(AssistantUtils):
         for one in links:
             if one.tool_id:
                 tool_list.append(one.tool_id)
-            elif one.flow_id:
-                flow_list.append(one.flow_id)
             elif one.knowledge_id:
                 knowledge_list.append(one.knowledge_id)
+            elif one.flow_id:
+                flow_list.append(one.flow_id)
             else:
                 logger.error(f'not expect link info: {one.dict()}')
         tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list,
