@@ -100,7 +100,9 @@ class AssistantDao(Assistant):
     @classmethod
     def get_assistant_by_name_user_id(cls, name: str, user_id: int) -> Assistant:
         with session_getter() as session:
-            statement = select(Assistant).where(Assistant.name == name, Assistant.user_id == user_id)
+            statement = select(Assistant).filter(Assistant.name == name,
+                                                 Assistant.user_id == user_id,
+                                                 Assistant.is_delete == 0)
             return session.exec(statement).first()
 
     @classmethod
