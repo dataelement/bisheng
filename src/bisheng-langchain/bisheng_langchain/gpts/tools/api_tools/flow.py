@@ -31,7 +31,7 @@ class FlowTools(APIToolBase):
 
     @classmethod
     def knowledge_retrieve(cls, collection_id: int = None) -> str:
-        flow_id = 'e59f4beb-7eec-450a-9c45-c03c3142f0d1'
+        flow_id = 'c7985115-a9d2-446a-9c55-40b5728ffb52'
         url = 'http://192.168.106.120:3002/api/v1/process/{}'.format(flow_id)
         input_key = 'inputs'
         params = {}
