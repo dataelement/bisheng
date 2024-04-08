@@ -76,7 +76,8 @@ class ChatMessageDao(MessageBase):
             )
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
-            return session.exec(statement).limit(limit).all()
+            statement = statement.limit(limit)
+            return session.exec(statement).all()
 
     @classmethod
     def delete_by_user_chat_id(cls, user_id: int, chat_id: str):
