@@ -93,7 +93,7 @@ class ChatClient:
                     # 判断下agent是否上线
                 if assistant.status != AssistantStatus.ONLINE.value:
                     raise IgnoreException('当前助手未上线，无法直接对话')
-            else:
+            elif not self.chat_id:
                 # 调试界面没测都重新生成
                 assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
                 if not assistant:
@@ -106,7 +106,7 @@ class ChatClient:
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
-            else:
+            elif not self.chat_id:
                 # 调试界面每次都重新生成
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
@@ -174,7 +174,6 @@ class ChatClient:
         await self.init_gpts_agent()
 
         await self.send_response('processing', 'begin', '')
-        await self.send_response('processing', 'start', '')
 
         # 将用户问题写入到数据库
         await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
@@ -190,8 +189,6 @@ class ChatClient:
                 answer += one.content
 
         res = await self.add_message('bot', answer, 'answer')
-
-        await self.send_response('processing', 'end', '')
 
         await self.send_response('answer', 'start', '')
         await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
