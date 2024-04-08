@@ -54,7 +54,13 @@ export const useAssistantStore = create<State & Actions>((set) => ({
   // 加载助手状态
   loadAssistantState: (id) => {
     return getAssistantDetailApi(id).then(data => {
-      set({ assistantState: { ...data, guide_question: data.guide_question || [''] } })
+      set({
+        assistantState: {
+          ...data,
+          // 补一个空行
+          guide_question: data.guide_question ? [...data.guide_question, ''] : ['']
+        }
+      })
       return data
     })
   },

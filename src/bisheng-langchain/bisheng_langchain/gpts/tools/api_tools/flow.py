@@ -9,7 +9,9 @@ class FlowTools(APIToolBase):
     def run(self, query: str) -> str:
         """Run query through api and parse result."""
         if query:
-            self.params[self.input_key] = query
+            self.params[self.input_key] = {
+                'question': query
+            }
 
         url = self.url
         logger.info('api_call url={}', url)
@@ -21,7 +23,9 @@ class FlowTools(APIToolBase):
     async def arun(self, query: str) -> str:
         """Run query through api and parse result."""
         if query:
-            self.params[self.input_key] = query
+            self.params[self.input_key] = {
+                'question': query
+            }
 
         url = self.url
         logger.info('api_call url={}', url)
@@ -31,7 +35,10 @@ class FlowTools(APIToolBase):
 
     @classmethod
     def knowledge_retrieve(cls, collection_id: int = None) -> str:
-        flow_id = 'e59f4beb-7eec-450a-9c45-c03c3142f0d1'
+        """
+        知识库检索工具，从内部知识库进行检索总结
+        """
+        flow_id = 'c7985115-a9d2-446a-9c55-40b5728ffb52'
         url = 'http://192.168.106.120:3002/api/v1/process/{}'.format(flow_id)
         input_key = 'inputs'
         params = {}

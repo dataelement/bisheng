@@ -6,6 +6,7 @@ from bisheng.database.models.user import UserDao
 
 
 class UserPayload:
+
     def __init__(self, **kwargs):
         self.user_id = kwargs.get('user_id')
         self.user_role = kwargs.get('role')
@@ -87,7 +88,7 @@ def get_assistant_list_by_access(role_id: int, name: str, page_num: int, page_si
     if name:
         count_filter.append(Assistant.name.like('%{}%'.format(name)))
 
-    db_role_access = AssistantDao.get_assistants_by_access(role_id, name, page_num, page_size)
+    db_role_access = AssistantDao.get_assistants_by_access(role_id, name, page_size, page_num)
     total_count = AssistantDao.get_count_by_filters(count_filter)
     # 补充用户名
     user_ids = [access[0].user_id for access in db_role_access]

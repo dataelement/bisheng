@@ -5,7 +5,6 @@ import { useContext } from "react";
 import { useMessageStore } from "./messageStore";
 
 export default function MessageUser({ useName, data }: { data: ChatMessageType }) {
-
     const msg = data.message[data.chatKey]
 
     const { appConfig } = useContext(locationContext)

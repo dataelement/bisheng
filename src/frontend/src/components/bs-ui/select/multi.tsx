@@ -82,7 +82,7 @@ const MultiSelect = ({ className, value = [], defaultValue = [], options = [], c
         })
         setOptionFilter(newValues)
     }
-    return <Select {...props} required >
+    return <Select {...props} required onOpenChange={(e) => !e && setOptionFilter(options)}>
         <SelectTrigger className="mt-2 h-auto">
             {
                 values.length
@@ -102,7 +102,7 @@ const MultiSelect = ({ className, value = [], defaultValue = [], options = [], c
         <SelectContent className={className}
             headNode={
                 <div className="p-2">
-                    <SearchInput ref={inputRef} inputClassName="h-8" placeholder={searchPlaceholder} onChange={(e) => { handleSearch(e) }} iconClassName="w-4 h-4" />
+                    <SearchInput ref={inputRef} inputClassName="h-8" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />
                 </div>
             }
             footerNode={children}

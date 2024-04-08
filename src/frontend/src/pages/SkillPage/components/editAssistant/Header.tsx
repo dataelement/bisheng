@@ -3,7 +3,7 @@ import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { useAssistantStore } from "@/store/assistantStore";
 import { ChevronLeftIcon, Pencil2Icon } from "@radix-ui/react-icons";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
 
@@ -14,9 +14,17 @@ export default function Header({ onSave, onLine }) {
     {/* 编辑助手 */ }
     const [editShow, setEditShow] = useState(false);
 
+    const needSaveRef = useRef(false)
+    useEffect(() => {
+        if (needSaveRef.current) {
+            needSaveRef.current = false
+            onSave()
+        }
+    }, [assistantState])
     const handleEditSave = (form) => {
         dispatchAssistant('setBaseInfo', form)
         setEditShow(false)
+        needSaveRef.current = true
     }
 
     return <div className="flex justify-between items-center border-b px-4">
@@ -29,10 +37,12 @@ export default function Header({ onSave, onLine }) {
                 <DialogTrigger asChild>
                     <Button variant="ghost" size="icon"><Pencil2Icon /></Button>
                 </DialogTrigger>
-                <EditAssistantDialog
-                    name={assistantState.name}
-                    desc={assistantState.desc}
-                    onSave={handleEditSave}></EditAssistantDialog>
+                {
+                    editShow && <EditAssistantDialog
+                        name={assistantState.name}
+                        desc={assistantState.desc}
+                        onSave={handleEditSave}></EditAssistantDialog>
+                }
             </Dialog>
         </div>
         <div className="flex gap-4">

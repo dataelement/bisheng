@@ -32,7 +32,7 @@ export interface AssistantDetail {
     /** 助手的技能ID列表，为None则不更新 */
     flow_list?: FlowType[];
     /** 知识库ID列表，为None则不更新 */
-    knowledge_list?: string[];
+    knowledge_list?: { id: number, name: string, index_name: string }[];
 }
 
 

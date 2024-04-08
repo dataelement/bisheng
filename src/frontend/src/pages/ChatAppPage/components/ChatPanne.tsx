@@ -15,7 +15,7 @@ import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 
-export default function ChatPanne({ data }) {
+export default function ChatPanne({ customWsHost = '', data }) {
     const { id, chatId, type } = data
     const { t } = useTranslation()
 
@@ -94,9 +94,12 @@ export default function ChatPanne({ data }) {
     // 应用链接
     const { appConfig } = useContext(locationContext)
     const token = localStorage.getItem("ws_token") || '';
-    const wsUrl = type === 'flow' ? `${appConfig.websocketHost}/api/v1/chat/${flow?.id}?type=L1&t=${token}` :
+    let wsUrl = type === 'flow' ? `${appConfig.websocketHost}/api/v1/chat/${flow?.id}?type=L1&t=${token}` :
         `${location.host}/api/v1/assistant/chat/${assistant?.id}?t=${token}`
 
+    if (customWsHost) {
+        wsUrl = `${appConfig.websocketHost}${customWsHost}&t=${token}`
+    }
 
     // sendmsg user name
     const sendUserName = useMemo(() => {
@@ -141,14 +144,16 @@ export default function ChatPanne({ data }) {
         <p className="text-center text-sm text-[28px] w-[182px] whitespace-normal h-[64px] leading-[32px] text-[#111111] mx-auto mt-[20px] font-light">
             选择一个<b className="text-[#111111] font-semibold">对话</b><br />开始<b className="text-[#111111] font-semibold">文擎睿见</b>
         </p>
-        <div
-            className="relative z-50 w-[162px] h-[38px] bg-[#0055e3] rounded-lg text-[white] leading-[38px] flex cursor-pointer hover:bg-[#0165e6] justify-around mx-auto mt-[120px] text-[13px]"
-            onClick={() => {
-                document.getElementById('newchat')?.click()
-            }}>
-            <span className="block my-auto ml-[4px]"><NewApplicationIcon /></span>
-            <span className="mr-[28px]">{t('chat.newChat')}</span>
-        </div>
+        {
+            !customWsHost && <div
+                className="relative z-50 w-[162px] h-[38px] bg-[#0055e3] rounded-lg text-[white] leading-[38px] flex cursor-pointer hover:bg-[#0165e6] justify-around mx-auto mt-[120px] text-[13px]"
+                onClick={() => {
+                    document.getElementById('newchat')?.click()
+                }}>
+                <span className="block my-auto ml-[4px]"><NewApplicationIcon /></span>
+                <span className="mr-[28px]">{t('chat.newChat')}</span>
+            </div>
+        }
         {/* <div className="bc"></div> */}
     </div>
 

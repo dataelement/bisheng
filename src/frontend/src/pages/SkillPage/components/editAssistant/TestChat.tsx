@@ -40,6 +40,13 @@ export default function TestChat({ assisId, guideQuestion }) {
             <TitleIconBg className="" id={assistantState.id}></TitleIconBg>
             <span className="text-sm">调试预览</span>
         </div>
-        <ChatComponent questions={guideQuestion} useName='' guideWord='' wsUrl={wsUrl} onBeforSend={getWsParamData}></ChatComponent>
+        <ChatComponent
+            clear
+            questions={guideQuestion}
+            useName=''
+            guideWord=''
+            wsUrl={wsUrl}
+            onBeforSend={getWsParamData}
+        ></ChatComponent>
     </div>
 };

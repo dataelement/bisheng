@@ -1,9 +1,9 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, String, text
+from sqlalchemy import JSON, Column, DateTime, String, text
 from sqlmodel import Field, or_, select
 
 
@@ -15,6 +15,7 @@ class GptsToolsBase(SQLModelSerializable):
     type: int = Field(default=0, description='表示工具是技能组装还是原生工具，type=1 表示技能')
     is_preset: bool = Field(default=True)
     is_delete: int = Field(default=0, description='1 表示逻辑删除')
+    api_params: Optional[List[Dict]] = Field(sa_column=Column(JSON), description='用来存储api参数等信息')
     user_id: Optional[int] = Field(index=True, description='创建用户ID， null表示系统创建')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))

@@ -43,9 +43,10 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         // let count = 0
         let { message, files, is_bot, intermediate_steps, ...other } = item
         try {
-            message = message && message[0] === '{' ? JSON.parse(message.replace(/([\t\n"])/g, '\\$1').replace(/'/g, '"')) : message || ''
+            message = message && message[0] === '{' ? JSON.parse(message.replace(/'/g, '"')) : message || ''
         } catch (e) {
             // 未考虑的情况暂不处理
+            console.error('e :>> ', e);
         }
         return {
             ...other,
@@ -146,7 +147,10 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         const prevMessage = messages[messages.length - 2];
         if (prevMessage && prevMessage.message === newCurrentMessage.message) {
             const removedMsg = messages.pop()
-            prevMessage.id = removedMsg.id
+            // 使用最后一条的信息作为准确信息
+            Object.keys(prevMessage).forEach((key) => {
+                prevMessage[key] = removedMsg[key]
+            })
         }
         set((state) => ({ messages: [...messages] }))
     },

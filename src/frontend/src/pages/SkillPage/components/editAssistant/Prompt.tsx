@@ -31,17 +31,12 @@ export default function Prompt() {
             </Dialog>
         </div>
         <div className="h-[90%]">
-            {assistantState.prompt ?
-                <Textarea
-                    className="border-none bg-transparent scrollbar-hide h-full focus-visible:ring-0 resize-none text-sm text-muted-foreground"
-                    value={assistantState.prompt}
-                    onInput={(e => dispatchAssistant('setPrompt', { prompt: e.target.value }))}></Textarea>
-                : <p className="text-sm text-muted-foreground">
-                    左侧包含返回按钮、名称；右侧包含保存按钮
-                    1. 返回按钮：点击退出回到助手管理页面
-                    2. 助手名称：初始值为创建时填写名称。
-                    3. 修改按钮：点击按钮，打开弹窗进行编辑</p>
-            }
+            <Textarea
+                className="border-none bg-transparent scrollbar-hide h-full focus-visible:ring-0 resize-none text-sm text-muted-foreground"
+                value={assistantState.prompt}
+                placeholder="详细、具体地描述助手与用户的交互方式，例如助手的身份、完成任务的具体方法和步骤、回答问题时的语气以及应该注意什么问题等"
+                onInput={(e => dispatchAssistant('setPrompt', { prompt: e.target.value }))}
+            ></Textarea>
         </div>
     </div>
 };

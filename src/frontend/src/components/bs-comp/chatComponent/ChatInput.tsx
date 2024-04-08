@@ -7,8 +7,9 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
 import GuideQuestions from "./GuideQuestions";
+import { ClearIcon } from "@/components/bs-icons/clear";
 
-export default function ChatInput({ form, questions, inputForm, wsUrl, onBeforSend }) {
+export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -69,7 +70,9 @@ export default function ChatInput({ form, questions, inputForm, wsUrl, onBeforSe
         const value = inputRef.current.value
         if (value.trim() === '') return
 
+        const event = new Event('input', { bubbles: true, cancelable: true });
         inputRef.current.value = ''
+        inputRef.current.dispatchEvent(event); // 触发调节input高度
         const [wsMsg, inputKey] = onBeforSend('', value)
         // msg to store
         createSendMsg(wsMsg.inputs, inputKey)
@@ -208,8 +211,8 @@ export default function ChatInput({ form, questions, inputForm, wsUrl, onBeforSe
         // setInputEmpty(textarea.value.trim() === '')
     }
 
-    return <div className="absolute bottom-0 w-full">
-        <div className="relative">
+    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff]">
+        <div className={`relative ${clear && 'pl-9'}`}>
             {/* form */}
             {
                 formShow && <div className="relative">
@@ -220,6 +223,15 @@ export default function ChatInput({ form, questions, inputForm, wsUrl, onBeforSe
             }
             {/* 引导问题 */}
             <GuideQuestions locked={inputLock.locked} chatId={chatId} questions={questions} onClick={handleClickGuideWord} />
+            {/* clear */}
+            <div className="flex absolute left-0 top-4 z-10">
+                {
+                    clear && <div
+                        className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
+                        onClick={destory}
+                    ><ClearIcon ></ClearIcon></div>
+                }
+            </div>
             <div className="flex absolute left-3 top-4 z-10">
                 {
                     form && <div
@@ -246,7 +258,10 @@ export default function ChatInput({ form, questions, inputForm, wsUrl, onBeforSe
                 placeholder={inputLock.locked ? inputLock.reason : '请输入问题'}
                 className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) !inputLock.locked && handleSendClick()
+                    if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        !inputLock.locked && handleSendClick()
+                    }
                 }}
             ></Textarea>
         </div>

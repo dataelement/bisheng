@@ -27,12 +27,12 @@ export default function GuideQuestions({ locked, chatId, questions, onClick }) {
 
     if (showGuideQuestion || show) return <div className="relative">
         <div className="absolute left-0 bottom-0">
-            <p className="text-gray-400 text-sm mb-2">推荐问题</p>
+            <p className="text-gray-950 text-sm mb-2 bg-[#fff] w-fit px-2 py-1">推荐问题</p>
             {
                 words.map((question, index) => (
                     <div
                         key={index}
-                        className="w-fit bg-primary/20 text-gray-600 rounded-md mb-2 px-4 py-1 text-sm cursor-pointer"
+                        className="w-fit bg-[#d4dffa] shadow-md text-gray-600 rounded-md mb-2 px-4 py-1 text-sm cursor-pointer"
                         onClick={() => {
                             setShowGuideQuestion(false)
                             setShow(false);

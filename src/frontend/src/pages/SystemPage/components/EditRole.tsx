@@ -13,7 +13,7 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { alertContext } from "../../../contexts/alertContext";
-import { createRole, getRoleLibsApi, getRolePermissionsApi, getRoleSkillsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
+import { createRole, getRoleAssistApi, getRoleLibsApi, getRolePermissionsApi, getRoleSkillsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 
@@ -27,7 +27,7 @@ const SearchPanne = ({ role_id, title, type, children }) => {
             page_size: pageSize
         }
         return type === 'skill' ? getRoleSkillsApi(param)
-            : (type === 'assistant' ? getRoleSkillsApi(param)
+            : (type === 'assistant' ? getRoleAssistApi({ ...param, type: 'assistant' })
                 : getRoleLibsApi(param))
     })
 
@@ -70,6 +70,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
                         case 1: useLibs.push(Number(item.third_id)); break;
                         case 2: useSkills.push(item.third_id); break;
                         case 3: manageLibs.push(Number(item.third_id)); break;
+                        case 4: useAssistant.push(Number(item.third_id)); break;
                     }
                 })
                 setForm({ name, useSkills, useLibs, useAssistant, manageLibs })
@@ -129,7 +130,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useSkills, type: 2 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useLibs, type: 1 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.manageLibs, type: 3 }),
-            // updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 4 })
+            updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 4 })
         ])
 
         console.log('form :>> ', form, res);
@@ -151,7 +152,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>{t('system.skillName')}</TableHead>
+                                <TableHead>助手名称</TableHead>
                                 <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
                                 <TableHead className="text-right">{t('system.usePermission')}</TableHead>
                             </TableRow>

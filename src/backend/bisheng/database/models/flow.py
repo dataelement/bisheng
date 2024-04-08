@@ -173,7 +173,7 @@ class FlowDao(FlowBase):
                 # admin
                 flow_id_extra = 'admin'
             else:
-                role_access = RoleAcessDao.get_role_acess(role_ids, AccessType.FLOW)
+                role_access = RoleAccessDao.get_role_access(role_ids, AccessType.FLOW)
                 if role_access:
                     flow_id_extra = [access.third_id for access in role_access]
         return FlowDao.get_flows(user_id, flow_id_extra, '', FlowStatus.ONLINE.value)

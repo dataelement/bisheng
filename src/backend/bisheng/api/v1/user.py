@@ -414,14 +414,18 @@ async def data_by_role(*,
                        page_size: int,
                        page_num: str,
                        name: Optional[str] = None,
-                       role_type: str = 'assitant',
+                       role_type: str = 'assistant',
                        Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无查看权限')
 
-    if role_type == 'assitant':
+    if role_type == 'assistant':
         return resp_200(get_assistant_list_by_access(role_id, name, page_num, page_size))
+    elif role_type == '':
+        pass
+    else:
+        return resp_200()
 
 
 @router.get('/role_access/knowledge', status_code=200)

@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
@@ -10,6 +9,7 @@ from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import GptsToolsRead
 from bisheng.database.models.knowledge import KnowledgeRead
 from langchain.docstore.document import Document
+from orjson import orjson
 from pydantic import BaseModel, Field, validator
 
 
@@ -200,7 +200,7 @@ class StreamData(BaseModel):
     data: dict
 
     def __str__(self) -> str:
-        return f'event: {self.event}\ndata: {json.dumps(self.data)}\n\n'
+        return f'event: {self.event}\ndata: {orjson.dumps(self.data).decode()}\n\n'
 
 
 class FinetuneCreateReq(BaseModel):

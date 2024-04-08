@@ -3,7 +3,7 @@ from typing import Dict
 from uuid import UUID
 
 from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler, AsyncGptsLLMCallbackHandler
+from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
@@ -107,18 +107,11 @@ class ChatClient:
     async def init_gpts_callback(self):
         if self.gpts_async_callback is not None:
             return
-        if self.chat_id:
-            async_callbacks = [AsyncGptsLLMCallbackHandler(**{
-                'websocket': self.websocket,
-                'flow_id': self.client_id,
-                'chat_id': self.chat_id
-            })]
-        else:
-            async_callbacks = [AsyncGptsDebugCallbackHandler(**{
-                'websocket': self.websocket,
-                'flow_id': self.client_id,
-                'chat_id': self.chat_id
-            })]
+        async_callbacks = [AsyncGptsDebugCallbackHandler(**{
+            'websocket': self.websocket,
+            'flow_id': self.client_id,
+            'chat_id': self.chat_id
+        })]
         self.gpts_async_callback = async_callbacks
 
     async def handle_gpts_message(self, message: Dict[any, any]):

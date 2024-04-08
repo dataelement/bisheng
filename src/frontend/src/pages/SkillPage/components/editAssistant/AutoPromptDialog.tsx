@@ -18,7 +18,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
 
     const init = () => {
         const prompt = areaRef.current.value
-        const apiUrl = `/api/v1/assistant/auto?assistant_id=${id}&prompt=${prompt}`;
+        const apiUrl = `/api/v1/assistant/auto?assistant_id=${id}&prompt=${encodeURIComponent(prompt)}`;
         const eventSource = new EventSource(apiUrl);
         areaRef.current.value = ''
 
@@ -182,7 +182,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                     </div>
                     {/* 引导词 */}
                     <div className="group relative pb-12 bg-gray-100 mt-4 px-4 py-2 rounded-md">
-                        <div className="text-md mb-2 font-medium leading-none">引导词</div>
+                        <div className="text-md mb-2 font-medium leading-none">引导问题</div>
                         {
                             question.map(qs => (
                                 <p key={qs} className="text-sm text-muted-foreground bg-gray-50 px-2 py-1 rounded-xl mb-2">{qs}</p>

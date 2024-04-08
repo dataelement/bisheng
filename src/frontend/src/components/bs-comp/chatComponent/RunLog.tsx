@@ -26,7 +26,10 @@ export default function RunLog({ data }) {
 
         title = `${status} ${tool.name}`
     } else if (data.category === 'knowledge') {
-        title = `${data.end ? '已搜索' : '正在搜索'} 知识库`
+        const knowledge = assistantState.knowledge_list?.find(knowledge => knowledge.id === parseInt(data.message.tool_key))
+        if (!knowledge) throw new Error('调试日志无法匹配到使用的知识库详情，id:' + data.message.tool_key)
+
+        title = `${data.end ? '已搜索' : '正在搜索'} ${knowledge.name}`
     }
 
     return <div className="py-1">

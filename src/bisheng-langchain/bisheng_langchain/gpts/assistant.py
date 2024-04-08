@@ -11,7 +11,7 @@ from bisheng_langchain.gpts.load_tools import get_all_tool_names, load_tools
 from bisheng_langchain.gpts.utils import import_by_type, import_class
 from langchain.tools import BaseTool
 from langchain_core.language_models.base import LanguageModelLike
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnableBinding
 
 logger = logging.getLogger(__name__)
@@ -106,8 +106,19 @@ class BishengAssistant:
             **agent_executor_params
         )
 
-    def run(self, query):
-        inputs = [HumanMessage(content=query)]
+    def run(self, query, chat_history=[], chat_round=5):
+        if len(chat_history) % 2 != 0:
+            raise ValueError("chat history should be even")
+        
+        # 限制chat_history轮数
+        if len(chat_history) > chat_round * 2:
+            chat_history = chat_history[-chat_round*2:]
+
+        inputs = []
+        for i in range(0, len(chat_history), 2):
+            inputs.append(HumanMessage(content=chat_history[i]))
+            inputs.append(AIMessage(content=chat_history[i+1]))
+        inputs.append(HumanMessage(content=query))
         result = asyncio.run(self.assistant.ainvoke(inputs))
         return result
 
@@ -116,9 +127,11 @@ if __name__ == "__main__":
     from langchain.globals import set_debug
 
     set_debug(True)
-    query = "帮我查一下去年这一天发生了哪些重大事情？"
-    bisheng_assistant = BishengAssistant("config/base_assistant.yaml")
-    result = bisheng_assistant.run(query)
+    # chat_history = []
+    chat_history = ['你好', '你好，有什么可以帮助你吗？', '福蓉科技股价多少?', '福蓉科技（股票代码：300049）的当前股价为48.67元。']
+    query = "去年这个时候的股价是多少？"
+    bisheng_assistant = BishengAssistant("config/base_scene.yaml")
+    result = bisheng_assistant.run(query, chat_history=chat_history)
     for r in result:
         print(f'------------------')
         print(type(r), r)

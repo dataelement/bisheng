@@ -64,12 +64,13 @@ Textarea.displayName = "Textarea"
  * input list
  */
 const InputList = React.forwardRef<HTMLDivElement, InputProps & {
+    rules: any[],
     value?: string[],
     inputClassName?: string,
     defaultValue?: string[],
     onChange?: (values: string[]) => void
 }>(
-    ({ className, inputClassName, value = [], defaultValue = [], ...props }, ref) => {
+    ({ rules, className, inputClassName, value = [], defaultValue = [], ...props }, ref) => {
         // 初始化 inputs 状态，为每个值分配唯一 ID
         const [inputs, setInputs] = React.useState(() =>
             value.map(val => ({ id: generateUUID(8), value: val }))
@@ -91,8 +92,8 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                 input.id === id ? { ...input, value: newValue } : input
             );
             // push
-            if (index === inputs.length - 1) {
-                newInputs = ([...inputs, { id: generateUUID(8), value: '' }]);
+            if (index === newInputs.length - 1) {
+                newInputs = ([...newInputs, { id: generateUUID(8), value: '' }]);
             }
             setInputs(newInputs);
             props.onChange(newInputs.map(input => input.value));
@@ -115,8 +116,27 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                             className={cname('pr-8', inputClassName)}
                             placeholder={props.placeholder || ''}
                             onChange={(e) => handleChange(e.target.value, item.id, index)}
+                            onInput={(e) => {
+                                rules.some(rule => {
+                                    if (rule.maxLength && e.target.value.length > rule.maxLength) {
+                                        e.target.nextSibling.textContent = rule.message;
+                                        e.target.nextSibling.style.display = '';
+                                        return true;
+                                    }
+                                    e.target.nextSibling.style.display = 'none';
+                                })
+                            }}
+                        // onFocus={(e) => {
+                        //     if (e.target.value && index === inputs.length - 1) {
+                        //         setInputs([...inputs, { id: generateUUID(8), value: '' }]);
+                        //     }
+                        // }}
                         ></Input>
-                        {index !== inputs.length - 1 && <MinusCircledIcon onClick={() => handleRemoveInput(item.id)} className="absolute top-2.5 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
+                        <p className="text-sm text-red-500" style={{ display: 'none' }}></p>
+                        {index !== inputs.length - 1 && <MinusCircledIcon onClick={(e) => {
+                            e.target.previousSibling.style.display = 'none';
+                            handleRemoveInput(item.id)
+                        }} className="absolute top-2.5 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
                     </div>
                 ))
             }

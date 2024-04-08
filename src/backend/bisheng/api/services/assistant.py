@@ -67,10 +67,10 @@ class AssistantService(AssistantUtils):
         for one in links:
             if one.tool_id:
                 tool_list.append(one.tool_id)
-            elif one.flow_id:
-                flow_list.append(one.flow_id)
             elif one.knowledge_id:
                 knowledge_list.append(one.knowledge_id)
+            elif one.flow_id:
+                flow_list.append(one.flow_id)
             else:
                 logger.error(f'not expect link info: {one.dict()}')
         tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list,
@@ -139,11 +139,11 @@ class AssistantService(AssistantUtils):
 
         # 自动选择工具和技能
         tool_info = cls.get_auto_tool_info(assistant, auto_agent)
-        tool_info = [one.to_dict() for one in tool_info]
+        tool_info = [one.model_dump() for one in tool_info]
         yield str(StreamData(event='message', data={'type': 'tool_list', 'message': tool_info}))
 
         flow_info = cls.get_auto_flow_info(assistant, auto_agent)
-        flow_info = [one.to_dict() for one in flow_info]
+        flow_info = [one. model_dump() for one in flow_info]
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod

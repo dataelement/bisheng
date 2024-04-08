@@ -100,7 +100,9 @@ class AssistantDao(Assistant):
     @classmethod
     def get_assistant_by_name_user_id(cls, name: str, user_id: int) -> Assistant:
         with session_getter() as session:
-            statement = select(Assistant).where(Assistant.name == name, Assistant.user_id == user_id)
+            statement = select(Assistant).filter(Assistant.name == name,
+                                                 Assistant.user_id == user_id,
+                                                 Assistant.is_delete == 0)
             return session.exec(statement).first()
 
     @classmethod
@@ -148,7 +150,7 @@ class AssistantDao(Assistant):
         statment = select(Assistant,
                           RoleAccess).join(RoleAccess,
                                            and_(RoleAccess.role_id == role_id,
-                                                RoleAccess.type == AccessType.FLOW.value,
+                                                RoleAccess.type == AccessType.ASSISTANT_READ.value,
                                                 RoleAccess.third_id == Assistant.id),
                                            isouter=True)
 
