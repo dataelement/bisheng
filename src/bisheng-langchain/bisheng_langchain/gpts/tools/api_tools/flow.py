@@ -41,9 +41,16 @@ class FlowTools(APIToolBase):
         flow_id = 'c7985115-a9d2-446a-9c55-40b5728ffb52'
         url = 'http://192.168.106.120:3002/api/v1/process/{}'.format(flow_id)
         input_key = 'inputs'
-        params = {}
-        params['Milvus-u5L3K'] = {'collection_id': collection_id}
-        params['Milvus-ABCD'] = {'collection_id': collection_id}
+        params = {
+            'tweaks': {
+                'ElasticKeywordsSearch-pFFyR': {
+                    'collection_id': collection_id
+                },
+                'Milvus-9KIR6': {
+                    'collection_id': collection_id
+                }
+            }
+        }
 
         class InputArgs(BaseModel):
             """args_schema"""
