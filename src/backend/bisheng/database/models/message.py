@@ -71,12 +71,12 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_messages_by_chat_id(cls, chat_id: str, category_list: list = None, limit: int = 10):
         with session_getter() as session:
-            statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(
-                ChatMessage.create_time.desc()
-            )
+            statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
-            statement = statement.limit(limit)
+            statement = statement.limit(limit).order_by(
+                ChatMessage.create_time.desc()
+            )
             return session.exec(statement).all()
 
     @classmethod

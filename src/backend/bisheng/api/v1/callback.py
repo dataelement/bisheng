@@ -2,6 +2,8 @@ import asyncio
 from typing import Any, Dict, List, Union
 
 from bisheng.api.v1.schemas import ChatResponse
+from bisheng.database.models.message import ChatMessage as ChatMessageModel
+from bisheng.database.models.message import ChatMessageDao
 from bisheng.utils.logger import logger
 from fastapi import WebSocket
 from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
@@ -15,10 +17,11 @@ from langchain.schema.messages import BaseMessage
 class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     """Callback handler for streaming LLM responses."""
 
-    def __init__(self, websocket: WebSocket, flow_id: str, chat_id: str):
+    def __init__(self, websocket: WebSocket, flow_id: str, chat_id: str, user_id: int = None):
         self.websocket = websocket
         self.flow_id = flow_id
         self.chat_id = chat_id
+        self.user_id = user_id
 
     async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         logger.debug(f'on_llm_new_token token={token} kwargs={kwargs}')
@@ -368,8 +371,20 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             message={'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str},
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
-                            message_id=kwargs.get('run_id').hex)
+                            sender=kwargs.get('run_id').hex)
         await self.websocket.send_json(resp.dict())
+
+        ChatMessageDao.insert_one(ChatMessageModel(
+            is_bot=1,
+            message={'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str},
+            intermediate_steps=f'Tool input: {input_str}',
+            category=tool_category,
+            type='start',
+            flow_id=self.flow_id,
+            chat_id=self.chat_id,
+            user_id=self.user_id,
+            sender=kwargs.get('run_id').hex
+        ))
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
@@ -389,9 +404,20 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             message={'tool_key': tool_name, 'output': output},
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
-                            message_id=kwargs.get('run_id').hex)
+                            sender=kwargs.get('run_id').hex)
 
         await self.websocket.send_json(resp.dict())
+        ChatMessageDao.insert_one(ChatMessageModel(
+            is_bot=1,
+            message={'tool_key': tool_name, 'output': output},
+            intermediate_steps=intermediate_steps,
+            category=tool_category,
+            type='end',
+            flow_id=self.flow_id,
+            chat_id=self.chat_id,
+            user_id=self.user_id,
+            sender=kwargs.get('run_id').hex
+        ))
 
         resp_start = ChatResponse(type='start',
                                   category='processing',

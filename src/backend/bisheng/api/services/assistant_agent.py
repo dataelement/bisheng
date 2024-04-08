@@ -23,7 +23,7 @@ from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
 from bisheng_langchain.gpts.utils import import_by_type, import_class
 from langchain_core.callbacks import Callbacks
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, Tool
 from loguru import logger
@@ -251,4 +251,9 @@ class AssistantAgent(AssistantUtils):
 
         # 最后一次输出的event即最终答案
         result = result['data']['output']['__end__']
-        return result
+        # 包含了history，将history排除
+        res = []
+        for one in result:
+            if isinstance(one, AIMessage) and one.response_metadata:
+                res.append(one)
+        return res

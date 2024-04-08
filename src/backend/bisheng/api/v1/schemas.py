@@ -131,7 +131,7 @@ class ChatMessage(BaseModel):
     intermediate_steps: str = None
     files: list = []
     user_id: int = None
-    message_id: int | str = None
+    message_id: int = None
     source: int = 0
     sender: str = None
     receiver: dict = None

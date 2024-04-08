@@ -46,7 +46,7 @@ class ChatClient:
     async def add_message(self, msg_type: str, message: str, category: str):
         self.chat_history.append({
             'category': category,
-            'msg': message
+            'message': message
         })
         if not self.chat_id:
             # debug模式无需保存历史
@@ -120,7 +120,7 @@ class ChatClient:
             return
         # 从数据库加载历史会话
         if self.chat_id:
-            res = ChatMessageDao.get_messages_by_chat_id(self.chat_id, ['human', 'bot'], 10)
+            res = ChatMessageDao.get_messages_by_chat_id(self.chat_id, ['question', 'answer'], 10)
             for one in res:
                 self.chat_history.append({
                     'message': one.message,
@@ -133,11 +133,11 @@ class ChatClient:
         for one in latest_history:
             if one['category'] == 'answer':
                 tmp.append(
-                    AIMessage(content=one['msg'])
+                    AIMessage(content=one['message'])
                 )
             else:
                 tmp.append(
-                    HumanMessage(content=json.loads(one['msg'])['input'])
+                    HumanMessage(content=json.loads(one['message'])['input'])
                 )
         return tmp
 
@@ -147,7 +147,8 @@ class ChatClient:
         async_callbacks = [AsyncGptsDebugCallbackHandler(**{
             'websocket': self.websocket,
             'flow_id': self.client_id,
-            'chat_id': self.chat_id
+            'chat_id': self.chat_id,
+            'user_id': self.user_id
         })]
         self.gpts_async_callback = async_callbacks
 
@@ -175,18 +176,19 @@ class ChatClient:
         await self.send_response('processing', 'begin', '')
         await self.send_response('processing', 'start', '')
 
+        # 将用户问题写入到数据库
+        await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
+
         # 调用agent获取结果
         # 获取回话历史
         chat_history = await self.get_latest_history()
         result = await self.gpts_agent.run(input_msg, chat_history, self.gpts_async_callback)
         logger.debug(f'gpts agent {self.client_key} result: {result}')
         answer = ''
-        for one in result[len(chat_history)+1:]:
+        for one in result:
             if isinstance(one, AIMessage):
                 answer += one.content
 
-        # 成功返回结果才写入到数据库
-        await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
         res = await self.add_message('bot', answer, 'answer')
 
         await self.send_response('processing', 'end', '')
