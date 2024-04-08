@@ -84,7 +84,7 @@ export default function MessageBs({ data, onUnlike, onSource }: { data: ChatMess
             <div className="flex gap-2 ">
                 <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} ><AvatarIcon /></div>
                 {data.message.toString() ?
-                    <div ref={messageRef} className="text-[#111] text-sm">
+                    <div ref={messageRef} className="text-[#111] text-sm max-w-[calc(100%-24px)]">
                         {mkdown}
                         {/* @user */}
                         {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}

@@ -160,8 +160,11 @@ class FlowDao(FlowBase):
     @classmethod
     def get_all_online_flows(cls):
         with session_getter() as session:
-            statement = select(Flow).where(Flow.status == FlowStatus.ONLINE.value)
-            return session.exec(statement).all()
+            statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
+                               Flow.update_time, Flow.description,
+                               Flow.guide_word).where(Flow.status == FlowStatus.ONLINE.value)
+            result = session.exec(statement).mappings().all()
+            return [Flow.model_validate(f) for f in result]
 
     @classmethod
     def get_user_access_online_flows(cls, user_id: int) -> List[Flow]:

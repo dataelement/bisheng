@@ -18,7 +18,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
 
-    const { messages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory } = useMessageStore()
+    const { messages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
     const inputRef = useRef(null)
 
     /**
@@ -64,6 +64,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     }, [])
 
     const handleSendClick = async () => {
+        // 关闭引导词
+        setShowGuideQuestion(false)
         // 收起表单
         formShow && setFormShow(false)
 
@@ -222,7 +224,12 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 </div>
             }
             {/* 引导问题 */}
-            <GuideQuestions locked={inputLock.locked} chatId={chatId} questions={questions} onClick={handleClickGuideWord} />
+            <GuideQuestions
+                locked={inputLock.locked}
+                chatId={chatId}
+                questions={questions}
+                onClick={handleClickGuideWord}
+            />
             {/* clear */}
             <div className="flex absolute left-0 top-4 z-10">
                 {

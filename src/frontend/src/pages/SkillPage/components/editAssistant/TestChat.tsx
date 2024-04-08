@@ -36,9 +36,9 @@ export default function TestChat({ assisId, guideQuestion }) {
     }
 
     return <div className="relative h-full px-4">
-        <div className="absolute flex top-2 gap-2 items-center">
+        <div className="absolute flex top-2 gap-2 items-center z-10">
             <TitleIconBg className="" id={assistantState.id}></TitleIconBg>
-            <span className="text-sm">调试预览</span>
+            <span className="text-sm bg-[rgba(255,255,255,0.8)]">调试预览</span>
         </div>
         <ChatComponent
             clear

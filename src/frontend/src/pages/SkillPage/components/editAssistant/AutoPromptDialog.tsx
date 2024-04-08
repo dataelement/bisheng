@@ -28,7 +28,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                 return;
             }
             const parsedData = JSON.parse(event.data);
-            console.log('parsedData :>> ', parsedData);
+            // console.log('parsedData :>> ', parsedData);
             switch (parsedData.type) {
                 case 'prompt':
                     areaRef.current.value += parsedData.message.replace('```markdown', ''); break
@@ -50,6 +50,8 @@ export default function AutoPromptDialog({ onOpenChange }) {
                     }
                     setLoading(false); break
             }
+            // 自动滚动
+            areaRef.current.scrollTop = areaRef.current.scrollHeight;
         };
 
         eventSource.onerror = (error: any) => {
@@ -101,7 +103,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
     }
 
     const handleUserQuestion = () => {
-        dispatchAssistant('setQuestion', { guide_question: question })
+        dispatchAssistant('setQuestion', { guide_question: [...question, ''] })
         message({
             variant: 'success',
             title: '提示',
@@ -142,7 +144,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
         dispatchAssistant('setGuideword', { guide_word: guideAreaRef.current.value })
         dispatchAssistant('setTools', { tool_list: tools })
         dispatchAssistant('setFlows', { flow_list: flows })
-        dispatchAssistant('setQuestion', { guide_question: question })
+        dispatchAssistant('setQuestion', { guide_question: [...question, ''] })
         // 收集结果
         message({
             variant: 'success',

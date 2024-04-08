@@ -182,7 +182,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
         {
             assistant && <div className={`w-full chat-box h-full relative px-6 ${type !== 'flow' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
-                <div className="absolute flex top-2 gap-2 items-center">
+                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1">
                     <TitleIconBg className="" id={assistant.id}></TitleIconBg>
                     <span className="text-sm">{assistant.name}</span>
                 </div>

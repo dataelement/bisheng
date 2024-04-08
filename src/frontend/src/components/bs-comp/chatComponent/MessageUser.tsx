@@ -28,7 +28,7 @@ export default function MessageUser({ useName, data }: { data: ChatMessageType }
         <div className="w-fit min-h-8 rounded-2xl px-6 py-4 max-w-[90%] bg-[#EEF2FF]">
             {useName && <p className="text-primary text-xs mb-2 text-right">{useName}</p>}
             <div className="flex gap-2 ">
-                <div className="text-[#0D1638] text-sm">{msg}</div>
+                <div className="text-[#0D1638] text-sm break-all whitespace-break-spaces">{msg}</div>
                 <div className="w-6 h-6 min-w-6"><img src="/user.png" alt="" /></div>
             </div>
             {/* 附加信息 */}

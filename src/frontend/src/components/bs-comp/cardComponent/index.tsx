@@ -127,7 +127,7 @@ export default function CardComponent<T>({
         {/* <span></span> */}
       </CardTitle>
     </CardHeader>
-    <CardContent className="h-[60px] overflow-auto scrollbar-hide mb-2">
+    <CardContent className="h-fit max-h-[60px] overflow-auto scrollbar-hide mb-2">
       <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className=" block">

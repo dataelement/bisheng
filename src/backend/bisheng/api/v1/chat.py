@@ -5,6 +5,7 @@ from uuid import UUID
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList,
                                     FlowGptsOnlineList, InitResponse, StreamData,
@@ -146,14 +147,15 @@ def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
 def get_online_chat(*, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
-    user_id = payload.get('user_id')
+    user = UserPayload(**payload)
+    user_id = user.user_id
     res = []
     # 获取所有已上线的助手
-    if payload.get('role') == 'admin':
+    if user.is_admin():
         all_assistant = AssistantDao.get_all_online_assistants()
         flows = FlowDao.get_all_online_flows()
     else:
-        assistants = AssistantService.get_assistant(user_id, None, AssistantStatus.ONLINE.value, 0, 0)
+        assistants = AssistantService.get_assistant(user, None, AssistantStatus.ONLINE.value, 0, 0)
         all_assistant = assistants.data.get('data')
         flows = FlowDao.get_user_access_online_flows(user_id)
     for one in all_assistant:

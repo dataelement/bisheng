@@ -10,7 +10,7 @@ from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
 from fastapi import WebSocket, status
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 
 
@@ -28,6 +28,9 @@ class ChatClient:
         # 业务自定义参数
         self.gpts_agent: AssistantAgent | None = None
         self.gpts_async_callback = None
+        self.chat_history = []
+        # 和模型对话时传入的对话历史条数
+        self.latest_history_num = 10
 
     async def send_message(self, message: str):
         await self.websocket.send_text(message)
@@ -41,11 +44,15 @@ class ChatClient:
             await self.handle_gpts_message(message)
 
     async def add_message(self, msg_type: str, message: str, category: str):
+        self.chat_history.append({
+            'category': category,
+            'message': message
+        })
         if not self.chat_id:
             # debug模式无需保存历史
             return
         is_bot = 0 if msg_type == 'human' else 1
-        ChatMessageDao.insert_one(ChatMessageModel(
+        return ChatMessageDao.insert_one(ChatMessageModel(
             is_bot=is_bot,
             source=0,
             message=message,
@@ -57,9 +64,11 @@ class ChatClient:
             user_id=self.user_id,
         ))
 
-    async def send_response(self, category: str, msg_type: str, message: str, intermediate_steps: str = ''):
+    async def send_response(self, category: str, msg_type: str, message: str, intermediate_steps: str = '',
+                            message_id: int = None):
         is_bot = 0 if msg_type == 'human' else 1
         await self.send_json(ChatResponse(
+            message_id=message_id,
             category=category,
             type=msg_type,
             is_bot=is_bot,
@@ -72,6 +81,7 @@ class ChatClient:
         ))
 
     async def init_gpts_agent(self):
+        await self.init_chat_history()
         await self.init_gpts_callback()
         try:
             # 处理智能助手业务
@@ -83,7 +93,7 @@ class ChatClient:
                     # 判断下agent是否上线
                 if assistant.status != AssistantStatus.ONLINE.value:
                     raise IgnoreException('当前助手未上线，无法直接对话')
-            else:
+            elif not self.chat_id:
                 # 调试界面没测都重新生成
                 assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
                 if not assistant:
@@ -96,7 +106,7 @@ class ChatClient:
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
-            else:
+            elif not self.chat_id:
                 # 调试界面每次都重新生成
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
@@ -104,13 +114,41 @@ class ChatClient:
             await self.websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=f'agent init error {str(e)}')
             raise Exception('agent init error')
 
+    async def init_chat_history(self):
+        # 初始化历史记录，不为空则不用重新初始化
+        if len(self.chat_history) > 0:
+            return
+        # 从数据库加载历史会话
+        if self.chat_id:
+            res = ChatMessageDao.get_messages_by_chat_id(self.chat_id, ['question', 'answer'], 10)
+            for one in res:
+                self.chat_history.append({
+                    'message': one.message,
+                    'category': one.category
+                })
+
+    async def get_latest_history(self):
+        tmp = []
+        latest_history = self.chat_history[-self.latest_history_num:]
+        for one in latest_history:
+            if one['category'] == 'answer':
+                tmp.append(
+                    AIMessage(content=one['message'])
+                )
+            else:
+                tmp.append(
+                    HumanMessage(content=json.loads(one['message'])['input'])
+                )
+        return tmp
+
     async def init_gpts_callback(self):
         if self.gpts_async_callback is not None:
             return
         async_callbacks = [AsyncGptsDebugCallbackHandler(**{
             'websocket': self.websocket,
             'flow_id': self.client_id,
-            'chat_id': self.chat_id
+            'chat_id': self.chat_id,
+            'user_id': self.user_id
         })]
         self.gpts_async_callback = async_callbacks
 
@@ -128,28 +166,33 @@ class ChatClient:
             self.chat_id = inputs.get('data').get('chatId')
             self.gpts_agent = None
             self.gpts_async_callback = None
+            self.chat_history = []
             await self.init_gpts_agent()
             return
 
         # 初始化agent
         await self.init_gpts_agent()
 
-        # 有用户输入，处理用户问题
-        await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
-
         await self.send_response('processing', 'begin', '')
         await self.send_response('processing', 'start', '')
-        result = await self.gpts_agent.run(input_msg, self.gpts_async_callback)
+
+        # 将用户问题写入到数据库
+        await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
+
+        # 调用agent获取结果
+        # 获取回话历史
+        chat_history = await self.get_latest_history()
+        result = await self.gpts_agent.run(input_msg, chat_history, self.gpts_async_callback)
         logger.debug(f'gpts agent {self.client_key} result: {result}')
         answer = ''
-        for one in result[1:]:
+        for one in result:
             if isinstance(one, AIMessage):
                 answer += one.content
-        await self.add_message('bot', answer, 'answer')
+
+        res = await self.add_message('bot', answer, 'answer')
 
         await self.send_response('processing', 'end', '')
-
         await self.send_response('answer', 'start', '')
-        await self.send_response('answer', 'end', answer)
+        await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
 
         await self.send_response('processing', 'close', '')

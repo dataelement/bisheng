@@ -22,14 +22,15 @@ chat_manager = ChatManager()
 
 @router.get('', response_model=UnifiedResponseModel[List[AssistantInfo]])
 def get_assistant(*,
-                  name: str = Query(default=None, description='助手名称，模糊匹配'),
+                  name: str = Query(default=None, description='助手名称，模糊匹配, 包含描述的模糊匹配'),
                   page: Optional[int] = Query(default=1, gt=0, description='页码'),
                   limit: Optional[int] = Query(default=10, gt=0, description='每页条数'),
                   status: Optional[int] = Query(default=None, description='是否上线状态'),
                   Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-    return AssistantService.get_assistant(current_user.get('user_id'), name, status, page, limit)
+    user = UserPayload(**current_user)
+    return AssistantService.get_assistant(user, name, status, page, limit)
 
 
 # 获取某个助手的详细信息
