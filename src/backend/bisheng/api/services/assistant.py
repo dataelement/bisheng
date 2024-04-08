@@ -94,6 +94,9 @@ class AssistantService(AssistantUtils):
         llm_conf = cls.get_llm_conf(assistant.model_name)
         assistant.model_name = llm_conf['model_name']
         assistant.temperature = llm_conf['temperature']
+
+        # 自动生成描述
+        assistant, _, _ = await cls.get_auto_info(assistant)
         assistant = AssistantDao.create_assistant(assistant)
 
         return resp_200(data=AssistantInfo(**assistant.dict(),
@@ -328,24 +331,10 @@ class AssistantService(AssistantUtils):
         auto_agent = AssistantAgent(assistant, '')
         await auto_agent.init_llm()
 
-        # 根据llm初始化prompt
-        auto_prompt = auto_agent.sync_optimize_assistant_prompt()
-        assistant.prompt = auto_prompt
-
-        # 自动生成开场白和问题
-        guide_info = auto_agent.generate_guide(assistant.prompt)
-        assistant.guide_word = guide_info['opening_lines']
-        assistant.guide_question = guide_info['questions']
-
         # 自动生成描述
         assistant.desc = auto_agent.generate_description(assistant.prompt)
 
-        # 自动选择工具
-        tool_info = cls.get_auto_tool_info(assistant, auto_agent)
-
-        # 自动选择技能
-        flow_info = cls.get_auto_flow_info(assistant, auto_agent)
-        return assistant, [one.id for one in tool_info], [one.id for one in flow_info]
+        return assistant, [], []
 
     @classmethod
     def get_auto_tool_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[GptsToolsRead]:
