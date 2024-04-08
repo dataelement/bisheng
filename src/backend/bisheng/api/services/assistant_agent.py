@@ -217,11 +217,15 @@ class AssistantAgent(AssistantUtils):
         tool_selector = ToolSelector(llm=self.llm, tools=tool_list)
         return tool_selector.select(self.assistant.name, prompt)
 
-    async def run(self, query: str, callback: Callbacks = None):
+    async def run(self, query: str, chat_history: List = None, callback: Callbacks = None):
         """
         运行智能体对话
         """
-        inputs = [HumanMessage(content=query)]
+        if chat_history:
+            chat_history.append(HumanMessage(content=query))
+            inputs = chat_history
+        else:
+            inputs = [HumanMessage(content=query)]
 
         result = {}
         async for one in self.agent.astream_events(inputs,

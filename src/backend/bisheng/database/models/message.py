@@ -69,6 +69,16 @@ class ChatMessageDao(MessageBase):
                 return None
 
     @classmethod
+    def get_messages_by_chat_id(cls, chat_id: str, category_list: list = None, limit: int = 10):
+        with session_getter() as session:
+            statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(
+                ChatMessage.create_time.desc()
+            )
+            if category_list:
+                statement = statement.where(ChatMessage.category.in_(category_list))
+            return session.exec(statement).limit(limit).all()
+
+    @classmethod
     def delete_by_user_chat_id(cls, user_id: int, chat_id: str):
         if user_id is None or chat_id is None:
             logger.info('delete_param_error user_id={} chat_id={}', user_id, chat_id)
