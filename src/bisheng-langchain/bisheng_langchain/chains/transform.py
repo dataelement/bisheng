@@ -1,5 +1,6 @@
 """Chain that runs an arbitrary python function."""
 import functools
+import inspect
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
@@ -61,7 +62,11 @@ class TransformChain(Chain):
         inputs: Dict[str, str],
         run_manager: Optional[CallbackManagerForChainRun] = None,
     ) -> Dict[str, str]:
-        return self.transform_cb(inputs, run_manager)
+        new_arg_supported = inspect.signature(self.transform_cb).parameters.get('run_manager')
+        if new_arg_supported:
+            return self.transform_cb(inputs, run_manager)
+        else:
+            return self.transform_cb(inputs)
 
     async def _acall(
         self,
@@ -69,8 +74,12 @@ class TransformChain(Chain):
         run_manager: Optional[AsyncCallbackManagerForChainRun] = None,
     ) -> Dict[str, Any]:
         if self.atransform_cb is not None:
-            return await self.atransform_cb(inputs, run_manager)
+            new_arg_supported = inspect.signature(self.transform_cb).parameters.get('run_manager')
+            if new_arg_supported:
+                return await self.atransform_cb(inputs, run_manager)
+            else:
+                return await self.atransform_cb(inputs)
         else:
             self._log_once("TransformChain's atransform is not provided, falling"
                            ' back to synchronous transform')
-            return self.transform_cb(inputs, run_manager)
+            return self._call(inputs, run_manager)

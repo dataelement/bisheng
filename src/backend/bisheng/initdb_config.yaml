@@ -76,9 +76,9 @@ gpts:
       # model: 'gpt-3.5-turbo-0125'
       openai_api_key: ''
       openai_proxy: 'http://118.195.232.223:39995'
-      temperature: 0.0
+      temperature: 0.3
     - type: 'CustomLLMChat'
       model_name: 'Qwen-1_8B-Chat'
       host_base_url: 'http://192.168.106.12:9001/v2.1/models/Qwen-1_8B-Chat/infer'
-      temperature: 0.01
+      temperature: 0.3
       agent_executor_type: 'get_qwen_local_functions_agent_executor'

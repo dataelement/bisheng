@@ -294,17 +294,19 @@ class BaseHostChatLLM(BaseChatModel):
                     is_error = True
                 elif response.startswith('data:'):
                     text = response[len('data:'):].strip()
-                    if text.startswith('{') and text.endswith('}'):
-                        yield (is_error, response[len('data:'):])
-                    elif text.startswith('{'):
-                        # 拆包了
-                        text_haf = text
-                        continue
-                    elif text_haf != '':
-                        yield (is_error, response(text_haf + text))
+                    if text == '[DONE]':
+                        break
+                    try:
+                        json.loads(text_haf + text)
+                        yield (is_error, text_haf + text)
                         text_haf = ''
-                    else:
-                        logger.info('agenerate_no_json text=%s', text)
+                    except Exception:
+                        # 拆包了
+                        if text_haf.startswith('{'):
+                            text_haf = text
+                            continue
+                        logger.error(f'response_not_json response={response}')
+
                     if is_error:
                         break
                 elif response.startswith('{'):
