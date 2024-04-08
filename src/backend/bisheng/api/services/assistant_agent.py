@@ -1,4 +1,5 @@
 import json
+import uuid
 from pathlib import Path
 from typing import Dict, List
 from uuid import UUID
@@ -9,7 +10,7 @@ from bisheng.api.services.utils import replace_flow_llm, set_flow_knowledge_id
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
-from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
@@ -34,6 +35,7 @@ class AssistantAgent(AssistantUtils):
         self.assistant = assistant_info
         self.chat_id = chat_id
         self.tools: List[BaseTool] = []
+        self.offline_flows = []
         self.agent: ConfigurableAssistant | None = None
         self.llm: BaseLanguageModel | None = None
         self.llm_agent_executor = None
@@ -137,11 +139,15 @@ class AssistantAgent(AssistantUtils):
             else:
                 tmp_flow_id = UUID(link.flow_id).hex
                 one_flow_data = flow_id2data.get(UUID(link.flow_id))
+                tool_name = f'flow_{link.flow_id}'
                 if not one_flow_data:
                     logger.warning('act=init_tools not find flow_id: {}', link.flow_id)
                     continue
+                if one_flow_data.status != FlowStatus.ONLINE.value:
+                    self.offline_flows.append(tool_name)
+                    logger.warning('act=init_tools not online flow_id: {}', link.flow_id)
+                    continue
                 flow_graph_data = one_flow_data.data
-                tool_name = f'flow_{link.flow_id}'
                 tool_description = f'Tool Name: {one_flow_data.name}\n Tool Description: {one_flow_data.description}'
 
             try:
@@ -226,6 +232,15 @@ class AssistantAgent(AssistantUtils):
             inputs = chat_history
         else:
             inputs = [HumanMessage(content=query)]
+
+        # 假回调，将已下线的技能回调给前端
+        for one in self.offline_flows:
+            if callback is not None:
+                run_id = uuid.uuid4()
+                await callback[0].on_tool_start({
+                    'name': one,
+                }, input_str='', run_id=run_id)
+                await callback[0].on_tool_end(output='', name=one, run_id=run_id)
 
         result = {}
         async for one in self.agent.astream_events(inputs,

@@ -367,7 +367,8 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             intermediate_steps=f'Tool input: {input_str}',
                             message={'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str},
                             flow_id=self.flow_id,
-                            chat_id=self.chat_id)
+                            chat_id=self.chat_id,
+                            message_id=kwargs.get('run_id').hex)
         await self.websocket.send_json(resp.dict())
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
@@ -387,7 +388,8 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             intermediate_steps=intermediate_steps,
                             message={'tool_key': tool_name, 'output': output},
                             flow_id=self.flow_id,
-                            chat_id=self.chat_id)
+                            chat_id=self.chat_id,
+                            message_id=kwargs.get('run_id').hex)
 
         await self.websocket.send_json(resp.dict())
 
