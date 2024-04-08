@@ -83,7 +83,7 @@ export default function SkillChatPage() {
                                 <span className={`relative top-[-1px] inline-block w-2 h-2 bg-[#adb8d2] mr-2 ${gradients[parseInt(chat.flow_id + '', 16) % gradients.length]}`}></span>
                                 {chat.flow_name}
                             </p>
-                            <span className="block text-xs text-gray-600 mt-3">{chat.flow_description}</span>
+                            <span className="block text-xs text-gray-600 mt-3 break-words truncate-multiline">{chat.flow_description}</span>
                             <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
                         </div>
                     ))

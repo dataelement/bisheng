@@ -15,17 +15,18 @@ export default function editAssistant() {
     const { id: assisId } = useParams()
     const navigate = useNavigate()
     // assistant data
-    const { assistantState, changed, loadAssistantState, saveAfter } = useAssistantStore()
+    const { assistantState, changed, loadAssistantState, saveAfter, destroy } = useAssistantStore()
     const { startNewRound, insetSystemMsg, setShowGuideQuestion } = useMessageStore()
 
     useEffect(() => {
         loadAssistantState(assisId).then((res) => {
             setShowGuideQuestion(true)
-            setGuideQuestion(res.guide_question?.filter((item) => item) || [''])
+            setGuideQuestion(res.guide_question?.filter((item) => item) || [])
+            res.guide_word && insetSystemMsg(res.guide_word)
         })
     }, [])
 
-    // 引导词独立存储
+    // 展示的引导词独立存储
     const [guideQuestion, setGuideQuestion] = useState([])
     const handleStartChat = async (params) => {
         if (!handleCheck()) return
@@ -93,6 +94,11 @@ export default function editAssistant() {
         }
         return true
     }
+
+    // 销毁
+    useEffect(() => {
+        return destroy
+    }, [])
 
     return <div className="bg-[#F4F5F8]">
         <Header onSave={() => handleSave(true)} onLine={handleOnline}></Header>

@@ -280,7 +280,7 @@
     },
     "status": {
         "1004": "This skill has been deleted",
-        "1008": "The current skill is not online, and direct conversation is not possible.",
+        "1008": "The current assistant or skill is not online, and direct conversation is not possible.",
         "1005": ""
     },
     "all": "All",

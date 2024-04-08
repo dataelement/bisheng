@@ -15,7 +15,7 @@ export default function Assistants() {
     const { t } = useTranslation()
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload } = useTable<AssistantItemDB>({ pageSize: 15 }, (param) =>
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData } = useTable<AssistantItemDB>({ pageSize: 15 }, (param) =>
         getAssistantsApi(param.page, param.pageSize, param.keyword)
     )
 
@@ -30,8 +30,13 @@ export default function Assistants() {
         })
     }
 
-    const handleCheckedChange = (checked, id) => {
-        return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(id, checked ? 1 : 0))
+    const handleCheckedChange = (checked, data) => {
+        return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 1 : 0)).then(res => {
+            if (res === null) {
+                refreshData((item) => item.id === data.id, { status: checked ? 1 : 0 })
+            }
+            return res
+        })
     }
 
     return <div className="h-full relative">
@@ -73,9 +78,10 @@ export default function Assistants() {
                                     title={item.name}
                                     description={item.desc}
                                     user={item.user_name}
+                                    onClick={() => item.status !== 1 && navigate('/assistant/' + item.id)}
                                     onDelete={handleDelete}
                                     onSetting={() => navigate('/assistant/' + item.id)}
-                                    onCheckedChange={(checked) => handleCheckedChange(checked, item.id)}
+                                    onCheckedChange={handleCheckedChange}
                                 ></CardComponent>
                             ))
                         }

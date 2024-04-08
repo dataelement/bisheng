@@ -15,6 +15,7 @@ import { createCustomFlowApi, getFlowApi } from "../../controllers/API/flow";
 import { useHasForm } from "../../util/hook";
 import FormSet from "./components/FormSet";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 
 export default function l2Edit() {
     const { t } = useTranslation()
@@ -58,6 +59,7 @@ export default function l2Edit() {
     // 校验
     const { user } = useContext(userContext);
     const [error, setError] = useState({ name: false, desc: false }) // 表单error信息展示
+    const { message } = useToast()
     const isParamError = (name, desc, showErrorConfirm = false) => {
         const errorlist = [];
         if (!name) errorlist.push(t('skills.skillNameRequired'));
@@ -67,11 +69,13 @@ export default function l2Edit() {
         const nameErrors = errorlist.length;
         if (!desc) errorlist.push(t('skills.skillDescRequired'));
         if (desc.length > 200) errorlist.push(t('skills.skillDescTooLong'));
-        if (errorlist.length && showErrorConfirm) setErrorData({
-            title: t('skills.errorTitle'),
-            list: errorlist,
+        if (errorlist.length && showErrorConfirm) message({
+            title: t('prompt'),
+            variant: 'error',
+            description: errorlist
         });
         setError({ name: !!nameErrors, desc: errorlist.length > nameErrors });
+
         return !!errorlist.length;
     }
 
@@ -119,7 +123,7 @@ export default function l2Edit() {
         const name = nameRef.current.value
         const description = descRef.current.value
         const guideWords = guideRef.current.value
-        if (isParamError(name, description)) return
+        if (isParamError(name, description, true)) return
         setLoading(true)
         formRef.current?.save()
 

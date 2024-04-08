@@ -3,7 +3,7 @@
     "prompt": "提示",
     "login": {
         "slogen": "便捷、灵活、可靠的企业级大模型应用开发平台",
-        "bottomText":"文擎毕昇",
+        "bottomText": "文擎毕昇",
         "account": "用户名",
         "password": "密码",
         "confirmPassword": "确认密码",
@@ -22,9 +22,9 @@
         "pleaseEnterCaptcha": "请输入验证码"
     },
     "menu": {
-        "user":"用户",
-        "bookopen":"帮助文档",
-        "github":"GitHub",
+        "user": "用户",
+        "bookopen": "帮助文档",
+        "github": "GitHub",
         "app": "会 话",
         "skills": "构 建",
         "knowledge": "知 识",
@@ -280,7 +280,7 @@
     },
     "status": {
         "1004": "该技能已被删除",
-        "1008": "当前技能未上线，无法直接对话",
+        "1008": "当前助手或者技能未上线，无法直接对话",
         "1005": ""
     },
     "all": "全部",
