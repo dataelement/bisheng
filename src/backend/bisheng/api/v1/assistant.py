@@ -29,7 +29,8 @@ def get_assistant(*,
                   Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-    return AssistantService.get_assistant(current_user.get('user_id'), name, status, page, limit)
+    user = UserPayload(**current_user)
+    return AssistantService.get_assistant(user, name, status, page, limit)
 
 
 # 获取某个助手的详细信息

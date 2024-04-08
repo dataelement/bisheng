@@ -119,6 +119,7 @@ class AssistantAgent(AssistantUtils):
         for link in flow_links:
             knowledge_id = link.knowledge_id
             if knowledge_id:
+                tmp_flow_id = 'knowledge_' + str(knowledge_id)
                 one_knowledge_data = knowledge_data.get(knowledge_id)
                 if not one_knowledge_data:
                     logger.warning('act=init_tools not find knowledge_id: {}', knowledge_id)
@@ -134,6 +135,7 @@ class AssistantAgent(AssistantUtils):
                 flow_graph_data = replace_flow_llm(flow_graph_data, self.llm,
                                                    self.get_llm_conf(self.assistant.model_name))
             else:
+                tmp_flow_id = UUID(link.flow_id).hex
                 one_flow_data = flow_id2data.get(UUID(link.flow_id))
                 if not one_flow_data:
                     logger.warning('act=init_tools not find flow_id: {}', link.flow_id)
@@ -147,7 +149,7 @@ class AssistantAgent(AssistantUtils):
                 graph = await build_flow_no_yield(graph_data=flow_graph_data,
                                                   artifacts=artifacts,
                                                   process_file=True,
-                                                  flow_id=UUID(link.flow_id).hex,
+                                                  flow_id=tmp_flow_id,
                                                   chat_id=self.assistant.id.hex)
                 built_object = await graph.abuild()
                 logger.info('act=init_flow_tool build_end')
@@ -159,7 +161,8 @@ class AssistantAgent(AssistantUtils):
                                  callbacks=callbacks)
                 tools.append(flow_tool)
             except Exception as exc:
-                logger.error(f'Error processing tweaks: {exc}')
+                logger.error(f'Error processing {tmp_flow_id} tweaks: {exc}')
+                raise Exception(f'Flow Build Error: {exc}')
         self.tools = tools
 
     async def init_agent(self):

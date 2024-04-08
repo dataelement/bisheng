@@ -26,7 +26,7 @@ class AssistantService(AssistantUtils):
 
     @classmethod
     def get_assistant(cls,
-                      user_id: int,
+                      user: UserPayload,
                       name: str = None,
                       status: int | None = None,
                       page: int = 1,
@@ -35,16 +35,18 @@ class AssistantService(AssistantUtils):
         获取助手列表
         """
         data = []
-        # 权限管理可见的助手信息
-        assistant_ids_extra = []
-        user_role = UserRoleDao.get_user_roles(user_id)
-        if user_role:
-            role_ids = [role.id for role in user_role]
-            role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
-            if role_access:
-                assistant_ids_extra = [access.third_id for access in role_access]
-
-        res, total = AssistantDao.get_assistants(user_id, name, assistant_ids_extra, status, page, limit)
+        if user.is_admin():
+            res, total = AssistantDao.get_all_assistants(page, limit)
+        else:
+            # 权限管理可见的助手信息
+            assistant_ids_extra = []
+            user_role = UserRoleDao.get_user_roles(user.user_id)
+            if user_role:
+                role_ids = [role.id for role in user_role]
+                role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
+                if role_access:
+                    assistant_ids_extra = [access.third_id for access in role_access]
+            res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit)
 
         for one in res:
             simple_dict = one.model_dump(include={
