@@ -15,7 +15,7 @@ class GetCurTimeInput(BaseModel):
 @tool(args_schema=GetCurTimeInput)
 def get_current_time(timezone='Asia/Shanghai'):
     """
-    Get the current UTC time and the time in the major time zones, which can be used for calculations related to time, date, and other scenarios.
+    获取当前UTC时间以及主要时区的时间，可用于时间、日期等场景相关的计算。当问题涉及到时间，调用此工具来查询和时间有关的内容。
     """
     tz = pytz.timezone(timezone)
     current_time = datetime.now(tz)
