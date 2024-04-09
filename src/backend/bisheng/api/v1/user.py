@@ -399,7 +399,7 @@ async def access_list(*, role_id: int, type: Optional[int] = None, Authorize: Au
         total_count = session.scalar(count_sql)
     # uuid 和str的转化
     for access in db_role_access:
-        if access.type == AccessType.FLOW.value:
+        if access.type in [AccessType.FLOW.value, AccessType.ASSISTANT_READ.value]:
             access.third_id = UUID(access.third_id)
 
     return resp_200({
