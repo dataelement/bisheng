@@ -371,7 +371,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
     async def on_llm_end(self, response: LLMResult, **kwargs: Any) -> Any:
         """Run when LLM ends running."""
         logger.debug(f'llm_end response={response}')
-        resp = ChatResponse(type='start',
+        resp = ChatResponse(type='end',
                             category='processing',
                             flow_id=self.flow_id,
                             chat_id=self.chat_id)
