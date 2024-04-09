@@ -174,7 +174,6 @@ class ChatClient:
         await self.init_gpts_agent()
 
         await self.send_response('processing', 'begin', '')
-        await self.send_response('processing', 'start', '')
 
         # 将用户问题写入到数据库
         await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
@@ -191,8 +190,7 @@ class ChatClient:
 
         res = await self.add_message('bot', answer, 'answer')
 
-        # await self.send_response('answer', 'start', '')
-        # await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
+        await self.send_response('answer', 'start', '')
+        await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
 
-        await self.send_response('processing', 'end', answer, message_id=res.id if res else None)
         await self.send_response('processing', 'close', '')

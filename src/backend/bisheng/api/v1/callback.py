@@ -355,6 +355,28 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             tool_name = tool_name.replace('knowledge_', '')
         return tool_name, tool_category
 
+    async def on_chat_model_start(self, serialized: Dict[str, Any],
+                                  messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
+        # """Run when retriever end running."""
+        # content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
+        # stream = ChatResponse(message=f'{content}', type='stream')
+        # await self.websocket.send_json(stream.dict())
+        logger.debug(f'on_chat_model_start serialized={serialized} messages={messages} kwargs={kwargs}')
+        resp = ChatResponse(type='start',
+                            category='processing',
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        await self.websocket.send_json(resp.dict())
+
+    async def on_llm_end(self, response: LLMResult, **kwargs: Any) -> Any:
+        """Run when LLM ends running."""
+        logger.debug(f'llm_end response={response}')
+        resp = ChatResponse(type='start',
+                            category='processing',
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        await self.websocket.send_json(resp.dict())
+
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
         logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
