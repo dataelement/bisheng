@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Any, Dict, List, Union
 
 from bisheng.api.v1.schemas import ChatResponse
@@ -371,7 +372,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             message={'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str},
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
-                            sender=kwargs.get('run_id').hex)
+                            extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
         await self.websocket.send_json(resp.dict())
 
         ChatMessageDao.insert_one(ChatMessageModel(
@@ -383,7 +384,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             flow_id=self.flow_id,
             chat_id=self.chat_id,
             user_id=self.user_id,
-            sender=kwargs.get('run_id').hex
+            extra=json.dumps({'run_id': kwargs.get('run_id').hex})
         ))
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
@@ -404,7 +405,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             message={'tool_key': tool_name, 'output': output},
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
-                            sender=kwargs.get('run_id').hex)
+                            extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
 
         await self.websocket.send_json(resp.dict())
         ChatMessageDao.insert_one(ChatMessageModel(
@@ -416,7 +417,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             flow_id=self.flow_id,
             chat_id=self.chat_id,
             user_id=self.user_id,
-            sender=kwargs.get('run_id').hex
+            extra=json.dumps({'run_id': kwargs.get('run_id').hex})
         ))
 
         resp_start = ChatResponse(type='start',
