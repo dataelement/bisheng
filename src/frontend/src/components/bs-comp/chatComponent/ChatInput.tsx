@@ -64,6 +64,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     }, [])
 
     const handleSendClick = async () => {
+        // 解除锁定状态下 form 按钮开放的状态
+        setShowWhenLocked(false)
         // 关闭引导词
         setShowGuideQuestion(false)
         // 收起表单
@@ -83,6 +85,12 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         const chatid = chatId
         await createWebSocket(chatid)
         sendWsMsg(wsMsg)
+
+        // 滚动聊天到底
+        const messageDom = document.getElementById('message-panne')
+        if (messageDom) {
+            messageDom.scrollTop = messageDom.scrollHeight;
+        }
     }
 
     const sendWsMsg = async (msg) => {
@@ -239,6 +247,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     ><ClearIcon ></ClearIcon></div>
                 }
             </div>
+            {/* form */}
             <div className="flex absolute left-3 top-4 z-10">
                 {
                     form && <div
@@ -247,6 +256,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-950'}></FormIcon></div>
                 }
             </div>
+            {/* send */}
             <div className="flex gap-2 absolute right-3 top-4 z-10">
                 <div
                     id="bs-send-btn"

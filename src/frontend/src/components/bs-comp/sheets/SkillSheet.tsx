@@ -31,7 +31,7 @@ export default function SkillSheet({ select, children, onSelect }) {
             {children}
         </SheetTrigger>
         <SheetContent className="sm:min-w-[966px] bg-gray-100">
-            <div className="flex h-full">
+            <div className="flex h-full" onClick={e => e.stopPropagation()}>
                 <div className="w-fit pr-6">
                     <SheetTitle>添加技能</SheetTitle>
                     <SearchInput value={keyword} placeholder="搜索" className="my-6" onChange={handleSearch} />

@@ -84,7 +84,7 @@ enum ACCESS_TYPE {
     USE_LIB = 1,
     USE_SKILL,
     MANAGE_LIB,
-    ASSISTANT
+    ASSISTANT = 5
 }
 export async function updateRolePermissionsApi(data: { role_id: number, access_id: number[], type: ACCESS_TYPE }) {
     return await axios.post(`/api/v1/role_access/refresh`, data);

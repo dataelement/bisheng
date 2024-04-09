@@ -1,4 +1,5 @@
-import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './index';
+import { DoubleArrowLeftIcon, DoubleArrowRightIcon } from '@radix-ui/react-icons';
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './index';
 
 interface IProps {
     /** 当前页码 */
@@ -28,6 +29,16 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
         // If total pages are more than maxVisiblePages, show at most maxVisiblePages pages
         const startPage = Math.max(1, page - Math.floor(maxVisiblePages / 2));
         const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+        // page 0
+        if (page !== 1) {
+            items.push(
+                <PaginationItem key="start">
+                    <PaginationLink href="#" onClick={() => handlePageChange(1)} >
+                        <DoubleArrowLeftIcon />
+                    </PaginationLink>
+                </PaginationItem>
+            );
+        }
         // Previous Button
         items.push(
             <PaginationItem key="previous">
@@ -53,14 +64,14 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
             }
         } else {
 
-            if (startPage > 1) {
-                // Display ellipsis if there are pages before the startPage
-                items.push(
-                    <PaginationItem key="startEllipsis">
-                        <PaginationEllipsis />
-                    </PaginationItem>
-                );
-            }
+            // if (startPage > 1) {
+            //     // Display ellipsis if there are pages before the startPage
+            //     items.push(
+            //         <PaginationItem key="startEllipsis">
+            //             <PaginationEllipsis />
+            //         </PaginationItem>
+            //     );
+            // }
 
             for (let i = startPage; i <= endPage; i++) {
                 items.push(
@@ -74,14 +85,14 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
                 );
             }
 
-            if (endPage < totalPages) {
-                // Display ellipsis if there are pages after the endPage
-                items.push(
-                    <PaginationItem key="endEllipsis">
-                        <PaginationEllipsis />
-                    </PaginationItem>
-                );
-            }
+            // if (endPage < totalPages) {
+            //     // Display ellipsis if there are pages after the endPage
+            //     items.push(
+            //         <PaginationItem key="endEllipsis">
+            //             <PaginationEllipsis />
+            //         </PaginationItem>
+            //     );
+            // }
         }
 
         // Next Button
@@ -92,6 +103,16 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
                     onClick={() => handlePageChange(page + 1)} />
             </PaginationItem>
         );
+        // page last
+        if (page !== totalPages) {
+            items.push(
+                <PaginationItem key="end">
+                    <PaginationLink href="#" onClick={() => handlePageChange(totalPages)} >
+                        <DoubleArrowRightIcon />
+                    </PaginationLink>
+                </PaginationItem>
+            );
+        }
 
         return items;
     };

@@ -59,8 +59,8 @@ export default function Assistants() {
                                     type='skill'
                                     title="新建助手"
                                     description={(<>
-                                        <p>没有想法？</p>
-                                        <p>我们提供场景模板供您使用和参考</p>
+                                        <p>通过描述角色和任务来创建你的助手</p>
+                                        <p>助手可以调用多个技能和工具</p>
                                     </>)}
                                     onClick={() => console.log('新建')}
                                 ></CardComponent>
@@ -90,7 +90,7 @@ export default function Assistants() {
         </div>
         {/* footer */}
         <div className="flex justify-between absolute bottom-0 left-0 w-full bg-[#F4F5F8] h-16 items-center px-10">
-            <p className="text-sm text-muted-foreground break-keep">助手是可以调用一个或者多个技能的智能体</p>
+            <p className="text-sm text-muted-foreground break-keep">在此页面管理您的助手，对助手上下线、编辑等等</p>
             <AutoPagination className="m-0 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage}></AutoPagination>
         </div>
     </div>

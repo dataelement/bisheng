@@ -1,6 +1,6 @@
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Dropdown from "../../../components/dropdownComponent";
 import InputComponent from "../../../components/inputComponent";
 import InputFileComponent from "../../../components/inputFileComponent";
 import { Button } from "../../../components/ui/button";
@@ -68,11 +68,18 @@ export default function ChatReportForm({ flow, onStart }) {
                         onChange={(val) => handleChange(i, val)}
                     /> :
                         item.type === VariableType.Select ?
-                            <Dropdown
-                                options={item.options.map(e => e.value)}
-                                onSelect={(val) => handleChange(i, val)}
-                                value={item.value}
-                            ></Dropdown> :
+                            <Select onValueChange={(val) => handleChange(i, val)}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        {
+                                            item.options.map(el => <SelectItem key={el.value} value={el.value}>{el.value}</SelectItem>)
+                                        }
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select> :
                             item.type === VariableType.File ?
                                 <InputFileComponent
                                     isSSO
