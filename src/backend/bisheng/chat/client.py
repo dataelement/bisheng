@@ -191,8 +191,8 @@ class ChatClient:
 
         res = await self.add_message('bot', answer, 'answer')
 
-        await self.send_response('answer', 'start', '')
-        await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
+        # await self.send_response('answer', 'start', '')
+        # await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
 
-        await self.send_response('processing', 'end', '')
+        await self.send_response('processing', 'end', answer, message_id=res.id if res else None)
         await self.send_response('processing', 'close', '')
