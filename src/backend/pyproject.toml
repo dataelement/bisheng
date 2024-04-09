@@ -83,6 +83,8 @@ psycopg-binary = "^3.1.9"
 emoji = "^2.10.1"
 platformdirs = ">=2.5"
 scipy = "*"
+arxiv = "2.1.0"
+matplotlib = "3.8.4"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
