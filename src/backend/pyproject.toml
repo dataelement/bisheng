@@ -18,7 +18,7 @@ include = ["./bisheng/*", "bisheng/**/*"]
 bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
-bisheng_langchain = "0.2.9"
+bisheng_langchain = "0.3.0b0"
 bisheng_pyautogen = "0.2.1"
 langchain = "0.1.12"
 langchain_experimental = "*"
