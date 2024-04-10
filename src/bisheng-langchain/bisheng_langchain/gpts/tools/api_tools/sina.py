@@ -20,16 +20,33 @@ class Stock(BaseModel):
     todayStart: float
     yesterdayEnd: float
     current: float
+    changeAmount: float
+    changeRate: float
+    vol: float
+    turnover: float
     highest: float
     lowest: float
     buyPercent: float
 
-    def __init__(self, name, todayStart, yesterdayEnd, current, highest='0', lowest='0'):
+    def __init__(self,
+                 name,
+                 todayStart,
+                 yesterdayEnd,
+                 current,
+                 highest='0',
+                 lowest='0',
+                 vol='0',
+                 turnover='0'):
         super().__init__(
             name=name,
             todayStart=float(todayStart),
             yesterdayEnd=float(yesterdayEnd),
             current=float(current),
+            changeAmount=round(float(current) - float(yesterdayEnd), 3),
+            changeRate=round((float(current) - float(yesterdayEnd)) / float(yesterdayEnd) * 100,
+                             3),
+            vol=float(vol),
+            turnover=float(turnover),
             highest=float(highest),
             lowest=float(lowest),
             buyPercent=0.0,
@@ -98,9 +115,13 @@ class StockInfo(APIToolBase):
     def devideStock(self, content: str) -> List[Stock]:
         match = stockPattern.search(content)
         stock = []
-        while match:
-            stock.append(Stock(match.group(1), match.group(2), match.group(3), match.group(4)))
-            match = stockPattern.search(content, match.end())
+        if match:
+            while match:
+                stock.append(Stock(match.group(1), match.group(2), match.group(3), match.group(4)),
+                            match.group(5), match.group(6), match.group(9), match.group(10)))
+                match = stockPattern.search(content, match.end())
+        else:
+            stock = [content]
         return stock
 
     def run(self, **kwargs):
@@ -127,7 +148,10 @@ class StockInfo(APIToolBase):
 
         resp = super().run(query=stock_number)
         stock = self.devideStock(resp)[0]
-        return json.dumps(stock.__dict__)
+        if isinstance(stock, Stock):
+            return json.dumps(stock.__dict__)
+        else:
+            return stock
 
     async def arun(self, **kwargs) -> str:
         prefix = 's_' if kwargs.get('prefix', '') == 's_' else ''
@@ -154,7 +178,10 @@ class StockInfo(APIToolBase):
         else:
             resp = await super().arun(query=stock_number)
             stock = self.devideStock(resp)[0]
-            return json.dumps(stock.__dict__)
+            if isinstance(stock, Stock):
+                return json.dumps(stock.__dict__)
+            else:
+                return stock
 
     @classmethod
     def realtime_info(cls) -> StockInfo:
