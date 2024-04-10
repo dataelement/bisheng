@@ -77,10 +77,10 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
         onCreate(res.id)
     }
 
-    return <div className="pt-2">
+    return <div className="pt-2 h-[calc(100vh-162px)] overflow-y-auto">
         <div className="border-b pb-2 flex justify-between items-center">
             <h1 className="">{t('finetune.createTrainingTask')}</h1>
-            <Button size="sm" className="h-10 px-5 bg-[#111] hover:bg-[#48494d]" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+            <Button variant="black" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
         </div>
         {/* base */}
         <div className="border-b pb-4">
@@ -109,7 +109,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
                             </SelectGroup>
                         </SelectContent>
                     </Select>
-                    <Button size="sm" className="h-9 px-5" onClick={gpuClick}>{t('finetune.gpuResourceUsage')}</Button>
+                    <Button size="sm" onClick={gpuClick}>{t('finetune.gpuResourceUsage')}</Button>
                 </div>
             </div>
             {/* datas */}

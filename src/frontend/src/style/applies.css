@@ -136,7 +136,7 @@
     @apply bg-muted transition-colors
   }
   .components-disclosure-title {
-    @apply flex items-center text-xs text-primary break-keep
+    @apply flex items-center text-xs break-keep
   }
   .components-disclosure-div {
     @apply flex gap-2
@@ -992,6 +992,10 @@
 
   .bisheng-title {
     @apply text-lg text-gray-950
+  }
+
+  .bisheng-table-footer {
+    @apply flex justify-between items-center absolute bottom-0 right-0 h-16 w-full bg-[#fff] [&>.desc]:whitespace-nowrap [&>.desc]:text-sm [&>.desc]:text-muted-foreground [&>.desc]:break-keep
   }
 
   .flex-between-center {

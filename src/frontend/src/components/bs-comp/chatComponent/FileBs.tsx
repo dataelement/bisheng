@@ -1,7 +1,7 @@
 import { AvatarIcon } from "@/components/bs-icons/avatar";
+import { WordIcon } from "@/components/bs-icons/office";
 import { checkSassUrl } from "@/pages/ChatAppPage/components/FileView";
 import { downloadFile } from "@/util/utils";
-import { FileIcon } from "@radix-ui/react-icons";
 import { useTranslation } from "react-i18next";
 
 // 颜色列表
@@ -38,7 +38,7 @@ export default function FileBs({ data }) {
                     className="flex gap-2 w-52 border border-gray-200 shadow-sm bg-gray-50 px-4 py-2 rounded-sm cursor-pointer"
                     onClick={() => handleDownloadFile(data.files[0])}
                 >
-                    <div><FileIcon /></div>
+                    <div className="flex items-center"><WordIcon /></div>
                     <div>
                         <h1 className="text-sm font-bold">{data.files[0]?.file_name}</h1>
                         <p className="text-xs text-gray-400 mt-1">点击下载</p>

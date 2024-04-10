@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
-import { Input } from "../../../components/bs-ui/input";
+import { Input, SearchInput } from "../../../components/bs-ui/input";
 import {
     Select,
     SelectContent,
@@ -77,14 +77,11 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
                     </SelectGroup>
                 </SelectContent>
             </Select>
-            <div className="w-[180px] relative">
-                <Input ref={inputRef} placeholder={t('finetune.modelName')} onChange={useDebounce(handleSearch, 600, false)}></Input>
-                <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
-            </div>
+            <SearchInput ref={inputRef} placeholder={t('finetune.modelName')} onChange={useDebounce(handleSearch, 600, false)}></SearchInput>
         </div>
         <div className="flex gap-4">
-            <Button size="sm" className="h-10 px-5" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
-            <Button size="sm" className="h-10 px-5  bg-[#111] hover:bg-[#48494d]" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+            <Button className="" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
+            <Button variant="black" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
         </div>
     </div>
 };

@@ -1,4 +1,3 @@
-import { PlusIcon } from "@radix-ui/react-icons";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../../components/bs-ui/button";
 import { Input } from "../../../components/bs-ui/input";
@@ -14,6 +13,7 @@ import { addServiceApi, deleteServiceApi, getServicesApi } from "../../../contro
 import { useCopyText } from "../../../util/hook";
 import { useTranslation } from "react-i18next";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { PlusIcon } from "@radix-ui/react-icons";
 
 export default function RTConfig({ open, onChange }) {
 
@@ -75,7 +75,7 @@ export default function RTConfig({ open, onChange }) {
                 </Table>
             </div>
             <div className="flex justify-start mt-4">
-                <Button variant='outline' className="flex justify-around  h-10 w-[120px]" onClick={() => setShowAdd(true)}><PlusIcon className="mt-1 font-bold"/>{t('create')}</Button>
+                <Button variant='outline' className="flex w-[120px]" onClick={() => setShowAdd(true)}><PlusIcon className="mr-2" />{t('create')}</Button>
             </div>
         </div>
     </dialog>

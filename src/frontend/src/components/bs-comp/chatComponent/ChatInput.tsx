@@ -69,7 +69,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         // 关闭引导词
         setShowGuideQuestion(false)
         // 收起表单
-        formShow && setFormShow(false)
+        // formShow && setFormShow(false)
+        setFormShow(false)
 
         const value = inputRef.current.value
         if (value.trim() === '') return
@@ -243,8 +244,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 {
                     clear && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                        onClick={destory}
-                    ><ClearIcon ></ClearIcon></div>
+                        onClick={() => { !inputLock.locked && destory() }}
+                    ><ClearIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-950'} ></ClearIcon></div>
                 }
             </div>
             {/* form */}

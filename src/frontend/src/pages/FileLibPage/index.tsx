@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../../components/bs-ui/button";
-import { Input } from "../../components/bs-ui/input";
+import { Input, SearchInput } from "../../components/bs-ui/input";
 import { Label } from "../../components/bs-ui/label";
 import {
     Table,
@@ -153,64 +153,62 @@ export default function FileLibPage() {
     const { t } = useTranslation();
 
     return (
-        <div className="w-full h-full p-6 overflow-y-auto">
+        <div className="w-full h-full p-6 relative">
             {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <span className="loading loading-infinity loading-lg"></span>
             </div>}
+            <div className="h-full overflow-y-auto pb-10">
+                <Tabs defaultValue="account" className="w-full mb-[40px]">
+                    <TabsList className="">
+                        <TabsTrigger value="account" className="roundedrounded-xl">{t('lib.fileData')}</TabsTrigger>
+                        <TabsTrigger disabled value="password">{t('lib.structuredData')}</TabsTrigger>
+                    </TabsList>
 
-            <Tabs defaultValue="account" className="w-full mb-[40px]">
-                <TabsList className="">
-                    <TabsTrigger value="account" className="roundedrounded-xl">{t('lib.fileData')}</TabsTrigger>
-                    <TabsTrigger disabled value="password">{t('lib.structuredData')}</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="account">
-                    <div className="flex justify-end gap-4 items-center">
-                        <div className="w-[180px] relative">
-                            <Input placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)}></Input>
-                            <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+                    <TabsContent value="account">
+                        <div className="flex justify-end gap-4 items-center">
+                            <SearchInput placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)} />
+                            <Button className="px-8" onClick={() => setOpen(true)}>{t('create')}</Button>
                         </div>
-                        <Button className="h-10 px-10" onClick={() => setOpen(true)}>{t('create')}</Button>
-                    </div>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
-                                <TableHead>{t('lib.model')}</TableHead>
-                                <TableHead>{t('createTime')}</TableHead>
-                                <TableHead>{t('updateTime')}</TableHead>
-                                <TableHead>{t('lib.createUser')}</TableHead>
-                                <TableHead className="text-right">{t('operations')}</TableHead>
-                            </TableRow>
-                        </TableHeader>
-
-                        <TableBody>
-                            {datalist.map((el) => (
-                                <TableRow key={el.id}>
-                                    <TableCell className="font-medium">{el.name}</TableCell>
-                                    <TableCell>{el.model || '--'}</TableCell>
-                                    <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-                                    <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                                    <TableCell>{el.user_name || '--'}</TableCell>
-                                    <TableCell className="text-right" onClick={() => {
-                                        // @ts-ignore
-                                        window.libname = el.name;
-                                    }}>
-                                        <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-[#0455e1]" onClick={handleCachePage}>{t('lib.details')}</Link>
-                                        {user.role === 'admin' || user.user_id === el.user_id ?
-                                            <Button variant="link" onClick={() => delConfirm(el)} className="ml-4 px-0">{t('delete')}</Button> :
-                                            <Button variant="link" className="ml-4 text-gray-400 px-0">{t('delete')}</Button>
-                                        }
-                                    </TableCell>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
+                                    <TableHead>{t('lib.model')}</TableHead>
+                                    <TableHead>{t('createTime')}</TableHead>
+                                    <TableHead>{t('updateTime')}</TableHead>
+                                    <TableHead>{t('lib.createUser')}</TableHead>
+                                    <TableHead className="text-right">{t('operations')}</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </TabsContent>
-                <TabsContent value="password"></TabsContent>
-            </Tabs>
-            <div className="flex justify-between items-center absolute bottom-0 right-0 h-[60px] w-[calc(100vw-184px)] bg-[#fff] pl-[60px] mr-5 border-t-[1px]">
-                <p>{t('lib.libraryCollection')}</p>
+                            </TableHeader>
+
+                            <TableBody>
+                                {datalist.map((el) => (
+                                    <TableRow key={el.id}>
+                                        <TableCell className="font-medium">{el.name}</TableCell>
+                                        <TableCell>{el.model || '--'}</TableCell>
+                                        <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
+                                        <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                                        <TableCell>{el.user_name || '--'}</TableCell>
+                                        <TableCell className="text-right" onClick={() => {
+                                            // @ts-ignore
+                                            window.libname = el.name;
+                                        }}>
+                                            <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-[#0455e1]" onClick={handleCachePage}>{t('lib.details')}</Link>
+                                            {user.role === 'admin' || user.user_id === el.user_id ?
+                                                <Button variant="link" onClick={() => delConfirm(el)} className="ml-4 px-0">{t('delete')}</Button> :
+                                                <Button variant="link" className="ml-4 text-gray-400 px-0">{t('delete')}</Button>
+                                            }
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TabsContent>
+                    <TabsContent value="password"></TabsContent>
+                </Tabs>
+            </div>
+            <div className="bisheng-table-footer px-6">
+                <p className="desc">{t('lib.libraryCollection')}</p>
                 <div>
                     <AutoPagination
                         page={page}

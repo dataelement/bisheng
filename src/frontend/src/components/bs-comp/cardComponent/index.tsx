@@ -158,7 +158,7 @@ export default function CardComponent<T>({
       <div className="flex gap-1 items-center">
         <UserIcon />
         <span className="text-sm text-muted-foreground">创建用户</span>
-        <span className="text-sm font-medium leading-none">{user}</span>
+        <span className="text-sm font-medium leading-none overflow-hidden text-ellipsis max-w-32 ">{user}</span>
       </div>
       {edit
         && <div className="hidden group-hover:flex">

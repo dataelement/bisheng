@@ -93,7 +93,7 @@ function ConfigModal({ data, readonly, open, setOpen, onSave }) {
                         </div>
                     </div>
                     <div className="flex justify-start">
-                        <Button variant='link' onClick={()=>{navigate('./doc')}} className="link col-span-8 pl-0">{t('model.modelConfigExplanationLink')}</Button>
+                        <Button variant='link' onClick={() => { navigate('./doc') }} className="link col-span-8 pl-0">{t('model.modelConfigExplanationLink')}</Button>
                     </div>
                     {readonly ? <div className="flex justify-end gap-4"><Button variant='outline' type="submit" className="mt-6 h-8 rounded-full px-8" onClick={() => setOpen(false)}>{t('close')}</Button></div>
                         : <div className="flex justify-end gap-4">
@@ -211,50 +211,56 @@ export default function FileLibPage() {
 
     const copyText = useCopyText()
 
-    return <div id="model-scroll" className="w-full h-full p-6 overflow-y-auto">
+    return <div id="model-scroll" className="w-full h-full p-6">
         <Tabs defaultValue="model" className="w-full mb-[40px]" onValueChange={e => e === 'model' && loadData()}>
             <TabsList className="">
                 <TabsTrigger value="model" className="roundedrounded-xl">{t('model.modelManagement')}</TabsTrigger>
                 <TabsTrigger value="finetune" disabled={user.role !== 'admin'}>{t('model.modelFineTune')}</TabsTrigger>
             </TabsList>
             <TabsContent value="model">
-                <div className="flex justify-end gap-4">
-                    {user.role === 'admin' && <Button className="h-10 px-5 bg-[#111] hover:bg-[#48494d]" onClick={() => setShowCpu({ type: 'model', show: true })}>{t('model.gpuResourceUsage')}</Button>}
-                    {user.role === 'admin' && appConfig.isDev && <Button className="h-10 px-6 bg-[#111] hover:bg-[#48494d]" onClick={() => setRTOpen(true)}>{t('finetune.rtServiceManagement')}</Button>}
-                    <Button className="h-10 px-10 rounded-lg" onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
+                <div className="relative">
+                    <div className="h-[calc(100vh-136px)] overflow-y-auto pb-20">
+                        <div className="flex justify-end gap-4">
+                            {user.role === 'admin' && <Button variant="black" onClick={() => setShowCpu({ type: 'model', show: true })}>{t('model.gpuResourceUsage')}</Button>}
+                            {user.role === 'admin' && appConfig.isDev && <Button variant="black" className="bg-[#111] hover:bg-[#48494d]" onClick={() => setRTOpen(true)}>{t('finetune.rtServiceManagement')}</Button>}
+                            <Button onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
+                        </div>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[200px]">{t('model.machineName')}</TableHead>
+                                    <TableHead>{t('model.modelName')}</TableHead>
+                                    <TableHead>{t('model.serviceAddress')}</TableHead>
+                                    <TableHead>{t('model.status')}</TableHead>
+                                    <TableHead className="text-right">{t('operations')}</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {datalist.map((el) => (
+                                    <TableRow key={el.id}>
+                                        <TableCell className="font-medium">{el.server}</TableCell>
+                                        <TableCell>{el.model}</TableCell>
+                                        <TableCell>
+                                            <p className="cursor-pointer" onClick={() => copyText(el.endpoint)}>{el.endpoint}</p>
+                                        </TableCell>
+                                        <TableCell>
+                                            {statusComponets(el.status, el.remark)}
+                                        </TableCell>
+                                        {user.role === 'admin' ? <TableCell className="text-right">
+                                            {appConfig.isDev && <Button variant="link" className={`link ${[STATUS.WAIT_ONLINE, STATUS.WAIT_OFFLINE].includes(el.status) && 'text-gray-400 cursor-default'}`}
+                                                onClick={() => handleSwitchOnline(el)}>{[STATUS.ERROR, STATUS.OFFLINE, STATUS.WAIT_ONLINE].includes(el.status) ? t('model.online') : t('model.offline')}</Button>}
+                                            <Button variant="link" className={`link px-0 pl-6`} onClick={() => handleOpenConfig(el)} >{t('model.modelConfiguration')}</Button> </TableCell> :
+                                            <TableCell className="">--</TableCell>}
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                    {/* 分页 */}
+                    <div className="bisheng-table-footer">
+                        <p className="desc">{t('model.modelCollectionCaption')}.</p>
+                    </div>
                 </div>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[200px]">{t('model.machineName')}</TableHead>
-                            <TableHead>{t('model.modelName')}</TableHead>
-                            <TableHead>{t('model.serviceAddress')}</TableHead>
-                            <TableHead>{t('model.status')}</TableHead>
-                            <TableHead className="text-right">{t('operations')}</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {datalist.map((el) => (
-                            <TableRow key={el.id}>
-                                <TableCell className="font-medium">{el.server}</TableCell>
-                                <TableCell>{el.model}</TableCell>
-                                <TableCell>
-                                    <p className="cursor-pointer" onClick={() => copyText(el.endpoint)}>{el.endpoint}</p>
-                                </TableCell>
-                                <TableCell>
-                                    {statusComponets(el.status, el.remark)}
-                                </TableCell>
-                                {user.role === 'admin' ? <TableCell className="text-right">
-                                    {appConfig.isDev && <Button variant="link" className={`link ${[STATUS.WAIT_ONLINE, STATUS.WAIT_OFFLINE].includes(el.status) && 'text-gray-400 cursor-default'}`}
-                                        onClick={() => handleSwitchOnline(el)}>{[STATUS.ERROR, STATUS.OFFLINE, STATUS.WAIT_ONLINE].includes(el.status) ? t('model.online') : t('model.offline')}</Button>}
-                                    <Button variant="link" className={`link px-0 pl-6`} onClick={() => handleOpenConfig(el)} >{t('model.modelConfiguration')}</Button> </TableCell> :
-                                    <TableCell className="">--</TableCell>}
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-                {/* 分页 */}
-            <div className="flex justify-between items-center w-[calc(100vw-184px)] absolute right-0 bottom-0 bg-[#fff] h-[60px] pl-[60px] mr-5  border-t-[1px]">{t('model.modelCollectionCaption')}.</div>
             </TabsContent>
             <TabsContent value="finetune">
                 {/* 微调 */}
