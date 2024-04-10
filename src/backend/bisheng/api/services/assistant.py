@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, List
 from uuid import UUID
 
@@ -178,6 +179,7 @@ class AssistantService(AssistantUtils):
         assistant.guide_question = req.guide_question or assistant.guide_question
         assistant.model_name = req.model_name or assistant.model_name
         assistant.temperature = req.temperature or assistant.temperature
+        assistant.update_time = datetime.now()
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息
