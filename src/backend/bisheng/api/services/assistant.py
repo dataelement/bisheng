@@ -52,6 +52,8 @@ class AssistantService(AssistantUtils):
             simple_dict = one.model_dump(include={
                 'id', 'name', 'desc', 'logo', 'status', 'user_id', 'create_time', 'update_time'
             })
+            if one.user_id == user.user_id or user.is_admin():
+                simple_dict['write'] = True
             simple_dict['user_name'] = cls.get_user_name(one.user_id)
             data.append(AssistantSimpleInfo(**simple_dict))
         return resp_200(data={'data': data, 'total': total})
