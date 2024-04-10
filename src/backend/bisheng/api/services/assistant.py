@@ -42,7 +42,7 @@ class AssistantService(AssistantUtils):
             assistant_ids_extra = []
             user_role = UserRoleDao.get_user_roles(user.user_id)
             if user_role:
-                role_ids = [role.id for role in user_role]
+                role_ids = [role.role_id for role in user_role]
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
                 if role_access:
                     assistant_ids_extra = [UUID(access.third_id).hex for access in role_access]
