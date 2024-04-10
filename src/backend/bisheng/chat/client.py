@@ -175,22 +175,25 @@ class ChatClient:
 
         await self.send_response('processing', 'begin', '')
 
-        # 将用户问题写入到数据库
-        await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
+        try:
+            # 将用户问题写入到数据库
+            await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
 
-        # 调用agent获取结果
-        # 获取回话历史
-        chat_history = await self.get_latest_history()
-        result = await self.gpts_agent.run(input_msg, chat_history, self.gpts_async_callback)
-        logger.debug(f'gpts agent {self.client_key} result: {result}')
-        answer = ''
-        for one in result:
-            if isinstance(one, AIMessage):
-                answer += one.content
-
-        res = await self.add_message('bot', answer, 'answer')
-
-        await self.send_response('answer', 'start', '')
-        await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
-
-        await self.send_response('processing', 'close', '')
+            # 获取回话历史
+            chat_history = await self.get_latest_history()
+            # 调用agent获取结果
+            result = await self.gpts_agent.run(input_msg, chat_history, self.gpts_async_callback)
+            logger.debug(f'gpts agent {self.client_key} result: {result}')
+            answer = ''
+            for one in result:
+                if isinstance(one, AIMessage):
+                    answer += one.content
+            res = await self.add_message('bot', answer, 'answer')
+            await self.send_response('answer', 'start', '')
+            await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
+        except Exception as e:
+            logger.exception('handle gpts message error: ')
+            await self.send_response('system', 'start', '')
+            await self.send_response('system', 'end', 'Error: ' + str(e))
+        finally:
+            await self.send_response('processing', 'close', '')

@@ -27,7 +27,10 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # 工具调用的缓存，在tool_end时将开始和结束拼接到一起存储到数据库
         self.tool_cache = {}
         # self.tool_cache = {
-        #     'run_id': {},  # 存储工具调用的input信息
+        #     'run_id': {
+        #         'input': {},
+        #         'category': "",
+        #     },  # 存储工具调用的input信息
         # }
 
     async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
@@ -389,7 +392,10 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
 
         tool_name, tool_category = self.parse_tool_category(serialized['name'])
         input_info = {'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str}
-        self.tool_cache[kwargs.get('run_id').hex] = input_info
+        self.tool_cache[kwargs.get('run_id').hex] = {
+            'input': input_info,
+            'category': tool_category
+        }
         resp = ChatResponse(type='start',
                             category=tool_category,
                             intermediate_steps=f'Tool input: {input_str}',
@@ -425,7 +431,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         # 从tool cache中获取input信息
         input_info = self.tool_cache.get(kwargs.get('run_id').hex)
         if input_info:
-            output_info.update(input_info)
+            output_info.update(input_info['input'])
             ChatMessageDao.insert_one(ChatMessageModel(
                 is_bot=1,
                 message=json.dumps(output_info),
@@ -437,4 +443,22 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                 user_id=self.user_id,
                 extra=json.dumps({'run_id': kwargs.get('run_id').hex})
             ))
+            self.tool_cache.pop(kwargs.get('run_id').hex())
+
+    async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt],
+                            **kwargs: Any) -> Any:
+        """Run when tool errors."""
+        logger.debug(f'on_tool_error error={error} kwargs={kwargs}')
+        input_info = self.tool_cache.get(kwargs.get('run_id').hex)
+        if input_info:
+            output_info = {'output': 'Error: ' + str(error)}
+            output_info.update(input_info['input'])
+            resp = ChatResponse(type='end',
+                                category=input_info['category'],
+                                intermediate_steps='Error: ' + str(error),
+                                message=json.dumps(output_info),
+                                flow_id=self.flow_id,
+                                chat_id=self.chat_id,
+                                extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
+            await self.websocket.send_json(resp.dict())
             self.tool_cache.pop(kwargs.get('run_id').hex())
