@@ -130,7 +130,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     // 异常类型处理，提示
                     if (errorMsg) return setInputLock({ locked: true, reason: errorMsg })
                     // 拦截会话串台情况
-                    if (currentChatIdRef.current !== data.chat_id) return
+                    if (currentChatIdRef.current && currentChatIdRef.current !== data.chat_id) return
                     handleWsMessage(data)
                     // 群聊@自己时，开启input
                     if (data.type === 'end' && data.receiver?.is_self) {
