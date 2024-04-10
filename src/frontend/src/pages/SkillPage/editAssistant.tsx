@@ -1,28 +1,28 @@
+import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { changeAssistantStatusApi, saveAssistanttApi } from "@/controllers/API/assistant";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
+import { useEffect, useState } from "react";
+import { useParams } from "react-router";
+import { useNavigate } from "react-router-dom";
 import Header from "./components/editAssistant/Header";
 import Prompt from "./components/editAssistant/Prompt";
 import Setting from "./components/editAssistant/Setting";
 import TestChat from "./components/editAssistant/TestChat";
-import { useEffect, useState } from "react";
-import { useParams } from "react-router";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { changeAssistantStatusApi, saveAssistanttApi } from "@/controllers/API/assistant";
-import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { useNavigate } from "react-router-dom";
 
 export default function editAssistant() {
     const { id: assisId } = useParams()
     const navigate = useNavigate()
     // assistant data
     const { assistantState, changed, loadAssistantState, saveAfter, destroy } = useAssistantStore()
-    const { startNewRound, insetSystemMsg, setShowGuideQuestion } = useMessageStore()
+    const { startNewRound, insetSystemMsg, insetBsMsg, setShowGuideQuestion } = useMessageStore()
 
     useEffect(() => {
         loadAssistantState(assisId).then((res) => {
             setShowGuideQuestion(true)
             setGuideQuestion(res.guide_question?.filter((item) => item) || [])
-            res.guide_word && insetSystemMsg(res.guide_word)
+            res.guide_word && insetBsMsg(res.guide_word)
         })
     }, [])
 
@@ -34,7 +34,7 @@ export default function editAssistant() {
         saveAfter()
         startNewRound()
         setGuideQuestion(assistantState.guide_question.filter((item) => item))
-        assistantState.guide_word && insetSystemMsg(assistantState.guide_word)
+        assistantState.guide_word && insetBsMsg(assistantState.guide_word)
     }
 
     const { message, toast } = useToast()

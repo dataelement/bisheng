@@ -45,7 +45,7 @@ class AssistantService(AssistantUtils):
                 role_ids = [role.id for role in user_role]
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
                 if role_access:
-                    assistant_ids_extra = [access.third_id for access in role_access]
+                    assistant_ids_extra = [UUID(access.third_id).hex for access in role_access]
             res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit)
 
         for one in res:

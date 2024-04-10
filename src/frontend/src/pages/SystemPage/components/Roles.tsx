@@ -69,7 +69,7 @@ export default function Roles() {
     return <div>
         <div className="flex gap-4 items-center justify-end">
             <div className="w-[180px] relative">
-                <SearchInput placeholder={t('system.roleName')} onChange={(e) => search(e.target.value)}></SearchInput>
+                <SearchInput placeholder={t('system.roleName')} onChange={handleSearch}></SearchInput>
             </div>
             <Button className="flex justify-around h-10 w-[120px] ml-5"  onClick={() => setRole({})}>
                 <PlusIcon className="text-[#0053e1]"/>

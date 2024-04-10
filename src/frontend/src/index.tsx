@@ -9,6 +9,8 @@ import "./style/index.css";
 import "./style/applies.css";
 // @ts-ignore
 import "./style/classes.css";
+// @ts-ignore
+import "./style/markdown.css";
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement

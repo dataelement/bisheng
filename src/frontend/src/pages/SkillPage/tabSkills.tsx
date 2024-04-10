@@ -91,7 +91,7 @@ export default function Skills() {
                                 type='skill'
                                 title={t('skills.createNew')}
                                 description={(<>
-                                    <p>没有想法？</p>
+                                    <p>技能通过可视化的流程编排，明确任务执行步骤</p>
                                     <p>我们提供场景模板供您使用和参考</p>
                                 </>)}
                             ></CardComponent>

@@ -56,8 +56,10 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
         return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
     }, [messagesRef.current, messages, chatId]);
 
-    return <div ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-52">
-        {guideWord && <MessageSystem key={99999} data={{ category: 'guide', thought: guideWord }} />}
+    return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-52">
+        {guideWord && <MessageBs
+            key={9999}
+            data={{ message: guideWord, isSend: false, chatKey: '', end: true, user_name: '' }} />}
         {
             messages.map(msg => {
                 // 工厂

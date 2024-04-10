@@ -1,4 +1,7 @@
+import { AssistantIcon } from "@/components/bs-icons/assistant";
+import { cname } from "@/components/bs-ui/utils";
 import { useState } from "react";
+import { AddToIcon } from "../../bs-icons/addTo";
 import { DelIcon } from "../../bs-icons/del";
 import { GoIcon } from "../../bs-icons/go";
 import { PlusIcon } from "../../bs-icons/plus";
@@ -7,8 +10,6 @@ import { SkillIcon } from "../../bs-icons/skill";
 import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { Switch } from "../../ui/switch";
-import { AddToIcon } from "../../bs-icons/addTo";
-import { cname } from "@/components/bs-ui/utils";
 
 interface IProps<T> {
   data: T,
@@ -22,6 +23,7 @@ interface IProps<T> {
   user?: string,
   isAdmin?: boolean,
   footer?: React.ReactNode,
+  icon?: any,
   onClick?: () => void,
   onAddTemp?: (data: T) => void,
   onCheckedChange?: (b: boolean, data: T) => Promise<any>
@@ -59,11 +61,11 @@ export function TitleIconBg({ id, className = '', children = <SkillIcon /> }) {
   return <div className={cname(`rounded-sm flex justify-center items-center ${gradients[parseInt(id + '', 16) % gradients.length]}`, className)}>{children}</div>
 }
 
-
 export default function CardComponent<T>({
   id = '',
   data,
   type,
+  icon: Icon = SkillIcon,
   edit = false,
   user,
   title,
@@ -121,7 +123,9 @@ export default function CardComponent<T>({
     <CardHeader className="pb-2">
       <CardTitle className="truncate-doubleline">
         <div className="flex gap-2 pb-2 items-center">
-          <TitleIconBg id={id}></TitleIconBg>
+          <TitleIconBg id={id}>
+            <Icon />
+          </TitleIconBg>
           <p className=" align-middle">{title}</p>
         </div>
         {/* <span></span> */}
@@ -140,7 +144,9 @@ export default function CardComponent<T>({
   return <Card className="group w-[320px] cursor-pointer" onClick={onClick}>
     <CardHeader>
       <div className="flex justify-between pb-2">
-        <TitleIconBg id={id}></TitleIconBg>
+        <TitleIconBg id={id} >
+          {type === 'skill' ? <SkillIcon /> : <AssistantIcon />}
+        </TitleIconBg>
         {edit && <Switch checked={_checked} onCheckedChange={handleCheckedChange} onClick={e => e.stopPropagation()}></Switch>}
       </div>
       <CardTitle className="truncate-doubleline leading-5">{title}</CardTitle>

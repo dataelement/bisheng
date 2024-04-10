@@ -62,7 +62,7 @@
     "skills": {
         "manageTemplate": "管理技能模板",
         "createNew": "新建技能",
-        "manageProjects": "这里管理您的个人项目，对技能上下线、编辑等等",
+        "manageProjects": "在此页面管理您的技能，对技能上下线、编辑等等",
         "skillSearch": "搜索您需要的技能",
         "confirmDeleteSkill": "确认删除该技能？",
         "backToSkillList": "返回技能列表",

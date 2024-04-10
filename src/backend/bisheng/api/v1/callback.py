@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Any, Dict, List, Union
 
 from bisheng.api.v1.schemas import ChatResponse
@@ -354,15 +355,31 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             tool_name = tool_name.replace('knowledge_', '')
         return tool_name, tool_category
 
+    async def on_chat_model_start(self, serialized: Dict[str, Any],
+                                  messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
+        # """Run when retriever end running."""
+        # content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
+        # stream = ChatResponse(message=f'{content}', type='stream')
+        # await self.websocket.send_json(stream.dict())
+        logger.debug(f'on_chat_model_start serialized={serialized} messages={messages} kwargs={kwargs}')
+        resp = ChatResponse(type='start',
+                            category='processing',
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        await self.websocket.send_json(resp.dict())
+
+    async def on_llm_end(self, response: LLMResult, **kwargs: Any) -> Any:
+        """Run when LLM ends running."""
+        logger.debug(f'llm_end response={response}')
+        resp = ChatResponse(type='end',
+                            category='processing',
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        await self.websocket.send_json(resp.dict())
+
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
         logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
-        resp_end = ChatResponse(type='end',
-                                category='processing',
-                                intermediate_steps='',
-                                flow_id=self.flow_id,
-                                chat_id=self.chat_id)
-        await self.websocket.send_json(resp_end.dict())
 
         tool_name, tool_category = self.parse_tool_category(serialized['name'])
         resp = ChatResponse(type='start',
@@ -371,7 +388,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             message={'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str},
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
-                            sender=kwargs.get('run_id').hex)
+                            extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
         await self.websocket.send_json(resp.dict())
 
         ChatMessageDao.insert_one(ChatMessageModel(
@@ -383,7 +400,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             flow_id=self.flow_id,
             chat_id=self.chat_id,
             user_id=self.user_id,
-            sender=kwargs.get('run_id').hex
+            extra=json.dumps({'run_id': kwargs.get('run_id').hex})
         ))
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
@@ -404,7 +421,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             message={'tool_key': tool_name, 'output': output},
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
-                            sender=kwargs.get('run_id').hex)
+                            extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
 
         await self.websocket.send_json(resp.dict())
         ChatMessageDao.insert_one(ChatMessageModel(
@@ -416,12 +433,5 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             flow_id=self.flow_id,
             chat_id=self.chat_id,
             user_id=self.user_id,
-            sender=kwargs.get('run_id').hex
+            extra=json.dumps({'run_id': kwargs.get('run_id').hex})
         ))
-
-        resp_start = ChatResponse(type='start',
-                                  category='processing',
-                                  intermediate_steps='',
-                                  flow_id=self.flow_id,
-                                  chat_id=self.chat_id)
-        await self.websocket.send_json(resp_start.dict())

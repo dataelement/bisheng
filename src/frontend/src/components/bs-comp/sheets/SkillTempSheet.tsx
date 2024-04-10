@@ -29,7 +29,7 @@ export default function SkillTempSheet({ children, onSelect }) {
             {children}
         </SheetTrigger>
         <SheetContent className="sm:min-w-[966px] bg-gray-100">
-            <div className="flex h-full">
+            <div className="flex h-full" onClick={e => e.stopPropagation()}>
                 <div className="w-fit pr-6">
                     <SheetTitle>技能模板</SheetTitle>
                     <SheetDescription>您可以从这里挑选一个模板开始，或者自定义高级模板</SheetDescription>

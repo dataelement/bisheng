@@ -70,7 +70,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
                         case 1: useLibs.push(Number(item.third_id)); break;
                         case 2: useSkills.push(item.third_id); break;
                         case 3: manageLibs.push(Number(item.third_id)); break;
-                        case 4: useAssistant.push(Number(item.third_id)); break;
+                        case 5: useAssistant.push(item.third_id); break;
                     }
                 })
                 setForm({ name, useSkills, useLibs, useAssistant, manageLibs })
@@ -130,7 +130,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useSkills, type: 2 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useLibs, type: 1 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.manageLibs, type: 3 }),
-            updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 4 })
+            updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 5 })
         ])
 
         console.log('form :>> ', form, res);

@@ -373,10 +373,10 @@ async def access_refresh(*, data: RoleRefresh, Authorize: AuthJWT = Depends()):
         session.commit()
     # 添加新的权限
     with session_getter() as session:
-        for id in access_id:
-            if access_type == AccessType.FLOW.value:
-                id = UUID(id).hex
-            role_access = RoleAccess(role_id=role_id, third_id=str(id), type=access_type)
+        for third_id in access_id:
+            if access_type in [AccessType.FLOW.value, AccessType.ASSISTANT_READ.value]:
+                third_id = UUID(third_id).hex
+            role_access = RoleAccess(role_id=role_id, third_id=str(third_id), type=access_type)
             session.add(role_access)
         session.commit()
     return resp_200()
@@ -399,7 +399,7 @@ async def access_list(*, role_id: int, type: Optional[int] = None, Authorize: Au
         total_count = session.scalar(count_sql)
     # uuid 和str的转化
     for access in db_role_access:
-        if access.type == AccessType.FLOW.value:
+        if access.type in [AccessType.FLOW.value, AccessType.ASSISTANT_READ.value]:
             access.third_id = UUID(access.third_id)
 
     return resp_200({

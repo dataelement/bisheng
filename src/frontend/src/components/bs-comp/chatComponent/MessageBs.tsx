@@ -1,17 +1,16 @@
-import { ThunmbIcon } from "@/components/bs-icons/thumbs";
-import SourceEntry from "./SourceEntry";
+import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { LoadIcon } from "@/components/bs-icons/loading";
-import { ChatMessageType } from "@/types/chat";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
-import { useMemo, useRef, useState } from "react";
+import { ChatMessageType } from "@/types/chat";
+import { copyText } from "@/utils";
+import { useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { copyText } from "@/utils";
 import MessageButtons from "./MessageButtons";
+import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
-import { AvatarIcon } from "@/components/bs-icons/avatar";
 
 // 颜色列表
 const colorList = [
@@ -28,7 +27,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBs({ data, onUnlike, onSource }: { data: ChatMessageType, onUnlike: any, onSource: any }) {
+export default function MessageBs({ data, onUnlike = () => { }, onSource }: { data: ChatMessageType, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -39,7 +38,7 @@ export default function MessageBs({ data, onUnlike, onSource }: { data: ChatMess
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeMathjax]}
                 linkTarget="_blank"
-                className="markdown prose inline-block break-all dark:prose-invert max-w-full text-sm text-[#111]"
+                className="bs-mkdown inline-block break-all max-w-full text-sm text-[#111]"
                 components={{
                     code: ({ node, inline, className, children, ...props }) => {
                         if (children.length) {
@@ -102,7 +101,7 @@ export default function MessageBs({ data, onUnlike, onSource }: { data: ChatMess
                         end={data.end}
                         source={data.source}
                         className="pl-8"
-                        onSource={() => onSource({
+                        onSource={() => onSource?.({
                             chatId,
                             messageId: data.id,
                             message: data.message || data.thought,

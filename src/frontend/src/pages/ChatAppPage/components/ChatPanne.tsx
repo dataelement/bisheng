@@ -2,10 +2,11 @@
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
+import { AssistantIcon } from "@/components/bs-icons/assistant";
 import { NewApplicationIcon } from "@/components/bs-icons/newApplication";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
-import { getAssistantDetailApi } from "@/controllers/API/assistant";
+import { useAssistantStore } from "@/store/assistantStore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TabsContext } from "../../../contexts/tabsContext";
@@ -21,7 +22,8 @@ export default function ChatPanne({ customWsHost = '', data }) {
 
     const [flow, setFlow] = useState<any>(null)
     const [assistant, setAssistant] = useState<any>(null)
-    console.log('data :>> ', flow);
+    const { assistantState, loadAssistantState } = useAssistantStore()
+    // console.log('data :>> ', flow);
     const build = useBuild()
     const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, destory } = useMessageStore()
 
@@ -35,7 +37,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
             changeChatId(chatId) // ws
         } else {
             setFlow(null)
-            const _assistant = await getAssistantDetailApi(id)
+            const _assistant = await loadAssistantState(id)
             loadHistoryMsg(_assistant.id, chatId)
             setAssistant(_assistant)
             changeChatId(chatId) // ws
@@ -158,12 +160,12 @@ export default function ChatPanne({ customWsHost = '', data }) {
     </div>
 
 
-    return <div className="flex-1">
+    return <div className="flex-1 min-w-0">
         {/* 技能会话 */}
         {
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
-                <div className="absolute flex top-2 gap-2 items-center">
+                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1">
                     <TitleIconBg className="" id={flow.id}></TitleIconBg>
                     <span className="text-sm">{flow.name}</span>
                 </div>
@@ -183,13 +185,13 @@ export default function ChatPanne({ customWsHost = '', data }) {
             assistant && <div className={`w-full chat-box h-full relative px-6 ${type !== 'flow' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1">
-                    <TitleIconBg className="" id={assistant.id}></TitleIconBg>
+                    <TitleIconBg className="" id={assistant.id}><AssistantIcon /></TitleIconBg>
                     <span className="text-sm">{assistant.name}</span>
                 </div>
                 <ChatComponent
                     useName={sendUserName}
-                    questions={assistant.guide_question}
-                    guideWord={assistant.guide_word}
+                    questions={assistantState.guide_question.filter((item) => item)}
+                    guideWord={assistantState.guide_word}
                     wsUrl={wsUrl}
                     onBeforSend={getWsParamData}
                     loadMore={() => loadMoreHistoryMsg(assistant.id)}
