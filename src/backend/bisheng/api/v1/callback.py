@@ -411,10 +411,11 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))
 
         # Create a ChatResponse instance.
+        output_info = {'tool_key': tool_name, 'output': output}
         resp = ChatResponse(type='end',
                             category=tool_category,
                             intermediate_steps=intermediate_steps,
-                            message=json.dumps({'tool_key': tool_name, 'output': output}),
+                            message=json.dumps(output_info),
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
                             extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
@@ -424,9 +425,10 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         # 从tool cache中获取input信息
         input_info = self.tool_cache.get(kwargs.get('run_id').hex)
         if input_info:
+            output_info.update(input_info)
             ChatMessageDao.insert_one(ChatMessageModel(
                 is_bot=1,
-                message=json.dumps({'tool_key': tool_name, 'output': output}.update(input_info)),
+                message=json.dumps(output_info),
                 intermediate_steps=intermediate_steps,
                 category=tool_category,
                 type='end',
