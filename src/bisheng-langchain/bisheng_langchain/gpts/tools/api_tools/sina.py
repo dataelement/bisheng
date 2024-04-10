@@ -120,7 +120,7 @@ class StockInfo(APIToolBase):
             while match:
                 stock.append(
                     Stock(match.group(1), match.group(2), match.group(3), match.group(4),
-                          match.group(5), match.group(6), match.group(9), match.group(10)))
+                          match.group(5), match.group(6), match.group(9), match.group(10))
                 match = stockPattern.search(content, match.end())
         else:
             stock = [content]
