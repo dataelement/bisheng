@@ -455,7 +455,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             output_info.update(input_info['input'])
             resp = ChatResponse(type='end',
                                 category=input_info['category'],
-                                intermediate_steps='Error: ' + str(error),
+                                intermediate_steps='Tool output:  Error: ' + str(error),
                                 message=json.dumps(output_info),
                                 flow_id=self.flow_id,
                                 chat_id=self.chat_id,
