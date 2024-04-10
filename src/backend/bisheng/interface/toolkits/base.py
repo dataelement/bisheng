@@ -5,7 +5,10 @@ from bisheng.interface.importing.utils import import_class, import_module
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class
-from langchain.agents import agent_toolkits
+from langchain.agents.agent_toolkits.vectorstore.toolkit import (VectorStoreInfo,
+                                                                 VectorStoreRouterToolkit,
+                                                                 VectorStoreToolkit)
+from langchain_community import agent_toolkits
 
 
 class ToolkitCreator(LangChainTypeCreator):
@@ -29,14 +32,16 @@ class ToolkitCreator(LangChainTypeCreator):
     def type_to_loader_dict(self) -> Dict:
         if self.type_dict is None:
             self.type_dict = {
-                toolkit_name: import_class(
-                    f'langchain.agents.agent_toolkits.{toolkit_name}'
-                )
+                toolkit_name: import_class(f'langchain_community.agent_toolkits.{toolkit_name}')
                 # if toolkit_name is not lower case it is a class
                 for toolkit_name in agent_toolkits.__all__
                 if not toolkit_name.islower() and toolkit_name in settings.toolkits
             }
-
+            self.type_dict.update({
+                'VectorStoreToolkit': VectorStoreToolkit,
+                'VectorStoreInfo': VectorStoreInfo,
+                'VectorStoreRouterToolkit': VectorStoreRouterToolkit
+            })
         return self.type_dict
 
     def get_signature(self, name: str) -> Optional[Dict]:
@@ -58,8 +63,7 @@ class ToolkitCreator(LangChainTypeCreator):
     def get_create_function(self, name: str) -> Callable:
         if loader_name := self.create_functions.get(name):
             return import_module(
-                f'from langchain.agents.agent_toolkits import {loader_name[0]}'
-            )
+                f'from langchain_community.agent_toolkits import {loader_name[0]}')
         else:
             raise ValueError('Toolkit not found')
 

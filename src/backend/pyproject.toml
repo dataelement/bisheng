@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bisheng"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Python package with a built-in web application"
 authors = ["Dataelement <hanfeng@dataelem.com>"]
 maintainers = [
@@ -18,8 +18,15 @@ include = ["./bisheng/*", "bisheng/**/*"]
 bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
-bisheng_langchain = "0.2.3.2"
+bisheng_langchain = "0.3.0"
 bisheng_pyautogen = "0.2.1"
+langchain = "0.1.12"
+langchain_experimental = "*"
+langchain_openai = "0.1.0"
+langchain-community = "0.0.28"
+openai = "1.14.3"
+langchain-google-genai = "^0.0.6"
+langchain-anthropic = "^0.1.4"
 minio = "7.2.0"
 loguru = "^0.7.1"
 fastapi_jwt_auth = "^0.5.0"
@@ -41,10 +48,6 @@ google-search-results = "^2.4.1"
 google-api-python-client = "^2.79.0"
 typer = "^0.9.0"
 gunicorn = "^20.1.0"
-langchain = "^0.1.0"
-langchain_experimental = "*"
-langchain_openai = "0.1.0"
-openai = "^1.12.0"
 pandas = "^2.0.0"
 chromadb = "^0.3.21"
 rich = "^13.4.2"
@@ -68,21 +71,20 @@ sqlmodel = "^0.0.14"
 pymysql = "^0.10.1"
 pymilvus = "^2.2.16"
 elasticsearch = "^8.9.0"
-anthropic = "^0.3.0"
 orjson = "^3.9.1"
 multiprocess = "^0.70.14"
 cachetools = "^5.3.1"
 types-cachetools = "^5.3.0.5"
 appdirs = "^1.4.4"
-pinecone-client = "^2.2.2"
 supabase = "^2.4.0"
-pymongo = "^4.4.0"
 certifi = "^2023.5.7"
 psycopg = "^3.1.9"
 psycopg-binary = "^3.1.9"
 emoji = "^2.10.1"
 platformdirs = ">=2.5"
 scipy = "*"
+arxiv = "2.1.0"
+matplotlib = "3.8.4"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
@@ -102,6 +104,11 @@ types-pyyaml = "^6.0.12.8"
 [tool.poetry.extras]
 deploy = ["langchain-serve"]
 
+
+[[tool.poetry.source]]
+name = "tsinghua"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+priority = "primary"
 
 [tool.pytest.ini_options]
 minversion = "6.0"

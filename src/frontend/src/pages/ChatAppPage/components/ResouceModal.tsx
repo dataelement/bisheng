@@ -1,10 +1,10 @@
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Download, Import } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
-import { ChatMessageType } from "../../../types/chat";
-import FileView, { checkSassUrl } from "./FileView";
 import { downloadFile } from "../../../util/utils";
+import FileView, { checkSassUrl } from "./FileView";
 
 // 顶部答案区
 const Anwser = ({ id, msg, onInit, onAdd }) => {
@@ -40,7 +40,7 @@ const Anwser = ({ id, msg, onInit, onAdd }) => {
 
 // 
 let timer = null
-const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId: string, words: string[], data: ChatMessageType, onClose: any, onAdd: any, children: any }) => {
+const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId: string, words: string[], data: any, onClose: any, onAdd: any, children: any }) => {
     const { t } = useTranslation()
     const [editCustomKey, setEditCustomKey] = useState(false)
     const inputRef = useRef(null)
@@ -59,7 +59,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
         // if (!words.length) return setFiles([])
         clearTimeout(timer) // 简单防抖
         timer = setTimeout(() => {
-            getSourceChunksApi(chatId, data.id, words.join(';')).then((_files) => {
+            getSourceChunksApi(chatId, data.messageId, words.join(';')).then((_files) => {
                 setFiles(_files)
                 // 默认打开第一个文件
                 _files && setFile(_files[0])
@@ -139,9 +139,11 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
     </div>
 }
 
-export default function ResouceModal({ chatId, data, open, setOpen }: { chatId: string, data: ChatMessageType, open: boolean, setOpen: (b: boolean) => void }) {
+const ResouceModal = forwardRef((props, ref) => {
     // labels
     const { t } = useTranslation()
+
+    const [open, setOpen] = useState(false)
     const [keywords, setKeywords] = useState([])
     const handleAddWord = (word: string) => {
         // 去重 更新
@@ -152,20 +154,24 @@ export default function ResouceModal({ chatId, data, open, setOpen }: { chatId: 
         setKeywords(keywords.filter((wd, i) => i !== index))
     }
 
-    // 记忆
-    // useEffect(() => {
-    //     const KEYWORDS_LOCAL_KEY = 'KEYWORDS_LOCAL'
-    //     setKeywords(JSON.parse(localStorage.getItem(KEYWORDS_LOCAL_KEY) || '[]'))
+    const [data, setData] = useState<any>({})
+    useImperativeHandle(ref, () => ({
+        openModal: (data) => {
+            setOpen(true)
+            setData(data)
+        }
+    }));
 
-    //     return () => localStorage.setItem(KEYWORDS_LOCAL_KEY, JSON.stringify(keywords))
-    // }, [])
     const MemoizedFileView = React.memo(FileView);
 
-    return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => setOpen(false)}>
-        <div className=" rounded-xl px-4 py-6 bg-[#fff] shadow-lg dark:bg-background w-[80%]" onClick={e => e.stopPropagation()}>
+    return <Dialog open={open} onOpenChange={setOpen} >
+        <DialogContent className="min-w-[80%]">
+            {/* <DialogHeader>
+                <DialogTitle>{t('chat.feedback')}</DialogTitle>
+            </DialogHeader> */}
             {open && <div>
-                <Anwser id={data.id} msg={data.message || data.thought} onInit={setKeywords} onAdd={handleAddWord}></Anwser>
-                <ResultPanne words={keywords} chatId={chatId} data={data} onClose={handleDelKeyword} onAdd={handleAddWord}>
+                <Anwser id={data.messageId} msg={data.message} onInit={setKeywords} onAdd={handleAddWord}></Anwser>
+                <ResultPanne words={keywords} chatId={data.chatId} data={data} onClose={handleDelKeyword} onAdd={handleAddWord}>
                     {
                         (file) => file.fileUrl ?
                             <MemoizedFileView data={file}></MemoizedFileView> :
@@ -175,15 +181,8 @@ export default function ResouceModal({ chatId, data, open, setOpen }: { chatId: 
                     }
                 </ResultPanne>
             </div>}
-        </div>
-    </dialog>
-};
+        </DialogContent>
+    </Dialog>
+});
 
-// const useRefState = (state) => {
-//     const [data, setData] = useState(state)
-//     const ref = useRef(state)
-//     return [data, ref, (nState) => {
-//         setData(nState)
-//         ref.current = nState
-//     }]
-// }
+export default ResouceModal

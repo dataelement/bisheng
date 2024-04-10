@@ -260,6 +260,29 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, sea
     return class_object.from_documents(**params)
 
 
+def initial_elastic_vector(class_object: Type[ElasticKeywordsSearch], params: dict, search: dict):
+    if not params.get('elasticsearch_url') and settings.get_knowledge().get('vectorstores').get(
+            'ElasticKeywordsSearch'):
+        params['elasticsearch_url'] = settings.get_knowledge().get('vectorstores').get(
+            'ElasticKeywordsSearch').get('elasticsearch_url')
+
+    if not params.get('ssl_verify') and settings.get_knowledge().get('vectorstores').get(
+            'ElasticKeywordsSearch'):
+        params['ssl_verify'] = eval(settings.get_knowledge().get('vectorstores').get(
+            'ElasticKeywordsSearch').get('ssl_verify'))
+    elif isinstance(params.get('ssl_verify'), str):
+        params['ssl_verify'] = eval(params['ssl_verify'])
+
+    collection_id = params.pop('collection_id', '')
+    if collection_id:
+        with session_getter() as session:
+            knowledge = session.get(Knowledge, collection_id)
+        index_name = knowledge.index_name or knowledge.collection_name
+        params['index_name'] = index_name
+    params['embedding'] = ''
+    return class_object.from_documents(**params)
+
+
 vecstore_initializer: Dict[str, Callable[[Type[Any], dict], Any]] = {
     'Pinecone': initialize_pinecone,
     'Chroma': initialize_chroma,

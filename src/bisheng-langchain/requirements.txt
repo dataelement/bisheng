@@ -1,4 +1,4 @@
-langchain
+langchain==0.1.12
 zhipuai
 websocket-client
 elasticsearch
@@ -10,4 +10,6 @@ pydantic==1.10.13
 pymupdf==1.23.8
 shapely==2.0.2
 filetype==1.2.0
-
+langgraph==0.0.30
+openai==1.14.3
+langchain-openai==0.1.0

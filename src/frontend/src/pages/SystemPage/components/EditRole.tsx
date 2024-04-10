@@ -1,9 +1,9 @@
-import { Search } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
-import { Switch } from "../../../components/ui/switch";
+import { Button } from "../../../components/bs-ui/button";
+import { Input, SearchInput } from "../../../components/bs-ui/input";
+import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
+import { Switch } from "../../../components/bs-ui/switch";
 import {
     Table,
     TableBody,
@@ -11,45 +11,40 @@ import {
     TableHead,
     TableHeader,
     TableRow
-} from "../../../components/ui/table";
+} from "../../../components/bs-ui/table";
 import { alertContext } from "../../../contexts/alertContext";
-import { createRole, getRoleLibsApi, getRolePermissionsApi, getRoleSkillsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
-import { useDebounce } from "../../../util/hook";
+import { createRole, getRoleAssistApi, getRoleLibsApi, getRolePermissionsApi, getRoleSkillsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { useTable } from "../../../util/hook";
 
-const pageSize = 10
-const SearchPanne = ({ title, total, onChange, children }) => {
-    const [page, setPage] = useState(1)
-    const pageCount = Math.ceil(total / pageSize)
-    const searchKeyRef = useRef('')
-    const { t } = useTranslation()
-
-    const handleSearch = useDebounce((e) => {
-        searchKeyRef.current = e.target.value
-        setPage(1)
-        onChange(1, searchKeyRef.current)
-    }, 500, false)
-
-    const loadPage = (page) => {
-        setPage(page)
-        onChange(page, searchKeyRef.current)
-    }
+const SearchPanne = ({ role_id, title, type, children }) => {
+    const { page, pageSize, data, total, loading, setPage, search } = useTable({ pageSize: 10 }, (params) => {
+        const { page, pageSize, keyword } = params
+        const param = {
+            name: keyword,
+            role_id,
+            page_num: page,
+            page_size: pageSize
+        }
+        return type === 'skill' ? getRoleSkillsApi(param)
+            : (type === 'assistant' ? getRoleAssistApi({ ...param, type: 'assistant' })
+                : getRoleLibsApi(param))
+    })
 
     return <>
         <div className="mt-20 flex justify-between items-center relative">
-            <p className="font-bold">{title}</p>
-            <Input className="w-[300px] rounded-full" onChange={handleSearch}></Input>
-            <Search className="absolute right-2" color="#999" />
+            <p className="text-xl font-bold">{title}</p>
+            <SearchInput onChange={(e) => search(e.target.value)}></SearchInput>
         </div>
         <div className="mt-4">
-            {children}
+            {loading ?
+                <div className="w-full h-[468px] flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+                    <span className="loading loading-infinity loading-lg"></span>
+                </div>
+                : children(data)}
         </div>
-        <div className="join grid grid-cols-2 w-[200px] mx-auto my-4">
-            <button disabled={page === 1} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page - 1)}>{t('previousPage')}</button>
-            <button disabled={page >= pageCount} className="join-item btn btn-outline btn-xs" onClick={() => loadPage(page + 1)}>{t('nextPage')}</button>
-        </div>
+        <AutoPagination className="m-0 mt-4 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage}></AutoPagination>
     </>
-
 }
 
 
@@ -62,21 +57,23 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
         name,
         useSkills: [],
         useLibs: [],
+        useAssistant: [],
         manageLibs: []
     })
     useEffect(() => {
         if (id !== -1) {
-            // 获取详情
+            // 获取详情，初始化选中数据
             getRolePermissionsApi(id).then(res => {
-                const useSkills = [], useLibs = [], manageLibs = []
+                const useSkills = [], useLibs = [], manageLibs = [], useAssistant = []
                 res.data.forEach(item => {
                     switch (item.type) {
                         case 1: useLibs.push(Number(item.third_id)); break;
                         case 2: useSkills.push(item.third_id); break;
                         case 3: manageLibs.push(Number(item.third_id)); break;
+                        case 5: useAssistant.push(item.third_id); break;
                     }
                 })
-                setForm({ name, useSkills, useLibs, manageLibs })
+                setForm({ name, useSkills, useLibs, useAssistant, manageLibs })
             })
         }
     }, [id])
@@ -98,10 +95,14 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
         if (!checked && form.manageLibs.includes(id)) return
         switchDataChange(id, 'useLibs', checked)
     }
-
-    const { data: skillData, change: handleSkillChange } = usePageData<any>(id, 'skill')
-    const { data: libData, change: handleLibChange } = usePageData<any>(id, 'lib')
-
+    /**
+     * 保存权限信息
+     * 1.验证重名
+     * 2.新增时先保存基本信息 创建 ID
+     * 3.修改时先更新基本信息
+     * 4.批量 保存各个种类权限信息（助手、技能、知识库等）
+     * @returns 
+     */
     const handleSave = async () => {
         if (!form.name.length || form.name.length > 50) {
             return setErrorData({
@@ -115,7 +116,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
                 list: [t('system.roleNameExists')]
             })
         }
-        // 新增先创建角色
+        // 没有id时需要走创建流程，否则修改
         let roleId = id
         if (id === -1) {
             const res = await captureAndAlertRequestErrorHoc(createRole(form.name))
@@ -128,7 +129,8 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
         const res = await Promise.all([
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useSkills, type: 2 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useLibs, type: 1 }),
-            updateRolePermissionsApi({ role_id: roleId, access_id: form.manageLibs, type: 3 })
+            updateRolePermissionsApi({ role_id: roleId, access_id: form.manageLibs, type: 3 }),
+            updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 5 })
         ])
 
         console.log('form :>> ', form, res);
@@ -136,90 +138,101 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
         onChange(true)
     }
 
-    return <div className="max-w-[600px] mx-auto pt-4">
+    const roleId = id === -1 ? 0 : id
+
+    return <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-136px)] overflow-y-auto pb-10 scrollbar-hide">
         <div className="font-bold mt-4">
-            <p className="mb-4">{t('system.roleName')}</p>
+            <p className="text-xl mb-4">{t('system.roleName')}</p>
             <Input placeholder={t('system.roleName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60}></Input>
         </div>
+        {/* 助手 */}
         <div className="">
-            <SearchPanne title={t('system.skillAuthorization')} total={skillData.total} onChange={handleSkillChange}>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>{t('system.skillName')}</TableHead>
-                            <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
-                            <TableHead className="text-right">{t('system.usePermission')}</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {skillData.data.map((el) => (
-                            <TableRow key={el.id}>
-                                <TableCell className="font-medium">{el.name}</TableCell>
-                                <TableCell>{el.user_name}</TableCell>
-                                <TableCell className="text-right">
-                                    <Switch checked={form.useSkills.includes(el.id)} onCheckedChange={(bln) => switchDataChange(el.id, 'useSkills', bln)} />
-                                </TableCell>
+            <SearchPanne title={'助手授权'} role_id={roleId} type={'assistant'}>
+                {(data) => (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>助手名称</TableHead>
+                                <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
+                                <TableHead className="text-right">{t('system.usePermission')}</TableHead>
                             </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                        </TableHeader>
+                        <TableBody>
+                            {data.map((el) => (
+                                <TableRow key={el.id}>
+                                    <TableCell className="font-medium">{el.name}</TableCell>
+                                    <TableCell>{el.user_name}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Switch checked={form.useAssistant.includes(el.id)} onCheckedChange={(bln) => switchDataChange(el.id, 'useAssistant', bln)} />
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
             </SearchPanne>
         </div>
+        {/* 技能 */}
         <div className="">
-            <SearchPanne title={t('system.knowledgeAuthorization')} total={libData.total} onChange={handleLibChange}>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>{t('system.skillName')}</TableHead>
-                            <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
-                            <TableHead className="text-right">{t('system.usePermission')}</TableHead>
-                            <TableHead className="text-right">{t('system.managePermission')}</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {libData.data.map((el) => (
-                            <TableRow key={el.id}>
-                                <TableCell className="font-medium">{el.name}</TableCell>
-                                <TableCell>{el.user_name}</TableCell>
-                                <TableCell className="text-right">
-                                    <Switch checked={form.useLibs.includes(el.id)} onCheckedChange={(bln) => switchUseLib(el.id, bln)} />
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <Switch checked={form.manageLibs.includes(el.id)} onCheckedChange={(bln) => switchLibManage(el.id, bln)} />
-                                </TableCell>
+            <SearchPanne title={t('system.skillAuthorization')} role_id={roleId} type={'skill'}>
+                {(data) => (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>{t('system.skillName')}</TableHead>
+                                <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
+                                <TableHead className="text-right">{t('system.usePermission')}</TableHead>
                             </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                        </TableHeader>
+                        <TableBody>
+                            {data.map((el) => (
+                                <TableRow key={el.id}>
+                                    <TableCell className="font-medium">{el.name}</TableCell>
+                                    <TableCell>{el.user_name}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Switch checked={form.useSkills.includes(el.id)} onCheckedChange={(bln) => switchDataChange(el.id, 'useSkills', bln)} />
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </SearchPanne>
+        </div>
+        {/* 知识库 */}
+        <div className="">
+            <SearchPanne title={t('system.knowledgeAuthorization')} role_id={roleId} type={'lib'}>
+                {(data) => (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>{t('system.skillName')}</TableHead>
+                                <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
+                                <TableHead className="text-right">{t('system.usePermission')}</TableHead>
+                                <TableHead className="text-right">{t('system.managePermission')}</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {data.map((el) => (
+                                <TableRow key={el.id}>
+                                    <TableCell className="font-medium">{el.name}</TableCell>
+                                    <TableCell>{el.user_name}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Switch checked={form.useLibs.includes(el.id)} onCheckedChange={(bln) => switchUseLib(el.id, bln)} />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Switch checked={form.manageLibs.includes(el.id)} onCheckedChange={(bln) => switchLibManage(el.id, bln)} />
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
             </SearchPanne>
         </div>
         <div className="flex justify-center gap-4 mt-16">
-            <Button variant="outline" className="h-8 rounded-full px-16" onClick={() => onChange()}>{t('cancel')}</Button>
-            <Button className="h-8 rounded-full px-16" onClick={handleSave}>{t('save')}</Button>
+            <Button variant="outline" className="px-16" onClick={() => onChange()}>{t('cancel')}</Button>
+            <Button className="px-16" onClick={handleSave}>{t('save')}</Button>
         </div>
     </div>
-}
-
-const usePageData = <T,>(id: number, key: 'skill' | 'lib') => {
-    const [data, setData] = useState<{ data: T[], total: number }>({ data: [], total: 0 })
-
-    useEffect(() => {
-        loadData()
-    }, [])
-
-    const loadData = async (page = 1, keyword = '') => {
-        const param = {
-            name: keyword,
-            role_id: id === -1 ? 0 : id,
-            page_num: page,
-            page_size: pageSize
-        }
-        const data = key === 'skill' ? await getRoleSkillsApi(param) : await getRoleLibsApi(param)
-        setData(data)
-    }
-
-    return {
-        data,
-        change: loadData
-    }
 }

@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
-import PaginationComponent from "../../components/PaginationComponent";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
+import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/bs-ui/table";
 import { alertContext } from "../../contexts/alertContext";
 import { deleteTaskApi, getTasksApi } from "../../controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
@@ -14,7 +14,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
     const { setSuccessData } = useContext(alertContext);
     const { t } = useTranslation()
 
-    const { page, pageSize, data: tasks, total, setPage, search, reload, filterData } = useTable((param) =>
+    const { page, pageSize, data: tasks, total, setPage, search, reload, filterData } = useTable({}, (param) =>
         getTasksApi({
             page: param.page,
             limit: param.pageSize,
@@ -53,8 +53,8 @@ export const Finetune = ({ rtClick, gpuClick }) => {
             {tasks?.length === 0 ?
                 <div className="mt-6 text-center text-gray-400">{t('finetune.noData')}</div>
                 : <div className="flex gap-4 mt-4">
-                    <div className="w-[40%]">
-                        <div className="border-r overflow-y-auto max-h-[calc(100vh-208px)]">
+                    <div className="w-[40%] relative">
+                        <div className="border-r overflow-y-auto max-h-[calc(100vh-210px)] pb-20">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
@@ -76,14 +76,17 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                                 </TableBody>
                             </Table>
                         </div>
-                        <PaginationComponent
-                            page={page}
-                            pageSize={pageSize}
-                            total={total}
-                            onChange={(newPage) => setPage(newPage)}
-                        />
+                        <div className="bisheng-table-footer">
+                            <p className="desc"></p>
+                            <AutoPagination
+                                page={page}
+                                pageSize={pageSize}
+                                total={total}
+                                onChange={(newPage) => setPage(newPage)}
+                            />
+                        </div>
                     </div>
-                    <div className="flex-1 overflow-hidden overflow-y-auto max-h-[calc(100vh-180px)]">
+                    <div className="flex-1 overflow-hidden overflow-y-auto max-h-[calc(100vh-210px)]">
                         {taskId ?
                             <FinetuneDetail id={taskId} onDelete={handleDeleteTask} onStatusChange={reload}></FinetuneDetail> :
                             <div className="flex justify-center items-center h-full">

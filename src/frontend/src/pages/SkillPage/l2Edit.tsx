@@ -4,10 +4,10 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import L2ParameterComponent from "../../CustomNodes/GenericNode/components/parameterComponent/l2Index";
 import ShadTooltip from "../../components/ShadTooltipComponent";
-import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
-import { Textarea } from "../../components/ui/textarea";
+import { Button } from "../../components/bs-ui/button";
+import { Input } from "../../components/bs-ui/input";
+import { Label } from "../../components/bs-ui/label";
+import { Textarea } from "../../components/bs-ui/input";
 import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { userContext } from "../../contexts/userContext";
@@ -15,6 +15,7 @@ import { createCustomFlowApi, getFlowApi } from "../../controllers/API/flow";
 import { useHasForm } from "../../util/hook";
 import FormSet from "./components/FormSet";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 
 export default function l2Edit() {
     const { t } = useTranslation()
@@ -58,6 +59,7 @@ export default function l2Edit() {
     // 校验
     const { user } = useContext(userContext);
     const [error, setError] = useState({ name: false, desc: false }) // 表单error信息展示
+    const { message } = useToast()
     const isParamError = (name, desc, showErrorConfirm = false) => {
         const errorlist = [];
         if (!name) errorlist.push(t('skills.skillNameRequired'));
@@ -67,11 +69,13 @@ export default function l2Edit() {
         const nameErrors = errorlist.length;
         if (!desc) errorlist.push(t('skills.skillDescRequired'));
         if (desc.length > 200) errorlist.push(t('skills.skillDescTooLong'));
-        if (errorlist.length && showErrorConfirm) setErrorData({
-            title: t('skills.errorTitle'),
-            list: errorlist,
+        if (errorlist.length && showErrorConfirm) message({
+            title: t('prompt'),
+            variant: 'error',
+            description: errorlist
         });
         setError({ name: !!nameErrors, desc: errorlist.length > nameErrors });
+
         return !!errorlist.length;
     }
 
@@ -119,7 +123,7 @@ export default function l2Edit() {
         const name = nameRef.current.value
         const description = descRef.current.value
         const guideWords = guideRef.current.value
-        if (isParamError(name, description)) return
+        if (isParamError(name, description, true)) return
         setLoading(true)
         formRef.current?.save()
 
@@ -140,8 +144,8 @@ export default function l2Edit() {
     // isForm
     const isForm = useHasForm(flow)
 
-    return <div className="relative box-border">
-        <div className="p-6 pb-48 h-screen overflow-y-auto">
+    return <div className="relative box-border h-full overflow-auto">
+        <div className="p-6 pb-48 h-full overflow-y-auto">
             <div className="flex justify-between w-full">
                 <ShadTooltip content={t('back')} side="right">
                     <button className="extra-side-bar-buttons w-[36px]" onClick={() => window.history.length < 3 ? navigate('/skills') : navigate(-1)}>
@@ -214,20 +218,20 @@ export default function l2Edit() {
             </div>
         </div>
         {/* footer */}
-        <div className="absolute flex bottom-0 w-full py-8 justify-center bg-[#fff] border-t dark:bg-gray-900">
+        <div className="absolute flex bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-[#fff] border-t dark:bg-gray-900">
             {
                 isL2 ?
                     <div className="flex gap-4 w-[50%]">
-                        <Button disabled={loading} className="extra-side-bar-save-disable w-[70%] rounded-full" onClick={handleSave}>
+                        <Button disabled={loading} className="extra-side-bar-save-disable w-[70%]" onClick={handleSave}>
                             {t('save')}
                         </Button>
-                        <Button disabled={loading} className="w-[30%] rounded-full" variant="outline" onClick={() => handleJumpFlow()}>
+                        <Button disabled={loading} className="w-[30%]" variant="outline" onClick={() => handleJumpFlow()}>
                             {t('skills.advancedConfiguration')}
                         </Button>
                     </div>
                     :
                     <div className="flex justify-center w-[50%]">
-                        <Button disabled={loading} className="extra-side-bar-save-disable w-[50%] rounded-full" onClick={handleCreateNewSkill}>
+                        <Button disabled={loading} className="extra-side-bar-save-disable w-[50%]" onClick={handleCreateNewSkill}>
                             {t('skills.nextStep')}
                         </Button>
                     </div>

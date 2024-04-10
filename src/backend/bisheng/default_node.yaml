@@ -348,6 +348,8 @@ retrievers:
 vectorstores:
   ElasticKeywordsSearch:
     documentation: "http://192.168.106.116:8030"
+  ElasticsearchStore:
+    documentation: https://python.langchain.com/docs/integrations/vectorstores/elasticsearch
   Milvus:
     documentation: "http://192.168.106.116:8030"
   Chroma:

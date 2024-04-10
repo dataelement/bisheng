@@ -147,6 +147,7 @@ def milvus_trans():
 
 
 from pymilvus import Collection, MilvusClient, MilvusException
+
 import json
 
 import requests
@@ -157,9 +158,14 @@ def milvus_clean():
 
     collection = milvus_cli.list_collections()
     for col in collection:
-        if col.startswith('tmp'):
+        if col.startswith('rag'):
             print(col)
-            milvus_cli.drop_collection(col)
+            collection_col = Collection(col, using=milvus_cli._using)
+            # milvus_cli.drop_collection(col)
+            try:
+                collection_col.release(timeout=1)
+            except Exception:
+                continue
 
 
 def elastic_clean():
@@ -178,6 +184,6 @@ def elastic_clean():
             print(x)
 
 
-# milvus_clean()
+milvus_clean()
 # elastic_clean()
-milvus_trans()
+# milvus_trans()

@@ -150,9 +150,12 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
     # 处理vectordb
     vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
     try:
-        pk = vectore_client.col.query(expr=f'file_id in {file_ids}',
-                                      output_fields=['pk'],
-                                      timeout=10)
+        if isinstance(vectore_client.col, Collection):
+            pk = vectore_client.col.query(expr=f'file_id in {file_ids}',
+                                          output_fields=['pk'],
+                                          timeout=10)
+        else:
+            pk = []
     except Exception:
         # 重试一次
         logger.error('timeout_except')

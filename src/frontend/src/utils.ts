@@ -1019,6 +1019,12 @@ export function validateNode(
   } = n.data;
   return Object.keys(template).reduce(
     (errors: Array<string>, t) => {
+      // 选择知识库不校验 embbadding
+      if (t === "embedding" &&
+        (template['collection_name']?.value ||
+          template['index_name']?.value)) {
+        return []
+      }
       // （必填 && 显示 && 值为空 && 无连线） 即验证不通过
       return errors.concat(
         template[t].required &&

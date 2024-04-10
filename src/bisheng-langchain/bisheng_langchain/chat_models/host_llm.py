@@ -200,6 +200,7 @@ class BaseHostChatLLM(BaseChatModel):
             max_tokens = kwargs.get('max_tokens')
             do_sample = kwargs.get('do_sample')
             params = {
+                'stream': False,
                 'messages': messages,
                 'model': self.model_name,
                 'top_p': top_p,
@@ -285,6 +286,7 @@ class BaseHostChatLLM(BaseChatModel):
             except Exception as e:
                 raise ValueError(f'exception in host llm infer: [{e}]') from e
 
+        text_haf = ''
         async for response in _acompletion_with_retry(**kwargs):
             is_error = False
             if response:
@@ -292,10 +294,19 @@ class BaseHostChatLLM(BaseChatModel):
                     is_error = True
                 elif response.startswith('data:'):
                     text = response[len('data:'):].strip()
-                    if text.startswith('{'):
-                        yield (is_error, response[len('data:'):])
-                    else:
-                        logger.info('agenerate_no_json text=%s', text)
+                    if text == '[DONE]':
+                        break
+                    try:
+                        json.loads(text_haf + text)
+                        yield (is_error, text_haf + text)
+                        text_haf = ''
+                    except Exception:
+                        # 拆包了
+                        if text_haf.startswith('{'):
+                            text_haf = text
+                            continue
+                        logger.error(f'response_not_json response={response}')
+
                     if is_error:
                         break
                 elif response.startswith('{'):
@@ -521,6 +532,7 @@ class HostQwen1_5Chat(BaseHostChatLLM):
         """Return type of chat model."""
         return 'qwen1.5_chat'
 
+
 class HostLlama2Chat(BaseHostChatLLM):
     # Llama-2-7b-chat-hf, Llama-2-13b-chat-hf, Llama-2-70b-chat-hf
     model_name: str = Field('Llama-2-7b-chat-hf', alias='model')
@@ -549,6 +561,7 @@ class CustomLLMChat(BaseHostChatLLM):
         """Return type of chat model."""
         return 'custom_llm_chat'
 
+
 class HostYuanChat(BaseHostChatLLM):
     # use custom llm chat api, api should compatiable with openai definition
     model_name: str = Field('Yuan2-2B-Janus-hf', alias='model')
@@ -562,7 +575,8 @@ class HostYuanChat(BaseHostChatLLM):
     def _llm_type(self) -> str:
         """Return type of chat model."""
         return 'yuan2'
-    
+
+
 class HostYiChat(BaseHostChatLLM):
     # use custom llm chat api, api should compatiable with openai definition
     model_name: str = Field('Yi-34B-Chat', alias='model')

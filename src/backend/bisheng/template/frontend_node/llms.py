@@ -207,6 +207,8 @@ class LLMFrontendNode(FrontendNode):
                 'cache',
         ]:
             field.show = True
+        if field.name in ['cache']:
+            field.show = True
 
         if name and 'azure' in name.lower():
             LLMFrontendNode.format_azure_field(field)

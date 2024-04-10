@@ -1,9 +1,9 @@
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
-import { Label } from "../../../components/ui/label";
-import { Textarea } from "../../../components/ui/textarea";
+import { Button } from "../../../components/bs-ui/button";
+import { Input } from "../../../components/bs-ui/input";
+import { Label } from "../../../components/bs-ui/label";
+import { Textarea } from "../../../components/bs-ui/input";
 import { alertContext } from "../../../contexts/alertContext";
 import { createTempApi } from "../../../controllers/API";
 import { FlowType } from "../../../types/flow";
@@ -57,7 +57,7 @@ export default function CreateTemp({ flow, open, setOpen, onCreated }: { flow: F
                     <Label htmlFor="username" className="text-right">{t('skills.description')}</Label>
                     <Textarea id="name" value={data.description} onChange={(e) => setData({ ...data, description: e.target.value })} className="col-span-2" />
                 </div>
-                <Button type="submit" className="h-8 w-[400px] rounded-full mt-6 mx-auto" onClick={handleSubmit}>{t('create')}</Button>
+                <Button type="submit" className="h-9 w-[400px] mt-6 mx-auto" onClick={handleSubmit}>{t('create')}</Button>
             </div>
         </form>
     </dialog>

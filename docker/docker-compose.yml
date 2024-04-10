@@ -32,7 +32,7 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/redis.conf:/etc/redis.conf
     command: redis-server /etc/redis.conf
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      test: ["CMD-SHELL", "redis-cli ping | grep -e 'PONG\|NOAUTH'"]
       interval: 10s
       timeout: 5s
       retries: 3

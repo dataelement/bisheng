@@ -1,12 +1,15 @@
-import json
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from uuid import UUID
 
+from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
+from bisheng.database.models.gpts_tools import GptsToolsRead
+from bisheng.database.models.knowledge import KnowledgeRead
 from langchain.docstore.document import Document
+from orjson import orjson
 from pydantic import BaseModel, Field, validator
 
 
@@ -46,7 +49,7 @@ class ExportedFlow(BaseModel):
 
 
 class InputRequest(BaseModel):
-    input: dict
+    input: Union[dict, str] = Field(description='question or command asked LLM to do')
 
 
 class TweaksRequest(BaseModel):
@@ -106,6 +109,16 @@ class ChatList(BaseModel):
     chat_id: str = None
     create_time: datetime = None
     update_time: datetime = None
+    flow_type: str = None  # flow: 技能 assistant：gpts助手
+
+
+class FlowGptsOnlineList(BaseModel):
+    id: str = Field('唯一ID')
+    name: str = None
+    desc: str = None
+    create_time: datetime = None
+    update_time: datetime = None
+    flow_type: str = None  # flow: 技能 assistant：gpts助手
 
 
 class ChatMessage(BaseModel):
@@ -114,7 +127,7 @@ class ChatMessage(BaseModel):
     is_bot: bool = False
     message: Union[str, None, dict] = ''
     type: str = 'human'
-    category: str = 'processing'
+    category: str = 'processing'  # system processing answer tool
     intermediate_steps: str = None
     files: list = []
     user_id: int = None
@@ -187,7 +200,7 @@ class StreamData(BaseModel):
     data: dict
 
     def __str__(self) -> str:
-        return f'event: {self.event}\ndata: {json.dumps(self.data)}\n\n'
+        return f'event: {self.event}\ndata: {orjson.dumps(self.data).decode()}\n\n'
 
 
 class FinetuneCreateReq(BaseModel):
@@ -210,3 +223,45 @@ class CustomComponentCode(BaseModel):
     code: str
     field: Optional[str] = None
     frontend_node: Optional[dict] = None
+
+
+class AssistantCreateReq(BaseModel):
+    name: str = Field(max_length=50, description='助手名称')
+    prompt: str = Field(min_length=20, max_length=1000, description='助手提示词')
+    logo: str = Field(description='logo文件的相对地址')
+
+
+class AssistantUpdateReq(BaseModel):
+    id: UUID = Field(description='助手ID')
+    name: Optional[str] = Field('', description='助手名称， 为空则不更新')
+    desc: Optional[str] = Field('', description='助手描述， 为空则不更新')
+    logo: Optional[str] = Field('', description='logo文件的相对地址，为空则不更新')
+    prompt: Optional[str] = Field('', description='用户可见prompt， 为空则不更新')
+    guide_word: Optional[str] = Field('', description='开场白， 为空则不更新')
+    guide_question: Optional[List] = Field([], description='引导问题列表， 为空则不更新')
+    model_name: Optional[str] = Field('', description='选择的模型名， 为空则不更新')
+    temperature: Optional[float] = Field(None, description='模型温度， 不传则不更新')
+
+    tool_list: List[int] | None = Field(default=None,
+                                        description='助手的工具ID列表,空列表则清空绑定的工具，为None则不更新')
+    flow_list: List[str] | None = Field(default=None, description='助手的技能ID列表，为None则不更新')
+    knowledge_list: List[int] | None = Field(default=None, description='知识库ID列表，为None则不更新')
+
+
+class AssistantSimpleInfo(BaseModel):
+    id: UUID
+    name: str
+    desc: str
+    logo: str
+    user_id: int
+    user_name: str
+    status: int
+    write: Optional[bool] = Field(default=False)
+    create_time: datetime
+    update_time: datetime
+
+
+class AssistantInfo(AssistantBase):
+    tool_list: List[GptsToolsRead] = Field(default=[], description='助手的工具ID列表')
+    flow_list: List[FlowRead] = Field(default=[], description='助手的技能ID列表')
+    knowledge_list: List[KnowledgeRead] = Field(default=[], description='知识库ID列表')

@@ -8,6 +8,7 @@ from bisheng.database.models.message import ChatMessage
 from bisheng.database.models.report import Report as ReportModel
 from bisheng.interface.run import build_sorted_vertices, get_memory_key, update_memory_keys
 from bisheng.services.deps import get_session_service
+from bisheng.template.field.base import TemplateField
 from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
@@ -313,6 +314,10 @@ def apply_tweaks(node: Dict[str, Any], node_tweaks: Dict[str, Any]) -> None:
         if tweak_name and tweak_value and tweak_name in template_data:
             key = tweak_name if tweak_name == 'file_path' else 'value'
             template_data[tweak_name][key] = tweak_value
+        elif tweak_name and tweak_value:
+            template_data[tweak_name] = TemplateField(field_type=type(tweak_value).__name__,
+                                                      name=tweak_name,
+                                                      value=tweak_value).to_dict()
 
 
 def process_tweaks(graph_data: Dict[str, Any], tweaks: Dict[str, Dict[str,

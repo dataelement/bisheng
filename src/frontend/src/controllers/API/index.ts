@@ -268,7 +268,36 @@ export const deleteChatApi = (chatId) => {
  * @param id flow_id chat_id - .
  * @returns {Promise<any>} his data.
  */
-export async function getChatHistory(flowId: string, chatId: string, pageSize: number, id?: number): Promise<any[]> {
+export interface MessageDB {
+  /** 场景 */
+  category: string;
+  chat_id: string;
+  create_time: string;
+  extra: string;
+  /** 文件列表 */
+  files: string;
+  flow_id: string;
+  id: number;
+  /** 日志 */
+  intermediate_steps: string;
+  /** 机器人回复 */
+  is_bot: boolean;
+  /** 已点赞 */
+  liked: number;
+  /** 消息内容 */
+  message: string;
+  receiver: null;
+  remark: null;
+  sender: string;
+  solved: number;
+  /** 有溯源 */
+  source: number;
+  type: string;
+  update_time: string;
+  user_id: number;
+}
+
+export async function getChatHistory(flowId: string, chatId: string, pageSize: number, id?: number): Promise<MessageDB[]> {
   return await axios.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=${pageSize}&id=${id || ''}`);
 }
 

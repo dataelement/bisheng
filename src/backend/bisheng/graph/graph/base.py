@@ -62,6 +62,8 @@ class Graph:
             edges = payload['edges']
             return cls(nodes, edges)
         except KeyError as exc:
+            import traceback
+            traceback.print_exc()
             raise ValueError(
                 f"Invalid payload. Expected keys 'nodes' and 'edges'. Found {list(payload.keys())}"
             ) from exc
