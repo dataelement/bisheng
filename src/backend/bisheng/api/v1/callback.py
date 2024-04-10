@@ -25,8 +25,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         self.user_id = user_id
 
         # 工具调用的缓存，在tool_end时将开始和结束拼接到一起存储到数据库
-        self.tool_cache = {
-        }
+        self.tool_cache = {}
         # self.tool_cache = {
         #     'run_id': {},  # 存储工具调用的input信息
         # }
@@ -390,7 +389,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
 
         tool_name, tool_category = self.parse_tool_category(serialized['name'])
         input_info = {'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str}
-        self.tool_cache[kwargs.get('run_id').hex()] = input_info
+        self.tool_cache[kwargs.get('run_id').hex] = input_info
         resp = ChatResponse(type='start',
                             category=tool_category,
                             intermediate_steps=f'Tool input: {input_str}',
@@ -399,7 +398,6 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             chat_id=self.chat_id,
                             extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
         await self.websocket.send_json(resp.dict())
-        self.tool_cache[kwargs.get('run_id').hex()] = input_info
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
@@ -424,7 +422,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         await self.websocket.send_json(resp.dict())
 
         # 从tool cache中获取input信息
-        input_info = self.tool_cache.get(kwargs.get('run_id').hex())
+        input_info = self.tool_cache.get(kwargs.get('run_id').hex)
         if input_info:
             ChatMessageDao.insert_one(ChatMessageModel(
                 is_bot=1,
