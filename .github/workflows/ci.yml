@@ -132,6 +132,7 @@ jobs:
         id: process_message
         run: |
           value=$(echo "${{ github.event.head_commit.message }}" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')
+          value=$(echo "${{ value }}" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\r/%0A/g')
           echo "message=${value}" >> $GITHUB_ENV
         shell: bash
 
