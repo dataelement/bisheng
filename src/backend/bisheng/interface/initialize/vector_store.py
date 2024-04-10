@@ -3,7 +3,7 @@ import os
 from typing import Any, Callable, Dict, Type
 
 from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge
+from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.settings import settings
 from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
@@ -261,26 +261,22 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, sea
 
 
 def initial_elastic_vector(class_object: Type[ElasticKeywordsSearch], params: dict, search: dict):
-    if not params.get('elasticsearch_url') and settings.get_knowledge().get('vectorstores').get(
-            'ElasticKeywordsSearch'):
-        params['elasticsearch_url'] = settings.get_knowledge().get('vectorstores').get(
-            'ElasticKeywordsSearch').get('elasticsearch_url')
-
-    if not params.get('ssl_verify') and settings.get_knowledge().get('vectorstores').get(
-            'ElasticKeywordsSearch'):
-        params['ssl_verify'] = eval(settings.get_knowledge().get('vectorstores').get(
-            'ElasticKeywordsSearch').get('ssl_verify'))
-    elif isinstance(params.get('ssl_verify'), str):
-        params['ssl_verify'] = eval(params['ssl_verify'])
-
+    if not params.get('connect_kwargs') and settings.get_knowledge().get('vectorstores').get(
+            'ElasticsearchStore'):
+        params['connect_kwargs'] = settings.get_knowledge().get('vectorstores').get(
+            'ElasticsearchStore')
+    params.update(params.pop('connect_kwargs'))
     collection_id = params.pop('collection_id', '')
     if collection_id:
-        with session_getter() as session:
-            knowledge = session.get(Knowledge, collection_id)
+        knowledge = KnowledgeDao.query_by_id(collection_id)
         index_name = knowledge.index_name or knowledge.collection_name
         params['index_name'] = index_name
-    params['embedding'] = ''
-    return class_object.from_documents(**params)
+        params['embedding'] = decide_embeddings(knowledge.model)
+    if params['documents']:
+        return class_object.from_documents(**params)
+    else:
+        params.pop('documents')
+        return class_object(**params)
 
 
 vecstore_initializer: Dict[str, Callable[[Type[Any], dict], Any]] = {
@@ -290,7 +286,7 @@ vecstore_initializer: Dict[str, Callable[[Type[Any], dict], Any]] = {
     'Weaviate': initialize_weaviate,
     'FAISS': initialize_faiss,
     'Milvus': initial_milvus,
-    'ElasticVectorSearch': initial_elastic,
+    'ElasticsearchStore': initial_elastic_vector,
     'ElasticKeywordsSearch': initial_elastic,
     'SupabaseVectorStore': initialize_supabase,
     'MongoDBAtlasVectorSearch': initialize_mongodb,

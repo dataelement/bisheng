@@ -37,12 +37,12 @@ def test_agent():
 
 def test_tools():
     tools = load_tools(tool_params={
-        "sina.realtime_info": {},
-        "sina.history_KLine": {},
-        "macro.macro_china_shrzgm": {}
+        "sina_realtime_info": {},
+        "sina_history_KLine": {},
+        "macro_china_shrzgm": {},
+        "tianyancha_all_companys_by_company": {}
     }, )
-    params = {"query": "sh600036", "date": "2024-03-01"}
-    tools[2].run("")
+    tools[3].run({})
 
 
 test_tools()

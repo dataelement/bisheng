@@ -20,52 +20,10 @@ class AutogenRoleFrontNode(FrontendNode):
                 'AutoGenGroupChatManager',
         }:
             self.template.add_field(
-                TemplateField(field_type='float',
+                TemplateField(field_type='BaseLanguageModel',
                               required=True,
                               show=True,
-                              name='temperature',
-                              advanced=False,
-                              value=0))
-            self.template.add_field(
-                TemplateField(field_type='str',
-                              required=True,
-                              show=True,
-                              name='model_name',
-                              value='gpt-4-0613',
-                              advanced=False))
-            self.template.add_field(
-                TemplateField(field_type='str',
-                              required=False,
-                              show=True,
-                              name='openai_api_base',
-                              value='',
-                              advanced=False))
-            self.template.add_field(
-                TemplateField(field_type='str',
-                              required=False,
-                              show=True,
-                              name='openai_api_key',
-                              value='',
-                              advanced=False))
-            self.template.add_field(
-                TemplateField(field_type='str',
-                              required=False,
-                              show=True,
-                              name='openai_proxy',
-                              advanced=False))
-            self.template.add_field(
-                TemplateField(field_type='str',
-                              required=False,
-                              show=True,
-                              name='api_type',
-                              info='azure',
-                              advanced=False))
-            self.template.add_field(
-                TemplateField(field_type='str',
-                              required=False,
-                              show=True,
-                              name='api_version',
-                              info='azure',
+                              name='llm',
                               advanced=False))
 
         if self.name == 'AutoGenGroupChatManager':

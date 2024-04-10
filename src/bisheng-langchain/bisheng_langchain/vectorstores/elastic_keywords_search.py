@@ -132,7 +132,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
                 self.client.indices.delete(index=index_name)
             except elasticsearch.exceptions.NotFoundError:
                 pass
-        
+
     def add_texts(
         self,
         texts: Iterable[str],
@@ -195,6 +195,9 @@ class ElasticKeywordsSearch(VectorStore, ABC):
                           query_strategy: str = 'match_phrase',
                           must_or_should: str = 'should',
                           **kwargs: Any) -> List[Document]:
+        if k == 0:
+            # pm need to control
+            return []
         docs_and_scores = self.similarity_search_with_score(query,
                                                             k=k,
                                                             query_strategy=query_strategy,
@@ -218,6 +221,9 @@ class ElasticKeywordsSearch(VectorStore, ABC):
                                      query_strategy: str = 'match_phrase',
                                      must_or_should: str = 'should',
                                      **kwargs: Any) -> List[Tuple[Document, float]]:
+        if k == 0:
+            # pm need to control
+            return []
         assert must_or_should in ['must', 'should'], 'only support must and should.'
         # llm or jiaba extract keywords
         if self.llm_chain:
@@ -288,10 +294,17 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         index_name = index_name or uuid.uuid4().hex
         if llm:
             llm_chain = LLMChain(llm=llm, prompt=prompt)
-            vectorsearch = cls(elasticsearch_url, index_name, llm_chain=llm_chain, drop_old=drop_old, **kwargs)
+            vectorsearch = cls(elasticsearch_url,
+                               index_name,
+                               llm_chain=llm_chain,
+                               drop_old=drop_old,
+                               **kwargs)
         else:
             vectorsearch = cls(elasticsearch_url, index_name, drop_old=drop_old, **kwargs)
-        vectorsearch.add_texts(texts, metadatas=metadatas, ids=ids, refresh_indices=refresh_indices)
+        vectorsearch.add_texts(texts,
+                               metadatas=metadatas,
+                               ids=ids,
+                               refresh_indices=refresh_indices)
 
         return vectorsearch
 

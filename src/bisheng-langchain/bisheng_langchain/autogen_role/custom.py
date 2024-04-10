@@ -19,7 +19,6 @@ class AutoGenCustomRole(ConversableAgent):
                          human_input_mode='NEVER',
                          code_execution_config=False,
                          llm_config=False,
-                         llm=None,
                          **kwargs)
         self.func = func
         self.coroutine = coroutine
