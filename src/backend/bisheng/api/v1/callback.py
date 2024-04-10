@@ -386,6 +386,15 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             chat_id=self.chat_id)
         await self.websocket.send_json(resp.dict())
 
+    async def on_llm_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> Any:
+        """Run when LLM errors."""
+        logger.debug(f'on_llm_error error={error} kwargs={kwargs}')
+        resp = ChatResponse(type='end',
+                            category='processing',
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        await self.websocket.send_json(resp.dict())
+
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
         logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
