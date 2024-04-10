@@ -141,7 +141,7 @@ export default function CardComponent<T>({
 
 
   // 技能组件
-  return <Card className="group w-[320px] cursor-pointer" onClick={onClick}>
+  return <Card className="group w-[320px] cursor-pointer" onClick={() => edit && onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
         <TitleIconBg id={id} >

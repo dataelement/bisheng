@@ -19,6 +19,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
 
     const { messages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
+    const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
 
     /**
@@ -41,9 +42,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     }, [messages])
     useEffect(() => {
         if (!chatId) return
+        setInputLock({ locked: false, reason: '' })
         // console.log('message chatid', messages, form, chatId);
         setShowWhenLocked(false)
 
+        currentChatIdRef.current = chatId
         changeChatedRef.current = true
         setFormShow(false)
         createWebSocket(chatId).then(() => {
@@ -83,8 +86,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         createSendMsg(wsMsg.inputs, inputKey)
         // 锁定 input
         setInputLock({ locked: true, reason: '' })
-        const chatid = chatId
-        await createWebSocket(chatid)
+        await createWebSocket(chatId)
         sendWsMsg(wsMsg)
 
         // 滚动聊天到底
@@ -127,6 +129,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
                     // 异常类型处理，提示
                     if (errorMsg) return setInputLock({ locked: true, reason: errorMsg })
+                    // 拦截会话串台情况
+                    if (currentChatIdRef.current !== data.chat_id) return
                     handleWsMessage(data)
                     // 群聊@自己时，开启input
                     if (data.type === 'end' && data.receiver?.is_self) {
@@ -177,7 +181,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         if (data.type === 'start') {
             createWsMsg(data)
         } else if (data.type === 'stream') {
-            updateCurrentMessage({ message: data.message, thought: data.intermediate_steps })
+            updateCurrentMessage({
+                chat_id: data.chat_id,
+                message: data.message,
+                thought: data.intermediate_steps
+            })
         } else if (data.type === 'end') {
             updateCurrentMessage({
                 ...data,

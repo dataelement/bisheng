@@ -1,4 +1,7 @@
+import ResouceModal from "@/pages/ChatAppPage/components/ResouceModal";
 import ThumbsMessage from "@/pages/ChatAppPage/components/ThumbsMessage";
+import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import FileBs from "./FileBs";
 import MessageBs from "./MessageBs";
 import MessageSystem from "./MessageSystem";
@@ -6,9 +9,6 @@ import MessageUser from "./MessageUser";
 import RunLog from "./RunLog";
 import Separator from "./Separator";
 import { useMessageStore } from "./messageStore";
-import { useEffect, useRef } from "react";
-import ResouceModal from "@/pages/ChatAppPage/components/ResouceModal";
-import { useTranslation } from "react-i18next";
 
 export default function MessagePanne({ useName, guideWord, loadMore }) {
     const { t } = useTranslation()

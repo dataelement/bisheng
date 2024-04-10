@@ -72,7 +72,7 @@ export default function Assistants() {
                                 <CardComponent<AssistantItemDB>
                                     data={item}
                                     id={item.id}
-                                    edit
+                                    edit={item.write}
                                     checked={item.status === 1}
                                     type='assist'
                                     title={item.name}
