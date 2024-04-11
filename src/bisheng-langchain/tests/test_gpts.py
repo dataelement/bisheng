@@ -3,7 +3,7 @@ from langchain.globals import set_debug
 
 import dotenv
 from bisheng_langchain.gpts.load_tools import load_tools
-from bisheng_langchain.gpts.agent import ConfigurableAgent
+# from bisheng_langchain.gpts.agent import ConfigurableAgent
 from langchain.globals import set_debug
 from langchain.tools import tool
 from langchain_core.messages import HumanMessage
@@ -37,12 +37,11 @@ def test_agent():
 
 def test_tools():
     tools = load_tools(tool_params={
-        "sina.realtime_info": {},
-        "sina.history_KLine": {},
-        "macro.macro_china_shrzgm": {}
+        "sina_realtime_info": {},
+        "sina_history_KLine": {},
+        "macro_china_shrzgm": {},
     }, )
-    params = {"query": "sh600036", "date": "2024-03-01"}
-    tools[2].run("")
+    tools[0].run({"stock_symbol": "399001", "stock_exchange": "sz"})
 
 
 test_tools()

@@ -5,7 +5,7 @@ import yaml
 from bisheng.database.models.config import Config
 from bisheng.utils.logger import logger
 from cryptography.fernet import Fernet
-from pydantic import BaseSettings, root_validator, validator
+from langchain.pydantic_v1 import BaseSettings, root_validator, validator
 from sqlmodel import select
 
 
