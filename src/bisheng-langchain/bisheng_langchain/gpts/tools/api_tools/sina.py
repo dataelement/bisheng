@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import List, Type
 
 from langchain_core.pydantic_v1 import BaseModel, Field
+from loguru import logger
 
 from .base import APIToolBase
 
@@ -139,9 +140,11 @@ class StockInfo(APIToolBase):
             ts = int(datetime.timestamp(date_obj) * 1000)
             stock = f'{stock_number}_240_{ts}'
             count = datetime.today() - date_obj
-            self.url = self.url.format(stockName=stock_number, stock=stock, count=count.days)
-
-            k_data = super().run('')
+            url = self.url.format(stockName=stock_number, stock=stock, count=count.days)
+            resp = self.client.get(url)
+            if resp.status_code != 200:
+                logger.info('api_call_fail res={}', resp.text)
+            k_data = resp.text
             data_array = json.loads(kLinePattern.search(k_data).group(1))
             for item in data_array:
                 if item.get('day') == date:
@@ -168,9 +171,8 @@ class StockInfo(APIToolBase):
             ts = int(datetime.timestamp(date_obj) * 1000)
             stock = f'{stock_number}_240_{ts}'
             count = datetime.today() - date_obj
-            self.url = self.url.format(stockName=stock_number, stock=stock, count=count.days)
-            k_data = await super().arun('')
-
+            url = self.url.format(stockName=stock_number, stock=stock, count=count.days)
+            k_data = await self.async_client.aget(url)
             data_array = json.loads(kLinePattern.search(k_data).group(1))
             for item in data_array:
                 if item.get('day') == date:
