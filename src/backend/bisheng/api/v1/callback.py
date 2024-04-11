@@ -452,7 +452,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                 user_id=self.user_id,
                 extra=json.dumps({'run_id': kwargs.get('run_id').hex})
             ))
-            self.tool_cache.pop(kwargs.get('run_id').hex())
+            self.tool_cache.pop(kwargs.get('run_id').hex)
 
     async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt],
                             **kwargs: Any) -> Any:
@@ -470,4 +470,4 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                                 chat_id=self.chat_id,
                                 extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
             await self.websocket.send_json(resp.dict())
-            self.tool_cache.pop(kwargs.get('run_id').hex())
+            self.tool_cache.pop(kwargs.get('run_id').hex)
