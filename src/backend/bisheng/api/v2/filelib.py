@@ -352,6 +352,7 @@ async def post_string_chunks(*, document: ChunkInput):
         return resp_500(code=422, message='文件重复')
 
     db_file = KnowledgeFile(knowledge_id=document.knowledge_id,
+                            file_name=document.documents[0].metadata.get('source'),
                             status=status,
                             md5=md5_,
                             extra_meta=document.documents[0].metadata,

@@ -552,6 +552,9 @@ class Milvus(MilvusLangchain):
         Returns:
             List[Document]: Document results for search.
         """
+        if k == 0:
+            # pm need to control
+            return []
         if self.col is None:
             logger.debug('No existing collection to search.')
             return []
@@ -587,6 +590,9 @@ class Milvus(MilvusLangchain):
         Returns:
             List[Document]: Document results for search.
         """
+        if k == 0:
+            # pm need to control
+            return []
         if self.col is None:
             logger.debug('No existing collection to search.')
             return []
@@ -626,6 +632,9 @@ class Milvus(MilvusLangchain):
         Returns:
             List[float], List[Tuple[Document, any, any]]:
         """
+        if k == 0:
+            # pm need to control
+            return []
         if self.col is None:
             logger.debug('No existing collection to search.')
             return []
@@ -669,6 +678,9 @@ class Milvus(MilvusLangchain):
         Returns:
             List[Tuple[Document, float]]: Result doc and score.
         """
+        if k == 0:
+            # pm need to control
+            return []
         if self.col is None:
             logger.debug('No existing collection to search.')
             return []
@@ -741,6 +753,9 @@ class Milvus(MilvusLangchain):
         Returns:
             List[Document]: Document results for search.
         """
+        if k == 0:
+            # pm need to control
+            return []
         if self.col is None:
             logger.debug('No existing collection to search.')
             return []
@@ -790,6 +805,9 @@ class Milvus(MilvusLangchain):
         Returns:
             List[Document]: Document results for search.
         """
+        if k == 0:
+            # pm need to control
+            return []
         if self.col is None:
             logger.debug('No existing collection to search.')
             return []
@@ -908,7 +926,7 @@ class Milvus(MilvusLangchain):
 
     def _select_relevance_score_fn(self) -> Callable[[float], float]:
         return self._relevance_score_fn
-    
+
     def query(self, expr: str, timeout: Optional[int] = None, **kwargs: Any) -> List[Document]:
         output_fields = self.fields[:]
         output_fields.remove(self._vector_field)

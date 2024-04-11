@@ -277,7 +277,7 @@ class VectorStoreFrontendNode(FrontendNode):
             extra_fields.append(
                 TemplateField(name='index_name',
                               field_type='str',
-                              required=True,
+                              required=False,
                               show=True,
                               advanced=False,
                               multiline=False))
