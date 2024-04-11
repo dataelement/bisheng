@@ -214,8 +214,8 @@ class BishengRagPipeline:
 
         # 按照文档的source和chunk_index排序，保证上下文的连贯性和一致性
         if self.params['post_retrieval'].get('sort_by_source_and_index', False):
+            logger.info('sort chunks by source and chunk_index')
             docs = sorted(docs, key=lambda x: (x.metadata['source'], x.metadata['chunk_index']))
-            breakpoint()
         return docs
 
     def load_documents(self, file_name, max_content=100000):
