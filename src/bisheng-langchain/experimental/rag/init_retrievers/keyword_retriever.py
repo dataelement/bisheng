@@ -29,9 +29,11 @@ class KeywordRetriever(BaseRetriever):
         drop_old: bool = False,
     ) -> None:
         split_docs = self.text_splitter.split_documents(documents)
-        for split_doc in split_docs:
+        print(f"KeywordRetriever: split document into {len(split_docs)} chunks")
+        for chunk_index, split_doc in enumerate(split_docs):
             if 'chunk_bboxes' in split_doc.metadata:
                 split_doc.metadata.pop('chunk_bboxes')
+            split_doc.metadata['chunk_index'] = chunk_index
 
         elasticsearch_url = self.keyword_store.elasticsearch_url
         ssl_verify = self.keyword_store.ssl_verify

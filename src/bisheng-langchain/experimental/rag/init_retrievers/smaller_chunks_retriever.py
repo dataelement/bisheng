@@ -27,9 +27,10 @@ class SmallerChunksVectorRetriever(BaseRetriever):
     ) -> None:
         if self.parent_splitter is not None:
             documents = self.parent_splitter.split_documents(documents)
-        for split_doc in documents:
+        for chunk_index, split_doc in enumerate(documents):
             if 'chunk_bboxes' in split_doc.metadata:
                 split_doc.metadata.pop('chunk_bboxes')
+            split_doc.metadata['chunk_index'] = chunk_index
         doc_ids = [str(uuid.uuid4()) for _ in documents]
 
         par_docs = []

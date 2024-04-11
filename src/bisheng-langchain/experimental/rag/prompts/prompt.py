@@ -33,12 +33,13 @@ system_template_general = """你是一个准确且可靠的知识库问答助手
 2. 如果上下文中不包含答案，就说你不知道，不要试图编造答案。
 3. 你需要根据上下文给出详细的回答，不要试图偷懒，不要遗漏括号中的信息，你必须回答的尽可能详细。
 """
-human_template_general = '''
+human_template_general = """
 上下文：
 {context}
+
 问题：
 {question}
-'''
+"""
 messages_general = [
     SystemMessagePromptTemplate.from_template(system_template_general),
     HumanMessagePromptTemplate.from_template(human_template_general),
