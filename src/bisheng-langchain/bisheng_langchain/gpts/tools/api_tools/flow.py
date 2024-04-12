@@ -62,13 +62,9 @@ class FlowTools(APIToolBase):
         attr_name = name.split('_', 1)[-1]
         class_method = getattr(cls, attr_name)
         function_description = kwargs.get('description','')
-        
-        all_function_description = function_description + "知识库检索工具，从" + function_description + "知识库进行检索总结" 
         kwargs.pop('description')
-        print(all_function_description)
-        # print(kwargs)
         return MultArgsSchemaTool(name=name + '_' +str(kwargs.get('collection_id')),
-                                  description=all_function_description,
+                                  description=function_description,
                                   func=class_method(**kwargs).run,
                                   coroutine=class_method(**kwargs).arun,
                                   args_schema=class_method(**kwargs).args_schema)
