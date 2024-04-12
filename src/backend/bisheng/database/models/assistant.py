@@ -180,7 +180,7 @@ class AssistantDao(Assistant):
                                            and_(RoleAccess.role_id == role_id,
                                                 RoleAccess.type == AccessType.ASSISTANT_READ.value,
                                                 RoleAccess.third_id == Assistant.id),
-                                           isouter=True)
+                                           isouter=True).where(Assistant.is_delete == 0)
 
         if name:
             statment = statment.where(Assistant.name.like('%' + name + '%'))
@@ -192,9 +192,10 @@ class AssistantDao(Assistant):
             return session.exec(statment).all()
 
     @classmethod
-    def get_count_by_filters(cls, filters) -> int:
+    def get_count_by_filters(cls, filters: List) -> int:
         with session_getter() as session:
             count_statement = session.query(func.count(Assistant.id))
+            filters.append(Assistant.is_delete == 0)
             return session.exec(count_statement.where(*filters)).scalar()
 
 
