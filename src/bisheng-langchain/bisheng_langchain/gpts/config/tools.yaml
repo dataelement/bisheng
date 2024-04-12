@@ -93,3 +93,8 @@
 - type: tianyancha_search_company
   # 25. 使用天眼查API搜索公司的工具
   api_key:
+
+- type: flow_knowledge_retrieve
+  # 26. 知识库检索工具
+  collection_id: 699
+  description: "美团知识库检索工具，从美团知识库进行检索总结"
