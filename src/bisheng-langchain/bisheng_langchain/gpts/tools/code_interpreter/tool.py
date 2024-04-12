@@ -1,6 +1,8 @@
+import glob
 import itertools
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -11,24 +13,18 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Type
 from uuid import uuid4
 
-from autogen.code_utils import extract_code, infer_lang
+import matplotlib
 from langchain_community.tools import Tool
 from langchain_core.pydantic_v1 import BaseModel, Field
 from loguru import logger
 
-try:
-    from termcolor import colored
-except ImportError:
-
-    def colored(x, *args, **kwargs):
-        return x
-
-
+CODE_BLOCK_PATTERN = r"```(\w*)\n(.*?)\n```"
 DEFAULT_TIMEOUT = 600
 WIN32 = sys.platform == 'win32'
 PATH_SEPARATOR = WIN32 and '\\' or '/'
 WORKING_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'extensions')
 TIMEOUT_MSG = 'Timeout'
+UNKNOWN = "unknown"
 
 
 def _cmd(lang):
@@ -39,6 +35,61 @@ def _cmd(lang):
     if lang in ['ps1']:
         return 'powershell'
     raise NotImplementedError(f'{lang} not recognized in code execution')
+
+
+def infer_lang(code):
+    """infer the language for the code.
+    TODO: make it robust.
+    """
+    if code.startswith("python ") or code.startswith("pip") or code.startswith("python3 "):
+        return "sh"
+
+    # check if code is a valid python code
+    try:
+        compile(code, "test", "exec")
+        return "python"
+    except SyntaxError:
+        # not a valid python code
+        return UNKNOWN
+
+
+def extract_code(
+    text: str, pattern: str = CODE_BLOCK_PATTERN, detect_single_line_code: bool = False
+) -> List[Tuple[str, str]]:
+    """Extract code from a text.
+
+    Args:
+        text (str): The text to extract code from.
+        pattern (str, optional): The regular expression pattern for finding the
+            code block. Defaults to CODE_BLOCK_PATTERN.
+        detect_single_line_code (bool, optional): Enable the new feature for
+            extracting single line code. Defaults to False.
+
+    Returns:
+        list: A list of tuples, each containing the language and the code.
+          If there is no code block in the input text, the language would be "unknown".
+          If there is code block but the language is not specified, the language would be "".
+    """
+    if not detect_single_line_code:
+        match = re.findall(pattern, text, flags=re.DOTALL)
+        return match if match else [(UNKNOWN, text)]
+
+    # Extract both multi-line and single-line code block, separated by the | operator
+    # `{3}(\w+)?\s*([\s\S]*?)`{3}: Matches multi-line code blocks.
+    #    The (\w+)? matches the language, where the ? indicates it is optional.
+    # `([^`]+)`: Matches inline code.
+    code_pattern = re.compile(r"`{3}(\w+)?\s*([\s\S]*?)`{3}|`([^`]+)`")
+    code_blocks = code_pattern.findall(text)
+
+    # Extract the individual code blocks and languages from the matched groups
+    extracted = []
+    for lang, group1, group2 in code_blocks:
+        if group1:
+            extracted.append((lang.strip(), group1.strip()))
+        elif group2:
+            extracted.append(("", group2.strip()))
+
+    return extracted
 
 
 def execute_code(
@@ -121,16 +172,51 @@ def head_file(path: str, n: int) -> List[str]:
         return []
 
 
-def upload_minio(param: dict, bucket: str, object_name: str, file_path, content_type='application/text'):
+def upload_minio(
+    param: dict,
+    bucket: str,
+    object_name: str,
+    file_path,
+    content_type='application/text',
+):
     # 初始化minio
     import minio
 
     minio_client = minio.Minio(**param)
-    logger.debug('upload_file obj={} bucket={} file_paht={}', object_name, bucket, file_path)
-    minio_client.fput_object(
-        bucket_name=bucket, object_name=object_name, file_path=file_path, content_type=content_type
+    logger.debug(
+        'upload_file obj={} bucket={} file_paht={}',
+        object_name,
+        bucket,
+        file_path,
     )
-    return minio_client.presigned_get_object(bucket_name=bucket, object_name=object_name, expires=timedelta(days=7))
+    minio_client.fput_object(
+        bucket_name=bucket,
+        object_name=object_name,
+        file_path=file_path,
+        content_type=content_type,
+    )
+    return minio_client.presigned_get_object(
+        bucket_name=bucket,
+        object_name=object_name,
+        expires=timedelta(days=7),
+    )
+
+
+def insert_set_font_code(code: str) -> str:
+    """判断python代码中是否导入了matplotlib库，如果有则插入设置字体的代码"""
+
+    split_code = code.split('\n')
+    cache_file = matplotlib.get_cachedir()
+    font_cache = glob.glob(f'{cache_file}/fontlist*')
+
+    for cache in font_cache:
+        os.remove(cache)
+
+    # todo: 如果生成的代码中已经有了设置字体的代码，可能会导致该段代码失效
+    pattern = re.compile(r'(import matplotlib|from matplotlib)')
+    index = max(i for i, line in enumerate(split_code) if pattern.search(line))
+    split_code.insert(index + 1, 'import matplotlib\nmatplotlib.rc("font", family="WenQuanYi Zen Hei")')
+    return '\n'.join(split_code)
 
 
 class CodeInterpreterToolArguments(BaseModel):
@@ -169,7 +255,7 @@ class FileInfo(BaseModel):
 class CodeInterpreterTool:
     """Tool for evaluating python code in native environment."""
 
-    name = 'code_interpreter'
+    name = 'bisheng_code_interpreter'
     args_schema: Type[BaseModel] = CodeInterpreterToolArguments
 
     def __init__(
@@ -204,6 +290,7 @@ class CodeInterpreterTool:
         for i, code_block in enumerate(code_blocks):
             lang, code = code_block
             lang = infer_lang(code)
+            code = insert_set_font_code(code)
             temp_dir = tempfile.TemporaryDirectory()
             exitcode, logs, _ = execute_code(
                 code,
@@ -236,26 +323,3 @@ class CodeInterpreterTool:
             description=self.description,
             args_schema=self.args_schema,
         )
-
-
-if __name__ == '__main__':
-    code_string = """print('hha')"""
-    code_blocks = extract_code(code_string)
-    logger.info(code_blocks)
-    logs_all = ''
-    for i, code_block in enumerate(code_blocks):
-        lang, code = code_block
-        lang = infer_lang(code)
-        print(
-            colored(
-                f'\n>>>>>>>> EXECUTING CODE BLOCK {i} (inferred language is {lang})...',
-                'red',
-            ),
-            flush=True,
-        )
-        exitcode, logs, image = execute_code(code, lang=lang)
-        logs_all += '\n' + logs
-        if exitcode != 0:
-            logger.error(f'{exitcode}, {logs_all}')
-
-    logger.info(logs_all)
