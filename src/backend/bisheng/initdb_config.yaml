@@ -1,10 +1,23 @@
+# 公共openai的配置，有需要可用yaml语法从此处引用。助手需要使用此配置
+openai_conf: &openai_conf
+  openai_api_base: "https://api.openai.com/v1"
+  openai_proxy: 'http://118.195.232.223:39995' # 如果是自己代理的服务地址，则填在这里
+  openai_api_key: "" # 私有的，openai账号的key
+
+# 公共minio的配置，有需要可用yaml语法从此处引用。目前知识库 和 助手的代码解释器工具需要minio
+minio_conf: &minio_conf
+  SCHEMA: false         # 是否支持 https
+  CERT_CHECK: false         # 是否校验 http证书
+  MINIO_ENDPOINT: "minio:9000"       # 这个地址用来写请求, 使用同一个docker-compose 启动，能通过容器名访问
+  MINIO_SHAREPOIN: "minio:9000"      # 确保和nginx的代理地址一致。同一个docker-compose启动可以直接使用默认值
+  MINIO_ACCESS_KEY: "minioadmin"
+  MINIO_SECRET_KEY: "minioadmin"
+
 knowledges:
   unstructured_api_url: ""  # 毕昇非结构化数据解析服务地址，提供包括OCR文字识别、表格识别、版式分析等能力。非必填，溯源必填
   embeddings: # 配置知识库的embedding服务，以下示例填写了两类embedding服务的配置方法，第一个是openai的embedding模型服务的配置方法，第二个是本地部署的embedding模型服务的配置方法，如果有多个可以添加多个
     text-embedding-ada-002: # 知识库下拉框中显示的embedding模型的名称，可自定义
-      openai_api_base: "https://api.openai.com/v1"
-      openai_proxy: "" # 如果是自己代理的服务地址，则填在这里
-      openai_api_key: "" # 私有的，openai账号的key
+      <<: *openai_conf
       # deployment: ""  # azure 部署需要
       # openai_api_type: ""    # azure api_type
       # openai_api_version: ""  # azure api_version
@@ -31,16 +44,9 @@ knowledges:
       # es_url:
       # es_passwrod:
       # ssl_verify: False
-     
-    
+
   minio: # 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储
-    SCHEMA: false         # 是否支持 https
-    CERT_CHECK: false         # 是否校验 http证书
-    MINIO_ENDPOINT: "minio:9000"       # 这个地址用来写请求, 使用同一个docker-compose 启动，能通过容器名访问
-    MINIO_SHAREPOIN: "minio:9000"      # 确保和nginx的代理地址一致。同一个docker-compose启动可以直接使用默认值
-    MINIO_ACCESS_KEY: "minioadmin"
-    MINIO_SECRET_KEY: "minioadmin"
-  #
+    <<: *minio_conf
 
 default_llm:
   # 全局配置大模型    
@@ -80,12 +86,26 @@ gpts:
   llms:
     - type: 'ChatOpenAI'
       model_name: 'gpt-4-0125-preview'
-      # model: 'gpt-3.5-turbo-0125'
-      openai_api_key: ''
-      openai_proxy: 'http://118.195.232.223:39995'
       temperature: 0.3
+      <<: *openai_conf
     - type: 'CustomLLMChat'
       model_name: 'Qwen-1_8B-Chat'
       host_base_url: 'http://192.168.106.12:9001/v2.1/models/Qwen-1_8B-Chat/infer'
       temperature: 0.3
       agent_executor_type: 'get_qwen_local_functions_agent_executor'
+  # 预置助手所需的配置
+  tools:
+    # 画图工具配置，引用公共的openai配置
+    dalle_image_generator:
+      <<: *openai_conf
+    # 必应搜索工具配置，配置搜索的api_key
+    bing_search:
+      bing_subscription_key: ""
+      bing_search_url: "https://api.bing.microsoft.com/v7.0/search"
+    # 代码执行工具配置，引用公共minio的配置，用来存储代码执行后生成的 图片等文件资源
+    bisheng_code_interpreter:
+      minio:
+        <<: *minio_conf
+    # 天眼查工具所需的配置
+    tianyancha:
+      api_key: ""

@@ -18,11 +18,9 @@ from bisheng.interface.types import get_all_types_dict
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
-from bisheng.settings import parse_key
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile
 from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import delete
 from sqlmodel import select
 
 try:
@@ -76,33 +74,29 @@ def get_config(Authorize: AuthJWT = Depends()):
     if payload.get('role') != 'admin':
         raise HTTPException(status_code=500, detail='Unauthorized')
     with session_getter() as session:
-        configs = session.exec(select(Config)).all()
-    config_str = []
-    for config in configs:
-        config_str.append(config.key + ':')
-        config_str.append(config.value)
-    return resp_200('\n'.join(config_str))
+        config = session.exec(select(Config).where(
+            Config.key == 'initdb_config'
+        )).first()
+    if config:
+        config_str = config.value
+    else:
+        config_str = ''
+    return resp_200(config_str)
 
 
 @router.post('/config/save')
 def save_config(data: dict):
     try:
-        config_yaml = yaml.safe_load(data.get('data'))
+        # 校验是否符合yaml格式
+        _ = yaml.safe_load(data.get('data'))
         with session_getter() as session:
-            old_config = session.exec(select(Config).where(Config.id > 0)).all()
-            session.exec(delete(Config).where(Config.id > 0))
+            config = session.exec(select(Config).where(
+                Config.key == 'initdb_config'
+            )).first()
+            config.value = data.get('data')
+            session.add(config)
             session.commit()
-        keys = list(config_yaml.keys())
-        values = parse_key(keys, data.get('data'))
-        with session_getter() as session:
-            for index, key in enumerate(keys):
-                config = Config(key=key, value=values[index])
-                session.add(config)
-            session.commit()
-        # 淘汰缓存
-        for old in old_config:
-            redis_key = 'config_' + old.key
-            redis_client.delete(redis_key)
+        redis_client.delete('config:initdb_config')
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'格式不正确, {str(e)}')
 
