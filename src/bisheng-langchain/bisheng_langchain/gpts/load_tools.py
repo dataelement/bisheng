@@ -54,12 +54,14 @@ def _get_bing_search(**kwargs: Any) -> BaseTool:
 
 def _get_dalle_image_generator(**kwargs: Any) -> Tool:
     openai_api_key = kwargs.get('openai_api_key')
+    openai_api_base = kwargs.get('openai_api_base')
     http_async_client = httpx.AsyncClient(proxies=kwargs.get('openai_proxy'))
     httpc_client = httpx.Client(proxies=kwargs.get('openai_proxy'))
     return DallEImageGenerator(
         api_wrapper=DallEAPIWrapper(
             model='dall-e-3',
             api_key=openai_api_key,
+            base_url=openai_api_base,
             http_client=httpc_client,
             http_async_client=http_async_client,
         )
@@ -78,7 +80,7 @@ def _get_native_code_interpreter(**kwargs: Any) -> Tool:
 _EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optional[str]], List[Optional[str]]]] = {  # type: ignore
     'dalle_image_generator': (_get_dalle_image_generator, ['openai_api_key', 'openai_proxy'], []),
     'bing_search': (_get_bing_search, ['bing_subscription_key', 'bing_search_url'], []),
-    'code_interpreter': (_get_native_code_interpreter, ["minio"], ['files']),
+    'bisheng_code_interpreter': (_get_native_code_interpreter, ["minio"], ['files']),
 }
 
 _API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {**ALL_API_TOOLS}  # type: ignore

@@ -84,6 +84,16 @@ class AssistantAgent(AssistantUtils):
         self.knowledge_skill_data = data
         return data
 
+    def parse_tool_params(self, tool: GptsTools) -> Dict:
+        if not tool.extra:
+            return {}
+        params = json.loads(tool.extra)
+
+        # 判断是否需要从系统配置里获取, 不需要从系统配置获取则用本身配置的
+        if params.get('&initdb_conf_key'):
+            return self.get_initdb_conf_by_more_key(params.get('&initdb_conf_key'))
+        return params
+
     async def init_tools(self, callbacks: Callbacks = None):
         """通过名称获取tool 列表
            tools_name_param:: {name: params}
@@ -102,7 +112,7 @@ class AssistantAgent(AssistantUtils):
         if tool_ids:
             tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
             tool_name_param = {
-                tool.tool_key: json.loads(tool.extra) if tool.extra else {}
+                tool.tool_key: self.parse_tool_params(tool)
                 for tool in tools_model
             }
             tool_langchain = load_tools(tool_params=tool_name_param,

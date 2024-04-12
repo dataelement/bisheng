@@ -182,7 +182,12 @@ def upload_minio(
     # 初始化minio
     import minio
 
-    minio_client = minio.Minio(**param)
+    minio_client = minio.Minio(
+        endpoint=param.get('MINIO_ENDPOINT'),
+        access_key=param.get('MINIO_ACCESS_KEY'),
+        secret_key=param.get('MINIO_SECRET_KEY'),
+        secure=param.get('SCHEMA'),
+        cert_check=param.get('CERT_CHECK'))
     logger.debug(
         'upload_file obj={} bucket={} file_paht={}',
         object_name,

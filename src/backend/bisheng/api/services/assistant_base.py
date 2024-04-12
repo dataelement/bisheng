@@ -1,3 +1,5 @@
+from typing import Dict
+
 from bisheng.settings import settings
 
 
@@ -29,3 +31,16 @@ class AssistantUtils:
     @classmethod
     def get_default_retrieval(cls) -> str:
         return cls.get_gpts_conf('default-retrieval')
+
+    @classmethod
+    def get_initdb_conf_by_more_key(cls, key: str) -> Dict:
+        """
+        根据多层级的key，获取对应的配置。
+        :param key: 例如：gpts.tools.code_interpreter  表示获取 gpts['tools']['code_interpreter']的内容
+        """
+        # 因为属于系统配置级别，不做不存在的判断。不存在直接抛出异常
+        key_list = key.split('.')
+        root_conf = settings.get_from_db(key_list[0].strip())
+        for one in key_list[1:]:
+            root_conf = root_conf[one.strip()]
+        return root_conf
