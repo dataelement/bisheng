@@ -97,10 +97,4 @@
 - type: flow_knowledge_retrieve
   # 26. 知识库检索工具
   collection_id: 699
-  description: "美团知识库检索工具"
-- type: flow_knowledge_retrieve
-  collection_id: 700
-  description: "永辉超市知识库检索工具"
-- type: flow_knowledge_retrieve
-  collection_id: 808
-  description: "重庆水务集团股份有限公司知识库检索工具"
+  description: "美团知识库检索工具，从美团知识库进行检索总结"
