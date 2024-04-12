@@ -6,6 +6,8 @@ import { useNavigate } from "react-router-dom";
 import { SearchInput } from "../../bs-ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
+import { SkillIcon } from "@/components/bs-icons/skill";
+import { AssistantIcon } from "@/components/bs-icons/assistant";
 
 export default function SkillChatSheet({ children, onSelect }) {
     const [open, setOpen] = useState(false)
@@ -32,7 +34,7 @@ export default function SkillChatSheet({ children, onSelect }) {
             {children}
         </SheetTrigger>
         <SheetContent className="sm:min-w-[966px] bg-gray-100">
-            <div className="flex h-full">
+            <div className="flex h-full" onClick={e => e.stopPropagation()}>
                 <div className="w-fit pr-6">
                     <SheetTitle>对话选择</SheetTitle>
                     <SheetDescription>选择一个您想使用的线上技能或助手</SheetDescription>
@@ -47,6 +49,7 @@ export default function SkillChatSheet({ children, onSelect }) {
                                 title={flow.name}
                                 description={flow.desc}
                                 type="sheet"
+                                icon={flow.flow_type === 'flow' ? SkillIcon : AssistantIcon}
                                 footer={
                                     <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${flow.flow_type === 'flow' && 'bg-gray-950'}`}>
                                         {flow.flow_type === 'flow' ? '技能' : '助手'}

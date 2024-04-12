@@ -123,8 +123,14 @@ class AssistantDao(Assistant):
                 count_statement = count_statement.where(Assistant.user_id == user_id)
 
             if name:
-                statement = statement.where(Assistant.name.like(f'%{name}%'))
-                count_statement = count_statement.where(Assistant.name.like(f'%{name}%'))
+                statement = statement.where(or_(
+                    Assistant.name.like(f'%{name}%'),
+                    Assistant.desc.like(f'%{name}%')
+                ))
+                count_statement = count_statement.where(or_(
+                    Assistant.name.like(f'%{name}%'),
+                    Assistant.desc.like(f'%{name}%')
+                ))
             if status is not None:
                 statement = statement.where(Assistant.status == status)
                 count_statement = count_statement.where(Assistant.status == status)
@@ -145,12 +151,34 @@ class AssistantDao(Assistant):
             return session.exec(statement).all()
 
     @classmethod
+    def get_all_assistants(cls, name: str, page: int, limit: int) -> (List[Assistant], int):
+        with session_getter() as session:
+            statement = select(Assistant).where(Assistant.is_delete == 0)
+            count_statement = session.query(func.count(
+                Assistant.id)).where(Assistant.is_delete == 0)
+            if name:
+                statement = statement.where(or_(
+                    Assistant.name.like(f'%{name}%'),
+                    Assistant.desc.like(f'%{name}%')
+                ))
+                count_statement = count_statement.where(or_(
+                    Assistant.name.like(f'%{name}%'),
+                    Assistant.desc.like(f'%{name}%')
+                ))
+            statement = statement.offset(
+                (page - 1) * limit
+            ).limit(limit).order_by(
+                Assistant.update_time.desc()
+            )
+            return session.exec(statement).all(), session.exec(count_statement).scalar()
+
+    @classmethod
     def get_assistants_by_access(cls, role_id: int, name: str, page_size: int,
                                  page_num: int) -> List[Tuple[Assistant, RoleAccess]]:
         statment = select(Assistant,
                           RoleAccess).join(RoleAccess,
                                            and_(RoleAccess.role_id == role_id,
-                                                RoleAccess.type == AccessType.FLOW.value,
+                                                RoleAccess.type == AccessType.ASSISTANT_READ.value,
                                                 RoleAccess.third_id == Assistant.id),
                                            isouter=True)
 

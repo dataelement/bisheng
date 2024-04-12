@@ -140,7 +140,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
         />
         <div className="search-icon">
           {/* ! replace hash color here */}
-          <Search size={20} strokeWidth={1.5} className="text-primary" />
+          <Search size={20} strokeWidth={1.5} className="" />
         </div>
       </div>
 

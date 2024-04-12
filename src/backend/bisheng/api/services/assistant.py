@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, List
 from uuid import UUID
 
@@ -26,7 +27,7 @@ class AssistantService(AssistantUtils):
 
     @classmethod
     def get_assistant(cls,
-                      user_id: int,
+                      user: UserPayload,
                       name: str = None,
                       status: int | None = None,
                       page: int = 1,
@@ -35,21 +36,25 @@ class AssistantService(AssistantUtils):
         获取助手列表
         """
         data = []
-        # 权限管理可见的助手信息
-        assistant_ids_extra = []
-        user_role = UserRoleDao.get_user_roles(user_id)
-        if user_role:
-            role_ids = [role.id for role in user_role]
-            role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
-            if role_access:
-                assistant_ids_extra = [access.third_id for access in role_access]
-
-        res, total = AssistantDao.get_assistants(user_id, name, assistant_ids_extra, status, page, limit)
+        if user.is_admin():
+            res, total = AssistantDao.get_all_assistants(name, page, limit)
+        else:
+            # 权限管理可见的助手信息
+            assistant_ids_extra = []
+            user_role = UserRoleDao.get_user_roles(user.user_id)
+            if user_role:
+                role_ids = [role.role_id for role in user_role]
+                role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
+                if role_access:
+                    assistant_ids_extra = [UUID(access.third_id).hex for access in role_access]
+            res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit)
 
         for one in res:
             simple_dict = one.model_dump(include={
                 'id', 'name', 'desc', 'logo', 'status', 'user_id', 'create_time', 'update_time'
             })
+            if one.user_id == user.user_id or user.is_admin():
+                simple_dict['write'] = True
             simple_dict['user_name'] = cls.get_user_name(one.user_id)
             data.append(AssistantSimpleInfo(**simple_dict))
         return resp_200(data={'data': data, 'total': total})
@@ -92,6 +97,9 @@ class AssistantService(AssistantUtils):
         llm_conf = cls.get_llm_conf(assistant.model_name)
         assistant.model_name = llm_conf['model_name']
         assistant.temperature = llm_conf['temperature']
+
+        # 自动生成描述
+        assistant, _, _ = await cls.get_auto_info(assistant)
         assistant = AssistantDao.create_assistant(assistant)
 
         return resp_200(data=AssistantInfo(**assistant.dict(),
@@ -171,6 +179,7 @@ class AssistantService(AssistantUtils):
         assistant.guide_question = req.guide_question or assistant.guide_question
         assistant.model_name = req.model_name or assistant.model_name
         assistant.temperature = req.temperature or assistant.temperature
+        assistant.update_time = datetime.now()
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息
@@ -326,24 +335,10 @@ class AssistantService(AssistantUtils):
         auto_agent = AssistantAgent(assistant, '')
         await auto_agent.init_llm()
 
-        # 根据llm初始化prompt
-        auto_prompt = auto_agent.sync_optimize_assistant_prompt()
-        assistant.prompt = auto_prompt
-
-        # 自动生成开场白和问题
-        guide_info = auto_agent.generate_guide(assistant.prompt)
-        assistant.guide_word = guide_info['opening_lines']
-        assistant.guide_question = guide_info['questions']
-
         # 自动生成描述
         assistant.desc = auto_agent.generate_description(assistant.prompt)
 
-        # 自动选择工具
-        tool_info = cls.get_auto_tool_info(assistant, auto_agent)
-
-        # 自动选择技能
-        flow_info = cls.get_auto_flow_info(assistant, auto_agent)
-        return assistant, [one.id for one in tool_info], [one.id for one in flow_info]
+        return assistant, [], []
 
     @classmethod
     def get_auto_tool_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[GptsToolsRead]:
@@ -366,8 +361,8 @@ class AssistantService(AssistantUtils):
 
     @classmethod
     def get_auto_flow_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[Flow]:
-        # 自动选择技能
-        all_flow = FlowDao.get_user_access_online_flows(assistant.user_id)
+        # 自动选择技能, 挑选前50个技能用来做自动选择
+        all_flow = FlowDao.get_user_access_online_flows(assistant.user_id, 50)
         flow_dict = {}
         flow_list = []
         for one in all_flow:

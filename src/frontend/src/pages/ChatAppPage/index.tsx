@@ -80,10 +80,10 @@ export default function SkillChatPage() {
                             className={` group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-gray-800 ${chatId === chat.chat_id ? 'bg-[#EDEFF6] dark:bg-gray-800' : 'bg-[#f9f9fc]'}`}
                             onClick={() => handleSelectChat(chat)}>
                             <p className="break-words text-sm font-bold text-gray-950 leading-6">
-                                <span className={`relative top-[-1px] inline-block w-2 h-2 bg-[#adb8d2] mr-2 ${gradients[parseInt(chat.flow_id + '', 16) % gradients.length]}`}></span>
+                                <span className={`relative top-[-1px] inline-block w-2 h-2 mr-2 ${chat.flow_type === 'flow' ? 'bg-[#111]' : 'bg-primary'}`}></span>
                                 {chat.flow_name}
                             </p>
-                            <span className="block text-xs text-gray-600 mt-3">{chat.flow_description}</span>
+                            <span className="block text-xs text-gray-600 mt-3 break-words truncate-multiline">{chat.flow_description}</span>
                             <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
                         </div>
                     ))

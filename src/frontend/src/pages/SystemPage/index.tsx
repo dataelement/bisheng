@@ -11,9 +11,9 @@ import Users from "./components/Users";
 import { useTranslation } from "react-i18next";
 
 export default function FileLibPage() {
-    
+
     const { t } = useTranslation()
-    return <div className="w-full h-full p-6 overflow-y-auto">
+    return <div className="w-full h-full p-6">
 
         <Tabs defaultValue="user" className="w-full">
             <TabsList className="">

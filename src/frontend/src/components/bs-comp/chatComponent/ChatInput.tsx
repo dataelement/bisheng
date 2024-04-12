@@ -18,7 +18,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
 
-    const { messages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory } = useMessageStore()
+    const { messages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
+    const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
 
     /**
@@ -41,9 +42,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     }, [messages])
     useEffect(() => {
         if (!chatId) return
+        setInputLock({ locked: false, reason: '' })
         // console.log('message chatid', messages, form, chatId);
         setShowWhenLocked(false)
 
+        currentChatIdRef.current = chatId
         changeChatedRef.current = true
         setFormShow(false)
         createWebSocket(chatId).then(() => {
@@ -64,8 +67,13 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     }, [])
 
     const handleSendClick = async () => {
+        // 解除锁定状态下 form 按钮开放的状态
+        setShowWhenLocked(false)
+        // 关闭引导词
+        setShowGuideQuestion(false)
         // 收起表单
-        formShow && setFormShow(false)
+        // formShow && setFormShow(false)
+        setFormShow(false)
 
         const value = inputRef.current.value
         if (value.trim() === '') return
@@ -78,9 +86,14 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         createSendMsg(wsMsg.inputs, inputKey)
         // 锁定 input
         setInputLock({ locked: true, reason: '' })
-        const chatid = chatId
-        await createWebSocket(chatid)
+        await createWebSocket(chatId)
         sendWsMsg(wsMsg)
+
+        // 滚动聊天到底
+        const messageDom = document.getElementById('message-panne')
+        if (messageDom) {
+            messageDom.scrollTop = messageDom.scrollHeight;
+        }
     }
 
     const sendWsMsg = async (msg) => {
@@ -116,6 +129,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
                     // 异常类型处理，提示
                     if (errorMsg) return setInputLock({ locked: true, reason: errorMsg })
+                    // 拦截会话串台情况
+                    if (currentChatIdRef.current && currentChatIdRef.current !== data.chat_id) return
                     handleWsMessage(data)
                     // 群聊@自己时，开启input
                     if (data.type === 'end' && data.receiver?.is_self) {
@@ -166,7 +181,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         if (data.type === 'start') {
             createWsMsg(data)
         } else if (data.type === 'stream') {
-            updateCurrentMessage({ message: data.message, thought: data.intermediate_steps })
+            updateCurrentMessage({
+                chat_id: data.chat_id,
+                message: data.message,
+                thought: data.intermediate_steps
+            })
         } else if (data.type === 'end') {
             updateCurrentMessage({
                 ...data,
@@ -222,16 +241,22 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 </div>
             }
             {/* 引导问题 */}
-            <GuideQuestions locked={inputLock.locked} chatId={chatId} questions={questions} onClick={handleClickGuideWord} />
+            <GuideQuestions
+                locked={inputLock.locked}
+                chatId={chatId}
+                questions={questions}
+                onClick={handleClickGuideWord}
+            />
             {/* clear */}
             <div className="flex absolute left-0 top-4 z-10">
                 {
                     clear && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                        onClick={destory}
-                    ><ClearIcon ></ClearIcon></div>
+                        onClick={() => { !inputLock.locked && destory() }}
+                    ><ClearIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-950'} ></ClearIcon></div>
                 }
             </div>
+            {/* form */}
             <div className="flex absolute left-3 top-4 z-10">
                 {
                     form && <div
@@ -240,6 +265,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-950'}></FormIcon></div>
                 }
             </div>
+            {/* send */}
             <div className="flex gap-2 absolute right-3 top-4 z-10">
                 <div
                     id="bs-send-btn"

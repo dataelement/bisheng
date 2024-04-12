@@ -62,7 +62,8 @@ class ToolkitCreator(LangChainTypeCreator):
 
     def get_create_function(self, name: str) -> Callable:
         if loader_name := self.create_functions.get(name):
-            return import_module(f'from langchain.agents.agent_toolkits import {loader_name[0]}')
+            return import_module(
+                f'from langchain_community.agent_toolkits import {loader_name[0]}')
         else:
             raise ValueError('Toolkit not found')
 

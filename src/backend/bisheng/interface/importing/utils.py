@@ -190,10 +190,12 @@ def import_vectorstore(vectorstore: str) -> Any:
 def import_documentloader(documentloader: str) -> Any:
     """Import documentloader from documentloader name"""
     from bisheng_langchain import document_loaders
+    from bisheng.interface.document_loaders.base import documentloader_creator
 
     if documentloader in document_loaders.__all__:
         return import_class(f'bisheng_langchain.document_loaders.{documentloader}')
-    return import_class(f'langchain.document_loaders.{documentloader}')
+    return next(x for x in documentloader_creator.type_to_loader_dict.values()
+                if x.__name__ == documentloader)
 
 
 def import_textsplitter(textsplitter: str) -> Any:

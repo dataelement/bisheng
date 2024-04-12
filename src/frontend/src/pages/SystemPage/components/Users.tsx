@@ -51,44 +51,46 @@ export default function Users(params) {
         reload()
     }
 
-    return <>
-        <div className="flex justify-end">
-            <div className="w-[180px] relative">
-                <SearchInput placeholder={t('system.username')} onChange={(e) => search(e.target.value)}></SearchInput>
+    return <div className="relative">
+        <div className="h-[calc(100vh-136px)] overflow-y-auto pb-10">
+            <div className="flex justify-end">
+                <div className="w-[180px] relative">
+                    <SearchInput placeholder={t('system.username')} onChange={(e) => search(e.target.value)}></SearchInput>
+                </div>
             </div>
-        </div>
-        <Table className="mb-[50px]">
-            {/* <TableCaption>用户列表.</TableCaption> */}
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-[200px]">{t('system.username')}</TableHead>
-                    <TableHead>{t('createTime')}</TableHead>
-                    <TableHead className="text-right">{t('operations')}</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {users.map((el) => (
-                    <TableRow key={el.id}>
-                        <TableCell className="font-medium max-w-md truncate">{el.user_name}</TableCell>
-                        {/* <TableCell>{el.role}</TableCell> */}
-                        <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                        <TableCell className="text-right">
-                            {user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-6">{t('edit')}</Button> :
-                                <Button variant="link" onClick={() => setRoleOpenId(el.user_id)} className="px-0 pl-6">{t('edit')}</Button>}
-                            {
-                                el.delete === 1 ? <Button variant="link" onClick={() => handleEnableUser(el)} className="px-0 pl-6">{t('enable')}</Button> :
-                                    user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-6">{t('disable')}</Button> :
-                                        <Button variant="link" onClick={() => delConfim(el)} className="text-red-500 px-0 pl-6">{t('disable')}</Button>
-                            }
-                        </TableCell>
+            <Table className="mb-[50px]">
+                {/* <TableCaption>用户列表.</TableCaption> */}
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-[200px]">{t('system.username')}</TableHead>
+                        <TableHead>{t('createTime')}</TableHead>
+                        <TableHead className="text-right">{t('operations')}</TableHead>
                     </TableRow>
-                ))}
-            </TableBody>
-        </Table>
+                </TableHeader>
+                <TableBody>
+                    {users.map((el) => (
+                        <TableRow key={el.id}>
+                            <TableCell className="font-medium max-w-md truncate">{el.user_name}</TableCell>
+                            {/* <TableCell>{el.role}</TableCell> */}
+                            <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                            <TableCell className="text-right">
+                                {user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-6">{t('edit')}</Button> :
+                                    <Button variant="link" onClick={() => setRoleOpenId(el.user_id)} className="px-0 pl-6">{t('edit')}</Button>}
+                                {
+                                    el.delete === 1 ? <Button variant="link" onClick={() => handleEnableUser(el)} className="text-green-500 px-0 pl-6">{t('enable')}</Button> :
+                                        user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-6">{t('disable')}</Button> :
+                                            <Button variant="link" onClick={() => delConfim(el)} className="text-red-500 px-0 pl-6">{t('disable')}</Button>
+                                }
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="flex justify-between items-center absolute bottom-0 right-0 w-[calc(100vw-184px)] border-t-[1px] py-4 bg-[white] pl-[60px] mr-5 h-[60px]">
-            <p className="whitespace-nowrap">用户列表</p>
+        <div className="bisheng-table-footer">
+            <p className="desc">用户列表</p>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"
                 page={page}
@@ -111,7 +113,7 @@ export default function Users(params) {
         </dialog>
 
         <UserRoleModal id={roleOpenId} onClose={() => setRoleOpenId(null)} onChange={handleRoleChange}></UserRoleModal>
-    </>
+    </div>
 };
 
 

@@ -31,13 +31,13 @@ export default function SkillSheet({ select, children, onSelect }) {
             {children}
         </SheetTrigger>
         <SheetContent className="sm:min-w-[966px] bg-gray-100">
-            <div className="flex h-full">
+            <div className="flex h-full" onClick={e => e.stopPropagation()}>
                 <div className="w-fit pr-6">
                     <SheetTitle>添加技能</SheetTitle>
                     <SearchInput value={keyword} placeholder="搜索" className="my-6" onChange={handleSearch} />
                     <Button className="w-full" onClick={toCreateFlow} >创建技能</Button>
                 </div>
-                <div className="flex-1 bg-[#fff] p-6 h-full flex flex-wrap gap-1 overflow-y-auto scrollbar-hide content-start">
+                <div className="flex-1 bg-[#fff] p-6 h-full flex flex-wrap gap-1 overflow-y-auto scrollbar-hide content-start min-w-[696px]">
                     {
                         onlineFlows[0] ? onlineFlows.map((flow, i) => (
                             <CardComponent key={i}
@@ -49,8 +49,8 @@ export default function SkillSheet({ select, children, onSelect }) {
                                 footer={(
                                     <div className="flex justify-end">
                                         {select.some(_ => _.id === flow.id) ?
-                                            <Button size="sm" className="absolute right-4 bottom-4 h-6" disabled>已添加</Button>
-                                            : <Button size="sm" className="absolute right-4 bottom-4 h-6" onClick={() => onSelect(flow)}>添加</Button>
+                                            <Button size="sm" className="h-6" disabled>已添加</Button>
+                                            : <Button size="sm" className="h-6" onClick={() => onSelect(flow)}>添加</Button>
                                         }
                                     </div>
                                 )}

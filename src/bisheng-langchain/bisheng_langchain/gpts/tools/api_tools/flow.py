@@ -50,7 +50,7 @@ class FlowTools(APIToolBase):
                 }
             }
         }
-        
+
         class InputArgs(BaseModel):
             """args_schema"""
             query: str = Field(description='questions to ask')

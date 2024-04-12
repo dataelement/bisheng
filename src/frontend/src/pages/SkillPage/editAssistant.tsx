@@ -1,31 +1,32 @@
+import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { changeAssistantStatusApi, saveAssistanttApi } from "@/controllers/API/assistant";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
+import { useEffect, useState } from "react";
+import { useParams } from "react-router";
+import { useNavigate } from "react-router-dom";
 import Header from "./components/editAssistant/Header";
 import Prompt from "./components/editAssistant/Prompt";
 import Setting from "./components/editAssistant/Setting";
 import TestChat from "./components/editAssistant/TestChat";
-import { useEffect, useState } from "react";
-import { useParams } from "react-router";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { changeAssistantStatusApi, saveAssistanttApi } from "@/controllers/API/assistant";
-import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { useNavigate } from "react-router-dom";
 
 export default function editAssistant() {
     const { id: assisId } = useParams()
     const navigate = useNavigate()
     // assistant data
-    const { assistantState, changed, loadAssistantState, saveAfter } = useAssistantStore()
-    const { startNewRound, insetSystemMsg, setShowGuideQuestion } = useMessageStore()
+    const { assistantState, changed, loadAssistantState, saveAfter, destroy } = useAssistantStore()
+    const { startNewRound, insetSystemMsg, insetBsMsg, setShowGuideQuestion } = useMessageStore()
 
     useEffect(() => {
         loadAssistantState(assisId).then((res) => {
             setShowGuideQuestion(true)
-            setGuideQuestion(res.guide_question?.filter((item) => item) || [''])
+            setGuideQuestion(res.guide_question?.filter((item) => item) || [])
+            res.guide_word && insetBsMsg(res.guide_word)
         })
     }, [])
 
-    // 引导词独立存储
+    // 展示的引导词独立存储
     const [guideQuestion, setGuideQuestion] = useState([])
     const handleStartChat = async (params) => {
         if (!handleCheck()) return
@@ -33,7 +34,7 @@ export default function editAssistant() {
         saveAfter()
         startNewRound()
         setGuideQuestion(assistantState.guide_question.filter((item) => item))
-        assistantState.guide_word && insetSystemMsg(assistantState.guide_word)
+        assistantState.guide_word && insetBsMsg(assistantState.guide_word)
     }
 
     const { message, toast } = useToast()
@@ -93,6 +94,11 @@ export default function editAssistant() {
         }
         return true
     }
+
+    // 销毁
+    useEffect(() => {
+        return destroy
+    }, [])
 
     return <div className="bg-[#F4F5F8]">
         <Header onSave={() => handleSave(true)} onLine={handleOnline}></Header>

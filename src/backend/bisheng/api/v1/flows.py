@@ -43,7 +43,7 @@ def create_flow(*, flow: FlowCreate, Authorize: AuthJWT = Depends()):
 
 @router.get('/', status_code=200)
 def read_flows(*,
-               name: str = Query(default=None, description='根据name查找数据库'),
+               name: str = Query(default=None, description='根据name查找数据库，包含描述的模糊搜索'),
                page_size: int = Query(default=None, description='根据pagesize查找数据库'),
                page_num: int = Query(default=None, description='根据pagenum查找数据库'),
                status: int = None,
@@ -67,8 +67,8 @@ def read_flows(*,
                 sql = sql.where(Flow.user_id == payload.get('user_id'))
                 count_sql = count_sql.where(Flow.user_id == payload.get('user_id'))
         if name:
-            sql = sql.where(Flow.name.like(f'%{name}%'))
-            count_sql = count_sql.where(Flow.name.like(f'%{name}%'))
+            sql = sql.where(or_(Flow.name.like(f'%{name}%'), Flow.description.like(f'%{name}%')))
+            count_sql = count_sql.where(or_(Flow.name.like(f'%{name}%'), Flow.description.like(f'%{name}%')))
         if status:
             sql = sql.where(Flow.status == status)
             count_sql = count_sql.where(Flow.status == status)

@@ -1,4 +1,5 @@
 import json
+import uuid
 from pathlib import Path
 from typing import Dict, List
 from uuid import UUID
@@ -9,7 +10,7 @@ from bisheng.api.services.utils import replace_flow_llm, set_flow_knowledge_id
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
-from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
@@ -22,7 +23,7 @@ from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
 from bisheng_langchain.gpts.utils import import_by_type, import_class
 from langchain_core.callbacks import Callbacks
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, Tool
 from loguru import logger
@@ -34,6 +35,7 @@ class AssistantAgent(AssistantUtils):
         self.assistant = assistant_info
         self.chat_id = chat_id
         self.tools: List[BaseTool] = []
+        self.offline_flows = []
         self.agent: ConfigurableAssistant | None = None
         self.llm: BaseLanguageModel | None = None
         self.llm_agent_executor = None
@@ -119,6 +121,7 @@ class AssistantAgent(AssistantUtils):
         for link in flow_links:
             knowledge_id = link.knowledge_id
             if knowledge_id:
+                tmp_flow_id = 'knowledge_' + str(knowledge_id)
                 one_knowledge_data = knowledge_data.get(knowledge_id)
                 if not one_knowledge_data:
                     logger.warning('act=init_tools not find knowledge_id: {}', knowledge_id)
@@ -134,12 +137,17 @@ class AssistantAgent(AssistantUtils):
                 flow_graph_data = replace_flow_llm(flow_graph_data, self.llm,
                                                    self.get_llm_conf(self.assistant.model_name))
             else:
+                tmp_flow_id = UUID(link.flow_id).hex
                 one_flow_data = flow_id2data.get(UUID(link.flow_id))
+                tool_name = f'flow_{link.flow_id}'
                 if not one_flow_data:
                     logger.warning('act=init_tools not find flow_id: {}', link.flow_id)
                     continue
+                if one_flow_data.status != FlowStatus.ONLINE.value:
+                    self.offline_flows.append(tool_name)
+                    logger.warning('act=init_tools not online flow_id: {}', link.flow_id)
+                    continue
                 flow_graph_data = one_flow_data.data
-                tool_name = f'flow_{link.flow_id}'
                 tool_description = f'Tool Name: {one_flow_data.name}\n Tool Description: {one_flow_data.description}'
 
             try:
@@ -147,7 +155,7 @@ class AssistantAgent(AssistantUtils):
                 graph = await build_flow_no_yield(graph_data=flow_graph_data,
                                                   artifacts=artifacts,
                                                   process_file=True,
-                                                  flow_id=UUID(link.flow_id).hex,
+                                                  flow_id=tmp_flow_id,
                                                   chat_id=self.assistant.id.hex)
                 built_object = await graph.abuild()
                 logger.info('act=init_flow_tool build_end')
@@ -159,7 +167,8 @@ class AssistantAgent(AssistantUtils):
                                  callbacks=callbacks)
                 tools.append(flow_tool)
             except Exception as exc:
-                logger.error(f'Error processing tweaks: {exc}')
+                logger.error(f'Error processing {tmp_flow_id} tweaks: {exc}')
+                raise Exception(f'Flow Build Error: {exc}')
         self.tools = tools
 
     async def init_agent(self):
@@ -214,11 +223,24 @@ class AssistantAgent(AssistantUtils):
         tool_selector = ToolSelector(llm=self.llm, tools=tool_list)
         return tool_selector.select(self.assistant.name, prompt)
 
-    async def run(self, query: str, callback: Callbacks = None):
+    async def run(self, query: str, chat_history: List = None, callback: Callbacks = None):
         """
         运行智能体对话
         """
-        inputs = [HumanMessage(content=query)]
+        if chat_history:
+            chat_history.append(HumanMessage(content=query))
+            inputs = chat_history
+        else:
+            inputs = [HumanMessage(content=query)]
+
+        # 假回调，将已下线的技能回调给前端
+        for one in self.offline_flows:
+            if callback is not None:
+                run_id = uuid.uuid4()
+                await callback[0].on_tool_start({
+                    'name': one,
+                }, input_str='', run_id=run_id)
+                await callback[0].on_tool_end(output='', name=one, run_id=run_id)
 
         result = {}
         async for one in self.agent.astream_events(inputs,
@@ -229,4 +251,9 @@ class AssistantAgent(AssistantUtils):
 
         # 最后一次输出的event即最终答案
         result = result['data']['output']['__end__']
-        return result
+        # 包含了history，将history排除
+        res = []
+        for one in result:
+            if isinstance(one, AIMessage) and one.response_metadata:
+                res.append(one)
+        return res

@@ -70,7 +70,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
                         case 1: useLibs.push(Number(item.third_id)); break;
                         case 2: useSkills.push(item.third_id); break;
                         case 3: manageLibs.push(Number(item.third_id)); break;
-                        case 4: useAssistant.push(Number(item.third_id)); break;
+                        case 5: useAssistant.push(item.third_id); break;
                     }
                 })
                 setForm({ name, useSkills, useLibs, useAssistant, manageLibs })
@@ -130,7 +130,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useSkills, type: 2 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useLibs, type: 1 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.manageLibs, type: 3 }),
-            updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 4 })
+            updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 5 })
         ])
 
         console.log('form :>> ', form, res);
@@ -140,7 +140,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
 
     const roleId = id === -1 ? 0 : id
 
-    return <div className="max-w-[600px] mx-auto pt-4">
+    return <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-136px)] overflow-y-auto pb-10 scrollbar-hide">
         <div className="font-bold mt-4">
             <p className="text-xl mb-4">{t('system.roleName')}</p>
             <Input placeholder={t('system.roleName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60}></Input>

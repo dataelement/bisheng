@@ -45,7 +45,7 @@ class ChatHistory(Subject):
         if chat_id and (message.message or message.intermediate_steps
                         or message.files) and message.type != 'stream':
             msg = message.copy()
-            msg.message = str(msg.message) if isinstance(msg.message, dict) else msg.message
+            msg.message = json.dumps(msg.message) if isinstance(msg.message, dict) else msg.message
             files = json.dumps(msg.files) if msg.files else ''
             msg.__dict__.pop('files')
             db_message = ChatMessage(files=files, **msg.__dict__)

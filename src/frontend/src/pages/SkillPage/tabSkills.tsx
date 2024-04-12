@@ -22,7 +22,7 @@ export default function Skills() {
     const { user } = useContext(userContext);
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload } = useTable<FlowType>({ pageSize: 14 }, (param) =>
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData } = useTable<FlowType>({ pageSize: 14 }, (param) =>
         readFlowsFromDatabase(param.page, param.pageSize, param.keyword)
     )
     const [open, setOpen] = useState(false)
@@ -32,7 +32,10 @@ export default function Skills() {
     // 上下线
     const handleCheckedChange = (checked, data) => {
         return captureAndAlertRequestErrorHoc(updataOnlineState(data.id, data, checked).then(res => {
-            data.status = checked ? 2 : 1
+            if (res) {
+                refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
+            }
+            return res
         }))
     }
 
@@ -88,7 +91,7 @@ export default function Skills() {
                                 type='skill'
                                 title={t('skills.createNew')}
                                 description={(<>
-                                    <p>没有想法？</p>
+                                    <p>技能通过可视化的流程编排，明确任务执行步骤</p>
                                     <p>我们提供场景模板供您使用和参考</p>
                                 </>)}
                             ></CardComponent>
@@ -105,6 +108,7 @@ export default function Skills() {
                                     description={item.description}
                                     checked={item.status === 2}
                                     user={item.user_name}
+                                    onClick={() => item.status !== 2 && handleSetting(item)}
                                     onAddTemp={toggleTempModal}
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={handleDelete}

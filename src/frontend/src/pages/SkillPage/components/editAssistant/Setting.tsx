@@ -1,6 +1,7 @@
+import { TitleIconBg } from "@/components/bs-comp/cardComponent";
 import SkillSheet from "@/components/bs-comp/sheets/SkillSheet";
 import ToolsSheet from "@/components/bs-comp/sheets/ToolsSheet";
-import { TitleIconBg } from "@/components/bs-comp/cardComponent";
+import { ToolIcon } from "@/components/bs-icons/tool";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { InputList, Textarea } from "@/components/bs-ui/input";
@@ -133,7 +134,10 @@ export default function Setting() {
                         <ToolsSheet
                             select={assistantState.tool_list}
                             onSelect={(tool) => dispatchAssistant('setting', { tool_list: [...assistantState.tool_list, tool] })}>
-                            <PlusIcon className="text-primary hover:text-primary/80 mr-2" onClick={e => e.stopPropagation()}></PlusIcon>
+                            <PlusIcon
+                                className="text-primary hover:text-primary/80 mr-2"
+                                onClick={e => e.stopPropagation()}
+                            ></PlusIcon>
                         </ToolsSheet>
                     </div>
                 </AccordionTrigger>
@@ -143,7 +147,7 @@ export default function Setting() {
                             assistantState.tool_list.map(tool => (
                                 <div key={tool.id} className="group flex justify-between items-center mt-2 cursor-pointer">
                                     <div className="flex gap-2 items-center">
-                                        <TitleIconBg id={tool.id} className="w-7 h-7"></TitleIconBg>
+                                        <TitleIconBg id={tool.id} className="w-7 h-7"><ToolIcon /></TitleIconBg>
                                         <p className="text-sm">{tool.name}</p>
                                     </div>
                                     <MinusCircledIcon

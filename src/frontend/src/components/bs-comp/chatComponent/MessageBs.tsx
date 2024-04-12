@@ -1,17 +1,16 @@
-import { ThunmbIcon } from "@/components/bs-icons/thumbs";
-import SourceEntry from "./SourceEntry";
+import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { LoadIcon } from "@/components/bs-icons/loading";
-import { ChatMessageType } from "@/types/chat";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
-import { useMemo, useRef, useState } from "react";
+import { ChatMessageType } from "@/types/chat";
+import { copyText } from "@/utils";
+import { useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { copyText } from "@/utils";
 import MessageButtons from "./MessageButtons";
+import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
-import { AvatarIcon } from "@/components/bs-icons/avatar";
 
 // 颜色列表
 const colorList = [
@@ -28,7 +27,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBs({ data, onUnlike, onSource }: { data: ChatMessageType, onUnlike: any, onSource: any }) {
+export default function MessageBs({ data, onUnlike = () => { }, onSource }: { data: ChatMessageType, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -39,7 +38,7 @@ export default function MessageBs({ data, onUnlike, onSource }: { data: ChatMess
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeMathjax]}
                 linkTarget="_blank"
-                className="markdown prose inline-block break-all dark:prose-invert max-w-full text-sm text-[#111]"
+                className="bs-mkdown inline-block break-all max-w-full text-sm text-[#111]"
                 components={{
                     code: ({ node, inline, className, children, ...props }) => {
                         if (children.length) {
@@ -79,20 +78,22 @@ export default function MessageBs({ data, onUnlike, onSource }: { data: ChatMess
     const chatId = useMessageStore(state => state.chatId)
 
     return <div className="flex w-full py-1">
-        <div className="w-fit min-h-8 rounded-2xl px-6 py-4 max-w-[90%] bg-[#F5F6F8]">
-            {data.sender && <p className="text-primary text-xs mb-2">{data.sender}</p>}
-            <div className="flex gap-2 ">
-                <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} ><AvatarIcon /></div>
-                {data.message.toString() ?
-                    <div ref={messageRef} className="text-[#111] text-sm">
-                        {mkdown}
-                        {/* @user */}
-                        {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
-                        {/* 光标 */}
-                        {/* {data.message.toString() && !data.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>} */}
-                    </div>
-                    : <div><LoadIcon className="text-gray-400" /></div>
-                }
+        <div className="w-fit max-w-[90%]">
+            {data.sender && <p className="text-gray-600 text-xs mb-2">{data.sender}</p>}
+            <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8]">
+                <div className="flex gap-2 ">
+                    <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} ><AvatarIcon /></div>
+                    {data.message.toString() ?
+                        <div ref={messageRef} className="text-[#111] text-sm max-w-[calc(100%-24px)]">
+                            {mkdown}
+                            {/* @user */}
+                            {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
+                            {/* 光标 */}
+                            {/* {data.message.toString() && !data.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>} */}
+                        </div>
+                        : <div><LoadIcon className="text-gray-400" /></div>
+                    }
+                </div>
             </div>
             {/* 附加信息 */}
             {
@@ -101,8 +102,8 @@ export default function MessageBs({ data, onUnlike, onSource }: { data: ChatMess
                         extra={data.extra}
                         end={data.end}
                         source={data.source}
-                        className="pl-8"
-                        onSource={() => onSource({
+                        className="pl-4"
+                        onSource={() => onSource?.({
                             chatId,
                             messageId: data.id,
                             message: data.message || data.thought,
