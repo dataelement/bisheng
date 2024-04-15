@@ -19,6 +19,8 @@ def init_default_data():
     from bisheng.database.models.role import Role
     from bisheng.database.models.user import User
     from bisheng.database.models.user_role import UserRole
+    from bisheng.database.models.gpts_tools import GptsTools
+
     if redis_client.setNx('init_default_data', '1'):
         try:
             db_service.create_db_and_tables()
@@ -57,6 +59,18 @@ def init_default_data():
                             db_component = Component(name=k, user_id=1, user_name='admin', data=v)
                             db_components.append(db_component)
                     session.add_all(db_components)
+                    session.commit()
+
+                # 初始化预置工具列表
+                preset_tools = session.exec(select(GptsTools).limit(1)).all()
+                if not preset_tools:
+                    preset_tools = []
+                    json_items = json.loads(read_from_conf('t_gpts_tools.json'))
+                    for item in json_items:
+                        item['api_params'] = json.loads(item['api_params'])
+                        preset_tool = GptsTools(**item)
+                        preset_tools.append(preset_tool)
+                    session.add_all(preset_tools)
                     session.commit()
 
             # 初始化数据库config
