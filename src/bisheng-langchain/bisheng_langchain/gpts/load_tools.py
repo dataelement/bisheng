@@ -1,7 +1,11 @@
+import json
+import os
 import warnings
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
+import pandas as pd
+import pymysql
 from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchRun
 from bisheng_langchain.gpts.tools.calculator.tool import calculator
@@ -13,6 +17,7 @@ from bisheng_langchain.gpts.tools.dalle_image_generator.tool import (
     DallEImageGenerator,
 )
 from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
+from dotenv import load_dotenv
 from langchain_community.tools.arxiv.tool import ArxivQueryRun
 from langchain_community.tools.bearly.tool import BearlyInterpreterTool
 from langchain_community.utilities.arxiv import ArxivAPIWrapper
@@ -161,3 +166,46 @@ def load_tools(
 def get_all_tool_names() -> List[str]:
     """Get a list of all possible tool names."""
     return list(_ALL_TOOLS.keys())
+
+
+def get_tool_table():
+
+    load_dotenv('.sql_env', override=True)
+    db = pymysql.connect(
+        host=os.getenv('MYSQL_HOST'),
+        user=os.getenv('MYSQL_USER'),
+        password=os.getenv('MYSQL_PASSWORD'),
+        database=os.getenv('MYSQL_DATABASE'),
+        port=int(os.getenv('MYSQL_PORT')),
+    )
+    cursor = db.cursor()
+    cursor.execute("SELECT name, t.desc, tool_key, extra FROM t_gpts_tools as t;")
+    results = cursor.fetchall()
+    db.close()
+    
+    df = pd.DataFrame(
+        columns=[
+            '前端工具名',
+            '前端工具描述',
+            'tool_key',
+            'tool参数配置',
+            'function_name',
+            'function_description',
+            'function_args',
+        ]
+    )
+    for i, result in enumerate(results):
+        name, desc, tool_key, extra = result
+        if not extra:
+            extra = '{}'
+        tool_func = load_tools({tool_key: json.loads(extra)})[0]
+
+        df.loc[i, '前端工具名'] = name
+        df.loc[i, '前端工具描述'] = desc
+        df.loc[i, 'tool_key'] = tool_key
+        df.loc[i, 'tool参数配置'] = extra
+        df.loc[i, 'function_name'] = tool_func.name
+        df.loc[i, 'function_description'] = tool_func.description
+        df.loc[i, 'function_args'] = f"{tool_func.args_schema.schema()['properties']}"
+
+    return df
