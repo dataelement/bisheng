@@ -93,7 +93,7 @@ gpts:
       host_base_url: 'http://192.168.106.12:9001/v2.1/models/Qwen-1_8B-Chat/infer'
       temperature: 0.3
       agent_executor_type: 'get_qwen_local_functions_agent_executor'
-  # 预置助手所需的配置
+  # 预置工具所需的配置
   tools:
     # 画图工具配置，引用公共的openai配置
     dalle_image_generator:

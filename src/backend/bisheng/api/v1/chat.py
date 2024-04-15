@@ -138,7 +138,8 @@ def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
                          create_time=message.create_time,
                          update_time=message.update_time))
         else:
-            logger.warning(f'没有找到flow_id={message.flow_id}')
+            # 通过接口创建的会话记录，不关联技能或者助手
+            logger.debug(f'unknown message.flow_id={message.flow_id}')
     return resp_200(chat_list)
 
 
