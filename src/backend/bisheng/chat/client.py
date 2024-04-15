@@ -29,8 +29,8 @@ class ChatClient:
         self.gpts_agent: AssistantAgent | None = None
         self.gpts_async_callback = None
         self.chat_history = []
-        # 和模型对话时传入的对话历史条数
-        self.latest_history_num = 10
+        # 和模型对话时传入的 完整的历史对话轮数
+        self.latest_history_num = 5
 
     async def send_message(self, message: str):
         await self.websocket.send_text(message)
@@ -120,7 +120,8 @@ class ChatClient:
             return
         # 从数据库加载历史会话
         if self.chat_id:
-            res = ChatMessageDao.get_messages_by_chat_id(self.chat_id, ['question', 'answer'], 10)
+            res = ChatMessageDao.get_messages_by_chat_id(self.chat_id, ['question', 'answer'],
+                                                         self.latest_history_num * 4)
             for one in res:
                 self.chat_history.append({
                     'message': one.message,
@@ -128,17 +129,22 @@ class ChatClient:
                 })
 
     async def get_latest_history(self):
+        # 需要将无效的历史消息剔除，只包含一问一答的完整会话记录
         tmp = []
-        latest_history = self.chat_history[-self.latest_history_num:]
-        for one in latest_history:
-            if one['category'] == 'answer':
-                tmp.append(
-                    AIMessage(content=one['message'])
-                )
-            else:
-                tmp.append(
-                    HumanMessage(content=json.loads(one['message'])['input'])
-                )
+        find_i = 1
+        is_answer = True
+        # 从聊天历史里获取
+        for i in range(len(self.chat_history) - 1, -1, -1):
+            if find_i >= self.latest_history_num:
+                break
+            if self.chat_history[i]['category'] == 'answer' and is_answer:
+                tmp.insert(0, AIMessage(content=self.chat_history[i]['message']))
+                is_answer = False
+            elif self.chat_history[i]['category'] == 'question' and not is_answer:
+                tmp.insert(0, HumanMessage(content=json.loads(self.chat_history[i]['message'])['input']))
+                is_answer = True
+                find_i += 1
+
         return tmp
 
     async def init_gpts_callback(self):
