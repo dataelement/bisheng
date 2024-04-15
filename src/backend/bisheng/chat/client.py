@@ -131,7 +131,7 @@ class ChatClient:
     async def get_latest_history(self):
         # 需要将无效的历史消息剔除，只包含一问一答的完整会话记录
         tmp = []
-        find_i = 1
+        find_i = 0
         is_answer = True
         # 从聊天历史里获取
         for i in range(len(self.chat_history) - 1, -1, -1):
