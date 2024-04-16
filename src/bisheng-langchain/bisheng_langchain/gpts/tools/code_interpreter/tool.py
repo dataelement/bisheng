@@ -187,7 +187,8 @@ def upload_minio(
         access_key=param.get('MINIO_ACCESS_KEY'),
         secret_key=param.get('MINIO_SECRET_KEY'),
         secure=param.get('SCHEMA'),
-        cert_check=param.get('CERT_CHECK'))
+        cert_check=param.get('CERT_CHECK'),
+    )
     logger.debug(
         'upload_file obj={} bucket={} file_paht={}',
         object_name,
@@ -218,9 +219,11 @@ def insert_set_font_code(code: str) -> str:
         os.remove(cache)
 
     # todo: 如果生成的代码中已经有了设置字体的代码，可能会导致该段代码失效
-    pattern = re.compile(r'(import matplotlib|from matplotlib)')
-    index = max(i for i, line in enumerate(split_code) if pattern.search(line))
-    split_code.insert(index + 1, 'import matplotlib\nmatplotlib.rc("font", family="WenQuanYi Zen Hei")')
+    if 'matplotlib' in code:
+        pattern = re.compile(r'(import matplotlib|from matplotlib)')
+        index = max(i for i, line in enumerate(split_code) if pattern.search(line))
+        split_code.insert(index + 1, 'import matplotlib\nmatplotlib.rc("font", family="WenQuanYi Zen Hei")')
+
     return '\n'.join(split_code)
 
 
@@ -307,7 +310,7 @@ class CodeInterpreterTool:
                 return {'exitcode': exitcode, 'log': logs_all}
 
             # 获取文件
-            temp_output_dir = Path(temp_dir.name) / 'output'
+            temp_output_dir = Path(temp_dir.name)
             for root, dirs, files in os.walk(temp_output_dir):
                 for name in files:
                     file_name = os.path.join(root, name)

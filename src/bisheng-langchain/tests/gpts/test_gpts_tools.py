@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 import dotenv
 import httpx
+import yaml
 from bisheng_langchain.gpts.assistant import BishengAssistant, ConfigurableAssistant
 from bisheng_langchain.gpts.load_tools import load_tools
 from langchain.globals import set_debug
@@ -14,6 +15,11 @@ from pydantic import BaseModel
 
 set_debug(True)
 dotenv.load_dotenv('/app/.env', override=True)
+
+
+tool_config_path = '/app/bisheng/src/bisheng-langchain/bisheng_langchain/gpts/config/tools.yaml'
+with open(tool_config_path, 'r') as f:
+    TOOLS_CONFIG = {i.pop('type'): i for i in yaml.load(f, Loader=yaml.FullLoader)}
 
 # dalle-3
 openai_api_key = os.getenv('OPENAI_API_KEY')
@@ -60,7 +66,7 @@ def test_all_tools():
         agent_executor_type=agent_type,
         tools=tools,
         llm=llm,
-        system_message=sys_msg,
+        assistant_message=sys_msg,
     )
 
     querys = [
@@ -98,7 +104,7 @@ def test_tianyancha():
         agent_executor_type=agent_type,
         tools=tools,
         llm=llm,
-        system_message=sys_msg,
+        assistant_message=sys_msg,
     )
 
     inputs = [HumanMessage(content="帮我查询云南白药公司的基本信息")]
@@ -109,9 +115,7 @@ def test_bisheng_code_interpreter_1():
     """
     仅执行代码
     """
-    tool_params = {
-        "native_code_interpreter": {"files": None},
-    }
+    tool_params = {"code_interpreter": TOOLS_CONFIG['code_interpreter']}
 
     tools = load_tools(tool_params)
     sys_msg = "You are a helpful assistant."
@@ -127,10 +131,10 @@ def test_bisheng_code_interpreter_1():
         agent_executor_type=agent_type,
         tools=tools,
         llm=llm,
-        system_message=sys_msg,
+        assistant_message=sys_msg,
     )
 
-    inputs = [HumanMessage(content="帮我在一个txt文件中写入“你好”保存下来，并把保存路径发给我")]
+    inputs = [HumanMessage(content="帮我画一个折线图，横坐标是时间，纵坐标是销售额，数据请随意编造, 请使用中文")]
     result = asyncio.run(agent.ainvoke(inputs))
 
 
@@ -146,7 +150,7 @@ def test_bisheng_code_interpreter_2():
         description: str
 
     tool_params = {
-        "native_code_interpreter": {
+        "code_interpreter": {
             'files': {
                 'temp_test': FileInfo(
                     source_path='/app/bisheng/README.md',
@@ -170,7 +174,7 @@ def test_bisheng_code_interpreter_2():
         agent_executor_type=agent_type,
         tools=tools,
         llm=llm,
-        system_message=sys_msg,
+        assistant_message=sys_msg,
     )
 
     inputs = [HumanMessage(content="请问这个md文件的最后一行内容是什么")]
@@ -237,8 +241,7 @@ def test_math():
 if __name__ == '__main__':
     # test_all_tools()
     # test_tianyancha()
-    # test_bisheng_code_interpreter_1()
+    test_bisheng_code_interpreter_1()
     # test_bisheng_code_interpreter_2()
     # list_tools_info()
-    test_math()
-    pass
+    # test_math()

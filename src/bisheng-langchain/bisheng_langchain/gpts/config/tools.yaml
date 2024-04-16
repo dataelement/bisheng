@@ -9,14 +9,14 @@
 - type: calculator
   # 3. 用于执行计算的工具
   
-- type: code_interpreter
-  # 4. 用于解释和执行代码的工具
+- type: bisheng_code_interpreter
+  # 4. 用于执行代码的工具
   minio:
-    access_key: 
-    secret_key: 
-    cert_check: false
-    endpoint: 192.168.106.116:9000
-    secure: false
+    MINIO_ACCESS_KEY: 
+    MINIO_SECRET_KEY: 
+    CERT_CHECK: false
+    MINIO_ENDPOINT: 192.168.106.116:9000
+    SCHEMA: false
 
 - type: dalle_image_generator
   # 5. 使用OpenAI的DALL-E模型生成图像的工具
@@ -98,3 +98,9 @@
   # 26. 知识库检索工具
   collection_id: 699
   description: "美团知识库检索工具，从美团知识库进行检索总结"
+
+- type: macro_china_pmi
+  # 27. 用于访问中国采购经理人指数（PMI）的宏观经济数据的工具
+
+- type: bond_zh_us_rate
+  # 28. 指定时间段内交易日的中美两国的收益率数据
