@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { bsconfirm } from "../../../alerts/confirm";
 import { Button } from "../../../components/bs-ui/button";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
     Table,
     TableBody,
@@ -40,7 +40,7 @@ export default function Roles() {
 
     // 删除
     const handleDelete = (item) => {
-        bsconfirm({
+        bsConfirm({
             desc: `${t('system.confirmText')} 【${item.role_name}】 ?`,
             okTxt: t('delete'),
             onOk(next) {
@@ -91,7 +91,7 @@ export default function Roles() {
                             <TableCell className="font-medium">{el.role_name}</TableCell>
                             <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
-                                <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => setRole(el)} className="px-0 pl-6">{t('edit')}</Button>
+                                <Button variant="link" onClick={() => setRole(el)} className="px-0 pl-6">{t('edit')}</Button>
                                 <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
                             </TableCell>
                         </TableRow>

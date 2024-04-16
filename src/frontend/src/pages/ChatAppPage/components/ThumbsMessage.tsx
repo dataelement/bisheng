@@ -49,8 +49,8 @@ const ThumbsMessage = forwardRef((props, ref) => {
                 <p className="mb-2"></p>
                 <Textarea ref={msgRef} maxLength={9999} className={`textarea ${error ? 'border border-red-400' : ''}`} ></Textarea>
                 <div className="flex justify-end gap-4 mt-4">
-                    <Button size="sm" variant="outline" onClick={() => setOpen(false)}>{t('cancel')}</Button>
-                    <Button size="sm" onClick={handleSubmit}>{t('submit')}</Button>
+                    <Button className='px-11' variant="outline" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+                    <Button className='px-11' onClick={handleSubmit}>{t('submit')}</Button>
                 </div>
             </div>
         </DialogContent>
