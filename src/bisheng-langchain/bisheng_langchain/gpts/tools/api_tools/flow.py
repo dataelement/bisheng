@@ -38,7 +38,8 @@ class FlowTools(APIToolBase):
     def knowledge_retrieve(cls, collection_id: int = None) -> str:    
 
         flow_id = 'c7985115-a9d2-446a-9c55-40b5728ffb52'
-        url = 'http://192.168.106.120:3002/api/v1/process/{}'.format(flow_id)
+        # url = 'http://192.168.106.120:3002/api/v1/process/{}'.format(flow_id)
+        url = 'http://110.16.193.170:50056/api/v1/process/{}'.format(flow_id)
         input_key = 'inputs'
         params = {
             'tweaks': {

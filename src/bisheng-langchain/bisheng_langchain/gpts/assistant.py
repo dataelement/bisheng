@@ -66,6 +66,28 @@ class BishengAssistant:
         # init assistant prompt
         prompt_type = self.assistant_params['prompt_type']
         assistant_message = import_class(f'bisheng_langchain.gpts.prompts.{prompt_type}')
+#         assistant_message = """You are a helpful assistant. If the user's question is in Chinese, please answer it in Chinese. 
+#  """
+
+#         assistant_message = """You are a helpful assistant. Please follow the instructions below:
+# - If the user's question is in Chinese, please answer it in Chinese. 
+# - 当问题中有涉及到时间信息时，比如最近6个月、昨天、去年等：你需要用时间工具查询时间信息。
+# """
+
+#         assistant_message = """
+# ## 角色
+# 你是一个金融分析师，会利用公司年报信息和工具，来回答用户的问题、分析公司的状况。
+ 
+# ## 工作流
+# 1.  - 假设问到永辉超市的参股公司中是否存在法律风险？
+#   - 流程：
+#     - 从【永辉超市年报】知识库中搜索到参股公司名称
+#     - 根据参股公司名称调用企业风险接口查询是否有法律风险
+
+# ## 限制
+# - 只讨论与金融分析相关的内容，拒绝回答与金融分析无关的话题。
+# - 所有的输出内容必须按照给定的格式进行组织，不能偏离框架要求。
+#  """
 
         # init llm or agent
         llm_params = self.assistant_params['llm']
@@ -106,6 +128,23 @@ class BishengAssistant:
             **agent_executor_params
         )
 
+    # def run(self, query, chat_history=[], chat_round=5):
+    #     if len(chat_history) % 2 != 0:
+    #         raise ValueError("chat history should be even")
+        
+    #     # 限制chat_history轮数
+    #     if len(chat_history) > chat_round * 2:
+    #         chat_history = chat_history[-chat_round*2:]
+
+    #     inputs = []
+    #     for i in range(0, len(chat_history), 2):
+    #         inputs.append(HumanMessage(content=chat_history[i]))
+    #         inputs.append(AIMessage(content=chat_history[i+1]))
+    #     inputs.append(HumanMessage(content=query))
+    #     result = asyncio.run(self.assistant.ainvoke(inputs))
+    #     return result
+
+
     def run(self, query, chat_history=[], chat_round=5):
         if len(chat_history) % 2 != 0:
             raise ValueError("chat history should be even")
@@ -119,7 +158,7 @@ class BishengAssistant:
             inputs.append(HumanMessage(content=chat_history[i]))
             inputs.append(AIMessage(content=chat_history[i+1]))
         inputs.append(HumanMessage(content=query))
-        result = asyncio.run(self.assistant.ainvoke(inputs))
+        result = asyncio.run(self.assistant.ainvoke({"input": inputs[0].content}))
         return result
 
 
@@ -127,11 +166,26 @@ if __name__ == "__main__":
     from langchain.globals import set_debug
 
     set_debug(True)
-    # chat_history = []
-    chat_history = ['你好', '你好，有什么可以帮助你吗？', '福蓉科技股价多少?', '福蓉科技（股票代码：300049）的当前股价为48.67元。']
-    query = "去年这个时候的股价是多少？"
-    bisheng_assistant = BishengAssistant("config/base_scene.yaml")
+    chat_history = []
+    # chat_history = ['你好', '你好，有什么可以帮助你吗？', '福蓉科技股价多少?', '福蓉科技（股票代码：300049）的当前股价为48.67元。']
+    query = "最近12个月M2和社融同比增长数据折线图"
+    # bisheng_assistant = BishengAssistant("config/base_scene_cohere.yaml")
+    bisheng_assistant = BishengAssistant("config/多知识库查询及比较分析场景_cohere.yaml")
     result = bisheng_assistant.run(query, chat_history=chat_history)
     for r in result:
         print(f'------------------')
         print(type(r), r)
+    
+    for index, action in enumerate(result['intermediate_steps']):
+        print(f'------------------action:{index}------------------')
+        print(action)
+
+    print(f'-------output----------')
+    print(result['output'])
+
+
+# a = """
+# Additional points to note:
+# - If the user's question is in Chinese, please answer it in Chinese. 
+# - 当问题中有涉及到时间信息时，比如最近6个月、昨天、去年等：你需要用时间工具查询时间信息。
+# """

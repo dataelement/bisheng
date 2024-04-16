@@ -218,3 +218,30 @@ def get_qwen_local_functions_agent_executor(
     if interrupt_before_action:
         app.interrupt = ['action:inbox']
     return app
+
+
+from langchain.agents import AgentExecutor
+from langchain_cohere.react_multi_hop.agent import create_cohere_react_agent
+from langchain_core.prompts import ChatPromptTemplate
+
+
+def get_cohere_functions_agent_executor(
+    tools: list[BaseTool],
+    llm: LanguageModelLike,
+    system_message: str,
+    interrupt_before_action: bool,
+    **kwargs,
+):
+    prompt = ChatPromptTemplate.from_template("{input}")
+    agent = create_cohere_react_agent(
+        llm=llm,
+        tools=tools,
+        prompt=prompt,
+        preamble=system_message,
+    )
+
+    agent_executor = AgentExecutor(agent=agent,
+                                   tools=tools,
+                                   verbose=True,
+                                   return_intermediate_steps=True)
+    return agent_executor

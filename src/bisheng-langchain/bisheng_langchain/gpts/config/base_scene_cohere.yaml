@@ -1,0 +1,35 @@
+assistant:
+  prompt_type: 'DEFAULT_SYSTEM_MESSAGE'
+  
+  llm:
+    type: 'ChatCohere'
+    model: 'command-r-plus'
+    cohere_api_key: ''
+    max_tokens: 1000
+    temperature: 0.3
+
+  tools:
+    - type: "sina_realtime_info"
+    - type: "sina_history_KLine"
+    - type: "bisheng_code_interpreter"
+      minio:
+        MINIO_ENDPOINT: "110.16.193.170:50061"
+        MINIO_ACCESS_KEY: "minioadmin"
+        MINIO_SECRET_KEY: "minioadmin"
+        SCHEMA: False
+        CERT_CHECK: False
+    - type: "bing_search"
+      bing_subscription_key: ""
+      bing_search_url: "https://api.bing.microsoft.com/v7.0/search"
+    - type: "get_current_time"
+    - type: "calculator"
+    - type: "dalle_image_generator"
+      openai_api_key: ''
+      openai_proxy: 'http://118.195.232.223:39995'
+    - type: macro_china_money_supply
+    - type: macro_china_shrzgm
+
+  agent_executor:
+    type: 'get_cohere_functions_agent_executor'
+    interrupt_before_action: False
+    recursion_limit: 50

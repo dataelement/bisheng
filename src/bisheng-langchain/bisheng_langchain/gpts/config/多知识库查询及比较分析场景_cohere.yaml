@@ -1,0 +1,40 @@
+assistant:
+  prompt_type: 'DEFAULT_SYSTEM_MESSAGE'
+  
+  llm:
+    type: 'ChatCohere'
+    model: 'command-r-plus'
+    cohere_api_key: ''
+    max_tokens: 1000
+    temperature: 0.3
+
+  tools:
+    # 美团 2019 年的营业收入是多少？
+    - type: flow_knowledge_retrieve
+      collection_id: 699
+      description: "美团知识库检索工具，从美团知识库进行检索总结"
+
+    - type: flow_knowledge_retrieve
+      collection_id: 700
+      description: "永辉超市知识库检索工具，从永辉超市知识库进行检索总结"
+
+    - type: flow_knowledge_retrieve
+      collection_id: 808
+      description: "重庆水务集团股份有限公司知识库检索工具，从重庆水务集团股份有限公司知识库进行检索总结"
+    
+    - type: tianyancha_get_company_baseinfo
+      api_key: "224d0cd7-b87d-4f92-8dc6-132632c2d50a"  
+
+    - type: tianyancha_get_company_baseinfo
+      api_key: "224d0cd7-b87d-4f92-8dc6-132632c2d50a"
+
+    - type: tianyancha_law_suit_case
+      api_key: "224d0cd7-b87d-4f92-8dc6-132632c2d50a"
+
+    - type: tianyancha_riskinfo
+      api_key: "224d0cd7-b87d-4f92-8dc6-132632c2d50a"
+
+  agent_executor:
+    type: 'get_cohere_functions_agent_executor'
+    interrupt_before_action: False
+    recursion_limit: 10
