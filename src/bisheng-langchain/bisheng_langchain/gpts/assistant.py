@@ -168,9 +168,9 @@ if __name__ == "__main__":
     set_debug(True)
     chat_history = []
     # chat_history = ['你好', '你好，有什么可以帮助你吗？', '福蓉科技股价多少?', '福蓉科技（股票代码：300049）的当前股价为48.67元。']
-    query = "最近12个月M2和社融同比增长数据折线图"
-    # bisheng_assistant = BishengAssistant("config/base_scene_cohere.yaml")
-    bisheng_assistant = BishengAssistant("config/多知识库查询及比较分析场景_cohere.yaml")
+    query = "最近12个月M2同比增长数据折线图？"
+    bisheng_assistant = BishengAssistant("config/base_scene_cohere.yaml")
+    # bisheng_assistant = BishengAssistant("config/多知识库查询及比较分析场景_cohere.yaml")
     result = bisheng_assistant.run(query, chat_history=chat_history)
     for r in result:
         print(f'------------------')
@@ -182,10 +182,3 @@ if __name__ == "__main__":
 
     print(f'-------output----------')
     print(result['output'])
-
-
-# a = """
-# Additional points to note:
-# - If the user's question is in Chinese, please answer it in Chinese. 
-# - 当问题中有涉及到时间信息时，比如最近6个月、昨天、去年等：你需要用时间工具查询时间信息。
-# """
