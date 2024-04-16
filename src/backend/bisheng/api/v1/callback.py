@@ -166,23 +166,15 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_agent_action(self, action: AgentAction, **kwargs: Any):
         logger.debug(f'on_agent_action action={action} kwargs={kwargs}')
 
-        log = f'Thought: {action.log}'
+        log = f'\nThought: {action.log}'
         # if there are line breaks, split them and send them
         # as separate messages
-        if '\n' in log:
-            logs = log.split('\n')
-            for log in logs:
-                resp = ChatResponse(type='stream',
-                                    intermediate_steps=log,
-                                    flow_id=self.flow_id,
-                                    chat_id=self.chat_id)
-                await self.websocket.send_json(resp.dict())
-        else:
-            resp = ChatResponse(type='stream',
-                                intermediate_steps=log,
-                                flow_id=self.flow_id,
-                                chat_id=self.chat_id)
-            await self.websocket.send_json(resp.dict())
+        log = log.replace('\n', '\n\n')
+        resp = ChatResponse(type='stream',
+                            intermediate_steps=log,
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        await self.websocket.send_json(resp.dict())
 
     async def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""
@@ -232,27 +224,17 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         asyncio.run_coroutine_threadsafe(coroutine, loop)
 
     def on_agent_action(self, action: AgentAction, **kwargs: Any) -> Any:
-        log = f'Thought: {action.log}'
+        log = f'\nThought: {action.log}'
         # if there are line breaks, split them and send them
         # as separate messages
-        if '\n' in log:
-            logs = log.split('\n')
-            for log in logs:
-                resp = ChatResponse(type='stream',
-                                    intermediate_steps=log,
-                                    flow_id=self.flow_id,
-                                    chat_id=self.chat_id)
-                loop = asyncio.get_event_loop()
-                coroutine = self.websocket.send_json(resp.dict())
-                asyncio.run_coroutine_threadsafe(coroutine, loop)
-        else:
-            resp = ChatResponse(type='stream',
-                                intermediate_steps=log,
-                                flow_id=self.flow_id,
-                                chat_id=self.chat_id)
-            loop = asyncio.get_event_loop()
-            coroutine = self.websocket.send_json(resp.dict())
-            asyncio.run_coroutine_threadsafe(coroutine, loop)
+        log = log.replace("\n", "\n\n")
+        resp = ChatResponse(type='stream',
+                            intermediate_steps=log,
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        loop = asyncio.get_event_loop()
+        coroutine = self.websocket.send_json(resp.dict())
+        asyncio.run_coroutine_threadsafe(coroutine, loop)
 
     def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""

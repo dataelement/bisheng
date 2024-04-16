@@ -140,7 +140,7 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id" | "isAlert"> & { description: string[] | string }
 
-function toast({ description: descs = [], ...props }: Toast) {
+function toast({ description: descs = [], ...props }: Toast & { isAlert?: boolean }) {
     const id = genId()
 
     const update = (props: ToasterToast) =>
@@ -160,6 +160,7 @@ function toast({ description: descs = [], ...props }: Toast) {
             id,
             open: true,
             onOpenChange: (open) => {
+                console.log('toast remove', id, open);
                 if (!open) dismiss()
             },
         },
@@ -172,7 +173,7 @@ function toast({ description: descs = [], ...props }: Toast) {
     }
 }
 
-function message(props) {
+function message(props: Toast) {
     return toast({ ...props, isAlert: true })
 }
 

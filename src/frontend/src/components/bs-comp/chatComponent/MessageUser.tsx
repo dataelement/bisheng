@@ -34,14 +34,17 @@ export default function MessageUser({ useName, data }: { data: ChatMessageType }
                 </div>
             </div>
             {/* 附加信息 */}
-            <div className="flex justify-between mt-2">
-                <span></span>
-                <div className="flex gap-2 text-gray-400 cursor-pointer self-end">
-                    {!running && <Pencil2Icon className="hover:text-gray-500" onClick={() => handleResend(false)} />}
-                    {!running && <ReloadIcon className="hover:text-gray-500" onClick={() => handleResend(true)} />}
-                    {appConfig.dialogQuickSearch && <MagnifyingGlassIcon className="hover:text-gray-500" onClick={handleSearch} />}
+            {
+                // 数组类型的 data通常是文件上传消息，不展示附加按钮
+                !Array.isArray(data.message.data) && <div className="flex justify-between mt-2">
+                    <span></span>
+                    <div className="flex gap-2 text-gray-400 cursor-pointer self-end">
+                        {!running && <Pencil2Icon className="hover:text-gray-500" onClick={() => handleResend(false)} />}
+                        {!running && <ReloadIcon className="hover:text-gray-500" onClick={() => handleResend(true)} />}
+                        {appConfig.dialogQuickSearch && <MagnifyingGlassIcon className="hover:text-gray-500" onClick={handleSearch} />}
+                    </div>
                 </div>
-            </div>
+            }
         </div>
     </div>
 };

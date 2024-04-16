@@ -16,6 +16,8 @@ type State = {
      * 变更会触发 ws建立，解锁滚动
      */
     chatId: string,
+    /** 没有更多历史纪录 */
+    historyEnd: boolean,
     messages: ChatMessageType[]
     /**
      * 控制引导问题的显示状态
@@ -68,11 +70,13 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
     })
 }
 
+let currentChatId = ''
 const runLogsTypes = ['tool', 'flow', 'knowledge']
 export const useMessageStore = create<State & Actions>((set, get) => ({
     running: false,
     chatId: '',
     messages: [],
+    historyEnd: false,
     showGuideQuestion: false,
     setShowGuideQuestion(bln: boolean) {
         set({ showGuideQuestion: bln })
@@ -80,16 +84,27 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     async loadHistoryMsg(flowid, chatId) {
         const res = await getChatHistory(flowid, chatId, 30, 0)
         const msgs = handleHistoryMsg(res)
-        set({ messages: msgs.reverse() })
+        currentChatId = chatId
+        set({ historyEnd: false, messages: msgs.reverse() })
     },
     async loadMoreHistoryMsg(flowid) {
         if (get().running) return // 会话进行中禁止加载more历史
+        if (get().historyEnd) return // 没有更多历史纪录
         const chatId = get().chatId
         const prevMsgs = get().messages
+        // 最后一条消息id不存在，忽略 loadmore
         if (!prevMsgs[0]?.id) return
         const res = await getChatHistory(flowid, chatId, 10, prevMsgs[0]?.id || 0)
+        // 过滤非同一会话消息
+        if (res[0]?.chat_id !== currentChatId) {
+            return console.warn('loadMoreHistoryMsg chatId not match, ignore')
+        }
         const msgs = handleHistoryMsg(res)
-        set({ messages: [...msgs.reverse(), ...prevMsgs] })
+        if (msgs.length) {
+            set({ messages: [...msgs.reverse(), ...prevMsgs] })
+        } else {
+            set({ historyEnd: true })
+        }
     },
     destory() {
         set({ chatId: '', messages: [] })

@@ -2,7 +2,6 @@ import SkillTempSheet from "@/components/bs-comp/sheets/SkillTempSheet";
 import { useContext, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { bsconfirm } from "../../alerts/confirm";
 import CardComponent from "../../components/bs-comp/cardComponent";
 import { MoveOneIcon } from "../../components/bs-icons/moveOne";
 import { Button } from "../../components/bs-ui/button";
@@ -16,6 +15,7 @@ import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import CreateTemp from "./components/CreateTemp";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function Skills() {
     const { t } = useTranslation()
@@ -40,7 +40,7 @@ export default function Skills() {
     }
 
     const handleDelete = (data) => {
-        bsconfirm({
+        bsConfirm({
             desc: t('skills.confirmDeleteSkill'),
             okTxt: t('delete'),
             onOk(next) {
@@ -52,7 +52,7 @@ export default function Skills() {
 
     const handleSetting = (data) => {
         // console.log('data :>> ', data);
-        navigate("/skill/" + data.id)
+        navigate("/build/skill/" + data.id)
     }
 
     // 选模板(创建技能)
@@ -64,7 +64,7 @@ export default function Skills() {
             res.user_name = user.user_name
             res.write = true
             setOpen(false)
-            navigate("/skill/" + res.id)
+            navigate("/build/skill/" + res.id)
         }))
     }
 
@@ -75,7 +75,7 @@ export default function Skills() {
                 {user.role === 'admin' && <Button
                     variant="ghost"
                     className="hover:bg-gray-50 flex gap-2"
-                    onClick={() => navigate('/temps')}
+                    onClick={() => navigate('/build/temps')}
                 ><MoveOneIcon />{t('skills.manageTemplate')}</Button>}
             </div>
             {/* list */}

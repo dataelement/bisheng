@@ -1,18 +1,18 @@
 import cloneDeep from "lodash-es/cloneDeep";
 import { CircleX, Menu, Save } from "lucide-react";
 import { useContext } from "react";
-import { bsconfirm } from "../../../../alerts/confirm";
 import { Button } from "../../../../components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../../components/ui/tooltip";
 import { userContext } from "../../../../contexts/userContext";
 import DisclosureComponent from "../DisclosureComponent";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function PersonalComponents({ onDragStart }) {
     const { addSavedComponent, checkComponentsName, delComponent, savedComponents } = useContext(userContext)
 
     const addComponent = (data) => {
         if (checkComponentsName(data.node.display_name)) {
-            bsconfirm({
+            bsConfirm({
                 title: '组件已存在',
                 desc: `组件 ${data.node.display_name} 已存在，覆盖原有组件还是继续创新建组件？`,
                 showClose: true,

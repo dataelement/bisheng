@@ -10,8 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "../../../../co
 import { undoRedoContext } from "../../../../contexts/undoRedoContext";
 import { downloadNode, expandGroupNode, removeApiKeys, updateFlowPosition } from "../../../../util/reactflowUtils";
 import { userContext } from "../../../../contexts/userContext";
-import { bsconfirm } from "../../../../alerts/confirm";
 import { alertContext } from "../../../../contexts/alertContext";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
   const [nodeLength, setNodeLength] = useState(
@@ -56,7 +56,7 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
         break;
       case "saveCom":
         if (checkComponentsName(data.node.display_name)) {
-          bsconfirm({
+          bsConfirm({
             title: '组件已存在',
             desc: `组件 ${data.node.display_name} 已存在，覆盖原有组件还是继续创新建组件？`,
             showClose: true,

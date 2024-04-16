@@ -56,7 +56,7 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
         return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
     }, [messagesRef.current, messages, chatId]);
 
-    return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-52">
+    return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-60">
         {guideWord && <MessageBs
             key={9999}
             data={{ message: guideWord, isSend: false, chatKey: '', end: true, user_name: '' }} />}

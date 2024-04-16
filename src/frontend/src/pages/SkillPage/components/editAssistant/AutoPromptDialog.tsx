@@ -236,9 +236,9 @@ export default function AutoPromptDialog({ onOpenChange }) {
         </div>
         <DialogFooter>
             <DialogClose>
-                <Button variant="outline" className="px-10" type="button">取消</Button>
+                <Button variant="outline" className="px-11" type="button">取消</Button>
             </DialogClose>
-            <Button type="submit" className="px-10" disabled={loading} onClick={handleUseAll}>全部使用</Button>
+            <Button type="submit" className="px-11" disabled={loading} onClick={handleUseAll}>全部使用</Button>
         </DialogFooter>
     </DialogContent>
 };
