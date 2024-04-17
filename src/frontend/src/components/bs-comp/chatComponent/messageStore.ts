@@ -16,6 +16,8 @@ type State = {
      * 变更会触发 ws建立，解锁滚动
      */
     chatId: string,
+    /** 没有更多历史纪录 */
+    historyEnd: boolean,
     messages: ChatMessageType[]
     /**
      * 控制引导问题的显示状态
@@ -40,17 +42,17 @@ type Actions = {
 
 
 const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
+    const correctedJsonString = (str: string) => str
+        // .replace(/\\([\s\S])|(`)/g, '\\\\$1$2') // 转义反斜线和反引号
+        .replace(/\n/g, '\\n')                  // 转义换行符
+        .replace(/\r/g, '\\r')                  // 转义回车符
+        .replace(/\t/g, '\\t')                  // 转义制表符
+        .replace(/'/g, '"');                    // 将单引号替换为双引号
     return data.map(item => {
         // let count = 0
         let { message, files, is_bot, intermediate_steps, ...other } = item
-        const correctedJsonString = (str: string) => str
-            // .replace(/\\([\s\S])|(`)/g, '\\\\$1$2') // 转义反斜线和反引号
-            .replace(/\n/g, '\\n')                  // 转义换行符
-            .replace(/\r/g, '\\r')                  // 转义回车符
-            .replace(/\t/g, '\\t')                  // 转义制表符
-            .replace(/'/g, '"');                    // 将单引号替换为双引号
         try {
-            message = message && message[0] === '{' ? JSON.parse(correctedJsonString(message)) : message || ''
+            message = message && message[0] === '{' ? JSON.parse(message) : message || ''
         } catch (e) {
             // 未考虑的情况暂不处理
             console.error('消息 to JSON error :>> ', e);
@@ -68,11 +70,13 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
     })
 }
 
+let currentChatId = ''
 const runLogsTypes = ['tool', 'flow', 'knowledge']
 export const useMessageStore = create<State & Actions>((set, get) => ({
     running: false,
     chatId: '',
     messages: [],
+    historyEnd: false,
     showGuideQuestion: false,
     setShowGuideQuestion(bln: boolean) {
         set({ showGuideQuestion: bln })
@@ -80,16 +84,27 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     async loadHistoryMsg(flowid, chatId) {
         const res = await getChatHistory(flowid, chatId, 30, 0)
         const msgs = handleHistoryMsg(res)
-        set({ messages: msgs.reverse() })
+        currentChatId = chatId
+        set({ historyEnd: false, messages: msgs.reverse() })
     },
     async loadMoreHistoryMsg(flowid) {
         if (get().running) return // 会话进行中禁止加载more历史
+        if (get().historyEnd) return // 没有更多历史纪录
         const chatId = get().chatId
         const prevMsgs = get().messages
+        // 最后一条消息id不存在，忽略 loadmore
         if (!prevMsgs[0]?.id) return
         const res = await getChatHistory(flowid, chatId, 10, prevMsgs[0]?.id || 0)
+        // 过滤非同一会话消息
+        if (res[0]?.chat_id !== currentChatId) {
+            return console.warn('loadMoreHistoryMsg chatId not match, ignore')
+        }
         const msgs = handleHistoryMsg(res)
-        set({ messages: [...msgs.reverse(), ...prevMsgs] })
+        if (msgs.length) {
+            set({ messages: [...msgs.reverse(), ...prevMsgs] })
+        } else {
+            set({ historyEnd: true })
+        }
     },
     destory() {
         set({ chatId: '', messages: [] })
@@ -118,7 +133,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             let newChat = cloneDeep(state.messages);
             newChat.push({
                 isSend: false,
-                message: runLogsTypes.includes(data.category) ? data.message : '',
+                message: runLogsTypes.includes(data.category) ? JSON.parse(data.message) : '',
                 chatKey: '',
                 thought: data.intermediate_steps || '',
                 category: data.category || '',
@@ -132,6 +147,10 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     },
     // stream end
     updateCurrentMessage(wsdata) {
+        // console.log( wsdata.chat_id, get().chatId);
+        // if (wsdata.end) {
+        //     debugger
+        // }
         console.log('change updateCurrentMessage');
         const messages = get().messages
         const isRunLog = runLogsTypes.includes(wsdata.category);
@@ -140,12 +159,12 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             messages.findLastIndex((msg) => msg.extra === wsdata.extra)
             : messages.findLastIndex((msg) => !runLogsTypes.includes(msg.category))
         const currentMessage = messages[currentMessageIndex]
-    
+
         const newCurrentMessage = {
             ...currentMessage,
             ...wsdata,
-            id: wsdata.messageId,
-            message: isRunLog ? wsdata.message : currentMessage.message + wsdata.message,
+            id: isRunLog ? wsdata.extra : wsdata.messageId, // 每条消息必唯一
+            message: isRunLog ? JSON.parse(wsdata.message) : currentMessage.message + wsdata.message,
             thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
             files: wsdata.files || null,
             category: wsdata.category || '',

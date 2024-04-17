@@ -21,6 +21,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
     const { t } = useTranslation()
 
     const [flow, setFlow] = useState<any>(null)
+    const flowRef = useRef(null)
     const [assistant, setAssistant] = useState<any>(null)
     const { assistantState, loadAssistantState } = useAssistantStore()
     // console.log('data :>> ', flow);
@@ -33,9 +34,11 @@ export default function ChatPanne({ customWsHost = '', data }) {
             const _flow = await getFlowApi(id)
             await build(_flow, chatId)
             loadHistoryMsg(_flow.id, chatId)
+            flowRef.current = _flow
             setFlow(_flow)
             changeChatId(chatId) // ws
         } else {
+            flowRef.current = null
             setFlow(null)
             const _assistant = await loadAssistantState(id)
             loadHistoryMsg(_assistant.id, chatId)
@@ -45,6 +48,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
     }
     useEffect(() => {
         if (!id) {
+            flowRef.current = null
             setFlow(null)
             setAssistant(null)
             return
@@ -56,17 +60,19 @@ export default function ChatPanne({ customWsHost = '', data }) {
 
     // ws 请求数据包装
     const { tabsState } = useContext(TabsContext);
+    // 依赖 chatId更新闭包，不依赖 flow
     const getWsParamData = (action, msg) => {
         if (type === 'flow') {
-            let inputs = tabsState[flow.id].formKeysData.input_keys;
+            const _flow = flowRef.current
+            let inputs = tabsState[_flow.id].formKeysData.input_keys;
             const input = inputs.find((el: any) => !el.type)
             const inputKey = input ? Object.keys(input)[0] : '';
             const msgData = {
                 chatHistory: messages,
-                flow_id: flow.id,
+                flow_id: _flow.id,
                 chat_id: chatId,
-                name: flow.name,
-                description: flow.description,
+                name: _flow.name,
+                description: _flow.description,
                 inputs: {}
             } as any
             if (msg) msgData.inputs = { ...input, [inputKey]: msg }
@@ -96,7 +102,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
     // 应用链接
     const { appConfig } = useContext(locationContext)
     const token = localStorage.getItem("ws_token") || '';
-    let wsUrl = type === 'flow' ? `${appConfig.websocketHost}/api/v1/chat/${flow?.id}?type=L1&t=${token}` :
+    let wsUrl = type === 'flow' ? `${appConfig.websocketHost}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
         `${location.host}/api/v1/assistant/chat/${assistant?.id}?t=${token}`
 
     if (customWsHost) {
@@ -141,9 +147,9 @@ export default function ChatPanne({ customWsHost = '', data }) {
         document.dispatchEvent(myEvent);
     }
 
-    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden relative">
+    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg">
         <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src="/application-start-logo.png" alt="" />
-        <p className="text-center text-sm text-[28px] w-[182px] whitespace-normal h-[64px] leading-[32px] text-[#111111] mx-auto mt-[20px] font-light">
+        <p className="text-center text-3xl w-[182px] whitespace-normal leading-[64px] text-[#111111] mx-auto mt-[20px] font-light">
             选择一个<b className="text-[#111111] font-semibold">对话</b><br />开始<b className="text-[#111111] font-semibold">文擎睿见</b>
         </p>
         {
@@ -156,11 +162,10 @@ export default function ChatPanne({ customWsHost = '', data }) {
                 <span className="mr-[28px]">{t('chat.newChat')}</span>
             </div>
         }
-        {/* <div className="bc"></div> */}
     </div>
 
 
-    return <div className="flex-1 min-w-0">
+    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg">
         {/* 技能会话 */}
         {
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>

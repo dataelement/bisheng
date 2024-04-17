@@ -40,7 +40,7 @@ _MACRO_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
 
 _tmp_flow = ['knowledge_retrieve']
 _TMP_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'flow_{name}': (FlowTools.get_api_tool, ['collection_id'])
+    f'flow_{name}': (FlowTools.get_api_tool, ['collection_id', 'description'])
     for name in _tmp_flow
 }
 ALL_API_TOOLS = {}

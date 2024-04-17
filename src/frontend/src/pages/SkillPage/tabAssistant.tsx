@@ -1,5 +1,4 @@
 import { useTranslation } from "react-i18next";
-import { bsconfirm } from "../../alerts/confirm";
 import CardComponent from "../../components/bs-comp/cardComponent";
 import { Dialog, DialogTrigger } from "../../components/bs-ui/dialog";
 import { SearchInput } from "../../components/bs-ui/input";
@@ -10,17 +9,20 @@ import { useTable } from "../../util/hook";
 import CreateAssistant from "./components/CreateAssistant";
 import { useNavigate } from "react-router-dom";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function Assistants() {
     const { t } = useTranslation()
     const navigate = useNavigate()
+    const { message } = useToast()
 
     const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData } = useTable<AssistantItemDB>({ pageSize: 15 }, (param) =>
         getAssistantsApi(param.page, param.pageSize, param.keyword)
     )
 
     const handleDelete = (data) => {
-        bsconfirm({
+        bsConfirm({
             desc: '确认删除该助手？',
             okTxt: t('delete'),
             onOk(next) {
@@ -72,13 +74,14 @@ export default function Assistants() {
                                 <CardComponent<AssistantItemDB>
                                     data={item}
                                     id={item.id}
-                                    edit
+                                    edit={item.write}
                                     checked={item.status === 1}
                                     type='assist'
                                     title={item.name}
                                     description={item.desc}
                                     user={item.user_name}
                                     onClick={() => item.status !== 1 && navigate('/assistant/' + item.id)}
+                                    onSwitchClick={() => !item.write && item.status !== 1 && message({ title: '提示', description: '请联系管理员上线助手', variant: 'warning' })}
                                     onDelete={handleDelete}
                                     onSetting={() => navigate('/assistant/' + item.id)}
                                     onCheckedChange={handleCheckedChange}

@@ -2,7 +2,6 @@ import SkillChatSheet from "@/components/bs-comp/sheets/SkillChatSheet";
 import { Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { bsconfirm } from "../../alerts/confirm";
 import { deleteChatApi, getChatsApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useDebounce } from "../../util/hook";
@@ -10,6 +9,7 @@ import { generateUUID } from "../../utils";
 import ChatPanne from "./components/ChatPanne";
 import { PlusBoxIcon } from "@/components/bs-icons/plusBox";
 import { gradients } from "@/components/bs-comp/cardComponent";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function SkillChatPage() {
 
@@ -52,7 +52,7 @@ export default function SkillChatPage() {
     // del
     const handleDeleteChat = (e, id) => {
         e.stopPropagation();
-        bsconfirm({
+        bsConfirm({
             desc: t('chat.confirmDeleteChat'),
             onOk(next) {
                 deleteChat(id);

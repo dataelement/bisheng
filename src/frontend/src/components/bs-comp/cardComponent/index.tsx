@@ -9,7 +9,7 @@ import { SettingIcon } from "../../bs-icons/setting";
 import { SkillIcon } from "../../bs-icons/skill";
 import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
-import { Switch } from "../../ui/switch";
+import { Switch } from "../../bs-ui/switch";
 
 interface IProps<T> {
   data: T,
@@ -25,6 +25,7 @@ interface IProps<T> {
   footer?: React.ReactNode,
   icon?: any,
   onClick?: () => void,
+  onSwitchClick?: () => void,
   onAddTemp?: (data: T) => void,
   onCheckedChange?: (b: boolean, data: T) => Promise<any>
   onDelete?: (data: T) => void,
@@ -74,6 +75,7 @@ export default function CardComponent<T>({
   description,
   footer = null,
   onClick,
+  onSwitchClick,
   onDelete,
   onAddTemp,
   onCheckedChange,
@@ -119,7 +121,7 @@ export default function CardComponent<T>({
 
 
   // 侧边弹窗列表（sheet）
-  if (type === 'sheet') return <Card className="group w-[320px] cursor-pointer bg-gray-100 hover:bg-gray-200 hover:shadow-none relative" onClick={onClick}>
+  if (type === 'sheet') return <Card className="group w-[320px] cursor-pointer bg-[#F7F9FC] hover:bg-[#EDEFF6] hover:shadow-none relative" onClick={onClick}>
     <CardHeader className="pb-2">
       <CardTitle className="truncate-doubleline">
         <div className="flex gap-2 pb-2 items-center">
@@ -141,13 +143,13 @@ export default function CardComponent<T>({
 
 
   // 技能组件
-  return <Card className="group w-[320px] cursor-pointer" onClick={onClick}>
+  return <Card className="group w-[320px] cursor-pointer" onClick={() => edit && onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
         <TitleIconBg id={id} >
           {type === 'skill' ? <SkillIcon /> : <AssistantIcon />}
         </TitleIconBg>
-        {edit && <Switch checked={_checked} onCheckedChange={handleCheckedChange} onClick={e => e.stopPropagation()}></Switch>}
+        <Switch checked={_checked} onCheckedChange={(b) => edit && handleCheckedChange(b)} onClick={e => { e.stopPropagation(); onSwitchClick?.() }}></Switch>
       </div>
       <CardTitle className="truncate-doubleline leading-5">{title}</CardTitle>
     </CardHeader>
@@ -158,7 +160,7 @@ export default function CardComponent<T>({
       <div className="flex gap-1 items-center">
         <UserIcon />
         <span className="text-sm text-muted-foreground">创建用户</span>
-        <span className="text-sm font-medium leading-none">{user}</span>
+        <span className="text-sm font-medium leading-none overflow-hidden text-ellipsis max-w-32 ">{user}</span>
       </div>
       {edit
         && <div className="hidden group-hover:flex">

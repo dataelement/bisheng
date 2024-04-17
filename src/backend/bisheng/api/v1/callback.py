@@ -24,6 +24,15 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         self.chat_id = chat_id
         self.user_id = user_id
 
+        # 工具调用的缓存，在tool_end时将开始和结束拼接到一起存储到数据库
+        self.tool_cache = {}
+        # self.tool_cache = {
+        #     'run_id': {
+        #         'input': {},
+        #         'category': "",
+        #     },  # 存储工具调用的input信息
+        # }
+
     async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         logger.debug(f'on_llm_new_token token={token} kwargs={kwargs}')
         resp = ChatResponse(message=token,
@@ -48,7 +57,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any],
                              **kwargs: Any) -> Any:
         """Run when chain starts running."""
-        logger.debug(f'on_chain_start serialized={serialized} inputs={inputs} kwargs={kwargs}')
+        logger.debug(f'on_chain_start inputs={inputs} kwargs={kwargs}')
 
     async def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
@@ -62,7 +71,8 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
                             **kwargs: Any) -> Any:
         """Run when tool starts running."""
-        logger.debug(f'on_tool_start  serialized={serialized} input_str={input_str} kwargs={kwargs}')
+        logger.debug(
+            f'on_tool_start  serialized={serialized} input_str={input_str} kwargs={kwargs}')
 
         resp = ChatResponse(type='stream',
                             intermediate_steps=f'Tool input: {input_str}',
@@ -156,23 +166,15 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_agent_action(self, action: AgentAction, **kwargs: Any):
         logger.debug(f'on_agent_action action={action} kwargs={kwargs}')
 
-        log = f'Thought: {action.log}'
+        log = f'\nThought: {action.log}'
         # if there are line breaks, split them and send them
         # as separate messages
-        if '\n' in log:
-            logs = log.split('\n')
-            for log in logs:
-                resp = ChatResponse(type='stream',
-                                    intermediate_steps=log,
-                                    flow_id=self.flow_id,
-                                    chat_id=self.chat_id)
-                await self.websocket.send_json(resp.dict())
-        else:
-            resp = ChatResponse(type='stream',
-                                intermediate_steps=log,
-                                flow_id=self.flow_id,
-                                chat_id=self.chat_id)
-            await self.websocket.send_json(resp.dict())
+        log = log.replace('\n', '\n\n')
+        resp = ChatResponse(type='stream',
+                            intermediate_steps=log,
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        await self.websocket.send_json(resp.dict())
 
     async def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""
@@ -199,7 +201,8 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
         # stream = ChatResponse(message=f'{content}', type='stream')
         # await self.websocket.send_json(stream.dict())
-        logger.debug(f'on_chat_model_start serialized={serialized} messages={messages} kwargs={kwargs}')
+        logger.debug(
+            f'on_chat_model_start serialized={serialized} messages={messages} kwargs={kwargs}')
 
 
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
@@ -221,27 +224,17 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         asyncio.run_coroutine_threadsafe(coroutine, loop)
 
     def on_agent_action(self, action: AgentAction, **kwargs: Any) -> Any:
-        log = f'Thought: {action.log}'
+        log = f'\nThought: {action.log}'
         # if there are line breaks, split them and send them
         # as separate messages
-        if '\n' in log:
-            logs = log.split('\n')
-            for log in logs:
-                resp = ChatResponse(type='stream',
-                                    intermediate_steps=log,
-                                    flow_id=self.flow_id,
-                                    chat_id=self.chat_id)
-                loop = asyncio.get_event_loop()
-                coroutine = self.websocket.send_json(resp.dict())
-                asyncio.run_coroutine_threadsafe(coroutine, loop)
-        else:
-            resp = ChatResponse(type='stream',
-                                intermediate_steps=log,
-                                flow_id=self.flow_id,
-                                chat_id=self.chat_id)
-            loop = asyncio.get_event_loop()
-            coroutine = self.websocket.send_json(resp.dict())
-            asyncio.run_coroutine_threadsafe(coroutine, loop)
+        log = log.replace("\n", "\n\n")
+        resp = ChatResponse(type='stream',
+                            intermediate_steps=log,
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        loop = asyncio.get_event_loop()
+        coroutine = self.websocket.send_json(resp.dict())
+        asyncio.run_coroutine_threadsafe(coroutine, loop)
 
     def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""
@@ -326,9 +319,11 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
 
 class AsyncGptsLLMCallbackHandler(AsyncStreamingLLMCallbackHandler):
 
-    async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
+    async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
+                            **kwargs: Any) -> Any:
         """Run when tool starts running."""
-        logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
+        logger.debug(
+            f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
         pass
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
@@ -361,7 +356,8 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         # content = messages[0][0] if isinstance(messages[0][0], str) else messages[0][0].get('content')
         # stream = ChatResponse(message=f'{content}', type='stream')
         # await self.websocket.send_json(stream.dict())
-        logger.debug(f'on_chat_model_start serialized={serialized} messages={messages} kwargs={kwargs}')
+        logger.debug(
+            f'on_chat_model_start serialized={serialized} messages={messages} kwargs={kwargs}')
         resp = ChatResponse(type='start',
                             category='processing',
                             flow_id=self.flow_id,
@@ -377,31 +373,37 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             chat_id=self.chat_id)
         await self.websocket.send_json(resp.dict())
 
-    async def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
-        """Run when tool starts running."""
-        logger.debug(f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
+    async def on_llm_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> Any:
+        """Run when LLM errors."""
+        logger.debug(f'on_llm_error error={error} kwargs={kwargs}')
+        resp = ChatResponse(type='end',
+                            category='processing',
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        await self.websocket.send_json(resp.dict())
 
+    async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
+                            **kwargs: Any) -> Any:
+        """Run when tool starts running."""
+        logger.debug(
+            f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
+
+        input_str = input_str
         tool_name, tool_category = self.parse_tool_category(serialized['name'])
+        input_info = {'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str}
+        self.tool_cache[kwargs.get('run_id').hex] = {
+            'input': input_info,
+            'category': tool_category,
+            'steps': f'Tool input: \n\n{input_str}\n\n',
+        }
         resp = ChatResponse(type='start',
                             category=tool_category,
-                            intermediate_steps=f'Tool input: {input_str}',
-                            message={'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str},
+                            intermediate_steps=self.tool_cache[kwargs.get('run_id').hex]['steps'],
+                            message=json.dumps(input_info, ensure_ascii=False),
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
                             extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
         await self.websocket.send_json(resp.dict())
-
-        ChatMessageDao.insert_one(ChatMessageModel(
-            is_bot=1,
-            message={'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str},
-            intermediate_steps=f'Tool input: {input_str}',
-            category=tool_category,
-            type='start',
-            flow_id=self.flow_id,
-            chat_id=self.chat_id,
-            user_id=self.user_id,
-            extra=json.dumps({'run_id': kwargs.get('run_id').hex})
-        ))
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
@@ -410,28 +412,63 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
 
         result = output
         # Create a formatted message.
-        intermediate_steps = f'{observation_prefix}{result}'
-
+        intermediate_steps = f'{observation_prefix}\n\n{result}'
         tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))
 
         # Create a ChatResponse instance.
+        output_info = {'tool_key': tool_name, 'output': output}
         resp = ChatResponse(type='end',
                             category=tool_category,
                             intermediate_steps=intermediate_steps,
-                            message={'tool_key': tool_name, 'output': output},
+                            message=json.dumps(output_info, ensure_ascii=False),
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
                             extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
 
         await self.websocket.send_json(resp.dict())
-        ChatMessageDao.insert_one(ChatMessageModel(
-            is_bot=1,
-            message={'tool_key': tool_name, 'output': output},
-            intermediate_steps=intermediate_steps,
-            category=tool_category,
-            type='end',
-            flow_id=self.flow_id,
-            chat_id=self.chat_id,
-            user_id=self.user_id,
-            extra=json.dumps({'run_id': kwargs.get('run_id').hex})
-        ))
+        # 从tool cache中获取input信息
+        input_info = self.tool_cache.get(kwargs.get('run_id').hex)
+        if input_info:
+            output_info.update(input_info['input'])
+            intermediate_steps = f'{input_info["steps"]}\n\n{intermediate_steps}'
+            ChatMessageDao.insert_one(
+                ChatMessageModel(is_bot=1,
+                                 message=json.dumps(output_info),
+                                 intermediate_steps=intermediate_steps,
+                                 category=tool_category,
+                                 type='end',
+                                 flow_id=self.flow_id,
+                                 chat_id=self.chat_id,
+                                 user_id=self.user_id,
+                                 extra=json.dumps({'run_id': kwargs.get('run_id').hex})))
+            self.tool_cache.pop(kwargs.get('run_id').hex)
+
+    async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt],
+                            **kwargs: Any) -> Any:
+        """Run when tool errors."""
+        logger.debug(f'on_tool_error error={error} kwargs={kwargs}')
+        input_info = self.tool_cache.get(kwargs.get('run_id').hex)
+        if input_info:
+            output_info = {'output': 'Error: ' + str(error)}
+            output_info.update(input_info['input'])
+            resp = ChatResponse(type='end',
+                                category=input_info['category'],
+                                intermediate_steps='\n\nTool output:\n\n  Error: ' + str(error),
+                                message=json.dumps(output_info, ensure_ascii=False),
+                                flow_id=self.flow_id,
+                                chat_id=self.chat_id,
+                                extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
+            await self.websocket.send_json(resp.dict())
+
+            # 保存工具调用记录
+            self.tool_cache.pop(kwargs.get('run_id').hex)
+            ChatMessageDao.insert_one(
+                ChatMessageModel(is_bot=1,
+                                 message=json.dumps(output_info),
+                                 intermediate_steps=f'{input_info["steps"]}\n\nTool output:\n\n  Error: ' + str(error),
+                                 category=tool_category,
+                                 type='end',
+                                 flow_id=self.flow_id,
+                                 chat_id=self.chat_id,
+                                 user_id=self.user_id,
+                                 extra=json.dumps({'run_id': kwargs.get('run_id').hex})))

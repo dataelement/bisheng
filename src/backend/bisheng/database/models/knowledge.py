@@ -45,7 +45,7 @@ class KnowledgeDao(KnowledgeBase):
     from bisheng.database.models.role_access import RoleAccess
 
     @classmethod
-    def query_by_id(cls, id: int):
+    def query_by_id(cls, id: int) -> Knowledge:
         with session_getter() as session:
             return session.get(Knowledge, id)
 

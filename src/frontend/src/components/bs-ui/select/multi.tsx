@@ -25,13 +25,23 @@ interface IProps {
     value?: string[],
     defaultValue?: string[],
     children?: React.ReactNode,
-    placeholder: string,
+    placeholder?: string,
     searchPlaceholder?: string,
     lockedValues?: string[],
     onChange?: (value: string[]) => void
 }
 // 临时用 andt 设计方案封装组件
-const MultiSelect = ({ className, value = [], defaultValue = [], options = [], children = null, placeholder, searchPlaceholder = '', lockedValues = [], onChange, ...props }: IProps) => {
+const MultiSelect = ({
+    className,
+    value = [],
+    defaultValue = [],
+    options = [],
+    children = null,
+    placeholder = '',
+    searchPlaceholder = '',
+    lockedValues = [],
+    onChange, ...props
+}: IProps) => {
 
     const [values, setValues] = React.useState(defaultValue)
     const [optionFilter, setOptionFilter] = React.useState(options)

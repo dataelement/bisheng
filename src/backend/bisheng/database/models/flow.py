@@ -139,7 +139,7 @@ class FlowDao(FlowBase):
 
     @classmethod
     def get_flows(cls, user_id: Optional[int], extra_ids: Union[List[str], str], name: str,
-                  status: int) -> List[Flow]:
+                  status: int, limit: int = 0) -> List[Flow]:
         with session_getter() as session:
             # data 数据量太大，对mysql 有影响
             statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
@@ -153,6 +153,8 @@ class FlowDao(FlowBase):
             if name:
                 statement = statement.where(Flow.name.like(f'%{name}%'))
             statement = statement.order_by(Flow.update_time.desc())
+            if limit > 0:
+                statement = statement.limit(limit)
             flows = session.exec(statement)
             flows_partial = flows.mappings().all()
             return [Flow.model_validate(f) for f in flows_partial]
@@ -167,11 +169,11 @@ class FlowDao(FlowBase):
             return [Flow.model_validate(f) for f in result]
 
     @classmethod
-    def get_user_access_online_flows(cls, user_id: int) -> List[Flow]:
+    def get_user_access_online_flows(cls, user_id: int, limit: int = 0) -> List[Flow]:
         user_role = UserRoleDao.get_user_roles(user_id)
         flow_id_extra = []
         if user_role:
-            role_ids = [role.id for role in user_role]
+            role_ids = [role.role_id for role in user_role]
             if 1 in role_ids:
                 # admin
                 flow_id_extra = 'admin'
@@ -179,4 +181,4 @@ class FlowDao(FlowBase):
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.FLOW)
                 if role_access:
                     flow_id_extra = [access.third_id for access in role_access]
-        return FlowDao.get_flows(user_id, flow_id_extra, '', FlowStatus.ONLINE.value)
+        return FlowDao.get_flows(user_id, flow_id_extra, '', FlowStatus.ONLINE.value, limit=limit)

@@ -22,9 +22,9 @@ export default function chatShare() {
         return `/api/v2/chat/ws/${flowId}?type=L1&${paramStr}`
     }, [libId, tweak])
 
-    const [chatId] = useState<string>(generateUUID(32))
+    const [data] = useState<any>({ id: flowId, chatId: generateUUID(32), type: 'flow' })
 
     if (!flowId) return <div>请选择技能</div>
 
-    return <ChatPanne customWsHost={wsUrl} data={{ id: flowId, chatId, type: 'flow' }} />
+    return <ChatPanne customWsHost={wsUrl} data={data} />
 };

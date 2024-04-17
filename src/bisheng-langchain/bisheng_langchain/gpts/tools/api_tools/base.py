@@ -49,10 +49,12 @@ class APIToolBase(BaseModel):
                                                      request_timeout=timeout)
         return values
 
-    def run(self, query: str) -> str:
+    def run(self, query: str, **kwargs) -> str:
         """Run query through api and parse result."""
         if query:
             self.params[self.input_key] = query
+        if kwargs:
+            self.params.update(kwargs)
         if self.params:
             param = '&'.join([f'{k}={v}' for k, v in self.params.items()])
             url = self.url + '?' + param if '?' not in self.url else self.url + '&' + param
@@ -62,12 +64,14 @@ class APIToolBase(BaseModel):
         resp = self.client.get(url)
         if resp.status_code != 200:
             logger.info('api_call_fail res={}', resp.text)
-        return resp.text
+        return resp.text[:10000]
 
-    async def arun(self, query: str) -> str:
+    async def arun(self, query: str, **kwargs) -> str:
         """Run query through api and parse result."""
         if query:
             self.params[self.input_key] = query
+        if kwargs:
+            self.params.update(kwargs)
         if self.params:
             param = '&'.join([f'{k}={v}' for k, v in self.params.items()])
             url = self.url + '?' + param if '?' not in self.url else self.url + '&' + param
@@ -75,8 +79,8 @@ class APIToolBase(BaseModel):
             url = self.url
         logger.info('api_call url={}', url)
         resp = await self.async_client.aget(url)
-        logger.info(resp)
-        return resp
+        logger.info(resp[:10000])
+        return resp[:10000]
 
     @classmethod
     def get_api_tool(cls, name, **kwargs: Any) -> BaseTool:

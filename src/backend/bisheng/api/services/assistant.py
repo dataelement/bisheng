@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, List
 from uuid import UUID
 
@@ -42,7 +43,7 @@ class AssistantService(AssistantUtils):
             assistant_ids_extra = []
             user_role = UserRoleDao.get_user_roles(user.user_id)
             if user_role:
-                role_ids = [role.id for role in user_role]
+                role_ids = [role.role_id for role in user_role]
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
                 if role_access:
                     assistant_ids_extra = [UUID(access.third_id).hex for access in role_access]
@@ -52,6 +53,8 @@ class AssistantService(AssistantUtils):
             simple_dict = one.model_dump(include={
                 'id', 'name', 'desc', 'logo', 'status', 'user_id', 'create_time', 'update_time'
             })
+            if one.user_id == user.user_id or user.is_admin():
+                simple_dict['write'] = True
             simple_dict['user_name'] = cls.get_user_name(one.user_id)
             data.append(AssistantSimpleInfo(**simple_dict))
         return resp_200(data={'data': data, 'total': total})
@@ -136,19 +139,23 @@ class AssistantService(AssistantUtils):
             yield str(StreamData(event='message', data={'type': 'prompt', 'message': one_prompt.content}))
             final_prompt += one_prompt.content
         assistant.prompt = final_prompt
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
         # 生成开场白和开场问题
         guide_info = auto_agent.generate_guide(assistant.prompt)
         yield str(StreamData(event='message', data={'type': 'guide_word', 'message': guide_info['opening_lines']}))
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
         yield str(StreamData(event='message', data={'type': 'guide_question', 'message': guide_info['questions']}))
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
         # 自动选择工具和技能
         tool_info = cls.get_auto_tool_info(assistant, auto_agent)
         tool_info = [one.model_dump() for one in tool_info]
         yield str(StreamData(event='message', data={'type': 'tool_list', 'message': tool_info}))
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
         flow_info = cls.get_auto_flow_info(assistant, auto_agent)
-        flow_info = [one. model_dump() for one in flow_info]
+        flow_info = [one.model_dump() for one in flow_info]
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod
@@ -170,12 +177,13 @@ class AssistantService(AssistantUtils):
                 return AssistantNameRepeatError.return_resp()
             assistant.name = req.name
         assistant.desc = req.desc
-        assistant.logo = req.logo or assistant.logo
-        assistant.prompt = req.prompt or assistant.prompt
-        assistant.guide_word = req.guide_word or assistant.guide_word
-        assistant.guide_question = req.guide_question or assistant.guide_question
-        assistant.model_name = req.model_name or assistant.model_name
-        assistant.temperature = req.temperature or assistant.temperature
+        assistant.logo = req.logo
+        assistant.prompt = req.prompt
+        assistant.guide_word = req.guide_word
+        assistant.guide_question = req.guide_question
+        assistant.model_name = req.model_name
+        assistant.temperature = req.temperature
+        assistant.update_time = datetime.now()
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息
@@ -357,8 +365,8 @@ class AssistantService(AssistantUtils):
 
     @classmethod
     def get_auto_flow_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[Flow]:
-        # 自动选择技能
-        all_flow = FlowDao.get_user_access_online_flows(assistant.user_id)
+        # 自动选择技能, 挑选前50个技能用来做自动选择
+        all_flow = FlowDao.get_user_access_online_flows(assistant.user_id, 50)
         flow_dict = {}
         flow_list = []
         for one in all_flow:

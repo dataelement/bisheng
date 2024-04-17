@@ -36,7 +36,7 @@ export default function CreateTaskList({ onChange }) {
     return <div>
         <div className="flex justify-between">
             <div>
-                <Button size="sm" className="rounded-lg h-10 px-5" onClick={() => openPopUp(<UploadModal
+                <Button size="sm" onClick={() => openPopUp(<UploadModal
                     fileName="files"
                     accept={['json']}
                     onClose={closePopUp}

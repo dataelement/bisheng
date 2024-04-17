@@ -19,17 +19,17 @@ import {
 import { ArrowLeft, Filter, RotateCw, Search, X } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { bsconfirm } from "../../alerts/confirm";
 // import PaginationComponent from "../../components/PaginationComponent";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination"
 import ShadTooltip from "../../components/ShadTooltipComponent";
-import { Input } from "../../components/bs-ui/input";
+import { Input, SearchInput } from "../../components/bs-ui/input";
 import { Select, SelectContent, SelectGroup, SelectTrigger, SelectItem } from "../../components/bs-ui/select";
 import { locationContext } from "../../contexts/locationContext";
 import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import UploadModal from "../../modals/UploadModal";
 import { useTable } from "../../util/hook";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function FilesPage() {
     const { t } = useTranslation()
@@ -69,14 +69,17 @@ export default function FilesPage() {
         reload()
     }
 
-    // 删除
-    const { delShow, idRef, close, delConfim } = useDelete()
-
-    const handleDelete = () => {
-        captureAndAlertRequestErrorHoc(deleteFile(idRef.current).then(res => {
-            reload()
-            close()
-        }))
+    const handleDelete = (id) => {
+        bsConfirm({
+            title: t('prompt'),
+            desc: t('lib.confirmDeleteFile'),
+            onOk(next) {
+                captureAndAlertRequestErrorHoc(deleteFile(id).then(res => {
+                    reload()
+                }))
+                next()
+            },
+        })
     }
 
     const [repeatFiles, setRepeatFiles] = useState([])
@@ -86,7 +89,7 @@ export default function FilesPage() {
         if (_repeatFiles.length) {
             setRepeatFiles(_repeatFiles)
         } else {
-            failFiles.length && bsconfirm({
+            failFiles.length && bsConfirm({
                 desc: <div>
                     <p>{t('lib.fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
                     <div className="max-h-[160px] overflow-y-auto no-scrollbar">
@@ -120,93 +123,83 @@ export default function FilesPage() {
         setFilter(Number(id))
     }
 
-    return <div className="w-full h-full p-6 relative overflow-y-auto">
+    return <div className="w-full h-full px-2 py-4 relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
         <ShadTooltip content="back" side="top">
-            <button className="extra-side-bar-buttons w-[36px] absolute top-[26px]" onClick={() => { }} >
+            <button className="extra-side-bar-buttons w-[36px] absolute top-[16px]" onClick={() => { }} >
                 <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
             </button>
         </ShadTooltip>
-        <Tabs defaultValue="account" className="w-full">
-            <TabsList className="ml-12">
-                <TabsTrigger value="account" className="roundedrounded-xl">{t('lib.fileList')}</TabsTrigger>
-                <TabsTrigger disabled value="password">{t('lib.systemIntegration')}</TabsTrigger>
-            </TabsList>
-            <TabsContent value="account">
-                <div className="flex justify-between items-center">
-                    <span className=" text-gray-800">{title}</span>
-                    <div className="flex gap-4 items-center">
-                        <div className="w-[180px] relative">
-                            <Input placeholder={t('lib.fileName')} onChange={(e) => search(e.target.value)}></Input>
-                            <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
-                        </div>
-                        {hasPermission && <Button className="h-10 px-9" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
-                    </div>
+        <div className="h-full overflow-y-auto pb-10 bg-[#fff]">
+            <div className="flex justify-between items-center">
+                <span className=" text-gray-700 text-sm font-black pl-14">{title}</span>
+                <div className="flex gap-4 items-center">
+                    <SearchInput placeholder={t('lib.fileName')} onChange={(e) => search(e.target.value)}></SearchInput>
+                    {hasPermission && <Button className="px-8" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
                 </div>
-                <Table>
-                    <TableCaption>
-                        <div className="join grid grid-cols-2 w-[200px]">
-                            <AutoPagination
-                                page={page}
-                                pageSize={pageSize}
-                                total={total}
-                                onChange={(newPage) => setPage(newPage)}
-                            />
-                        </div>
-                    </TableCaption>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[600px]">{t('lib.fileName')}</TableHead>
-                            {/* 状态 */}
-                            <TableHead className="flex items-center gap-4">{t('lib.status')}
-                                {/* Select component */}
-                                <Select onValueChange={selectChange}>
-                                    <SelectTrigger className="border-none w-16">
-                                        <Filter size={16} className={`cursor-pointer ${filter === 999 ? '' : 'text-gray-950'}`} />
-                                    </SelectTrigger>
-                                    <SelectContent className="w-fit">
-                                        <SelectGroup>
-                                            <SelectItem value={'999'}>{t('all')}</SelectItem>
-                                            <SelectItem value={'1'}>{t('lib.parsing')}</SelectItem>
-                                            <SelectItem value={'2'}>{t('lib.completed')}</SelectItem>
-                                            <SelectItem value={'3'}>{t('lib.parseFailed')}</SelectItem>
-                                        </SelectGroup>
-                                    </SelectContent>
-                                </Select>
-                            </TableHead>
-                            <TableHead>{t('lib.uploadTime')}</TableHead>
-                            <TableHead className="text-right pr-6">{t('operations')}</TableHead>
+            </div>
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-[600px]">{t('lib.fileName')}</TableHead>
+                        {/* 状态 */}
+                        <TableHead className="flex items-center gap-4">{t('lib.status')}
+                            {/* Select component */}
+                            <Select onValueChange={selectChange}>
+                                <SelectTrigger className="border-none w-16">
+                                    <Filter size={16} className={`cursor-pointer ${filter === 999 ? '' : 'text-gray-950'}`} />
+                                </SelectTrigger>
+                                <SelectContent className="w-fit">
+                                    <SelectGroup>
+                                        <SelectItem value={'999'}>{t('all')}</SelectItem>
+                                        <SelectItem value={'1'}>{t('lib.parsing')}</SelectItem>
+                                        <SelectItem value={'2'}>{t('lib.completed')}</SelectItem>
+                                        <SelectItem value={'3'}>{t('lib.parseFailed')}</SelectItem>
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                        </TableHead>
+                        <TableHead>{t('lib.uploadTime')}</TableHead>
+                        <TableHead className="text-right pr-6">{t('operations')}</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {datalist.map(el => (
+                        <TableRow key={el.id}>
+                            <TableCell className="font-medium">{el.file_name}</TableCell>
+                            <TableCell>
+                                {el.status === 3 ? <div className="flex items-center">
+                                    <div className="tooltip" data-tip={el.remark}>
+                                        <span className='text-red-500'>{t('lib.parseFailed')}</span>
+                                    </div>
+                                    <Button variant="link"><RotateCw size={16} onClick={() => handleRetry([el])} /></Button>
+                                </div> :
+                                    <span className={el.status === 3 && 'text-red-500'}>{[t('lib.parseFailed'), t('lib.parsing'), t('lib.completed'), t('lib.parseFailed')][el.status]}</span>
+                                }
+                            </TableCell>
+                            <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                            <TableCell className="text-right">
+                                {hasPermission ? <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500">{t('delete')}</Button> :
+                                    <Button variant="link" className="ml-4 text-gray-400">{t('delete')}</Button>}
+                            </TableCell>
                         </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {datalist.map(el => (
-                            <TableRow key={el.id}>
-                                <TableCell className="font-medium">{el.file_name}</TableCell>
-                                <TableCell>
-                                    {el.status === 3 ? <div className="flex items-center">
-                                        <div className="tooltip" data-tip={el.remark}>
-                                            <span className='text-red-500'>{t('lib.parseFailed')}</span>
-                                        </div>
-                                        <Button variant="link"><RotateCw size={16} onClick={() => handleRetry([el])} /></Button>
-                                    </div> :
-                                        <span className={el.status === 3 && 'text-red-500'}>{[t('lib.parseFailed'), t('lib.parsing'), t('lib.completed'), t('lib.parseFailed')][el.status]}</span>
-                                    }
-                                </TableCell>
-                                <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                                <TableCell className="text-right">
-                                    {hasPermission ? <Button variant="link" onClick={() => delConfim(el.id)} className="ml-4">{t('delete')}</Button> :
-                                        <Button variant="link" className="ml-4 text-gray-400">{t('delete')}</Button>}
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-                {/* Pagination */}
-            </TabsContent>
-            <TabsContent value="password"></TabsContent>
-        </Tabs>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
+        <div className="bisheng-table-footer px-6">
+            <p></p>
+            <div>
+                <AutoPagination
+                    page={page}
+                    pageSize={pageSize}
+                    total={total}
+                    onChange={(newPage) => setPage(newPage)}
+                />
+            </div>
+        </div>
         {/* upload modal */}
         <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen} onResult={handleUploadResult}></UploadModal>
         {/* 重复文件提醒 */}
@@ -229,34 +222,5 @@ export default function FilesPage() {
                 </div>
             </div>
         </dialog>
-        {/* Delete confirmation */}
-        <dialog className={`modal ${delShow && 'modal-open'}`}>
-            <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg">{t('prompt')}</h3>
-                <p className="py-4">{t('lib.confirmDeleteFile')}</p>
-                <div className="modal-action">
-                    <Button className="h-8" variant="outline" onClick={close}>{t('cancel')}</Button>
-                    <Button className="h-8" variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
-                </div>
-            </form>
-        </dialog>
-    </div>
+    </div >
 };
-
-
-const useDelete = () => {
-    const [delShow, setDelShow] = useState(false)
-    const idRef = useRef<any>(null)
-
-    return {
-        delShow,
-        idRef,
-        close: () => {
-            setDelShow(false)
-        },
-        delConfim: (id) => {
-            idRef.current = id
-            setDelShow(true)
-        }
-    }
-}

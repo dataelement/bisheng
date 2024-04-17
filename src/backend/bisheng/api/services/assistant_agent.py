@@ -84,6 +84,16 @@ class AssistantAgent(AssistantUtils):
         self.knowledge_skill_data = data
         return data
 
+    def parse_tool_params(self, tool: GptsTools) -> Dict:
+        if not tool.extra:
+            return {}
+        params = json.loads(tool.extra)
+
+        # 判断是否需要从系统配置里获取, 不需要从系统配置获取则用本身配置的
+        if params.get('&initdb_conf_key'):
+            return self.get_initdb_conf_by_more_key(params.get('&initdb_conf_key'))
+        return params
+
     async def init_tools(self, callbacks: Callbacks = None):
         """通过名称获取tool 列表
            tools_name_param:: {name: params}
@@ -102,7 +112,7 @@ class AssistantAgent(AssistantUtils):
         if tool_ids:
             tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
             tool_name_param = {
-                tool.tool_key: json.loads(tool.extra) if tool.extra else {}
+                tool.tool_key: self.parse_tool_params(tool)
                 for tool in tools_model
             }
             tool_langchain = load_tools(tool_params=tool_name_param,
@@ -241,16 +251,7 @@ class AssistantAgent(AssistantUtils):
                     'name': one,
                 }, input_str='', run_id=run_id)
                 await callback[0].on_tool_end(output='', name=one, run_id=run_id)
-
-        result = {}
-        async for one in self.agent.astream_events(inputs,
-                                                   config=RunnableConfig(callbacks=callback),
-                                                   version='v1'):
-            if one['event'] == 'on_chain_end':
-                result = one
-
-        # 最后一次输出的event即最终答案
-        result = result['data']['output']['__end__']
+        result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
         # 包含了history，将history排除
         res = []
         for one in result:

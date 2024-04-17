@@ -96,7 +96,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
           </button>
         </ShadTooltip>
         <ShadTooltip content={t('flow.exit')} side="bottom">
-          <button className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-r-full rounded-l-none" onClick={() => navgate('/skill/' + flow.id, { replace: true })} >
+          <button className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-r-full rounded-l-none" onClick={() => navgate('/build/skill/' + flow.id, { replace: true })} >
             <LogOut strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" ></LogOut>{t('flow.exit')}
           </button>
         </ShadTooltip>
@@ -140,7 +140,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
         />
         <div className="search-icon">
           {/* ! replace hash color here */}
-          <Search size={20} strokeWidth={1.5} className="text-primary" />
+          <Search size={20} strokeWidth={1.5} className="" />
         </div>
       </div>
 

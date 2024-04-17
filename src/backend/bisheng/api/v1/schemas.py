@@ -256,6 +256,7 @@ class AssistantSimpleInfo(BaseModel):
     user_id: int
     user_name: str
     status: int
+    write: Optional[bool] = Field(default=False)
     create_time: datetime
     update_time: datetime
 

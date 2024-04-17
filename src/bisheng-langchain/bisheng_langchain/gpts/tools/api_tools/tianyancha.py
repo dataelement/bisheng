@@ -114,29 +114,7 @@ class CompanyInfo(APIToolBase):
 
     @classmethod
     def all_companys_by_company(cls, api_key: str, pageSize: int = 20, pageNum: int = 1):
-        """可以通过公司名称获取企业人员的所有相关公司，包括其担任法人、股东、董监高的公司信息"""
-        url = 'http://open.api.tianyancha.com/services/v4/open/allCompanys'
-        input_key = 'name'
-        params = {}
-        params['pageSize'] = pageSize
-        params['pageNum'] = pageNum
-
-        class InputArgs(BaseModel):
-            """args_schema"""
-            query: str = Field(description='company name to query')
-
-        return cls(url=url,
-                   api_key=api_key,
-                   params=params,
-                   input_key=input_key,
-                   args_schema=InputArgs)
-
-    @classmethod
-    def all_companys_by_humanname(cls,
-                                  api_key: str,
-                                  pageSize: int = 20,
-                                  pageNum: int = 1) -> CompanyInfo:
-        """可以通过人名获取企业人员的所有相关公司，包括其担任法人、股东、董监高的公司信息"""
+        """可以通过公司名称和人名获取企业人员的所有相关公司，包括其担任法人、股东、董监高的公司信息"""
         url = 'http://open.api.tianyancha.com/services/v4/open/allCompanys'
         input_key = 'humanName'
         params = {}
@@ -145,7 +123,8 @@ class CompanyInfo(APIToolBase):
 
         class InputArgs(BaseModel):
             """args_schema"""
-            query: str = Field(description='human name to query')
+            query: str = Field(description='human who you want to search')
+            name: str = Field(description='company name which human worked')
 
         return cls(url=url,
                    api_key=api_key,

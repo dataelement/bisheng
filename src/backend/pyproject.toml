@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bisheng"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Python package with a built-in web application"
 authors = ["Dataelement <hanfeng@dataelem.com>"]
 maintainers = [
@@ -18,8 +18,8 @@ include = ["./bisheng/*", "bisheng/**/*"]
 bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
-bisheng_langchain = "0.3.0"
-bisheng_pyautogen = "0.2.1"
+bisheng_langchain = "0.3.1"
+bisheng_pyautogen = "0.3.0"
 langchain = "0.1.12"
 langchain_experimental = "*"
 langchain_openai = "0.1.0"
