@@ -2,13 +2,13 @@ from datetime import datetime
 from typing import Optional
 
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, String, text
+from sqlalchemy import Column, DateTime, String, text, TEXT
 from sqlmodel import Field
 
 
 class ConfigBase(SQLModelSerializable):
     key: str = Field(index=True, unique=True)
-    value: str = Field(sa_column=Column(String(length=8096)))
+    value: str = Field(sa_column=Column(TEXT))
     comment: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
