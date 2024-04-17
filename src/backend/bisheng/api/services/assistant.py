@@ -139,19 +139,23 @@ class AssistantService(AssistantUtils):
             yield str(StreamData(event='message', data={'type': 'prompt', 'message': one_prompt.content}))
             final_prompt += one_prompt.content
         assistant.prompt = final_prompt
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
         # 生成开场白和开场问题
         guide_info = auto_agent.generate_guide(assistant.prompt)
         yield str(StreamData(event='message', data={'type': 'guide_word', 'message': guide_info['opening_lines']}))
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
         yield str(StreamData(event='message', data={'type': 'guide_question', 'message': guide_info['questions']}))
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
         # 自动选择工具和技能
         tool_info = cls.get_auto_tool_info(assistant, auto_agent)
         tool_info = [one.model_dump() for one in tool_info]
         yield str(StreamData(event='message', data={'type': 'tool_list', 'message': tool_info}))
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
         flow_info = cls.get_auto_flow_info(assistant, auto_agent)
-        flow_info = [one. model_dump() for one in flow_info]
+        flow_info = [one.model_dump() for one in flow_info]
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod
