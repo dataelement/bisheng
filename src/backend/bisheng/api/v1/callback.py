@@ -388,7 +388,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         logger.debug(
             f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
 
-        input_str = input_str.decode('utf-8')
+        input_str = input_str
         tool_name, tool_category = self.parse_tool_category(serialized['name'])
         input_info = {'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str}
         self.tool_cache[kwargs.get('run_id').hex] = {
@@ -410,7 +410,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         logger.debug(f'on_tool_end output={output} kwargs={kwargs}')
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
 
-        result = output.decode("utf-8")
+        result = output
         # Create a formatted message.
         intermediate_steps = f'{observation_prefix}\n\n{result}'
         tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))
