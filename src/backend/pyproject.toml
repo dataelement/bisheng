@@ -104,12 +104,6 @@ types-pyyaml = "^6.0.12.8"
 [tool.poetry.extras]
 deploy = ["langchain-serve"]
 
-
-[[tool.poetry.source]]
-name = "tsinghua"
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-priority = "primary"
-
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-ra"
