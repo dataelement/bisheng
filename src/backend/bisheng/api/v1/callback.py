@@ -410,13 +410,8 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
 
         result = output
-        # 从tool cache中获取input信息
-        input_info = self.tool_cache.get(kwargs.get('run_id').hex)
         # Create a formatted message.
         intermediate_steps = f'{observation_prefix}\n\n{result}'
-        if input_info:
-            intermediate_steps = f'{input_info["steps"]}\n\n{intermediate_steps}'
-
         tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))
 
         # Create a ChatResponse instance.
@@ -430,8 +425,11 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
 
         await self.websocket.send_json(resp.dict())
+        # 从tool cache中获取input信息
+        input_info = self.tool_cache.get(kwargs.get('run_id').hex)
         if input_info:
             output_info.update(input_info['input'])
+            intermediate_steps = f'{input_info["steps"]}\n\n{intermediate_steps}'
             ChatMessageDao.insert_one(
                 ChatMessageModel(is_bot=1,
                                  message=json.dumps(output_info),
@@ -454,10 +452,22 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             output_info.update(input_info['input'])
             resp = ChatResponse(type='end',
                                 category=input_info['category'],
-                                intermediate_steps=f'{input_info["steps"]}\n\nTool output:\n\n  Error: ' + str(error),
+                                intermediate_steps='\n\nTool output:\n\n  Error: ' + str(error),
                                 message=json.dumps(output_info, ensure_ascii=False),
                                 flow_id=self.flow_id,
                                 chat_id=self.chat_id,
                                 extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
             await self.websocket.send_json(resp.dict())
+
+            # 保存工具调用记录
             self.tool_cache.pop(kwargs.get('run_id').hex)
+            ChatMessageDao.insert_one(
+                ChatMessageModel(is_bot=1,
+                                 message=json.dumps(output_info),
+                                 intermediate_steps=f'{input_info["steps"]}\n\nTool output:\n\n  Error: ' + str(error),
+                                 category=tool_category,
+                                 type='end',
+                                 flow_id=self.flow_id,
+                                 chat_id=self.chat_id,
+                                 user_id=self.user_id,
+                                 extra=json.dumps({'run_id': kwargs.get('run_id').hex})))
