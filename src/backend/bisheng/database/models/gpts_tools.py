@@ -12,7 +12,7 @@ class GptsToolsBase(SQLModelSerializable):
     logo: Optional[str] = Field(sa_column=Column(String(length=512), index=False))
     desc: Optional[str] = Field(sa_column=Column(String(length=2048), index=False))
     tool_key: str = Field(sa_column=Column(String(length=125), index=False))
-    type: int = Field(default=0, description='表示工具是技能组装还是原生工具，type=1 表示技能')
+    type: int = Field(default=0, description='表示工具是技能组装还是原生工具，type=1 表示技能。字段废弃')
     is_preset: bool = Field(default=True)
     is_delete: int = Field(default=0, description='1 表示逻辑删除')
     api_params: Optional[List[Dict]] = Field(sa_column=Column(JSON), description='用来存储api参数等信息')
@@ -29,7 +29,8 @@ class GptsToolsBase(SQLModelSerializable):
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
     extra: Optional[str] = Field(sa_column=Column(String(length=2048), index=False),
-                                 description='用来存储额外信息，比如参数需求等')
+                                 description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
+                                             '表示配置信息从系统配置里获取,多层级用.隔开')
     id: Optional[int] = Field(default=None, primary_key=True)
 
 

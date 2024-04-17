@@ -4,22 +4,28 @@ from urllib.parse import urlparse
 
 import dotenv
 import httpx
-from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+import yaml
+from bisheng_langchain.gpts.assistant import BishengAssistant, ConfigurableAssistant
 from bisheng_langchain.gpts.load_tools import load_tools
 from langchain.globals import set_debug
 from langchain.tools import tool
-from langchain_community.chat_models.openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 set_debug(True)
 dotenv.load_dotenv('/app/.env', override=True)
 
+
+tool_config_path = '/app/bisheng/src/bisheng-langchain/bisheng_langchain/gpts/config/tools.yaml'
+with open(tool_config_path, 'r') as f:
+    TOOLS_CONFIG = {i.pop('type'): i for i in yaml.load(f, Loader=yaml.FullLoader)}
+
 # dalle-3
 openai_api_key = os.getenv('OPENAI_API_KEY')
 openai_proxy = os.getenv('OPENAI_PROXY')
-HTTP_ASYNC_CLIENT = httpx.AsyncClient(proxies=openai_proxy)
-HTTP_CLIENT = httpx.Client(proxies=openai_proxy)
+async_http_client = httpx.AsyncClient(proxies=openai_proxy)
+httpx_client = httpx.Client(proxies=openai_proxy)
 
 # code interpreter
 bearly_api_key = os.getenv("BEARLY_API_KEY")
@@ -48,14 +54,19 @@ def test_all_tools():
 
     tools = load_tools(tool_params)
     agent_type = "get_openai_functions_agent_executor"
-    llm = ChatOpenAI(model_name='gpt-4-0125-preview', http_client=HTTP_ASYNC_CLIENT)
+    llm = ChatOpenAI(
+        model='gpt-4-0125-preview',
+        temperature=0.0,
+        http_async_client=async_http_client,
+        http_client=httpx_client,
+    )
     sys_msg = "You are a helpful assistant."
 
     agent = ConfigurableAssistant(
         agent_executor_type=agent_type,
         tools=tools,
         llm=llm,
-        system_message=sys_msg,
+        assistant_message=sys_msg,
     )
 
     querys = [
@@ -82,13 +93,18 @@ def test_tianyancha():
     tools = load_tools(tool_params)
     sys_msg = "You are a helpful assistant."
     agent_type = "get_openai_functions_agent_executor"
-    llm = ChatOpenAI(model_name='gpt-4-0125-preview', http_client=HTTP_ASYNC_CLIENT)
+    llm = ChatOpenAI(
+        model='gpt-4-0125-preview',
+        temperature=0.0,
+        http_async_client=async_http_client,
+        http_client=httpx_client,
+    )
 
     agent = ConfigurableAssistant(
         agent_executor_type=agent_type,
         tools=tools,
         llm=llm,
-        system_message=sys_msg,
+        assistant_message=sys_msg,
     )
 
     inputs = [HumanMessage(content="帮我查询云南白药公司的基本信息")]
@@ -99,23 +115,26 @@ def test_bisheng_code_interpreter_1():
     """
     仅执行代码
     """
-    tool_params = {
-        "native_code_interpreter": {"files": None},
-    }
+    tool_params = {"code_interpreter": TOOLS_CONFIG['code_interpreter']}
 
     tools = load_tools(tool_params)
     sys_msg = "You are a helpful assistant."
     agent_type = "get_openai_functions_agent_executor"
-    llm = ChatOpenAI(model_name='gpt-4-0125-preview', http_client=HTTP_ASYNC_CLIENT)
+    llm = ChatOpenAI(
+        model='gpt-4-0125-preview',
+        temperature=0.0,
+        http_async_client=async_http_client,
+        http_client=httpx_client,
+    )
 
     agent = ConfigurableAssistant(
         agent_executor_type=agent_type,
         tools=tools,
         llm=llm,
-        system_message=sys_msg,
+        assistant_message=sys_msg,
     )
 
-    inputs = [HumanMessage(content="帮我在一个txt文件中写入“你好”保存下来，并把保存路径发给我")]
+    inputs = [HumanMessage(content="帮我画一个折线图，横坐标是时间，纵坐标是销售额，数据请随意编造, 请使用中文")]
     result = asyncio.run(agent.ainvoke(inputs))
 
 
@@ -131,7 +150,7 @@ def test_bisheng_code_interpreter_2():
         description: str
 
     tool_params = {
-        "native_code_interpreter": {
+        "code_interpreter": {
             'files': {
                 'temp_test': FileInfo(
                     source_path='/app/bisheng/README.md',
@@ -144,13 +163,18 @@ def test_bisheng_code_interpreter_2():
     tools = load_tools(tool_params)
     sys_msg = "You are a helpful assistant."
     agent_type = "get_openai_functions_agent_executor"
-    llm = ChatOpenAI(model_name='gpt-4-0125-preview', http_client=HTTP_ASYNC_CLIENT)
+    llm = ChatOpenAI(
+        model='gpt-4-0125-preview',
+        temperature=0.0,
+        http_async_client=async_http_client,
+        http_client=httpx_client,
+    )
 
     agent = ConfigurableAssistant(
         agent_executor_type=agent_type,
         tools=tools,
         llm=llm,
-        system_message=sys_msg,
+        assistant_message=sys_msg,
     )
 
     inputs = [HumanMessage(content="请问这个md文件的最后一行内容是什么")]
@@ -198,10 +222,26 @@ def list_tools_info():
     df.to_excel('./024工具列表.xlsx')
 
 
+def test_math():
+    questions = [
+        '已知椭圆的长轴长度为8，短轴长度为6，求椭圆的离心率，并计算其焦点坐标。',
+        '考虑区域 $D$，它由曲线 $y = x^2$，$y = 4$，$x = 0$ 和 $x = 2$ 围成。计算二重积分∬D xydxdy的值',
+        '考虑函数f(x)=(ln(x^2+1))/(x^3+2*x^2)在x=0处的极限',
+    ]
+    for query in questions:
+        bisheng_assistant = BishengAssistant(
+            "/app/bisheng/src/bisheng-langchain/bisheng_langchain/gpts/config/base_scene.yaml"
+        )
+        result = bisheng_assistant.run(query)
+        for r in result:
+            print(f'------------------')
+            print(type(r), r)
+
+
 if __name__ == '__main__':
     # test_all_tools()
     # test_tianyancha()
-    # test_bisheng_code_interpreter_1()
+    test_bisheng_code_interpreter_1()
     # test_bisheng_code_interpreter_2()
     # list_tools_info()
-    pass
+    # test_math()

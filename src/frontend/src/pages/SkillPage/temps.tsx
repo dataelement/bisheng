@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from "react-i18next";
-import { bsconfirm } from "../../alerts/confirm";
 import { Button } from "../../components/bs-ui/button";
 import {
     Table,
@@ -14,6 +13,7 @@ import {
 import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useNavigate } from "react-router-dom";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function Templates() {
     const navigate = useNavigate()
@@ -53,7 +53,7 @@ export default function Templates() {
     }
 
     const handleDelTemp = (index: number, id: number) => {
-        bsconfirm({
+        bsConfirm({
             desc: t('skills.confirmText'),
             okTxt: t('delete'),
             onOk(next) {
@@ -66,7 +66,7 @@ export default function Templates() {
         })
     }
 
-    return <div className="p-6 h-full relative">
+    return <div className="px-2 py-4 h-full relative">
         <div className="h-full w-full overflow-y-auto overflow-x-hidden scrollbar-hide">
             <div className="flex justify-end">
                 <Button className="h-10 px-8" size="sm" onClick={() => navigate('/build/skills')}>{t('skills.backToSkillList')}</Button>
@@ -109,8 +109,8 @@ export default function Templates() {
             </Table>
         </div>
         {/* footer */}
-        <div className="flex justify-between items-center absolute bottom-0 right-0 w-full py-4 bg-[white] pl-[60px] mr-5 h-[60px]">
-            <p className="text-gray-500">{t('skills.skillTemplateManagement')}</p>
+        <div className="flex justify-between items-center absolute bottom-0 right-0 w-full py-4 bg-[white] pl-[16px] h-[60px]">
+            <p className="text-gray-500 text-sm">{t('skills.skillTemplateManagement')}</p>
             <span></span>
         </div>
     </div>

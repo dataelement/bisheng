@@ -35,12 +35,12 @@ export default function SkillChatSheet({ children, onSelect }) {
         </SheetTrigger>
         <SheetContent className="sm:min-w-[966px] bg-gray-100">
             <div className="flex h-full" onClick={e => e.stopPropagation()}>
-                <div className="w-fit pr-6">
+                <div className="w-fit p-6">
                     <SheetTitle>对话选择</SheetTitle>
                     <SheetDescription>选择一个您想使用的线上技能或助手</SheetDescription>
                     <SearchInput value={keyword} placeholder="搜索" className="my-6" onChange={(e) => setKeyword(e.target.value)} />
                 </div>
-                <div className="flex-1 min-w-[696px] bg-[#fff] p-6 h-full flex flex-wrap gap-1 overflow-y-auto scrollbar-hide content-start">
+                <div className="flex-1 min-w-[696px] bg-[#fff] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
                     {
                         options.length ? options.map((flow, i) => (
                             <CardComponent key={i}

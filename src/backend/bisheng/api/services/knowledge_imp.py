@@ -360,7 +360,7 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         } for t in texts]
     else:
         # 如果文件不是pdf 需要内部转pdf
-        if file_name.rsplit('.', 1)[-1] != 'pdf':
+        if file_name.rsplit('.', 1)[-1].lower() != 'pdf':
             b64_data = base64.b64encode(open(input_file, 'rb').read()).decode()
             inp = dict(filename=file_name, b64_data=[b64_data], mode='topdf')
             resp = requests.post(settings.get_knowledge().get('unstructured_api_url'), json=inp)

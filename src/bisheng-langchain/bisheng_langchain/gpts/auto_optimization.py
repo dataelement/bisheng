@@ -3,7 +3,11 @@ import os
 import re
 
 import httpx
-from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT, BREIF_DES_PROMPT, OPENDIALOG_PROMPT
+from bisheng_langchain.gpts.prompts import (
+    ASSISTANT_PROMPT_OPT,
+    BREIF_DES_PROMPT,
+    OPENDIALOG_PROMPT,
+)
 from langchain_core.language_models.base import LanguageModelLike
 from langchain_openai.chat_models import ChatOpenAI
 from loguru import logger
@@ -48,16 +52,13 @@ def optimize_assistant_prompt(
     Returns:
         assistant_prompt(str):
     """
-    chain = ({
-        'assistant_name': lambda x: x['assistant_name'],
-        'assistant_description': lambda x: x['assistant_description'],
-    }
-             | ASSISTANT_PROMPT_OPT
-             | llm)
-    chain_output = chain.invoke({
-        'assistant_name': assistant_name,
-        'assistant_description': assistant_description,
-    })
+    chain = ASSISTANT_PROMPT_OPT | llm
+    chain_output = chain.invoke(
+        {
+            'assistant_name': assistant_name,
+            'assistant_description': assistant_description,
+        }
+    )
     response = chain_output.content
     assistant_prompt = parse_markdown(response)
     return assistant_prompt
@@ -67,17 +68,15 @@ def generate_opening_dialog(
     llm: LanguageModelLike,
     description: str,
 ) -> str:
-    chain = ({
-        'description': lambda x: x['description'],
-    }
-             | OPENDIALOG_PROMPT
-             | llm)
+    chain = OPENDIALOG_PROMPT | llm
     time = 0
     while time <= 3:
         try:
-            chain_output = chain.invoke({
-                'description': description,
-            })
+            chain_output = chain.invoke(
+                {
+                    'description': description,
+                }
+            )
             output = parse_json(chain_output.content)
             output = json.loads(output)
             opening_lines = output[0]['开场白']
@@ -101,20 +100,22 @@ def generate_breif_description(
     llm: LanguageModelLike,
     description: str,
 ) -> str:
-    chain = ({
-        'description': lambda x: x['description'],
-    }
-             | BREIF_DES_PROMPT
-             | llm)
-    chain_output = chain.invoke({
-        'description': description,
-    })
+    chain = BREIF_DES_PROMPT | llm
+    chain_output = chain.invoke(
+        {
+            'description': description,
+        }
+    )
     breif_description = chain_output.content
     breif_description = breif_description.strip()
     return breif_description
 
 
 if __name__ == '__main__':
+    from dotenv import load_dotenv
+
+    load_dotenv('/app/.env', override=True)
+
     httpx_client = httpx.Client(proxies=os.getenv('OPENAI_PROXY'))
     llm = ChatOpenAI(model='gpt-4-0125-preview', temperature=0.01, http_client=httpx_client)
     # llm = ChatQWen(model="qwen1.5-72b-chat", temperature=0.01, api_key=os.getenv('QWEN_API_KEY'))

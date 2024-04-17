@@ -74,7 +74,7 @@ export default function EditAssistantDialog({ name, desc, onSave }) {
         
     };
 
-    return <DialogContent className="sm:max-w-[625px] p-10">
+    return <DialogContent className="sm:max-w-[625px]">
         <DialogHeader>
             <DialogTitle>编辑助手</DialogTitle>
         </DialogHeader>
@@ -92,9 +92,9 @@ export default function EditAssistantDialog({ name, desc, onSave }) {
         </div>
         <DialogFooter>
             <DialogClose>
-                <Button variant="outline" className="px-10" type="button">取消</Button>
+                <Button variant="outline" className="px-11" type="button">取消</Button>
             </DialogClose>
-            <Button type="submit" className="px-10" onClick={handleSubmit}>确认</Button>
+            <Button type="submit" className="px-11" onClick={handleSubmit}>确认</Button>
         </DialogFooter>
     </DialogContent>
 };

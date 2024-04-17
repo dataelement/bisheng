@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 export default function FileLibPage() {
 
     const { t } = useTranslation()
-    return <div className="w-full h-full p-6">
+    return <div className="w-full h-full px-2 py-4">
 
         <Tabs defaultValue="user" className="w-full">
             <TabsList className="">

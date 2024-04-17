@@ -166,23 +166,15 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_agent_action(self, action: AgentAction, **kwargs: Any):
         logger.debug(f'on_agent_action action={action} kwargs={kwargs}')
 
-        log = f'Thought: {action.log}'
+        log = f'\nThought: {action.log}'
         # if there are line breaks, split them and send them
         # as separate messages
-        if '\n' in log:
-            logs = log.split('\n')
-            for log in logs:
-                resp = ChatResponse(type='stream',
-                                    intermediate_steps=log,
-                                    flow_id=self.flow_id,
-                                    chat_id=self.chat_id)
-                await self.websocket.send_json(resp.dict())
-        else:
-            resp = ChatResponse(type='stream',
-                                intermediate_steps=log,
-                                flow_id=self.flow_id,
-                                chat_id=self.chat_id)
-            await self.websocket.send_json(resp.dict())
+        log = log.replace('\n', '\n\n')
+        resp = ChatResponse(type='stream',
+                            intermediate_steps=log,
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        await self.websocket.send_json(resp.dict())
 
     async def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""
@@ -232,27 +224,17 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         asyncio.run_coroutine_threadsafe(coroutine, loop)
 
     def on_agent_action(self, action: AgentAction, **kwargs: Any) -> Any:
-        log = f'Thought: {action.log}'
+        log = f'\nThought: {action.log}'
         # if there are line breaks, split them and send them
         # as separate messages
-        if '\n' in log:
-            logs = log.split('\n')
-            for log in logs:
-                resp = ChatResponse(type='stream',
-                                    intermediate_steps=log,
-                                    flow_id=self.flow_id,
-                                    chat_id=self.chat_id)
-                loop = asyncio.get_event_loop()
-                coroutine = self.websocket.send_json(resp.dict())
-                asyncio.run_coroutine_threadsafe(coroutine, loop)
-        else:
-            resp = ChatResponse(type='stream',
-                                intermediate_steps=log,
-                                flow_id=self.flow_id,
-                                chat_id=self.chat_id)
-            loop = asyncio.get_event_loop()
-            coroutine = self.websocket.send_json(resp.dict())
-            asyncio.run_coroutine_threadsafe(coroutine, loop)
+        log = log.replace("\n", "\n\n")
+        resp = ChatResponse(type='stream',
+                            intermediate_steps=log,
+                            flow_id=self.flow_id,
+                            chat_id=self.chat_id)
+        loop = asyncio.get_event_loop()
+        coroutine = self.websocket.send_json(resp.dict())
+        asyncio.run_coroutine_threadsafe(coroutine, loop)
 
     def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""
@@ -406,16 +388,18 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         logger.debug(
             f'on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}')
 
+        input_str = input_str
         tool_name, tool_category = self.parse_tool_category(serialized['name'])
         input_info = {'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str}
         self.tool_cache[kwargs.get('run_id').hex] = {
             'input': input_info,
-            'category': tool_category
+            'category': tool_category,
+            'steps': f'Tool input: \n\n{input_str}\n\n',
         }
         resp = ChatResponse(type='start',
                             category=tool_category,
-                            intermediate_steps=f'Tool input: {input_str}',
-                            message=json.dumps(input_info),
+                            intermediate_steps=self.tool_cache[kwargs.get('run_id').hex]['steps'],
+                            message=json.dumps(input_info, ensure_ascii=False),
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
                             extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
@@ -428,8 +412,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
 
         result = output
         # Create a formatted message.
-        intermediate_steps = f'{observation_prefix}{result}'
-
+        intermediate_steps = f'{observation_prefix}\n\n{result}'
         tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))
 
         # Create a ChatResponse instance.
@@ -437,17 +420,17 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         resp = ChatResponse(type='end',
                             category=tool_category,
                             intermediate_steps=intermediate_steps,
-                            message=json.dumps(output_info),
+                            message=json.dumps(output_info, ensure_ascii=False),
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
                             extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
 
         await self.websocket.send_json(resp.dict())
-
         # 从tool cache中获取input信息
         input_info = self.tool_cache.get(kwargs.get('run_id').hex)
         if input_info:
             output_info.update(input_info['input'])
+            intermediate_steps = f'{input_info["steps"]}\n\n{intermediate_steps}'
             ChatMessageDao.insert_one(
                 ChatMessageModel(is_bot=1,
                                  message=json.dumps(output_info),
@@ -470,10 +453,22 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             output_info.update(input_info['input'])
             resp = ChatResponse(type='end',
                                 category=input_info['category'],
-                                intermediate_steps='Tool output:  Error: ' + str(error),
-                                message=json.dumps(output_info),
+                                intermediate_steps='\n\nTool output:\n\n  Error: ' + str(error),
+                                message=json.dumps(output_info, ensure_ascii=False),
                                 flow_id=self.flow_id,
                                 chat_id=self.chat_id,
                                 extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
             await self.websocket.send_json(resp.dict())
+
+            # 保存工具调用记录
             self.tool_cache.pop(kwargs.get('run_id').hex)
+            ChatMessageDao.insert_one(
+                ChatMessageModel(is_bot=1,
+                                 message=json.dumps(output_info),
+                                 intermediate_steps=f'{input_info["steps"]}\n\nTool output:\n\n  Error: ' + str(error),
+                                 category=tool_category,
+                                 type='end',
+                                 flow_id=self.flow_id,
+                                 chat_id=self.chat_id,
+                                 user_id=self.user_id,
+                                 extra=json.dumps({'run_id': kwargs.get('run_id').hex})))

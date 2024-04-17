@@ -154,7 +154,7 @@ class StockInfo(APIToolBase):
         resp = super().run(query=stock_number)
         stock = self.devideStock(resp)[0]
         if isinstance(stock, Stock):
-            return json.dumps(stock.__dict__)
+            return json.dumps(stock.__dict__, ensure_ascii=False)
         else:
             return stock
 
@@ -183,7 +183,7 @@ class StockInfo(APIToolBase):
             resp = await super().arun(query=stock_number)
             stock = self.devideStock(resp)[0]
             if isinstance(stock, Stock):
-                return json.dumps(stock.__dict__)
+                return json.dumps(stock.__dict__, ensure_ascii=False)
             else:
                 return stock
 

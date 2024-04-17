@@ -1,15 +1,13 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../../components/bs-ui/button";
 import { Input, SearchInput } from "../../components/bs-ui/input";
-import { Label } from "../../components/bs-ui/label";
 import {
     Table,
     TableBody,
-    TableCaption,
     TableCell,
     TableHead,
     TableHeader,
-    TableRow,
+    TableRow
 } from "../../components/bs-ui/table";
 import {
     Tabs,
@@ -20,16 +18,17 @@ import {
 
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Dropdown from "../../components/dropdownComponent";
 import { Textarea } from "../../components/bs-ui/input";
+import Dropdown from "../../components/dropdownComponent";
 import { alertContext } from "../../contexts/alertContext";
 import { userContext } from "../../contexts/userContext";
 import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 // import PaginationComponent from "../../components/PaginationComponent";
-import AutoPagination from "../../components/bs-ui/pagination/autoPagination"
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
-import { Search } from "lucide-react";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 function CreateModal({ datalist, open, setOpen }) {
     const { t } = useTranslation()
@@ -88,33 +87,37 @@ function CreateModal({ datalist, open, setOpen }) {
         });
     }
 
-    return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => setOpen(false)}>
-        <form method="dialog" className="max-w-[600px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background overflow-visible" onClick={e => e.stopPropagation()}>
-            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={() => setOpen(false)}>✕</button>
-            <h3 className="font-bold text-lg">{t('lib.createLibrary')}</h3>
-            <div className="flex flex-wrap justify-center">
-                <div className="grid gap-4 py-4 mt-2">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="name" className="text-right">{t('lib.libraryName')}</Label>
-                        <Input id="name" ref={nameRef} placeholder={t('lib.libraryName')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="desc" className="text-right">{t('lib.description')}</Label>
-                        <Textarea id="desc" ref={descRef} placeholder={t('lib.description')} className={`col-span-3 ${error.desc && 'border-red-400'}`} />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label className="text-right">{t('lib.model')}</Label>
-                        <Dropdown
-                            options={options}
-                            onSelect={(val) => setModal(val)}
-                            value={modal}
-                        ></Dropdown>
-                    </div>
-                    <Button type="submit" className="mt-6 h-10" onClick={handleCreate}>{t('create')}</Button>
+    return <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-[625px]">
+            <DialogHeader>
+                <DialogTitle>{t('lib.createLibrary')}</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 py-2">
+                <div className="">
+                    <label htmlFor="name" className="bisheng-label">{t('lib.libraryName')}</label>
+                    <Input name="name" ref={nameRef} placeholder={t('lib.libraryName')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
+                </div>
+                <div className="">
+                    <label htmlFor="name" className="bisheng-label">{t('lib.description')}</label>
+                    <Textarea id="desc" ref={descRef} placeholder={t('lib.description')} className={`col-span-3 ${error.desc && 'border-red-400'}`} />
+                </div>
+                <div className="">
+                    <label htmlFor="roleAndTasks" className="bisheng-label">{t('lib.model')}</label>
+                    <Dropdown
+                        options={options}
+                        onSelect={(val) => setModal(val)}
+                        value={modal}
+                    ></Dropdown>
                 </div>
             </div>
-        </form>
-    </dialog>
+            <DialogFooter>
+                <DialogClose>
+                    <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
+                </DialogClose>
+                <Button type="submit" className="px-11" onClick={handleCreate}>{t('create')}</Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
 }
 
 export default function FileLibPage() {
@@ -125,14 +128,17 @@ export default function FileLibPage() {
         readFileLibDatabase(param.page, param.pageSize, param.keyword)
     )
 
-    // Delete
-    const { delShow, idRef, close, delConfirm } = useDelete();
-
-    const handleDelete = () => {
-        captureAndAlertRequestErrorHoc(deleteFileLib(idRef.current.id).then(res => {
-            reload();
-            close();
-        }));
+    const handleDelete = (id) => {
+        bsConfirm({
+            title: t('prompt'),
+            desc: t('lib.confirmDeleteLibrary'),
+            onOk(next) {
+                captureAndAlertRequestErrorHoc(deleteFileLib(id).then(res => {
+                    reload();
+                }));
+                next()
+            },
+        })
     }
 
     // 进详情页前缓存 page, 临时方案
@@ -153,7 +159,7 @@ export default function FileLibPage() {
     const { t } = useTranslation();
 
     return (
-        <div className="w-full h-full p-6 relative">
+        <div className="w-full h-full px-2 py-4 relative">
             {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <span className="loading loading-infinity loading-lg"></span>
             </div>}
@@ -195,7 +201,7 @@ export default function FileLibPage() {
                                         }}>
                                             <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-[#0455e1]" onClick={handleCachePage}>{t('lib.details')}</Link>
                                             {user.role === 'admin' || user.user_id === el.user_id ?
-                                                <Button variant="link" onClick={() => delConfirm(el)} className="ml-4 px-0">{t('delete')}</Button> :
+                                                <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500 px-0">{t('delete')}</Button> :
                                                 <Button variant="link" className="ml-4 text-gray-400 px-0">{t('delete')}</Button>
                                             }
                                         </TableCell>
@@ -219,36 +225,6 @@ export default function FileLibPage() {
                 </div>
             </div>
             <CreateModal datalist={datalist} open={open} setOpen={setOpen}></CreateModal>
-
-            <dialog className={`modal ${delShow && 'modal-open'}`}>
-                <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-                    <h3 className="font-bold text-lg">{t('prompt')}</h3>
-                    <p className="py-4">{t('lib.confirmDeleteLibrary')}</p>
-                    <div className="modal-action">
-                        <Button className="h-10" variant="outline" onClick={close}>{t('cancel')}</Button>
-                        <Button className="h-10" variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
-                    </div>
-                </form>
-            </dialog>
         </div>
     );
-}
-
-
-
-const useDelete = () => {
-    const [delShow, setDelShow] = useState(false)
-    const idRef = useRef<any>(null)
-
-    return {
-        delShow,
-        idRef,
-        close: () => {
-            setDelShow(false)
-        },
-        delConfirm: (id) => {
-            idRef.current = id
-            setDelShow(true)
-        }
-    }
 }

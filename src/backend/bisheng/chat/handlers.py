@@ -321,13 +321,17 @@ class Handler:
             # agent model will produce the steps log
             from langchain.schema import Document  # noqa
             if chat_id and intermediate_steps.strip():
+                finally_log = ''
                 for s in intermediate_steps.split('\n'):
+                    # 清理召回日志中的一些冗余日志
                     if 'source_documents' in s:
                         answer = eval(s.split(':', 1)[1])
                         if 'result' in answer:
-                            s = 'Answer: ' + answer.get('result')
-                    msg = ChatResponse(intermediate_steps=s, type='end', user_id=user_id)
-                    steps.append(msg)
+                            finally_log += 'Answer: ' + answer.get('result') + "\n\n"
+                    else:
+                        finally_log += s + "\n\n"
+                msg = ChatResponse(intermediate_steps=finally_log, type='end', user_id=user_id)
+                steps.append(msg)
             else:
                 # 只有L3用户给出详细的log
                 end_resp.intermediate_steps = intermediate_steps

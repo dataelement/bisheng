@@ -1,7 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { bsconfirm } from "../../../alerts/confirm";
 import { Badge } from "../../../components/bs-ui/badge";
 import { Button } from "../../../components/bs-ui/button";
 import EditLabel from "../../../components/bs-ui/editLabel";
@@ -12,6 +11,7 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { TaskDB } from "../../../types/api/finetune";
 import FinetuneResult from "./FinetuneResult";
 import { formatMilliseconds } from "../../../util/utils";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export const enum TaskStatus {
     /** 训练中 */
@@ -42,7 +42,7 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
 
     const cancelPublish = async () => {
         if (online) {
-            bsconfirm({
+            bsConfirm({
                 desc: t('finetune.confirmCancelPublish'),
                 async onOk(next) {
                     next()
@@ -71,7 +71,7 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
         } else if (status === TaskStatus.PUBLISH_SUCCESS) {
             tip = t('finetune.confirmDeletePublishedModel', { name })
         }
-        bsconfirm({
+        bsConfirm({
             desc: tip,
             onOk(next) {
                 onDelete()
@@ -81,7 +81,7 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
     }
 
     const stopClick = () => {
-        bsconfirm({
+        bsConfirm({
             desc: t('finetune.confirmStopTraining'),
             onOk(next) {
                 onStop()
