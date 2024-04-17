@@ -392,12 +392,13 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         input_info = {'tool_key': tool_name, 'serialized': serialized, 'input_str': input_str}
         self.tool_cache[kwargs.get('run_id').hex] = {
             'input': input_info,
-            'category': tool_category
+            'category': tool_category,
+            'steps': f'Tool input: \n\n{input_str}\n\n',
         }
         resp = ChatResponse(type='start',
                             category=tool_category,
-                            intermediate_steps=f'Tool input: {input_str}',
-                            message=json.dumps(input_info),
+                            intermediate_steps=self.tool_cache[kwargs.get('run_id').hex]['steps'],
+                            message=json.dumps(input_info, ensure_ascii=False),
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
                             extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
@@ -409,8 +410,12 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
 
         result = output
+        # 从tool cache中获取input信息
+        input_info = self.tool_cache.get(kwargs.get('run_id').hex)
         # Create a formatted message.
-        intermediate_steps = f'{observation_prefix}{result}'
+        intermediate_steps = f'{observation_prefix}\n\n{result}'
+        if input_info:
+            intermediate_steps = f'{input_info["steps"]}\n\n{intermediate_steps}'
 
         tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))
 
@@ -419,15 +424,12 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         resp = ChatResponse(type='end',
                             category=tool_category,
                             intermediate_steps=intermediate_steps,
-                            message=json.dumps(output_info),
+                            message=json.dumps(output_info, ensure_ascii=False),
                             flow_id=self.flow_id,
                             chat_id=self.chat_id,
                             extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
 
         await self.websocket.send_json(resp.dict())
-
-        # 从tool cache中获取input信息
-        input_info = self.tool_cache.get(kwargs.get('run_id').hex)
         if input_info:
             output_info.update(input_info['input'])
             ChatMessageDao.insert_one(
@@ -452,8 +454,8 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             output_info.update(input_info['input'])
             resp = ChatResponse(type='end',
                                 category=input_info['category'],
-                                intermediate_steps='Tool output:  Error: ' + str(error),
-                                message=json.dumps(output_info),
+                                intermediate_steps=f'{input_info["steps"]}\n\nTool output:\n\n  Error: ' + str(error),
+                                message=json.dumps(output_info, ensure_ascii=False),
                                 flow_id=self.flow_id,
                                 chat_id=self.chat_id,
                                 extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
