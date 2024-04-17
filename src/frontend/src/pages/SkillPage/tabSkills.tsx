@@ -1,4 +1,6 @@
 import SkillTempSheet from "@/components/bs-comp/sheets/SkillTempSheet";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { useContext, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -15,11 +17,11 @@ import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import CreateTemp from "./components/CreateTemp";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function Skills() {
     const { t } = useTranslation()
     const { user } = useContext(userContext);
+    const { message } = useToast()
     const navigate = useNavigate()
 
     const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData } = useTable<FlowType>({ pageSize: 14 }, (param) =>
@@ -109,6 +111,7 @@ export default function Skills() {
                                     checked={item.status === 2}
                                     user={item.user_name}
                                     onClick={() => item.status !== 2 && handleSetting(item)}
+                                    onSwitchClick={() => !item.write && item.status !== 2 && message({ title: '提示', description: '请联系管理员上线技能', variant: 'warning' })}
                                     onAddTemp={toggleTempModal}
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={handleDelete}

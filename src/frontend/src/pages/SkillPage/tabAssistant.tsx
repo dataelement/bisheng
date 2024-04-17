@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import DialogForceUpdate from "@/components/bs-ui/dialog/DialogForceUpdate";
 
 export default function Assistants() {
     const { t } = useTranslation()
@@ -54,8 +55,8 @@ export default function Assistants() {
                     </div>
                     : <div className="mt-6 flex gap-2 flex-wrap pb-20 min-w-[980px]">
                         {/* 创建助手 */}
-                        <Dialog>
-                            <DialogTrigger asChild>
+                        <DialogForceUpdate
+                            trigger={
                                 <CardComponent<FlowType>
                                     data={null}
                                     type='skill'
@@ -66,9 +67,9 @@ export default function Assistants() {
                                     </>)}
                                     onClick={() => console.log('新建')}
                                 ></CardComponent>
-                            </DialogTrigger>
+                            }>
                             <CreateAssistant ></CreateAssistant>
-                        </Dialog>
+                        </DialogForceUpdate>
                         {
                             dataSource.map((item, i) => (
                                 <CardComponent<AssistantItemDB>

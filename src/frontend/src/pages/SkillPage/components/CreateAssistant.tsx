@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Button } from "../../../components/bs-ui/button";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../../components/bs-ui/dialog";
-import { Input, Textarea } from "../../../components/bs-ui/input";
-import { LoadIcon } from "../../../components/bs-icons/loading";
 import { useNavigate } from "react-router-dom";
+import { LoadIcon } from "../../../components/bs-icons/loading";
+import { Button } from "../../../components/bs-ui/button";
+import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../../components/bs-ui/dialog";
+import { Input, Textarea } from "../../../components/bs-ui/input";
 import { createAssistantsApi } from "../../../controllers/API/assistant";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 
@@ -12,7 +12,12 @@ export default function CreateAssistant() {
     // State for form fields
     const [formData, setFormData] = useState({
         name: '',
-        roleAndTasks: ''
+        roleAndTasks: `示例：
+你是 XX，具有 XX 经验，擅长 XX，…
+你的任务是 XX ，需要按照以下步骤执行：
+1. XX
+2. XX
+3. …`
     });
 
     const [loading, setLoading] = useState(false);
@@ -90,11 +95,15 @@ export default function CreateAssistant() {
             </div>
             <div className="">
                 <label htmlFor="roleAndTasks" className="bisheng-label">你希望助手的角色是什么，具体完成什么任务？</label>
-                <Textarea id="roleAndTasks" defaultValue={`你是 xx，具有 xx 经验，擅长 xx，……
-你的任务是 xx ，需要按照以下步骤执行：
-1. XX
-2. ……`
-                } name="roleAndTasks" placeholder="例如助手的身份、完成任务的具体方法和步骤、回答问题时的语气以及应该注意什么问题等" maxLength={1000} className="mt-2" value={formData.roleAndTasks} onChange={handleChange} />
+                <Textarea
+                    id="roleAndTasks"
+                    name="roleAndTasks"
+                    placeholder="例如助手的身份、完成任务的具体方法和步骤、回答问题时的语气以及应该注意什么问题等"
+                    maxLength={1000}
+                    className="mt-2 min-h-32"
+                    value={formData.roleAndTasks}
+                    onChange={handleChange}
+                />
                 {errors.roleAndTasks && <p className="bisheng-tip mt-1">{errors.roleAndTasks}</p>}
             </div>
         </div>
