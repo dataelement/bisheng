@@ -177,12 +177,12 @@ class AssistantService(AssistantUtils):
                 return AssistantNameRepeatError.return_resp()
             assistant.name = req.name
         assistant.desc = req.desc
-        assistant.logo = req.logo or assistant.logo
-        assistant.prompt = req.prompt or assistant.prompt
-        assistant.guide_word = req.guide_word or assistant.guide_word
-        assistant.guide_question = req.guide_question or assistant.guide_question
-        assistant.model_name = req.model_name or assistant.model_name
-        assistant.temperature = req.temperature or assistant.temperature
+        assistant.logo = req.logo
+        assistant.prompt = req.prompt
+        assistant.guide_word = req.guide_word
+        assistant.guide_question = req.guide_question
+        assistant.model_name = req.model_name
+        assistant.temperature = req.temperature
         assistant.update_time = datetime.now()
         AssistantDao.update_assistant(assistant)
 
