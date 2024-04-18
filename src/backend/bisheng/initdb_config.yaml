@@ -59,6 +59,10 @@ llm_request:
   max_retries: 1
   stream: true
 
+# v2免登录接口使用的默认操作用户
+default_operator:
+  user: 3
+  url: https://bisheng.dataelem.com
 
 # 是否需要验证码
 use_captcha:
