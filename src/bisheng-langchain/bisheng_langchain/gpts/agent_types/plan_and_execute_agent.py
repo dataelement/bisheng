@@ -47,6 +47,7 @@ def bisheng_create_openai_tools_runnable(
     output_parser = PydanticToolsParser(tools=tools, first_tool_only=True)
     if prompt:
         return prompt | llm.bind(**llm_kwargs) | output_parser
+        # return prompt | llm.bind(**llm_kwargs)
     else:
         return llm.bind(**llm_kwargs) | output_parser
 
@@ -77,24 +78,29 @@ def get_plan_and_solve_cute_agent_executor(
 
         steps: List[str] = Field(description="different steps to follow, should be in sorted order")
 
-    planner_prompt = ChatPromptTemplate.from_template(
-        """For the given objective, come up with a simple step by step plan. \
+    planner_prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                'system',
+                """For the given objective, come up with a simple step by step plan. \
 This plan should involve individual tasks, that if executed correctly will yield the correct answer. Do not add any superfluous steps. \
 The result of the final step should be the final answer. Make sure that each step has all the information needed - do not skip steps.
+You must call the function Plan.
 
-{objective}"""
+{objective}""",
+            )
+        ]
     )
-    planner = create_structured_output_runnable(
-        Plan,
-        llm,
-        planner_prompt,
-    )
+    planner = create_structured_output_runnable(Plan, llm, planner_prompt, enforce_function_usage=False)
     # note: test the planner
     # res = planner.invoke({"objective": "帮我查询去年今天的新闻"})
     # print(res)
 
-    replanner_prompt = ChatPromptTemplate.from_template(
-        """For the given objective, come up with a simple step by step plan. \
+    replanner_prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                'system',
+                """For the given objective, come up with a simple step by step plan. \
 This plan should involve individual tasks, that if executed correctly will yield the correct answer. Do not add any superfluous steps. \
 The result of the final step should be the final answer. Make sure that each step has all the information needed - do not skip steps.
 
@@ -107,7 +113,10 @@ Your original plan was this:
 You have currently done the follow steps:
 {past_steps}
 
-Update your plan accordingly. If no more steps are needed and you should summarise the results of the steps that have been performed and return them to the user, then respond with that. Otherwise, fill out the plan. Only add steps to the plan that still NEED to be done. Do not return previously done steps as part of the plan."""
+如果需要更新计划，请调用Plan。如果保持原计划，请调用Plan。如果不需要不需要更新计划了且已执行完所有步骤，那么请总结已执行的步骤，调用Response返回给用户。""",
+            )
+        ]
+        # Update your plan accordingly. If no more steps are needed and you should summarise the results of the steps that have been performed and return them to the user, then respond with that. Otherwise, fill out the plan. Only add steps to the plan that still NEED to be done. Do not return previously done steps as part of the plan."""
     )
 
     class Response(BaseModel):
@@ -115,11 +124,25 @@ Update your plan accordingly. If no more steps are needed and you should summari
 
         response: str
 
-    replanner = create_openai_fn_runnable(
-        [Plan, Response],
-        llm,
-        replanner_prompt,
-    )
+    # replanner = create_openai_fn_runnable(
+    #     [Plan, Response],
+    #     llm,
+    #     replanner_prompt,
+    # )
+    replanner = bisheng_create_openai_tools_runnable([Plan, Response], llm, prompt=replanner_prompt)
+
+    # res = replanner.invoke(
+    #     {
+    #         "input": "帮我查询去年今天的新闻",
+    #         "plan": ["通过时间查询工具确定去年今天的时间", "查询去年今天的新闻内容"],
+    #         "past_steps": [
+    #             ("通过时间查询工具确定去年今天的时间", "去年今天的时间为2023-04-18"),
+    #             # ("查询去年今天的新闻内容", "新闻内容为NBA冠军是湖人队"),
+    #         ],
+    #     }
+    # )
+
+    # print(res)
 
     # create the graph
     def execute_step(state: PlanExecute):
@@ -201,7 +224,7 @@ if __name__ == '__main__':
     """ qwen1.5 接口在多处不兼容，暂时不使用
      1. tool choice 有问题
      2. 仅支持传入tools参数，不支持传入functions参数
-    """
+    # """
     # llm = ChatOpenAI(model='qwen1.5', base_url='http://34.87.129.78:9300/v1', streaming=False, temperature=0.1)
 
     llm = ChatOpenAI(
