@@ -1,5 +1,6 @@
 import operator
 import os
+import time
 from textwrap import dedent
 from typing import (
     Annotated,
@@ -18,27 +19,16 @@ from typing import (
 import httpx
 from bisheng_langchain.gpts.load_tools import load_tools
 from langchain import hub
-from langchain.agents import (
-    AgentExecutor,
-    create_openai_functions_agent,
-    create_openai_tools_agent,
-)
-from langchain.chains.openai_functions import (
-    create_openai_fn_runnable,
-    create_structured_output_runnable,
-)
+from langchain.agents import create_openai_tools_agent
 from langchain.output_parsers import PydanticToolsParser
-from langchain.prompts import ChatPromptTemplate, PromptTemplate
+from langchain.prompts import PromptTemplate
 from langchain.tools import BaseTool
 from langchain_core.language_models.base import LanguageModelLike
-from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
-from langchain_core.prompts import (
-    BasePromptTemplate,
-    ChatPromptTemplate,
-    SystemMessagePromptTemplate,
-)
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import BasePromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_core.runnables import Runnable, RunnablePassthrough
+from langchain_core.runnables import Runnable
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_openai.chat_models import ChatOpenAI
 
@@ -62,7 +52,7 @@ def bisheng_create_openai_tools_runnable(
         return llm.bind(**llm_kwargs) | output_parser
 
 
-def create_xxxx_runnable(
+def create_structured_output_runnable(
     llm: Runnable,
     prompt: str,
     output_format: Type[BaseModel],
@@ -124,9 +114,10 @@ def get_plan_and_solve_agent_executor(
 {objective}
 
 ## format_instructions
-{format_instructions}"""
+{format_instructions}
+"""
     )
-    planner = create_xxxx_runnable(llm=llm, prompt=plan_msg, output_format=Plan)
+    planner = create_structured_output_runnable(llm=llm, prompt=plan_msg, output_format=Plan)
     # test the planner
     # res = planner.invoke(
     #     {
@@ -139,7 +130,9 @@ def get_plan_and_solve_agent_executor(
     class NextStep(BaseModel):
         """next step to follow"""
 
-        next_step: int = Field(description="0代表重新计划，1代表继续执行，2代表直接输出", enum=[0, 1, 2])
+        next_step: int = Field(
+            description="0 for reschedule, 1 for continue execution, 2 for direct output", enum=[0, 1, 2]
+        )
 
     decide_next_step_msg = dedent(
         """你是一个善于根据用户提问列出计划的智能助手。
@@ -164,9 +157,9 @@ def get_plan_and_solve_agent_executor(
 
 ## format_instructions
 {format_instructions}
-    """
+"""
     )
-    observer = create_xxxx_runnable(llm=llm, prompt=decide_next_step_msg, output_format=NextStep)
+    observer = create_structured_output_runnable(llm=llm, prompt=decide_next_step_msg, output_format=NextStep)
     # test case
     # res = observer.invoke(
     #     {
@@ -184,16 +177,16 @@ def get_plan_and_solve_agent_executor(
     class Response(BaseModel):
         """Response to user."""
 
-        response: str
+        response: str = Field(description="the final response to user.")
 
     response_msg = dedent(
-        """你需要根据用户提问，原始拟定的计划，以及已经执行的计划和该计划的结果，进行总结，将最终结果返回给用户。
-            
+        """
+## 你的任务
+1. 你需要根据"用户提问"以及"已执行的步骤和结果"，进行总结，将最终结果返回给用户；
+2. 请务必遵守format_instructions。
+
 ## 用户提问
 {input}
-
-## 原始计划
-{plan}
 
 ## 已执行的步骤和结果
 {past_steps}
@@ -202,7 +195,7 @@ def get_plan_and_solve_agent_executor(
 {format_instructions} 
 """
     )
-    responser = create_xxxx_runnable(llm=llm, prompt=response_msg, output_format=Response)
+    responser = create_structured_output_runnable(llm=llm, prompt=response_msg, output_format=Response)
     # test case
     # print(
     #     responser.invoke(
@@ -237,7 +230,7 @@ def get_plan_and_solve_agent_executor(
     ## format_instructions
     {format_instructions}
     """
-    replanner = create_xxxx_runnable(llm=llm, prompt=replan_msg, output_format=Plan)
+    replanner = create_structured_output_runnable(llm=llm, prompt=replan_msg, output_format=Plan)
     # res = replanner.invoke(
     #     {
     #         "input": "帮我查询去年今天的新闻",
@@ -260,8 +253,17 @@ def get_plan_and_solve_agent_executor(
         return {"plan": plan.steps, 'unexecuted_steps': plan.steps}
 
     def execute_step(state: PlanExecute):
+        chat_round = 5
         cur_task = state['unexecuted_steps'].pop(0)
-        agent_response = agent_executor.invoke({"input": cur_task, "chat_history": []}, debug=True)
+        chat_history = []
+        past_steps = state['past_steps']
+        if past_steps and len(past_steps) > 1:
+            if len(past_steps) > chat_round * 2:
+                past_steps = past_steps[-chat_round * 2 :]
+            for i in range(0, len(past_steps), 2):
+                chat_history.append(HumanMessage(content=past_steps[i]))
+                chat_history.append(AIMessage(content=past_steps[i + 1]))
+        agent_response = agent_executor.invoke({"input": cur_task, "chat_history": chat_history}, debug=True)
         return {"past_steps": (cur_task, agent_response['agent_outcome'].return_values['output'])}
 
     def observation_step(state: PlanExecute):
@@ -283,7 +285,7 @@ def get_plan_and_solve_agent_executor(
         answer = responser.invoke(
             {
                 "input": state["input"],
-                "plan": state["plan"],
+                # "plan": state["plan"],
                 "past_steps": state["past_steps"],
             }
         )
@@ -359,4 +361,7 @@ if __name__ == '__main__':
         system_message='You are a helpful assistant.',
         interrupt_before_action=False,
     )
-    app.invoke({"input": "去年今天的重大事件"}, debug=True)
+
+    start = time.time()
+    app.invoke({"input": "帮我查一下前年的NBA总冠军是哪支队伍"}, debug=True)
+    print(time.time() - start)
