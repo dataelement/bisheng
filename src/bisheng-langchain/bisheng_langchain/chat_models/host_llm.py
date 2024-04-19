@@ -207,6 +207,7 @@ class BaseHostChatLLM(BaseChatModel):
                 'temperature': temperature,
                 'max_tokens': max_tokens,
                 'do_sample': do_sample,
+                'stop': kwargs.get('stop', None),
                 'function_call': kwargs.get('function_call', None),
                 'functions': kwargs.get('functions', [])
             }
