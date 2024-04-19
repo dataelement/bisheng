@@ -19,7 +19,6 @@ import {
 import { ArrowLeft, Filter, RotateCw, Search, X } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { bsconfirm } from "../../alerts/confirm";
 // import PaginationComponent from "../../components/PaginationComponent";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination"
 import ShadTooltip from "../../components/ShadTooltipComponent";
@@ -30,6 +29,7 @@ import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import UploadModal from "../../modals/UploadModal";
 import { useTable } from "../../util/hook";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function FilesPage() {
     const { t } = useTranslation()
@@ -69,14 +69,17 @@ export default function FilesPage() {
         reload()
     }
 
-    // 删除
-    const { delShow, idRef, close, delConfim } = useDelete()
-
-    const handleDelete = () => {
-        captureAndAlertRequestErrorHoc(deleteFile(idRef.current).then(res => {
-            reload()
-            close()
-        }))
+    const handleDelete = (id) => {
+        bsConfirm({
+            title: t('prompt'),
+            desc: t('lib.confirmDeleteFile'),
+            onOk(next) {
+                captureAndAlertRequestErrorHoc(deleteFile(id).then(res => {
+                    reload()
+                }))
+                next()
+            },
+        })
     }
 
     const [repeatFiles, setRepeatFiles] = useState([])
@@ -86,7 +89,7 @@ export default function FilesPage() {
         if (_repeatFiles.length) {
             setRepeatFiles(_repeatFiles)
         } else {
-            failFiles.length && bsconfirm({
+            failFiles.length && bsConfirm({
                 desc: <div>
                     <p>{t('lib.fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
                     <div className="max-h-[160px] overflow-y-auto no-scrollbar">
@@ -120,12 +123,12 @@ export default function FilesPage() {
         setFilter(Number(id))
     }
 
-    return <div className="w-full h-full p-6 relative">
+    return <div className="w-full h-full px-2 py-4 relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
         <ShadTooltip content="back" side="top">
-            <button className="extra-side-bar-buttons w-[36px] absolute top-[26px]" onClick={() => { }} >
+            <button className="extra-side-bar-buttons w-[36px] absolute top-[16px]" onClick={() => { }} >
                 <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
             </button>
         </ShadTooltip>
@@ -178,7 +181,7 @@ export default function FilesPage() {
                             </TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
-                                {hasPermission ? <Button variant="link" onClick={() => delConfim(el.id)} className="ml-4">{t('delete')}</Button> :
+                                {hasPermission ? <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500">{t('delete')}</Button> :
                                     <Button variant="link" className="ml-4 text-gray-400">{t('delete')}</Button>}
                             </TableCell>
                         </TableRow>
@@ -219,34 +222,5 @@ export default function FilesPage() {
                 </div>
             </div>
         </dialog>
-        {/* Delete confirmation */}
-        <dialog className={`modal ${delShow && 'modal-open'}`}>
-            <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg">{t('prompt')}</h3>
-                <p className="py-4">{t('lib.confirmDeleteFile')}</p>
-                <div className="modal-action">
-                    <Button className="h-8" variant="outline" onClick={close}>{t('cancel')}</Button>
-                    <Button className="h-8" variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
-                </div>
-            </form>
-        </dialog>
     </div >
 };
-
-
-const useDelete = () => {
-    const [delShow, setDelShow] = useState(false)
-    const idRef = useRef<any>(null)
-
-    return {
-        delShow,
-        idRef,
-        close: () => {
-            setDelShow(false)
-        },
-        delConfim: (id) => {
-            idRef.current = id
-            setDelShow(true)
-        }
-    }
-}

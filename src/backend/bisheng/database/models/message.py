@@ -75,7 +75,7 @@ class ChatMessageDao(MessageBase):
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
             statement = statement.limit(limit).order_by(
-                ChatMessage.create_time.desc()
+                ChatMessage.create_time.asc()
             )
             return session.exec(statement).all()
 

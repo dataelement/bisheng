@@ -29,11 +29,11 @@ export default function ToolsSheet({ select, onSelect, children }) {
         </SheetTrigger>
         <SheetContent className="w-[1000px] sm:max-w-[1000px] bg-gray-100">
             <div className="flex h-full" onClick={e => e.stopPropagation()}>
-                <div className="w-fit pr-6">
+                <div className="w-fit p-6">
                     <SheetTitle>添加工具</SheetTitle>
                     <SearchInput placeholder="搜索" className="mt-6" onChange={(e) => setKeyword(e.target.value)} />
                 </div>
-                <div className="flex-1 bg-[#fff] p-6 h-full overflow-auto scrollbar-hide">
+                <div className="flex-1 bg-[#fff] p-5 pt-12 h-full overflow-auto scrollbar-hide">
                     <Accordion type="single" collapsible className="w-full">
                         {
                             options.length ? options.map(el => (

@@ -163,7 +163,7 @@ class BaseHostChatLLM(BaseChatModel):
                     values[
                         'host_base_url'] = f"{values['host_base_url']}/{values['model_name']}/infer"
         except Exception:
-            raise Exception(f'Update Decoupled status faild for model {model}')
+            raise Exception(f'Update Decoupled status failed for model {model}')
 
         try:
             if values['headers']:

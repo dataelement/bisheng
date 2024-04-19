@@ -1,0 +1,11 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <g id="Group 542">
+        <g id="Group 417">
+            <path id="Rectangle 186"
+                d="M4 15L4 17.4C4 17.9601 4 18.2401 4.10899 18.454C4.20487 18.6422 4.35785 18.7951 4.54601 18.891C4.75992 19 5.03995 19 5.6 19L18.4 19C18.9601 19 19.2401 19 19.454 18.891C19.6422 18.7951 19.7951 18.6422 19.891 18.454C20 18.2401 20 17.9601 20 17.4L20 15"
+                stroke="currentColor" stroke-width="2" />
+            <path id="Vector 1" d="M12 14L12 6.5M8 9L12 5L16 9" stroke="currentColor" stroke-width="2"
+                stroke-linejoin="round" />
+        </g>
+    </g>
+</svg>

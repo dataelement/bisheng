@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import { Button } from "../../../components/ui/button";
 import { Button } from "@/components/bs-ui/button";
@@ -12,14 +12,12 @@ import {
 } from "../../../components/bs-ui/table";
 import { userContext } from "../../../contexts/userContext";
 import { disableUserApi, getUsersApi } from "../../../controllers/API/user";
-import UserRoleModal from "./UserRoleModal";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
-// import { Input } from "../../../components/ui/input";
-import { Input, SearchInput } from "../../../components/bs-ui/input";
-// import PaginationComponent from "../../../components/PaginationComponent";
-import { Search } from "lucide-react";
-import AutoPagination from "../../../components/bs-ui/pagination/autoPagination"
+import UserRoleModal from "./UserRoleModal";
+import { SearchInput } from "../../../components/bs-ui/input";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 
 export default function Users(params) {
     const { user } = useContext(userContext);
@@ -29,13 +27,20 @@ export default function Users(params) {
         getUsersApi(param.keyword, param.page, param.pageSize)
     )
 
-    // 禁用
-    const { delShow, idRef, close, delConfim } = useDelete()
-    const handleDelete = () => {
-        captureAndAlertRequestErrorHoc(disableUserApi(idRef.current.user_id, 1).then(res => {
-            reload()
-            close()
-        }))
+    // 禁用确认
+    const handleDelete = (user) => {
+        bsConfirm({
+            title: `${t('prompt')}!`,
+            desc: t('system.confirmDisable'),
+            okTxt: t('disable'),
+            onOk(next) {
+                captureAndAlertRequestErrorHoc(disableUserApi(user.user_id, 1).then(res => {
+                    reload()
+                    close()
+                }))
+                next()
+            }
+        })
     }
     const handleEnableUser = (user) => {
         captureAndAlertRequestErrorHoc(disableUserApi(user.user_id, 0).then(res => {
@@ -79,7 +84,7 @@ export default function Users(params) {
                                 {
                                     el.delete === 1 ? <Button variant="link" onClick={() => handleEnableUser(el)} className="text-green-500 px-0 pl-6">{t('enable')}</Button> :
                                         user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-6">{t('disable')}</Button> :
-                                            <Button variant="link" onClick={() => delConfim(el)} className="text-red-500 px-0 pl-6">{t('disable')}</Button>
+                                            <Button variant="link" onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-6">{t('disable')}</Button>
                                 }
                             </TableCell>
                         </TableRow>
@@ -100,36 +105,6 @@ export default function Users(params) {
             />
         </div>
 
-        {/* 禁用确认 */}
-        <dialog className={`modal ${delShow && 'modal-open'}`}>
-            <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg">{t('prompt')}!</h3>
-                <p className="py-4">{t('system.confirmDisable')}</p>
-                <div className="modal-action">
-                    <Button className="h-8" variant="outline" onClick={close}>{t('cancel')}</Button>
-                    <Button className="h-8" variant="destructive" onClick={handleDelete}>{t('disable')}</Button>
-                </div>
-            </form>
-        </dialog>
-
         <UserRoleModal id={roleOpenId} onClose={() => setRoleOpenId(null)} onChange={handleRoleChange}></UserRoleModal>
     </div>
 };
-
-
-const useDelete = () => {
-    const [delShow, setDelShow] = useState(false)
-    const idRef = useRef<any>(null)
-
-    return {
-        delShow,
-        idRef,
-        close: () => {
-            setDelShow(false)
-        },
-        delConfim: (id) => {
-            idRef.current = id
-            setDelShow(true)
-        }
-    }
-}

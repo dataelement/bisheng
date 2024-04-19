@@ -1,6 +1,9 @@
 from bisheng_langchain.gpts.prompts.select_tools_prompt import HUMAN_MSG, SYS_MSG
-from langchain.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
-                               SystemMessagePromptTemplate)
+from langchain.prompts import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
 from langchain_core.language_models.base import LanguageModelLike
 from pydantic import BaseModel
 
@@ -31,19 +34,15 @@ class ToolSelector:
             HumanMessagePromptTemplate.from_template(self.human_message),
         ]
 
-        chain = ({
-            'tool_pool': lambda x: x['tool_pool'],
-            'task_name': lambda x: x['task_name'],
-            'task_description': lambda x: x['task_description'],
-        }
-                 | ChatPromptTemplate.from_messages(messages)
-                 | self.llm)
+        chain = ChatPromptTemplate.from_messages(messages) | self.llm
 
-        chain_output = chain.invoke({
-            'tool_pool': tool_pool,
-            'task_name': task_name,
-            'task_description': task_description,
-        })
+        chain_output = chain.invoke(
+            {
+                'tool_pool': tool_pool,
+                'task_name': task_name,
+                'task_description': task_description,
+            }
+        )
 
         try:
             all_tool_name = set([tool.tool_name for tool in self.tools])
