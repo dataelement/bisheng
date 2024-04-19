@@ -1,5 +1,6 @@
 import operator
 import os
+from textwrap import dedent
 from typing import (
     Annotated,
     Any,
@@ -17,18 +18,27 @@ from typing import (
 import httpx
 from bisheng_langchain.gpts.load_tools import load_tools
 from langchain import hub
-from langchain.agents import create_openai_functions_agent
+from langchain.agents import (
+    AgentExecutor,
+    create_openai_functions_agent,
+    create_openai_tools_agent,
+)
 from langchain.chains.openai_functions import (
     create_openai_fn_runnable,
     create_structured_output_runnable,
 )
 from langchain.output_parsers import PydanticToolsParser
-from langchain.prompts import ChatPromptTemplate
+from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain.tools import BaseTool
 from langchain_core.language_models.base import LanguageModelLike
-from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser, PydanticOutputParser
+from langchain_core.prompts import (
+    BasePromptTemplate,
+    ChatPromptTemplate,
+    SystemMessagePromptTemplate,
+)
 from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_openai.chat_models import ChatOpenAI
 
@@ -52,85 +62,182 @@ def bisheng_create_openai_tools_runnable(
         return llm.bind(**llm_kwargs) | output_parser
 
 
-def get_plan_and_solve_cute_agent_executor(
+def create_xxxx_runnable(
+    llm: Runnable,
+    prompt: str,
+    output_format: Type[BaseModel],
+):
+    output_parser = PydanticOutputParser(pydantic_object=output_format)
+    output_format_instructions = output_parser.get_format_instructions()
+
+    _prompt = PromptTemplate.from_template(
+        prompt, partial_variables={'format_instructions': output_format_instructions}
+    )
+    return _prompt | llm | output_parser
+
+
+def get_plan_and_solve_agent_executor(
     tools: list[BaseTool],
     llm: LanguageModelLike,
     system_message: str,
     interrupt_before_action: bool,
     **kwargs,
 ):
+    avaliable_tools = "\n".join([f"- {tool.name}" for tool in tools])
     # todo: support system_message
-    prompt = hub.pull("hwchase17/openai-functions-agent")
-    agent_runnable = create_openai_functions_agent(llm, tools, prompt)
-    agent_executor = create_agent_executor(agent_runnable, tools)
-    # note: test the agent_executor
-    # agent_executor.invoke({'input': 'Hello', 'chat_history': []}, debug=True)
+    agent_prompt = hub.pull("hwchase17/openai-tools-agent")
+    agent_runnable = create_openai_tools_agent(llm, tools, agent_prompt)
+    agent_executor = create_agent_executor(agent_runnable=agent_runnable, tools=tools)
+    # test the agent_executor
+    # r1 = agent_executor.invoke(
+    #     {'input': '调用工具查询现在的时间，并查询去年今天的重大新闻', 'chat_history': []}, debug=True
+    # )
+    # print(r1)
 
     # define the state
     class PlanExecute(TypedDict):
         input: str
         plan: List[str]
+        unexecuted_steps: List[str]
         past_steps: Annotated[List[Tuple], operator.add]
         response: str
+        observation: int
 
     class Plan(BaseModel):
         """Plan to follow in future"""
 
         steps: List[str] = Field(description="different steps to follow, should be in sorted order")
 
-    planner_prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                'system',
-                """For the given objective, come up with a simple step by step plan. \
-This plan should involve individual tasks, that if executed correctly will yield the correct answer. Do not add any superfluous steps. \
-The result of the final step should be the final answer. Make sure that each step has all the information needed - do not skip steps.
-You must call the function Plan.
+    plan_msg = dedent(
+        """你是一个善于根据用户提问列出实施计划的专家。
 
-{objective}""",
-            )
-        ]
+## 可列入计划的工具
+{avaliable_tools}
+
+## 任务
+1. 针对给定的用户提问，提出一个简单的分步计划；
+2. 该计划应涉及单个任务，如果依次正确执行，就能得到正确答案。不要添加任何多余的步骤；
+3. 执行完最后一步的结果应该是最终答案。确保每个步骤都包含所需的全部信息--不要跳过步骤；
+4. 在"可列入计划的工具"中选择合适的工具放入你的执行计划，或许能帮你更好地列出计划。
+
+## 用户提问
+{objective}
+
+## format_instructions
+{format_instructions}"""
     )
-    planner = create_structured_output_runnable(Plan, llm, planner_prompt, enforce_function_usage=False)
-    # note: test the planner
-    # res = planner.invoke({"objective": "帮我查询去年今天的新闻"})
+    planner = create_xxxx_runnable(llm=llm, prompt=plan_msg, output_format=Plan)
+    # test the planner
+    # res = planner.invoke(
+    #     {
+    #         "objective": "帮我查询去年今天的新闻",
+    #         "avaliable_tools": avaliable_tools,
+    #     }
+    # )
     # print(res)
 
-    replanner_prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                'system',
-                """For the given objective, come up with a simple step by step plan. \
-This plan should involve individual tasks, that if executed correctly will yield the correct answer. Do not add any superfluous steps. \
-The result of the final step should be the final answer. Make sure that each step has all the information needed - do not skip steps.
+    class NextStep(BaseModel):
+        """next step to follow"""
 
-Your objective was this:
+        next_step: int = Field(description="0代表重新计划，1代表继续执行，2代表直接输出", enum=[0, 1, 2])
+
+    decide_next_step_msg = dedent(
+        """你是一个善于根据用户提问列出计划的智能助手。
+    
+## 规则
+1. 请根据"用户提问"，"原始计划"，以及"已执行的步骤和结果"，来决定是否需要重新计划或者继续执行计划，或者直接输出；
+2. 如果你认为继续执行"原始计划"并不能得到最终的答案，则需要重新计划，返回0（重新计划）；
+3. 如果你认为总结"已执行的步骤和结果"后，足够回答用户问题了，则返回2（直接输出）；
+4. 如果你认为"原始计划"不需要再做调整了，需要继续执行"还未执行的步骤"就能回答用户提问了，则返回1（继续执行）；
+
+## 用户提问
 {input}
 
-Your original plan was this:
+## 原始计划
 {plan}
 
-You have currently done the follow steps:
+## 还未执行的步骤
+{unexecuted_steps}
+
+## 已执行的步骤和结果
 {past_steps}
 
-如果需要更新计划，请调用Plan。如果保持原计划，请调用Plan。如果不需要不需要更新计划了且已执行完所有步骤，那么请总结已执行的步骤，调用Response返回给用户。""",
-            )
-        ]
-        # Update your plan accordingly. If no more steps are needed and you should summarise the results of the steps that have been performed and return them to the user, then respond with that. Otherwise, fill out the plan. Only add steps to the plan that still NEED to be done. Do not return previously done steps as part of the plan."""
+## format_instructions
+{format_instructions}
+    """
     )
+    observer = create_xxxx_runnable(llm=llm, prompt=decide_next_step_msg, output_format=NextStep)
+    # test case
+    # res = observer.invoke(
+    #     {
+    #         "input": "帮我查询去年今天的新闻",
+    #         "plan": ["通过时间查询工具确定去年今天的时间", "查询前年今天的新闻"],
+    #         "unexecuted_steps": ['查询前年今天的新闻'],
+    #         "past_steps": [
+    #             ("通过时间查询工具确定去年今天的时间", "去年今天的时间为2023-04-18"),
+    #             # ("查询去年今天的新闻内容", "新闻内容为NBA冠军是湖人队"),
+    #         ],
+    #     }
+    # )
+    # print(res)
 
     class Response(BaseModel):
         """Response to user."""
 
         response: str
 
-    # replanner = create_openai_fn_runnable(
-    #     [Plan, Response],
-    #     llm,
-    #     replanner_prompt,
-    # )
-    replanner = bisheng_create_openai_tools_runnable([Plan, Response], llm, prompt=replanner_prompt)
+    response_msg = dedent(
+        """你需要根据用户提问，原始拟定的计划，以及已经执行的计划和该计划的结果，进行总结，将最终结果返回给用户。
+            
+## 用户提问
+{input}
 
+## 原始计划
+{plan}
+
+## 已执行的步骤和结果
+{past_steps}
+
+## format_instructions
+{format_instructions} 
+"""
+    )
+    responser = create_xxxx_runnable(llm=llm, prompt=response_msg, output_format=Response)
+    # test case
+    # print(
+    #     responser.invoke(
+    #         {
+    #             "input": "帮我查询去年今天的重大新闻",
+    #             "plan": ["通过时间查询工具确定去年今天的时间", "查询去年今天的新闻内容"],
+    #             "past_steps": [
+    #                 ("通过时间查询工具确定去年今天的时间", "去年今天的时间为2023-04-18"),
+    #                 ("查询去年今天的新闻内容", "新闻内容为NBA冠军是湖人队"),
+    #             ],
+    #         }
+    #     )
+    # )
+
+    replan_msg = """你是一个善于根据用户提问制定计划的智能助手。
+
+    ## 任务
+    1. 请根据用户提问，原始计划，以及已经执行的计划和该计划的结果，重新制定计划；
+    2. 如果原始计划中，未执行的计划描述不完整或者信息缺失，则需要对该计划进行信息的补充；
+    3. 不要重复制定没有意义的计划，如果你认为已经不需要制定制定新的计划了，则返回原计划即可；
+    4. 你一定要按照format_instructions的格式回复。
+
+    ## 用户提问
+    {input}
+
+    ## 原始计划
+    {plan}
+
+    ## 已执行的步骤和结果
+    {past_steps}
+    
+    ## format_instructions
+    {format_instructions}
+    """
+    replanner = create_xxxx_runnable(llm=llm, prompt=replan_msg, output_format=Plan)
     # res = replanner.invoke(
     #     {
     #         "input": "帮我查询去年今天的新闻",
@@ -142,64 +249,72 @@ You have currently done the follow steps:
     #     }
     # )
 
-    # print(res)
-
     # create the graph
-    def execute_step(state: PlanExecute):
-        task = state["plan"][0]
-        agent_response = agent_executor.invoke({"input": task, "chat_history": []}, debug=True)
-        return {"past_steps": (task, agent_response["agent_outcome"].return_values["output"])}
-
     def plan_step(state: PlanExecute):
-        plan = planner.invoke({"objective": state["input"]})
-        return {"plan": plan.steps}
+        plan: Plan = planner.invoke(
+            {
+                "objective": state["input"],
+                'avaliable_tools': avaliable_tools,
+            }
+        )
+        return {"plan": plan.steps, 'unexecuted_steps': plan.steps}
+
+    def execute_step(state: PlanExecute):
+        cur_task = state['unexecuted_steps'].pop(0)
+        agent_response = agent_executor.invoke({"input": cur_task, "chat_history": []}, debug=True)
+        return {"past_steps": (cur_task, agent_response['agent_outcome'].return_values['output'])}
+
+    def observation_step(state: PlanExecute):
+        output: NextStep = observer.invoke(
+            {
+                'input': state['input'],
+                'plan': state["plan"],
+                'past_steps': state['past_steps'],
+                'unexecuted_steps': state['unexecuted_steps'],
+            }
+        )
+        return {'observation': output.next_step}
 
     def replan_step(state: PlanExecute):
         output = replanner.invoke(state)
-        if isinstance(output, Response):
-            return {"response": output.response}
-        else:
-            return {"plan": output.steps}
+        return {"plan": output.steps, 'unexecuted_steps': output.steps}
 
-    def should_end(state: PlanExecute):
-        if "response" in state and state["response"]:
-            return True
-        else:
-            return False
+    def response_step(state: PlanExecute):
+        answer = responser.invoke(
+            {
+                "input": state["input"],
+                "plan": state["plan"],
+                "past_steps": state["past_steps"],
+            }
+        )
+        return {"response": answer.response}
+
+    def next_step(state: PlanExecute):
+        return state["observation"]
 
     workflow = StateGraph(PlanExecute)
 
-    # Add the plan node
     workflow.add_node("planner", plan_step)
-
-    # Add the execution step
     workflow.add_node("agent", execute_step)
-
-    # Add a replan node
-    workflow.add_node("replan", replan_step)
+    workflow.add_node("replanner", replan_step)
+    workflow.add_node("observer", observation_step)
+    workflow.add_node("responser", response_step)
 
     workflow.set_entry_point("planner")
-
-    # From plan we go to agent
     workflow.add_edge("planner", "agent")
-
-    # From agent, we replan
-    workflow.add_edge("agent", "replan")
+    workflow.add_edge("agent", "observer")
+    workflow.add_edge("replanner", "agent")
+    workflow.add_edge("responser", END)
 
     workflow.add_conditional_edges(
-        "replan",
-        # Next, we pass in the function that will determine which node is called next.
-        should_end,
+        "observer",
+        next_step,
         {
-            # If `tools`, then we call the tool node.
-            True: END,
-            False: "agent",
+            0: "replanner",
+            1: "agent",
+            2: "responser",
         },
     )
-
-    # Finally, we compile it!
-    # This compiles it into a LangChain Runnable,
-    # meaning you can use it as you would any other runnable
     app = workflow.compile()
     return app
 
@@ -221,24 +336,27 @@ if __name__ == '__main__':
         }
     )
 
-    """ qwen1.5 接口在多处不兼容，暂时不使用
-     1. tool choice 有问题
-     2. 仅支持传入tools参数，不支持传入functions参数
-    # """
-    # llm = ChatOpenAI(model='qwen1.5', base_url='http://34.87.129.78:9300/v1', streaming=False, temperature=0.1)
-
     llm = ChatOpenAI(
-        model='gpt-4-turbo',
-        api_key=os.getenv('OPENAI_API_KEY'),
-        http_client=httpx_client,
-        streaming=False,
-        temperature=0.1,
+        model='qwen1.5',
+        base_url='http://34.87.129.78:9300/v1',
+        temperature=0,
     )
+    # print(llm.invoke('你好'))
+    # llm = ChatOpenAI(
+    #     model="command-r-plus-104b", base_url='http://34.87.129.78:9100/v1', streaming=False, temperature=0.1
+    # )
 
-    app = get_plan_and_solve_cute_agent_executor(
+    # llm = ChatOpenAI(
+    #     model='gpt-4-0125-preview',
+    #     api_key=os.getenv('OPENAI_API_KEY'),
+    #     http_client=httpx_client,
+    #     streaming=False,
+    #     temperature=0.1,
+    # )
+    app = get_plan_and_solve_agent_executor(
         tools=tools,
         llm=llm,
-        system_message='Hello',
+        system_message='You are a helpful assistant.',
         interrupt_before_action=False,
     )
     app.invoke({"input": "去年今天的重大事件"}, debug=True)
