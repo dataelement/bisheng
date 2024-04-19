@@ -251,16 +251,7 @@ class AssistantAgent(AssistantUtils):
                     'name': one,
                 }, input_str='', run_id=run_id)
                 await callback[0].on_tool_end(output='', name=one, run_id=run_id)
-
-        result = {}
-        async for one in self.agent.astream_events(inputs,
-                                                   config=RunnableConfig(callbacks=callback),
-                                                   version='v1'):
-            if one['event'] == 'on_chain_end':
-                result = one
-
-        # 最后一次输出的event即最终答案
-        result = result['data']['output']['__end__']
+        result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
         # 包含了history，将history排除
         res = []
         for one in result:

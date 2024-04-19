@@ -30,8 +30,6 @@ const router = createBrowserRouter([
     element: <MainLayout />,
     children: [
       { path: "", element: <SkillChatPage /> },
-      { path: "skill", element: <L2Edit /> },
-      { path: "skill/:id", element: <L2Edit /> },
       { path: "filelib", element: <FileLibPage /> },
       { path: "filelib/:id", element: <FilesPage /> },
       {
@@ -44,7 +42,9 @@ const router = createBrowserRouter([
           { path: "", element: <Navigate to="assist" replace /> },
         ]
       },
-      { path: "temps", element: <Templates /> },
+      { path: "build/skill", element: <L2Edit /> },
+      { path: "build/skill/:id", element: <L2Edit /> },
+      { path: "build/temps", element: <Templates /> },
       { path: "model", element: <ModelPage /> },
       { path: "sys", element: <SystemPage /> },
     ],

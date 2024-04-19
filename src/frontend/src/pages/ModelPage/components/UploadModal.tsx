@@ -7,6 +7,7 @@ import { Button } from "../../../components/ui/button";
 import { Progress } from "../../../components/ui/progress";
 import { alertContext } from "../../../contexts/alertContext";
 import { generateUUID } from "../../../utils";
+import { UploadIcon } from "@/components/bs-icons/upload";
 
 interface IProps {
     accept: string[],
@@ -46,9 +47,10 @@ export default function UploadModal({
             <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
                 <div className="w-[460px]">
                     {/* 拖拽区 */}
-                    <div {...getRootProps()} className="h-[100px] border border-dashed flex justify-center items-center cursor-pointer">
+                    <div {...getRootProps()} className="group h-[100px] border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary">
                         <input {...getInputProps()} />
-                        {isDragActive ? <p>{t('code.dropFileHere')}</p> : <p>{t('code.clickOrDragHere')}</p>}
+                        <UploadIcon className="group-hover:text-primary" />
+                        {isDragActive ? <p className="text-gray-400 text-sm">{t('code.dropFileHere')}</p> : <p className="text-gray-400 text-sm">{t('code.clickOrDragHere')}</p>}
                     </div>
                     {/* 进度条 */}
                     <div className=" max-h-[300px] overflow-y-auto no-scrollbar mt-4">

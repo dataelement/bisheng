@@ -173,7 +173,7 @@ class FlowDao(FlowBase):
         user_role = UserRoleDao.get_user_roles(user_id)
         flow_id_extra = []
         if user_role:
-            role_ids = [role.id for role in user_role]
+            role_ids = [role.role_id for role in user_role]
             if 1 in role_ids:
                 # admin
                 flow_id_extra = 'admin'

@@ -1,6 +1,6 @@
 import json
 from typing import Dict
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
@@ -39,9 +39,11 @@ class ChatClient:
         await self.websocket.send_json(message.dict())
 
     async def handle_message(self, message: Dict[any, any]):
-        # 处理客户端发过来的信息
-        if self.work_type == WorkType.GPTS:
-            await self.handle_gpts_message(message)
+        trace_id = uuid4().hex
+        with logger.contextualize(trace_id=trace_id):
+            # 处理客户端发过来的信息
+            if self.work_type == WorkType.GPTS:
+                await self.handle_gpts_message(message)
 
     async def add_message(self, msg_type: str, message: str, category: str):
         self.chat_history.append({
@@ -197,6 +199,8 @@ class ChatClient:
             res = await self.add_message('bot', answer, 'answer')
             await self.send_response('answer', 'start', '')
             await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
+            logger.info(f'gpts agent chat_id: {self.chat_id} question: {input_msg}')
+            logger.info(f'gpts agent chat_id: {self.chat_id} answer: {answer}')
         except Exception as e:
             logger.exception('handle gpts message error: ')
             await self.send_response('system', 'start', '')

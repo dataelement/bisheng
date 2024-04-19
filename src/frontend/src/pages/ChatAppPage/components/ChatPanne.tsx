@@ -147,9 +147,9 @@ export default function ChatPanne({ customWsHost = '', data }) {
         document.dispatchEvent(myEvent);
     }
 
-    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden relative">
+    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg">
         <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src="/application-start-logo.png" alt="" />
-        <p className="text-center text-sm text-[28px] w-[182px] whitespace-normal h-[64px] leading-[32px] text-[#111111] mx-auto mt-[20px] font-light">
+        <p className="text-center text-3xl w-[182px] whitespace-normal leading-[64px] text-[#111111] mx-auto mt-[20px] font-light">
             选择一个<b className="text-[#111111] font-semibold">对话</b><br />开始<b className="text-[#111111] font-semibold">文擎睿见</b>
         </p>
         {
@@ -162,11 +162,10 @@ export default function ChatPanne({ customWsHost = '', data }) {
                 <span className="mr-[28px]">{t('chat.newChat')}</span>
             </div>
         }
-        {/* <div className="bc"></div> */}
     </div>
 
 
-    return <div className="flex-1 min-w-0 min-h-0">
+    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg">
         {/* 技能会话 */}
         {
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>

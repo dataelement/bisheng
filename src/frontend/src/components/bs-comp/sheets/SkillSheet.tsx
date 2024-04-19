@@ -32,12 +32,12 @@ export default function SkillSheet({ select, children, onSelect }) {
         </SheetTrigger>
         <SheetContent className="sm:min-w-[966px] bg-gray-100">
             <div className="flex h-full" onClick={e => e.stopPropagation()}>
-                <div className="w-fit pr-6">
+                <div className="w-fit p-6">
                     <SheetTitle>添加技能</SheetTitle>
                     <SearchInput value={keyword} placeholder="搜索" className="my-6" onChange={handleSearch} />
                     <Button className="w-full" onClick={toCreateFlow} >创建技能</Button>
                 </div>
-                <div className="flex-1 bg-[#fff] p-6 h-full flex flex-wrap gap-1 overflow-y-auto scrollbar-hide content-start min-w-[696px]">
+                <div className="flex-1 bg-[#fff] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start min-w-[696px]">
                     {
                         onlineFlows[0] ? onlineFlows.map((flow, i) => (
                             <CardComponent key={i}

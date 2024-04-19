@@ -189,6 +189,13 @@ def upload_minio(
         secure=param.get('SCHEMA'),
         cert_check=param.get('CERT_CHECK'),
     )
+    minio_share = minio.Minio(
+        endpoint=param.get('MINIO_SHAREPOIN'),
+        access_key=param.get('MINIO_ACCESS_KEY'),
+        secret_key=param.get('MINIO_SECRET_KEY'),
+        secure=param.get('SCHEMA'),
+        cert_check=param.get('CERT_CHECK'),
+    )
     logger.debug(
         'upload_file obj={} bucket={} file_paht={}',
         object_name,
@@ -201,7 +208,7 @@ def upload_minio(
         file_path=file_path,
         content_type=content_type,
     )
-    return minio_client.presigned_get_object(
+    return minio_share.presigned_get_object(
         bucket_name=bucket,
         object_name=object_name,
         expires=timedelta(days=7),

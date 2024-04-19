@@ -139,19 +139,23 @@ class AssistantService(AssistantUtils):
             yield str(StreamData(event='message', data={'type': 'prompt', 'message': one_prompt.content}))
             final_prompt += one_prompt.content
         assistant.prompt = final_prompt
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
         # 生成开场白和开场问题
         guide_info = auto_agent.generate_guide(assistant.prompt)
         yield str(StreamData(event='message', data={'type': 'guide_word', 'message': guide_info['opening_lines']}))
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
         yield str(StreamData(event='message', data={'type': 'guide_question', 'message': guide_info['questions']}))
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
         # 自动选择工具和技能
         tool_info = cls.get_auto_tool_info(assistant, auto_agent)
         tool_info = [one.model_dump() for one in tool_info]
         yield str(StreamData(event='message', data={'type': 'tool_list', 'message': tool_info}))
+        yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
         flow_info = cls.get_auto_flow_info(assistant, auto_agent)
-        flow_info = [one. model_dump() for one in flow_info]
+        flow_info = [one.model_dump() for one in flow_info]
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod
@@ -173,12 +177,12 @@ class AssistantService(AssistantUtils):
                 return AssistantNameRepeatError.return_resp()
             assistant.name = req.name
         assistant.desc = req.desc
-        assistant.logo = req.logo or assistant.logo
-        assistant.prompt = req.prompt or assistant.prompt
-        assistant.guide_word = req.guide_word or assistant.guide_word
-        assistant.guide_question = req.guide_question or assistant.guide_question
-        assistant.model_name = req.model_name or assistant.model_name
-        assistant.temperature = req.temperature or assistant.temperature
+        assistant.logo = req.logo
+        assistant.prompt = req.prompt
+        assistant.guide_word = req.guide_word
+        assistant.guide_question = req.guide_question
+        assistant.model_name = req.model_name
+        assistant.temperature = req.temperature
         assistant.update_time = datetime.now()
         AssistantDao.update_assistant(assistant)
 
