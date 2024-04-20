@@ -1,6 +1,7 @@
 import operator
 import os
 import time
+from copy import deepcopy
 from textwrap import dedent
 from typing import (
     Annotated,
@@ -19,7 +20,7 @@ from typing import (
 import httpx
 from bisheng_langchain.gpts.load_tools import load_tools
 from langchain import hub
-from langchain.agents import create_openai_tools_agent
+from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.output_parsers import PydanticToolsParser
 from langchain.prompts import PromptTemplate
 from langchain.tools import BaseTool
@@ -77,7 +78,8 @@ def get_plan_and_solve_agent_executor(
     # todo: support system_message
     agent_prompt = hub.pull("hwchase17/openai-tools-agent")
     agent_runnable = create_openai_tools_agent(llm, tools, agent_prompt)
-    agent_executor = create_agent_executor(agent_runnable=agent_runnable, tools=tools)
+    # agent_executor = create_agent_executor(agent_runnable=agent_runnable, tools=tools)
+    agent_executor = AgentExecutor(agent=agent_runnable, tools=tools, stream_runnable=False)
     # test the agent_executor
     # r1 = agent_executor.invoke(
     #     {'input': '调用工具查询现在的时间，并查询去年今天的重大新闻', 'chat_history': []}, debug=True
@@ -108,7 +110,9 @@ def get_plan_and_solve_agent_executor(
 1. 针对给定的用户提问，提出一个简单的分步计划；
 2. 该计划应涉及单个任务，如果依次正确执行，就能得到正确答案。不要添加任何多余的步骤；
 3. 执行完最后一步的结果应该是最终答案。确保每个步骤都包含所需的全部信息--不要跳过步骤；
-4. 在"可列入计划的工具"中选择合适的工具放入你的执行计划，或许能帮你更好地列出计划。
+4. 在"可列入计划的工具"中选择合适的工具放入你的执行计划，或许能帮你更好地列出计划；
+5. 计划中的步骤应该按照执行顺序排列；
+6. 计划描述应该清晰明了，不要使用模糊的语言，不要指代不明确的对象。
 
 ## 用户提问
 {objective}
@@ -250,7 +254,7 @@ def get_plan_and_solve_agent_executor(
                 'avaliable_tools': avaliable_tools,
             }
         )
-        return {"plan": plan.steps, 'unexecuted_steps': plan.steps}
+        return {"plan": plan.steps, 'unexecuted_steps': deepcopy(plan.steps)}
 
     def execute_step(state: PlanExecute):
         chat_round = 5
@@ -264,7 +268,8 @@ def get_plan_and_solve_agent_executor(
                 chat_history.append(HumanMessage(content=past_steps[i]))
                 chat_history.append(AIMessage(content=past_steps[i + 1]))
         agent_response = agent_executor.invoke({"input": cur_task, "chat_history": chat_history}, debug=True)
-        return {"past_steps": (cur_task, agent_response['agent_outcome'].return_values['output'])}
+        # return {"past_steps": (cur_task, agent_response['agent_outcome'].return_values['output'])}
+        return {"past_steps": (f"**{cur_task}**", agent_response['output'])}
 
     def observation_step(state: PlanExecute):
         output: NextStep = observer.invoke(
@@ -279,7 +284,7 @@ def get_plan_and_solve_agent_executor(
 
     def replan_step(state: PlanExecute):
         output = replanner.invoke(state)
-        return {"plan": output.steps, 'unexecuted_steps': output.steps}
+        return {'unexecuted_steps': output.steps}
 
     def response_step(state: PlanExecute):
         answer = responser.invoke(
