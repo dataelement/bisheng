@@ -4,7 +4,6 @@ from bisheng.services.base import Service
 from bisheng.services.task.backends.anyio import AnyIOBackend
 from bisheng.services.task.backends.base import TaskBackend
 from bisheng.services.task.utils import get_celery_worker_status
-from bisheng.utils.logger import configure
 from loguru import logger
 
 
@@ -21,7 +20,6 @@ def check_celery_availability():
 
 
 try:
-    configure()
     status = check_celery_availability()
 
     USE_CELERY = status.get('availability') is not None
