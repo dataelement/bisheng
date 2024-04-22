@@ -1,0 +1,48 @@
+assistant:
+  # prompt_type: 'ASSISTANT_PROMPT_DEFAULT'
+  # llm:
+  #   type: 'ChatOpenAI'
+  #   model: 'gpt-4-0125-preview'
+  #   openai_api_key: ''
+  #   openai_proxy: 'http://118.195.232.223:39995'
+  #   temperature: 0.0
+
+  prompt_type: 'ASSISTANT_PROMPT_COHERE'
+  llm:
+    type: 'ChatOpenAI'
+    model: 'command-r-plus-104b'
+    openai_api_base: 'http://34.87.129.78:9100/v1'
+    openai_api_key: ''
+    openai_proxy: ''
+    temperature: 0.3
+
+  tools:
+    # 美团 2019 年的营业收入是多少？
+    - type: flow_knowledge_retrieve
+      collection_id: 699
+      description: "美团知识库检索工具，从美团知识库进行检索总结"
+
+    - type: flow_knowledge_retrieve
+      collection_id: 700
+      description: "永辉超市知识库检索工具，从永辉超市知识库进行检索总结"
+
+    - type: flow_knowledge_retrieve
+      collection_id: 808
+      description: "重庆水务集团股份有限公司知识库检索工具，从重庆水务集团股份有限公司知识库进行检索总结"
+    
+    - type: tianyancha_get_company_baseinfo
+      api_key: ""  
+
+    - type: tianyancha_get_company_baseinfo
+      api_key: ""
+
+    - type: tianyancha_law_suit_case
+      api_key: ""
+
+    - type: tianyancha_riskinfo
+      api_key: ""
+
+  agent_executor:
+    type: 'get_openai_functions_agent_executor'
+    interrupt_before_action: False
+    recursion_limit: 50
