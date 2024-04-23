@@ -86,7 +86,6 @@ class LlmExtract(object):
                  model_api_url: str = 'https://bisheng.dataelem.com/api/v1/models/{}/infer',
                  unstructured_api_url: str = "https://bisheng.dataelem.com/api/v1/etl4llm/predict",
                  server_type: str = 'openai_api',
-
     ):
         self.server_type = server_type # 'qwen_api', 'bisheng_api', 'openai_api'
         self.model_name = model_name

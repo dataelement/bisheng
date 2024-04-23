@@ -1,11 +1,17 @@
 import os
 import json
+import argparse
+import base64
+import tempfile
 from tqdm import tqdm
 from llm_extract import LlmExtract
 from llm_extract import init_logger
 from prompt import system_template
-
+from flask import Flask, request, Response, abort
 logger = init_logger(__name__)
+
+
+app = Flask(__name__)
 
 
 class DocumentExtract(object):
@@ -48,13 +54,51 @@ class DocumentExtract(object):
             logger.info(f'process pdf: {pdf_name}')
             pdf_path = os.path.join(pdf_folder, pdf_name)
             llm_kv_results = self.predict_one_pdf(pdf_path, schema, system_message, save_folder)
+        
+
+@app.route("/document_ie", methods=['POST'])
+def extract_document_kv():
+    data = request.json
+    file_name = data['file_name']
+    file_b64 = data['file_b64']
+    schema = data['schema']
+    system_message = data.get('system_message', system_template)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        file_path = os.path.join(tmpdir, file_name)
+        with open(file_path, "wb") as fout:
+            fout.write(base64.b64decode(file_b64))
+
+        try:
+            llm_kv_results = ie_client.predict_one_pdf(file_path, schema, system_message)
+            result = {'code': '200', 'msg': '响应成功', 'data': llm_kv_results}
+        except Exception as e:
+            logger.error(f'error: {e}')
+            result = {'code': '500', 'msg': str(e)} 
+        result = json.dumps(result, indent=4, ensure_ascii=False)
+
+    return Response(str(result), mimetype='application/json')
 
 
 if __name__ == '__main__':
-    llm_model_name = 'qwen1.5'
-    llm_model_api_url = 'http://34.87.129.78:9300/v1'
-    client = DocumentExtract(llm_model_name=llm_model_name, llm_model_api_url=llm_model_api_url)
-    schema = '合同标题|借款合同编号|担保合同编号|借款人|贷款人|借款金额'
-    pdf_folder = '/home/public/huatai/流动资金借款合同_pdf'
-    save_folder = '/home/public/huatai/流动资金借款合同_pdf_qwen72B_res'
-    client.predict_all_pdf(pdf_folder, schema, save_folder)
+    # llm_model_name = 'qwen1.5'
+    # llm_model_api_url = 'http://34.87.129.78:9300/v1'
+    # client = DocumentExtract(llm_model_name=llm_model_name, llm_model_api_url=llm_model_api_url)
+    # schema = '合同标题|借款合同编号|担保合同编号|借款人|贷款人|借款金额'
+    # pdf_folder = '/home/public/huatai/流动资金借款合同_pdf'
+    # save_folder = '/home/public/huatai/流动资金借款合同_pdf_qwen72B_res'
+    # client.predict_all_pdf(pdf_folder, schema, save_folder)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_name', default='qwen1.5', type=str, help='model name')
+    parser.add_argument('--model_api_url', default='http://34.87.129.78:9300/v1', type=str, help='model api url')
+    parser.add_argument('--unstructured_api_url', default="https://bisheng.dataelem.com/api/v1/etl4llm/predict", type=str, help='unstructur api url')
+    args = parser.parse_args()
+    global ie_client
+    ie_client = DocumentExtract(
+        llm_model_name=args.model_name, 
+        llm_model_api_url=args.model_api_url, 
+        unstructured_api_url=args.unstructured_api_url
+    )
+    app.run(host='0.0.0.0', port=6118, threaded=True)
+
