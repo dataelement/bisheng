@@ -1,0 +1,8 @@
+{
+  "unstructured_api_url": "https://bisheng.dataelem.com/api/v1/etl4llm/predict",
+  "llm_model_name": "qwen1.5-32b-chat",
+  "llm_model_api_url": "http://127.0.0.1:9300/v1",
+  "server_type": "openai_api",
+  "web_host": "127.0.0.1",
+  "web_port": "7118"
+}
