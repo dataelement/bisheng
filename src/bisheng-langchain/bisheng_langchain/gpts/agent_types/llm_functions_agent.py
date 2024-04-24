@@ -41,7 +41,7 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
         if 'tool_calls' not in last_message.additional_kwargs:
             if '|<instruct>|' in system_message:
                 # cohere model
-                pattern = r"Answer(.+)\nGrounded answer"
+                pattern = r"Answer:(.+)\nGrounded answer"
                 match = re.search(pattern, last_message.content)
                 if match:
                     last_message.content = match.group(1)
