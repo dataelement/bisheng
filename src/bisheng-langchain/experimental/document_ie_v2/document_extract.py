@@ -5,14 +5,12 @@ import json
 import os
 import tempfile
 
-from flask import Flask, Response, abort, request
+from flask import Flask, Response, request
 from llm_extract import LlmExtract, init_logger
 from prompt import system_template
 from tqdm import tqdm
 
 logger = init_logger(__name__)
-
-
 app = Flask(__name__)
 
 
@@ -44,7 +42,7 @@ class DocumentExtract(object):
                 with open(save_llm_path, 'r') as f:
                     llm_kv_results = json.load(f)
         else:
-            llm_kv_results = self.llm_client.predict(pdf_path, schema)
+            llm_kv_results = self.llm_client.predict(pdf_path, schema, system_message)
 
         return llm_kv_results
 

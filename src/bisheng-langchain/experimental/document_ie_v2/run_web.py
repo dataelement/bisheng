@@ -16,8 +16,7 @@ config = json.load(open('./config.json'))
 unstructured_api_url = config['unstructured_api_url']
 llm_model_name = config['llm_model_name']
 llm_model_api_url = config['llm_model_api_url']
-
-server_type = 'openai_api'
+server_type = config['server_type']
 web_host = config['web_host']
 web_port = config['web_port']
 
