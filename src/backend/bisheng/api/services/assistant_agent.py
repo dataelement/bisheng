@@ -273,9 +273,6 @@ class AssistantAgent(AssistantUtils):
                 }, input_str='', run_id=run_id)
                 await callback[0].on_tool_end(output='', name=one, run_id=run_id)
         result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
-        # 包含了history，将history排除
-        res = []
-        for one in result:
-            if isinstance(one, AIMessage) and one.response_metadata:
-                res.append(one)
+        # 包含了history，将history排除, 默认取最后一个为最终结果
+        res = [result[-1]]
         return res
