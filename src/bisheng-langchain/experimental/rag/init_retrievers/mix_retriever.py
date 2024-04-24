@@ -28,13 +28,15 @@ class MixRetriever(BaseRetriever):
         drop_old: bool = False,
     ) -> None:
         vector_split_docs = self.vector_text_splitter.split_documents(documents)
-        for split_doc in vector_split_docs:
+        for chunk_index, split_doc in enumerate(vector_split_docs):
             if 'chunk_bboxes' in split_doc.metadata:
                 split_doc.metadata.pop('chunk_bboxes')
+            split_doc.metadata['chunk_index'] = chunk_index
         keyword_split_docs = self.keyword_text_splitter.split_documents(documents)
-        for split_doc in keyword_split_docs:
+        for chunk_index, split_doc in enumerate(keyword_split_docs):
             if 'chunk_bboxes' in split_doc.metadata:
                 split_doc.metadata.pop('chunk_bboxes')
+            split_doc.metadata['chunk_index'] = chunk_index
 
         self.keyword_store.from_documents(
             keyword_split_docs,
