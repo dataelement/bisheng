@@ -10,6 +10,7 @@ from uuid import UUID
 
 import rsa
 from bisheng.api.services.captcha import verify_captcha
+from bisheng.api.services.user_service import get_assistant_list_by_access
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
@@ -372,10 +373,10 @@ async def access_refresh(*, data: RoleRefresh, Authorize: AuthJWT = Depends()):
         session.commit()
     # 添加新的权限
     with session_getter() as session:
-        for id in access_id:
-            if access_type == AccessType.FLOW.value:
-                id = UUID(id).hex
-            role_access = RoleAccess(role_id=role_id, third_id=str(id), type=access_type)
+        for third_id in access_id:
+            if access_type in [AccessType.FLOW.value, AccessType.ASSISTANT_READ.value]:
+                third_id = UUID(third_id).hex
+            role_access = RoleAccess(role_id=role_id, third_id=str(third_id), type=access_type)
             session.add(role_access)
         session.commit()
     return resp_200()
@@ -398,13 +399,33 @@ async def access_list(*, role_id: int, type: Optional[int] = None, Authorize: Au
         total_count = session.scalar(count_sql)
     # uuid 和str的转化
     for access in db_role_access:
-        if access.type == AccessType.FLOW.value:
+        if access.type in [AccessType.FLOW.value, AccessType.ASSISTANT_READ.value]:
             access.third_id = UUID(access.third_id)
 
     return resp_200({
         'data': [jsonable_encoder(access) for access in db_role_access],
         'total': total_count
     })
+
+
+@router.get('/role_access/list_type', status_code=200)
+async def data_by_role(*,
+                       role_id: int,
+                       page_size: int,
+                       page_num: str,
+                       name: Optional[str] = None,
+                       role_type: str = 'assistant',
+                       Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
+        raise HTTPException(status_code=500, detail='无查看权限')
+
+    if role_type == 'assistant':
+        return resp_200(get_assistant_list_by_access(role_id, name, page_num, page_size))
+    elif role_type == '':
+        pass
+    else:
+        return resp_200()
 
 
 @router.get('/role_access/knowledge', status_code=200)

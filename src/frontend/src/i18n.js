@@ -13,7 +13,7 @@ i18n.use(Backend)
     .init({
         partialBundledLanguages: true,
         ns: ['bs'],
-        lng: userLanguage === 'zh' ? userLanguage : 'en', // 除中文即英文
+        lng: 'zh', // userLanguage === 'zh' ? userLanguage : 'en', // 除中文即英文
         backend: {
             loadPath: '/locales/{{lng}}/{{ns}}.json'
         },

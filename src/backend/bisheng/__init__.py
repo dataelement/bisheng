@@ -1,6 +1,7 @@
 from importlib import metadata
 
 from bisheng.cache import cache_manager  # noqa: E402
+from bisheng.interface.custom.custom_component import CustomComponent
 from bisheng.processing.process import load_flow_from_json  # noqa: E402
 
 try:
@@ -11,4 +12,4 @@ except metadata.PackageNotFoundError:
 del metadata  # optional, avoids polluting the results of dir(__package__)
 
 
-__all__ = ['load_flow_from_json', 'cache_manager']
+__all__ = ['load_flow_from_json', 'cache_manager', 'CustomComponent']

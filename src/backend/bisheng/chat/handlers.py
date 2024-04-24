@@ -215,9 +215,20 @@ class Handler:
 
         key = get_cache_key(client_id, chat_id)
         langchain_object = session.in_memory_cache.get(key)
-        input_key = langchain_object.input_keys[0]
-        input_dict = {k: '' for k in langchain_object.input_keys}
+        if batch_question and len(langchain_object.input_keys) == 0:
+            # prompt 没有可以输入问题的地方
+            await session.send_json(client_id, chat_id, start_resp)
+            log_resp = start_resp.copy()
+            log_resp.intermediate_steps = '当前Prompt设置无用户输入，PresetQuestion 不生效'
+            log_resp.type = 'end'
+            await session.send_json(client_id, chat_id, log_resp)
+            input_key = 'input'
+            input_dict = {}
+        else:
+            input_key = langchain_object.input_keys[0]
+            input_dict = {k: '' for k in langchain_object.input_keys}
 
+        batch_question = ['start'] if not batch_question else batch_question  # 确保点击确定，会执行LLM
         report = ''
         logger.info(f'process_file batch_question={batch_question}')
         for question in batch_question:
@@ -237,7 +248,6 @@ class Handler:
                                          type='start',
                                          category='answer',
                                          user_id=user_id)
-            await session.send_json(client_id, chat_id, response_step)
             response_step.type = 'end'
             await session.send_json(client_id, chat_id, response_step)
             report = f"""{report}### {question} \n {result} \n """
@@ -311,13 +321,17 @@ class Handler:
             # agent model will produce the steps log
             from langchain.schema import Document  # noqa
             if chat_id and intermediate_steps.strip():
+                finally_log = ''
                 for s in intermediate_steps.split('\n'):
+                    # 清理召回日志中的一些冗余日志
                     if 'source_documents' in s:
                         answer = eval(s.split(':', 1)[1])
                         if 'result' in answer:
-                            s = 'Answer: ' + answer.get('result')
-                    msg = ChatResponse(intermediate_steps=s, type='end', user_id=user_id)
-                    steps.append(msg)
+                            finally_log += 'Answer: ' + answer.get('result') + "\n\n"
+                    else:
+                        finally_log += s + "\n\n"
+                msg = ChatResponse(intermediate_steps=finally_log, type='end', user_id=user_id)
+                steps.append(msg)
             else:
                 # 只有L3用户给出详细的log
                 end_resp.intermediate_steps = intermediate_steps

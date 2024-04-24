@@ -1,6 +1,6 @@
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Dropdown from "../../../components/dropdownComponent";
 import InputComponent from "../../../components/inputComponent";
 import InputFileComponent from "../../../components/inputFileComponent";
 import { Button } from "../../../components/ui/button";
@@ -56,7 +56,7 @@ export default function ChatReportForm({ flow, onStart }) {
         onStart(obj, str)
     }
 
-    return <div className="absolute right-20 bottom-32 w-[90%] max-w-[680px] flex flex-col gap-6 rounded-xl p-4 md:p-6 border bg-gray-50">
+    return <div className="flex flex-col gap-6 rounded-xl p-4 ">
         <div className="max-h-[520px] overflow-y-auto">
             {items.map((item, i) => <div key={item.id} className="w-full text-sm">
                 {item.name}
@@ -68,11 +68,18 @@ export default function ChatReportForm({ flow, onStart }) {
                         onChange={(val) => handleChange(i, val)}
                     /> :
                         item.type === VariableType.Select ?
-                            <Dropdown
-                                options={item.options.map(e => e.value)}
-                                onSelect={(val) => handleChange(i, val)}
-                                value={item.value}
-                            ></Dropdown> :
+                            <Select onValueChange={(val) => handleChange(i, val)}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        {
+                                            item.options.map(el => <SelectItem key={el.value} value={el.value}>{el.value}</SelectItem>)
+                                        }
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select> :
                             item.type === VariableType.File ?
                                 <InputFileComponent
                                     isSSO

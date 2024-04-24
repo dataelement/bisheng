@@ -1,13 +1,12 @@
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
-import { Label } from "../../../components/ui/label";
-import { Textarea } from "../../../components/ui/textarea";
+import { Button } from "../../../components/bs-ui/button";
+import { Input, Textarea } from "../../../components/bs-ui/input";
 import { alertContext } from "../../../contexts/alertContext";
 import { createTempApi } from "../../../controllers/API";
-import { FlowType } from "../../../types/flow";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { FlowType } from "../../../types/flow";
 
 export default function CreateTemp({ flow, open, setOpen, onCreated }: { flow: FlowType, open: boolean, setOpen: any, onCreated?: any }) {
     const { setErrorData, setSuccessData } = useContext(alertContext);
@@ -44,21 +43,29 @@ export default function CreateTemp({ flow, open, setOpen, onCreated }: { flow: F
         }))
     }
 
-    return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => setOpen(false)}>
-        <form method="dialog" className="max-w-[600px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={e => e.stopPropagation()}>
-            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={() => setOpen(false)}>✕</button>
-            <h3 className="font-bold text-lg mb-4">{t('skills.createTemplate')}</h3>
-            <div className="flex flex-wrap flex-col gap-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="name" className="text-right">{t('skills.skillName')}</Label>
-                    <Input id="name" value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} className="col-span-2" />
+    return <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-[625px]">
+            <DialogHeader>
+                <DialogTitle>{t('skills.createTemplate')}</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 py-2">
+                <div className="">
+                    <label htmlFor="name" className="bisheng-label">{t('skills.skillName')}</label>
+                    <Input name="name" className="mt-2" value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} />
+                    {/* {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>} */}
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="username" className="text-right">{t('skills.description')}</Label>
+                <div className="">
+                    <label htmlFor="roleAndTasks" className="bisheng-label">{t('skills.description')}</label>
                     <Textarea id="name" value={data.description} onChange={(e) => setData({ ...data, description: e.target.value })} className="col-span-2" />
+                    {/* {errors.roleAndTasks && <p className="bisheng-tip mt-1">{errors.roleAndTasks}</p>} */}
                 </div>
-                <Button type="submit" className="h-8 w-[400px] rounded-full mt-6 mx-auto" onClick={handleSubmit}>{t('create')}</Button>
             </div>
-        </form>
-    </dialog>
+            <DialogFooter>
+                <DialogClose>
+                    <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
+                </DialogClose>
+                <Button type="submit" className="px-11" onClick={handleSubmit}>{t('create')}</Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
 };

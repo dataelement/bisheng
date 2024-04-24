@@ -147,9 +147,9 @@ export async function saveFlowToDatabase(newFlow: {
 * @returns {Promise<any>} The flows data.
 * @throws Will throw an error if reading fails.
 */
-export async function readFlowsFromDatabase(page: number = 1, search: string) {
-    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${20}&name=${search}`);
-    return { data, pages: Math.ceil(total / 20) };
+export async function readFlowsFromDatabase(page: number = 1, pageSize: number = 20, search: string) {
+    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${pageSize}&name=${search}`);
+    return { data, total };
 }
 
 /**
@@ -222,7 +222,18 @@ export async function updataOnlineState(id, updatedFlow, open) {
  * @returns {Promise<any>}.
  * @throws .
  */
-export async function readOnlineFlows(page: number = 1) {
-    const { data, total }: { data: any, total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${100}&status=2`);
+export async function readOnlineFlows(page: number = 1, searchKey: string = "") {
+    const data: { data: any, total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${100}&status=2&name=${searchKey}`);
     return data;
+}
+
+
+// 解析 custom 组件节点
+export async function reloadCustom(code): Promise<any> {
+    const response = await axios.post("/api/v1/component/custom_component", {
+        code,
+        "field": "",
+        "frontend_node": {}
+    });
+    return response
 }

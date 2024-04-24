@@ -1,7 +1,7 @@
 import AceEditor from "react-ace";
 
-import { Button } from "../../components/ui/button";
-import { Label } from "../../components/ui/label";
+import { Button } from "../../components/bs-ui/button";
+import { Label } from "../../components/bs-ui/label";
 import {
     Table,
     TableBody,
@@ -10,7 +10,7 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "../../components/ui/table";
+} from "../../components/bs-ui/table";
 import {
     Tabs,
     TabsContent,
@@ -20,8 +20,7 @@ import {
 
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
-import { bsconfirm } from "../../alerts/confirm";
+import { Link, useNavigate } from "react-router-dom";
 import { alertContext } from "../../contexts/alertContext";
 import { locationContext } from "../../contexts/locationContext";
 import { userContext } from "../../contexts/userContext";
@@ -31,6 +30,13 @@ import RTConfig from "./components/RTConfig";
 import { CpuDetail } from "./cpuInfo";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { Finetune } from "./finetune";
+import { QuestionMarkIcon } from "@/components/bs-icons/questionMark";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Textarea } from "@/components/bs-ui/input";
+import Dropdown from "@/components/dropdownComponent";
+import { Input } from "@mui/material";
+import { error } from "console";
 
 enum STATUS {
     ONLINE,
@@ -42,6 +48,7 @@ enum STATUS {
 
 function ConfigModal({ data, readonly, open, setOpen, onSave }) {
     const { t } = useTranslation()
+    const navigate = useNavigate()
 
     const codeRef = useRef("")
     const validataRef = useRef([])
@@ -60,19 +67,20 @@ function ConfigModal({ data, readonly, open, setOpen, onSave }) {
         onSave(data.id, codeRef.current)
     }
 
-    return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => setOpen(false)}>
-        <form method="dialog" className="max-w-[800px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={e => e.stopPropagation()}>
-            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={() => setOpen(false)}>✕</button>
-            <h3 className="font-bold text-lg">{t('model.modelConfiguration')}</h3>
+    return <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-[800px]">
+            <DialogHeader>
+                <DialogTitle>{t('model.modelConfiguration')}</DialogTitle>
+            </DialogHeader>
             <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
                 <div className="grid gap-4 py-4 mt-2 w-full">
-                    <div className="grid grid-cols-8 items-center gap-4">
-                        <Label htmlFor="name" className="text-right">{t('model.modelName')}</Label>
-                        <p className=" text-sm text-gray-500 col-span-7">{data.model}</p>
+                    <div className="grid grid-cols-8 items-center">
+                        <Label htmlFor="name" className="text-left">{t('model.modelName')}</Label>
+                        <p className=" text-sm text-gray-500 col-span-7 text-left ml-[-10px]">{data.model}</p>
                     </div>
                     <div className="grid grid-cols-8 items-center gap-4 mt-4">
-                        <Label htmlFor="desc" className="text-right self-start">{t('model.modelConfigLabel')}</Label>
-                        <div className="col-span-7">
+                        <Label htmlFor="desc" className="text-left self-start col-span-8">{t('model.modelConfigLabel')}</Label>
+                        <div className="col-span-8">
                             <AceEditor
                                 value={data.config || '{}'}
                                 mode="json"
@@ -90,20 +98,21 @@ function ConfigModal({ data, readonly, open, setOpen, onSave }) {
                             />
                         </div>
                     </div>
-                    <div className="grid grid-cols-8 items-center gap-4">
-                        <p></p>
-                        <Link to={'./doc'} target="_blank" className="link col-span-7">{t('model.modelConfigExplanationLink')}</Link>
+                    <div className="flex justify-start">
+                        <Button variant='link' onClick={() => window.open('/model/doc')} className="link col-span-8 pl-0">{t('model.modelConfigExplanationLink')}</Button>
                     </div>
-                    {readonly ? <div className="flex justify-end gap-4"><Button variant='outline' type="submit" className="mt-6 h-8 rounded-full px-8" onClick={() => setOpen(false)}>{t('close')}</Button></div>
-                        : <div className="flex justify-end gap-4">
-                            <Button variant='outline' type="submit" className="mt-6 h-8 rounded-full px-8" onClick={() => setOpen(false)}>{t('cancel')}</Button>
-                            <Button type="submit" className="mt-6 h-8 rounded-full px-8" onClick={handleCreate}>{t('confirmButton')}</Button>
-                        </div>
-                    }
                 </div>
             </div>
-        </form>
-    </dialog>
+            <DialogFooter>
+                {readonly ? <div className="flex justify-end gap-4"><Button variant='outline' type="submit" className="mt-6 h-8 rounded-full px-8" onClick={() => setOpen(false)}>{t('close')}</Button></div>
+                    : <div className="flex justify-end gap-4">
+                        <Button variant='outline' type="submit" className="px-11" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+                        <Button type="submit" className="px-11" onClick={handleCreate}>{t('confirmButton')}</Button>
+                    </div>
+                }
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
 }
 
 export default function FileLibPage() {
@@ -137,11 +146,12 @@ export default function FileLibPage() {
     // 上线状态
     const statusComponets = (status: number, reason?: string) => {
         const comps = [
-            <div className="badge badge-accent"><span>{t('model.onlineStatus')}</span></div>,
-            <div className="badge"><span>{t('model.offlineStatus')}</span></div>,
-            <div>
-                <span className="badge bg-warning" data-theme="light">{t('model.exceptionStatus')}</span>
-                <div className="tooltip tooltip-warning before:break-words" data-tip={reason || t('model.warningTooltip')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
+            <div className="flex items-center text-[#00b58d]"><div className="w-2 h-2 bg-[#00b58d] mr-2 mt-[1px]"></div><span>{t('model.onlineStatus')}</span></div>,
+            <div className="flex items-center text-[#aeb7d3]"><div className="w-2 h-2 bg-[#aeb7d3] mr-2 mt-[1px]"></div><span>{t('model.offlineStatus')}</span></div>,
+            <div className="flex items-center text-[#ff7b2a]">
+                <div className="w-2 h-2 bg-[#ff7b2a] mr-2 mt-[1px]"></div>
+                <span>{t('model.exceptionStatus')}</span>
+                <div className="tooltip before:break-words" data-tip={reason || t('model.warningTooltip')}><span className="flex ml-[7px] mt-1 items-center justify-center w-[15px] h-[15px] rounded-full bg-[#aeb7d3] text-[#fff] text-[12px] font-bold">?</span></div>
             </div>,
             <div className="badge badge-ghost"><span>{t('model.inProgressOnlineStatus')}</span></div>,
             <div className="badge badge-ghost"><span>{t('model.inProgressOfflineStatus')}</span></div>
@@ -158,7 +168,7 @@ export default function FileLibPage() {
             // 接口
             captureAndAlertRequestErrorHoc(switchOnLineApi(el.id, true))
         } else if (el.status === STATUS.ONLINE) {
-            bsconfirm({
+            bsConfirm({
                 desc: t('model.confirmModelOffline'),
                 okTxt: t('model.confirmOfflineButtonText'),
                 onOk(next) {
@@ -209,50 +219,56 @@ export default function FileLibPage() {
 
     const copyText = useCopyText()
 
-    return <div id="model-scroll" className="w-full h-screen p-6 overflow-y-auto">
-        <Tabs defaultValue="model" className="w-full" onValueChange={e => e === 'model' && loadData()}>
+    return <div id="model-scroll" className="w-full h-full px-2 py-4">
+        <Tabs defaultValue="model" className="w-full mb-[40px]" onValueChange={e => e === 'model' && loadData()}>
             <TabsList className="">
                 <TabsTrigger value="model" className="roundedrounded-xl">{t('model.modelManagement')}</TabsTrigger>
                 <TabsTrigger value="finetune" disabled={user.role !== 'admin'}>{t('model.modelFineTune')}</TabsTrigger>
             </TabsList>
             <TabsContent value="model">
-                <div className="flex justify-end gap-4">
-                    <Button className="h-8 rounded-full" onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
-                    {user.role === 'admin' && <Button className="h-8 rounded-full" onClick={() => setShowCpu({ type: 'model', show: true })}>{t('model.gpuResourceUsage')}</Button>}
-                    {user.role === 'admin' && appConfig.isDev && <Button className="h-8 rounded-full" onClick={() => setRTOpen(true)}>{t('finetune.rtServiceManagement')}</Button>}
+                <div className="relative">
+                    <div className="h-[calc(100vh-136px)] overflow-y-auto pb-20">
+                        <div className="flex justify-end gap-4">
+                            {user.role === 'admin' && <Button variant="black" onClick={() => setShowCpu({ type: 'model', show: true })}>{t('model.gpuResourceUsage')}</Button>}
+                            {user.role === 'admin' && appConfig.isDev && <Button variant="black" className="bg-[#111] hover:bg-[#48494d]" onClick={() => setRTOpen(true)}>{t('finetune.rtServiceManagement')}</Button>}
+                            <Button onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
+                        </div>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[200px]">{t('model.machineName')}</TableHead>
+                                    <TableHead>{t('model.modelName')}</TableHead>
+                                    <TableHead>{t('model.serviceAddress')}</TableHead>
+                                    <TableHead>{t('model.status')}</TableHead>
+                                    <TableHead className="text-right">{t('operations')}</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {datalist.map((el) => (
+                                    <TableRow key={el.id}>
+                                        <TableCell className="font-medium">{el.server}</TableCell>
+                                        <TableCell>{el.model}</TableCell>
+                                        <TableCell>
+                                            <p className="cursor-pointer" onClick={() => copyText(el.endpoint)}>{el.endpoint}</p>
+                                        </TableCell>
+                                        <TableCell>
+                                            {statusComponets(el.status, el.remark)}
+                                        </TableCell>
+                                        {user.role === 'admin' ? <TableCell className="text-right">
+                                            {appConfig.isDev && <Button variant="link" className={`link ${[STATUS.WAIT_ONLINE, STATUS.WAIT_OFFLINE].includes(el.status) && 'text-gray-400 cursor-default'}`}
+                                                onClick={() => handleSwitchOnline(el)}>{[STATUS.ERROR, STATUS.OFFLINE, STATUS.WAIT_ONLINE].includes(el.status) ? t('model.online') : t('model.offline')}</Button>}
+                                            <Button variant="link" className={`link px-0 pl-6`} onClick={() => handleOpenConfig(el)} >{t('model.modelConfiguration')}</Button> </TableCell> :
+                                            <TableCell className="">--</TableCell>}
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                    {/* 分页 */}
+                    <div className="bisheng-table-footer">
+                        <p className="desc">{t('model.modelCollectionCaption')}.</p>
+                    </div>
                 </div>
-                <Table>
-                    <TableCaption>{t('model.modelCollectionCaption')}.</TableCaption>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[200px]">{t('model.machineName')}</TableHead>
-                            <TableHead>{t('model.modelName')}</TableHead>
-                            <TableHead>{t('model.serviceAddress')}</TableHead>
-                            <TableHead>{t('model.status')}</TableHead>
-                            <TableHead>{t('operations')}</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {datalist.map((el) => (
-                            <TableRow key={el.id}>
-                                <TableCell className="font-medium">{el.server}</TableCell>
-                                <TableCell>{el.model}</TableCell>
-                                <TableCell>
-                                    <p className="cursor-pointer" onClick={() => copyText(el.endpoint)}>{el.endpoint}</p>
-                                </TableCell>
-                                <TableCell>
-                                    {statusComponets(el.status, el.remark)}
-                                </TableCell>
-                                {user.role === 'admin' ? <TableCell className="">
-                                    {appConfig.isDev && <a href="javascript:;" className={`link ${[STATUS.WAIT_ONLINE, STATUS.WAIT_OFFLINE].includes(el.status) && 'text-gray-400 cursor-default'}`}
-                                        onClick={() => handleSwitchOnline(el)}>{[STATUS.ERROR, STATUS.OFFLINE, STATUS.WAIT_ONLINE].includes(el.status) ? t('model.online') : t('model.offline')}</a>}
-                                    <a href="javascript:;" className={`link ml-4`} onClick={() => handleOpenConfig(el)} >{t('model.modelConfiguration')}</a> </TableCell> :
-                                    <TableCell className="">--</TableCell>}
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-                {/* 分页 */}
             </TabsContent>
             <TabsContent value="finetune">
                 {/* 微调 */}
@@ -262,15 +278,16 @@ export default function FileLibPage() {
         {/* 编辑配置 */}
         <ConfigModal data={currentModel} readonly={readOnlyConfig || !appConfig.isDev} open={open} setOpen={setOpen} onSave={handleSave}></ConfigModal>
         {/* CPU使用情况 */}
-        <dialog className={`modal bg-blur-shared ${showCpu.show ? 'modal-open' : 'modal-close'}`} onClick={() => setShowCpu({ ...showCpu, show: false })}>
-            <form method="dialog" className="max-w-[80%] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={e => e.stopPropagation()}>
-                <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={() => setShowCpu({ ...showCpu, show: false })}>✕</button>
-                <h3 className="font-bold text-lg mb-4">{t('model.gpuResourceUsageTitle')}</h3>
+        <Dialog open={showCpu.show} onOpenChange={(show) => setShowCpu({ ...showCpu, show })}>
+            <DialogContent className="sm:max-w-[80%]">
+                <DialogHeader>
+                    <DialogTitle>{t('model.gpuResourceUsageTitle')}</DialogTitle>
+                </DialogHeader>
                 <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
                     {showCpu.show && <CpuDetail type={showCpu.type} />}
                 </div>
-            </form>
-        </dialog>
+            </DialogContent>
+        </Dialog>
         {/* RT配置 */}
         <RTConfig open={rtOpen} onChange={handleRTChange}></RTConfig>
     </div>

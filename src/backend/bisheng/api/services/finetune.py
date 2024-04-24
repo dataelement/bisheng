@@ -297,7 +297,7 @@ class FinetuneService:
         try:
             published_model = ModelDeployDao.insert_one(published_model)
         except Exception as e:
-            logger.error(f'create published model error: {e}', exc_info=True)
+            logger.error(f'create published model error: {str(e)}')
             published_model = ModelDeployDao.find_model_by_server_and_name(published_model.server,
                                                                            published_model.model)
 

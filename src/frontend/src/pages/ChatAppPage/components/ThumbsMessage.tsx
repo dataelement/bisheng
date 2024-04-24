@@ -1,11 +1,11 @@
 
-import { Textarea } from "../../../components/ui/textarea";
-import { Button } from "../../../components/ui/button";
-
-import React, { useState, forwardRef, useImperativeHandle, useRef, useContext } from 'react';
+import { Button } from '@/components/bs-ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog';
+import { Textarea } from '@/components/bs-ui/input';
+import { useToast } from '@/components/bs-ui/toast/use-toast';
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { disLikeCommentApi } from "../../../controllers/API";
-import { alertContext } from "../../../contexts/alertContext";
 
 const ThumbsMessage = forwardRef((props, ref) => {
     const { t } = useTranslation()
@@ -24,12 +24,13 @@ const ThumbsMessage = forwardRef((props, ref) => {
         }
     }));
 
-    const { setErrorData, setSuccessData } = useContext(alertContext);
+    const { message } = useToast()
     const handleSubmit = () => {
         if (!msgRef.current.value) {
-            setErrorData({
+            message({
                 title: t('prompt'),
-                list: [t('chat.feedbackRequired')]
+                variant: 'warning',
+                description: t('chat.feedbackRequired')
             });
             return setError(true);
         }
@@ -39,18 +40,21 @@ const ThumbsMessage = forwardRef((props, ref) => {
         setError(false);
     };
 
-    return (
-        <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => setOpen(false)}>
-            <div className="rounded-xl px-4 py-6 bg-[#fff] shadow-lg dark:bg-background w-[400px]" onClick={e => e.stopPropagation()}>
-                <p className="mb-2">{t('chat.feedback')}</p>
+    return <Dialog open={open} onOpenChange={setOpen} >
+        <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+                <DialogTitle>{t('chat.feedback')}</DialogTitle>
+            </DialogHeader>
+            <div className="">
+                <p className="mb-2"></p>
                 <Textarea ref={msgRef} maxLength={9999} className={`textarea ${error ? 'border border-red-400' : ''}`} ></Textarea>
                 <div className="flex justify-end gap-4 mt-4">
-                    <Button size="sm" variant="outline" onClick={() => setOpen(false)}>{t('cancel')}</Button>
-                    <Button size="sm" onClick={handleSubmit}>{t('submit')}</Button>
+                    <Button className='px-11' variant="outline" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+                    <Button className='px-11' onClick={handleSubmit}>{t('submit')}</Button>
                 </div>
             </div>
-        </dialog>
-    );
+        </DialogContent>
+    </Dialog>
 });
 
 export default ThumbsMessage;

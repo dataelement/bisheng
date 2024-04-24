@@ -11,6 +11,30 @@
 	pointer-events: none;
 }
 
+::selection {
+	color: #fff;
+	/* background-color: hsl(var(--primary)); */
+	background-color: #111;
+}
+
+/* 整个滚动条（包括轨道） */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+/* 滚动条滑块 */
+::-webkit-scrollbar-thumb {
+	background-color: darkgrey;
+	border-radius: 4px;
+}
+
+/* 滚动条轨道 */
+::-webkit-scrollbar-track {
+	background: #fff;
+	border-radius: 8px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
 	.App-logo {
 		animation: App-logo-spin infinite 20s linear;
@@ -56,39 +80,6 @@
 
 .animate-cursor {
 	animation: pulse2 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.markdown h1 {
-	margin: 0;
-	font-size: 26px;
-}
-
-.markdown h2 {
-	margin: 0;
-	font-size: 24px;
-}
-
-.markdown h3 {
-	margin: 0;
-	font-size: 20px;
-}
-
-.markdown h4 {
-	margin: 0;
-	font-size: 20px;
-}
-
-.markdown h5 {
-	font-size: 20px;
-}
-
-.markdown h6 {
-	font-size: 18px;
-}
-
-.markdown ol,
-.markdown ul {
-	white-space: normal !important;
 }
 
 @keyframes pulse2 {
@@ -188,4 +179,18 @@
 
 .chat-bubble:before {
 	display: none;
+}
+
+.build-tab {}
+
+.build-tab a.active {
+	color: #024FE5;
+	/* background: #F4F5F8;
+	padding: 10px 40px; */
+}
+
+.bs-chat-bg {
+	width: 100%;
+	background: url(/points.png) 0 100% repeat-x;
+	background-size: 10px 432px;
 }

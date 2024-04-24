@@ -55,7 +55,7 @@ export default function Report() {
                         </div>
                 }
             </div>
-            <div className="w-[240px] border px-4 pt-4 bg-[#fff]">
+            <div className="w-[240px] border px-4 pt-4 bg-[#fff] overflow-y-auto">
                 <LabelPanne onInset={handleInset}></LabelPanne>
             </div>
         </div>

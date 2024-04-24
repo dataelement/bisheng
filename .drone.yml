@@ -1,0 +1,42 @@
+kind: pipeline # 定义对象类型，还有secret和signature两种类型
+type: docker # 定义流水线类型，还有kubernetes、exec、ssh等类型
+name: cicd # 定义流水线名称
+
+steps: # 定义流水线执行步骤，这些步骤将顺序执行
+  - name: package # 流水线名称
+    image: python:3.10-slim # 定义创建容器的Docker镜像
+    volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
+      - name: maven-cache
+        path: /root/.m2 # 将maven下载依赖的目录挂载出来，防止重复下载
+      - name: maven-build
+        path: /app/build # 将应用打包好的Jar和执行脚本挂载出来
+    commands: # 定义在Docker容器中执行的shell命令
+      - pip install Cython
+      - pip install wheel
+      - pip install twine
+      - cd ./src/bisheng-langchain
+      - python setup.py bdist_wheel
+      - cp dist.* /app/build/
+
+  - name: build_backend
+    image: python:3.10-slim # 定义创建容器的Docker镜像
+    volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
+      - name: maven-cache
+        path: /root/.m2 # 将maven下载依赖的目录挂载出来，防止重复下载
+      - name: maven-build
+        path: /app/build # 将应用打包好的Jar和执行脚本挂载出来
+    commands:
+      - cd ./src/backend
+      - pip install bisheng_langchain==$RELEASE_VERSION
+      - sed -i 's/^bisheng_langchain.*/bisheng_langchain = "'$RELEASE_VERSION'"/g' pyproject.toml
+      - poetry lock
+
+  - name: build-image # 步骤名称
+    image: plugins/docker # 使用镜像
+    settings: # 当前设置
+      username: # 账号名称
+        from_secret: docker_username
+      password: # 账号密码
+        from_secret: docker_password
+      dockerfile: deploy/Dockerfile # Dockerfile地址， 注意是相对地址
+      repo: yxs970707/deploy-web-demo # 镜像名称

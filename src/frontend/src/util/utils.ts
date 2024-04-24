@@ -1,6 +1,8 @@
 import axios from "axios";
 import clsx, { ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { APITemplateType } from "../types/api";
+import { checkUpperWords } from "../utils";
 
 export function classNames(...classes: Array<string>): string {
     return classes.filter(Boolean).join(" ");
@@ -73,4 +75,42 @@ export function formatMilliseconds(ms: number, format: string): string {
     // formattedString = formattedString.replace(/\s+/g, ' ').trim();
 
     return formattedString;
+}
+
+export function toTitleCase(str: string | undefined): string {
+    if (!str) return "";
+    let result = str
+        .split("_")
+        .map((word, index) => {
+            if (index === 0) {
+                return checkUpperWords(
+                    word[0].toUpperCase() + word.slice(1).toLowerCase()
+                );
+            }
+            return checkUpperWords(word.toLowerCase());
+        })
+        .join(" ");
+
+    return result
+        .split("-")
+        .map((word, index) => {
+            if (index === 0) {
+                return checkUpperWords(
+                    word[0].toUpperCase() + word.slice(1).toLowerCase()
+                );
+            }
+            return checkUpperWords(word.toLowerCase());
+        })
+        .join(" ");
+}
+
+export function getFieldTitle(
+    template: APITemplateType,
+    templateField: string
+): string {
+    return template[templateField].display_name
+        ? template[templateField].display_name!
+        : template[templateField].name
+            ? toTitleCase(template[templateField].name!)
+            : toTitleCase(templateField);
 }

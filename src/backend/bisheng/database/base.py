@@ -1,10 +1,9 @@
 import hashlib
+import json
+import os
 from contextlib import contextmanager
 
 from bisheng.database.init_config import init_config
-from bisheng.database.models.role import Role
-from bisheng.database.models.user import User
-from bisheng.database.models.user_role import UserRole
 from bisheng.database.service import DatabaseService
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
@@ -16,6 +15,12 @@ db_service: 'DatabaseService' = DatabaseService(settings.database_url)
 def init_default_data():
     """初始化数据库"""
     from bisheng.cache.redis import redis_client
+    from bisheng.database.models.component import Component
+    from bisheng.database.models.role import Role
+    from bisheng.database.models.user import User
+    from bisheng.database.models.user_role import UserRole
+    from bisheng.database.models.gpts_tools import GptsTools
+
     if redis_client.setNx('init_default_data', '1'):
         try:
             db_service.create_db_and_tables()
@@ -44,6 +49,30 @@ def init_default_data():
                     db_userrole = UserRole(user_id=user.user_id, role_id=db_role.id)
                     session.add(db_userrole)
                     session.commit()
+
+                component_db = session.exec(select(Component).limit(1)).all()
+                if not component_db:
+                    db_components = []
+                    json_items = json.loads(read_from_conf('component.json'))
+                    for item in json_items:
+                        for k, v in item.items():
+                            db_component = Component(name=k, user_id=1, user_name='admin', data=v)
+                            db_components.append(db_component)
+                    session.add_all(db_components)
+                    session.commit()
+
+                # 初始化预置工具列表
+                preset_tools = session.exec(select(GptsTools).limit(1)).all()
+                if not preset_tools:
+                    preset_tools = []
+                    json_items = json.loads(read_from_conf('t_gpts_tools.json'))
+                    for item in json_items:
+                        item['api_params'] = json.loads(item['api_params'])
+                        preset_tool = GptsTools(**item)
+                        preset_tools.append(preset_tool)
+                    session.add_all(preset_tools)
+                    session.commit()
+
             # 初始化数据库config
             init_config()
         except Exception as exc:
@@ -68,3 +97,16 @@ def session_getter() -> Session:
         raise
     finally:
         session.close()
+
+
+def read_from_conf(file_path: str) -> str:
+    if '/' not in file_path:
+        # Get current path
+        current_path = os.path.dirname(os.path.abspath(__file__))
+
+        file_path = os.path.join(current_path, file_path)
+
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    return content

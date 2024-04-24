@@ -3,7 +3,14 @@ import App from "./App";
 import ContextWrapper from "./contexts";
 import reportWebVitals from "./reportWebVitals";
 import './i18n';
-import "./index.css";
+// @ts-ignore
+import "./style/index.css";
+// @ts-ignore
+import "./style/applies.css";
+// @ts-ignore
+import "./style/classes.css";
+// @ts-ignore
+import "./style/markdown.css";
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement

@@ -5,26 +5,30 @@ import time
 from typing import List, Optional
 from uuid import uuid4
 
-from bisheng.api.services.knowledge_imp import addEmbedding, decide_vectorstores
+from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
+                                                delete_knowledge_file_vectors, retry_files)
 from bisheng.api.utils import access_check
-from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200
+from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500
 from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeRead
-from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
+from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
+                                               KnowledgeRead)
+from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
+                                                    KnowledgeFileRead)
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
-from langchain.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
-                                        UnstructuredMarkdownLoader, UnstructuredPowerPointLoader,
-                                        UnstructuredWordDocumentLoader)
+from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
+                                                  UnstructuredMarkdownLoader,
+                                                  UnstructuredPowerPointLoader,
+                                                  UnstructuredWordDocumentLoader)
 from pymilvus import Collection
 from sqlalchemy import delete, func, or_
 from sqlmodel import select
@@ -97,9 +101,8 @@ async def process_knowledge(*,
         separator = ['\n\n', '\n', ' ', '']
         chunk_size = 500
         chunk_overlap = 50
-    with session_getter() as session:
-        knowledge = session.exec(select(Knowledge).where(Knowledge.id == knowledge_id)).one()
 
+    knowledge = KnowledgeDao.query_by_id(knowledge_id)
     if not access_check(payload=payload,
                         owner_user_id=knowledge.user_id,
                         target_id=knowledge.id,
@@ -110,30 +113,42 @@ async def process_knowledge(*,
     files = []
     file_paths = []
     result = []
+
     for path in file_path:
         filepath, file_name = file_download(path)
         md5_ = os.path.splitext(os.path.basename(filepath))[0].split('_')[0]
         # 是否包含重复文件
-        with session_getter() as session:
-            repeat = session.exec(
-                select(KnowledgeFile).where(KnowledgeFile.md5 == md5_, KnowledgeFile.status == 2,
-                                            KnowledgeFile.knowledge_id == knowledge_id)).all()
-        status = 3 if repeat else 1
-        remark = 'file repeat' if repeat else ''
-        db_file = KnowledgeFile(knowledge_id=knowledge_id,
-                                file_name=file_name,
-                                status=status,
-                                md5=md5_,
-                                remark=remark,
-                                user_id=payload.get('user_id'))
-        with session_getter() as session:
-            session.add(db_file)
-            session.commit()
-            session.refresh(db_file)
-        if not repeat:
+        content_repeat = KnowledgeFileDao.get_file_by_condition(md5_=md5_,
+                                                                knowledge_id=knowledge_id)
+        name_repeat = KnowledgeFileDao.get_file_by_condition(file_name=file_name,
+                                                             knowledge_id=knowledge_id)
+        if content_repeat or name_repeat:
+            db_file = content_repeat[0] if content_repeat else name_repeat[0]
+            old_name = db_file.file_name
+            file_type = file_name.rsplit('.', 1)[-1]
+            obj_name = f'tmp/{db_file.id}.{file_type}'
+            db_file.object_name = obj_name
+            db_file.remark = f'{file_name} 对应已存在文件 {old_name}'
+            with open(filepath, 'rb') as file:
+                MinioClient().upload_tmp(db_file.object_name, file.read())
+            db_file.status = 3
+        else:
+            status = 1
+            remark = ''
+            db_file = KnowledgeFile(knowledge_id=knowledge_id,
+                                    file_name=file_name,
+                                    status=status,
+                                    md5=md5_,
+                                    remark=remark,
+                                    user_id=payload.get('user_id'))
+            with session_getter() as session:
+                session.add(db_file)
+                session.commit()
+                session.refresh(db_file)
             files.append(db_file.copy())
             file_paths.append(filepath)
-        logger.info(f'fileName={file_name} col={collection_name} file_id={db_file.id}')
+
+        logger.info(f'col={collection_name} repeat={db_file} file_id={db_file.id}')
         result.append(db_file.copy())
 
     if files:
@@ -309,59 +324,23 @@ def get_filelist(*,
 @router.post('/retry', status_code=200)
 def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = Depends()):
     """失败重试"""
-    file_ids = data.get('file_ids')
-    with session_getter() as session:
-        db_files = session.exec(
-            select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids),
-                                        KnowledgeFile.status == 3)).all()
-
-    separator = ['\n\n', '\n', ' ', '']
-    chunk_size = 500
-    chunk_overlap = 50
-    if db_files:
-        minio = MinioClient()
-        for file in db_files:
-            if file.remark == 'file repeat':
-                # 重复的文件不能重复解析
-                continue
-            # file exist
-            with session_getter() as session:
-                db_knowledge = session.get(Knowledge, file.knowledge_id)
-                file.status = 1  # 解析中
-                session.add(file)
-                session.commit()
-                session.refresh(file)
-                session.refresh(db_knowledge)
-
-            index_name = db_knowledge.index_name or db_knowledge.collection_name
-            original_file = file.object_name
-            file_url = minio.get_share_link(original_file)
-            if file_url:
-                file_path, _ = file_download(file_url)
-            else:
-                with session_getter() as session:
-                    db_knowledge = session.get(Knowledge, file.knowledge_id)
-                    file.status = 3  # 解析中
-                    file.remark = '原始文件丢失'
-                    session.commit()
-                continue
-
-            try:
-                background_tasks.add_task(addEmbedding,
-                                          collection_name=db_knowledge.collection_name,
-                                          index_name=index_name,
-                                          knowledge_id=db_knowledge.id,
-                                          model=db_knowledge.model,
-                                          chunk_size=chunk_size,
-                                          separator=separator,
-                                          chunk_overlap=chunk_overlap,
-                                          file_paths=[file_path],
-                                          knowledge_files=[file],
-                                          callback=None,
-                                          extra_meta=file.extra_meta)
-            except Exception as e:
-                logger.error(e)
-
+    Authorize.jwt_required()
+    db_file_retry = data.get('file_objs')
+    if db_file_retry:
+        id2input = {file.get('id'): KnowledgeFile.validate(file) for file in db_file_retry}
+    else:
+        return resp_500('参数错误')
+    file_ids = list(id2input.keys())
+    db_files = KnowledgeFileDao.select_list(file_ids=file_ids)
+    for file in db_files:
+        # file exist
+        input_file = id2input.get(file.id)
+        if input_file.remark and '对应已存在文件' in input_file.remark:
+            file.file_name = input_file.remark.split(' 对应已存在文件 ')[0]
+            file.remark = ''
+        file.status = 1  # 解析中
+        file = KnowledgeFileDao.update(file)
+    background_tasks.add_task(retry_files, db_files, id2input)
     return resp_200()
 
 
@@ -419,40 +398,15 @@ def delete_knowledge_file(*, file_id: int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
 
-    with session_getter() as session:
-        knowledge_file = session.get(KnowledgeFile, file_id)
-        if not knowledge_file:
-            raise HTTPException(status_code=404, detail='文件不存在')
+    knowledge_file = KnowledgeFileDao.select_list([file_id])
+    if knowledge_file:
+        knowledge_file = knowledge_file[0]
+    knowledge = KnowledgeDao.query_by_id(knowledge_file.knowledge_id)
+    if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
+        raise HTTPException(status_code=404, detail='没有权限执行操作')
 
-        knowledge = session.get(Knowledge, knowledge_file.knowledge_id)
-        if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
-            raise HTTPException(status_code=404, detail='没有权限执行操作')
     # 处理vectordb
-    collection_name = knowledge.collection_name
-    embeddings = FakeEmbedding()
-    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-    if isinstance(vectore_client, Milvus) and vectore_client.col:
-        pk = vectore_client.col.query(expr=f'file_id == {file_id}', output_fields=['pk'])
-        res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
-        logger.info(f'act=delete_vector file_id={file_id} res={res}')
+    delete_knowledge_file_vectors([file_id])
+    KnowledgeFileDao.delete_batch([file_id])
 
-    # minio
-    minio_client = MinioClient()
-    minio_client.delete_minio(str(knowledge_file.id))
-    if knowledge_file.object_name:
-        minio_client.delete_minio(str(knowledge_file.object_name))
-    # elastic
-    index_name = knowledge.index_name or collection_name
-    esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
-
-    if esvectore_client:
-        res = esvectore_client.client.delete_by_query(
-            index=index_name, query={'match': {
-                'metadata.file_id': file_id
-            }})
-        logger.info(f'act=delete_es file_id={file_id} res={res}')
-
-    with session_getter() as session:
-        session.delete(knowledge_file)
-        session.commit()
     return resp_200(message='删除成功')

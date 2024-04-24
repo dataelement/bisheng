@@ -2,14 +2,15 @@ import hashlib
 from typing import Dict, List, Optional
 
 from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, delete_es,
-                                                delete_knowledge_by, delete_knowledge_file_batch,
+                                                delete_knowledge_by, delete_knowledge_file_vectors,
                                                 delete_vector, text_knowledge)
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeRead,
                                                KnowledgeUpdate)
-from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileRead
+from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
+                                                    KnowledgeFileRead)
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
@@ -122,12 +123,31 @@ def delete_knowledge_api(*, knowledge_id: int):
         return resp_500(message=f'错误 e={str(e)}')
 
 
+# 清空知识库的所有文件内容
+@router.delete('/clear/{knowledge_id}', status_code=200)
+def clear_knowledge_files(*, knowledge_id: int):
+    """ 删除知识库信息. """
+    with session_getter() as session:
+        knowledge = session.get(Knowledge, knowledge_id)
+    if not knowledge:
+        raise HTTPException(status_code=404, detail='knowledge not found')
+    try:
+        delete_knowledge_by(knowledge, only_clear=True)
+        return {'message': 'knowledge deleted successfully'}
+    except Exception as e:
+        logger.exception(e)
+        return resp_500(message=f'错误 e={str(e)}')
+
+
 @router.post('/file/{knowledge_id}',
              response_model=UnifiedResponseModel[KnowledgeFileRead],
              status_code=200)
 async def upload_file(*,
                       knowledge_id: int,
                       callback_url: Optional[str] = Form(None),
+                      separator: List[str] = Form(default=['\n\n', '\n', ' ', '']),
+                      chunk_size: int = Form(default=500),
+                      chunk_overlap: int = Form(default=50),
                       file: UploadFile = File(...),
                       background_tasks: BackgroundTasks):
 
@@ -135,11 +155,7 @@ async def upload_file(*,
     # 缓存本地
     file_byte = await file.read()
     file_path = save_download_file(file_byte, 'bisheng', file_name)
-    auto_p = True
-    if auto_p:
-        separator = ['\n\n', '\n', ' ', '']
-        chunk_size = 500
-        chunk_overlap = 50
+
     with session_getter() as session:
         knowledge = session.get(Knowledge, knowledge_id)
 
@@ -193,7 +209,8 @@ def delete_knowledge_file(*, file_id: int):
         raise HTTPException(status_code=404, detail='文件不存在')
 
     try:
-        delete_knowledge_file_batch([file_id])
+        delete_knowledge_file_vectors([file_id])
+        KnowledgeFileDao.delete_batch(file_ids=[file_id])
         return resp_200()
     except Exception as e:
         return resp_500(message=f'error e={str(e)}')
@@ -208,8 +225,8 @@ def delete_file_batch_api(file_ids: List[int]):
         raise HTTPException(status_code=404, detail='文件不存在')
 
     try:
-        delete_knowledge_file_batch(file_ids)
-        return resp_200()
+        delete_knowledge_file_vectors(file_ids)
+        KnowledgeFileDao.delete_batch(file_ids=file_ids)
     except Exception as e:
         return resp_500(message=f'error e={str(e)}')
 
@@ -245,6 +262,9 @@ def get_filelist(*, knowledge_id: int, page_size: int = 10, page_num: int = 1):
 async def post_chunks(*,
                       knowledge_id: int = Form(...),
                       metadata: str = Form(...),
+                      separator: List[str] = Form(default=['\n\n', '\n', ' ', '']),
+                      chunk_size: int = Form(default=500),
+                      chunk_overlap: int = Form(default=50),
                       file: UploadFile = File(...)):
     """ 获取知识库文件信息. """
     file_name = file.filename
@@ -276,9 +296,6 @@ async def post_chunks(*,
         session.commit()
         session.refresh(db_file)
 
-    separator = ['\n\n', '\n', ' ', '']
-    chunk_size = 500
-    chunk_overlap = 50
     index_name = db_knowledge.index_name or db_knowledge.collection_name
     try:
         minio_client = MinioClient()
@@ -335,6 +352,7 @@ async def post_string_chunks(*, document: ChunkInput):
         return resp_500(code=422, message='文件重复')
 
     db_file = KnowledgeFile(knowledge_id=document.knowledge_id,
+                            file_name=document.documents[0].metadata.get('source'),
                             status=status,
                             md5=md5_,
                             extra_meta=document.documents[0].metadata,

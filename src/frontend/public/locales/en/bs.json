@@ -21,8 +21,8 @@
         "pleaseEnterCaptcha": "Please enter captcha"
     },
     "menu": {
-        "app": "App",
-        "skills": "Skills",
+        "app": "Chat",
+        "skills": "Build",
         "knowledge": "Knowledge",
         "models": "Models",
         "system": "System",
@@ -57,7 +57,7 @@
     },
     "skills": {
         "manageTemplate": "Manage Skill Templates",
-        "createNew": "Create New",
+        "createNew": "Create New Skill",
         "manageProjects": "Manage your personal projects here, including skill deployment and editing",
         "skillSearch": "Skill Search",
         "confirmDeleteSkill": "Confirm the deletion of this skill?",
@@ -280,7 +280,7 @@
     },
     "status": {
         "1004": "This skill has been deleted",
-        "1008": "The current skill is not online, and direct conversation is not possible.",
+        "1008": "The current assistant or skill is not online, and direct conversation is not possible.",
         "1005": ""
     },
     "all": "All",
@@ -308,7 +308,6 @@
         "taskAborted": "Task aborted",
         "trainingSuccess": "Training succeed",
         "publishSuccess": "Publish succeed",
-        "fillName": "Please fill in the name",
         "taskId": "Task Id",
         "baseModel": "Base Model",
         "runtime": "Runtime",

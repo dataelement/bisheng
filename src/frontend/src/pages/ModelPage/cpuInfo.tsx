@@ -7,7 +7,7 @@ import {
     TableHead,
     TableHeader,
     TableRow
-} from "../../components/ui/table";
+} from "../../components/bs-ui/table";
 import { GPUlistApi, GPUlistByFinetuneApi } from "../../controllers/API";
 
 export const CpuDetail = ({ type }) => {

@@ -1,5 +1,3 @@
-
-
 def test(func: callable):
     func('123')
 

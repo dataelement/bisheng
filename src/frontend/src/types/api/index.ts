@@ -1,21 +1,40 @@
 import { Edge, Node, Viewport } from "reactflow";
+import { FlowType } from "../flow";
 //kind and class are just representative names to represent the actual structure of the object received by the API
-
-export type APIObjectType = { kind: APIKindType;[key: string]: APIKindType };
-export type APIKindType = { class: APIClassType;[key: string]: APIClassType };
+export type APIDataType = { [key: string]: APIKindType };
+export type APIObjectType = { [key: string]: APIKindType };
+export type APIKindType = { [key: string]: APIClassType };
 export type APITemplateType = {
-  variable: TemplateVariableType;
   [key: string]: TemplateVariableType;
 };
+
+export type CustomFieldsType = {
+  [key: string]: Array<string>;
+};
+
 export type APIClassType = {
   base_classes: Array<string>;
   description: string;
   template: APITemplateType;
   display_name: string;
+  icon?: string;
   input_types?: Array<string>;
   output_types?: Array<string>;
+  custom_fields?: CustomFieldsType;
+  beta?: boolean;
   documentation: string;
-  [key: string]: Array<string> | string | APITemplateType;
+  error?: string;
+  official?: boolean;
+  flow?: FlowType;
+  [key: string]:
+    | Array<string>
+    | string
+    | APITemplateType
+    | boolean
+    | FlowType
+    | CustomFieldsType
+    | boolean
+    | undefined;
 };
 
 export type TemplateVariableType = {
@@ -24,9 +43,14 @@ export type TemplateVariableType = {
   placeholder?: string;
   list: boolean;
   show: boolean;
+  readonly?: boolean;
   multiline?: boolean;
   value?: any;
+  dynamic?: boolean;
+  proxy?: { id: string; field: string };
   input_types?: Array<string>;
+  display_name?: string;
+  name?: string;
   [key: string]: any;
 };
 export type sendAllProps = {
@@ -65,13 +89,9 @@ export type UploadFileTypeAPI = {
   flowId: string;
 };
 
-
-export type RTServer = {
-  update_time: string;
-  endpoint: string;
-  sft_endpoint: string;
-  remark: string;
-  create_time: string;
-  server: string;
-  id: number;
-}
+export type Component = {
+  name: string;
+  description: string;
+  data: Object;
+  tags: [string];
+};

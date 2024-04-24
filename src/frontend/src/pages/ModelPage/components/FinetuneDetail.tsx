@@ -1,10 +1,9 @@
 import { Loader2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { bsconfirm } from "../../../alerts/confirm";
-import { Badge } from "../../../components/ui/badge";
-import { Button } from "../../../components/ui/button";
-import EditLabel from "../../../components/ui/editLabel";
+import { Badge } from "../../../components/bs-ui/badge";
+import { Button } from "../../../components/bs-ui/button";
+import EditLabel from "../../../components/bs-ui/editLabel";
 import { alertContext } from "../../../contexts/alertContext";
 import { getModelInfoApi } from "../../../controllers/API";
 import { cancelTaskApi, getTaskInfoApi, publishTaskApi, unPublishTaskApi, updataTaskNameApi } from "../../../controllers/API/finetune";
@@ -12,6 +11,7 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { TaskDB } from "../../../types/api/finetune";
 import FinetuneResult from "./FinetuneResult";
 import { formatMilliseconds } from "../../../util/utils";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export const enum TaskStatus {
     /** 训练中 */
@@ -42,7 +42,7 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
 
     const cancelPublish = async () => {
         if (online) {
-            bsconfirm({
+            bsConfirm({
                 desc: t('finetune.confirmCancelPublish'),
                 async onOk(next) {
                     next()
@@ -71,7 +71,7 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
         } else if (status === TaskStatus.PUBLISH_SUCCESS) {
             tip = t('finetune.confirmDeletePublishedModel', { name })
         }
-        bsconfirm({
+        bsConfirm({
             desc: tip,
             onOk(next) {
                 onDelete()
@@ -81,7 +81,7 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
     }
 
     const stopClick = () => {
-        bsconfirm({
+        bsConfirm({
             desc: t('finetune.confirmStopTraining'),
             onOk(next) {
                 onStop()
@@ -90,21 +90,21 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
         })
     }
 
-    return <div className="absolute right-4 flex gap-4">
+    return <div className="absolute right-4 flex gap-2">
         {status === TaskStatus.PUBLISH_SUCCESS ?
-            <Button size="sm" className="rounded-full h-7" disabled={loading} onClick={cancelPublish}>
+            <Button size="sm" disabled={loading} onClick={cancelPublish}>
                 {loading && <Loader2 className="animate-spin mr-2" size={14} />}
                 {t('finetune.cancelPublish')}
             </Button> :
             status === TaskStatus.TRAIN_SUCCESS ?
-                <Button size="sm" className="rounded-full h-7" disabled={loading} onClick={handlePublish}>
+                <Button size="sm" disabled={loading} onClick={handlePublish}>
                     {loading && <Loader2 className="animate-spin mr-2" size={14} />}
                     {t('finetune.publish')}
                 </Button> : null
         }
         {status === TaskStatus.TRAINING_IN_PROGRESS ?
-            <Button size="sm" className="rounded-full h-7 bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
-            <Button size="sm" className="rounded-full h-7 bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('delete')}</Button>
+            <Button size="sm" className="bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
+            <Button size="sm" className="bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('delete')}</Button>
         }
     </div>
 }
@@ -189,8 +189,8 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
                 <EditLabel
                     rule={[
                         {
-                            pattern: /^.{1,50}$/,
-                            message: t('finetune.fillName'),
+                            pattern: /^(?=.*[a-zA-Z])(?=.*\d)?[a-zA-Z\d_-]+$/,
+                            message: t('finetune.enterModelName'),
                         }
                     ]}
                     str={baseInfo.model_name}

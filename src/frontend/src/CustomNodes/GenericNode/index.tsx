@@ -18,9 +18,12 @@ import {
   toTitleCase,
 } from "../../utils";
 import ParameterComponent from "./components/parameterComponent";
+import EditLabel from "../../components/ui/editLabel";
 
-export default function GenericNode({ data, selected }: {
+export default function GenericNode({ data, xPos, yPos, selected }: {
   data: NodeDataType;
+  xPos: number;
+  yPos: number;
   selected: boolean;
 }) {
   const { id: flowId } = useParams();
@@ -69,18 +72,24 @@ export default function GenericNode({ data, selected }: {
   }
 
   const [_, fouceUpdateNode] = useState(false)
+  const isGroup = !!data.node?.flow;
 
   return (
     <>
       <NodeToolbar>
         <NodeToolbarComponent
+          position={{ x: xPos, y: yPos }}
           data={data}
           openPopUp={openPopUp}
           deleteNode={deleteNode}
         ></NodeToolbarComponent>
       </NodeToolbar>
 
-      <div className={classNames("border-4 generic-node-div", selected ? "border-ring" : "")} style={{ borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown }}>
+      <div className={classNames("border-4 generic-node-div relative", selected ? "border-ring" : "")} style={{ borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown }}>
+        {isGroup && <div className={`generic-node-div absolute border-2 w-full h-full left-3 top-3 z-[-1] ${selected ? "border-ring" : ""}`} style={{ borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown }}>
+          <div className={`generic-node-div absolute border-4 w-full h-full left-3 top-3 z-[-1] bg-transparent ${selected ? "border-ring" : ""}`} style={{ borderColor: nodeColors[types[data.type]] ?? nodeColors.unknown }}>
+          </div>
+        </div>}
         <div className="generic-node-div-title">
           {/* title */}
           <div className="generic-node-title-arrangement">
@@ -131,8 +140,15 @@ export default function GenericNode({ data, selected }: {
             </div>
             <div className="generic-node-tooltip-div">
               <ShadTooltip content={data.node.display_name}>
-                <div className="generic-node-tooltip-div text-primary">
-                  {data.node.display_name}
+                <div className="generic-node-tooltip-div text-[#111]">
+                  {isGroup ? <EditLabel
+                    rule={[
+                      {required: true}
+                    ]}
+                    str={data.node.display_name}
+                    onChange={(val) => {(data.node.display_name = val);fouceUpdateNode(!_)}}>
+                    {(val) => <div className="max-w-[300px] overflow-hidden text-ellipsis">{val}</div>}
+                  </EditLabel> : data.node.display_name}
                 </div>
               </ShadTooltip>
             </div>
@@ -140,7 +156,7 @@ export default function GenericNode({ data, selected }: {
           {/* <div className="round-button-div">
             <button className="relative" onClick={(event) => { event.preventDefault(); openPopUp(<NodeModal data={data} />)}} ></button>
           </div> */}
-        </div>
+        </div >
 
         <div className="generic-node-desc nodrag">
           <div className="generic-node-desc-text">{data.node.description}</div>
@@ -172,6 +188,7 @@ export default function GenericNode({ data, selected }: {
                     !data.node.template[t].advanced ? (
                     <ParameterComponent
                       data={data}
+                      isGroup={isGroup}
                       color={
                         nodeColors[types[data.node.template[t].type]] ??
                         nodeColors[data.node.template[t].type] ??
@@ -229,7 +246,7 @@ export default function GenericNode({ data, selected }: {
             </div>}
           </>
         </div>
-      </div>
+      </div >
     </>
   );
 }
