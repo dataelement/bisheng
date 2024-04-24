@@ -1,5 +1,5 @@
 import json
-
+import re
 from bisheng_langchain.gpts.message_types import LiberalFunctionMessage, LiberalToolMessage
 from langchain.tools import BaseTool
 from langchain.tools.render import format_tool_to_openai_tool
@@ -39,6 +39,12 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
         last_message = messages[-1]
         # If there is no function call, then we finish
         if 'tool_calls' not in last_message.additional_kwargs:
+            if '|<instruct>|' in system_message:
+                # cohere model
+                pattern = r"Answer:(.+)\nGrounded answer"
+                match = re.search(pattern, last_message.content)
+                if match:
+                    last_message.content = match.group(1)
             return 'end'
         # Otherwise if there is, we continue
         else:
