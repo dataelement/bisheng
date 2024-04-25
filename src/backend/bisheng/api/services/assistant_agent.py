@@ -155,9 +155,7 @@ class AssistantAgent(AssistantUtils):
                     continue
                 # 说明是关联的知识库，修改知识库检索技能的对应知识库ID参数
                 tool_name = f'knowledge_{link.knowledge_id}'
-                tool_description = (
-                    f'Tool Name: {one_knowledge_data.name}\n '
-                    f'Tool Description: {one_knowledge_data.description}')
+                tool_description = f'{one_knowledge_data.name}:{one_knowledge_data.description}'
                 # 先查找替换collection_id
                 flow_graph_data = await self.get_knowledge_skill_data()
                 flow_graph_data = set_flow_knowledge_id(flow_graph_data, knowledge_id)
@@ -175,7 +173,7 @@ class AssistantAgent(AssistantUtils):
                     logger.warning('act=init_tools not online flow_id: {}', link.flow_id)
                     continue
                 flow_graph_data = one_flow_data.data
-                tool_description = f'Tool Name: {one_flow_data.name}\n Tool Description: {one_flow_data.description}'
+                tool_description = f'{one_flow_data.name}:{one_flow_data.description}'
 
             try:
                 artifacts = {}
