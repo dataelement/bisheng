@@ -49,7 +49,7 @@ class ExportedFlow(BaseModel):
 
 
 class InputRequest(BaseModel):
-    input: Union[dict, str] = Field(description='question or command asked LLM to do')
+    input: str = Field(description='question or command asked LLM to do')
 
 
 class TweaksRequest(BaseModel):
