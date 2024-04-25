@@ -43,7 +43,7 @@ def create_flow(*, flow: FlowCreate, Authorize: AuthJWT = Depends()):
 
 @router.get('/versions', status_code=200)
 def get_versions(*,
-                 flow_id: str = Query(default=None, description='根据flow_id查找所有的版本信息'),
+                 flow_id: UUID,
                  Authorize: AuthJWT = Depends()):
     """
     获取技能对应的版本列表
@@ -51,12 +51,13 @@ def get_versions(*,
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
+    flow_id = flow_id.hex
     return FlowService.get_version_list_by_flow(user, flow_id)
 
 
 @router.post('/versions', status_code=200)
 def create_versions(*,
-                    flow_id: str = Query(default=None, description='根据flow_id创建新的版本'),
+                    flow_id: UUID,
                     flow_version: FlowVersionCreate,
                     Authorize: AuthJWT = Depends()):
     """
@@ -65,6 +66,7 @@ def create_versions(*,
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
+    flow_id = flow_id.hex
     return FlowService.create_new_version(user, flow_id, flow_version)
 
 
@@ -110,7 +112,7 @@ def get_version_info(*,
 
 @router.post('/change_version', status_code=200)
 def change_version(*,
-                   flow_id: str = Query(default=None, description='技能唯一ID'),
+                   flow_id: UUID = Query(default=None, description='技能唯一ID'),
                    version_id: int = Query(default=None, description='需要设置的当前版本ID'),
                    Authorize: AuthJWT = Depends()):
     """
@@ -119,6 +121,7 @@ def change_version(*,
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
+    flow_id = flow_id.hex
     return FlowService.change_current_version(user, flow_id, version_id)
 
 
