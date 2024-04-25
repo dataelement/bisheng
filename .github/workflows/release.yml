@@ -83,7 +83,6 @@ jobs:
       - name: build lock
         run: |
           cd ./src/backend
-          pip install bisheng_langchain==$RELEASE_VERSION
           sed -i 's/^bisheng_langchain.*/bisheng_langchain = "'$RELEASE_VERSION'"/g' pyproject.toml
           poetry source add --priority=supplemental foo http://${{ secrets.NEXUS_PUBLIC }}:${{ secrets.NEXUS_PUBLIC_PASSWORD }}@${{ env.PY_NEXUS }}/repository/pypi-group/simple
           poetry lock
