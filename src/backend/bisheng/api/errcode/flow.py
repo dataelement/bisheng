@@ -9,7 +9,7 @@ class NotFoundVersionError(BaseErrorCode):
 
 class CurVersionDelError(BaseErrorCode):
     Code: int = 10501
-    Msg: str = '当前使用版本不能删除'
+    Msg: str = '当前正在使用版本无法删除'
 
 
 class VersionNameExistsError(BaseErrorCode):

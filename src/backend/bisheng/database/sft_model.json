@@ -1,0 +1,32 @@
+[
+  {
+    "model_name": "Baichuan2-7B-Chat"
+  },
+  {
+    "model_name": "Baichuan2-13B-Chat"
+  },
+  {
+    "model_name": "chatglm2-6b"
+  },
+  {
+    "model_name": "chatglm3-6b"
+  },
+  {
+    "model_name": "internlm-chat-7b-8k"
+  },
+  {
+    "model_name": "internlm-20b-chat"
+  },
+  {
+    "model_name": "Llama-2-7b-chat-hf"
+  },
+  {
+    "model_name": "Llama-2-13b-chat-hf"
+  },
+  {
+    "model_name": "Qwen-7B-Chat"
+  },
+  {
+    "model_name": "Qwen-13B-Chat"
+  }
+]

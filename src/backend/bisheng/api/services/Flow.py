@@ -1,6 +1,6 @@
 from typing import List
 
-from bisheng.api.errcode.flow import NoVersionError, CurVersionDelError, VersionNameExistsError, NotFoundFlowError, \
+from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, NotFoundFlowError, \
     FlowOnlineEditError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate
@@ -32,7 +32,7 @@ class FlowService:
         """
         version_info = FlowVersionDao.get_version_by_id(version_id)
         if not version_info:
-            return NoVersionError.return_resp()
+            return NotFoundVersionError.return_resp()
         if version_info.is_current == 1:
             return CurVersionDelError.return_resp()
 
@@ -54,7 +54,7 @@ class FlowService:
         # 切换版本
         version_info = FlowVersionDao.get_version_by_id(version_id)
         if not version_info:
-            return NoVersionError.return_resp()
+            return NotFoundVersionError.return_resp()
         if version_info.is_current == 1:
             return resp_200()
 
@@ -87,7 +87,7 @@ class FlowService:
 
         version_info = FlowVersionDao.get_version_by_id(version_id)
         if not version_info:
-            return NoVersionError.return_resp()
+            return NotFoundVersionError.return_resp()
 
         # 版本是当前版本, 且技能处于上线状态则不可编辑
         if version_info.is_current == 1:

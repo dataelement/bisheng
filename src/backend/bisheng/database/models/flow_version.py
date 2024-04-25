@@ -13,9 +13,10 @@ from bisheng.database.models.flow import Flow
 
 
 class FlowVersionBase(SQLModelSerializable):
-    id: int = Field(primary_key=True, unique=True)
-    flow_id: str = Field(index=True, description="所属的技能ID")
+    id: Optional[int] = Field(default=None, primary_key=True, unique=True)
+    flow_id: str = Field(index=True, max_length=32, description="所属的技能ID")
     name: str = Field(index=True, description="版本的名字")
+    data: Optional[Dict] = Field(default=None, description="版本的数据")
     description: Optional[str] = Field(index=False, description="版本的描述")
     user_id: Optional[int] = Field(index=True, description="创建者")
     is_current: Optional[int] = Field(default=0, description="是否为正在使用版本")
@@ -69,12 +70,13 @@ class FlowVersionDao(FlowVersion):
         """
         with session_getter() as session:
             session.add(version)
-
-            # 更新技能表里的data数据
-            update_flow = update(Flow).where(Flow.id == version.flow_id).values(data=version.data)
-            session.exec(update_flow)
-
             session.commit()
+            # 如果是当前版本，则更新技能表里的数据
+            if version.is_current == 1:
+                # 更新技能表里的data数据
+                update_flow = update(Flow).where(Flow.id == version.flow_id).values(data=version.data)
+                session.exec(update_flow)
+                session.commit()
             session.refresh(version)
             return version
 
@@ -115,10 +117,9 @@ class FlowVersionDao(FlowVersion):
         根据技能ID 获取所有的技能版本
         """
         with session_getter() as session:
-            statement = select(FlowVersion.id, FlowVersion.name, FlowVersion.description,
-                               FlowVersion.is_default, FlowVersion.is_current, FlowVersion.create_time,
-                               FlowVersion.update_time).where(
-                FlowVersion.flow_id == flow_id, FlowVersion.is_delete == 0)
+            statement = select(FlowVersion.id, FlowVersion.flow_id, FlowVersion.name, FlowVersion.description,
+                               FlowVersion.is_current, FlowVersion.create_time, FlowVersion.update_time).where(
+                FlowVersion.flow_id == flow_id, FlowVersion.is_delete == 0).order_by(FlowVersion.id.asc())
             ret = session.exec(statement)
 
             flows_partial = ret.mappings().all()

@@ -7,7 +7,6 @@ from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from bisheng.database.models.flow_version import FlowVersion
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
 from bisheng.database.models.user_role import UserRoleDao
 # if TYPE_CHECKING:
@@ -90,6 +89,7 @@ class FlowDao(FlowBase):
 
     @classmethod
     def create_flow(cls, flow_info: Flow) -> Flow:
+        from bisheng.database.models.flow_version import FlowVersion
         with session_getter() as session:
             session.add(flow_info)
             # 创建一个默认的版本
