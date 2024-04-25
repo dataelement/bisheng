@@ -2,11 +2,15 @@ import json
 from typing import List
 from uuid import UUID
 
+from bisheng.api.errcode.flow import FlowNotExistError, NotFoundFlowError, NotFoundVersionError
+from bisheng.api.services.Flow import FlowService
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import (access_check, build_flow_no_yield, get_L2_param_from_flow,
                                remove_api_keys)
-from bisheng.api.v1.schemas import FlowListCreate, FlowListRead, UnifiedResponseModel, resp_200
+from bisheng.api.v1.schemas import FlowListCreate, FlowListRead, UnifiedResponseModel, resp_200, FlowVersionCreate
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate
+from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate, FlowDao
+from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User
 from bisheng.settings import settings
@@ -33,12 +37,72 @@ def create_flow(*, flow: FlowCreate, Authorize: AuthJWT = Depends()):
                                    Flow.user_id == payload.get('user_id'))).first():
             raise HTTPException(status_code=500, detail='技能名重复')
     flow.user_id = payload.get('user_id')
-    with session_getter() as session:
-        db_flow = Flow.model_validate(flow)
-        session.add(db_flow)
-        session.commit()
-        session.refresh(db_flow)
+    db_flow = Flow.model_validate(flow)
+    # 创建新的技能
+    db_flow = FlowDao.create_flow(db_flow)
     return resp_200(data=FlowRead.model_validate(db_flow))
+
+
+@router.get('/versions', status_code=200)
+def get_versions(*,
+                 flow_id: str = Query(default=None, description='根据flow_id查找所有的版本信息'),
+                 Authorize: AuthJWT = Depends()):
+    """
+    获取技能对应的版本列表
+    """
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+    return FlowService.get_version_list_by_flow(user, flow_id)
+
+
+@router.post('/versions', status_code=200)
+def create_versions(*,
+                    flow_id: str = Query(default=None, description='根据flow_id创建新的版本'),
+                    flow_version: FlowVersionCreate,
+                    Authorize: AuthJWT = Depends()):
+    """
+    创建新的技能版本
+    """
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+    return FlowService.get_version_list_by_flow(user, flow_id, flow_version)
+
+
+@router.put('/versions/{version_id}', status_code=200)
+def update_versions(*,
+                    version_id: int = Query(default=None, description='根据version_id更新版本详细信息'),
+                    flow_version: FlowVersionCreate,
+                    Authorize: AuthJWT = Depends()):
+    """
+    更新版本
+    """
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+    return FlowService.update_version_info(user, version_id, flow_version)
+
+
+@router.delete('/versions/{version_id}', status_code=200)
+def delete_versions(*,
+                    version_id: int = Query(default=None, description='根据version_id删除版本详细信息'),
+                    Authorize: AuthJWT = Depends()):
+    """
+    删除版本
+    """
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+    return FlowService.delete_version(user, version_id)
+
+
+@router.get('/versions/{version_id}', status_code=200)
+def get_version_info(*,
+                     version_id: int = Query(default=None, description='根据version_id查找版本详细信息'),
+                     Authorize: AuthJWT = Depends()):
+    """
+    获取版本信息
+    """
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+    return FlowService.get_version_info(user, version_id)
 
 
 @router.get('/', status_code=200)

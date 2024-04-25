@@ -1,0 +1,181 @@
+# Path: src/backend/bisheng/database/models/flow.py
+
+from datetime import datetime
+from typing import Dict, List, Optional
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
+# if TYPE_CHECKING:
+from pydantic import validator
+from sqlmodel import JSON, Field, select, update, text, Column, DateTime
+
+from bisheng.database.models.flow import Flow
+
+
+class FlowVersionBase(SQLModelSerializable):
+    id: int = Field(primary_key=True, unique=True)
+    flow_id: str = Field(index=True, description="所属的技能ID")
+    name: str = Field(index=True, description="版本的名字")
+    description: Optional[str] = Field(index=False, description="版本的描述")
+    user_id: Optional[int] = Field(index=True, description="创建者")
+    is_current: Optional[int] = Field(default=0, description="是否为正在使用版本")
+    is_delete: Optional[int] = Field(default=0, description="是否删除")
+    create_time: Optional[datetime] = Field(sa_column=Column(
+        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+
+    @validator('data')
+    def validate_json(v):
+        # dict_keys(['description', 'name', 'id', 'data'])
+        if not v:
+            return v
+        if not isinstance(v, dict):
+            raise ValueError('Flow must be a valid JSON')
+
+        # data must contain nodes and edges
+        if 'nodes' not in v.keys():
+            raise ValueError('Flow must have nodes')
+        if 'edges' not in v.keys():
+            raise ValueError('Flow must have edges')
+        return v
+
+
+class FlowVersion(FlowVersionBase, table=True):
+    data: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description="版本的数据")
+
+
+class FlowVersionRead(FlowVersionBase):
+    pass
+
+
+class FlowVersionDao(FlowVersion):
+
+    @classmethod
+    def create_version(cls, version: FlowVersion) -> FlowVersion:
+        """
+        创建新版本
+        """
+        with session_getter() as session:
+            session.add(version)
+            session.commit()
+            session.refresh(version)
+            return version
+
+    @classmethod
+    def update_version(cls, version: FlowVersion) -> FlowVersion:
+        """
+        更新版本信息，同时更新技能表里的data数据
+        """
+        with session_getter() as session:
+            session.add(version)
+
+            # 更新技能表里的data数据
+            update_flow = update(Flow).where(Flow.id == version.flow_id).values(data=version.data)
+            session.exec(update_flow)
+
+            session.commit()
+            session.refresh(version)
+            return version
+
+    @classmethod
+    def get_version_by_name(cls, flow_id: str, name: str) -> Optional[FlowVersion]:
+        """
+        根据技能ID和版本名字获取版本的信息
+        """
+        with session_getter() as session:
+            statement = select(FlowVersion).where(FlowVersion.flow_id == flow_id,
+                                                  FlowVersion.name == name,
+                                                  FlowVersion.is_delete == 0)
+            return session.exec(statement).first()
+
+    @classmethod
+    def get_version_by_id(cls, version_id: int) -> Optional[FlowVersion]:
+        """
+        根据版本ID获取技能版本的信息
+        """
+        with session_getter() as session:
+            statement = select(FlowVersion).where(FlowVersion.id == version_id, FlowVersion.is_delete == 0)
+            return session.exec(statement).first()
+
+    @classmethod
+    def get_version_by_flow(cls, flow_id: str) -> Optional[FlowVersion]:
+        """
+        根据技能ID获取当前技能版本的信息
+        """
+        with session_getter() as session:
+            statement = select(FlowVersion).where(FlowVersion.flow_id == flow_id,
+                                                  FlowVersion.is_current == 1,
+                                                  FlowVersion.is_delete == 0)
+            return session.exec(statement).first()
+
+    @classmethod
+    def get_list_by_flow(cls, flow_id: str) -> List[FlowVersionRead]:
+        """
+        根据技能ID 获取所有的技能版本
+        """
+        with session_getter() as session:
+            statement = select(FlowVersion.id, FlowVersion.name, FlowVersion.description,
+                               FlowVersion.is_default, FlowVersion.is_current, FlowVersion.create_time,
+                               FlowVersion.update_time).where(
+                FlowVersion.flow_id == flow_id, FlowVersion.is_delete == 0)
+            ret = session.exec(statement)
+
+            flows_partial = ret.mappings().all()
+            return [FlowVersionRead.model_validate(f) for f in flows_partial]
+
+    @classmethod
+    def get_list_by_flow_ids(cls, flow_ids: List[str]) -> List[FlowVersion]:
+        """
+        根据技能ID列表 获取所有的技能的当前版本信息
+        """
+        with session_getter() as session:
+            statement = select(FlowVersion).where(FlowVersion.flow_id.in_(flow_ids),
+                                                  FlowVersion.is_current == 1,
+                                                  FlowVersion.is_delete == 0)
+            return session.exec(statement).all()
+
+    @classmethod
+    def delete_flow_version(cls, version_id: int) -> None:
+        """
+        删除某个版本，正在使用的版本不能删除
+        """
+        with session_getter() as session:
+            update_statement = update(FlowVersion).where(
+                FlowVersion.id == version_id, FlowVersion.is_current == 0).values(is_delete=1)
+            session.exec(update_statement)
+            session.commit()
+
+    @classmethod
+    def change_current_version(cls, flow_id: str, new_version_info: FlowVersion) -> bool:
+        """
+        修改技能的当前版本, 判断当前版本是否存在
+        同时修改技能表里的data数据
+        """
+        with session_getter() as session:
+            # 设置当前版本
+            set_statement = update(FlowVersion).where(
+                FlowVersion.flow_id == flow_id,
+                FlowVersion.id == new_version_info.id,
+                FlowVersion.is_delete == 0,
+            ).values(is_current=1)
+            update_ret = session.exec(set_statement)
+            if update_ret.rowcount == 0:
+                # 未更新成功则不取消之前设置的当前版本
+                return False
+
+            # 更新技能表里的data数据
+            update_flow = update(Flow).where(Flow.id == flow_id).values(data=new_version_info.data)
+            session.exec(update_flow)
+            session.commit()
+
+            # 把其他版本修改为非当前版本
+            statement = update(FlowVersion).where(
+                FlowVersion.flow_id == flow_id,
+                FlowVersion.id != new_version_info.id,
+                FlowVersion.is_current == 1).values(
+                is_current=0)
+            session.exec(statement)
+            session.commit()
+
+            return True

@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from bisheng.database.models.flow_version import FlowVersion
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
 from bisheng.database.models.user_role import UserRoleDao
 # if TYPE_CHECKING:
@@ -86,6 +87,17 @@ class FlowUpdate(SQLModelSerializable):
 
 
 class FlowDao(FlowBase):
+
+    @classmethod
+    def create_flow(cls, flow_info: Flow) -> Flow:
+        with session_getter() as session:
+            session.add(flow_info)
+            # 创建一个默认的版本
+            flow_version = FlowVersion(name="v0", is_current=1, flow_id=flow_info.id.hex, user_id=flow_info.user_id)
+            session.add(flow_version)
+            session.commit()
+            session.refresh(flow_info)
+            return flow_info
 
     @classmethod
     def get_flow_by_id(cls, flow_id: str) -> Optional[Flow]:

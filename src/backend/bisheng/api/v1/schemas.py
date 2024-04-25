@@ -265,3 +265,9 @@ class AssistantInfo(AssistantBase):
     tool_list: List[GptsToolsRead] = Field(default=[], description='助手的工具ID列表')
     flow_list: List[FlowRead] = Field(default=[], description='助手的技能ID列表')
     knowledge_list: List[KnowledgeRead] = Field(default=[], description='知识库ID列表')
+
+
+class FlowVersionCreate(BaseModel):
+    name: str = Field(description="版本的名字")
+    description: Optional[str] = Field(description="版本的描述")
+    data: Dict = Field(description='技能版本的节点数据数据')
