@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
-from settings import settings
+from bisheng.settings import settings
 from loguru import logger
 
 
