@@ -327,6 +327,7 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_di
             if settings.get_from_db('file_access'):
                 # need to verify file access
                 access_url = settings.get_from_db('file_access') + f'?username={user_name}'
+                logger.info('file_access_filter url={}', access_url)
                 vectorstore = VectorStoreFilterRetriever(vectorstore=params['retriever'],
                                                          access_url=access_url)
             else:

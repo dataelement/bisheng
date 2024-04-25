@@ -57,3 +57,46 @@ mysql_session()
 
 # if __name__ == '__main__':
 #     web.run_app(app, host='127.0.0.1', port=8080)
+
+from bisheng import CustomComponent
+from langchain.chains.base import Chain
+from typing import List, Optional, Dict, Any
+from langchain.callbacks.manager import (
+    AsyncCallbackManagerForChainRun,
+    CallbackManagerForChainRun,
+)
+
+
+class InputChain(CustomComponent):
+    documentation: str = 'http://docs.bisheng.org/components/custom'
+
+    class Input(Chain):
+        output_key: str = "text"  #: :meta private:
+
+        @property
+        def input_keys(self) -> List[str]:
+            """需要接受的key
+            """
+            return ['question', 'dept']
+
+        def _call(
+            self,
+            inputs: Dict[str, Any],
+            run_manager: Optional[CallbackManagerForChainRun] = None,
+        ) -> Dict[str, str]:
+            print(inputs)
+            return {"text": "ok"}
+
+        async def _acall(
+            self,
+            inputs: Dict[str, Any],
+            run_manager: Optional[AsyncCallbackManagerForChainRun] = None,
+        ) -> Dict[str, str]:
+            print(inputs)
+            return {"text": "ok"}
+
+    def build_config(self):
+        return {'noNeed': {'display_name': 'Parameter'}}
+
+    def build(self, noNeed: str) -> Input:
+        return InputChain().Input()
