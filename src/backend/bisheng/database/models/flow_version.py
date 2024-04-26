@@ -112,6 +112,15 @@ class FlowVersionDao(FlowVersion):
             return session.exec(statement).first()
 
     @classmethod
+    def get_list_by_ids(cls, ids: List[int]) -> List[FlowVersion]:
+        """
+        根据ID列表获取所有版本详情
+        """
+        with session_getter() as session:
+            statement = select(FlowVersion).where(FlowVersion.id.in_(ids))
+            return session.exec(statement).all()
+
+    @classmethod
     def get_list_by_flow(cls, flow_id: str) -> List[FlowVersionRead]:
         """
         根据技能ID 获取所有的技能版本

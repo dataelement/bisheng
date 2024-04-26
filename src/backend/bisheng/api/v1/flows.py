@@ -6,17 +6,15 @@ from bisheng.api.services.Flow import FlowService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import (access_check, build_flow_no_yield, get_L2_param_from_flow,
                                remove_api_keys)
-from bisheng.api.v1.schemas import FlowListCreate, FlowListRead, UnifiedResponseModel, resp_200, FlowVersionCreate
+from bisheng.api.v1.schemas import FlowListCreate, FlowListRead, UnifiedResponseModel, resp_200, FlowVersionCreate, \
+    FlowCompareReq
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate, FlowDao
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
-from bisheng.database.models.user import User
+from bisheng.database.models.role_access import AccessType
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import func, or_
 from sqlmodel import select
 
 # build router
@@ -128,8 +126,8 @@ def change_version(*,
 @router.get('/', status_code=200)
 def read_flows(*,
                name: str = Query(default=None, description='根据name查找数据库，包含描述的模糊搜索'),
-               page_size: int = Query(default=10, description='根据pagesize查找数据库'),
-               page_num: int = Query(default=1, description='根据pagenum查找数据库'),
+               page_size: int = Query(default=10, description='每页数量'),
+               page_num: int = Query(default=1, description='页数'),
                status: int = None,
                Authorize: AuthJWT = Depends()):
     """Read all flows."""
@@ -256,3 +254,12 @@ async def download_file():
     """Download all flows as a file."""
     flows = read_flows()
     return resp_200(FlowListRead(flows=flows))
+
+
+@router.post('/compare', response_model=UnifiedResponseModel, status_code=200)
+async def compare_flow_node(*, item: FlowCompareReq, Authorize: AuthJWT = Depends()):
+    """ 技能多版本对比 """
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+    return FlowService.compare_flow_node(user, item)

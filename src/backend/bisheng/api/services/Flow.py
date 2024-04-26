@@ -6,7 +6,7 @@ from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, V
     NotFoundFlowError, \
     FlowOnlineEditError
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.role_access import RoleAccessDao, AccessType
@@ -164,3 +164,26 @@ class FlowService:
             "data": res,
             "total": total
         })
+
+    @classmethod
+    def compare_flow_node(cls, user: UserPayload, req: FlowCompareReq) -> UnifiedResponseModel[Dict]:
+        """
+        比较两个版本中某个节点的 输出结果
+        """
+        if req.question_list is None or len(req.question_list) == 0:
+            return resp_200(data={})
+        if req.version_list is None or len(req.version_list) == 0:
+            return resp_200(data={})
+        if req.node_id is None:
+            return resp_200(data={})
+
+        # 获取版本数据
+        version_infos = FlowVersionDao.get_list_by_ids(req.version_list)
+        # todo: 运行多个技能获取对应节点的执行结果
+        res = []
+        for one in req.question_list:
+            tmp = {}
+            for version in version_infos:
+                tmp[version.id] = f"答案：{one}"
+            res.append(tmp)
+        return resp_200(data=res)

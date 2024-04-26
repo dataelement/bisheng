@@ -271,3 +271,11 @@ class FlowVersionCreate(BaseModel):
     name: Optional[str] = Field(default=None, description="版本的名字")
     description: Optional[str] = Field(default=None, description="版本的描述")
     data: Optional[Dict] = Field(default=None, description='技能版本的节点数据数据')
+
+
+class FlowCompareReq(BaseModel):
+    inputs: Any = Field(default=None, description='技能运行所需要的输入')
+    question_list: List[str] = Field(default=[], description='测试case列表')
+    version_list: List[int] = Field(default=[], description='对比版本ID列表')
+    node_id: str = Field(default=None, description='需要对比的节点唯一ID')
+    thread_num: Optional[int] = Field(default=1, description='对比线程数')
