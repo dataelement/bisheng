@@ -366,7 +366,7 @@ class AssistantService(AssistantUtils):
     @classmethod
     def get_auto_flow_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[Flow]:
         # 自动选择技能, 挑选前50个技能用来做自动选择
-        all_flow = FlowDao.get_user_access_online_flows(assistant.user_id, 50)
+        all_flow = FlowDao.get_user_access_online_flows(assistant.user_id, 1, 50)
         flow_dict = {}
         flow_list = []
         for one in all_flow:

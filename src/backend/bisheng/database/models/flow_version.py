@@ -119,22 +119,21 @@ class FlowVersionDao(FlowVersion):
         with session_getter() as session:
             statement = select(FlowVersion.id, FlowVersion.flow_id, FlowVersion.name, FlowVersion.description,
                                FlowVersion.is_current, FlowVersion.create_time, FlowVersion.update_time).where(
-                FlowVersion.flow_id == flow_id, FlowVersion.is_delete == 0).order_by(FlowVersion.id.asc())
-            ret = session.exec(statement)
-
-            flows_partial = ret.mappings().all()
-            return [FlowVersionRead.model_validate(f) for f in flows_partial]
+                FlowVersion.flow_id == flow_id, FlowVersion.is_delete == 0).order_by(FlowVersion.id.desc())
+            ret = session.exec(statement).mappings().all()
+            return [FlowVersionRead.model_validate(f) for f in ret]
 
     @classmethod
-    def get_list_by_flow_ids(cls, flow_ids: List[str]) -> List[FlowVersion]:
+    def get_list_by_flow_ids(cls, flow_ids: List[str]) -> List[FlowVersionRead]:
         """
-        根据技能ID列表 获取所有的技能的当前版本信息
+        根据技能ID列表 获取所有的技能的所有版本信息
         """
         with session_getter() as session:
-            statement = select(FlowVersion).where(FlowVersion.flow_id.in_(flow_ids),
-                                                  FlowVersion.is_current == 1,
-                                                  FlowVersion.is_delete == 0)
-            return session.exec(statement).all()
+            statement = select(FlowVersion.id, FlowVersion.flow_id, FlowVersion.name, FlowVersion.description,
+                               FlowVersion.is_current, FlowVersion.create_time, FlowVersion.update_time).where(
+                FlowVersion.flow_id.in_(flow_ids), FlowVersion.is_delete == 0).order_by(FlowVersion.id.desc())
+            ret = session.exec(statement).mappings().all()
+            return [FlowVersionRead.model_validate(f) for f in ret]
 
     @classmethod
     def delete_flow_version(cls, version_id: int) -> None:

@@ -128,62 +128,16 @@ def change_version(*,
 @router.get('/', status_code=200)
 def read_flows(*,
                name: str = Query(default=None, description='根据name查找数据库，包含描述的模糊搜索'),
-               page_size: int = Query(default=None, description='根据pagesize查找数据库'),
-               page_num: int = Query(default=None, description='根据pagenum查找数据库'),
+               page_size: int = Query(default=10, description='根据pagesize查找数据库'),
+               page_num: int = Query(default=1, description='根据pagenum查找数据库'),
                status: int = None,
                Authorize: AuthJWT = Depends()):
     """Read all flows."""
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
     try:
-        sql = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
-                     Flow.update_time, Flow.description, Flow.guide_word)
-        count_sql = select(func.count(Flow.id))
-        if 'admin' != payload.get('role'):
-            role_access = RoleAccessDao.get_role_access(payload.get('role'), AccessType.FLOW)
-
-            if role_access:
-                flow_ids = [access.third_id for access in role_access]
-                sql = sql.where(or_(Flow.user_id == payload.get('user_id'), Flow.id.in_(flow_ids)))
-                count_sql = count_sql.where(
-                    or_(Flow.user_id == payload.get('user_id'), Flow.id.in_(flow_ids)))
-            else:
-                sql = sql.where(Flow.user_id == payload.get('user_id'))
-                count_sql = count_sql.where(Flow.user_id == payload.get('user_id'))
-        if name:
-            sql = sql.where(or_(Flow.name.like(f'%{name}%'), Flow.description.like(f'%{name}%')))
-            count_sql = count_sql.where(or_(Flow.name.like(f'%{name}%'), Flow.description.like(f'%{name}%')))
-        if status:
-            sql = sql.where(Flow.status == status)
-            count_sql = count_sql.where(Flow.status == status)
-        # get total count
-        with session_getter() as session:
-            total_count = session.scalar(count_sql)
-        sql = sql.order_by(Flow.update_time.desc())
-        if page_num and page_size:
-            sql = sql.offset((page_num - 1) * page_size).limit(page_size)
-        # get flow id
-        with session_getter() as session:
-            flows = session.exec(sql)
-        flows_partial = flows.mappings().all()
-        flows = [Flow.model_validate(f) for f in flows_partial]
-        # # get flow data
-        # if flows:
-        #     flows = session.exec(
-        #         select(Flow).where(Flow.id.in_(flows)).order_by(Flow.update_time.desc())).all()
-        res = [jsonable_encoder(flow) for flow in flows]
-        if flows:
-            db_user_ids = {flow.user_id for flow in flows}
-            with session_getter() as session:
-                db_user = session.exec(select(User).where(User.user_id.in_(db_user_ids))).all()
-            userMap = {user.user_id: user.user_name for user in db_user}
-            for r in res:
-                r['user_name'] = userMap[r['user_id']]
-                r['write'] = True if 'admin' == payload.get('role') or r.get(
-                    'user_id') == payload.get('user_id') else False
-
-        return resp_200(data={'data': res, 'total': total_count})
-
+        return FlowService.get_all_flows(user, name, status, page_num, page_size)
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
