@@ -475,7 +475,7 @@
     @apply fixed left-0 top-0 h-screen w-screen
   }
   .header-notifications {
-    @apply absolute right-[3px] h-1.5 w-1.5 rounded-full bg-destructive
+    @apply absolute right-3 top-2 h-1.5 w-1.5 rounded-full bg-destructive
   }
 
   .input-component-div {

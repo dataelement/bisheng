@@ -185,8 +185,32 @@
 
 .build-tab a.active {
 	color: #024FE5;
+	background: #fff;
+	box-shadow: 1px 1px 2px 0 #e9e9e9
+		/* background: #F4F5F8;
+	padding: 10px 40px; */
+}
+
+.build-tab a.active>svg {
+	color: #024FE5 !important;
+}
+
+.build-tab a {
+	color: #666;
 	/* background: #F4F5F8;
 	padding: 10px 40px; */
+}
+
+.build-tab a>svg {
+	color: #666;
+}
+
+.build-tab a:hover {
+	color: #024FE5;
+}
+
+.build-tab a:hover>svg {
+	color: #024FE5;
 }
 
 .bs-chat-bg {

@@ -22,6 +22,7 @@ interface IProps<T> {
   checked?: boolean,
   user?: string,
   isAdmin?: boolean,
+  headSelecter?: React.ReactNode,
   footer?: React.ReactNode,
   icon?: any,
   onClick?: () => void,
@@ -74,6 +75,7 @@ export default function CardComponent<T>({
   isAdmin,
   description,
   footer = null,
+  headSelecter = null,
   onClick,
   onSwitchClick,
   onDelete,
@@ -149,7 +151,16 @@ export default function CardComponent<T>({
         <TitleIconBg id={id} >
           {type === 'skill' ? <SkillIcon /> : <AssistantIcon />}
         </TitleIconBg>
-        <Switch checked={_checked} onCheckedChange={(b) => edit && handleCheckedChange(b)} onClick={e => { e.stopPropagation(); onSwitchClick?.() }}></Switch>
+        <div className="flex gap-1 items-center">
+          {headSelecter}
+          <Switch
+            checked={_checked}
+            className="w-12"
+            texts={['上线', '下线']}
+            onCheckedChange={(b) => edit && handleCheckedChange(b)}
+            onClick={e => { e.stopPropagation(); onSwitchClick?.() }}
+          ></Switch>
+        </div>
       </div>
       <CardTitle className="truncate-doubleline leading-5">{title}</CardTitle>
     </CardHeader>

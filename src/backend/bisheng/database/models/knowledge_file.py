@@ -12,7 +12,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     knowledge_id: int = Field(index=True)
     file_name: str = Field(index=True)
     md5: Optional[str] = Field(index=False)
-    status: Optional[int] = Field(index=False)
+    status: Optional[int] = Field(index=False, description="1: 解析中；2: 解析成功；3: 解析失败")
     object_name: Optional[str] = Field(index=False)
     extra_meta: Optional[str] = Field(index=False)
     remark: Optional[str] = Field(sa_column=Column(String(length=512)))

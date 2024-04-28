@@ -16,6 +16,7 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import { generateUUID } from "../../utils";
+import CardSelectVersion from "./components/CardSelectVersion";
 import CreateTemp from "./components/CreateTemp";
 
 export default function Skills() {
@@ -33,6 +34,7 @@ export default function Skills() {
 
     // 上下线
     const handleCheckedChange = (checked, data) => {
+        // data.versionId todo
         return captureAndAlertRequestErrorHoc(updataOnlineState(data.id, data, checked).then(res => {
             if (res) {
                 refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
@@ -101,6 +103,7 @@ export default function Skills() {
                         {
                             dataSource.map((item, i) => (
                                 <CardComponent<FlowType>
+                                    key={item.id}
                                     data={item}
                                     id={item.id}
                                     type='skill'
@@ -110,12 +113,18 @@ export default function Skills() {
                                     description={item.description}
                                     checked={item.status === 2}
                                     user={item.user_name}
-                                    onClick={() => item.status !== 2 && handleSetting(item)}
+                                    onClick={() => handleSetting(item)}
                                     onSwitchClick={() => !item.write && item.status !== 2 && message({ title: '提示', description: '请联系管理员上线技能', variant: 'warning' })}
                                     onAddTemp={toggleTempModal}
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={handleDelete}
                                     onSetting={handleSetting}
+                                    headSelecter={(
+                                        <CardSelectVersion
+                                            showPop={item.status !== 2}
+                                            data={item}
+                                        ></CardSelectVersion>
+                                    )}
                                 ></CardComponent>
                             ))
                         }

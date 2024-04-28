@@ -1,7 +1,7 @@
 from bisheng.template.field.base import TemplateField
 from bisheng.template.template.base import Template
+from langchain.pydantic_v1 import BaseModel
 from langchain_core.language_models import BaseLanguageModel
-from openai import BaseModel
 
 
 def set_flow_knowledge_id(graph_data: dict, knowledge_id: int):

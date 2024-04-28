@@ -81,27 +81,27 @@ class LLMFrontendNode(FrontendNode):
     @staticmethod
     def format_azure_field(field: TemplateField):
         if field.name == 'model_name':
-            field.show = True  # Azure uses deployment_name instead of model_name.
+            field.show = False  # Azure uses deployment_name instead of model_name.
+        elif field.name == 'openai_api_base':
+            # openai < 1.0.0
+            field.show = False
         elif field.name == 'openai_api_type':
             field.show = False
-            field.password = False
-            field.value = 'azure'
         elif field.name == 'openai_api_version':
             field.show = True
-            field.advanced = True
             field.password = False
-        elif field.name == 'openai_api_base':
+        elif field.name == 'azure_endpoint':
             field.show = True
-            field.advanced = True
         elif field.name == 'openai_api_key':
             field.show = True
-            field.advanced = True
+            field.advanced = False
         elif field.name == 'deployment_name':
             field.show = True
-            field.advanced = True
             field.value = 'chatgpt'
         elif field.name == 'azure_ad_token_provider':
             field.show = False
+        elif field.name == 'openai_proxy':
+            field.advanced = True
 
     @staticmethod
     def format_contribute_field(field: TemplateField):

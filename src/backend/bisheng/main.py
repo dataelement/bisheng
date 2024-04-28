@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
+from bisheng.settings import settings
 from loguru import logger
 
 
@@ -128,7 +129,7 @@ def setup_app(static_files_dir: Optional[Path] = None) -> FastAPI:
     return app
 
 
-configure(log_level='DEBUG', log_file='./data/bisheng.log')
+configure(settings.logger_conf)
 
 app = create_app()
 

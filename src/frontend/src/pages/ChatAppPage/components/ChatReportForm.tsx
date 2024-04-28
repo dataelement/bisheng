@@ -1,5 +1,5 @@
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { useContext, useEffect, useRef, useState } from "react";
+import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import InputComponent from "../../../components/inputComponent";
 import InputFileComponent from "../../../components/inputFileComponent";
@@ -12,14 +12,23 @@ import { Variable, VariableType, getVariablesApi } from "../../../controllers/AP
  * @description
  * 表单项数据由组件的参数信息和单独接口获取的必填信息及排序信息而来。
  */
-export default function ChatReportForm({ flow, onStart }) {
+const ChatReportForm = forwardRef(({ type = 'chat', flow, onStart }, ref) => {
     const { setErrorData } = useContext(alertContext);
     const { t } = useTranslation()
+
+    useImperativeHandle(ref, () => ({
+        submit: () => {
+            handleStart()
+        }
+    }));
 
     // 从 api中获取
     const [items, setItems] = useState<Variable[]>([])
     useEffect(() => {
-        getVariablesApi({ flow_id: flow.id }).then(
+        // chat -》L1； diff -> 对比测试
+        type === 'chat' ? getVariablesApi({ flow_id: flow.flow_id || flow.id }).then(
+            res => setItems(res)
+        ) : getVariablesApi({ flow_id: flow.flow_id || flow.id }).then(
             res => setItems(res)
         )
     }, [])
@@ -97,6 +106,8 @@ export default function ChatReportForm({ flow, onStart }) {
             </div>
             )}
         </div>
-        <Button size="sm" onClick={handleStart}>{t('report.start')}</Button>
+        {type === 'chat' && <Button size="sm" onClick={handleStart}>{t('report.start')}</Button>}
     </div>
-};
+});
+
+export default ChatReportForm

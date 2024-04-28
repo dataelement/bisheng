@@ -12,7 +12,7 @@ from bisheng.database.models.user_role import UserRoleDao
 # if TYPE_CHECKING:
 from pydantic import validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
-from sqlmodel import JSON, Field, select
+from sqlmodel import JSON, Field, select, update
 
 
 class FlowStatus(Enum):
@@ -88,6 +88,29 @@ class FlowUpdate(SQLModelSerializable):
 class FlowDao(FlowBase):
 
     @classmethod
+    def create_flow(cls, flow_info: Flow) -> Flow:
+        from bisheng.database.models.flow_version import FlowVersion
+        with session_getter() as session:
+            session.add(flow_info)
+            # 创建一个默认的版本
+            flow_version = FlowVersion(name="v0", is_current=1, flow_id=flow_info.id.hex, user_id=flow_info.user_id)
+            session.add(flow_version)
+            session.commit()
+            session.refresh(flow_info)
+            return flow_info
+
+    @classmethod
+    def delete_flow(cls, flow_info: Flow) -> Flow:
+        from bisheng.database.models.flow_version import FlowVersion
+        with session_getter() as session:
+            session.delete(flow_info)
+            # 删除对应的版本信息
+            update_statement = update(FlowVersion).where(FlowVersion.flow_id == flow_info.id.hex).values(is_delete=1)
+            session.exec(update_statement)
+            session.commit()
+            return flow_info
+
+    @classmethod
     def get_flow_by_id(cls, flow_id: str) -> Optional[Flow]:
         with session_getter() as session:
             statement = select(Flow).where(Flow.id == UUID(flow_id))
@@ -139,25 +162,42 @@ class FlowDao(FlowBase):
 
     @classmethod
     def get_flows(cls, user_id: Optional[int], extra_ids: Union[List[str], str], name: str,
-                  status: int, limit: int = 0) -> List[Flow]:
+                  status: Optional[int] = None, page: int = 0, limit: int = 0) -> List[Flow]:
         with session_getter() as session:
             # data 数据量太大，对mysql 有影响
             statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
                                Flow.update_time, Flow.description,
-                               Flow.guide_word).where(Flow.status == status)
+                               Flow.guide_word)
             if extra_ids and isinstance(extra_ids, List):
                 statement = statement.where(or_(Flow.id.in_(extra_ids), Flow.user_id == user_id))
             elif not extra_ids:
                 statement = statement.where(Flow.user_id == user_id)
-
             if name:
-                statement = statement.where(Flow.name.like(f'%{name}%'))
+                statement = statement.where(or_(Flow.name.like(f'%{name}%'), Flow.description.like(f'%{name}%')))
+            if status is not None:
+                statement = statement.where(Flow.status == status)
             statement = statement.order_by(Flow.update_time.desc())
-            if limit > 0:
-                statement = statement.limit(limit)
+            if page > 0 and limit > 0:
+                statement = statement.offset((page - 1) * limit).limit(limit)
             flows = session.exec(statement)
             flows_partial = flows.mappings().all()
             return [Flow.model_validate(f) for f in flows_partial]
+
+    @classmethod
+    def count_flows(cls, user_id: Optional[int], extra_ids: Union[List[str], str], name: str,
+                    status: Optional[int] = None) -> int:
+        with session_getter() as session:
+            count_statement = session.query(func.count(Flow.id))
+            if extra_ids and isinstance(extra_ids, List):
+                count_statement = count_statement.filter(or_(Flow.id.in_(extra_ids), Flow.user_id == user_id))
+            elif not extra_ids:
+                count_statement = count_statement.filter(Flow.user_id == user_id)
+            if name:
+                count_statement = count_statement.filter(or_(Flow.name.like(f'%{name}%'),
+                                                             Flow.description.like(f'%{name}%')))
+            if status is not None:
+                count_statement = count_statement.filter(Flow.status == status)
+            return count_statement.scalar()
 
     @classmethod
     def get_all_online_flows(cls):
@@ -169,7 +209,7 @@ class FlowDao(FlowBase):
             return [Flow.model_validate(f) for f in result]
 
     @classmethod
-    def get_user_access_online_flows(cls, user_id: int, limit: int = 0) -> List[Flow]:
+    def get_user_access_online_flows(cls, user_id: int, page: int = 0, limit: int = 0) -> List[Flow]:
         user_role = UserRoleDao.get_user_roles(user_id)
         flow_id_extra = []
         if user_role:
@@ -181,4 +221,4 @@ class FlowDao(FlowBase):
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.FLOW)
                 if role_access:
                     flow_id_extra = [access.third_id for access in role_access]
-        return FlowDao.get_flows(user_id, flow_id_extra, '', FlowStatus.ONLINE.value, limit=limit)
+        return FlowDao.get_flows(user_id, flow_id_extra, '', FlowStatus.ONLINE.value, page=page, limit=limit)
