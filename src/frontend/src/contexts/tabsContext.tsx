@@ -3,7 +3,7 @@ import { ReactNode, createContext, useContext, useState } from "react";
 import { addEdge } from "reactflow";
 import { updateFlowApi } from "../controllers/API/flow";
 import { APIClassType, APITemplateType } from "../types/api";
-import { FlowType, NodeType } from "../types/flow";
+import { FlowType, FlowVersionItem, NodeType } from "../types/flow";
 import { TabsContextType, TabsState } from "../types/tabs";
 import { generateUUID, updateTemplate } from "../utils";
 import { alertContext } from "./alertContext";
@@ -28,6 +28,8 @@ const TabsContextInitialValue: TabsContextType = {
     selection: { nodes: any; edges: any },
     position: { x: number; y: number; paneX?: number; paneY?: number }
   ) => { },
+  version: null,
+  setVersion: (version: FlowVersionItem | null) => ""
 };
 
 export const TabsContext = createContext<TabsContextType>(
@@ -36,6 +38,7 @@ export const TabsContext = createContext<TabsContextType>(
 
 export function TabsProvider({ children }: { children: ReactNode }) {
   const [flow, setFlow] = useState<FlowType>(null);
+  const [version, setVersion] = useState<FlowVersionItem | null>(null);
   // flowid: formKeysData
   const [tabsState, setTabsState] = useState<TabsState>({});
   const [lastCopiedSelection, setLastCopiedSelection] = useState(null);
@@ -313,7 +316,9 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         getNodeId,
         tabsState,
         setTabsState,
-        paste
+        paste,
+        version,
+        setVersion
       }}
     >
       {children}

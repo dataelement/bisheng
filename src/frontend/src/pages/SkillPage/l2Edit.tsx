@@ -108,6 +108,8 @@ export default function l2Edit() {
         const name = nameRef.current.value
         const description = descRef.current.value
         const guideWords = guideRef.current.value
+        // 上线技能直接跳转L3
+        if (flow.status === 2) return navigate('/flow/' + id, { replace: true })
         // 高级配置信息有误直接跳转L3
         if (isParamError(name, description)) return navigate('/flow/' + id, { replace: true })
         // 保存在跳
