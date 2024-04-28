@@ -12,7 +12,7 @@ from bisheng.database.models.user_role import UserRoleDao
 # if TYPE_CHECKING:
 from pydantic import validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
-from sqlmodel import JSON, Field, select
+from sqlmodel import JSON, Field, select, update
 
 
 class FlowStatus(Enum):
@@ -97,6 +97,17 @@ class FlowDao(FlowBase):
             session.add(flow_version)
             session.commit()
             session.refresh(flow_info)
+            return flow_info
+
+    @classmethod
+    def delete_flow(cls, flow_info: Flow) -> Flow:
+        from bisheng.database.models.flow_version import FlowVersion
+        with session_getter() as session:
+            session.delete(flow_info)
+            # 删除对应的版本信息
+            update_statement = update(FlowVersion).where(FlowVersion.flow_id == flow_info.id.hex).values(is_delete=1)
+            session.exec(update_statement)
+            session.commit()
             return flow_info
 
     @classmethod

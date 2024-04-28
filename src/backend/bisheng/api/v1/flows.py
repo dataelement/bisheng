@@ -2,7 +2,7 @@ import json
 from typing import List
 from uuid import UUID
 
-from bisheng.api.services.Flow import FlowService
+from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import (access_check, build_flow_no_yield, get_L2_param_from_flow,
                                remove_api_keys)
@@ -210,9 +210,7 @@ def delete_flow(*, flow_id: UUID, Authorize: AuthJWT = Depends()):
         raise HTTPException(status_code=404, detail='Flow not found')
     if 'admin' != payload.get('role') and flow.user_id != payload.get('user_id'):
         raise HTTPException(status_code=500, detail='没有权限删除此技能')
-    with session_getter() as session:
-        session.delete(flow)
-        session.commit()
+    FlowDao.delete_flow(flow)
     return resp_200(message='删除成功')
 
 

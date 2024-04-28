@@ -2,6 +2,7 @@ from typing import List, Dict
 
 from fastapi.encoders import jsonable_encoder
 
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
     NotFoundFlowError, \
     FlowOnlineEditError
@@ -39,6 +40,15 @@ class FlowService:
         version_info = FlowVersionDao.get_version_by_id(version_id)
         if not version_info:
             return NotFoundVersionError.return_resp()
+
+        flow_info = FlowDao.get_flow_by_id(version_info.flow_id)
+        if not flow_info:
+            return NotFoundFlowError.return_resp()
+
+        # 判断权限
+        if not user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+            return UnAuthorizedError.return_resp()
+
         if version_info.is_current == 1:
             return CurVersionDelError.return_resp()
 
@@ -50,10 +60,15 @@ class FlowService:
         """
         修改当前版本
         """
-        # 技能上线状态不允许 切换版本
         flow_info = FlowDao.get_flow_by_id(flow_id)
         if not flow_info:
             return NotFoundFlowError.return_resp()
+
+        # 判断权限
+        if not user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+            return UnAuthorizedError.return_resp()
+
+        # 技能上线状态不允许 切换版本
         if flow_info.status == FlowStatus.ONLINE:
             return FlowOnlineEditError.return_resp()
 
@@ -74,12 +89,20 @@ class FlowService:
         """
         创建新版本
         """
+        flow_info = FlowDao.get_flow_by_id(flow_id)
+        if not flow_info:
+            return NotFoundFlowError.return_resp()
+
+        # 判断权限
+        if not user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+            return UnAuthorizedError.return_resp()
+
         exist_version = FlowVersionDao.get_version_by_name(flow_id, flow_version.name)
         if exist_version:
             return VersionNameExistsError.return_resp()
 
         flow_version = FlowVersion(flow_id=flow_id, name=flow_version.name, description=flow_version.description,
-                                   data=flow_version.data)
+                                   user_id=user.user_id, data=flow_version.data)
 
         flow_version = FlowVersionDao.create_version(flow_version)
         return resp_200(data=flow_version)
@@ -94,15 +117,17 @@ class FlowService:
         version_info = FlowVersionDao.get_version_by_id(version_id)
         if not version_info:
             return NotFoundVersionError.return_resp()
+        flow_info = FlowDao.get_flow_by_id(version_info.flow_id)
+        if not flow_info:
+            return NotFoundFlowError.return_resp()
+
+        # 判断权限
+        if not user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+            return UnAuthorizedError.return_resp()
 
         # 版本是当前版本, 且技能处于上线状态则不可编辑
-        if version_info.is_current == 1:
-            # 技能上线状态不允许编辑
-            flow_info = FlowDao.get_flow_by_id(version_info.flow_id)
-            if not flow_info:
-                return NotFoundFlowError.return_resp()
-            if flow_info.status == FlowStatus.ONLINE:
-                return FlowOnlineEditError.return_resp()
+        if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE:
+            return FlowOnlineEditError.return_resp()
 
         version_info.name = flow_version.name if flow_version.name else version_info.name
         version_info.description = flow_version.description if flow_version.description else version_info.description
@@ -179,6 +204,7 @@ class FlowService:
 
         # 获取版本数据
         version_infos = FlowVersionDao.get_list_by_ids(req.version_list)
+
         # todo: 运行多个技能获取对应节点的执行结果
         res = []
         for one in req.question_list:
