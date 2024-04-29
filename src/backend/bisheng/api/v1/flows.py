@@ -260,4 +260,4 @@ async def compare_flow_node(*, item: FlowCompareReq, Authorize: AuthJWT = Depend
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
-    return FlowService.compare_flow_node(user, item)
+    return await FlowService.compare_flow_node(user, item)

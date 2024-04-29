@@ -1,6 +1,8 @@
+import asyncio
 from typing import List, Dict
 
 from fastapi.encoders import jsonable_encoder
+from loguru import logger
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
@@ -8,14 +10,17 @@ from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, V
     FlowOnlineEditError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq
+from bisheng.chat.utils import process_node_data
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.role_access import RoleAccessDao, AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.processing.process import process_graph_cached, process_tweaks
 
 
 class FlowService:
+
     @classmethod
     def get_version_list_by_flow(cls, user: UserPayload, flow_id: str) -> UnifiedResponseModel[List[FlowVersionRead]]:
         """
@@ -126,7 +131,7 @@ class FlowService:
             return UnAuthorizedError.return_resp()
 
         # 版本是当前版本, 且技能处于上线状态则不可编辑
-        if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE:
+        if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE.value:
             return FlowOnlineEditError.return_resp()
 
         version_info.name = flow_version.name if flow_version.name else version_info.name
@@ -191,25 +196,74 @@ class FlowService:
         })
 
     @classmethod
-    def compare_flow_node(cls, user: UserPayload, req: FlowCompareReq) -> UnifiedResponseModel[Dict]:
+    async def compare_flow_node(cls, user: UserPayload, req: FlowCompareReq) -> UnifiedResponseModel[Dict]:
         """
         比较两个版本中某个节点的 输出结果
         """
         if req.question_list is None or len(req.question_list) == 0:
-            return resp_200(data={})
+            return resp_200(data=[])
         if req.version_list is None or len(req.version_list) == 0:
-            return resp_200(data={})
+            return resp_200(data=[])
         if req.node_id is None:
-            return resp_200(data={})
+            return resp_200(data=[])
+
+        # 特殊处理下inputs, 保持和通过websocket会话的格式一致
+        if req.inputs.get('data', None):
+            for one in req.inputs['data']:
+                one['id'] = one['nodeId']
+                if 'InputFile' in one['id']:
+                    one['file_path'] = one['value']
 
         # 获取版本数据
+        res = [{} for _ in range(len(req.question_list))]
         version_infos = FlowVersionDao.get_list_by_ids(req.version_list)
-
-        # todo: 运行多个技能获取对应节点的执行结果
-        res = []
-        for one in req.question_list:
-            tmp = {}
-            for version in version_infos:
-                tmp[version.id] = f"答案：{one}"
-            res.append(tmp)
+        event_loop = asyncio.get_event_loop()
+        tasks = []
+        for index, question in enumerate(req.question_list):
+            question_index = index
+            tmp_inputs = req.inputs.copy()
+            task = event_loop.run_in_executor(None, cls.exec_flow_node,
+                                              tmp_inputs, res, question_index, question, version_infos)
+            tasks.append(task)
+        results = await asyncio.gather(*tasks)
+        for one in results:
+            await one
         return resp_200(data=res)
+
+    @classmethod
+    async def exec_flow_node(cls, inputs: Dict, res: List[Dict], index: int, question: str,
+                             versions: List[FlowVersion]):
+        # 替换answer
+        answer_result = {}
+        for key, val in inputs.items():
+            if key == 'data' or key == 'id':
+                continue
+            else:
+                # 其他默认输入key，替换第一个需要输入的key
+                inputs[key] = question
+                break
+        # 替换节点的参数, 替换inputFileNode和VariableNode的参数
+        tweaks = {}
+        if inputs.get('data') is not None:
+            node_data = inputs.pop('data')
+            tweaks = process_node_data(node_data)
+
+        # 执行两个版本的节点
+        for one in versions:
+            graph_data = process_tweaks(one.data, tweaks)
+            result = await process_graph_cached(graph_data,
+                                                inputs,
+                                                session_id=None,
+                                                history_count=10,
+                                                flow_id=one.flow_id)
+            if isinstance(result, dict) and 'result' in result:
+                task_result = result['result']
+            elif hasattr(result, 'result') and hasattr(result, 'session_id'):
+                task_result = result.result
+            else:
+                logger.error(f"exec flow node error version_id: {one.id}, answer: {result}")
+                task_result = {"answer": "flow exec error"}
+
+            answer_result[one.id] = list(task_result.values())[0]
+
+        res[index] = answer_result
