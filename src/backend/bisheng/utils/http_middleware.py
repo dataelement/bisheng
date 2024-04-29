@@ -17,6 +17,6 @@ class CustomMiddleware(BaseHTTPMiddleware):
         with logger.contextualize(trace_id=trace_id):
             logger.info(f'{request.url.path}')
             response = await call_next(request)
-            process_time = round(time() - start_time, 2)
+            process_time = round((time() - start_time) * 1000, 3)
             logger.info(f'{request.url.path} {response.status_code} timecost={process_time}')
             return response
