@@ -103,7 +103,7 @@ class ChainFrontendNode(FrontendNode):
         if field.name in ['input_key', 'output_key']:
             field.required = True
             field.show = True
-            field.advanced = True
+            field.advanced = False
 
         # We should think of a way to deal with this later
         # if field.field_type == "PromptTemplate":
