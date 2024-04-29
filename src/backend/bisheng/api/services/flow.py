@@ -217,17 +217,15 @@ class FlowService:
         # 获取版本数据
         res = [{} for _ in range(len(req.question_list))]
         version_infos = FlowVersionDao.get_list_by_ids(req.version_list)
-        event_loop = asyncio.get_event_loop()
+        # 启动一个新的事件循环
         tasks = []
         for index, question in enumerate(req.question_list):
             question_index = index
             tmp_inputs = req.inputs.copy()
-            task = event_loop.run_in_executor(None, cls.exec_flow_node,
-                                              tmp_inputs, res, question_index, question, version_infos)
+            task = asyncio.create_task(cls.exec_flow_node(
+                tmp_inputs, res, question_index, question, version_infos))
             tasks.append(task)
-        results = await asyncio.gather(*tasks)
-        for one in results:
-            await one
+        await asyncio.gather(*tasks)
         return resp_200(data=res)
 
     @classmethod
