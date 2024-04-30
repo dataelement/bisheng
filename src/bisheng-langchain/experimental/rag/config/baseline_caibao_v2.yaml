@@ -1,15 +1,17 @@
 data:
   origin_file_path: '/home/public/rag_benchmark_finance_report'
   question: '/home/public/rag_benchmark_finance_report/finance_report_data_100_single.xlsx'
-  save_answer: '/home/public/rag_benchmark_finance_report/finance_report_data_100_single_qwen1.5_72b_3w_chunk_size_1000.xlsx'
+  save_answer: '/home/public/rag_benchmark_finance_report/finance_report_data_100_single_command-r-plus_6w_chunk_size_1000.xlsx'
+  # save_answer: '/home/public/rag_benchmark_finance_report/finance_report_data_100_single_command-r-plus_20chunk_chunk_size_1000.xlsx'
+  # save_answer: '/home/public/rag_benchmark_finance_report/finance_report_data_100_single_moonshot_20chunk_chunk_size_1000.xlsx'
 
 milvus:
-  host: '192.168.106.116'
-  port: '19530'
+  host: '110.16.193.170'
+  port: '50062'
   drop_old: True
 
 elasticsearch:
-  url: 'http://192.168.106.116:9200'
+  url: 'http://110.16.193.170:50062/es'
   ssl_verify:
     basic_auth: ["elastic", "oSGL-zVvZ5P3Tm7qkDLC"]
   drop_old: True
@@ -18,28 +20,36 @@ embedding:
   type: 'OpenAIEmbeddings'
   model: 'text-embedding-ada-002'
   openai_api_key: ''
-  openai_proxy: 'http://192.168.106.20:1081'
-
-# chat_llm:
-#   type: 'ChatOpenAI'
-#   model: 'gpt-4-1106-preview'
-#   openai_api_key: ''
-#   openai_proxy: 'http://192.168.106.20:1081'
-#   temperature: 0.0
+  openai_proxy: ''
 
 chat_llm:
-  type: 'ChatQWen'
-  model_name: 'qwen1.5-72b-chat'
-  api_key: ''
-  temperature: 0.01
+  type: 'ChatOpenAI'
+  model: 'gpt-4-1106-preview'
+  openai_api_key: ''
+  openai_proxy: ''
+  temperature: 0.0
+
+# chat_llm:
+#   type: 'ChatCohere'
+#   model: 'command-r-plus'
+#   cohere_api_key: ''
+#   max_tokens: 1000
+#   temperature: 0.01
+
+# chat_llm:
+#   type: 'ChatQWen'
+#   model_name: 'qwen1.5-72b-chat'
+#   api_key: ''
+#   temperature: 0.01
 
 loader: 
   type: 'ElemUnstructuredLoader'
-  unstructured_api_url: 'http://192.168.106.12:10001/v1/etl4llm/predict'
+  unstructured_api_url: 'https://bisheng.dataelem.com/api/v1/etl4llm/predict'
 
 retriever: 
   type: 'EnsembleRetriever' # 不动
-  suffix: 'benchmark_caibao_1000_test'
+  suffix: 'benchmark_caibao_1000_source_title'
+  add_aux_info: True
   retrievers: 
     - type: 'KeywordRetriever'
       splitter:
