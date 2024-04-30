@@ -12,8 +12,8 @@ from sqlmodel import select
 
 
 class LoggerConf(BaseModel):
-    level: str = 'INFO'
-    format: str = '[%(asctime)s][%(levelname)s] %(message)s'
+    level: str = 'DEBUG'
+    format: str = '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
     handlers: List[Dict] = []
 
     @classmethod
