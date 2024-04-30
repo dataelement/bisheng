@@ -18,10 +18,12 @@ from init_retrievers import (
 )
 from loguru import logger
 from scoring.ragas_score import RagScore
+from extract_info import extract_title
 from tqdm import tqdm
 from utils import import_by_type, import_class, import_module
 from langchain.docstore.document import Document
 from langchain.chains.question_answering import load_qa_chain
+from langchain_community.chat_models.cohere import ChatCohere
 
 
 class BishengRagPipeline:
@@ -157,18 +159,31 @@ class BishengRagPipeline:
                 documents = loader.load()
 
                 # # load from text
-                # with open(each_file_path.replace('.pdf', '.txt'), 'r') as f:
-                #     content = f.read()
-                # documents = [Document(page_content=content, metadata={'source': os.path.basename(each_file_path)})]
-
+                # if each_file_path.endswith('.pdf'):
+                #     with open(each_file_path.replace('.pdf', '.txt'), 'r') as f:
+                #         content = f.read()
+                #     documents = [Document(page_content=content, metadata={'source': os.path.basename(each_file_path)})]
+                
                 logger.info(f'documents: {len(documents)}, page_content: {len(documents[0].page_content)}')
                 if len(documents[0].page_content) == 0:
                     logger.error(f'{each_file_path} page_content is empty.')
 
+                # add aux infoerror
+                add_aux_info = self.params['retriever'].get('add_aux_info', False)
+                if add_aux_info:
+                    for doc in documents:
+                        try:
+                            title = extract_title(llm=self.llm, text=doc.page_content)
+                            logger.info(f'extract title: {title}')
+                        except Exception as e:
+                            logger.error(f"Failed to extract title: {e}")
+                            title = ''
+                        doc.metadata['title'] = title
+
                 vector_drop_old = self.params['milvus']['drop_old'] if index == 0 else False
                 keyword_drop_old = self.params['elasticsearch']['drop_old'] if index == 0 else False
                 for idx, retriever in enumerate(self.retriever.retrievers):
-                    retriever.add_documents(documents, collection_name, vector_drop_old)
+                    retriever.add_documents(documents, collection_name, vector_drop_old, add_aux_info=add_aux_info)
 
     def retrieval_and_rerank(self, question, collection_name, max_content=100000):
         """
@@ -259,6 +274,9 @@ class BishengRagPipeline:
             file_name = questions_info['文件名']
             collection_name = questions_info['知识库名']
 
+            # if question != '请分析江苏中设集团股份有限公司2021年重大关联交易的情况。':
+            #     continue
+
             if self.params['generate']['with_retrieval']:
                 # retrieval and rerank
                 docs = self.retrieval_and_rerank(question, collection_name, max_content=self.params['generate']['max_content'])
@@ -276,14 +294,13 @@ class BishengRagPipeline:
             except Exception as e:
                 logger.error(f'question: {question}\nerror: {e}')
                 ans = {'output_text': str(e)}
-                    
+            rag_answer = ans['output_text']
+            
             # context = '\n\n'.join([doc.page_content for doc in docs])
             # content = prompt.format(context=context, question=question)
 
             # for rate_limit
             # time.sleep(3)
-
-            rag_answer = ans['output_text']
             logger.info(f'question: {question}\nans: {rag_answer}\n')
             questions_info['rag_answer'] = rag_answer
             # questions_info['rag_context'] = '\n----------------\n'.join([doc.page_content for doc in docs])

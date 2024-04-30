@@ -1,5 +1,6 @@
 import os
 import uuid
+from loguru import logger
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -13,8 +14,6 @@ from langchain_core.vectorstores import VectorStore
 from langchain.callbacks.manager import CallbackManagerForRetrieverRun
 from langchain.text_splitter import TextSplitter
 
-from .baseline_vector_retriever import BaselineVectorRetriever
-
 
 class KeywordRetriever(BaseRetriever):
     keyword_store: ElasticKeywordsSearch
@@ -27,13 +26,16 @@ class KeywordRetriever(BaseRetriever):
         documents: List[Document],
         collection_name: str,
         drop_old: bool = False,
+        **kwargs,
     ) -> None:
         split_docs = self.text_splitter.split_documents(documents)
-        print(f"KeywordRetriever: split document into {len(split_docs)} chunks")
+        logger.info(f"KeywordRetriever: split document into {len(split_docs)} chunks")
         for chunk_index, split_doc in enumerate(split_docs):
             if 'chunk_bboxes' in split_doc.metadata:
                 split_doc.metadata.pop('chunk_bboxes')
             split_doc.metadata['chunk_index'] = chunk_index
+            if kwargs.get('add_aux_info', False):
+                split_doc.page_content = split_doc.metadata["source"] + '\n' + split_doc.metadata["title"] + '\n' + split_doc.page_content
 
         elasticsearch_url = self.keyword_store.elasticsearch_url
         ssl_verify = self.keyword_store.ssl_verify

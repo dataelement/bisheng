@@ -24,6 +24,7 @@ class SmallerChunksVectorRetriever(BaseRetriever):
         documents: List[Document],
         collection_name: str,
         drop_old: bool = False,
+        **kwargs,
     ) -> None:
         if self.parent_splitter is not None:
             documents = self.parent_splitter.split_documents(documents)
@@ -31,6 +32,8 @@ class SmallerChunksVectorRetriever(BaseRetriever):
             if 'chunk_bboxes' in split_doc.metadata:
                 split_doc.metadata.pop('chunk_bboxes')
             split_doc.metadata['chunk_index'] = chunk_index
+            if kwargs.get('add_aux_info', False):
+                split_doc.page_content = split_doc.metadata["source"] + '\n' + split_doc.metadata["title"] + '\n' + split_doc.page_content
         doc_ids = [str(uuid.uuid4()) for _ in documents]
 
         par_docs = []
@@ -41,6 +44,8 @@ class SmallerChunksVectorRetriever(BaseRetriever):
             sub_docs = self.child_splitter.split_documents([par_doc])
             for _doc in sub_docs:
                 _doc.metadata[self.id_key] = _id
+                if kwargs.get('add_aux_info', False):
+                    _doc.page_content = _doc.metadata["source"] + '\n' + _doc.metadata["title"] + '\n' + _doc.page_content
             par_docs.append(par_doc)
             child_docs.extend(sub_docs)
         
