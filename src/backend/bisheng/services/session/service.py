@@ -13,7 +13,7 @@ class SessionService(Service):
     def __init__(self):
         self.cache_service = redis_client
 
-    async def load_session(self, key, data_graph):
+    async def load_session(self, key, data_graph, **kwargs):
         # Check if the data is cached
         if key in self.cache_service:
             return self.cache_service.get(key)
@@ -25,11 +25,7 @@ class SessionService(Service):
         # graph, artifacts = await build_sorted_vertices(data_graph)
         # 用自定义的初始化方法，完成api和聊天的对齐
         artifacts = {}
-        graph = await build_flow_no_yield(graph_data=data_graph,
-                                          artifacts=artifacts,
-                                          process_file=True,
-                                          flow_id=key,
-                                          chat_id=key)
+        graph = await build_flow_no_yield(graph_data=data_graph, **kwargs)
 
         self.cache_service.set(key, (graph, artifacts))
 
