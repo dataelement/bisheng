@@ -14,7 +14,7 @@ from bisheng.cache import InMemoryCache
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao
-from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead
+from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead, GptsToolsTypeRead
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
@@ -260,9 +260,27 @@ class AssistantService(AssistantUtils):
         return resp_200()
 
     @classmethod
-    def get_gpts_tools(cls, user_id: Any) -> List[GptsToolsRead]:
+    def get_gpts_tools(cls, user_id: Any) -> List[GptsToolsTypeRead]:
         """ 获取用户可见的工具列表 """
-        return GptsToolsDao.get_list_by_user(user_id)
+        # 获取用户可见的工具类别
+        all_tool_type = GptsToolsDao.get_tool_type(user_id)
+        tool_type_id = [one.id for one in all_tool_type]
+        res = []
+        tool_type_children = {}
+        for one in all_tool_type:
+            tool_type_id.append(one.id)
+            tool_type_children[one.id] = []
+            res.append(one.model_dump())
+
+        # 获取对应类别下的工具列表
+        tool_list = GptsToolsDao.get_list_by_type(tool_type_id)
+        for one in tool_list:
+            tool_type_children[one.type].append(one)
+
+        for one in res:
+            one["children"] = tool_type_children.get(one["id"], [])
+
+        return res
 
     @classmethod
     def get_models(cls) -> UnifiedResponseModel:

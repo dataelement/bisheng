@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 from contextlib import contextmanager
+from typing import List
 
 from sqlalchemy import text
 
@@ -9,7 +10,7 @@ from bisheng.database.init_config import init_config
 from bisheng.database.service import DatabaseService
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-from sqlmodel import Session, select
+from sqlmodel import Session, select, update
 
 db_service: 'DatabaseService' = DatabaseService(settings.database_url)
 
@@ -22,6 +23,7 @@ def init_default_data():
     from bisheng.database.models.user import User
     from bisheng.database.models.user_role import UserRole
     from bisheng.database.models.gpts_tools import GptsTools
+    from bisheng.database.models.gpts_tools import GptsToolsType
     from bisheng.database.models.sft_model import SftModel
     from bisheng.database.models.flow_version import FlowVersion
 
@@ -75,6 +77,26 @@ def init_default_data():
                         preset_tool = GptsTools(**item)
                         preset_tools.append(preset_tool)
                     session.add_all(preset_tools)
+                    session.commit()
+                # 初始化预置工具类别
+                preset_tools_type = session.exec(select(GptsToolsType).limit(1)).all()
+                if not preset_tools_type:
+                    preset_tools_type = []
+                    json_items = json.loads(read_from_conf('t_gpts_tools_type.json'))
+                    for item in json_items:
+                        preset_tool_type = GptsToolsType(**item)
+                        preset_tools_type.append(preset_tool_type)
+                    session.add_all(preset_tools_type)
+                    session.commit()
+                    # 设置预置工具所属的类别, 需要和预置数据一致，所以id是固定的
+                    for i in range(1, 7):
+                        session.exec(update(GptsTools).where(GptsTools.id == i).values(type=i))
+                    # 属于天眼查类别下的工具
+                    tyc_types: List[int] = list(range(7, 18))
+                    session.exec(update(GptsTools).where(GptsTools.id.in_(tyc_types)).values(type=7))
+                    # 属于金融类别下的工具
+                    jr_types: List[int] = list(range(18, 28))
+                    session.exec(update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     session.commit()
                 # 初始化配置可用于微调的基准模型
                 preset_models = session.exec(select(SftModel).limit(1)).all()
