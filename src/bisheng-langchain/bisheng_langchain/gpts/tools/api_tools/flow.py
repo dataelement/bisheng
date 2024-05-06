@@ -1,9 +1,10 @@
 from loguru import logger
-from pydantic import BaseModel, Field
+from langchain_core.pydantic_v1 import BaseModel, Field
 from typing import Any
 from .base import APIToolBase
 from .base import MultArgsSchemaTool
 from langchain_core.tools import BaseTool
+
 
 class FlowTools(APIToolBase):
 
@@ -52,9 +53,8 @@ class FlowTools(APIToolBase):
         }
 
         class InputArgs(BaseModel):
-            """args_schema"""
             query: str = Field(description='questions to ask')
-              
+
         return cls(url=url, params=params, input_key=input_key, args_schema=InputArgs)
     
     @classmethod

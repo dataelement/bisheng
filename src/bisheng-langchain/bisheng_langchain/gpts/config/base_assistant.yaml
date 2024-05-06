@@ -1,5 +1,5 @@
 assistant:
-  prompt_type: 'DEFAULT_SYSTEM_MESSAGE'
+  prompt_type: 'ASSISTANT_PROMPT_DEFAULT'
   
   llm:
     type: 'ChatOpenAI'
