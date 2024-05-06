@@ -168,7 +168,7 @@ class BishengRagPipeline:
                 if len(documents[0].page_content) == 0:
                     logger.error(f'{each_file_path} page_content is empty.')
 
-                # add aux infoerror
+                # add aux info
                 add_aux_info = self.params['retriever'].get('add_aux_info', False)
                 if add_aux_info:
                     for doc in documents:
@@ -300,7 +300,7 @@ class BishengRagPipeline:
             # content = prompt.format(context=context, question=question)
 
             # for rate_limit
-            # time.sleep(3)
+            # time.sleep(30)
             logger.info(f'question: {question}\nans: {rag_answer}\n')
             questions_info['rag_answer'] = rag_answer
             # questions_info['rag_context'] = '\n----------------\n'.join([doc.page_content for doc in docs])
