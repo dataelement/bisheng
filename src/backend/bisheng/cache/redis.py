@@ -5,7 +5,9 @@ import redis
 from bisheng.settings import settings
 from loguru import logger
 from redis import ConnectionPool, RedisCluster
+from redis.backoff import ExponentialBackoff
 from redis.cluster import ClusterNode
+from redis.retry import Retry
 from redis.sentinel import Sentinel
 
 
@@ -18,12 +20,17 @@ class RedisClient:
             mode = redis_conf.pop('mode', 'sentinel')
             if mode == 'cluster':
                 # 集群模式
+                cluster_url = ''
                 if 'startup_nodes' in redis_conf:
+                    first_node = redis_conf['startup_nodes'][0]
+                    cluster_url = f'redis://{first_node["host"]}:{first_node["port"]}'
                     redis_conf['startup_nodes'] = [
                         ClusterNode(node.get('host'), node.get('port'))
                         for node in redis_conf['startup_nodes']
                     ]
-                self.connection = RedisCluster(**redis_conf)
+                self.connection = RedisCluster.from_url(cluster_url, **redis_conf,
+                                                        retry=Retry(ExponentialBackoff(), 6),
+                                                        cluster_error_retry_attempts=1)
                 return
             hosts = [eval(x) for x in redis_conf.pop('sentinel_hosts')]
             password = redis_conf.pop('sentinel_password')

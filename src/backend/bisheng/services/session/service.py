@@ -1,5 +1,5 @@
+from bisheng.api.utils import build_flow_no_yield
 from bisheng.cache.redis import redis_client
-from bisheng.interface.run import build_sorted_vertices
 from bisheng.services.base import Service
 from bisheng.services.session.utils import compute_dict_hash, session_id_generator
 
@@ -13,7 +13,7 @@ class SessionService(Service):
     def __init__(self):
         self.cache_service = redis_client
 
-    async def load_session(self, key, data_graph):
+    async def load_session(self, key, data_graph, **kwargs):
         # Check if the data is cached
         if key in self.cache_service:
             return self.cache_service.get(key)
@@ -22,7 +22,10 @@ class SessionService(Service):
             key = self.generate_key(session_id=None, data_graph=data_graph)
 
         # If not cached, build the graph and cache it
-        graph, artifacts = await build_sorted_vertices(data_graph)
+        # graph, artifacts = await build_sorted_vertices(data_graph)
+        # 用自定义的初始化方法，完成api和聊天的对齐
+        artifacts = {}
+        graph = await build_flow_no_yield(graph_data=data_graph, **kwargs)
 
         self.cache_service.set(key, (graph, artifacts))
 

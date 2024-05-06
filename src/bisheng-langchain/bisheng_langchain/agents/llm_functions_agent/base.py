@@ -8,7 +8,6 @@ from bisheng_langchain.chat_models.proxy_llm import ProxyChatLLM
 from langchain.agents import BaseSingleActionAgent
 from langchain.callbacks.base import BaseCallbackManager
 from langchain.callbacks.manager import Callbacks
-from langchain.chat_models.openai import ChatOpenAI
 from langchain.prompts.chat import (BaseMessagePromptTemplate, ChatPromptTemplate,
                                     HumanMessagePromptTemplate, MessagesPlaceholder)
 from langchain.schema import AgentAction, AgentFinish, BasePromptTemplate, OutputParserException
@@ -18,6 +17,7 @@ from langchain.tools import BaseTool
 from langchain.tools.convert_to_openai import format_tool_to_openai_function
 from langchain_core.agents import AgentActionMessageLog
 from langchain_core.pydantic_v1 import root_validator
+from langchain_openai import ChatOpenAI
 
 
 def _convert_agent_action_to_messages(agent_action: AgentAction,
@@ -82,7 +82,7 @@ def _parse_ai_message(message: BaseMessage) -> Union[AgentAction, AgentFinish]:
     if not isinstance(message, AIMessage):
         raise TypeError(f'Expected an AI message got {type(message)}')
 
-    function_call = message.additional_kwargs.get('function_call', {})
+    function_call = message.additional_kwargs.get('tool_calls', {})
 
     if function_call:
         function_name = function_call['name']

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { bsconfirm } from "../../../alerts/confirm";
-import { Button } from "../../../components/ui/button";
+import { Button } from "../../../components/bs-ui/button";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
     Table,
     TableBody,
@@ -10,14 +10,13 @@ import {
     TableHead,
     TableHeader,
     TableRow
-} from "../../../components/ui/table";
+} from "../../../components/bs-ui/table";
 import { delRoleApi, getRolesApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { ROLE } from "../../../types/api/user";
 import EditRole from "./EditRole";
-import { Input } from "../../../components/ui/input";
-import { Search } from "lucide-react";
-
+import { SearchInput } from "../../../components/bs-ui/input";
+import { PlusIcon } from "@/components/bs-icons/plus";
 export default function Roles() {
     const { t } = useTranslation()
 
@@ -41,7 +40,7 @@ export default function Roles() {
 
     // 删除
     const handleDelete = (item) => {
-        bsconfirm({
+        bsConfirm({
             desc: `${t('system.confirmText')} 【${item.role_name}】 ?`,
             okTxt: t('delete'),
             onOk(next) {
@@ -67,35 +66,41 @@ export default function Roles() {
 
     if (role) return <EditRole id={role.id || -1} name={role.role_name || ''} onBeforeChange={checkSameName} onChange={handleChange}></EditRole>
 
-    return <div className=" relative">
-        <div className="flex gap-4 items-center justify-end">
-            <div className="w-[180px] relative">
-                <Input value={searchWord} placeholder={t('system.roleName')} onChange={handleSearch}></Input>
-                <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+    return <div className="relative">
+        <div className="h-[calc(100vh-136px)] overflow-y-auto pb-10">
+            <div className="flex gap-6 items-center justify-end">
+                <div className="w-[180px] relative">
+                    <SearchInput placeholder={t('system.roleName')} onChange={handleSearch}></SearchInput>
+                </div>
+                <Button className="flex justify-around" onClick={() => setRole({})}>
+                    <PlusIcon className="text-primary" />
+                    <span className="text-[#fff] mx-4">{t('create')}</span>
+                </Button>
             </div>
-            <Button className="h-8 rounded-full" onClick={() => setRole({})}>{t('create')}</Button>
-        </div>
-        <Table>
-            <TableCaption>{t('system.roleList')}.</TableCaption>
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-[200px]">{t('system.roleName')}</TableHead>
-                    <TableHead>{t('createTime')}</TableHead>
-                    <TableHead className="text-right">{t('operations')}</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {roles.map((el) => (
-                    <TableRow key={el.id}>
-                        <TableCell className="font-medium">{el.role_name}</TableCell>
-                        <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-                        <TableCell className="text-right">
-                            <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => setRole(el)}>{t('edit')}</Button>
-                            <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => handleDelete(el)} className="text-red-500">{t('delete')}</Button>
-                        </TableCell>
+            <Table className="mb-10">
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-[200px]">{t('system.roleName')}</TableHead>
+                        <TableHead>{t('createTime')}</TableHead>
+                        <TableHead className="text-right">{t('operations')}</TableHead>
                     </TableRow>
-                ))}
-            </TableBody>
-        </Table>
+                </TableHeader>
+                <TableBody>
+                    {roles.map((el) => (
+                        <TableRow key={el.id}>
+                            <TableCell className="font-medium">{el.role_name}</TableCell>
+                            <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
+                            <TableCell className="text-right">
+                                <Button variant="link" onClick={() => setRole(el)} className="px-0 pl-6">{t('edit')}</Button>
+                                <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </div>
+        <div className="bisheng-table-footer">
+            <p className="desc">{t('system.roleList')}.</p>
+        </div>
     </div>
 };

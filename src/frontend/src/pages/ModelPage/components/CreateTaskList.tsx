@@ -1,12 +1,12 @@
 import { HelpCircle, Loader2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge } from "../../../components/ui/badge";
-import { Button } from "../../../components/ui/button";
-import { Checkbox } from "../../../components/ui/checkbox";
-import { Input } from "../../../components/ui/input";
-import { Label } from "../../../components/ui/label";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
+import { Badge } from "../../../components/bs-ui/badge";
+import { Button } from "../../../components/bs-ui/button";
+import { Checkbox } from "../../../components/bs-ui/checkBox";
+import { Input } from "../../../components/bs-ui/input";
+import { Label } from "../../../components/bs-ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/bs-ui/tooltip";
 import { PopUpContext } from "../../../contexts/popUpContext";
 import { getFileUrlApi, getPresetFileApi, uploadTaskFileApi } from "../../../controllers/API/finetune";
 import { downloadFile, downloadJson } from "../../../util/utils";
@@ -36,7 +36,7 @@ export default function CreateTaskList({ onChange }) {
     return <div>
         <div className="flex justify-between">
             <div>
-                <Button size="sm" className="rounded-full h-7" onClick={() => openPopUp(<UploadModal
+                <Button size="sm" onClick={() => openPopUp(<UploadModal
                     fileName="files"
                     accept={['json']}
                     onClose={closePopUp}
@@ -73,7 +73,7 @@ export default function CreateTaskList({ onChange }) {
                             <Button size="sm" variant="outline"
                                 disabled={downloadMap[data.id]}
                                 onClick={() => handleDownloadFile(data)}
-                                className="rounded-full h-6 px-4 ml-auto">
+                                className="rounded-lg h-7 px-4 ml-auto">
                                 {downloadMap[data.id] && <Loader2 className="animate-spin mr-2" size={14} />}
                                 {t('finetune.download')}</Button>
                             {isCustom ?
@@ -101,7 +101,7 @@ export default function CreateTaskList({ onChange }) {
                             <Button
                                 size="sm"
                                 variant="destructive"
-                                className="rounded-full h-6 px-4"
+                                className="rounded-lg h-7 px-4"
                                 onClick={() => {
                                     setUserList((prev) => {
                                         const newData = prev.filter(el => el.id !== data.id)

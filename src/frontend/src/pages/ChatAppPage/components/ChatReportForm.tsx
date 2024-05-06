@@ -1,6 +1,6 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Dropdown from "../../../components/dropdownComponent";
 import InputComponent from "../../../components/inputComponent";
 import InputFileComponent from "../../../components/inputFileComponent";
 import { Button } from "../../../components/ui/button";
@@ -12,14 +12,23 @@ import { Variable, VariableType, getVariablesApi } from "../../../controllers/AP
  * @description
  * 表单项数据由组件的参数信息和单独接口获取的必填信息及排序信息而来。
  */
-export default function ChatReportForm({ flow, onStart }) {
+const ChatReportForm = forwardRef(({ type = 'chat', flow, onStart }, ref) => {
     const { setErrorData } = useContext(alertContext);
     const { t } = useTranslation()
+
+    useImperativeHandle(ref, () => ({
+        submit: () => {
+            handleStart()
+        }
+    }));
 
     // 从 api中获取
     const [items, setItems] = useState<Variable[]>([])
     useEffect(() => {
-        getVariablesApi({ flow_id: flow.id }).then(
+        // chat -》L1； diff -> 对比测试
+        type === 'chat' ? getVariablesApi({ flow_id: flow.flow_id || flow.id }).then(
+            res => setItems(res)
+        ) : getVariablesApi({ flow_id: flow.flow_id || flow.id }).then(
             res => setItems(res)
         )
     }, [])
@@ -56,7 +65,7 @@ export default function ChatReportForm({ flow, onStart }) {
         onStart(obj, str)
     }
 
-    return <div className="absolute right-20 bottom-32 w-[90%] max-w-[680px] flex flex-col gap-6 rounded-xl p-4 md:p-6 border bg-gray-50">
+    return <div className="flex flex-col gap-6 rounded-xl p-4 ">
         <div className="max-h-[520px] overflow-y-auto">
             {items.map((item, i) => <div key={item.id} className="w-full text-sm">
                 {item.name}
@@ -68,11 +77,18 @@ export default function ChatReportForm({ flow, onStart }) {
                         onChange={(val) => handleChange(i, val)}
                     /> :
                         item.type === VariableType.Select ?
-                            <Dropdown
-                                options={item.options.map(e => e.value)}
-                                onSelect={(val) => handleChange(i, val)}
-                                value={item.value}
-                            ></Dropdown> :
+                            <Select onValueChange={(val) => handleChange(i, val)}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        {
+                                            item.options.map(el => <SelectItem key={el.value} value={el.value}>{el.value}</SelectItem>)
+                                        }
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select> :
                             item.type === VariableType.File ?
                                 <InputFileComponent
                                     isSSO
@@ -90,6 +106,8 @@ export default function ChatReportForm({ flow, onStart }) {
             </div>
             )}
         </div>
-        <Button size="sm" onClick={handleStart}>{t('report.start')}</Button>
+        {type === 'chat' && <Button size="sm" onClick={handleStart}>{t('report.start')}</Button>}
     </div>
-};
+});
+
+export default ChatReportForm

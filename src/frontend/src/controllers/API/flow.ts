@@ -1,5 +1,5 @@
 import { ReactFlowJsonObject } from "reactflow";
-import { FlowStyleType, FlowType } from "../../types/flow";
+import { FlowStyleType, FlowType, FlowVersionItem } from "../../types/flow";
 import axios from "../request";
 
 /**
@@ -147,9 +147,9 @@ export async function saveFlowToDatabase(newFlow: {
 * @returns {Promise<any>} The flows data.
 * @throws Will throw an error if reading fails.
 */
-export async function readFlowsFromDatabase(page: number = 1, search: string) {
-    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${20}&name=${search}`);
-    return { data, pages: Math.ceil(total / 20) };
+export async function readFlowsFromDatabase(page: number = 1, pageSize: number = 20, search: string) {
+    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${pageSize}&name=${search}`);
+    return { data, total };
 }
 
 /**
@@ -222,7 +222,94 @@ export async function updataOnlineState(id, updatedFlow, open) {
  * @returns {Promise<any>}.
  * @throws .
  */
-export async function readOnlineFlows(page: number = 1) {
-    const { data, total }: { data: any, total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${100}&status=2`);
+export async function readOnlineFlows(page: number = 1, searchKey: string = "") {
+    const data: { data: any, total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${100}&status=2&name=${searchKey}`);
     return data;
+}
+
+
+// 解析 custom 组件节点
+export async function reloadCustom(code): Promise<any> {
+    const response = await axios.post("/api/v1/component/custom_component", {
+        code,
+        "field": "",
+        "frontend_node": {}
+    });
+    return response
+}
+
+
+/**
+ * 获取技能对应的版本列表.
+ *
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function getFlowVersions(flow_id): Promise<FlowVersionItem[]> {
+    return await axios.get(`/api/v1/flows/versions`, {
+        params: { flow_id }
+    });
+}
+
+/**
+ * 创建新的技能版本.
+ *
+ * @param {object} versionData - 新版本的数据.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function createFlowVersion(flow_id, versionData: { name: string, description: string, data: any }) {
+    return await axios.post(`/api/v1/flows/versions?flow_id=${flow_id}`, versionData);
+}
+
+/**
+ * 获取单个版本的信息.
+ *
+ * @param {string} versionId - 版本的ID.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function getVersionDetails(versionId: string) {
+    return await axios.get(`/api/v1/flows/versions/${versionId}`);
+}
+
+/**
+ * 更新版本信息.
+ *
+ * @param {string} versionId - 要更新的版本ID.
+ * @param {object} versionData - 更新的版本数据.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function updateVersion(versionId: string, versionData: { name: string, description: string, data: any }) {
+    return await axios.put(`/api/v1/flows/versions/${versionId}`, versionData);
+}
+
+/**
+ * 删除版本.
+ *
+ * @param {string} versionId - 要删除的版本ID.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function deleteVersion(versionId: string) {
+    return await axios.delete(`/api/v1/flows/versions/${versionId}`);
+}
+
+/**
+ * 切换版本.
+ *
+ * @param {object} versionData - 包含要更改到的版本ID的数据.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function changeCurrentVersion({ flow_id, version_id }: { flow_id: string, version_id: number }) {
+    return await axios.post(`/api/v1/flows/change_version?flow_id=${flow_id}&version_id=${version_id}`);
+}
+
+/**
+ * 运行测试用例.
+ */
+export async function runTestCase(data: { question_list, version_list, node_id, inputs }): Promise<any[]> {
+    return await axios.post(`/api/v1/flows/compare`, data);
 }

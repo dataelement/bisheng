@@ -1,3 +1,4 @@
+import cloneDeep from "lodash-es/cloneDeep";
 import { Info } from "lucide-react";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -16,17 +17,17 @@ import KeypairListComponent from "../../../../components/keypairListComponent";
 import PromptAreaComponent from "../../../../components/promptComponent";
 import TextAreaComponent from "../../../../components/textAreaComponent";
 import ToggleShadComponent from "../../../../components/toggleShadComponent";
-import { MAX_LENGTH_TO_SCROLL_TOOLTIP } from "../../../../constants";
 import { PopUpContext } from "../../../../contexts/popUpContext";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
+import { reloadCustom } from "../../../../controllers/API/flow";
+import { captureAndAlertRequestErrorHoc } from "../../../../controllers/request";
 import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
 import { ParameterComponentType } from "../../../../types/components";
 import { cleanEdges, convertObjToArray, convertValuesToNumbers, hasDuplicateKeys } from "../../../../util/reactflowUtils";
 import {
   classNames,
   getNodeNames,
-  getRandomKeyByssmm,
   groupByFamily,
   isValidConnection,
   nodeColors,
@@ -45,6 +46,7 @@ export default function ParameterComponent({
   required = false,
   optionalHandle = null,
   info = "",
+  isGroup = false,
   onChange
 }: ParameterComponentType) {
   // console.log('data, id :>> ', name, optionalHandle);
@@ -58,6 +60,8 @@ export default function ParameterComponent({
   const [position, setPosition] = useState(0);
   const { closePopUp } = useContext(PopUpContext);
   const { setTabsState, flow } = useContext(TabsContext);
+
+  const groupedEdge = useRef(null); // 用yu过滤菜单的数据
 
   useEffect(() => {
     if (ref.current && ref.current.offsetTop && ref.current.clientHeight) {
@@ -75,8 +79,8 @@ export default function ParameterComponent({
   const { reactFlowInstance } = useContext(typesContext);
   const disabled = useMemo(() => {
     let dis = reactFlowInstance?.getEdges().some((e) => e.targetHandle === id) ?? false;
-    // 特殊处理milvus、ElasticKeywordsSearch组件的 disabled
-    if (((data.type === "Milvus" && name === 'collection_name') || (data.type === "ElasticKeywordsSearch" && name === 'index_name'))
+    // 特殊处理含有知识库组件的 disabled
+    if (['index_name', 'collection_name'].includes(name)
       && reactFlowInstance?.getEdges().some((e) => e.targetHandle.indexOf('documents') !== -1
         && e.targetHandle.indexOf(data.id) !== -1)) {
       dis = true
@@ -85,21 +89,23 @@ export default function ParameterComponent({
   }, [id, data, reactFlowInstance])
   // milvus 组件，知识库不为空是 embbeding取消必填限制
   useEffect(() => {
-    if (data.type === "Milvus" && data.node.template.embedding) {
-      const hidden = disabled ? false : !!data.node.template.collection_name.value
+    const {embedding, index_name, collection_name, connection_args} = data.node.template
+    if ((index_name || collection_name) && embedding) {
+      const hidden = disabled ? false : !!(collection_name || index_name).value
       data.node.template.embedding.required = !hidden
       data.node.template.embedding.show = !hidden
-      if (hidden) data.node.template.connection_args.value = ''
+      if (hidden && connection_args) data.node.template.connection_args.value = ''
       onChange?.()
     }
   }, [data, disabled])
-  const handleRemoveMilvusEmbeddingEdge = () => {
-    const edges = reactFlowInstance.getEdges().filter(edge => edge.targetHandle.indexOf('Embeddings|embedding|Milvus') === -1)
+  const handleRemoveMilvusEmbeddingEdge = (nodeId) => {
+    const edges = reactFlowInstance.getEdges().filter(edge => edge.targetHandle.indexOf('Embeddings|embedding|'+nodeId) === -1)
     reactFlowInstance.setEdges(edges)
   }
   const [myData, setMyData] = useState(useContext(typesContext).data);
 
   const handleOnNewValue = useCallback((newValue: any) => {
+    // TODO 使用setNodes 保存修改（onChange）
     data.node.template[name].value = ['float', 'int'].includes(type) ? Number(newValue) : newValue;
     // Set state to pending
     setTabsState((prev) => {
@@ -115,6 +121,7 @@ export default function ParameterComponent({
 
   // 临时处理知识库保存方法, 类似方法多了需要抽象
   const handleOnNewLibValue = (newValue: string, collectionId: number | '') => {
+    // TODO 使用setNodes 保存修改（onChange）
     data.node.template[name].value = newValue;
     data.node.template[name].collection_id = collectionId;
     // Set state to pending
@@ -128,6 +135,32 @@ export default function ParameterComponent({
       };
     });
   };
+
+  // custom 组件 reload
+  const handleReloadCustom = (code) => {
+    captureAndAlertRequestErrorHoc(reloadCustom(code)).then(res => {
+      if (res) {
+        reactFlowInstance.setNodes((nds) =>
+          nds.map((nd) => {
+            if (nd.id === data.id) {
+              let newNode = cloneDeep(nd);
+              newNode.data.node = res
+              return newNode;
+            }
+            return nd
+          })
+        )
+        // 清理线
+        setTimeout(() => {
+          const edges = cleanEdges(
+            reactFlowInstance.getNodes(),
+            reactFlowInstance.getEdges()
+          )
+          reactFlowInstance.setEdges(edges)
+        }, 60);
+      }
+    })
+  }
 
   useEffect(() => {
     infoHtml.current = (
@@ -144,55 +177,89 @@ export default function ParameterComponent({
   const [errorDuplicateKey, setErrorDuplicateKey] = useState(false);
 
   useEffect(() => {
-    const groupedObj = groupByFamily(myData, tooltipTitle, left, data.type);
+    let groupedObj: any = groupByFamily(myData, tooltipTitle!, left, flow.data?.nodes || []);
+    groupedEdge.current = groupedObj;
 
-    refNumberComponents.current = groupedObj[0]?.type?.length;
+    if (groupedObj && groupedObj.length > 0) {
+      //@ts-ignore
+      refHtml.current = groupedObj.map((item, index) => {
+        const Icon: any =
+          nodeIconsLucide[item.family] ?? nodeIconsLucide["unknown"];
 
-    refHtml.current = groupedObj.map((item, i) => {
-      const Icon: any = nodeIconsLucide[item.family];
-
-      return (
-        <span
-          key={getRandomKeyByssmm() + item.family + i}
-          className={classNames(
-            i > 0 ? "mt-2 flex items-center" : "flex items-center"
-          )}
-        >
-          <div
-            className="h-5 w-5"
-            style={{
-              color: nodeColors[item.family],
-            }}
-          >
-            {/* <Icon
-              className="h-5 w-5"
-              strokeWidth={1.5}
-              style={{
-                color: nodeColors[item.family] ?? nodeColors.unknown,
-              }}
-            /> */}
-          </div>
-          <span className="ps-2 text-xs text-foreground">
-            {getNodeNames()[item.family] ?? ""}{" "}
-            <span className="text-xs">
-              {" "}
-              {item.type === "" ? "" : " - "}
-              {item.type.split(", ").length > 2
-                ? item.type.split(", ").map((el, i) => (
-                  <React.Fragment key={el + i}>
-                    <span>
-                      {i === item.type.split(", ").length - 1
-                        ? el
-                        : (el += `, `)}
-                    </span>
-                  </React.Fragment>
-                ))
-                : item.type}
+        return (
+          <div key={index}>
+            {index === 0 && (
+              <span>
+                {left
+                  ? "Avaliable input components:"
+                  : "Avaliable output components:"}
+              </span>
+            )}
+            <span
+              key={index}
+              className={classNames(
+                index > 0 ? "mt-2 flex items-center" : "mt-3 flex items-center"
+              )}
+            >
+              <div
+                className="h-5 w-5"
+                style={{
+                  color: nodeColors[item.family],
+                }}
+              >
+                <Icon
+                  className="h-5 w-5"
+                  strokeWidth={1.5}
+                  style={{
+                    color: nodeColors[item.family] ?? nodeColors.unknown,
+                  }}
+                />
+              </div>
+              <span className="ps-2 text-xs text-foreground">
+                {getNodeNames()[item.family] ?? "Other"}{" "}
+                {item?.display_name && item?.display_name?.length > 0 ? (
+                  <span className="text-xs">
+                    {" "}
+                    {item.display_name === "" ? "" : " - "}
+                    {item.display_name.split(", ").length > 2
+                      ? item.display_name.split(", ").map((el, index) => (
+                        <React.Fragment key={el + index}>
+                          <span>
+                            {index ===
+                              item.display_name.split(", ").length - 1
+                              ? el
+                              : (el += `, `)}
+                          </span>
+                        </React.Fragment>
+                      ))
+                      : item.display_name}
+                  </span>
+                ) : (
+                  <span className="text-xs">
+                    {" "}
+                    {item.type === "" ? "" : " - "}
+                    {item.type.split(", ").length > 2
+                      ? item.type.split(", ").map((el, index) => (
+                        <React.Fragment key={el + index}>
+                          <span>
+                            {index === item.type.split(", ").length - 1
+                              ? el
+                              : (el += `, `)}
+                          </span>
+                        </React.Fragment>
+                      ))
+                      : item.type}
+                  </span>
+                )}
+              </span>
             </span>
-          </span>
-        </span>
-      );
-    });
+          </div>
+        );
+      });
+    } else {
+      //@ts-ignore
+      refHtml.current = <span>No compatible components found.</span>;
+    }
   }, [tooltipTitle]);
 
   return (
@@ -235,11 +302,7 @@ export default function ParameterComponent({
           <></>
         ) : (
           <ShadTooltip
-            styleClasses={
-              refNumberComponents.current > MAX_LENGTH_TO_SCROLL_TOOLTIP
-                ? "tooltip-fixed-width custom-scroll overflow-y-scroll nowheel"
-                : "tooltip-fixed-width"
-            }
+            styleClasses={"tooltip-fixed-width custom-scroll nowheel"}
             delayDuration={0}
             content={refHtml.current}
             side={left ? "left" : "right"}
@@ -271,6 +334,7 @@ export default function ParameterComponent({
             {data.node.template[name].list ? (
               // input list
               <InputListComponent
+                isGroup={isGroup}
                 disabled={disabled}
                 value={
                   !data.node.template[name].value ||
@@ -297,7 +361,7 @@ export default function ParameterComponent({
                 disabled={disabled}
                 id={data.node.template[name].collection_id ?? ""}
                 value={data.node.template[name].value ?? ""}
-                onSelect={(val, id) => { handleOnNewLibValue(val, id); val && handleRemoveMilvusEmbeddingEdge() }}
+                onSelect={(val, id) => { handleOnNewLibValue(val, id); val && handleRemoveMilvusEmbeddingEdge(data.id) }}
                 onChange={() => { }}
               />
             ) : (
@@ -345,12 +409,12 @@ export default function ParameterComponent({
           <div className="mt-2 w-full">
             <CodeAreaComponent
               setNodeClass={(nodeClass) => {
-                data.node = nodeClass;
+                data.node = nodeClass; // 无用
               }}
               nodeClass={data.node}
               disabled={disabled}
               value={data.node.template[name].value ?? ""}
-              onChange={handleOnNewValue}
+              onChange={data.type === 'Data' ? handleReloadCustom : handleOnNewValue}
             />
           </div>
         ) : left === true && type === "file" ? (
@@ -379,18 +443,28 @@ export default function ParameterComponent({
           <div className="mt-2 w-full">
             <PromptAreaComponent
               field_name={name}
-              setNodeClass={(nodeClass) => {
-                data.node = nodeClass;
+              setNodeClass={(nodeClass, code) => {
                 if (reactFlowInstance) {
-                  cleanEdges({
-                    flow: {
-                      edges: reactFlowInstance.getEdges(),
-                      nodes: reactFlowInstance.getNodes(),
-                    },
-                    updateEdge: (edge) => reactFlowInstance.setEdges(edge),
-                  });
+                  reactFlowInstance.setNodes((nds) =>
+                    nds.map((nd) => {
+                      if (nd.id === data.id) {
+                        let newNode = cloneDeep(nd);
+                        newNode.data.node = nodeClass
+                        newNode.data.node.template[name].value = code;
+                        return newNode;
+                      }
+                      return nd
+                    })
+                  )
+                  // 清理线
+                  setTimeout(() => {
+                    const edges = cleanEdges(
+                      reactFlowInstance.getNodes(),
+                      reactFlowInstance.getEdges()
+                    )
+                    reactFlowInstance.setEdges(edges)
+                  }, 60);
                 }
-                // onChange?.()
               }}
               nodeClass={data.node}
               disabled={disabled}

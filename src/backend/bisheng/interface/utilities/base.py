@@ -7,8 +7,8 @@ from bisheng.settings import settings
 from bisheng.template.frontend_node.utilities import UtilitiesFrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class
-from langchain import utilities
-from langchain.utilities.sql_database import SQLDatabase
+from langchain_community import utilities
+from langchain_community.utilities.sql_database import SQLDatabase
 
 
 class UtilityCreator(LangChainTypeCreator):
@@ -27,7 +27,7 @@ class UtilityCreator(LangChainTypeCreator):
         """
         if self.type_dict is None:
             self.type_dict = {
-                utility_name: import_class(f'langchain.utilities.{utility_name}')
+                utility_name: import_class(f'langchain_community.utilities.{utility_name}')
                 for utility_name in utilities.__all__
             }
             self.type_dict['SQLDatabase'] = SQLDatabase

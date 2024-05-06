@@ -1,20 +1,36 @@
+# 公共openai的配置，有需要可用yaml语法从此处引用。助手需要使用此配置
+openai_conf: &openai_conf
+  openai_api_base: "https://api.openai.com/v1"
+  openai_proxy: 'http://118.195.232.223:39995' # 如果是自己代理的服务地址，则填在这里
+  openai_api_key: "" # 私有的，openai账号的key
+
+# 公共minio的配置，有需要可用yaml语法从此处引用。目前知识库 和 助手的代码解释器工具需要minio
+minio_conf: &minio_conf
+  SCHEMA: false         # 是否支持 https
+  CERT_CHECK: false         # 是否校验 http证书
+  MINIO_ENDPOINT: "minio:9000"       # 这个地址用来写请求, 使用同一个docker-compose 启动，能通过容器名访问
+  MINIO_SHAREPOIN: "minio:9000"      # 确保和nginx的代理地址一致。同一个docker-compose启动可以直接使用默认值
+  MINIO_ACCESS_KEY: "minioadmin"
+  MINIO_SECRET_KEY: "minioadmin"
+
 knowledges:
   unstructured_api_url: ""  # 毕昇非结构化数据解析服务地址，提供包括OCR文字识别、表格识别、版式分析等能力。非必填，溯源必填
   embeddings: # 配置知识库的embedding服务，以下示例填写了两类embedding服务的配置方法，第一个是openai的embedding模型服务的配置方法，第二个是本地部署的embedding模型服务的配置方法，如果有多个可以添加多个
     text-embedding-ada-002: # 知识库下拉框中显示的embedding模型的名称，可自定义
-      openai_api_base: "https://api.openai.com/v1"
-      openai_proxy: "" # 如果是自己代理的服务地址，则填在这里
-      openai_api_key: "" # 私有的，openai账号的key
+      <<: *openai_conf
       # deployment: ""  # azure 部署需要
       # openai_api_type: ""    # azure api_type
       # openai_api_version: ""  # azure api_version
     embedding-host: # 知识库下拉框中显示的embedding模型的名称，可自定义
       host_base_url: "" # 在模型管理页面中已上线的embedding服务的地址
       model: "" # 在模型管理页面中已上线的embedding模型的名称
+    # custom-embedding:
+    #   component: custom
+
   vectorstores:
     # Milvus 最低要求cpu 4C 8G 推荐4C 16G
     Milvus: # 如果需要切换其他vectordb，确保其他服务已经启动，然后配置对应参数
-      connection_args: {'host': 'milvus', 'port': '19530', 'user': '', 'password': '', 'secure': False}
+      connection_args: { 'host': 'milvus', 'port': '19530', 'user': '', 'password': '', 'secure': False }
       # partiton-key model, 用于分区的字段，如果不配置默认True， 分区后，新的partiton不会新建collection，可以通过增加suffix强制增加collection
       is_partition: False
       partition_suffix: 1
@@ -23,14 +39,14 @@ knowledges:
       elasticsearch_url: 'http://elasticsearch:9200'
       ssl_verify: "{'basic_auth': ('elastic', 'password')}"
       #   ssl_verify: "{'ca_certs': False, 'basic_auth': ('elastic', 'F94h5JtdQn6EQB-G9Hjv'), 'verify_certs': False}"
+    ElasticVectorSearch:
+      es_url: 'http://192.168.106.115:9200'
+      # es_url:
+      # es_passwrod:
+      # ssl_verify: False
+
   minio: # 如果要支持溯源功能，由于溯源会展示源文件，必须配置 oss 存储
-     SCHEMA: false         # 是否支持 https
-     CERT_CHECK: false         # 是否校验 http证书
-     MINIO_ENDPOINT: "minio:9000"       # 这个地址用来写请求
-     MINIO_SHAREPOIN: "minio:9000"      # 为保证外网和内网隔离。 浏览器获取连接是这个域名
-     MINIO_ACCESS_KEY: "minioadmin"
-     MINIO_SECRET_KEY: "minioadmin"
-  #
+    <<: *minio_conf
 
 default_llm:
   # 全局配置大模型    
@@ -43,6 +59,10 @@ llm_request:
   max_retries: 1
   stream: true
 
+# v2免登录接口使用的默认操作用户
+default_operator:
+  user: 3
+  url: https://bisheng.dataelem.com
 
 # 是否需要验证码
 use_captcha:
@@ -58,3 +78,38 @@ env:
   # 可配置与http不一致的websocket地址
   # websocket_url: 192.168.106.120:3003
   office_url: http://IP:8701 # office 组件访问地址，需要浏览器能直接访问
+
+# 智能助手相关配置
+gpts:
+  agent_executor:
+    # 默认agent的executor, 如果模型里有配置优先用模型的
+    type: 'get_openai_functions_agent_executor'
+    interrupt_before_action: False
+    recursion_limit: 50
+  #  助手可选大模型列表，第一个为默认模型
+  llms:
+    - type: 'ChatOpenAI'
+      model_name: 'gpt-4-0125-preview'
+      temperature: 0.3
+      <<: *openai_conf
+    - type: 'CustomLLMChat'
+      model_name: 'Qwen-1_8B-Chat'
+      host_base_url: 'http://192.168.106.12:9001/v2.1/models/Qwen-1_8B-Chat/infer'
+      temperature: 0.3
+      agent_executor_type: 'get_qwen_local_functions_agent_executor'
+  # 预置工具所需的配置
+  tools:
+    # 画图工具配置，引用公共的openai配置
+    dalle_image_generator:
+      <<: *openai_conf
+    # 必应搜索工具配置，配置搜索的api_key
+    bing_search:
+      bing_subscription_key: ""
+      bing_search_url: "https://api.bing.microsoft.com/v7.0/search"
+    # 代码执行工具配置，引用公共minio的配置，用来存储代码执行后生成的 图片等文件资源
+    bisheng_code_interpreter:
+      minio:
+        <<: *minio_conf
+    # 天眼查工具所需的配置
+    tianyancha:
+      api_key: ""

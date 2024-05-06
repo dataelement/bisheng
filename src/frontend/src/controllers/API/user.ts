@@ -57,6 +57,12 @@ export async function getRoleSkillsApi(params): Promise<{ data: any[], total: nu
     return await axios.get(`/api/v1/role_access/flow`, { params });
 }
 /**
+ * 根据角色获取技能列表
+ */
+export async function getRoleAssistApi(params): Promise<{ data: any[], total: number }> {
+    return await axios.get(`/api/v1/role_access/list_type`, { params });
+}
+/**
  * 根据角色获取知识库列表
  */
 export async function getRoleLibsApi(params): Promise<{ data: any[], total: number }> {
@@ -77,7 +83,8 @@ export async function createRole(name) {
 enum ACCESS_TYPE {
     USE_LIB = 1,
     USE_SKILL,
-    MANAGE_LIB
+    MANAGE_LIB,
+    ASSISTANT = 5
 }
 export async function updateRolePermissionsApi(data: { role_id: number, access_id: number[], type: ACCESS_TYPE }) {
     return await axios.post(`/api/v1/role_access/refresh`, data);

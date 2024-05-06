@@ -15,8 +15,12 @@ class ThreadPoolManager:
             max_workers=max_workers, thread_name_prefix=thread_name_prefix)
         # 设计每个同步线程配备一个协程
         self.future_dict: Dict[str, List[concurrent.futures.Future]] = {}
-        self.async_task: Dict[str, List[asyncio.Task]] = {}
+        self.async_task: Dict[str, List[concurrent.futures.Future]] = {}
         self.lock = threading.Lock()
+
+    def fake_task_for_skip_first_thread(self):
+        """因为异步函数提交会不占用线程时间，导致任务堆积到某个线程上"""
+        time.sleep(1)
 
     def submit(self, key: str, fn, *args, **kwargs):
         with self.lock:
@@ -25,6 +29,7 @@ class ThreadPoolManager:
             if key not in self.async_task:
                 self.async_task[key] = []
             if asyncio.coroutines.iscoroutinefunction(fn):
+                self.executor.submit(self.fake_task_for_skip_first_thread)
                 future = self.executor.submit(self.run_in_event_loop, fn, *args, **kwargs)
                 self.async_task[key].append(future)
             else:
@@ -43,7 +48,7 @@ class ThreadPoolManager:
             )
             return result
 
-    def run_in_event_loop(self, coro, *args, **kwargs):
+    def run_in_event_loop(self, coro, *args, **kwargs) -> concurrent.futures.Future:
         try:
             loop = asyncio.get_event_loop()
             logger.info('event loop {}', loop)
@@ -54,14 +59,12 @@ class ThreadPoolManager:
             logger.info('Creating new event loop {}', loop)
         asyncio.set_event_loop(loop)
         trace_id = kwargs.pop('trace_id', '2')
-        start_wait = time.time()
         with logger.contextualize(trace_id=trace_id):
             future = asyncio.run_coroutine_threadsafe(coro(*args, **kwargs), loop)
             # result = loop.run_until_complete(coro(*args, **kwargs))
-            end_wait = time.time()
             # 压力大的时候，会创建更多线程，从而更多事件队列
             time.sleep(1)
-            logger.info(f'async_task_waited={end_wait - start_wait:.2f} seconds', )
+            logger.info('async_task_added fun={} args={}', coro.__name__, args[0] if args else '')
             return future
 
     def start_loop(self, loop):
@@ -102,6 +105,42 @@ class ThreadPoolManager:
     # async def async_done_callback(self, future):
     #     self.async_task_result.append(future)
 
+    def cancel_task(self, key_list: List[str]):
+        with self.lock:
+            for key in key_list:
+                if self.async_task.get(key):
+                    logger.info('clean_pending_task key={}', key)
+                    for task in self.async_task.get(key):
+                        task.result().cancel()
+                if self.future_dict.get(key):
+                    for task in self.future_dict.get(key):
+                        task.cancel()
+
+    def tear_down(self):
+        key_list = list(self.async_task.keys())
+        self.cancel_task(key_list)
+        self.executor.shutdown(cancel_futures=True)
+
 
 # 创建一个线程池管理器
 thread_pool = ThreadPoolManager(5)
+
+if __name__ == '__main__':
+
+    def wait_(name: str):
+        logger.info('{} enter wait {}', threading.current_thread(), name)
+        time.sleep(10)
+        logger.info('{} done {}', threading.current_thread(), name)
+
+    async def await_(name: str = 1):
+        logger.info('{} enter wait {}', threading.current_thread(), name)
+        await asyncio.sleep(10)
+        logger.info('{} done {}', threading.current_thread(), name)
+
+    thread_pool.submit('ABB', wait_, 'NO.1')
+    thread_pool.submit('AAA', await_)
+    # time.sleep(3)
+    # thread_pool.submit("AA", wait_, "~~~~~~~~~~~~")
+    # thread_pool.submit("AA", await_, "NO.3")
+    # time.sleep(2)
+    # thread_pool.tear_down(["AAA"])

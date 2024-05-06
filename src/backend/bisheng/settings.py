@@ -1,12 +1,41 @@
 import os
-from typing import Dict, Optional, Union
-
+from typing import Dict, Optional, Union, List
+import re
 import yaml
+from pydantic import BaseModel
+
 from bisheng.database.models.config import Config
 from bisheng.utils.logger import logger
 from cryptography.fernet import Fernet
-from pydantic import BaseSettings, root_validator, validator
+from langchain.pydantic_v1 import BaseSettings, root_validator, validator
 from sqlmodel import select
+
+
+class LoggerConf(BaseModel):
+    level: str = 'DEBUG'
+    format: str = '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
+    handlers: List[Dict] = []
+
+    @classmethod
+    def parse_logger_sink(cls, sink: str) -> str:
+        match = re.search(r'\{(.+?)\}', sink)
+        if not match:
+            return sink
+        env_keys = {}
+        for one in match.groups():
+            env_keys[one] = os.getenv(one, "")
+        return sink.format(**env_keys)
+
+    @validator('handlers', pre=True)
+    @classmethod
+    def set_handlers(cls, value):
+        if value is None:
+            value = []
+        for one in value:
+            one['sink'] = cls.parse_logger_sink(one['sink'])
+            if one.get('filter'):
+                one['filter'] = eval(one['filter'])
+        return value
 
 
 class Settings(BaseSettings):
@@ -39,6 +68,10 @@ class Settings(BaseSettings):
     bisheng_rt: dict = {}
     default_llm: dict = {}
     jwt_secret: str = 'secret'
+    gpts: dict = {}
+    openai_conf = {}
+    minio_conf = {}
+    logger_conf: LoggerConf = LoggerConf()
 
     @validator('database_url', pre=True)
     def set_database_url(cls, value):
@@ -94,52 +127,34 @@ class Settings(BaseSettings):
 
     def get_knowledge(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
-        from bisheng.database.base import session_getter
-        from bisheng.cache.redis import redis_client
-        redis_key = 'config_knowledges'
-        cache = redis_client.get(redis_key)
-        if cache:
-            return yaml.safe_load(cache)
-        with session_getter() as session:
-            knowledge_config = session.exec(
-                select(Config).where(Config.key == 'knowledges')).first()
-            if knowledge_config:
-                redis_client.set(redis_key, knowledge_config.value, 100)
-                return yaml.safe_load(knowledge_config.value)
-            else:
-                return {}
+        all_config = self.get_all_config()
+        return all_config.get('knowledges', {})
 
     def get_default_llm(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
-        from bisheng.database.base import session_getter
-        from bisheng.cache.redis import redis_client
-        redis_key = 'config_default_llm'
-        cache = redis_client.get(redis_key)
-        if cache:
-            return yaml.safe_load(cache)
-        with session_getter() as session:
-            llm_config = session.exec(select(Config).where(Config.key == 'default_llm')).first()
-            if llm_config:
-                redis_client.set(redis_key, llm_config.value, 100)
-                return yaml.safe_load(llm_config.value)
-            else:
-                return {}
+        all_config = self.get_all_config()
+        return all_config.get('default_llm', {})
 
     def get_from_db(self, key: str):
-        # 直接从db中添加配置
+        # 先获取所有的key
+        all_config = self.get_all_config()
+        return all_config.get(key, {})
+
+    def get_all_config(self):
         from bisheng.database.base import session_getter
         from bisheng.cache.redis import redis_client
-        redis_key = 'config_' + key
+        redis_key = 'config:initdb_config'
         cache = redis_client.get(redis_key)
         if cache:
             return yaml.safe_load(cache)
-        with session_getter() as session:
-            llm_config = session.exec(select(Config).where(Config.key == key)).first()
-            if llm_config:
-                redis_client.set(redis_key, llm_config.value, 100)
-                return yaml.safe_load(llm_config.value)
-            else:
-                return {}
+        else:
+            with session_getter() as session:
+                initdb_config = session.exec(select(Config).where(Config.key == 'initdb_config')).first()
+                if initdb_config:
+                    redis_client.set(redis_key, initdb_config.value, 100)
+                    return yaml.safe_load(initdb_config.value)
+                else:
+                    raise Exception('initdb_config not found, please check your system config')
 
     def update_from_yaml(self, file_path: str, dev: bool = False):
         new_settings = load_settings_from_yaml(file_path)
@@ -164,6 +179,9 @@ class Settings(BaseSettings):
         self.admin = new_settings.admin or {}
         self.bisheng_rt = new_settings.bisheng_rt or {}
         self.default_llm = new_settings.default_llm or {}
+        self.gpts = new_settings.gpts or {}
+        self.openai_conf = new_settings.openai_conf
+        self.minio_conf = new_settings.openai_conf
         self.dev = dev
 
     def update_settings(self, **kwargs):
@@ -229,13 +247,14 @@ def save_conf(file_path: str, content: str):
         f.write(content)
 
 
-def parse_key(keys: list[str], setting_str: str = None) -> str:
+def parse_key(keys: list[str], setting_str: str = None, include_key: bool = False) -> str:
     # 通过key，返回yaml配置里value所有的字符串，包含注释
     if not setting_str:
         setting_str = read_from_conf(config_file)
     setting_lines = setting_str.split('\n')
     value_of_key = [[] for _ in keys]
     value_start_flag = [False for _ in keys]
+    prev_line = ''
     for line in setting_lines:
         for index, key in enumerate(keys):
             if value_start_flag[index]:
@@ -246,6 +265,11 @@ def parse_key(keys: list[str], setting_str: str = None) -> str:
                     continue
             if line.startswith(key + ':'):
                 value_start_flag[index] = True
+                if include_key:
+                    if prev_line.startswith('#'):
+                        value_of_key[index].append(prev_line)
+                    value_of_key[index].append(line)
+        prev_line = line
     return ['\n'.join(value) for value in value_of_key]
 
 

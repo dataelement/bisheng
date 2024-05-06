@@ -1,3 +1,6 @@
+from datetime import datetime
+from uuid import UUID
+
 import orjson
 from sqlmodel import SQLModel
 
@@ -24,3 +27,16 @@ class SQLModelSerializable(SQLModel):
         orm_mode = True
         json_loads = orjson.loads
         json_dumps = orjson_dumps
+
+    def to_dict(self):
+        result = self.model_dump()
+        for column in result:
+            value = getattr(self, column)
+            if isinstance(value, datetime):
+                # 将datetime对象转换为字符串
+                value = value.isoformat()
+            elif isinstance(value, UUID):
+                # 将UUID对象转换为字符串
+                value = value.hex
+            result[column] = value
+        return result

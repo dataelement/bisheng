@@ -10,6 +10,7 @@ import { alertContext } from "../../contexts/alertContext";
 import { subUploadLibFile } from "../../controllers/API";
 import { uploadFileWithProgress } from "./upload";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { UploadIcon } from "@/components/bs-icons/upload";
 
 let qid = 1
 export default function UploadModal({ id, accept, open, desc = '', setOpen, onResult }) {
@@ -98,11 +99,10 @@ export default function UploadModal({ id, accept, open, desc = '', setOpen, onRe
             params.chunk_overlap = Number(/^\d+$/.test(overlap) ? overlap : '100') // 异常值使用默认值
         }
         // sub api
-        captureAndAlertRequestErrorHoc(subUploadLibFile(params).then(() => {
+        captureAndAlertRequestErrorHoc(subUploadLibFile(params).then((res) => {
             setOpen(false);
             setLoading(false);
-
-            onResult?.(progressList.length, failFilesRef.current)
+            onResult?.(progressList.length, failFilesRef.current, res)
         }), () => setLoading(false));
     }
 
@@ -181,9 +181,10 @@ export default function UploadModal({ id, accept, open, desc = '', setOpen, onRe
             <p className="py-4">{desc}</p>
             <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
                 <div className="w-[460px]">
-                    <div {...getRootProps()} className="h-[100px] border border-dashed flex justify-center items-center cursor-pointer">
+                    <div {...getRootProps()} className="group h-[100px] border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary">
                         <input {...getInputProps()} />
-                        {isDragActive ? <p>{t('code.dropFileHere')}</p> : <p>{t('code.clickOrDragHere')}</p>}
+                        <UploadIcon className="group-hover:text-primary" />
+                        {isDragActive ? <p className="text-gray-400 text-sm">{t('code.dropFileHere')}</p> : <p className="text-gray-400 text-sm">{t('code.clickOrDragHere')}</p>}
                     </div>
                     <div className=" max-h-[300px] overflow-y-auto no-scrollbar mt-4">
                         {progressList.map((pros) => (

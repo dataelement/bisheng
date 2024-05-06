@@ -1,9 +1,8 @@
 """Chain that runs an arbitrary python function."""
 import logging
-import os
 from typing import Callable, Dict, Optional
 
-import openai
+import httpx
 from autogen import AssistantAgent
 from langchain.base_language import BaseLanguageModel
 
@@ -45,15 +44,6 @@ Reply "TERMINATE" in the end when everything is done.
     ):
         is_termination_msg = (is_termination_msg if is_termination_msg is not None else
                               (lambda x: x.get('content') == 'TERMINATE'))
-        if openai_proxy:
-            openai.proxy = {'https': openai_proxy, 'http': openai_proxy}
-        else:
-            openai.proxy = None
-        if openai_api_base:
-            openai.api_base = openai_api_base
-        else:
-            openai.api_base = os.environ.get('OPENAI_API_BASE', 'https://api.openai.com/v1')
-
         config_list = [
             {
                 'model': model_name,
@@ -63,17 +53,24 @@ Reply "TERMINATE" in the end when everything is done.
                 'api_version': api_version,
             },
         ]
-        llm_config = {
-            'seed': 42,  # change the seed for different trials
-            'temperature': temperature,
-            'config_list': config_list,
-            'request_timeout': 120,
-        }
+        if openai_proxy:
+            config_list[0]['http_client'] = httpx.Client(proxies=openai_proxy)
+            config_list[0]['http_async_client'] = httpx.AsyncClient(proxies=openai_proxy)
+
+        if llm:
+            llm_config = llm
+
+        else:
+            llm_config = {
+                'seed': 42,  # change the seed for different trials
+                'temperature': temperature,
+                'config_list': config_list,
+                'request_timeout': 120,
+            }
 
         super().__init__(
             name,
             llm_config=llm_config,
-            llm=llm,
             system_message=system_message,
             is_termination_msg=is_termination_msg,
             max_consecutive_auto_reply=None,

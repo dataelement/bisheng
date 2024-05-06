@@ -3,11 +3,10 @@ import os
 from typing import Any, Callable, Dict, Type
 
 from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge
+from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.settings import settings
-from bisheng_langchain.embeddings.host_embedding import HostEmbeddings
+from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
-from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain_community.vectorstores import (FAISS, Chroma, Milvus, MongoDBAtlasVectorSearch,
                                               Pinecone, Qdrant, SupabaseVectorStore, Weaviate)
 from loguru import logger
@@ -230,12 +229,7 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
 
         if not knowledge:
             raise ValueError(f'不能找到知识库collection={col} knowledge_id={collection_id}')
-        model_param = settings.get_knowledge().get('embeddings').get(knowledge.model)
-        if knowledge.model == 'text-embedding-ada-002':
-            embedding = OpenAIEmbeddings(**model_param)
-        else:
-            embedding = HostEmbeddings(**model_param)
-        params['embedding'] = embedding
+        params['embedding'] = decide_embeddings(knowledge.model)
         if knowledge.collection_name.startswith('partition'):
             search_kwargs.update({'partition_key': knowledge.id})
     logger.info('init_milvus collection_name={} partition={}', params['collection_name'],
@@ -266,6 +260,25 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, sea
     return class_object.from_documents(**params)
 
 
+def initial_elastic_vector(class_object: Type[ElasticKeywordsSearch], params: dict, search: dict):
+    if not params.get('connect_kwargs') and settings.get_knowledge().get('vectorstores').get(
+            'ElasticsearchStore'):
+        params['connect_kwargs'] = settings.get_knowledge().get('vectorstores').get(
+            'ElasticsearchStore')
+    params.update(params.pop('connect_kwargs'))
+    collection_id = params.pop('collection_id', '')
+    if collection_id:
+        knowledge = KnowledgeDao.query_by_id(collection_id)
+        index_name = knowledge.index_name or knowledge.collection_name
+        params['index_name'] = index_name
+        params['embedding'] = decide_embeddings(knowledge.model)
+    if params['documents']:
+        return class_object.from_documents(**params)
+    else:
+        params.pop('documents')
+        return class_object(**params)
+
+
 vecstore_initializer: Dict[str, Callable[[Type[Any], dict], Any]] = {
     'Pinecone': initialize_pinecone,
     'Chroma': initialize_chroma,
@@ -273,7 +286,7 @@ vecstore_initializer: Dict[str, Callable[[Type[Any], dict], Any]] = {
     'Weaviate': initialize_weaviate,
     'FAISS': initialize_faiss,
     'Milvus': initial_milvus,
-    'ElasticVectorSearch': initial_elastic,
+    'ElasticsearchStore': initial_elastic_vector,
     'ElasticKeywordsSearch': initial_elastic,
     'SupabaseVectorStore': initialize_supabase,
     'MongoDBAtlasVectorSearch': initialize_mongodb,

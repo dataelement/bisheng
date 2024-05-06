@@ -4,9 +4,9 @@ import { defineConfig } from "vite";
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
 const apiRoutes = ["^/api/", "/health"];
-
+import path from "path";
 // Use environment variable to determine the target.
-const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
+ const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
 
 const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
   proxyObj[route] = {
@@ -18,7 +18,7 @@ const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
   };
   // 文件服务地址
   proxyObj['/bisheng'] = {
-    target: "http://127.0.0.1",
+    target: "http://127.0.0.1:50061",
     changeOrigin: true,
     withCredentials: true,
     secure: false
@@ -39,6 +39,11 @@ export default defineConfig(() => {
             reactdrop: ['react-window', 'react-beautiful-dnd', 'react-dropzone']
           }
         }
+      }
+    },
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src')
       }
     },
     plugins: [

@@ -1,11 +1,12 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Union
+from typing import List, Optional, Union
 
+from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, text
-from sqlmodel import Field
+from sqlmodel import Field, select
 
 
 class RoleAccessBase(SQLModelSerializable):
@@ -41,9 +42,32 @@ class AccessType(Enum):
     FLOW = 2
     KNOWLEDGE_WRITE = 3
     FLOW_WRITE = 4
+    ASSISTANT_READ = 5
+    ASSISTANT_WRITE = 6
 
 
 class RoleRefresh(BaseModel):
     role_id: int
     access_id: list[Union[str, int]]
     type: int
+
+
+class RoleAccessDao(RoleAccessBase):
+
+    @classmethod
+    def get_role_access(cls, role_ids: List[int], access_type: AccessType) -> List[RoleAccess]:
+        with session_getter() as session:
+            if access_type:
+                return session.exec(
+                    select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
+                                             RoleAccess.type == access_type.value)).all()
+            return session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(role_ids))).all()
+
+    @classmethod
+    def judge_role_access(cls, role_ids: List[int], third_id: str, access_type: AccessType) -> Optional[RoleAccess]:
+        with session_getter() as session:
+            return session.exec(select(RoleAccess).filter(
+                RoleAccess.role_id.in_(role_ids),
+                RoleAccess.type == access_type.value,
+                RoleAccess.third_id == third_id
+            )).first()

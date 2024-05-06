@@ -8,6 +8,7 @@ from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
 from bisheng.utils.http_middleware import CustomMiddleware
 from bisheng.utils.logger import configure
+from bisheng.utils.threadpool import thread_pool
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,12 +16,16 @@ from fastapi.responses import FileResponse, JSONResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
+from bisheng.settings import settings
 from loguru import logger
 
 
 def handle_http_exception(req: Request, exc: HTTPException) -> ORJSONResponse:
-    msg = {'status_code': exc.status_code, 'status_message': exc.detail}
-    logger.error(f'{req.method} {req.url} {exc.status_code} {exc.detail}', exc_info=True)
+    msg = {
+        'status_code': exc.status_code,
+        'status_message': exc.detail['error'] if isinstance(exc.detail, dict) else exc.detail
+    }
+    logger.error(f'{req.method} {req.url} {exc.status_code} {exc.detail}')
     return ORJSONResponse(content=msg)
 
 
@@ -30,7 +35,10 @@ def handle_request_validation_error(req: Request, exc: RequestValidationError) -
     return ORJSONResponse(content=msg)
 
 
-_EXCEPTION_HANDLERS = {HTTPException: handle_http_exception, RequestValidationError: handle_request_validation_error}
+_EXCEPTION_HANDLERS = {
+    HTTPException: handle_http_exception,
+    RequestValidationError: handle_request_validation_error
+}
 
 
 @asynccontextmanager
@@ -41,6 +49,7 @@ async def lifespan(app: FastAPI):
     # LangfuseInstance.update()
     yield
     teardown_services()
+    thread_pool.tear_down()
 
 
 def create_app():
@@ -120,11 +129,11 @@ def setup_app(static_files_dir: Optional[Path] = None) -> FastAPI:
     return app
 
 
-configure(log_level='DEBUG', log_file='./data/bisheng.log')
+configure(settings.logger_conf)
 
 app = create_app()
 
 if __name__ == '__main__':
     import uvicorn
 
-    uvicorn.run(app, host='0.0.0.0', port=7860)
+    uvicorn.run(app, host='0.0.0.0', port=7860, workers=1)

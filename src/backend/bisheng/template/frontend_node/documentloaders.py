@@ -11,7 +11,7 @@ def build_file_field(suffixes: list,
     """Build a template field for a document loader."""
     return TemplateField(
         field_type=fieldType,
-        required=False,
+        required=True,
         show=True,
         name=name,
         value='',

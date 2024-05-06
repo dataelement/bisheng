@@ -1,36 +1,25 @@
-import { Bell, Combine, FileDown, FileUp, LogOut, Menu, Save, Search, TerminalSquare } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
-import AlertDropdown from "../../../../alerts/alertDropDown";
-import ShadTooltip from "../../../../components/ShadTooltipComponent";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../../components/ui/tooltip";
 import { alertContext } from "../../../../contexts/alertContext";
-import { PopUpContext } from "../../../../contexts/popUpContext";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
-import ApiModal from "../../../../modals/ApiModal";
 import L2ParamsModal from "../../../../modals/L2ParamsModal";
-import ExportModal from "../../../../modals/exportModal";
 import { APIClassType, APIObjectType } from "../../../../types/api";
 import { FlowType } from "../../../../types/flow";
-import { classNames, nodeColors, nodeIconsLucide, getNodeNames, } from "../../../../utils";
+import { getNodeNames, nodeColors, nodeIconsLucide } from "../../../../utils";
 import DisclosureComponent from "../DisclosureComponent";
-import { undoRedoContext } from "../../../../contexts/undoRedoContext";
+import PersonalComponents from "./PersonalComponents";
 
 export default function ExtraSidebar({ flow }: { flow: FlowType }) {
   const { t } = useTranslation()
 
   const { data } = useContext(typesContext);
-  const { openPopUp } = useContext(PopUpContext);
-  const { uploadFlow, tabsState, saveFlow } = useContext(TabsContext);
-  const AlertWidth = 384;
-  const { notificationCenter, setNotificationCenter, setSuccessData, setErrorData } = useContext(alertContext);
+  const { saveFlow } = useContext(TabsContext);
+  const { setSuccessData } = useContext(alertContext);
   const [dataFilter, setFilterData] = useState(data);
   const [search, setSearch] = useState("");
-  const isPending = tabsState[flow.id]?.isPending;
-  // 记录快照
-  const { takeSnapshot } = useContext(undoRedoContext);
 
   const [open, setOpen] = useState(false)
 
@@ -65,11 +54,11 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
     });
   }
 
-  const navgate = useNavigate()
   const nodeNames = getNodeNames()
   return (
     <div className="side-bar-arrangement">
-      <div className="flex absolute right-[80px] top-4 z-10">
+      {/* 简化 */}
+      {/* <div className="flex absolute right-[80px] top-20 z-10">
         <ShadTooltip content={t('flow.simplifyConfig')} side="bottom">
           <button className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-l-full rounded-r-none" onClick={() => setOpen(true)}>
             <Combine strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" color="#34d399"></Combine>{t('flow.simplify')}
@@ -94,12 +83,13 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
           </button>
         </ShadTooltip>
         <ShadTooltip content={t('flow.exit')} side="bottom">
-          <button className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-r-full rounded-l-none" onClick={() => navgate('/skill/' + flow.id, { replace: true })} >
+          <button className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-r-full rounded-l-none" onClick={() => navgate('/build/skill/' + flow.id, { replace: true })} >
             <LogOut strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" ></LogOut>{t('flow.exit')}
           </button>
         </ShadTooltip>
-      </div>
-      <div className="side-bar-buttons-arrangement">
+      </div> */}
+      {/* 顶部按钮组 */}
+      {/* <div className="side-bar-buttons-arrangement">
         <ShadTooltip content={t('flow.import')} side="bottom">
           <button className="extra-side-bar-buttons" onClick={() => { takeSnapshot(); uploadFlow() }} >
             <FileUp strokeWidth={1.5} className="side-bar-button-size " ></FileUp>
@@ -126,7 +116,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
             <Save strokeWidth={1.5} className={"side-bar-button-size" + (isPending ? " " : " extra-side-bar-save-disable")} ></Save>
           </button>
         </ShadTooltip>
-      </div>
+      </div> */}
       {/* <Separator /> */}
       <div className="side-bar-search-div-placement">
         <input type="text" name="search" id="search" placeholder={t('flow.searchComponent')} className="input-search rounded-full"
@@ -137,11 +127,12 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
         />
         <div className="search-icon">
           {/* ! replace hash color here */}
-          <Search size={20} strokeWidth={1.5} className="text-primary" />
+          <Search size={20} strokeWidth={1.5} className="" />
         </div>
       </div>
 
       <div className="side-bar-components-div-arrangement">
+        <PersonalComponents onDragStart={onDragStart}></PersonalComponents>
         {Object.keys(dataFilter)
           .sort()
           .map((d: keyof APIObjectType, i) =>

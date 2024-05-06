@@ -1,10 +1,11 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
+from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from pydantic import validator
 from sqlalchemy import Column, DateTime, text
-from sqlmodel import Field
+from sqlmodel import Field, select
 
 
 class UserBase(SQLModelSerializable):
@@ -61,3 +62,18 @@ class UserCreate(UserBase):
 class UserUpdate(SQLModelSerializable):
     user_id: int
     delete: Optional[int] = 0
+
+
+class UserDao(UserBase):
+
+    @classmethod
+    def get_user(cls, user_id: int) -> User | None:
+        with session_getter() as session:
+            statement = select(User).where(User.user_id == user_id)
+            return session.exec(statement).first()
+
+    @classmethod
+    def get_user_by_ids(cls, user_ids: List[int]) -> List[User] | None:
+        with session_getter() as session:
+            statement = select(User).where(User.user_id.in_(user_ids))
+            return session.exec(statement).all()

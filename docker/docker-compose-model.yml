@@ -1,7 +1,7 @@
 services:
   bisheng-rt:
     container_name: bisheng-rt
-    image: dataelement/bisheng-rt:0.0.6.2
+    image: dataelement/bisheng-rt:0.0.6.3rc1
     shm_size: 10gb
     ports:
       - "9000:9000"
@@ -16,7 +16,10 @@ services:
               device_ids: ['0,1']  # 指定想映射给rt服务使用的宿主机上的GPU ID号，如想映射多个卡，可写为['0','1','2']
     environment:
       TZ: Asia/Shanghai
+    # 不使用闭源模型的话，用下面的启动命令
     command: ["./bin/rtserver", "f"]
+    # 使用闭源模型的话，用下面的启动命令，地址替换为授权地址
+    # command: ["bash", "bin/entrypoint.sh", "--serveraddr=<license srv host>"]
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/llm:/opt/bisheng-rt/models/model_repository  # 冒号前为宿主机上放置模型目录的路径，请根据实际环境修改；冒号后为映射到容器内的路径，请勿修改
     healthcheck:
@@ -56,12 +59,14 @@ services:
 
   bisheng-unstructured:
     container_name: bisheng-unstructured
-    image: dataelement/bisheng-unstructured:0.0.3.2
+    image: dataelement/bisheng-unstructured:0.0.3.4
     ports:
       - "10001:10001"
     environment:
       rt_server: bisheng-rt:9001
       TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng-uns/config.yaml:/opt/bisheng-unstructured/bisheng_unstructured/config/config.yaml
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:10001/health"]
       interval: 30s

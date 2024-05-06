@@ -46,8 +46,6 @@ async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwa
         # 针对返回为空的情况，进行默认文案说明
         if isinstance(output, dict):
             result = output.get(langchain_object.output_keys[0])
-        elif isinstance(output, str) and len(output.strip()) == 0:
-            result = 'Warning: LLM 返回为空，请检查输入是否正确，可以尝使减少输入token数量'
         else:
             result = output
 

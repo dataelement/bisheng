@@ -3,6 +3,7 @@
 import importlib
 from typing import Any, ClassVar, Dict, Type
 
+from bisheng.interface.custom import CustomComponent
 from bisheng.interface.wrappers.base import wrapper_creator
 from bisheng.utils import validate
 from langchain.agents import Agent
@@ -10,7 +11,7 @@ from langchain.base_language import BaseLanguageModel
 from langchain.chains.base import Chain
 from langchain.chat_models.base import BaseChatModel
 from langchain.prompts import PromptTemplate
-from langchain.tools import BaseTool
+from langchain_community.tools import BaseTool
 
 
 def import_module(module_path: str) -> Any:
@@ -54,6 +55,7 @@ def import_by_type(_type: str, name: str) -> Any:
         'retrievers': import_retriever,
         'autogen_roles': import_autogenRoles,
         'input_output': import_inputoutput,
+        'custom_components': import_custom_component,
     }
     if _type == 'llms':
         key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(
@@ -65,9 +67,15 @@ def import_by_type(_type: str, name: str) -> Any:
     return loaded_func(name)
 
 
+def import_custom_component(custom_component: str) -> CustomComponent:
+    """Import custom component from custom component name"""
+    return import_class('bisheng.interface.custom.custom_component.CustomComponent')
+
+
 def import_inputoutput(input_output: str) -> Any:
     """Import output parser from output parser name"""
-    return import_module(f'from bisheng_langchain.input_output import {input_output}')
+    from bisheng.interface.inputoutput.base import input_output_creator
+    return input_output_creator.type_to_loader_dict[input_output]
 
 
 def import_output_parser(output_parser: str) -> Any:
@@ -77,7 +85,8 @@ def import_output_parser(output_parser: str) -> Any:
 
 def import_chat_llm(llm: str) -> BaseChatModel:
     """Import chat llm from llm name"""
-    return import_class(f'langchain.chat_models.{llm}')
+    from bisheng.interface.llms.base import llm_creator
+    return next(x for x in llm_creator.type_to_loader_dict.values() if x.__name__ == llm)
 
 
 def import_chain_contribute_llm(llm: str) -> BaseChatModel:
@@ -86,11 +95,12 @@ def import_chain_contribute_llm(llm: str) -> BaseChatModel:
 
 
 def import_retriever(retriever: str) -> Any:
+    """Import retriever from retriever name"""
     from bisheng.interface.retrievers.base import retriever_creator
     if retriever in retriever_creator.type_to_loader_dict:
         return retriever_creator.type_to_loader_dict[retriever]
-    """Import retriever from retriever name"""
-    return import_module(f'from langchain.retrievers import {retriever}')
+
+    return import_module(f'from langchain_community.retrievers import {retriever}')
 
 
 def import_autogenRoles(autogen: str) -> Any:
@@ -128,7 +138,8 @@ def import_wrapper(wrapper: str) -> Any:
 
 def import_toolkit(toolkit: str) -> Any:
     """Import toolkit from toolkit name"""
-    return import_module(f'from langchain.agents.agent_toolkits import {toolkit}')
+    from bisheng.interface.toolkits.base import toolkits_creator
+    return toolkits_creator.type_to_loader_dict[toolkit]
 
 
 def import_agent(agent: str) -> Agent:
@@ -152,31 +163,20 @@ def import_tool(tool: str) -> BaseTool:
     if tool in tool_creator.type_to_loader_dict:
         return tool_creator.type_to_loader_dict[tool]['fcn']
 
-    return import_class(f'langchain.tools.{tool}')
+    return import_class(f'langchain_community.tools.{tool}')
 
 
 def import_chain(chain: str) -> Type[Chain]:
     """Import chain from chain name"""
-    from bisheng.interface.chains.custom import CUSTOM_CHAINS
-
-    if chain in CUSTOM_CHAINS:
-        return CUSTOM_CHAINS[chain]
-    if chain == 'SQLDatabaseChain':
-        return import_class('langchain_experimental.sql.SQLDatabaseChain')
-
-    from bisheng_langchain import chains
-    if chain in chains.__all__:
-        return import_class(f'bisheng_langchain.chains.{chain}')
-
-    return import_class(f'langchain.chains.{chain}')
+    from bisheng.interface.chains.base import chain_creator
+    return next(x for x in chain_creator.type_to_loader_dict.values() if x.__name__ == chain)
 
 
 def import_embedding(embedding: str) -> Any:
     """Import embedding from embedding name"""
-    from bisheng_langchain import embeddings
-    if embedding in embeddings.__all__:
-        return import_class(f'bisheng_langchain.embeddings.{embedding}')
-    return import_class(f'langchain.embeddings.{embedding}')
+    from bisheng.interface.embeddings.base import embedding_creator
+    return next(x for x in embedding_creator.type_to_loader_dict.values()
+                if x.__name__ == embedding)
 
 
 def import_vectorstore(vectorstore: str) -> Any:
@@ -184,16 +184,18 @@ def import_vectorstore(vectorstore: str) -> Any:
     from bisheng_langchain import vectorstores
     if vectorstore in vectorstores.__all__:
         return import_class(f'bisheng_langchain.vectorstores.{vectorstore}')
-    return import_class(f'langchain.vectorstores.{vectorstore}')
+    return import_class(f'langchain_community.vectorstores.{vectorstore}')
 
 
 def import_documentloader(documentloader: str) -> Any:
     """Import documentloader from documentloader name"""
     from bisheng_langchain import document_loaders
+    from bisheng.interface.document_loaders.base import documentloader_creator
 
     if documentloader in document_loaders.__all__:
         return import_class(f'bisheng_langchain.document_loaders.{documentloader}')
-    return import_class(f'langchain.document_loaders.{documentloader}')
+    return next(x for x in documentloader_creator.type_to_loader_dict.values()
+                if x.__name__ == documentloader)
 
 
 def import_textsplitter(textsplitter: str) -> Any:
@@ -205,7 +207,7 @@ def import_utility(utility: str) -> Any:
     """Import utility from utility name"""
     if utility == 'SQLDatabase':
         return import_class(f'langchain.sql_database.{utility}')
-    return import_class(f'langchain.utilities.{utility}')
+    return import_class(f'langchain_community.utilities.{utility}')
 
 
 def get_function(code):
@@ -213,3 +215,9 @@ def get_function(code):
     function_name = validate.extract_function_name(code)
 
     return validate.create_function(code, function_name)
+
+
+def eval_custom_component_code(code: str) -> Type[CustomComponent]:
+    """Evaluate custom component code"""
+    class_name = validate.extract_class_name(code)
+    return validate.create_class(code, class_name)

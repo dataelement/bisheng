@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import AceEditor from "react-ace";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/ui/button";
+import { Button } from "../../../components/bs-ui/button";
 import { alertContext } from "../../../contexts/alertContext";
 import { getSysConfigApi, setSysConfigApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
@@ -52,8 +52,7 @@ export default function Config() {
             className="h-[70vh] w-full rounded-lg border-[1px] border-border custom-scroll"
         />
         <div className="flex justify-center mt-8">
-            <Button className=" rounded-full px-24" onClick={handleSave}>{t('save')}</Button>
+            <Button className=" h-10 w-[120px] px-24" onClick={handleSave}>{t('save')}</Button>
         </div>
     </div>
 };
-

@@ -7,7 +7,7 @@ from bisheng.template.frontend_node.vectorstores import VectorStoreFrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_method
 from bisheng_langchain import vectorstores as contribute_vectorstores
-from langchain import vectorstores
+from langchain_community import vectorstores
 
 
 class VectorstoreCreator(LangChainTypeCreator):
@@ -21,12 +21,14 @@ class VectorstoreCreator(LangChainTypeCreator):
     def type_to_loader_dict(self) -> Dict:
         if self.type_dict is None:
             self.type_dict: dict[str, Any] = {
-                vectorstore_name: import_class(f'langchain.vectorstores.{vectorstore_name}')
+                vectorstore_name:
+                import_class(f'langchain_community.vectorstores.{vectorstore_name}')
                 for vectorstore_name in vectorstores.__all__
                 if vectorstore_name != 'Milvus'  # use bisheng_langchain
             }
             self.type_dict.update({
-                vectorstore_name: import_class(f'bisheng_langchain.vectorstores.{vectorstore_name}')
+                vectorstore_name:
+                import_class(f'bisheng_langchain.vectorstores.{vectorstore_name}')
                 for vectorstore_name in contribute_vectorstores.__all__
             })
         return self.type_dict

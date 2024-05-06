@@ -146,6 +146,10 @@ class Vertex:
             if not hasattr(edge, 'target_param'):
                 continue
             param_key = edge.target_param
+
+            # If the param_key is in the template_dict and the edge.target_id is the current node
+            # We check this to make sure params with the same name but different target_id
+            # don't get overwritten
             if param_key in template_dict and edge.target_id == self.id:
                 if template_dict[param_key]['list']:
                     if param_key not in params:
@@ -189,9 +193,10 @@ class Vertex:
         for key, value in template_dict.items():
             if key in params:
                 continue
-            if key == '_type' or (not value.get('show') and not value.get('value')):
+            if key == '_type' or (not value.get('show')
+                                  and not value.get('value')) and key != 'code':
                 continue
-            if value.get('collection_id'):
+            if value.get('collection_id') and 'collection_id' not in template_dict:
                 params['collection_id'] = value.get('collection_id')
             # If the type is not transformable to a python base class
             # then we need to get the edge that connects to this node
@@ -223,7 +228,7 @@ class Vertex:
                     elif isinstance(val, dict):
                         params[key] = val
                     elif isinstance(val, str):
-                        params[key] = json.loads(val)
+                        params[key] = json.loads(val) if val else {}
                 elif value.get('type') == 'int' and val is not None:
                     try:
                         params[key] = int(val)
@@ -453,4 +458,4 @@ class Vertex:
 
     def _built_object_repr(self):
         # Add a message with an emoji, stars for sucess,
-        return 'Built successfully ✨' if self._built_object else 'Failed to build 😵‍💫'
+        return f'Built successfully {self.id}' if self._built_object else f'Failed to build {self.id}'

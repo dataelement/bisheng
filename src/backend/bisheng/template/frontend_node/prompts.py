@@ -8,6 +8,7 @@ from langchain.agents.mrkl import prompt
 
 
 class PromptFrontendNode(FrontendNode):
+
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:
         # if field.field_type  == "StringPromptTemplate"
@@ -31,10 +32,7 @@ class PromptFrontendNode(FrontendNode):
             field.field_type = 'prompt'
             field.advanced = False
 
-        if (
-            'Union' in field.field_type
-            and 'BaseMessagePromptTemplate' in field.field_type
-        ):
+        if ('Union' in field.field_type and 'BaseMessagePromptTemplate' in field.field_type):
             field.field_type = 'BaseMessagePromptTemplate'
 
         # All prompt fields should be password=False

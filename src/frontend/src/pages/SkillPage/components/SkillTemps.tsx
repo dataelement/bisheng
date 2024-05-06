@@ -35,7 +35,7 @@ export default function SkillTemps({ flows, isTemp = false,
                         </CardHeader>
                     </Card>
                 ))}
-                {isTemp && <Card className="w-[300px] mr-4 mb-4 overflow-hidden cursor-pointer" onClick={() => navigate('/skill')}>
+                {isTemp && <Card className="w-[300px] mr-4 mb-4 overflow-hidden cursor-pointer" onClick={() => navigate('/build/skill')}>
                     <CardContent className="flex flex-col items-center pt-4 hover:text-slate-500">
                         <PlusSquare />
                         <span>{t('skills.custom')}</span>

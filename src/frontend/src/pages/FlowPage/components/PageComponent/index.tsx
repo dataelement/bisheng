@@ -29,10 +29,16 @@ import { typesContext } from "../../../../contexts/typesContext";
 import { undoRedoContext } from "../../../../contexts/undoRedoContext";
 import { APIClassType } from "../../../../types/api";
 import { FlowType, NodeType } from "../../../../types/flow";
+import { generateFlow, generateNodeFromFlow, reconnectEdges, validateSelection } from "../../../../util/reactflowUtils";
 import { intersectArrays } from "../../../../util/utils";
 import { isValidConnection } from "../../../../utils";
 import ConnectionLineComponent from "../ConnectionLineComponent";
+import SelectionMenu from "../SelectionMenuComponent";
 import ExtraSidebar from "../extraSidebarComponent";
+import { alertContext } from "../../../../contexts/alertContext";
+import Header from "../Header";
+import { Badge } from "@/components/bs-ui/badge";
+import { LayersIcon } from "@radix-ui/react-icons";
 
 const nodeTypes = {
   genericNode: GenericNode,
@@ -41,12 +47,14 @@ const nodeTypes = {
 export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: string }) {
 
   let {
+    version,
     setFlow,
     setTabsState,
     saveFlow,
     uploadFlow,
     getNodeId,
   } = useContext(TabsContext);
+  const { setErrorData } = useContext(alertContext);
 
   const reactFlowWrapper = useRef(null);
   const { data, types, reactFlowInstance, setReactFlowInstance, templates } = useContext(typesContext);
@@ -59,10 +67,22 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   // 记录快照
   const { takeSnapshot } = useContext(undoRedoContext);
   // 快捷键
-  const [keyBoardPanneRef, setLastSelection] = useKeyBoard(reactFlowWrapper)
+  const { keyBoardPanneRef, lastSelection, setLastSelection } = useKeyBoard(reactFlowWrapper)
   const onSelectionChange = useCallback((flow) => {
     setLastSelection(flow);
   }, []);
+
+  const [selectionMenuVisible, setSelectionMenuVisible] = useState(false);
+  const [selectionEnded, setSelectionEnded] = useState(true);
+
+  // Workaround to show the menu only after the selection has ended.
+  useEffect(() => {
+    if (selectionEnded && lastSelection && lastSelection.nodes.length > 1) {
+      setSelectionMenuVisible(true);
+    } else {
+      setSelectionMenuVisible(false);
+    }
+  }, [selectionEnded, lastSelection]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(
     flow.data?.nodes ?? []
@@ -73,12 +93,12 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   const { setViewport } = useReactFlow();
   useEffect(() => {
     if (reactFlowInstance && flow) {
-      // 节点变化update flow
+      // 节点变化update flow(唯一修改口)
       flow.data = reactFlowInstance.toObject();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     /**
-     * 由于flow模块设计问题，临时通过把flow挂在到window上，来提供 reactflow 节点做重复 id校验使用
+     * 由于flow模块设计问题，临时通过把flow挂在到window上，来提供 reactflow 节点 做重复id校验使用
      */
     window._flow = flow;
   }, [nodes, edges]);
@@ -306,7 +326,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
           }
         });
       });
-
+      // TODO 修改 setNodes 来更新
       setFlow('changeid', { ...flow })
     }
     document.addEventListener('idChange', handleChangeId)
@@ -314,59 +334,122 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   }, [flow.data]); // 修改 id后, 需要监听 data这一层
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {Object.keys(data).length ? <ExtraSidebar flow={flow} /> : <></>}
-      {/* Main area */}
-      <main className="flex flex-1" ref={keyBoardPanneRef}>
-        {/* Primary column */}
-        <div className="h-full w-full">
-          <div className="h-full w-full" ref={reactFlowWrapper}>
-            {Object.keys(templates).length > 0 && Object.keys(types).length > 0 ? (
-              <div className="h-full w-full">
-                <ReactFlow
-                  nodes={nodes}
-                  onMove={() => {
-                    if (reactFlowInstance)
-                      flow = { ...flow, data: reactFlowInstance.toObject() }
-                  }}
-                  edges={edges}
-                  onNodesChange={onNodesChangeMod}
-                  onEdgesChange={onEdgesChangeMod}
-                  onConnect={onConnect}
-                  disableKeyboardA11y={true}
-                  onInit={setReactFlowInstance}
-                  nodeTypes={nodeTypes}
-                  onEdgeUpdate={onEdgeUpdate}
-                  onEdgeUpdateStart={onEdgeUpdateStart}
-                  onEdgeUpdateEnd={onEdgeUpdateEnd}
-                  onNodeDragStart={onNodeDragStart}
-                  onSelectionDragStart={onSelectionDragStart}
-                  onEdgesDelete={onEdgesDelete}
-                  connectionLineComponent={ConnectionLineComponent}
-                  onDragOver={onDragOver}
-                  onDrop={onDrop}
-                  onNodesDelete={onDelete}
-                  onSelectionChange={onSelectionChange}
-                  className="theme-attribution"
-                  minZoom={0.01}
-                  maxZoom={8}
-                  fitView
-                >
-                  <Background className="bg-gray-0 dark:bg-gray-950" color='#999' variant={BackgroundVariant.Dots} />
-                  <Controls showInteractive={false}
-                    className="bg-muted fill-foreground stroke-foreground text-primary
+    <div className="flex flex-col h-full overflow-hidden">
+      <Header flow={flow}></Header>
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {Object.keys(data).length ? <ExtraSidebar flow={flow} /> : <></>}
+        {/* Main area */}
+        <main className="flex flex-1" ref={keyBoardPanneRef}>
+          {/* Primary column */}
+          <div className="h-full w-full">
+            <div className="h-full w-full" ref={reactFlowWrapper}>
+              {Object.keys(templates).length > 0 && Object.keys(types).length > 0 ? (
+                <div className="h-full w-full">
+                  <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onMove={() => {
+                      if (reactFlowInstance)
+                        // 无用 待删
+                        flow = { ...flow, data: reactFlowInstance.toObject() }
+                    }}
+                    onNodesChange={onNodesChangeMod}
+                    onEdgesChange={onEdgesChangeMod}
+                    onConnect={onConnect}
+                    disableKeyboardA11y={true}
+                    onInit={setReactFlowInstance}
+                    nodeTypes={nodeTypes}
+                    onEdgeUpdate={onEdgeUpdate}
+                    onEdgeUpdateStart={onEdgeUpdateStart}
+                    onEdgeUpdateEnd={onEdgeUpdateEnd}
+                    onNodeDragStart={onNodeDragStart}
+                    onSelectionDragStart={onSelectionDragStart}
+                    onSelectionStart={(e) => { e.preventDefault(); setSelectionEnded(false) }}
+                    onSelectionEnd={() => setSelectionEnded(true)}
+                    onEdgesDelete={onEdgesDelete}
+                    connectionLineComponent={ConnectionLineComponent}
+                    onDragOver={onDragOver}
+                    onDrop={onDrop}
+                    onNodesDelete={onDelete}
+                    onSelectionChange={onSelectionChange}
+                    className="theme-attribution"
+                    minZoom={0.01}
+                    maxZoom={8}
+                    fitView
+                  >
+                    <Background className="bg-gray-100 dark:bg-gray-950" color='#999' variant={BackgroundVariant.Dots} />
+                    <Controls showInteractive={false}
+                      className="bg-muted fill-foreground stroke-foreground text-primary
                    [&>button]:border-b-border hover:[&>button]:bg-border"
-                  ></Controls>
-                </ReactFlow>
-                <Chat flow={flow} reactFlowInstance={reactFlowInstance} />
-                <p className="absolute top-0 left-[220px] text-xs mt-2 text-gray-500">{flow.name}</p>
-              </div>
-            ) : (
-              <></>
-            )}
+                    ></Controls>
+                    <SelectionMenu
+                      isVisible={selectionMenuVisible}
+                      nodes={lastSelection?.nodes}
+                      onClick={() => {
+                        takeSnapshot();
+                        const valiDateRes = validateSelection(lastSelection!, edges)
+                        if (valiDateRes.length === 0) {
+                          // groupFlow
+                          const { newFlow, removedEdges } = generateFlow(
+                            lastSelection!,
+                            nodes,
+                            edges,
+                            ''
+                          );
+                          // newGroupNode（inset groupFlow）
+                          const newGroupNode = generateNodeFromFlow(
+                            newFlow,
+                            getNodeId
+                          );
+                          // group之外的线
+                          const newEdges = reconnectEdges(
+                            newGroupNode,
+                            removedEdges
+                          );
+                          // 更新节点，过滤重复 node
+                          setNodes((oldNodes) => [
+                            ...oldNodes.filter(
+                              (oldNodes) =>
+                                !lastSelection?.nodes.some(
+                                  (selectionNode) =>
+                                    selectionNode.id === oldNodes.id
+                                )
+                            ),
+                            newGroupNode,
+                          ]);
+                          setEdges((oldEdges) => [
+                            ...oldEdges.filter(
+                              (oldEdge) =>
+                                !lastSelection!.nodes.some(
+                                  (selectionNode) =>
+                                    selectionNode.id === oldEdge.target ||
+                                    selectionNode.id === oldEdge.source
+                                )
+                            ),
+                            ...newEdges,
+                          ]);
+                        } else {
+                          setErrorData({
+                            title: "Invalid selection",
+                            list: valiDateRes,
+                          });
+                        }
+                      }}
+                    />
+                  </ReactFlow>
+                  <Chat flow={flow} reactFlowInstance={reactFlowInstance} />
+                  <div className="absolute top-20 left-[220px] text-xs mt-2 text-gray-500">
+                    <p className="mb-2">{flow.name}</p>
+                    <Badge variant="outline"><LayersIcon className="mr-1" />当前版本：{version?.name}</Badge>
+                  </div>
+                </div>
+              ) : (
+                <></>
+              )}
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
       {/* 删除确认 */}
       <dialog className={`modal ${blocker.state === "blocked" && 'modal-open'}`}>
         <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
@@ -389,7 +472,7 @@ const useKeyBoard = (reactFlowWrapper) => {
 
   const position = useRef({ x: 0, y: 0 });
   const [lastSelection, setLastSelection] =
-    useState<OnSelectionChangeParams>(null);
+    useState<OnSelectionChangeParams | null>(null);
   let {
     lastCopiedSelection,
     paste,
@@ -408,8 +491,14 @@ const useKeyBoard = (reactFlowWrapper) => {
       ) {
         event.preventDefault();
         setLastCopiedSelection(cloneDeep(lastSelection));
-      }
-      if (
+        // } else if (
+        //   (event.ctrlKey || event.metaKey) &&
+        //   event.key === "x" &&
+        //   lastSelection
+        // ) {
+        //   event.preventDefault();
+        //   setLastCopiedSelection(cloneDeep(lastSelection), true);
+      } else if (
         (event.ctrlKey || event.metaKey) &&
         event.key === "v" &&
         lastCopiedSelection
@@ -420,6 +509,12 @@ const useKeyBoard = (reactFlowWrapper) => {
           x: position.current.x - bounds.left,
           y: position.current.y - bounds.top,
         });
+      } else if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key === "g" &&
+        lastSelection
+      ) {
+        event.preventDefault();
       }
     };
     const handleMouseMove = (event) => {
@@ -435,7 +530,7 @@ const useKeyBoard = (reactFlowWrapper) => {
     };
   }, [position, lastCopiedSelection, lastSelection]);
 
-  return [keyBoardPanneRef, setLastSelection] as const
+  return { lastSelection, keyBoardPanneRef, setLastSelection }
 }
 
 // 离开页面保存提示

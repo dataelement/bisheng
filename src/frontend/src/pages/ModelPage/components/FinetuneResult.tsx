@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/bs-ui/card";
 import { getTaskInfoApi } from "../../../controllers/API/finetune";
 import { TaskStatus } from "./FinetuneDetail";
 
@@ -93,7 +93,7 @@ export default function FinetuneResult({ id, training, isStop, failed, onChange 
                 <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.trainingLogs')}</small>
             </div>
             <div className="mt-4 rounded-md bg-gray-100 dark:bg-gray-800 p-2 overflow-auto max-w-full h-[400px]">
-                <pre className="text-gray-500 text-sm">{logs}</pre>
+                <pre className="text-gray-500 text-sm max-w-[500px]">{logs}</pre>
             </div>
         </div>
     </div>

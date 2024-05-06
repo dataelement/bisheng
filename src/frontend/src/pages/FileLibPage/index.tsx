@@ -1,34 +1,34 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
+import { Button } from "../../components/bs-ui/button";
+import { Input, SearchInput } from "../../components/bs-ui/input";
 import {
     Table,
     TableBody,
-    TableCaption,
     TableCell,
     TableHead,
     TableHeader,
-    TableRow,
-} from "../../components/ui/table";
+    TableRow
+} from "../../components/bs-ui/table";
 import {
     Tabs,
     TabsContent,
     TabsList,
     TabsTrigger,
-} from "../../components/ui/tabs";
+} from "../../components/bs-ui/tabs";
 
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Textarea } from "../../components/bs-ui/input";
 import Dropdown from "../../components/dropdownComponent";
-import { Textarea } from "../../components/ui/textarea";
 import { alertContext } from "../../contexts/alertContext";
 import { userContext } from "../../contexts/userContext";
 import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-import PaginationComponent from "../../components/PaginationComponent";
+// import PaginationComponent from "../../components/PaginationComponent";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
-import { Search } from "lucide-react";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 function CreateModal({ datalist, open, setOpen }) {
     const { t } = useTranslation()
@@ -87,51 +87,58 @@ function CreateModal({ datalist, open, setOpen }) {
         });
     }
 
-    return <dialog className={`modal bg-blur-shared ${open ? 'modal-open' : 'modal-close'}`} onClick={() => setOpen(false)}>
-        <form method="dialog" className="max-w-[600px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={e => e.stopPropagation()}>
-            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={() => setOpen(false)}>✕</button>
-            <h3 className="font-bold text-lg">{t('lib.createLibrary')}</h3>
-            <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
-                <div className="grid gap-4 py-4 mt-2">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="name" className="text-right">{t('lib.libraryName')}</Label>
-                        <Input id="name" ref={nameRef} placeholder={t('lib.libraryName')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="desc" className="text-right">{t('lib.description')}</Label>
-                        <Textarea id="desc" ref={descRef} placeholder={t('lib.description')} className={`col-span-3 ${error.desc && 'border-red-400'}`} />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label className="text-right">{t('lib.model')}</Label>
-                        <Dropdown
-                            options={options}
-                            onSelect={(val) => setModal(val)}
-                            value={modal}
-                        ></Dropdown>
-                    </div>
-                    <Button type="submit" className="mt-6 h-8 rounded-full" onClick={handleCreate}>{t('create')}</Button>
+    return <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-[625px]">
+            <DialogHeader>
+                <DialogTitle>{t('lib.createLibrary')}</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 py-2">
+                <div className="">
+                    <label htmlFor="name" className="bisheng-label">{t('lib.libraryName')}</label>
+                    <Input name="name" ref={nameRef} placeholder={t('lib.libraryName')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
+                </div>
+                <div className="">
+                    <label htmlFor="name" className="bisheng-label">{t('lib.description')}</label>
+                    <Textarea id="desc" ref={descRef} placeholder={t('lib.description')} className={`col-span-3 ${error.desc && 'border-red-400'}`} />
+                </div>
+                <div className="">
+                    <label htmlFor="roleAndTasks" className="bisheng-label">{t('lib.model')}</label>
+                    <Dropdown
+                        options={options}
+                        onSelect={(val) => setModal(val)}
+                        value={modal}
+                    ></Dropdown>
                 </div>
             </div>
-        </form>
-    </dialog>
+            <DialogFooter>
+                <DialogClose>
+                    <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
+                </DialogClose>
+                <Button type="submit" className="px-11" onClick={handleCreate}>{t('create')}</Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
 }
 
 export default function FileLibPage() {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable((param) =>
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
         readFileLibDatabase(param.page, param.pageSize, param.keyword)
     )
 
-    // Delete
-    const { delShow, idRef, close, delConfirm } = useDelete();
-
-    const handleDelete = () => {
-        captureAndAlertRequestErrorHoc(deleteFileLib(idRef.current.id).then(res => {
-            reload();
-            close();
-        }));
+    const handleDelete = (id) => {
+        bsConfirm({
+            title: t('prompt'),
+            desc: t('lib.confirmDeleteLibrary'),
+            onOk(next) {
+                captureAndAlertRequestErrorHoc(deleteFileLib(id).then(res => {
+                    reload();
+                }));
+                next()
+            },
+        })
     }
 
     // 进详情页前缓存 page, 临时方案
@@ -152,106 +159,72 @@ export default function FileLibPage() {
     const { t } = useTranslation();
 
     return (
-        <div className="w-full h-screen p-6 overflow-y-auto">
+        <div className="w-full h-full px-2 py-4 relative">
             {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <span className="loading loading-infinity loading-lg"></span>
             </div>}
+            <div className="h-full overflow-y-auto pb-10">
+                <Tabs defaultValue="account" className="w-full mb-[40px]">
+                    <TabsList className="">
+                        <TabsTrigger value="account" className="roundedrounded-xl">{t('lib.fileData')}</TabsTrigger>
+                        <TabsTrigger disabled value="password">{t('lib.structuredData')}</TabsTrigger>
+                    </TabsList>
 
-            <Tabs defaultValue="account" className="w-full">
-                <TabsList className="">
-                    <TabsTrigger value="account" className="roundedrounded-xl">{t('lib.fileData')}</TabsTrigger>
-                    <TabsTrigger disabled value="password">{t('lib.structuredData')}</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="account">
-                    <div className="flex justify-end gap-4 items-center">
-                        <div className="w-[180px] relative">
-                            <Input placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)}></Input>
-                            <Search className="absolute right-4 top-2 text-gray-300 pointer-events-none"></Search>
+                    <TabsContent value="account">
+                        <div className="flex justify-end gap-4 items-center">
+                            <SearchInput placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)} />
+                            <Button className="px-8" onClick={() => setOpen(true)}>{t('create')}</Button>
                         </div>
-                        <Button className="h-8 rounded-full" onClick={() => setOpen(true)}>{t('create')}</Button>
-                    </div>
-                    <Table>
-                        <TableCaption>
-                            <p>{t('lib.libraryCollection')}</p>
-                            <div className="">
-                                <PaginationComponent
-                                    page={page}
-                                    pageSize={pageSize}
-                                    total={total}
-                                    onChange={(newPage) => setPage(newPage)}
-                                />
-                            </div>
-                        </TableCaption>
-
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
-                                <TableHead>{t('lib.model')}</TableHead>
-                                <TableHead>{t('createTime')}</TableHead>
-                                <TableHead>{t('updateTime')}</TableHead>
-                                <TableHead>{t('lib.createUser')}</TableHead>
-                                <TableHead className="text-right"></TableHead>
-                            </TableRow>
-                        </TableHeader>
-
-                        <TableBody>
-                            {datalist.map((el) => (
-                                <TableRow key={el.id}>
-                                    <TableCell className="font-medium">{el.name}</TableCell>
-                                    <TableCell>{el.model || '--'}</TableCell>
-                                    <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-                                    <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                                    <TableCell>{el.user_name || '--'}</TableCell>
-                                    <TableCell className="text-right" onClick={() => {
-                                        // @ts-ignore
-                                        window.libname = el.name;
-                                    }}>
-                                        <Link to={`/filelib/${el.id}`} className="underline" onClick={handleCachePage}>{t('lib.details')}</Link>
-                                        {user.role === 'admin' || user.user_id === el.user_id ?
-                                            <a href="javascript:;" onClick={() => delConfirm(el)} className="underline ml-4">{t('delete')}</a> :
-                                            <a href="javascript:;" className="underline ml-4 text-gray-400">{t('delete')}</a>
-                                        }
-                                    </TableCell>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
+                                    <TableHead>{t('lib.model')}</TableHead>
+                                    <TableHead>{t('createTime')}</TableHead>
+                                    <TableHead>{t('updateTime')}</TableHead>
+                                    <TableHead>{t('lib.createUser')}</TableHead>
+                                    <TableHead className="text-right">{t('operations')}</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </TabsContent>
-                <TabsContent value="password"></TabsContent>
-            </Tabs>
+                            </TableHeader>
 
+                            <TableBody>
+                                {datalist.map((el) => (
+                                    <TableRow key={el.id}>
+                                        <TableCell className="font-medium">{el.name}</TableCell>
+                                        <TableCell>{el.model || '--'}</TableCell>
+                                        <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
+                                        <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                                        <TableCell>{el.user_name || '--'}</TableCell>
+                                        <TableCell className="text-right" onClick={() => {
+                                            // @ts-ignore
+                                            window.libname = el.name;
+                                        }}>
+                                            <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-[#0455e1]" onClick={handleCachePage}>{t('lib.details')}</Link>
+                                            {user.role === 'admin' || user.user_id === el.user_id ?
+                                                <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500 px-0">{t('delete')}</Button> :
+                                                <Button variant="link" className="ml-4 text-gray-400 px-0">{t('delete')}</Button>
+                                            }
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TabsContent>
+                    <TabsContent value="password"></TabsContent>
+                </Tabs>
+            </div>
+            <div className="bisheng-table-footer px-6">
+                <p className="desc">{t('lib.libraryCollection')}</p>
+                <div>
+                    <AutoPagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={total}
+                        onChange={(newPage) => setPage(newPage)}
+                    />
+                </div>
+            </div>
             <CreateModal datalist={datalist} open={open} setOpen={setOpen}></CreateModal>
-
-            <dialog className={`modal ${delShow && 'modal-open'}`}>
-                <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-                    <h3 className="font-bold text-lg">{t('prompt')}</h3>
-                    <p className="py-4">{t('lib.confirmDeleteLibrary')}</p>
-                    <div className="modal-action">
-                        <Button className="h-8 rounded-full" variant="outline" onClick={close}>{t('cancel')}</Button>
-                        <Button className="h-8 rounded-full" variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
-                    </div>
-                </form>
-            </dialog>
         </div>
     );
-}
-
-
-
-const useDelete = () => {
-    const [delShow, setDelShow] = useState(false)
-    const idRef = useRef<any>(null)
-
-    return {
-        delShow,
-        idRef,
-        close: () => {
-            setDelShow(false)
-        },
-        delConfirm: (id) => {
-            idRef.current = id
-            setDelShow(true)
-        }
-    }
 }
