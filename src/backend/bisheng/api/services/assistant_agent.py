@@ -5,13 +5,15 @@ from typing import Dict, List
 from uuid import UUID
 
 import httpx
+from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.utils import replace_flow_llm, set_flow_knowledge_id
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
 from bisheng.database.models.flow import FlowDao, FlowStatus
-from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao
+from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType, AuthMethod
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
@@ -102,6 +104,9 @@ class AssistantAgent(AssistantUtils):
         return data
 
     def parse_tool_params(self, tool: GptsTools) -> Dict:
+        """
+        解析预置工具的初始化参数
+        """
         if not tool.extra:
             return {}
         params = json.loads(tool.extra)
@@ -110,6 +115,59 @@ class AssistantAgent(AssistantUtils):
         if params.get('&initdb_conf_key'):
             return self.get_initdb_conf_by_more_key(params.get('&initdb_conf_key'))
         return params
+
+    async def init_preset_tools(self, tool_list: List[GptsTools], callbacks: Callbacks = None):
+        """
+        初始化预置工具列表
+        """
+        tool_name_param = {
+            tool.tool_key: self.parse_tool_params(tool)
+            for tool in tool_list
+        }
+        tool_langchain = load_tools(tool_params=tool_name_param,
+                                    llm=self.llm,
+                                    callbacks=callbacks)
+        return tool_langchain
+
+    @staticmethod
+    async def parse_personal_params(tool: GptsTools, all_tool_type: Dict[int, GptsToolsType]) -> Dict:
+        """
+        解析自定义工具的初始化参数
+        """
+        tool_type_info = all_tool_type.get(tool.type)
+        if not tool_type_info:
+            raise Exception(f'获取工具类型失败，tool_type_id: {tool.type}')
+
+        # 拼接请求头
+        headers = {}
+        if tool_type_info.auth_method == AuthMethod.API_KEY.value:
+            headers = {
+                "Authorization": f"{tool_type_info.auth_type} {tool_type_info.api_key}"
+            }
+
+        # 返回初始化 openapi所需的入参
+        params = {
+            "params": json.loads(tool.extra),
+            "headers": headers,
+            "url": tool_type_info.server_host,
+            "description": tool.name + tool.desc if tool.desc else tool.name
+        }
+        return params
+
+    async def init_personal_tools(self, tool_list: List[GptsTools], callbacks: Callbacks = None):
+        """
+        初始化自定义工具列表
+        """
+        tool_type_ids = [one.type for one in tool_list]
+        all_tool_type = GptsToolsDao.get_all_tool_type(tool_type_ids)
+        all_tool_type = {one.id: one for one in all_tool_type}
+        tool_langchain = []
+        for one in tool_list:
+            tool_params = await self.parse_personal_params(one, all_tool_type)
+            openapi_tool = OpenApiTools.get_api_tool(one.tool_key, **tool_params)
+            openapi_tool.callbacks = callbacks
+            tool_langchain.append(openapi_tool)
+        return tool_langchain
 
     async def init_tools(self, callbacks: Callbacks = None):
         """通过名称获取tool 列表
@@ -128,17 +186,24 @@ class AssistantAgent(AssistantUtils):
                 flow_links.append(link)
         if tool_ids:
             tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
-            tool_name_param = {
-                tool.tool_key: self.parse_tool_params(tool)
-                for tool in tools_model
-            }
-            tool_langchain = load_tools(tool_params=tool_name_param,
-                                        llm=self.llm,
-                                        callbacks=callbacks)
-            tools += tool_langchain
-            logger.info('act=build_tools size={} return_tools={}', len(tools), len(tool_langchain))
+            preset_tools = []
+            personal_tools = []
+            for one in tools_model:
+                if one.is_preset:
+                    preset_tools.append(one)
+                else:
+                    personal_tools.append(one)
+            if preset_tools:
+                tool_langchain = await self.init_preset_tools(preset_tools, callbacks)
+                logger.info('act=build_preset_tools size={} return_tools={}', len(preset_tools), len(tool_langchain))
+                tools += tool_langchain
+            if personal_tools:
+                tool_langchain = await self.init_personal_tools(personal_tools, callbacks)
+                logger.info('act=build_personal_tools size={} return_tools={}', len(personal_tools),
+                            len(tool_langchain))
+                tools += tool_langchain
 
-        # flow, 当知识库的时候，flow_id 会重复
+        # flow + knowledge
         flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links if link.flow_id])
         knowledge_data = KnowledgeDao.get_list_by_ids(
             [link.knowledge_id for link in flow_links if link.knowledge_id])
