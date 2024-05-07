@@ -63,18 +63,19 @@ class MixRetriever(BaseRetriever):
     def _get_relevant_documents(
         self,
         query: str,
-        collection_name: str,
+        collection_name: Optional[str] = None,
     ) -> List[Document]:
-        self.keyword_store = self.keyword_store.__class__(
-            index_name=collection_name,
-            elasticsearch_url=self.keyword_store.elasticsearch_url,
-            ssl_verify=self.keyword_store.ssl_verify,
-        )
-        self.vector_store = self.vector_store.__class__(
-            collection_name=collection_name,
-            embedding_function=self.vector_store.embedding_func,
-            connection_args=self.vector_store.connection_args,
-        )
+        if collection_name:
+            self.keyword_store = self.keyword_store.__class__(
+                index_name=collection_name,
+                elasticsearch_url=self.keyword_store.elasticsearch_url,
+                ssl_verify=self.keyword_store.ssl_verify,
+            )
+            self.vector_store = self.vector_store.__class__(
+                collection_name=collection_name,
+                embedding_function=self.vector_store.embedding_func,
+                connection_args=self.vector_store.connection_args,
+            )
         if self.search_type == 'similarity':
             keyword_docs = self.keyword_store.similarity_search(query, **self.keyword_search_kwargs)
             vector_docs = self.vector_store.similarity_search(query, **self.vector_search_kwargs)

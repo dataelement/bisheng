@@ -68,18 +68,19 @@ class SmallerChunksVectorRetriever(BaseRetriever):
     def _get_relevant_documents(
         self,
         query: str,
-        collection_name: str,
+        collection_name: Optional[str] = None,
     ) -> List[Document]:
-        child_vectorstore = self.vector_store.__class__(
-            collection_name=collection_name + 'child',
-            embedding_function=self.vector_store.embedding_func,
-            connection_args=self.vector_store.connection_args,
-        )
-        parent_vectorstore = self.vector_store.__class__(
-            collection_name=collection_name + 'parent',
-            embedding_function=self.vector_store.embedding_func,
-            connection_args=self.vector_store.connection_args,
-        )
+        if collection_name:
+            child_vectorstore = self.vector_store.__class__(
+                collection_name=collection_name + 'child',
+                embedding_function=self.vector_store.embedding_func,
+                connection_args=self.vector_store.connection_args,
+            )
+            parent_vectorstore = self.vector_store.__class__(
+                collection_name=collection_name + 'parent',
+                embedding_function=self.vector_store.embedding_func,
+                connection_args=self.vector_store.connection_args,
+            )
         sub_docs = child_vectorstore.similarity_search(query, **self.child_search_kwargs)
         doc_ids, ret = [], []
         for doc in sub_docs:

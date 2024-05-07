@@ -51,13 +51,14 @@ class KeywordRetriever(BaseRetriever):
     def _get_relevant_documents(
         self,
         query: str,
-        collection_name: str,
+        collection_name: Optional[str] = None,
     ) -> List[Document]:
-        self.keyword_store = self.keyword_store.__class__(
-            index_name=collection_name,
-            elasticsearch_url=self.keyword_store.elasticsearch_url,
-            ssl_verify=self.keyword_store.ssl_verify,
-        )
+        if collection_name:
+            self.keyword_store = self.keyword_store.__class__(
+                index_name=collection_name,
+                elasticsearch_url=self.keyword_store.elasticsearch_url,
+                ssl_verify=self.keyword_store.ssl_verify,
+            )
         if self.search_type == 'similarity':
             result = self.keyword_store.similarity_search(query, **self.search_kwargs)
         return result

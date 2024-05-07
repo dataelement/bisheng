@@ -48,13 +48,14 @@ class BaselineVectorRetriever(BaseRetriever):
     def _get_relevant_documents(
         self,
         query: str,
-        collection_name: str,
+        collection_name: Optional[str] = None,
     ) -> List[Document]:
-        self.vector_store = self.vector_store.__class__(
-            collection_name=collection_name,
-            embedding_function=self.vector_store.embedding_func,
-            connection_args=self.vector_store.connection_args,
-        )
+        if collection_name:
+            self.vector_store = self.vector_store.__class__(
+                collection_name=collection_name,
+                embedding_function=self.vector_store.embedding_func,
+                connection_args=self.vector_store.connection_args,
+            )
         if self.search_type == 'similarity':
             result = self.vector_store.similarity_search(query, **self.search_kwargs)
         return result

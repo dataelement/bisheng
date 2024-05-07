@@ -67,6 +67,7 @@ class EnsembleRetriever(BaseRetriever):
         query: str,
         *,
         run_manager: AsyncCallbackManagerForRetrieverRun,
+        **kwagrs: Any,
     ) -> List[Document]:
         """
         Asynchronously get the relevant documents for a given query.
@@ -79,7 +80,7 @@ class EnsembleRetriever(BaseRetriever):
         """
 
         # Get fused result of the retrievers.
-        fused_documents = await self.arank_fusion(query, run_manager)
+        fused_documents = await self.arank_fusion(query, run_manager, **kwagrs)
 
         return fused_documents
 

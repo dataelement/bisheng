@@ -1,7 +1,8 @@
 import time
 import os
 import yaml
-from typing import Any, Dict, Tuple, Type, Union
+import httpx
+from typing import Any, Dict, Tuple, Type, Union, Optional
 from loguru import logger
 from langchain_core.tools import BaseTool, Tool
 from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
@@ -29,25 +30,71 @@ class MultArgsSchemaTool(Tool):
             return (), tool_input
 
 
-class BishengRAGTool():
+class BishengRAGTool:
 
     def __init__(
         self,
-        vector_store: Milvus,
-        keyword_store: ElasticKeywordsSearch,
-        llm: LanguageModelLike,
-        collection_name: str,
+        vector_store: Optional[Milvus] = None,
+        keyword_store: Optional[ElasticKeywordsSearch] = None,
+        llm: Optional[LanguageModelLike] = None,
+        collection_name: Optional[str] = None,
         **kwargs
     ) -> None:
-        self.vector_store = vector_store
-        self.keyword_store = keyword_store
-        self.llm = llm
+        if collection_name is None and (keyword_store is None or vector_store is None):
+            raise ValueError('collection_name must be provided if keyword_store or vector_store is not provided')
         self.collection_name = collection_name
         
         yaml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config/baseline_v2.yaml')
         with open(yaml_path, 'r') as f:
             self.params = yaml.safe_load(f)
         
+        # init milvus
+        if vector_store:
+            self.vector_store = vector_store
+        else:
+            # init embeddings
+            embedding_params = self.params['embedding']
+            embedding_object = import_by_type(_type='embeddings', name=embedding_params['type'])
+            if embedding_params['type'] == 'OpenAIEmbeddings' and embedding_params['openai_proxy']:
+                embedding_params.pop('type')
+                self.embeddings = embedding_object(
+                    http_client=httpx.Client(proxies=embedding_params['openai_proxy']), **embedding_params
+                )
+            else:
+                embedding_params.pop('type')
+                self.embeddings = embedding_object(**embedding_params)
+            
+            self.vector_store = Milvus(
+                embedding_function=self.embeddings,
+                connection_args={
+                    "host": self.params['milvus']['host'],
+                    "port": self.params['milvus']['port'],
+                },
+            )
+        
+        # init keyword store
+        if keyword_store:
+            self.keyword_store = keyword_store
+        else:
+            self.keyword_store = ElasticKeywordsSearch(
+                index_name='default_es',
+                elasticsearch_url=self.params['elasticsearch']['url'],
+                ssl_verify=self.params['elasticsearch']['ssl_verify'],
+            )
+        
+        # init llm
+        if llm:
+            self.llm = llm
+        else:
+            llm_params = self.params['chat_llm']
+            llm_object = import_by_type(_type='llms', name=llm_params['type'])
+            if llm_params['type'] == 'ChatOpenAI' and llm_params['openai_proxy']:
+                llm_params.pop('type')
+                self.llm = llm_object(http_client=httpx.Client(proxies=llm_params['openai_proxy']), **llm_params)
+            else:
+                llm_params.pop('type')
+                self.llm = llm_object(**llm_params)
+
         # init retriever
         retriever_list = []
         retrievers = self.params['retriever']['retrievers']
@@ -133,7 +180,7 @@ class BishengRAGTool():
         try:
             ans = self.qa_chain({"input_documents": docs, "question": query}, return_only_outputs=True)
         except Exception as e:
-            logger.error(f'question: {question}\nerror: {e}')
+            logger.error(f'question: {query}\nerror: {e}')
             ans = {'output_text': str(e)}
         rag_answer = ans['output_text']
         return rag_answer
@@ -143,18 +190,16 @@ class BishengRAGTool():
         return rag_answer
     
     @classmethod
-    def get_api_tool(cls, name, **kwargs: Any) -> BaseTool:
+    def get_rag_tool(cls, name, description, **kwargs: Any) -> BaseTool:
         class InputArgs(BaseModel):
-            query: str = Field(description='questions to ask')
+            query: str = Field(description='question asked by the user.')
 
-        function_description = kwargs.get('description','')
-        kwargs.pop('description')
         return MultArgsSchemaTool(name=name,
-                                  description=function_description,
+                                  description=description,
                                   func=cls(**kwargs).run,
                                   coroutine=cls(**kwargs).arun,
                                   args_schema=InputArgs)
-
+    
 
 if __name__ == '__main__':
     from langchain.chat_models import ChatOpenAI
@@ -166,6 +211,7 @@ if __name__ == '__main__':
 
     # milvus
     vector_store = Milvus(
+            collection_name='rag_finance_report_0_benchmark_caibao_1000_source_title',
             embedding_function=embeddings,
             connection_args={
                 "host": '110.16.193.170',
@@ -174,17 +220,23 @@ if __name__ == '__main__':
     )
     # es
     keyword_store = ElasticKeywordsSearch(
-        index_name='default_es',
+        index_name='rag_finance_report_0_benchmark_caibao_1000_source_title',
         elasticsearch_url='http://110.16.193.170:50062/es',
         ssl_verify={'basic_auth': ["elastic", "oSGL-zVvZ5P3Tm7qkDLC"]},
     )
 
-    tool = BishengRAGTool.get_api_tool(
+    tool = BishengRAGTool.get_rag_tool(
         name='rag_knowledge_retrieve', 
+        description='金融年报财报知识库问答',
         vector_store=vector_store, 
         keyword_store=keyword_store, 
-        llm=llm, 
-        collection_name='rag_finance_report_0_benchmark_caibao_1000_source_title',
-        description='金融年报财报知识库问答'
+        llm=llm
     )
     print(tool.run('能否根据2020年金宇生物技术股份有限公司的年报，给我简要介绍一下报告期内公司的社会责任工作情况？'))
+
+    # tool = BishengRAGTool.get_rag_tool(
+    #     name='rag_knowledge_retrieve', 
+    #     description='金融年报财报知识库问答',
+    #     collection_name='rag_finance_report_0_benchmark_caibao_1000_source_title'
+    # )
+    # print(tool.run('能否根据2020年金宇生物技术股份有限公司的年报，给我简要介绍一下报告期内公司的社会责任工作情况？'))
