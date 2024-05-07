@@ -148,14 +148,20 @@ class GptsToolsDao(GptsToolsBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_tool_type(cls, user_id: int) -> List[GptsToolsType]:
+    def get_tool_type(cls, user_id: int, is_preset: Optional[bool] = None) -> List[GptsToolsType]:
         """
         获得所有的工具类别，包含预置和用户自己的
         """
         with session_getter() as session:
-            statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0).where(
-                or_(GptsToolsType.user_id == user_id, GptsToolsType.is_preset == 1)
-            ).order_by(GptsToolsType.id.desc())
+            statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
+            if is_preset is None:
+                statement = statement.where(
+                    or_(GptsToolsType.user_id == user_id, GptsToolsType.is_preset == 1)
+                )
+            elif is_preset:
+                statement = statement.where(GptsToolsType.is_preset == 1)
+            else:
+                statement = statement.where(GptsToolsType.user_id == user_id)
             return session.exec(statement).all()
 
     @classmethod

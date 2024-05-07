@@ -183,7 +183,7 @@ def get_tool_list(*, is_preset: Optional[bool] = None, Authorize: AuthJWT = Depe
     """查询所有可见的tool 列表"""
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-    return resp_200(AssistantService.get_gpts_tools(current_user.get('user_id')))
+    return resp_200(AssistantService.get_gpts_tools(current_user.get('user_id'), is_preset))
 
 
 @router.post('/tool_schema', response_model=UnifiedResponseModel)

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Optional
 from uuid import UUID
 
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
@@ -261,10 +261,10 @@ class AssistantService(AssistantUtils):
         return resp_200()
 
     @classmethod
-    def get_gpts_tools(cls, user_id: Any) -> List[GptsToolsTypeRead]:
+    def get_gpts_tools(cls, user_id: Any, is_preset: Optional[bool] = None) -> List[GptsToolsTypeRead]:
         """ 获取用户可见的工具列表 """
         # 获取用户可见的工具类别
-        all_tool_type = GptsToolsDao.get_tool_type(user_id)
+        all_tool_type = GptsToolsDao.get_tool_type(user_id, is_preset)
         tool_type_id = [one.id for one in all_tool_type]
         res = []
         tool_type_children = {}
