@@ -279,3 +279,7 @@ class FlowCompareReq(BaseModel):
     version_list: List[int] = Field(default=[], description='对比版本ID列表')
     node_id: str = Field(default=None, description='需要对比的节点唯一ID')
     thread_num: Optional[int] = Field(default=1, description='对比线程数')
+
+
+class DeleteToolTypeReq(BaseModel):
+    tool_type_id: int = Field(description="要删除的工具类别ID")

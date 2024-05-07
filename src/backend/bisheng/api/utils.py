@@ -2,6 +2,8 @@ import xml.dom.minidom
 from pathlib import Path
 from typing import Dict, List
 
+import aiohttp
+
 from bisheng.api.v1.schemas import StreamData
 from bisheng.database.base import session_getter
 from bisheng.database.models.role_access import AccessType, RoleAccess
@@ -234,8 +236,8 @@ def access_check(payload: dict, owner_user_id: int, target_id: int, type: Access
 
 
 def get_L2_param_from_flow(
-    flow_data: dict,
-    flow_id: str,
+        flow_data: dict,
+        flow_id: str,
 ):
     graph = Graph.from_payload(flow_data)
     node_id = []
@@ -402,3 +404,13 @@ def parse_gpus(gpu_str: str) -> List[Dict]:
             round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
         })
     return res
+
+
+async def get_url_content(url: str) -> str:
+    """ 获取接口的返回的body内容 """
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status != 200:
+                raise Exception(f"Failed to download content, HTTP status code: {response.status}")
+            res = await response.read()
+            return res.decode('utf-8')

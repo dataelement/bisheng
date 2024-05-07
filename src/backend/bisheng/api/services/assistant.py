@@ -3,13 +3,14 @@ from typing import Any, List
 from uuid import UUID
 
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
-                                           AssistantNotEditError, AssistantNotExistsError)
+                                           AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
+                                           ToolTypeEmptyError, ToolTypeNotExistsError, ToolTypeIsPresetError)
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
-                                    StreamData, UnifiedResponseModel, resp_200)
+                                    StreamData, UnifiedResponseModel, resp_200, resp_500)
 from bisheng.cache import InMemoryCache
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
@@ -281,6 +282,99 @@ class AssistantService(AssistantUtils):
             one["children"] = tool_type_children.get(one["id"], [])
 
         return res
+
+    @classmethod
+    def add_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
+        """ 添加自定义工具 """
+
+        # 判断类别是否已存在
+        tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
+        if tool_type:
+            return ToolTypeRepeatError.return_resp()
+        if len(req.children) == 0:
+            return ToolTypeEmptyError.return_resp()
+        req.user_id = user.user_id
+
+        for one in req.children:
+            one.user_id = user.user_id
+            one.is_delete = 0
+            one.is_preset = False
+
+        # 添加工具类别和对应的 工具列表
+        res = GptsToolsDao.insert_tool_type(req)
+        return resp_200(data=res)
+
+    @classmethod
+    def update_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
+        """
+        更新工具类别，包括更新工具类别的名称和删除、新增工具类别的API
+        """
+        exist_tool_type = GptsToolsDao.get_one_tool_type(req.id)
+        if not exist_tool_type:
+            return ToolTypeNotExistsError.return_resp()
+        if len(req.children) == 0:
+            return ToolTypeEmptyError.return_resp()
+
+        # 判断工具类别名称是否重复
+        tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
+        if tool_type and tool_type.id != exist_tool_type.id:
+            return ToolTypeRepeatError.return_resp()
+
+        #
+        exist_tool_type.name = req.name
+        exist_tool_type.description = req.description
+        exist_tool_type.auth_method = req.auth_method
+        exist_tool_type.api_key = req.api_key
+        exist_tool_type.auth_type = req.auth_type
+        exist_tool_type.openapi_schema = req.openapi_schema
+
+        children_map = {}
+        for one in req.children:
+            children_map[GptsToolsDao.get_tool_key(exist_tool_type.id, one.tool_key)] = one
+
+        # 获取此类别下旧的API列表
+        old_tool_list = GptsToolsDao.get_list_by_type([exist_tool_type.id])
+        # 需要被删除的工具列表
+        delete_tool_id_list = []
+        # 需要被更新的工具列表
+        update_tool_list = []
+        for one in old_tool_list:
+            # 说明此工具 需要删除
+            if children_map.get(one.tool_key) is None:
+                delete_tool_id_list.append(one.id)
+            else:
+                # 说明此工具需要更新
+                new_tool_info = children_map.pop(one.tool_key)
+                one.name = new_tool_info.name
+                one.desc = new_tool_info.desc
+                one.extra = new_tool_info.extra
+                one.api_params = new_tool_info.api_params
+                update_tool_list.append(one)
+
+        add_children = []
+        for one in children_map.values():
+            one.user_id = user.user_id
+            one.is_preset = False
+            one.is_delete = 0
+            add_children.append(one)
+
+        GptsToolsDao.update_tool_type(exist_tool_type, delete_tool_id_list,
+                                      add_children, update_tool_list)
+
+        children = GptsToolsDao.get_list_by_type([exist_tool_type.id])
+        res = GptsToolsTypeRead(**exist_tool_type.model_dump(), children=children)
+        return resp_200(data=res)
+
+    @classmethod
+    def delete_gpts_tools(cls, user: UserPayload, tool_type_id: int) -> UnifiedResponseModel:
+        """ 删除工具类别 """
+        exist_tool_type = GptsToolsDao.get_one_tool_type(tool_type_id)
+        if not exist_tool_type:
+            return resp_200()
+        if exist_tool_type.is_preset:
+            return ToolTypeIsPresetError.return_resp()
+        GptsToolsDao.delete_tool_type(tool_type_id)
+        return resp_200()
 
     @classmethod
     def get_models(cls) -> UnifiedResponseModel:
