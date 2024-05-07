@@ -220,7 +220,7 @@ async def get_tool_schema(*,
         for one in schema.apis:
             tool_type.children.append(GptsTools(
                 name=one['summary'],
-                description=one['description'],
+                desc=one['description'],
                 tool_key=one['operationId'],
                 is_preset=0,
                 is_delete=0,
