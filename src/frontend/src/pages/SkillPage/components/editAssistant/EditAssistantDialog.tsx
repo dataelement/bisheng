@@ -70,8 +70,8 @@ export default function EditAssistantDialog({ name, desc, onSave }) {
             description: Object.keys(errors).map(key => errors[key]),
         })
 
-            onSave(formData)
-        
+        onSave(formData)
+
     };
 
     return <DialogContent className="sm:max-w-[625px]">

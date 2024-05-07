@@ -15,8 +15,7 @@ import { useMemo } from "react";
  * 参数模板 template
  */
 export default function ComponentParameter({ disabled = false, flow, node, template, children, onChange = () => { } }) {
-    const _disabled = disabled || (flow.data.edges.some((e) => e.targetHandle === node.id) ??
-        false);
+    const _disabled = false // disabled || (flow.data.edges.some((e) => e.targetHandle === node.id) ?? false);
 
     const keys = useMemo(() => {
         return Object.keys(template).filter(
@@ -35,11 +34,12 @@ export default function ComponentParameter({ disabled = false, flow, node, templ
     }, [template])
 
     const handleOnNewValue = (newValue: any, name) => {
+        // console.log('object :>> ', object);
         // 引用更新
-        // node.data.node.template[name].value = newValue;
-        // // 手动修改知识库，collection_id 清空
-        // if (['index_name', 'collection_name'].includes(name)) delete node.data.node.template[name].collection_id
-        // onChange() // 更新通知
+        node.data.node.template[name].value = newValue;
+        // 手动修改知识库，collection_id 清空
+        if (['index_name', 'collection_name'].includes(name)) delete node.data.node.template[name].collection_id
+        onChange() // 更新通知
     }
 
     const getStrComp = (template, n) => {
