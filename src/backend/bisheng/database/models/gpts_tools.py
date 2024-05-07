@@ -133,6 +133,7 @@ class GptsToolsDao(GptsToolsBase):
                     GptsTools.is_preset == 1)).where(GptsTools.is_delete == 0)
             if page and page_size:
                 statement = statement.offset((page - 1) * page_size).limit(page_size)
+            statement = statement.order_by(GptsTools.create_time.desc())
             list_tools = session.exec(statement).all()
             return list_tools
 

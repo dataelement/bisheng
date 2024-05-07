@@ -15,7 +15,7 @@ from bisheng.cache import InMemoryCache
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao
-from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead, GptsToolsTypeRead
+from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead, GptsToolsTypeRead, GptsTools
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
@@ -457,23 +457,32 @@ class AssistantService(AssistantUtils):
         return assistant, [], []
 
     @classmethod
-    def get_auto_tool_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[GptsToolsRead]:
-        # 自动选择工具
-        all_tool = cls.get_gpts_tools(user_id=assistant.user_id)
-        tool_list = []
-        all_tool_dict = {}
-        for one in all_tool:
-            all_tool_dict[one.name] = one
-            tool_list.append({
-                'name': one.name,
-                'description': one.desc if one.desc else '',
-            })
-        tool_list = auto_agent.choose_tools(tool_list, assistant.prompt)
-        tool_info = []
-        for one in tool_list:
-            if all_tool_dict.get(one):
-                tool_info.append(all_tool_dict[one])
-        return tool_info
+    def get_auto_tool_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[GptsTools]:
+        # 分页自动选择工具
+        res = []
+        page = 1
+        page_num = 50
+        while True:
+            all_tool = GptsToolsDao.get_list_by_user(assistant.user_id, page, page_num)
+            if len(all_tool) == 0:
+                break
+            logger.info(f"auto select tools: page: {page}, number: {len(all_tool)}")
+            tool_list = []
+            all_tool_dict = {}
+            for one in all_tool:
+                all_tool_dict[one.name] = one
+                tool_list.append({
+                    'name': one.name,
+                    'description': one.desc if one.desc else '',
+                })
+            tool_info = []
+            tool_list = auto_agent.choose_tools(tool_list, assistant.prompt)
+            for one in tool_list:
+                if all_tool_dict.get(one):
+                    tool_info.append(all_tool_dict[one])
+            res += tool_info
+            page += 1
+        return res
 
     @classmethod
     def get_auto_flow_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[Flow]:
