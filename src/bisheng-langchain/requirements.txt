@@ -13,3 +13,4 @@ filetype==1.2.0
 langgraph==0.0.30
 openai==1.14.3
 langchain-openai==0.1.0
+bisheng-ragas==0.0.23.dev26+g17e2a91

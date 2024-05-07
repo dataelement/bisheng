@@ -1,0 +1,88 @@
+data:
+  origin_file_path: '/home/public/rag_benchmark_v1.0/rag_benchmark_processed'
+  question: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample.xlsx'
+  save_answer: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample_gpt4_12chunk_s2b.xlsx'
+
+milvus:
+  host: '192.168.106.116'
+  port: '19530'
+  drop_old: True
+
+elasticsearch:
+  url: 'http://192.168.106.116:9200'
+  ssl_verify:
+    basic_auth: ["elastic", "oSGL-zVvZ5P3Tm7qkDLC"]
+  drop_old: True
+
+embedding:
+  type: 'OpenAIEmbeddings'
+  model: 'text-embedding-ada-002'
+  openai_api_key: ''
+  openai_proxy: 'http://118.195.232.223:39995'
+
+chat_llm:
+  type: 'ChatOpenAI'
+  model: 'gpt-4-1106-preview'
+  openai_api_key: ''
+  openai_proxy: 'http://118.195.232.223:39995'
+  temperature: 0.0
+
+loader: 
+  type: 'ElemUnstructuredLoader'
+  unstructured_api_url: 'http://192.168.106.12:10001/v1/etl4llm/predict'
+
+retriever: 
+  type: 'EnsembleRetriever' # 不动
+  suffix: 'test_s2b_mix'
+  retrievers: 
+    - type: 'SmallerChunksVectorRetriever'
+      splitter:
+        parent_splitter:
+          type: 'ElemCharacterTextSplitter'
+          chunk_size: 1024
+          chunk_overlap: 200
+          separators: ["\n\n", "\n", " ", ""]
+        child_splitter:
+          type: 'RecursiveCharacterTextSplitter'
+          chunk_size: 216
+          chunk_overlap: 0
+          separators: ["\n\n", "\n", " ", ""]
+      retrieval:
+        search_type: 'similarity'
+        child_search_kwargs: 
+          k: 12
+    - type: 'KeywordRetriever'
+      splitter:
+        text_splitter:
+          type: 'ElemCharacterTextSplitter'
+          chunk_size: 1024
+          chunk_overlap: 200
+          separators: ["\n\n", "\n", " ", ""]
+      retrieval:
+        search_type: 'similarity'
+        search_kwargs: 
+          k: 6
+          
+post_retrieval:
+  delete_duplicate: True
+  with_rank: False
+  rerank:
+    type: 'CustomReranker'
+    model_path: '/home/public/llm/bge-reranker-large'
+    device_id: 'cuda:0'
+    threshold: 0.0
+
+generate:
+  with_retrieval: True
+  chain_type: 'stuff'
+  # prompt_type: 'BASE_PROMPT'
+  prompt_type: 'CHAT_PROMPT'
+
+metric:
+  type: 'bisheng-ragas'
+  question_column: '问题'
+  gt_column: 'GT'
+  answer_column: 'rag_answer'
+  query_type_column: '问题类型'
+  metrics: ['answer_correctness_bisheng']
+  batch_size: 5
