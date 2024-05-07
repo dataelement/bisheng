@@ -149,6 +149,18 @@ class GptsToolsDao(GptsToolsBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_all_tool_type(cls, tool_type_ids: List[int]) -> List[GptsToolsType]:
+        """
+        获得所有的工具类别
+        """
+        with session_getter() as session:
+            statement = select(GptsToolsType).filter(
+                GptsToolsType.is_delete == 0,
+                GptsToolsType.id.in_(tool_type_ids)
+            )
+            return session.exec(statement).all()
+
+    @classmethod
     def get_tool_type(cls, user_id: int, is_preset: Optional[bool] = None) -> List[GptsToolsType]:
         """
         获得所有的工具类别，包含预置和用户自己的
@@ -228,7 +240,7 @@ class GptsToolsDao(GptsToolsBase):
             # 删除不存在的工具列表
             session.exec(update(GptsTools).where(
                 GptsTools.id.in_(del_tool_ids)
-            )).values(is_delete=1)
+            ).values(is_delete=1))
             # 新增工具列表
             for one in add_tool_list:
                 one.type = data.id
