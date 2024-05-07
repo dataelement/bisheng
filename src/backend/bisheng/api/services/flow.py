@@ -9,7 +9,7 @@ from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, V
     NotFoundFlowError, \
     FlowOnlineEditError
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500
 from bisheng.chat.utils import process_node_data
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
@@ -225,7 +225,10 @@ class FlowService:
             task = asyncio.create_task(cls.exec_flow_node(
                 tmp_inputs, res, question_index, question, version_infos))
             tasks.append(task)
-        await asyncio.gather(*tasks)
+        try:
+            await asyncio.gather(*tasks)
+        except Exception as e:
+            return resp_500(message="技能对比错误：{}".format(str(e)))
         return resp_200(data=res)
 
     @classmethod
