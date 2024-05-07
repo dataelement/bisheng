@@ -127,12 +127,13 @@ if __name__ == "__main__":
     from langchain.globals import set_debug
 
     set_debug(True)
-    # chat_history = []
-    # query = "永辉超市的参股公司中是否存在法律风险？"
-    chat_history = ['你好', '你好，有什么可以帮助你吗？', '福蓉科技股价多少?', '福蓉科技（股票代码：300049）的当前股价为48.67元。']
-    query = '去年这个时候的股价是多少？'
-    bisheng_assistant = BishengAssistant("config/base_scene.yaml")
+    chat_history = []
+    query = "请问，在苏州迈为科技股份有限公司2019年的年报中，现金流的情况是否发生了重大变化？若发生，导致重大变化的原因是什么？"
+    # chat_history = ['你好', '你好，有什么可以帮助你吗？', '福蓉科技股价多少?', '福蓉科技（股票代码：300049）的当前股价为48.67元。']
+    # query = '去年这个时候的股价是多少？'
+    # bisheng_assistant = BishengAssistant("config/base_scene.yaml")
     # bisheng_assistant = BishengAssistant("config/knowledge_scene.yaml")
+    bisheng_assistant = BishengAssistant("config/rag_scene.yaml")
     result = bisheng_assistant.run(query, chat_history=chat_history)
     for r in result:
         print(f'------------------')

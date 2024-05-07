@@ -14,7 +14,7 @@ if not os.path.exists(tmpdir):
 
 unstructured_api_url = "https://bisheng.dataelem.com/api/v1/etl4llm/predict"
 ellm_api_base_url = 'https://dataelem.com/idp'
-llm_model_name = 'qwen1.5-72b-chat'
+llm_model_name = 'qwen1.5-32b-chat'
 llm_model_api_url = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
 
 # ellm_api_base_url = 'http://192.168.106.20:3502/v2/idp/idp_app/infer'
