@@ -16,7 +16,7 @@ class OpenApiSchema:
         if self.contents.get('servers') is None:
             raise Exception('openapi schema must have servers')
         servers = self.contents['servers']
-        if isinstance(type(servers), list):
+        if isinstance(servers, list):
             self.default_server = servers[0]['url']
         else:
             self.default_server = servers['url']
