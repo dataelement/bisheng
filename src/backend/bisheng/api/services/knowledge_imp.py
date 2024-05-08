@@ -315,7 +315,7 @@ def addEmbedding(collection_name,
                         time.time() - ts1)
 
         except Exception as e:
-            logger.error('add_vectordb {}', e)
+            logger.exception('add_vectordb {}', e)
             with session_getter() as session:
                 db_file = session.get(KnowledgeFile, knowledge_file.id)
                 setattr(db_file, 'status', 3)

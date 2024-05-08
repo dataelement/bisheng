@@ -8,13 +8,13 @@ import httpx
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
 from bisheng.api.services.assistant_base import AssistantUtils
-from bisheng.api.services.utils import replace_flow_llm, set_flow_knowledge_id
+from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType, AuthMethod
-from bisheng.database.models.knowledge import KnowledgeDao
+from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
                                                       generate_opening_dialog,
@@ -29,6 +29,9 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, Tool
 from loguru import logger
+
+from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.utils.embedding import decide_embeddings
 
 
 class AssistantAgent(AssistantUtils):
@@ -169,6 +172,30 @@ class AssistantAgent(AssistantUtils):
             tool_langchain.append(openapi_tool)
         return tool_langchain
 
+    async def init_knowledge_tool(self, knowledge: Knowledge, callbacks: Callbacks = None):
+        """
+        初始化知识库工具
+        """
+        embeddings = decide_embeddings(knowledge.model)
+        search_kwargs = {}
+        vector_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
+        if knowledge.collection_name.startswith('partition'):
+            search_kwargs.update({'partition_key': knowledge.id})
+            vector_client = vector_client.as_retriever(search_type="similarity", search_kwargs=search_kwargs)
+
+        es_vector_client = decide_vectorstores(knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
+        tool_params = {
+            "bisheng_rag": {
+                "name": f"knowledge_{knowledge.id}",
+                "description": f"{knowledge.name}:{knowledge.description}",
+                "vector_store": vector_client,
+                "keyword_store": es_vector_client,
+                "llm": self.llm
+            }
+        }
+        tool = load_tools(tool_params=tool_params, llm=self.llm, callbacks=callbacks)
+        return tool
+
     async def init_tools(self, callbacks: Callbacks = None):
         """通过名称获取tool 列表
            tools_name_param:: {name: params}
@@ -213,19 +240,8 @@ class AssistantAgent(AssistantUtils):
         for link in flow_links:
             knowledge_id = link.knowledge_id
             if knowledge_id:
-                tmp_flow_id = 'knowledge_' + str(knowledge_id)
-                one_knowledge_data = knowledge_data.get(knowledge_id)
-                if not one_knowledge_data:
-                    logger.warning('act=init_tools not find knowledge_id: {}', knowledge_id)
-                    continue
-                # 说明是关联的知识库，修改知识库检索技能的对应知识库ID参数
-                tool_name = f'knowledge_{link.knowledge_id}'
-                tool_description = f'{one_knowledge_data.name}:{one_knowledge_data.description}'
-                # 先查找替换collection_id
-                flow_graph_data = await self.get_knowledge_skill_data()
-                flow_graph_data = set_flow_knowledge_id(flow_graph_data, knowledge_id)
-                flow_graph_data = replace_flow_llm(flow_graph_data, self.llm,
-                                                   self.get_llm_conf(self.assistant.model_name))
+                knowledge_tool = await self.init_knowledge_tool(knowledge_data[knowledge_id], callbacks)
+                tools.extend(knowledge_tool)
             else:
                 tmp_flow_id = UUID(link.flow_id).hex
                 one_flow_data = flow_id2data.get(UUID(link.flow_id))
@@ -240,25 +256,25 @@ class AssistantAgent(AssistantUtils):
                 flow_graph_data = one_flow_data.data
                 tool_description = f'{one_flow_data.name}:{one_flow_data.description}'
 
-            try:
-                artifacts = {}
-                graph = await build_flow_no_yield(graph_data=flow_graph_data,
-                                                  artifacts=artifacts,
-                                                  process_file=True,
-                                                  flow_id=tmp_flow_id,
-                                                  chat_id=self.assistant.id.hex)
-                built_object = await graph.abuild()
-                logger.info('act=init_flow_tool build_end')
-                flow_tool = Tool(name=tool_name,
-                                 func=built_object,
-                                 coroutine=built_object.acall,
-                                 description=tool_description,
-                                 args_schema=InputRequest,
-                                 callbacks=callbacks)
-                tools.append(flow_tool)
-            except Exception as exc:
-                logger.error(f'Error processing {tmp_flow_id} tweaks: {exc}')
-                raise Exception(f'Flow Build Error: {exc}')
+                try:
+                    artifacts = {}
+                    graph = await build_flow_no_yield(graph_data=flow_graph_data,
+                                                      artifacts=artifacts,
+                                                      process_file=True,
+                                                      flow_id=tmp_flow_id,
+                                                      chat_id=self.assistant.id.hex)
+                    built_object = await graph.abuild()
+                    logger.info('act=init_flow_tool build_end')
+                    flow_tool = Tool(name=tool_name,
+                                     func=built_object,
+                                     coroutine=built_object.acall,
+                                     description=tool_description,
+                                     args_schema=InputRequest,
+                                     callbacks=callbacks)
+                    tools.append(flow_tool)
+                except Exception as exc:
+                    logger.error(f'Error processing {tmp_flow_id} tweaks: {exc}')
+                    raise Exception(f'Flow Build Error: {exc}')
         self.tools = tools
 
     async def init_agent(self):
