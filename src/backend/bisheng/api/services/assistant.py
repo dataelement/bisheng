@@ -99,6 +99,8 @@ class AssistantService(AssistantUtils):
         assistant.model_name = llm_conf['model_name']
         assistant.temperature = llm_conf['temperature']
 
+        logger.info(f"assistant original prompt id: {assistant.id}, desc: {assistant.prompt}")
+
         # 自动生成描述
         assistant, _, _ = await cls.get_auto_info(assistant)
         assistant = AssistantDao.create_assistant(assistant)
