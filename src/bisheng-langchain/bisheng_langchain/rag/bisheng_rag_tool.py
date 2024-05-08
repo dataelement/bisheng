@@ -17,6 +17,7 @@ from bisheng_langchain.rag.init_retrievers import (
     SmallerChunksVectorRetriever,
 )
 from bisheng_langchain.rag.utils import import_by_type, import_class
+from bisheng_langchain.rag.extract_info import extract_title
 
 
 class MultArgsSchemaTool(Tool):
@@ -147,6 +148,42 @@ class BishengRAGTool:
 
         retriever_class = retriever_classes[retriever_type]
         return retriever_class(**input_kwargs)
+
+    def file2knowledge(self, file_path, drop_old=True):
+        """
+        file to knowledge
+        """
+        loader_params = self.params['loader']
+        loader_object = import_by_type(_type='documentloaders', name=loader_params.pop('type'))
+
+        logger.info(f'file_path: {file_path}')
+        loader = loader_object(
+            file_name=os.path.basename(file_path), file_path=file_path, **loader_params
+        )
+        documents = loader.load()
+        logger.info(f'documents: {len(documents)}, page_content: {len(documents[0].page_content)}')
+        if len(documents[0].page_content) == 0:
+            logger.error(f'{file_path} page_content is empty.')
+
+        # add aux info
+        add_aux_info = self.params['retriever'].get('add_aux_info', False)
+        if add_aux_info:
+            for doc in documents:
+                try:
+                    title = extract_title(llm=self.llm, text=doc.page_content)
+                    logger.info(f'extract title: {title}')
+                except Exception as e:
+                    logger.error(f"Failed to extract title: {e}")
+                    title = ''
+                doc.metadata['title'] = title
+
+        for idx, retriever in enumerate(self.retriever.retrievers):
+            retriever.add_documents(
+                documents, 
+                self.collection_name, 
+                drop_old=drop_old, 
+                add_aux_info=add_aux_info
+            )
     
     def retrieval_and_rerank(self, query):
         """
@@ -202,16 +239,19 @@ class BishengRAGTool:
     
 
 if __name__ == '__main__':
+    # rag_tool = BishengRAGTool(collection_name='rag_finance_report_0_test')
+    # rag_tool.file2knowledge(file_path='/home/public/rag_benchmark_finance_report/金融年报财报的来源文件/2021-04-23__金宇生物技术股份有限公司__600201__生物股份__2020年__年度报告.pdf')
+
     from langchain.chat_models import ChatOpenAI
     from langchain.embeddings import OpenAIEmbeddings
     # embedding
     embeddings = OpenAIEmbeddings(model='text-embedding-ada-002')
     # llm
     llm = ChatOpenAI(model='gpt-4-1106-preview', temperature=0.01)
-
+    collection_name = 'rag_finance_report_0_benchmark_caibao_1000_source_title'
     # milvus
     vector_store = Milvus(
-            collection_name='rag_finance_report_0_benchmark_caibao_1000_source_title',
+            collection_name=collection_name,
             embedding_function=embeddings,
             connection_args={
                 "host": '110.16.193.170',
@@ -220,7 +260,7 @@ if __name__ == '__main__':
     )
     # es
     keyword_store = ElasticKeywordsSearch(
-        index_name='rag_finance_report_0_benchmark_caibao_1000_source_title',
+        index_name=collection_name,
         elasticsearch_url='http://110.16.193.170:50062/es',
         ssl_verify={'basic_auth': ["elastic", "oSGL-zVvZ5P3Tm7qkDLC"]},
     )
