@@ -145,9 +145,9 @@ def clear_knowledge_files(*, knowledge_id: int):
 async def upload_file(*,
                       knowledge_id: int,
                       callback_url: Optional[str] = Form(None),
-                      separator: List[str] = Form(default=['\n\n', '\n', ' ', '']),
-                      chunk_size: int = Form(default=500),
-                      chunk_overlap: int = Form(default=50),
+                      separator: List[str] = Form(default=['\n\n']),
+                      chunk_size: int = Form(default=1000),
+                      chunk_overlap: int = Form(default=100),
                       file: UploadFile = File(...),
                       background_tasks: BackgroundTasks):
 
@@ -262,9 +262,9 @@ def get_filelist(*, knowledge_id: int, page_size: int = 10, page_num: int = 1):
 async def post_chunks(*,
                       knowledge_id: int = Form(...),
                       metadata: str = Form(...),
-                      separator: List[str] = Form(default=['\n\n', '\n', ' ', '']),
-                      chunk_size: int = Form(default=500),
-                      chunk_overlap: int = Form(default=50),
+                      separator: List[str] = Form(default=['\n\n']),
+                      chunk_size: int = Form(default=1000),
+                      chunk_overlap: int = Form(default=100),
                       file: UploadFile = File(...)):
     """ 获取知识库文件信息. """
     file_name = file.filename

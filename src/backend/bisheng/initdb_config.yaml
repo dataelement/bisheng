@@ -14,6 +14,11 @@ minio_conf: &minio_conf
   MINIO_SECRET_KEY: "minioadmin"
 
 knowledges:
+  # 知识库所需的大模型配置，用来对文档内容总结一个标题，然后将标题和chunk合并存储到向量库内, 不配置则不总结文档
+  llm:
+    type: "ChatOpenAi"
+    model: "gpt-3.5-turbo"
+    <<: *openai_conf
   unstructured_api_url: ""  # 毕昇非结构化数据解析服务地址，提供包括OCR文字识别、表格识别、版式分析等能力。非必填，溯源必填
   embeddings: # 配置知识库的embedding服务，以下示例填写了两类embedding服务的配置方法，第一个是openai的embedding模型服务的配置方法，第二个是本地部署的embedding模型服务的配置方法，如果有多个可以添加多个
     text-embedding-ada-002: # 知识库下拉框中显示的embedding模型的名称，可自定义

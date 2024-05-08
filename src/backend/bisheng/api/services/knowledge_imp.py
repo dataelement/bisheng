@@ -3,7 +3,7 @@ import json
 import math
 import re
 import time
-from typing import Dict, List
+from typing import Dict, List, Any
 from uuid import uuid4
 
 import requests
@@ -18,9 +18,11 @@ from bisheng.settings import settings
 from bisheng.utils import minio_client
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import MinioClient
+from bisheng.interface.importing.utils import import_by_type
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
+from bisheng_langchain.rag.extract_info import extract_title
 from fastapi import HTTPException
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
@@ -215,6 +217,20 @@ def decide_vectorstores(collection_name: str, vector_store: str,
     return instantiate_vectorstore(class_object=class_obj, params=param)
 
 
+def decide_knowledge_llm() -> Any:
+    """ 获取用来总结知识库chunk的 llm对象 """
+    # 获取llm配置
+    llm_params = settings.get_knowledge().get('llm')
+    if not llm_params:
+        # 无相关配置
+        return None
+    # 获取llm对象
+    llm_object = import_by_type(_type='llms', name=llm_params['type'])
+    llm_params.pop('type')
+    llm = llm_object(**llm_params)
+    return llm
+
+
 def addEmbedding(collection_name,
                  index_name,
                  knowledge_id: int,
@@ -380,15 +396,32 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             input_file,
             unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
         documents = loader.load()
+
+        # 按照新的规则对每个分块做 标题提取
+        try:
+            llm = decide_knowledge_llm()
+        except Exception as e:
+            logger.exception('knowledge_llm_error:')
+            raise Exception(f'知识库总结所需模型配置有误，初始化失败， {str(e)}')
+        if llm:
+            logger.info(f'need_extract_title')
+            for one in documents:
+                # 配置了相关llm的话，就对文档做总结
+                title = extract_title(llm, documents)
+                one.metadata['title'] = title
+
         text_splitter = ElemCharacterTextSplitter(separators=separator,
                                                   chunk_size=size,
                                                   chunk_overlap=chunk_overlap)
         texts = text_splitter.split_documents(documents)
-        raw_texts = [t.page_content for t in texts]
+
+        raw_texts = [t.metadata.get("source", '') + '\n' + t.metadata.get('title', '') + '\n' + t.page_content
+                     for t in texts]
         metadatas = [{
             'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
             'page': t.metadata.get('chunk_bboxes')[0].get('page'),
             'source': t.metadata.get('source', ''),
+            'title': t.metadata.get('title', ''),
             'extra': '',
         } for t in texts]
     return (raw_texts, metadatas)
@@ -406,8 +439,8 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
         logger.exception(e)
 
     separator = '\n\n'
-    chunk_size = 500
-    chunk_overlap = 50
+    chunk_size = 1000
+    chunk_overlap = 100
 
     text_splitter = CharacterTextSplitter(separator=separator,
                                           chunk_size=chunk_size,
@@ -468,9 +501,9 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             KnowledgeFileDao.update(file)
         return
 
-    separator = ['\n\n', '\n', ' ', '']
-    chunk_size = 500
-    chunk_overlap = 50
+    separator = ['\n\n']
+    chunk_size = 1000
+    chunk_overlap = 100
     if db_files:
         minio = MinioClient()
         for file in db_files:
@@ -482,7 +515,7 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             original_file = input_file.object_name
             file_url = minio.get_share_link(original_file,
                                             minio_client.tmp_bucket) if original_file.startswith(
-                                                'tmp') else minio.get_share_link(original_file)
+                'tmp') else minio.get_share_link(original_file)
             if file_url:
                 file_path, _ = file_download(file_url)
             else:
