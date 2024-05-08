@@ -13,6 +13,8 @@ from fastapi import WebSocket, status
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 
+from bisheng.settings import settings
+
 
 class ChatClient:
     def __init__(self, client_key: str, client_id: str, chat_id: str, user_id: int,
@@ -31,6 +33,7 @@ class ChatClient:
         self.chat_history = []
         # 和模型对话时传入的 完整的历史对话轮数
         self.latest_history_num = 5
+        self.gpts_conf = settings.get_from_db('gpts')
 
     async def send_message(self, message: str):
         await self.websocket.send_text(message)
@@ -196,6 +199,13 @@ class ChatClient:
             for one in result:
                 if isinstance(one, AIMessage):
                     answer += one.content
+
+            # todo: 后续优化代码解释器的实现方案，保证输出的文件可以公开访问
+            # 获取minio的share地址，把share域名去掉, 为毕昇的部署方案特殊处理下
+            if gpts_tool_conf := self.gpts_conf.get('tools'):
+                if bisheng_code_conf := gpts_tool_conf.get("bisheng_code_interpreter"):
+                    answer = answer.replace(f"http://{bisheng_code_conf['minio']['MINIO_SHAREPOIN']}", "")
+
             res = await self.add_message('bot', answer, 'answer')
             await self.send_response('answer', 'start', '')
             await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
