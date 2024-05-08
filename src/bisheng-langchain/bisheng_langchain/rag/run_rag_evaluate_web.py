@@ -2,8 +2,8 @@ import os
 import gradio as gr
 import pandas as pd
 from pathlib import Path
-from scoring.ragas_score import RagScore
 from gradio import components
+from bisheng_langchain.rag.scoring.ragas_score import RagScore
 
 
 save_folder = '/home/public/rag_benchmark_v1.0/rag_score_demo'
