@@ -1,3 +1,4 @@
+import hashlib
 import json
 from typing import List, Optional, Any, Dict
 from uuid import UUID
@@ -219,9 +220,9 @@ async def get_tool_schema(*,
         schema.parse_paths()
         for one in schema.apis:
             tool_type.children.append(GptsTools(
-                name=one['summary'],
+                name=one['operationId'],
                 desc=one['description'],
-                tool_key=one['operationId'],
+                tool_key=hashlib.md5(one['operationId'].encode("utf-8")).hexdigest(),
                 is_preset=0,
                 is_delete=0,
                 api_params=one["parameters"],
