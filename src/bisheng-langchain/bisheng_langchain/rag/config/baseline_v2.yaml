@@ -47,7 +47,7 @@ retriever:
       retrieval:
         search_type: 'similarity'
         search_kwargs: 
-          k: 10
+          k: 100
     - type: 'BaselineVectorRetriever'
       splitter: 
         text_splitter:
@@ -59,7 +59,7 @@ retriever:
       retrieval:
         search_type: 'similarity'
         search_kwargs: 
-          k: 10
+          k: 100
           
 post_retrieval:
   delete_duplicate: False
@@ -69,11 +69,11 @@ post_retrieval:
     model_path: '/home/public/llm/bge-reranker-large'
     device_id: 'cuda:0'
     threshold: 0.0
-  sort_by_source_and_index: False
+  sort_by_source_and_index: True
 
 generate:
   with_retrieval: True
-  max_content: 30000
+  max_content: 15000
   chain_type: 'stuff'
   # prompt_type: 'BASE_PROMPT'
   prompt_type: 'CHAT_PROMPT'

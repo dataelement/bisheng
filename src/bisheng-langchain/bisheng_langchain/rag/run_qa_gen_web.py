@@ -1,7 +1,7 @@
 import os
 import tempfile
 import gradio as gr
-from qa_corpus.qa_generator import RagQAGenerator
+from bisheng_langchain.rag.qa_corpus.qa_generator import RagQAGenerator
 
 
 tmpdir = '/home/public/rag_benchmark_v1.0/tmp'

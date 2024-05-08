@@ -49,6 +49,12 @@ class BishengRAGTool:
         with open(yaml_path, 'r') as f:
             self.params = yaml.safe_load(f)
         
+        # update params
+        max_content = kwargs.get("max_content", 15000)
+        sort_by_source_and_index = kwargs.get("sort_by_source_and_index", True)
+        self.params['generate']['max_content'] = max_content
+        self.params['post_retrieval']['sort_by_source_and_index'] = sort_by_source_and_index
+        
         # init milvus
         if vector_store:
             self.vector_store = vector_store

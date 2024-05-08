@@ -1,29 +1,26 @@
 import argparse
 import copy
-import time
 import inspect
+import time
 import os
+from collections import defaultdict
+
 import httpx
 import pandas as pd
 import yaml
-import math
-from collections import defaultdict
+from loguru import logger
+from tqdm import tqdm
 from bisheng_langchain.retrievers import EnsembleRetriever
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
-from init_retrievers import (
+from langchain.chains.question_answering import load_qa_chain
+from bisheng_langchain.rag.init_retrievers import (
     BaselineVectorRetriever,
     KeywordRetriever,
     MixRetriever,
     SmallerChunksVectorRetriever,
 )
-from loguru import logger
-from scoring.ragas_score import RagScore
-from extract_info import extract_title
-from tqdm import tqdm
-from utils import import_by_type, import_class, import_module
-from langchain.docstore.document import Document
-from langchain.chains.question_answering import load_qa_chain
-from langchain_community.chat_models.cohere import ChatCohere
+from bisheng_langchain.rag.scoring.ragas_score import RagScore
+from bisheng_langchain.rag.utils import import_by_type, import_class
 
 
 class BishengRagPipeline:
@@ -157,42 +154,29 @@ class BishengRagPipeline:
                     file_name=os.path.basename(each_file_path), file_path=each_file_path, **loader_params
                 )
                 documents = loader.load()
-
-                # # load from text
-                # if each_file_path.endswith('.pdf'):
-                #     with open(each_file_path.replace('.pdf', '.txt'), 'r') as f:
-                #         content = f.read()
-                #     documents = [Document(page_content=content, metadata={'source': os.path.basename(each_file_path)})]
-                
-                logger.info(f'documents: {len(documents)}, page_content: {len(documents[0].page_content)}')
+                logger.info(f'documents: {len(documents)}')
                 if len(documents[0].page_content) == 0:
                     logger.error(f'{each_file_path} page_content is empty.')
-
-                # add aux info
-                add_aux_info = self.params['retriever'].get('add_aux_info', False)
-                if add_aux_info:
-                    for doc in documents:
-                        try:
-                            title = extract_title(llm=self.llm, text=doc.page_content)
-                            logger.info(f'extract title: {title}')
-                        except Exception as e:
-                            logger.error(f"Failed to extract title: {e}")
-                            title = ''
-                        doc.metadata['title'] = title
 
                 vector_drop_old = self.params['milvus']['drop_old'] if index == 0 else False
                 keyword_drop_old = self.params['elasticsearch']['drop_old'] if index == 0 else False
                 for idx, retriever in enumerate(self.retriever.retrievers):
-                    retriever.add_documents(documents, collection_name, vector_drop_old, add_aux_info=add_aux_info)
+                    retriever.add_documents(documents, f"{collection_name}_{idx}", vector_drop_old)
+                    # retriever.add_documents(documents, collection_name, vector_drop_old)
 
-    def retrieval_and_rerank(self, question, collection_name, max_content=100000):
+    def retrieval_and_rerank(self, question, collection_name):
         """
         retrieval and rerank
         """
         collection_name = f"{collection_name}_{self.params['retriever']['suffix']}"
+
         # EnsembleRetriever直接检索召回会默认去重
-        docs = self.retriever.get_relevant_documents(query=question, collection_name=collection_name)
-        logger.info(f'retrieval docs origin: {len(docs)}')
+        # docs = self.retriever.get_relevant_documents(query=question, collection_name=collection_name)
+        docs = []
+        for idx, retriever in enumerate(self.retriever.retrievers):
+            docs.extend(retriever.get_relevant_documents(query=question, collection_name=f"{collection_name}_{idx}"))
+            # docs.extend(retriever.get_relevant_documents(query=question, collection_name=collection_name))
+        logger.info(f'retrieval docs: {len(docs)}')
 
         # delete duplicate
         if self.params['post_retrieval']['delete_duplicate']:
@@ -213,29 +197,14 @@ class BishengRagPipeline:
             if not hasattr(self, 'ranker'):
                 rerank_params = self.params['post_retrieval']['rerank']
                 rerank_type = rerank_params.pop('type')
-                rerank_object = import_class(f'rerank.rerank.{rerank_type}')
+                rerank_object = import_class(f'bisheng_langchain.rag.rerank.{rerank_type}')
                 self.ranker = rerank_object(**rerank_params)
             docs = getattr(self, 'ranker').sort_and_filter(question, docs)
 
-        # delete redundancy according to max_content 
-        doc_num, doc_content_sum = 0, 0
-        for doc in docs:
-            doc_content_sum += len(doc.page_content)
-            if doc_content_sum > max_content:
-                break
-            doc_num += 1
-        docs = docs[:doc_num]
-        logger.info(f'retrieval docs after delete redundancy: {len(docs)}')
-
-        # 按照文档的source和chunk_index排序，保证上下文的连贯性和一致性
-        if self.params['post_retrieval'].get('sort_by_source_and_index', False):
-            logger.info('sort chunks by source and chunk_index')
-            docs = sorted(docs, key=lambda x: (x.metadata['source'], x.metadata['chunk_index']))
         return docs
 
     def load_documents(self, file_name, max_content=100000):
         """
-        直接加载文档，如果文档过长，直接截断处理；
         max_content: max content len of llm
         """
         file_path = os.path.join(self.origin_file_path, file_name)
@@ -262,7 +231,7 @@ class BishengRagPipeline:
         all_questions_info = df.to_dict('records')
         if 'prompt_type' in self.params['generate']:
             prompt_type = self.params['generate']['prompt_type']
-            prompt = import_module(f'from prompts.prompt import {prompt_type}')
+            prompt = import_class(f'bisheng_langchain.rag.prompts.{prompt_type}')
         else:
             prompt = None
         qa_chain = load_qa_chain(
@@ -274,33 +243,31 @@ class BishengRagPipeline:
             file_name = questions_info['文件名']
             collection_name = questions_info['知识库名']
 
-            # if question != '请分析江苏中设集团股份有限公司2021年重大关联交易的情况。':
-            #     continue
-
             if self.params['generate']['with_retrieval']:
                 # retrieval and rerank
-                docs = self.retrieval_and_rerank(question, collection_name, max_content=self.params['generate']['max_content'])
+                docs = self.retrieval_and_rerank(question, collection_name)
             else:
                 # load document
                 if file_name not in file2docs:
-                    docs = self.load_documents(file_name, max_content=self.params['generate']['max_content'])
+                    docs = self.load_documents(file_name)
                     file2docs[file_name] = docs
                 else:
                     docs = file2docs[file_name]
 
             # question answer
             try:
-                ans = qa_chain({"input_documents": docs, "question": question}, return_only_outputs=True)
+                ans = qa_chain({"input_documents": docs, "question": question}, return_only_outputs=False)
             except Exception as e:
                 logger.error(f'question: {question}\nerror: {e}')
                 ans = {'output_text': str(e)}
-            rag_answer = ans['output_text']
-            
+
             # context = '\n\n'.join([doc.page_content for doc in docs])
             # content = prompt.format(context=context, question=question)
 
-            # for rate_limit
-            # time.sleep(30)
+            # # for rate_limit
+            # time.sleep(15)
+
+            rag_answer = ans['output_text']
             logger.info(f'question: {question}\nans: {rag_answer}\n')
             questions_info['rag_answer'] = rag_answer
             # questions_info['rag_context'] = '\n----------------\n'.join([doc.page_content for doc in docs])
