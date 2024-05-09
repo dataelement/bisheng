@@ -407,7 +407,7 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             logger.info(f'need_extract_title')
             for one in documents:
                 # 配置了相关llm的话，就对文档做总结
-                title = extract_title(llm, documents)
+                title = extract_title(llm, one.page_content)
                 one.metadata['title'] = title
 
         text_splitter = ElemCharacterTextSplitter(separators=separator,
