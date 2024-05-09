@@ -300,6 +300,7 @@ class AssistantService(AssistantUtils):
         req.user_id = user.user_id
 
         for one in req.children:
+            one.id = None
             one.user_id = user.user_id
             one.is_delete = 0
             one.is_preset = False
