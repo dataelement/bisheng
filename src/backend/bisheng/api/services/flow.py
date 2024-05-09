@@ -118,8 +118,8 @@ class FlowService:
         """
         更新版本信息
         """
-
-        version_info = FlowVersionDao.get_version_by_id(version_id)
+        # 包含已删除的版本，若版本已删除，则重新恢复此版本
+        version_info = FlowVersionDao.get_version_by_id(version_id, include_delete=True)
         if not version_info:
             return NotFoundVersionError.return_resp()
         flow_info = FlowDao.get_flow_by_id(version_info.flow_id)
@@ -137,6 +137,8 @@ class FlowService:
         version_info.name = flow_version.name if flow_version.name else version_info.name
         version_info.description = flow_version.description if flow_version.description else version_info.description
         version_info.data = flow_version.data if flow_version.data else version_info.data
+        # 恢复此技能版本
+        version_info.is_delete = 1
 
         flow_version = FlowVersionDao.update_version(version_info)
         return resp_200(data=flow_version)

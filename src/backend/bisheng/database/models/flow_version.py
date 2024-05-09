@@ -92,12 +92,14 @@ class FlowVersionDao(FlowVersion):
             return session.exec(statement).first()
 
     @classmethod
-    def get_version_by_id(cls, version_id: int) -> Optional[FlowVersion]:
+    def get_version_by_id(cls, version_id: int, include_delete: bool = False) -> Optional[FlowVersion]:
         """
         根据版本ID获取技能版本的信息
         """
         with session_getter() as session:
-            statement = select(FlowVersion).where(FlowVersion.id == version_id, FlowVersion.is_delete == 0)
+            statement = select(FlowVersion).where(FlowVersion.id == version_id)
+            if not include_delete:
+                statement = statement.where(FlowVersion.is_delete == 0)
             return session.exec(statement).first()
 
     @classmethod
