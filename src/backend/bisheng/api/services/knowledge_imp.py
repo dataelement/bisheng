@@ -13,7 +13,7 @@ from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, Knowle
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.interface.initialize.loading import instantiate_vectorstore, instantiate_llm
 from bisheng.settings import settings
 from bisheng.utils import minio_client
 from bisheng.utils.embedding import decide_embeddings
@@ -224,10 +224,11 @@ def decide_knowledge_llm() -> Any:
     if not llm_params:
         # 无相关配置
         return None
+
     # 获取llm对象
-    llm_object = import_by_type(_type='llms', name=llm_params['type'])
-    llm_params.pop('type')
-    llm = llm_object(**llm_params)
+    node_type = llm_params.pop('type')
+    class_object = import_by_type(_type='llms', name=node_type)
+    llm = instantiate_llm(node_type, class_object, llm_params)
     return llm
 
 
