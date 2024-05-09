@@ -188,10 +188,6 @@ class AssistantAgent(AssistantUtils):
         embeddings = decide_embeddings(knowledge.model)
         search_kwargs = {}
         vector_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
-        if knowledge.collection_name.startswith('partition'):
-            search_kwargs.update({'partition_key': knowledge.id})
-            vector_client = vector_client.as_retriever(search_type="similarity", search_kwargs=search_kwargs)
-
         es_vector_client = decide_vectorstores(knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
         tool_params = {
             "bisheng_rag": {
