@@ -70,6 +70,7 @@ class MixRetriever(BaseRetriever):
                 index_name=collection_name,
                 elasticsearch_url=self.keyword_store.elasticsearch_url,
                 ssl_verify=self.keyword_store.ssl_verify,
+                llm_chain=self.keyword_store.llm_chain
             )
             self.vector_store = self.vector_store.__class__(
                 collection_name=collection_name,

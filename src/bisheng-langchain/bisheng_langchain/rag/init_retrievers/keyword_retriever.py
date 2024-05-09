@@ -58,6 +58,7 @@ class KeywordRetriever(BaseRetriever):
                 index_name=collection_name,
                 elasticsearch_url=self.keyword_store.elasticsearch_url,
                 ssl_verify=self.keyword_store.ssl_verify,
+                llm_chain=self.keyword_store.llm_chain
             )
         if self.search_type == 'similarity':
             result = self.keyword_store.similarity_search(query, **self.search_kwargs)
