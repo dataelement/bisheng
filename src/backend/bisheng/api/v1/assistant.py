@@ -202,10 +202,14 @@ async def get_tool_schema(*,
             return resp_500(message="url文件下载失败：" + str(e))
 
     # 根据文件内容是否以`{`开头判断用什么解析方式
-    if file_content.startswith("{"):
-        res = json.loads(file_content)
-    else:
-        res = yaml.safe_load(file_content)
+    try:
+        if file_content.startswith("{"):
+            res = json.loads(file_content)
+        else:
+            res = yaml.safe_load(file_content)
+    except Exception as e:
+        logger.exception(f'openapi schema parse error')
+        return resp_500(message=f"openapi schema解析报错，请检查内容是否符合json或者yaml格式: {str(e)}")
 
     # 解析openapi schema转为助手工具的格式
     try:
