@@ -95,6 +95,12 @@ gpts:
   llms:
     - type: 'ChatOpenAI'
       model_name: 'gpt-4-0125-preview'
+      # 助手内 挂载的知识库检索参数，可按需配置。配置参数和模型有关
+      knowledge_retrive:
+        # 传给模型的最大字符数，超过会自动截断
+        max_content: 15000
+        # 是否将检索的chunk重新排序，必须是031版本之后创建的知识库才支持排序
+        sort_by_source_and_index: false
       temperature: 0.3
       <<: *openai_conf
     - type: 'CustomLLMChat'

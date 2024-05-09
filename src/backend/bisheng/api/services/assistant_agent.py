@@ -63,6 +63,11 @@ class AssistantAgent(AssistantUtils):
         self.llm_agent_executor = None
         self.knowledge_skill_path = str(Path(__file__).parent / 'knowledge_skill.json')
         self.knowledge_skill_data = None
+        # 知识库检索相关参数
+        self.knowledge_retrive = {
+            "max_content": 15000,
+            "sort_by_source_and_index": False
+        }
 
     async def init_assistant(self, callbacks: Callbacks = None):
         await self.init_llm()
@@ -82,6 +87,10 @@ class AssistantAgent(AssistantUtils):
 
         if llm_params.get('agent_executor_type'):
             self.llm_agent_executor = llm_params.pop('agent_executor_type')
+
+        # 如果模型有单独配置知识库检索参数，则使用模型配置的
+        if llm_params.get('knowledge_retrive'):
+            self.knowledge_retrive = llm_params.pop('knowledge_retrive')
 
         if llm_params['type'] == 'ChatOpenAI':
             llm_object = import_class('langchain_openai.ChatOpenAI')
@@ -193,6 +202,7 @@ class AssistantAgent(AssistantUtils):
                 "llm": self.llm
             }
         }
+        tool_params['bisheng_rag'].update(self.knowledge_retrive)
         tool = load_tools(tool_params=tool_params, llm=self.llm, callbacks=callbacks)
         return tool
 
