@@ -288,7 +288,9 @@ class AssistantService(AssistantUtils):
     @classmethod
     def add_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
         """ 添加自定义工具 """
-
+        req.id = None
+        if req.name.__len__() > 30:
+            return resp_500(message="名字过长，不能超过30个字符")
         # 判断类别是否已存在
         tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
         if tool_type:
@@ -316,13 +318,14 @@ class AssistantService(AssistantUtils):
             return ToolTypeNotExistsError.return_resp()
         if len(req.children) == 0:
             return ToolTypeEmptyError.return_resp()
+        if req.name.__len__() > 30:
+            return resp_500(message="名字过长，不能超过30个字符")
 
         # 判断工具类别名称是否重复
         tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
         if tool_type and tool_type.id != exist_tool_type.id:
             return ToolTypeRepeatError.return_resp()
 
-        #
         exist_tool_type.name = req.name
         exist_tool_type.description = req.description
         exist_tool_type.auth_method = req.auth_method
