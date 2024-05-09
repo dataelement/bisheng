@@ -335,7 +335,13 @@ class AssistantService(AssistantUtils):
 
         children_map = {}
         for one in req.children:
-            children_map[GptsToolsDao.get_tool_key(exist_tool_type.id, one.tool_key)] = one
+            save_key = GptsToolsDao.get_tool_key(exist_tool_type.id, one.tool_key)
+            save_key_prefix = save_key.split("_")[0]
+            if one.tool_key.startswith(save_key_prefix):
+                # 说明api和数据库的一致，没有通过openapiSchema重新解析
+                children_map[one.tool_key] = one
+            else:
+                children_map[save_key] = one
 
         # 获取此类别下旧的API列表
         old_tool_list = GptsToolsDao.get_list_by_type([exist_tool_type.id])
@@ -358,6 +364,7 @@ class AssistantService(AssistantUtils):
 
         add_children = []
         for one in children_map.values():
+            one.id = None
             one.user_id = user.user_id
             one.is_preset = False
             one.is_delete = 0
