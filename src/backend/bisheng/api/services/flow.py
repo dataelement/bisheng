@@ -239,17 +239,17 @@ class FlowService:
         # 替换answer
         answer_result = {}
         for key, val in inputs.items():
-            if key == 'data' or key == 'id':
-                continue
-            else:
-                # 其他默认输入key，替换第一个需要输入的key
+            if key != 'data' and key != 'id':
+                # 默认输入key，替换第一个需要输入的key
                 inputs[key] = question
-                break
+        if 'id' in inputs:
+            inputs.pop('id')
         # 替换节点的参数, 替换inputFileNode和VariableNode的参数
         tweaks = {}
-        if inputs.get('data') is not None:
+        if 'data' in inputs:
             node_data = inputs.pop('data')
-            tweaks = process_node_data(node_data)
+            if node_data:
+                tweaks = process_node_data(node_data)
 
         # 执行两个版本的节点
         for one in versions:
