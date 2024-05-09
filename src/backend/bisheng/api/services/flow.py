@@ -138,7 +138,7 @@ class FlowService:
         version_info.description = flow_version.description if flow_version.description else version_info.description
         version_info.data = flow_version.data if flow_version.data else version_info.data
         # 恢复此技能版本
-        version_info.is_delete = 1
+        version_info.is_delete = 0
 
         flow_version = FlowVersionDao.update_version(version_info)
         return resp_200(data=flow_version)
