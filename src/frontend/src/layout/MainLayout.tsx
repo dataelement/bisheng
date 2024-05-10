@@ -44,12 +44,12 @@ export default function MainLayout() {
                 <div className="flex h-9 my-[14px]">
                     <Link className="inline-block" to='/'><img src='/login-logo-small.png' className="w-[114px] h-9 ml-8 rounded" alt="" /></Link>
                 </div>
-                <div className="flex w-fit">
-                    {/* <div className="flex">
+                <div className="flex w-fit relative z-50">
+                    <div className="flex">
                         <TooltipProvider>
                             <Tooltip>
-                                <TooltipTrigger className="h-8 w-8 bg-[white] rounded-lg cursor-pointer my-4">
-                                    <div className="" onClick={() => setDark(!dark)}>
+                                <TooltipTrigger className="h-8 w-8 bg-[white] rounded-lg cursor-pointer my-4" onClick={() => setDark(!dark)}>
+                                    <div className="">
                                         {dark ? (
                                             <SunIcon className="side-bar-button-size mx-auto w-[13px] h-[13px]" />
                                         ) : (
@@ -63,8 +63,8 @@ export default function MainLayout() {
                         <Separator className="mx-[4px]" orientation="vertical" />
                         <TooltipProvider>
                             <Tooltip>
-                                <TooltipTrigger className="h-8 w-8 bg-[white] rounded-lg cursor-pointer my-4">
-                                    <div className="" onClick={changLanguage}>
+                                <TooltipTrigger className="h-8 w-8 bg-[white] rounded-lg cursor-pointer my-4" onClick={changLanguage}>
+                                    <div className="">
                                         {language === 'en'
                                             ? <EnIcon className="side-bar-button-size mx-auto w-[19px] h-[19px]" />
                                             : <Globe className="side-bar-button-size mx-auto w-[17px] h-[17px]" />}
@@ -74,7 +74,7 @@ export default function MainLayout() {
                             </Tooltip>
                         </TooltipProvider>
                         <Separator className="mx-[23px] h-6 border-l my-5 border-[#dddddd]" orientation="vertical" />
-                    </div> */}
+                    </div>
                     <div className="flex items-center h-7 my-4">
                         <img className="h-7 w-7 rounded-2xl mr-4" src="/user.png" alt="" />
                         <span className="leading-8 text-[14px] mr-8">{t("menu.user")}</span>
@@ -169,7 +169,7 @@ export default function MainLayout() {
 };
 
 const useLanguage = (user: User) => {
-    const [language, setLanguage] = useState('en')
+    const [language, setLanguage] = useState('zh')
     useEffect(() => {
         const lang = user.user_id ? localStorage.getItem('language-' + user.user_id) : null
         if (lang) {
