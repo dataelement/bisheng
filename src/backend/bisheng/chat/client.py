@@ -208,7 +208,7 @@ class ChatClient:
 
             res = await self.add_message('bot', answer, 'answer')
             await self.send_response('answer', 'start', '')
-            await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
+            await self.send_response('answer', 'end_cover', answer, message_id=res.id if res else None)
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')
         except Exception as e:
