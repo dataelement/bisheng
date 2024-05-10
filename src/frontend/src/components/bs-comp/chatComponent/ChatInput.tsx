@@ -146,7 +146,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     } else {
                         if (event.reason) {
                             toast({
-                                title: '提示',
+                                title: t('prompt'),
                                 variant: 'error',
                                 description: event.reason
                             });
@@ -281,7 +281,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 style={{ height: 56 }}
                 disabled={inputLock.locked}
                 onInput={handleTextAreaHeight}
-                placeholder={inputLock.locked ? inputLock.reason : '请输入问题'}
+                placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
                 className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {

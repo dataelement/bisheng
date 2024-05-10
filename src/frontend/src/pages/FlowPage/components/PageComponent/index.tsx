@@ -440,7 +440,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
                   <Chat flow={flow} reactFlowInstance={reactFlowInstance} />
                   <div className="absolute top-20 left-[220px] text-xs mt-2 text-gray-500">
                     <p className="mb-2">{flow.name}</p>
-                    <Badge variant="outline"><LayersIcon className="mr-1" />当前版本：{version?.name}</Badge>
+                    <Badge variant="outline"><LayersIcon className="mr-1" />{t('skills.currentVersion')}{version?.name}</Badge>
                   </div>
                 </div>
               ) : (

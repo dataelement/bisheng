@@ -23,6 +23,7 @@ import { useNavigate } from "react-router-dom";
 import { createFlowVersion, deleteVersion, getFlowVersions, getVersionDetails, updateVersion } from "@/controllers/API/flow";
 import { FlowVersionItem } from "@/types/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { t } from "i18next";
 
 export default function Header({ flow }) {
     const navgate = useNavigate()
@@ -51,7 +52,7 @@ export default function Header({ flow }) {
         )
         message({
             variant: "success",
-            title: `版本 v${maxNo} 保存成功`,
+            title: `${t('skills.version')} v${maxNo} ${t('skills.saveSuccessful')}`,
             description: ""
         })
         // 更新版本列表
@@ -94,16 +95,16 @@ export default function Header({ flow }) {
                 onClick={() => navgate('/build/skill/' + flow.id, { replace: true })}
             ><ExitIcon className="h-4 w-4" /></Button>
             <Button variant="outline" onClick={() => { takeSnapshot(); uploadFlow() }} >
-                <ArrowUpIcon className="h-4 w-4 mr-1" />导入
+                <ArrowUpIcon className="h-4 w-4 mr-1" />{t('skills.import')}
             </Button>
             <Button variant="outline" onClick={() => { openPopUp(<ExportModal />) }}>
-                <ArrowDownIcon className="h-4 w-4 mr-1" />导出
+                <ArrowDownIcon className="h-4 w-4 mr-1" />{t('skills.export')}
             </Button>
             <Button variant="outline" onClick={() => { openPopUp(<ApiModal flow={flow} />) }} >
-                <CodeIcon className="h-4 w-4 mr-1" />代码
+                <CodeIcon className="h-4 w-4 mr-1" />{t('skills.code')}
             </Button>
             <Button variant="outline" onClick={() => setOpen(true)} >
-                <StackIcon className="h-4 w-4 mr-1" />简化
+                <StackIcon className="h-4 w-4 mr-1" />{t('skills.simplify')}
             </Button>
         </div>
         {
@@ -116,7 +117,7 @@ export default function Header({ flow }) {
                             description: ""
                         }))
                 }
-                    disabled={!isPending}><SaveIcon />保存</Button>
+                    disabled={!isPending}><SaveIcon />{t('skills.save')}</Button>
                 <ActionButton
                     className="px-6 flex gap-2"
                     align="end"
@@ -124,7 +125,7 @@ export default function Header({ flow }) {
                     buttonTipContent={(
                         <div>
                             <img src={TipPng} alt="" className="w-80" />
-                            <p className="mt-4 text-sm">支持分成多个版本分支，分别进行开发以及版本间的比较。</p>
+                            <p className="mt-4 text-sm">{t('skills.supportVersions')}</p>
                         </div>
                     )}
                     dropDown={(
@@ -160,7 +161,7 @@ export default function Header({ flow }) {
                             </RadioGroup>
                         </div>
                     )}
-                ><LayersIcon />保存版本</ActionButton>
+                ><LayersIcon />{t('skills.saveVersion')}</ActionButton>
                 <Button variant="outline" className="relative"
                     onClick={(event: React.MouseEvent<HTMLElement>) => {
                         setNotificationCenter(false);
@@ -222,8 +223,8 @@ const useVersion = (flow) => {
 
     const handleDeleteVersion = (version, index) => {
         bsConfirm({
-            title: "提示",
-            desc: `是否删除 ${version.name} 版本？`,
+            title: t('prompt'),
+            desc: `${t('skills.deleteOrNot')} ${version.name} ${t('skills.version')}?`,
             onOk: (next) => {
                 captureAndAlertRequestErrorHoc(deleteVersion(version.id)).then(res => {
                     if (res) {

@@ -10,6 +10,7 @@ import { SkillIcon } from "../../bs-icons/skill";
 import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { Switch } from "../../bs-ui/switch";
+import { useTranslation } from "react-i18next";
 
 interface IProps<T> {
   data: T,
@@ -86,6 +87,8 @@ export default function CardComponent<T>({
 
   const [_checked, setChecked] = useState(checked)
 
+  const { t } = useTranslation()
+
   const handleCheckedChange = async (bln) => {
     const res = await onCheckedChange(bln, data)
     if (res === false) return
@@ -156,7 +159,7 @@ export default function CardComponent<T>({
           <Switch
             checked={_checked}
             className="w-12"
-            texts={['上线', '下线']}
+            texts={[t('skills.online'), t('skills.offline')]}
             onCheckedChange={(b) => edit && handleCheckedChange(b)}
             onClick={e => { e.stopPropagation(); onSwitchClick?.() }}
           ></Switch>
@@ -170,7 +173,7 @@ export default function CardComponent<T>({
     <CardFooter className="flex justify-between h-10">
       <div className="flex gap-1 items-center">
         <UserIcon />
-        <span className="text-sm text-muted-foreground">创建用户</span>
+        <span className="text-sm text-muted-foreground">{t('skills.createdBy')}</span>
         <span className="text-sm font-medium leading-none overflow-hidden text-ellipsis max-w-32 ">{user}</span>
       </div>
       {edit

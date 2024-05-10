@@ -14,7 +14,7 @@ export default function MessageSystem({ data }) {
 
         message({
             variant: 'success',
-            title: '提示',
+            title: t('prompt'),
             description: t('chat.copyTip')
         })
     }

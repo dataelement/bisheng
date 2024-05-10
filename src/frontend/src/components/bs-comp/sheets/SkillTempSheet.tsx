@@ -4,11 +4,13 @@ import { SearchInput } from "../../bs-ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 export default function SkillTempSheet({ children, onSelect }) {
     const [open, setOpen] = useState(false)
 
     const navigate = useNavigate()
+    const { t } = useTranslation()
 
     const [keyword, setKeyword] = useState(' ')
     const allDataRef = useRef([])
@@ -31,16 +33,16 @@ export default function SkillTempSheet({ children, onSelect }) {
         <SheetContent className="sm:min-w-[966px] bg-gray-100">
             <div className="flex h-full" onClick={e => e.stopPropagation()}>
                 <div className="w-fit p-6">
-                    <SheetTitle>技能模板</SheetTitle>
-                    <SheetDescription>您可以从这里挑选一个模板开始，或者自定义高级模板</SheetDescription>
-                    <SearchInput value={keyword} placeholder="搜索" className="my-6" onChange={(e) => setKeyword(e.target.value)} />
+                    <SheetTitle>{t('skills.skillTemplate')}</SheetTitle>
+                    <SheetDescription>{t('skills.skillTemplateChoose')}</SheetDescription>
+                    <SearchInput value={keyword} placeholder={t('build.search')} className="my-6" onChange={(e) => setKeyword(e.target.value)} />
                 </div>
                 <div className="flex-1 min-w-[696px] bg-[#fff] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
                     <CardComponent
                         id={0}
                         type="sheet"
                         data={null}
-                        title='自定义技能'
+                        title={t('skills.customSkills')}
                         description=''
                         onClick={() => navigate('/build/skill')}
                     ></CardComponent>

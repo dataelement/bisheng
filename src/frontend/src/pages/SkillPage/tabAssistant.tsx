@@ -24,7 +24,7 @@ export default function Assistants() {
 
     const handleDelete = (data) => {
         bsConfirm({
-            desc: '确认删除该助手？',
+            desc: t('deleteAssistant'),
             okTxt: t('delete'),
             onOk(next) {
                 deleteAssistantApi(data.id).then(() => reload())
@@ -45,7 +45,7 @@ export default function Assistants() {
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative top-[-60px]">
             <div className="flex">
-                <SearchInput className="w-64" placeholder="搜索您需要的助手" onChange={(e) => search(e.target.value)}></SearchInput>
+                <SearchInput className="w-64" placeholder={t('build.searchAssistant')} onChange={(e) => search(e.target.value)}></SearchInput>
             </div>
             {/* list */}
             {
@@ -60,10 +60,10 @@ export default function Assistants() {
                                 <CardComponent<FlowType>
                                     data={null}
                                     type='skill'
-                                    title="新建助手"
+                                    title={t('build.createAssistant')}
                                     description={(<>
-                                        <p>通过描述角色和任务来创建你的助手</p>
-                                        <p>助手可以调用多个技能和工具</p>
+                                        <p>{t('build.createDescription')}</p>
+                                        <p>{t('build.nextDescription')}</p>
                                     </>)}
                                     onClick={() => console.log('新建')}
                                 ></CardComponent>
@@ -82,7 +82,7 @@ export default function Assistants() {
                                     description={item.desc}
                                     user={item.user_name}
                                     onClick={() => item.status !== 1 && navigate('/assistant/' + item.id)}
-                                    onSwitchClick={() => !item.write && item.status !== 1 && message({ title: '提示', description: '请联系管理员上线助手', variant: 'warning' })}
+                                    onSwitchClick={() => !item.write && item.status !== 1 && message({ title: t('prompt'), description: t('skills.contactAdmin'), variant: 'warning' })}
                                     onDelete={handleDelete}
                                     onSetting={() => navigate('/assistant/' + item.id)}
                                     onCheckedChange={handleCheckedChange}
@@ -94,7 +94,7 @@ export default function Assistants() {
         </div>
         {/* footer */}
         <div className="flex justify-between absolute bottom-0 left-0 w-full bg-[#F4F5F8] h-16 items-center px-10">
-            <p className="text-sm text-muted-foreground break-keep">在此页面管理您的助手，对助手上下线、编辑等等</p>
+            <p className="text-sm text-muted-foreground break-keep">{t('build.manageAssistant')}</p>
             <AutoPagination className="m-0 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage}></AutoPagination>
         </div>
     </div>

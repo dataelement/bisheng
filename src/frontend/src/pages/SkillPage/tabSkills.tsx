@@ -95,8 +95,8 @@ export default function Skills() {
                                 type='skill'
                                 title={t('skills.createNew')}
                                 description={(<>
-                                    <p>技能通过可视化的流程编排，明确任务执行步骤</p>
-                                    <p>我们提供场景模板供您使用和参考</p>
+                                    <p>{t('skills.executionSteps')}</p>
+                                    <p>{t('skills.sceneTemplates')}</p>
                                 </>)}
                             ></CardComponent>
                         </SkillTempSheet>
@@ -114,7 +114,7 @@ export default function Skills() {
                                     checked={item.status === 2}
                                     user={item.user_name}
                                     onClick={() => handleSetting(item)}
-                                    onSwitchClick={() => !item.write && item.status !== 2 && message({ title: '提示', description: '请联系管理员上线技能', variant: 'warning' })}
+                                    onSwitchClick={() => !item.write && item.status !== 2 && message({ title: t('prompt'), description: t('skills.contactAdmin'), variant: 'warning' })}
                                     onAddTemp={toggleTempModal}
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={handleDelete}

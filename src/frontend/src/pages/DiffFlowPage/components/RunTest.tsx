@@ -11,9 +11,11 @@ import CellWarp from "./Cell";
 import RunForm from "./RunForm";
 import { DelIcon } from "@/components/bs-icons/del";
 import * as XLSX from 'xlsx';
+import { useTranslation } from "react-i18next";
 
 export default function RunTest({ nodeId }) {
 
+    const { t } = useTranslation()
     const [formShow, setFormShow] = useState(false)
     const { runningType, mulitVersionFlow, readyVersions, questions, removeQuestion, cellRefs,
         allRunStart, rowRunStart, colRunStart, overQuestions, addQuestion } = useDiffFlowStore()
@@ -51,8 +53,8 @@ export default function RunTest({ nodeId }) {
         inputsRef.current = { id: nodeId, query, data: inputs }
         //
         if (questions.length === 0) return message({
-            title: '提示',
-            description: '请先添加测试用例',
+            title: t('prompt'),
+            description: t('test.addTest'),
             variant: 'warning'
         })
         allRunStart(nodeId, inputsRef.current)
@@ -109,14 +111,14 @@ export default function RunTest({ nodeId }) {
         <div className="bg-[#fff] p-2">
             <div className="flex items-center justify-between ">
                 <div className="flex gap-2 items-center">
-                    <Button size="sm" onClick={handleUploadTxt}>上传测试用例</Button>
+                    <Button size="sm" onClick={handleUploadTxt}>{t('test.uploadTest')}</Button>
                     <TooltipProvider delayDuration={200}>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <QuestionMarkCircledIcon />
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>为测试用例是当前组件的输入，只支持 txt 文件，最多 20 行</p>
+                                <p>{t('test.explain')}</p>
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
@@ -124,18 +126,18 @@ export default function RunTest({ nodeId }) {
                 {
                     isForm ? <Dialog open={formShow} onOpenChange={setFormShow}>
                         <DialogTrigger asChild>
-                            <Button size="sm" disabled={runningType === 'all'}><PlayIcon />测试运行</Button>
+                            <Button size="sm" disabled={runningType === 'all'}><PlayIcon />{t('test.testRun')}</Button>
                         </DialogTrigger>
                         <RunForm show={formShow} flow={mulitVersionFlow[0]} onChangeShow={setFormShow} onSubmit={handleRunTest} />
                     </Dialog> :
-                        <Button size="sm" disabled={runningType === 'all'} onClick={() => handleRunTest()}><PlayIcon />测试运行</Button>
+                        <Button size="sm" disabled={runningType === 'all'} onClick={() => handleRunTest()}><PlayIcon />{t('test.testRun')}</Button>
                 }
             </div>
             {/* table */}
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[100px]">测试用例</TableHead>
+                        <TableHead className="w-[100px]">{t('test.testCase')}</TableHead>
                         {
                             mulitVersionFlow.map(version =>
                                 version && <TableHead key={version.id}>
@@ -145,7 +147,7 @@ export default function RunTest({ nodeId }) {
                                             disabled={['all', 'col'].includes(runningType)}
                                             size='icon'
                                             className="w-6 h-6"
-                                            title="运行"
+                                            title={t('test.run')}
                                             onClick={() => handleColRunTest(version.id)}
                                         ><PlayIcon /></Button>}
                                     </div>
@@ -153,7 +155,7 @@ export default function RunTest({ nodeId }) {
                             )
                         }
                         <TableHead className="text-right">
-                            <Button variant="link" disabled={runningType !== ''} onClick={handleDownExcle}><DownloadIcon className="mr-1" />下载运行结果</Button>
+                            <Button variant="link" disabled={runningType !== ''} onClick={handleDownExcle}><DownloadIcon className="mr-1" />{t('test.downloadResults')}</Button>
                         </TableHead>
                     </TableRow>
                 </TableHeader>
@@ -195,7 +197,7 @@ export default function RunTest({ nodeId }) {
                         {questions.length < 20 && <TableCell>
                             <div className="flex items-center gap-2 font-medium min-w-52">
                                 <Input
-                                    placeholder="输入测试用例..."
+                                    placeholder={t('test.testCases')}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
                                             if (!e.target.value) return

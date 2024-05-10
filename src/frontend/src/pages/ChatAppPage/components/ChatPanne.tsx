@@ -149,8 +149,8 @@ export default function ChatPanne({ customWsHost = '', data }) {
 
     if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg">
         <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src="/application-start-logo.png" alt="" />
-        <p className="text-center text-3xl w-[182px] whitespace-normal leading-[64px] text-[#111111] mx-auto mt-[20px] font-light">
-            选择一个<b className="text-[#111111] font-semibold">对话</b><br />开始<b className="text-[#111111] font-semibold">文擎睿见</b>
+        <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] text-[#111111] mx-auto mt-[20px] font-light">
+            {t('chat.chooseOne')}<b className="text-[#111111] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className="text-[#111111] font-semibold">{t('chat.wenqingruijian')}</b>
         </p>
         {
             !customWsHost && <div

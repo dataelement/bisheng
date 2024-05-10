@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { changeCurrentVersion } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const SelectComp = ({ value, onChange = (id) => { }, data, disabled = false }) => {
 
@@ -33,13 +34,15 @@ export default function CardSelectVersion(
 ) {
     const [value, setValue] = useState(props.data.version_list.find(item => item.is_current === 1)?.id || '0')
 
+    const { t } = useTranslation()
+
     if (showPop) return <TooltipProvider>
         <Tooltip>
             <TooltipTrigger>
                 <SelectComp {...props} value={value} onChange={setValue} />
             </TooltipTrigger>
             <TooltipContent>
-                <p>选择上线版本</p>
+                <p>{t('skills.chooseOnline')}</p>
             </TooltipContent>
         </Tooltip>
     </TooltipProvider>

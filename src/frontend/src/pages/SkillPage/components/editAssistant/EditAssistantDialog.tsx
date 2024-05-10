@@ -3,9 +3,11 @@ import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } f
 import { Input, Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function EditAssistantDialog({ name, desc, onSave }) {
 
+    const { t } = useTranslation()
     // State for form fields
     const [formData, setFormData] = useState({ name: '', desc: '' });
 
@@ -21,11 +23,11 @@ export default function EditAssistantDialog({ name, desc, onSave }) {
     const validateField = (name, value) => {
         switch (name) {
             case 'name':
-                if (!value) return '名称不可为空';
-                if (value.length > 50) return '名称最多50个字符';
+                if (!value) return t('build.nameRequired');
+                if (value.length > 50) return t('build.nameMaxLength');
                 return '';
             case 'desc':
-                if (value.length > 1000) return '最多1000个字符';
+                if (value.length > 1000) return t('build.descMaxLength');
                 return '';
             default:
                 return '';
@@ -65,7 +67,7 @@ export default function EditAssistantDialog({ name, desc, onSave }) {
         const isValid = validateForm();
         // console.log('Form data:', errors);
         if (!isValid) return toast({
-            title: '提示',
+            title: t('prompt'),
             variant: 'error',
             description: Object.keys(errors).map(key => errors[key]),
         })
@@ -76,25 +78,26 @@ export default function EditAssistantDialog({ name, desc, onSave }) {
 
     return <DialogContent className="sm:max-w-[625px]">
         <DialogHeader>
-            <DialogTitle>编辑助手</DialogTitle>
+            <DialogTitle>{t('build.editAssistant')}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-8 py-6">
             <div className="">
-                <label htmlFor="name" className="bisheng-label">助手名称<span className="bisheng-tip">*</span></label>
-                <Input id="name" name="name" placeholder="给助手取一个名字" className="mt-2" value={formData.name} onChange={handleChange} />
+                <label htmlFor="name" className="bisheng-label">{t('build.assistantName')}<span className="bisheng-tip">*</span></label>
+                <Input id="name" name="name" placeholder={t('build.enterName')} className="mt-2" value={formData.name} onChange={handleChange} />
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
             </div>
             <div className="">
-                <label htmlFor="desc" className="bisheng-label">助手描述</label>
-                <Textarea id="desc" name="desc" placeholder="介绍助手功能，描述在会话和助手页面可见" maxLength={1200} className="mt-2" value={formData.desc} onChange={handleChange} />
+                <label htmlFor="desc" className="bisheng-label">{t('build.assistantDesc')}</label>
+                <Textarea id="desc" name="desc" placeholder={t('build.enterDesc')} maxLength={1200} className="mt-2" value={formData.desc} onChange={handleChange} />
                 {errors.desc && <p className="bisheng-tip mt-1">{errors.desc}</p>}
             </div>
         </div>
         <DialogFooter>
             <DialogClose>
-                <Button variant="outline" className="px-11" type="button">取消</Button>
+                <Button variant="outline" className="px-11" type="button">{t('build.cancel')}</Button>
             </DialogClose>
-            <Button type="submit" className="px-11" onClick={handleSubmit}>确认</Button>
+            <Button type="submit" className="px-11" onClick={handleSubmit}>{t('build.confirm')}</Button>
         </DialogFooter>
     </DialogContent>
 };
+

@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../
 import { userContext } from "../../../../contexts/userContext";
 import DisclosureComponent from "../DisclosureComponent";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { t } from "i18next";
 
 export default function PersonalComponents({ onDragStart }) {
     const { addSavedComponent, checkComponentsName, delComponent, savedComponents } = useContext(userContext)
@@ -65,7 +66,7 @@ export default function PersonalComponents({ onDragStart }) {
                 <DisclosureComponent
                     openDisc={true}
                     button={{
-                        title: '保存/Saved',
+                        title: t('skills.save'),
                         Icon: Save,
                         color: ''
                     }}
@@ -73,7 +74,7 @@ export default function PersonalComponents({ onDragStart }) {
             </TooltipTrigger>
             <TooltipContent className="bg-gray-0 rounded-md " side="right" collisionPadding={20}>
                 <div className="">
-                    <Button variant="outline" className="w-full rounded-full" onClick={upFile}>导入本地组件</Button>
+                    <Button variant="outline" className="w-full rounded-full" onClick={upFile}>{t('skills.importLocal')}</Button>
                 </div>
                 <div className="max-h-[540px] overflow-y-auto no-scrollbar">
                     {

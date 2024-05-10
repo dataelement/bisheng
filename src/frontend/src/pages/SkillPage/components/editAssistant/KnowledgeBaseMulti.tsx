@@ -1,10 +1,12 @@
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { readFileLibDatabase } from "@/controllers/API";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function KnowledgeBaseMulti({ value, onChange, children }:
     { value: any, onChange: (a: any) => any, children: (fun: any) => React.ReactNode }) {
 
+    const { t } = useTranslation()
     const [options, setOptions] = useState<any>([]);
     const originOptionsRef = useRef([])
     const reload = () => {
@@ -26,8 +28,8 @@ export default function KnowledgeBaseMulti({ value, onChange, children }:
     return <MultiSelect
         value={value.map(el => el.id)}
         options={options}
-        placeholder={"请选择知识库"}
-        searchPlaceholder={"搜索知识库名称"}
+        placeholder={t('build.selectKnowledgeBase')}
+        searchPlaceholder={t('build.searchBaseName')}
         onChange={handleChange}
     >
         {children(reload)}

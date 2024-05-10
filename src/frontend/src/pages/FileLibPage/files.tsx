@@ -204,23 +204,24 @@ export default function FilesPage() {
         <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen} onResult={handleUploadResult}></UploadModal>
         {/* 重复文件提醒 */}
         <dialog className={`modal ${repeatFiles.length && 'modal-open'}`}>
-            <div className="modal-box w-[560px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg relative">文件重复提示
-                    <X className="absolute right-0 top-0 text-gray-400 cursor-pointer" size={20} onClick={() => setRepeatFiles([])}></X>
-                </h3>
-                <p className="py-4">以下文件在知识库中已存在，继续上传将会覆盖原有文件以及处理策略，是否覆盖？</p>
-                <ul className="overflow-y-auto max-h-[400px]">
-                    {repeatFiles.map(el => (
-                        <li key={el.id} className="py-2 text-red-500">{el.remark}</li>
-                    ))}
-                </ul>
-                <div className="modal-action">
-                    <Button className="h-8" variant="outline" onClick={() => setRepeatFiles([])}>不覆盖，保留原文件</Button>
-                    <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
-                        {retryLoad && <span className="loading loading-spinner loading-xs"></span>}覆盖
-                    </Button>
-                </div>
-            </div>
-        </dialog>
+    <div className="modal-box w-[560px] bg-[#fff] shadow-lg dark:bg-background">
+        <h3 className="font-bold text-lg relative">{t('lib.modalTitle')}
+            <X className="absolute right-0 top-0 text-gray-400 cursor-pointer" size={20} onClick={() => setRepeatFiles([])}></X>
+        </h3>
+        <p className="py-4">{t('lib.modalMessage')}</p>
+        <ul className="overflow-y-auto max-h-[400px]">
+            {repeatFiles.map(el => (
+                <li key={el.id} className="py-2 text-red-500">{el.remark}</li>
+            ))}
+        </ul>
+        <div className="modal-action">
+            <Button className="h-8" variant="outline" onClick={() => setRepeatFiles([])}>{t('lib.keepOriginal')}</Button>
+            <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
+                {retryLoad && <span className="loading loading-spinner loading-xs"></span>}{t('lib.override')}
+            </Button>
+        </div>
+    </div>
+</dialog>
+
     </div >
 };

@@ -7,8 +7,11 @@ import { ChevronLeftIcon, Pencil2Icon } from "@radix-ui/react-icons";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
+import { useTranslation } from "react-i18next";
 
 export default function Header({ onSave, onLine }) {
+    const { t } = useTranslation()
+
     const navigate = useNavigate()
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
@@ -47,8 +50,8 @@ export default function Header({ onSave, onLine }) {
             </Dialog>
         </div>
         <div className="flex gap-4">
-            <Button variant="outline" className="px-10" type="button" onClick={onSave}>保存</Button>
-            <Button type="submit" className="px-10" onClick={onLine}>上线</Button>
+            <Button variant="outline" className="px-10" type="button" onClick={onSave}>{t('build.save')}</Button>
+            <Button type="submit" className="px-10" onClick={onLine}>{t('build.online')}</Button>
         </div>
     </div>
 };
