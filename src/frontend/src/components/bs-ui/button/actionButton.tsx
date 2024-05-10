@@ -9,27 +9,33 @@ export default function ActionButton({
     dropDown = null,
     align = 'center',
     buttonTipContent = null,
+    delayDuration = 700,
+    variant = "default",
     ...props
 }) {
 
     return <div className="flex items-center">
         <>
             {buttonTipContent ? <TooltipProvider>
-                <Tooltip>
+                <Tooltip delayDuration={delayDuration}>
                     <TooltipTrigger asChild>
-                        <Button className={`rounded-r-none ${className}`} {...props}>{children}</Button>
+                        <Button variant={variant} className={`rounded-r-none ${className}`} {...props}>{children}</Button>
                     </TooltipTrigger>
                     <TooltipContent className="bg-[#fff] text-gray-800">
                         {buttonTipContent}
                     </TooltipContent>
                 </Tooltip>
             </TooltipProvider> :
-                <Button className={`rounded-r-none ${className}`} {...props}>{children}</Button>
+                <Button variant={variant} className={`rounded-r-none ${className}`} {...props}>{children}</Button>
             }
         </>
         <Popover>
             <PopoverTrigger asChild>
-                <Button size="icon" className="rounded-l-none ml-[1px] [&[data-state=open]>svg]:rotate-180"><CaretDownIcon /></Button>
+                <Button
+                    size="icon"
+                    variant={variant}
+                    className="rounded-l-none ml-[1px] [&[data-state=open]>svg]:rotate-180"
+                ><CaretDownIcon /></Button>
             </PopoverTrigger>
             <PopoverContent className="w-80 p-0" align={align}>
                 {dropDown}

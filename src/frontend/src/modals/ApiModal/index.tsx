@@ -267,7 +267,7 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
       <DialogContent className="h-[80vh] md:max-w-[80vw]">
         <DialogHeader>
           <DialogTitle className="flex items-center">
-            <span className="pr-2">Code</span>
+            <span className="pr-2">Api</span>
             <Code2
               className="h-6 w-6 pl-1 text-gray-800 dark:text-white"
               aria-hidden="true"

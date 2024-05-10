@@ -11,19 +11,20 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { alertContext } from "@/contexts/alertContext";
 import { PopUpContext } from "@/contexts/popUpContext";
 import { TabsContext } from "@/contexts/tabsContext";
-import TipPng from "../../../assets/tip.png";
+import { typesContext } from "@/contexts/typesContext";
 import { undoRedoContext } from "@/contexts/undoRedoContext";
+import { createFlowVersion, deleteVersion, getFlowVersions, getVersionDetails, updateVersion } from "@/controllers/API/flow";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import ApiModal from "@/modals/ApiModal";
 import L2ParamsModal from "@/modals/L2ParamsModal";
 import ExportModal from "@/modals/exportModal";
+import { FlowVersionItem } from "@/types/flow";
 import { ArrowDownIcon, ArrowUpIcon, BellIcon, CodeIcon, ExitIcon, LayersIcon, StackIcon } from "@radix-ui/react-icons";
+import { t } from "i18next";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { createFlowVersion, deleteVersion, getFlowVersions, getVersionDetails, updateVersion } from "@/controllers/API/flow";
-import { FlowVersionItem } from "@/types/flow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { t } from "i18next";
+import TipPng from "../../../assets/tip.jpg";
 
 export default function Header({ flow }) {
     const navgate = useNavigate()
@@ -33,6 +34,8 @@ export default function Header({ flow }) {
     const AlertWidth = 384;
     const { notificationCenter, setNotificationCenter } = useContext(alertContext);
     const { uploadFlow, setFlow, tabsState, saveFlow } = useContext(TabsContext);
+    const { reactFlowInstance } = useContext(typesContext);
+
     const isPending = tabsState[flow.id]?.isPending;
     const { openPopUp } = useContext(PopUpContext);
     // 记录快照
@@ -40,7 +43,7 @@ export default function Header({ flow }) {
 
     const handleSaveNewVersion = async () => {
         // 累加版本 vx ++
-        let maxNo = 1
+        let maxNo = 0
         versions.forEach(v => {
             const match = v.name.match(/[vV](\d+)/)
             maxNo = match ? Math.max(Number(match[1]), maxNo) : maxNo
@@ -65,8 +68,9 @@ export default function Header({ flow }) {
     // 切换版本
     const handleChangeVersion = async (versionId) => {
         setLoading(true)
+        reactFlowInstance.setNodes([]) // 便于重新渲染节点
         // 保存当前版本
-        await saveFlow(flow)
+        updateVersion(version.id, { name: version.name, description: '', data: flow.data })
         // 切换版本UI
         const currentVersion = setCurrentVersion(Number(versionId))
         // 加载选中版本data
@@ -79,6 +83,16 @@ export default function Header({ flow }) {
             description: ""
         })
         setLoading(false)
+    }
+    // 保存版本
+    const handleSaveVersion = async () => {
+        // 保存当前版本
+        captureAndAlertRequestErrorHoc(updateVersion(version.id, { name: version.name, description: '', data: flow.data }).then(_ =>
+            _ && message({
+                variant: "success",
+                title: t('success'),
+                description: ""
+            })))
     }
 
     return <div className="flex justify-between items-center border-b px-4">
@@ -93,7 +107,7 @@ export default function Header({ flow }) {
                 variant="outline"
                 size="icon"
                 onClick={() => navgate('/build/skill/' + flow.id, { replace: true })}
-            ><ExitIcon className="h-4 w-4" /></Button>
+            ><ExitIcon className="h-4 w-4 rotate-180" /></Button>
             <Button variant="outline" onClick={() => { takeSnapshot(); uploadFlow() }} >
                 <ArrowUpIcon className="h-4 w-4 mr-1" />{t('skills.import')}
             </Button>
@@ -109,19 +123,14 @@ export default function Header({ flow }) {
         </div>
         {
             version && <div className="flex gap-4">
-                <Button className="px-6 flex gap-2" type="button" onClick={() =>
-                    updateVersion(version.id, { name: version.name, description: '', data: flow.data }).then(_ =>
-                        _ && message({
-                            variant: "success",
-                            title: t('success'),
-                            description: ""
-                        }))
-                }
+                <Button className="px-6 flex gap-2" type="button" onClick={handleSaveVersion}
                     disabled={!isPending}><SaveIcon />{t('skills.save')}</Button>
                 <ActionButton
                     className="px-6 flex gap-2"
                     align="end"
+                    variant="outline"
                     onClick={handleSaveNewVersion}
+                    delayDuration={200}
                     buttonTipContent={(
                         <div>
                             <img src={TipPng} alt="" className="w-80" />
@@ -129,12 +138,12 @@ export default function Header({ flow }) {
                         </div>
                     )}
                     dropDown={(
-                        <div>
+                        <div className=" overflow-y-auto max-h-96 max-h">
                             <RadioGroup value={version.id + ''} onValueChange={handleChangeVersion} className="gap-0">
                                 {versions.map((vers, index) => (
                                     <div key={vers.id} className="group flex items-center gap-4 px-4 py-2 cursor-pointer hover:bg-gray-100 border-b">
                                         <RadioGroupItem value={vers.id + ''} />
-                                        <div className="w-52">
+                                        <div className="w-[198px]">
                                             <TextInput
                                                 className="h-[30px]"
                                                 type="hover"
@@ -146,9 +155,9 @@ export default function Header({ flow }) {
                                         </div>
                                         {
                                             // 最后一个 V0 版本和当前选中版本不允许删除
-                                            !(version.id === vers.id || versions.length - 1 === index)
+                                            !(version.id === vers.id)
                                             && <Button
-                                                className="group-hover:block hidden"
+                                                className="group-hover:flex hidden"
                                                 type="button"
                                                 size="icon"
                                                 variant="outline"
@@ -181,27 +190,22 @@ export default function Header({ flow }) {
         }
 
         {/* 高级配置l2配置 */}
-        <L2ParamsModal data={flow} open={open} setOpen={setOpen} onSave={() => {
-            saveFlow(flow);
-            message({
-                variant: "success",
-                title: t('success'),
-                description: ""
-            });
-        }}></L2ParamsModal>
+        <L2ParamsModal data={flow} open={open} setOpen={setOpen} onSave={handleSaveVersion}></L2ParamsModal>
     </div>
 };
 
 // 技能版本管理
 const useVersion = (flow) => {
     const [versions, setVersions] = useState<FlowVersionItem[]>([])
-    const { version, setVersion } = useContext(TabsContext)
+    const { version, setVersion, updateOnlineVid } = useContext(TabsContext)
 
     const refrenshVersions = () => {
         getFlowVersions(flow.id).then(res => {
             setVersions(res)
             const currentV = res.find(el => el.is_current === 1)
             setVersion(currentV)
+            // 记录上线的版本
+            updateOnlineVid(currentV?.id)
         })
     }
 

@@ -37,13 +37,13 @@ export default function l2Edit() {
         // 无id不再请求
         if (!id) return
         // 已有flow 数据时，不再请求
-        if (flow?.id === id) {
-            setIsL2(true)
-            nameRef.current.value = flow.name
-            descRef.current.value = flow.description
-            guideRef.current.value = flow.guide_word
-            return
-        }
+        // if (flow?.id === id) {
+        //     setIsL2(true)
+        //     nameRef.current.value = flow.name
+        //     descRef.current.value = flow.description
+        //     guideRef.current.value = flow.guide_word
+        //     return
+        // }
         // 无flow从db获取
         getFlowApi(id).then(_flow => {
             // 回填flow

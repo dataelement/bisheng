@@ -12,6 +12,9 @@ const Cell = forwardRef((props, ref) => {
         loading: () => {
             setLoading(true)
         },
+        loaded: () => {
+            setLoading(false)
+        },
         setData: (val) => {
             setLoading(false)
             setValue(val)

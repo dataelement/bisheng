@@ -65,16 +65,20 @@ const TestDialog = forwardRef((props: any, ref) => {
 const formData = {
     toolName: "",
     schemaContent: "",
-    authType: "none",
+    authType: "basic",
     apiKey: "",
-    authMethod: "basic",
+    authMethod: "none",
     customHeader: ""
 }
 
 const EditTool = forwardRef((props: any, ref) => {
     const [editShow, setShow] = useState(false)
     const setEditShow = (bln) => {
-        !bln && setFormState({ ...formData })
+        if (!bln) {
+            // 关闭弹窗初始化数据
+            setFormState({ ...formData })
+            setTableData([])
+        }
         setShow(bln)
     }
     const [delShow, setDelShow] = useState(false)
@@ -117,6 +121,7 @@ const EditTool = forwardRef((props: any, ref) => {
 
     // 发送请求给后端获取Schema
     const handleImportSchema = () => {
+        // http://192.168.106.120:3002/openapi-test.json
         captureAndAlertRequestErrorHoc(downloadToolSchema({ download_url: schemaUrl.current })).then(res => {
             schemaUrl.current = ''
             if (!res) return
@@ -132,8 +137,9 @@ const EditTool = forwardRef((props: any, ref) => {
     };
 
     // 根据模板设置Schema内容
-    const handleSelectTemplate = (key) => {
-        captureAndAlertRequestErrorHoc(downloadToolSchema({ file_content: Example[key] })).then(res => {
+    const handleSelectTemplate = (key = '') => {
+        const file_content = key ? Example[key] : formState.schemaContent
+        file_content && captureAndAlertRequestErrorHoc(downloadToolSchema({ file_content })).then(res => {
             schemaUrl.current = ''
             if (!res) return
             fromDataRef.current = res
@@ -199,68 +205,176 @@ const EditTool = forwardRef((props: any, ref) => {
     const { t } = useTranslation()
 
     return <div>
-    <Sheet open={editShow} onOpenChange={setEditShow}>
-        <SheetContent className="w-[800px] sm:max-w-[800px] p-4">
-            <SheetHeader>
-                <SheetTitle>{t('tools.name')}</SheetTitle>
-            </SheetHeader>
-            <div className="mt-4 overflow-y-auto h-screen pb-40">
-                {/* name */}
-                <label htmlFor="open" className="px-6">{t('tools.name')}</label>
-                <div className="px-6 mb-4" >
-                    <Input
-                        id="toolName"
-                        name="toolName"
-                        className="mt-2"
-                        placeholder={t('tools.enterToolName')}
-                        value={formState.toolName}
-                        onChange={handleInputChange}
-                    />
-                </div>
-                {/* schema */}
-                <div className="px-6 flex items-center justify-between">
-                    <label htmlFor="open">{t('tools.openapiSchema')}</label>
-                    <div className="flex gap-2">
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline"><PlusIcon /> {t('tools.importFromUrl')}</Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-80" align="end">
-                                <div className="flex items-center gap-4">
-                                    <Input
-                                        id="schemaUrl"
-                                        name="schemaUrl"
-                                        placeholder="https://"
-                                        onChange={(e) => schemaUrl.current = e.target.value}
-                                    />
-                                    <PopoverClose>
-                                        <Button size="sm" className="w-16" onClick={handleImportSchema}>{t('tools.import')}</Button>
-                                    </PopoverClose>
-                                </div>
-                            </PopoverContent>
-                        </Popover>
-                        <Select value="1" onValueChange={(k) => handleSelectTemplate(k)}>
-                            <SelectTrigger >
-                                <span>{t('tools.examples')}</span>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    <SelectItem value="json">{t('tools.weatherJson')}</SelectItem>
-                                    <SelectItem value="yaml">{t('tools.petShopYaml')}</SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
+        <Sheet open={editShow} onOpenChange={setEditShow}>
+            <SheetContent className="w-[800px] sm:max-w-[800px] p-4">
+                <SheetHeader>
+                    <SheetTitle>{t('tools.createCustomTool')}</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4 overflow-y-auto h-screen pb-40">
+                    {/* name */}
+                    <label htmlFor="open" className="px-6">{t('tools.name')}</label>
+                    <div className="px-6 mb-4" >
+                        <Input
+                            id="toolName"
+                            name="toolName"
+                            className="mt-2"
+                            placeholder={t('tools.enterToolName')}
+                            value={formState.toolName}
+                            onChange={handleInputChange}
+                        />
                     </div>
-                </div>
-                <div className="px-6 mb-4" >
-                    <Textarea
-                        id="schemaContent"
-                        name="schemaContent"
-                        placeholder={t('tools.enterOpenAPISchema')}
-                        className="mt-2 min-h-52"
-                        value={formState.schemaContent}
-                        onChange={handleInputChange}
-                    />
+                    {/* schema */}
+                    <div className="px-6 flex items-center justify-between">
+                        <label htmlFor="open">OpenAPI Schema</label>
+                        <div className="flex gap-2">
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline"><PlusIcon /> {t('tools.importFromUrl')}</Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80" align="end">
+                                    <div className="flex items-center gap-4">
+                                        <Input
+                                            id="schemaUrl"
+                                            name="schemaUrl"
+                                            placeholder="https://"
+                                            onChange={(e) => schemaUrl.current = e.target.value}
+                                        />
+                                        <PopoverClose>
+                                            <Button size="sm" className="w-16" onClick={handleImportSchema}>{t('tools.import')}</Button>
+                                        </PopoverClose>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                            <Select value="1" onValueChange={(k) => handleSelectTemplate(k)}>
+                                <SelectTrigger >
+                                    <span>{t('tools.examples')}</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        <SelectItem value="json">{t('tools.weatherJson')}</SelectItem>
+                                        <SelectItem value="yaml">{t('tools.petShopYaml')}</SelectItem>
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <div className="px-6 mb-4" >
+                        <Textarea
+                            id="schemaContent"
+                            name="schemaContent"
+                            placeholder={t('tools.enterOpenAPISchema')}
+                            className="mt-2 min-h-52"
+                            value={formState.schemaContent}
+                            onChange={handleInputChange}
+                            onBlur={() => handleSelectTemplate()}
+                        />
+                    </div>
+                    <label htmlFor="open" className="px-6">{t('tools.authenticationType')}</label>
+                    <div className="px-6">
+                        <div className="px-6 mb-4" >
+                            <label htmlFor="open" className="bisheng-label">{t('tools.authType')}</label>
+                            <RadioGroup
+                                id="authMethod"
+                                name="authMethod"
+                                defaultValue={formState.authMethod}
+                                className="flex mt-2 gap-4"
+                                onValueChange={(value) => setFormState(prevState => ({ ...prevState, authMethod: value }))}
+                            >
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="none" id="r1" />
+                                    <Label htmlFor="r1">{t('tools.none')}</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="apikey" id="r2" />
+                                    <Label htmlFor="r2">{t('tools.apiKey')}</Label>
+                                </div>
+                            </RadioGroup>
+                        </div>
+                        {formState.authMethod === "apikey" && (<>
+                            <div className="px-6 mb-4">
+                                <label htmlFor="apiKey">API Key</label>
+                                <Input
+                                    id="apiKey"
+                                    name="apiKey"
+                                    className="mt-2"
+                                    value={formState.apiKey}
+                                    onChange={handleInputChange}
+                                />
+                            </div>
+
+                            <div className="px-6 mb-4" >
+                                <label htmlFor="open" className="bisheng-label">Auth Type</label>
+                                <RadioGroup
+                                    id="authType"
+                                    name="authType"
+                                    defaultValue={formState.authType}
+                                    className="flex mt-2 gap-4"
+                                    onValueChange={(value) => setFormState(prevState => ({ ...prevState, authType: value }))}
+                                >
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="basic" id="r4" />
+                                        <Label htmlFor="r4">Basic</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="bearer" id="r5" />
+                                        <Label htmlFor="r5">Bearer</Label>
+                                    </div>
+                                    {/* <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="custom" id="r6" />
+                                    <Label htmlFor="r6">Custom</Label>
+                                </div> */}
+                                </RadioGroup>
+                            </div>
+                        </>)}
+                        {/* {formState.authMethod === "custom" && (
+                            <div className="px-6 mb-4">
+                                <label htmlFor="customHeader">Custom Header Name</label>
+                                <Input
+                                    id="customHeader"
+                                    name="customHeader"
+                                    className="mt-2"
+                                    value={formState.customHeader}
+                                    onChange={handleInputChange}
+                                />
+                            </div>
+                        )} */}
+                    </div>
+                    <label htmlFor="open" className="px-6">{t('tools.availableTools')}</label>
+                    <div className="px-6 mb-4" >
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[100px]">{t('tools.name')}</TableHead>
+                                    <TableHead >{t('tools.description')}</TableHead>
+                                    <TableHead >{t('tools.method')}</TableHead>
+                                    <TableHead >{t('tools.path')}</TableHead>
+                                    {/* <TableHead >操作</TableHead> */}
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {
+                                    tableData.length ? tableData.map((item, index) =>
+                                        <TableRow key={index}>
+                                            <TableCell>{item.name}</TableCell>
+                                            <TableCell>{item.desc}</TableCell>
+                                            <TableCell>{item.extra.method}</TableCell>
+                                            <TableCell>{item.extra.path}</TableCell>
+                                            {/* <TableCell>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => testDialogRef.current.open(item)}
+                                                >测试</Button>
+                                            </TableCell> */}
+                                        </TableRow>
+                                    ) :
+                                        <TableRow>
+                                            <TableCell colSpan={4}>{t('tools.none')}</TableCell>
+                                        </TableRow>
+                                }
+                            </TableBody>
+                        </Table>
+                    </div>
                 </div>
                 <label htmlFor="open" className="px-6">{t('tools.authenticationType')}</label>
                 <div className="px-6">
@@ -295,67 +409,22 @@ const EditTool = forwardRef((props: any, ref) => {
                             />
                         </div>
                     )}
-                    <div className="px-6 mb-4" >
-                        <label htmlFor="open" className="bisheng-label">{t('tools.authType')}</label>
-                        <RadioGroup
-                            id="authType"
-                            name="authType"
-                            defaultValue="basic"
-                            className="flex mt-2 gap-4"
-                            onValueChange={(value) => setFormState(prevState => ({ ...prevState, authType: value }))}
-                        >
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="basic" id="r4" />
-                                <Label htmlFor="r4">{t('tools.basic')}</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="bearer" id="r5" />
-                                <Label htmlFor="r5">{t('tools.bearer')}</Label>
-                            </div>
-                        </RadioGroup>
-                    </div>
                 </div>
-                <label htmlFor="open" className="px-6">{t('tools.availableTools')}</label>
-                <div className="px-6 mb-4" >
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[100px]">{t('tools.name')}</TableHead>
-                                <TableHead >{t('tools.description')}</TableHead>
-                                <TableHead >{t('tools.method')}</TableHead>
-                                <TableHead >{t('tools.path')}</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {
-                                tableData.map((item, index) =>
-                                    <TableRow key={index}>
-                                        <TableCell>{item.name}</TableCell>
-                                        <TableCell>{item.desc}</TableCell>
-                                        <TableCell>{item.extra.method}</TableCell>
-                                        <TableCell>{item.extra.path}</TableCell>
-                                    </TableRow>
-                                )
-                            }
-                        </TableBody>
-                    </Table>
-                </div>
-            </div>
-            <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4 bg-[#fff]">
-                {delShow && <Button
-                    size="sm"
-                    variant="destructive"
-                    className="absolute left-6"
-                    onClick={handleDelete}
-                >{t('tools.delete')}</Button>}
-                <Button size="sm" variant="outline" onClick={() => setEditShow(false)}>{t('tools.cancel')}</Button>
-                <Button size="sm" onClick={handleSave}>{t('tools.save')}</Button>
-            </SheetFooter>
-        </SheetContent>
-    </Sheet >
-    {/* test dialog */}
-    <TestDialog ref={testDialogRef} />
-</div>
+                <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4 bg-[#fff]">
+                    {delShow && <Button
+                        size="sm"
+                        variant="destructive"
+                        className="absolute left-6"
+                        onClick={handleDelete}
+                    >{t('tools.delete')}</Button>}
+                    <Button size="sm" variant="outline" onClick={() => setEditShow(false)}>{t('tools.cancel')}</Button>
+                    <Button size="sm" onClick={handleSave}>{t('tools.save')}</Button>
+                </SheetFooter>
+            </SheetContent>
+        </Sheet >
+        {/* test dialog */}
+        <TestDialog ref={testDialogRef} />
+    </div>
 })
 
 export default EditTool

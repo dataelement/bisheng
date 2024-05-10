@@ -35,6 +35,7 @@ import { TabsContext } from "../../contexts/tabsContext";
 import { typesContext } from "../../contexts/typesContext";
 import { NodeDataType } from "../../types/flow";
 import { classNames, limitScrollFieldsModal } from "../../utils";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 
 export default function EditNodeModal({ data }: { data: NodeDataType }) {
   const [open, setOpen] = useState(true);
@@ -56,7 +57,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
   const { closePopUp } = useContext(PopUpContext);
   const { types } = useContext(typesContext);
   const ref = useRef();
-  const { setTabsState, flow } = useContext(TabsContext);
+  const { isOnlineVersion, version, setTabsState, flow } = useContext(TabsContext);
   const { reactFlowInstance } = useContext(typesContext);
 
   let disabled =
@@ -71,6 +72,16 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
     if (x === false) {
       closePopUp();
     }
+  }
+
+  const { message } = useToast()
+  const handleSave = () => {
+    if (isOnlineVersion()) return message({
+      title: '提示',
+      description: '上线中不可编辑保存',
+      variant: 'warning'
+    })
+    setModalOpen(false)
   }
 
   function changeAdvanced(node) {
@@ -354,7 +365,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
         </div>
 
         <DialogFooter>
-          <Button className="mt-3 rounded-full" onClick={() => { setModalOpen(false); }} type="submit" >save</Button>
+          <Button className="mt-3 rounded-full" onClick={handleSave} type="submit" >save</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

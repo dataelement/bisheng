@@ -39,7 +39,7 @@ export default function TestChat({ assisId, guideQuestion }) {
     }
 
     return <div className="relative h-full px-4 bs-chat-bg">
-        <div className="absolute flex left-0 top-0 gap-2 px-4 py-2 items-center z-10 bg-[#fff] shadow-sm">
+        <div className="absolute flex w-full left-0 top-0 gap-2 px-4 py-2 items-center z-10 bg-[#fff] shadow-sm">
             <TitleIconBg className="" id={assistantState.id}><AssistantIcon /></TitleIconBg>
             <span className="text-sm ">{t('build.debugPreview')}</span>
         </div>

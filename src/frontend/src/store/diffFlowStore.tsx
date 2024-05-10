@@ -3,6 +3,7 @@
  */
 import { generateUUID } from "@/components/bs-ui/utils"
 import { getVersionDetails, runTestCase } from "@/controllers/API/flow"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { create } from "zustand"
 
 const enum RunningType {
@@ -57,7 +58,7 @@ export const useDiffFlowStore = create<State & Actions>((set, get) => ({
     initFristVersionFlow(versionId) {
         getVersionDetails(versionId).then(version => {
             set({
-                mulitVersionFlow: [version],
+                mulitVersionFlow: [version, null],
                 questions: [],
                 readyVersions: {},
                 running: false,
@@ -197,13 +198,16 @@ export const useDiffFlowStore = create<State & Actions>((set, get) => ({
  */
 const runTest = ({ questions, questionIndexs, nodeId, versionIds, inputs, refs }) => {
     // loading
+    console.log(refs, 222);
+    const runIds = []
     questionIndexs.forEach(qIndex => {
         versionIds.forEach(versionId => {
             refs[`${qIndex}-${versionId}`].current.loading()
+            runIds.push(`${qIndex}-${versionId}`)
         })
     });
     // 运行
-    return runTestCase({
+    return captureAndAlertRequestErrorHoc(runTestCase({
         question_list: questionIndexs.map(qIndex => questions[qIndex].q),
         version_list: versionIds,
         inputs,
@@ -213,6 +217,11 @@ const runTest = ({ questions, questionIndexs, nodeId, versionIds, inputs, refs }
             Object.keys(row).forEach(vId => {
                 refs[`${questionIndexs[rowIndex]}-${vId}`].current.setData(row[vId])
             })
+        })
+    }), () => {
+        // error callback
+        runIds.forEach(id => {
+            refs[id].current.loaded()
         })
     })
 }
