@@ -4,13 +4,15 @@ from typing import List, Optional, Any, Dict
 from uuid import UUID
 
 import yaml
+from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_url_content
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantInfo, AssistantUpdateReq,
-                                    StreamData, UnifiedResponseModel, resp_200, resp_500, DeleteToolTypeReq)
+                                    StreamData, UnifiedResponseModel, resp_200, resp_500, DeleteToolTypeReq,
+                                    TestToolReq)
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.types import WorkType
 from bisheng.database.models.assistant import Assistant
@@ -267,3 +269,22 @@ def delete_tool_type(*, req: DeleteToolTypeReq, Authorize: AuthJWT = Depends()):
     current_user = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**current_user)
     return AssistantService.delete_gpts_tools(user, req.tool_type_id)
+
+
+@router.post('/tool_test', response_model=UnifiedResponseModel)
+async def test_tool_type(*, req: TestToolReq, Authorize: AuthJWT = Depends()):
+    """ 测试自定义工具 """
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**current_user)
+
+    tool_params = OpenApiSchema.parse_openapi_tool_params('test', 'test', req.extra, req.server_host,
+                                                          req.auth_method, req.auth_type, req.api_key)
+
+    openapi_tool = OpenApiTools.get_api_tool('test', **tool_params)
+    try:
+        resp = await openapi_tool.arun(req.request_params)
+        return resp_200(data=resp)
+    except Exception as e:
+        logger.exception('tool_test error')
+        return resp_500(message=f"测试请求出错：{str(e)}")

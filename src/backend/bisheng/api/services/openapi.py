@@ -1,3 +1,8 @@
+import json
+
+from bisheng.database.models.gpts_tools import AuthMethod
+
+
 class OpenApiSchema:
     def __init__(self, contents: dict):
         self.contents = contents
@@ -39,3 +44,22 @@ class OpenApiSchema:
                 one_api_info["parameters"] = method_info.get('parameters', [])
                 self.apis.append(one_api_info)
         return self.apis
+
+    @staticmethod
+    def parse_openapi_tool_params(name: str, description: str, extra: str, server_host: str,
+                                  auth_method: int, auth_type: str = None, api_key: str = None):
+        # 拼接请求头
+        headers = {}
+        if auth_method == AuthMethod.API_KEY.value:
+            headers = {
+                "Authorization": f"{auth_type} {api_key}"
+            }
+
+        # 返回初始化 openapi所需的入参
+        params = {
+            "params": json.loads(extra),
+            "headers": headers,
+            "url": server_host,
+            "description": name + description if description else name
+        }
+        return params

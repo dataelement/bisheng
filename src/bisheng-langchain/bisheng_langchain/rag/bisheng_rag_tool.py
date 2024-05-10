@@ -46,7 +46,7 @@ class BishengRAGTool:
         self.collection_name = collection_name
         
         yaml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config/baseline_v2.yaml')
-        with open(yaml_path, 'r') as f:
+        with open(yaml_path, 'r', encoding='utf-8') as f:
             self.params = yaml.safe_load(f)
         
         # update params

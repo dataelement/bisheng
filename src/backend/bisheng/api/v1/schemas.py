@@ -6,7 +6,7 @@ from uuid import UUID
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
-from bisheng.database.models.gpts_tools import GptsToolsRead
+from bisheng.database.models.gpts_tools import GptsToolsRead, AuthMethod, AuthType
 from bisheng.database.models.knowledge import KnowledgeRead
 from langchain.docstore.document import Document
 from orjson import orjson
@@ -283,3 +283,13 @@ class FlowCompareReq(BaseModel):
 
 class DeleteToolTypeReq(BaseModel):
     tool_type_id: int = Field(description="要删除的工具类别ID")
+
+
+class TestToolReq(BaseModel):
+    server_host: str = Field(default='', description="服务的根地址")
+    extra: str = Field(default='', description="Api 对象解析后的extra字段")
+    auth_method: int = Field(default=AuthMethod.NO.value, description="认证类型")
+    auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description="Auth Type")
+    api_key: Optional[str] = Field(default='', description="api key")
+
+    request_params: Dict = Field(default=None, description="用户填写的请求参数")

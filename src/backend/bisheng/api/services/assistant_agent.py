@@ -9,6 +9,7 @@ from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.knowledge_imp import decide_vectorstores
+from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
@@ -149,22 +150,9 @@ class AssistantAgent(AssistantUtils):
         tool_type_info = all_tool_type.get(tool.type)
         if not tool_type_info:
             raise Exception(f'获取工具类型失败，tool_type_id: {tool.type}')
-
-        # 拼接请求头
-        headers = {}
-        if tool_type_info.auth_method == AuthMethod.API_KEY.value:
-            headers = {
-                "Authorization": f"{tool_type_info.auth_type} {tool_type_info.api_key}"
-            }
-
-        # 返回初始化 openapi所需的入参
-        params = {
-            "params": json.loads(tool.extra),
-            "headers": headers,
-            "url": tool_type_info.server_host,
-            "description": tool.name + tool.desc if tool.desc else tool.name
-        }
-        return params
+        return OpenApiSchema.parse_openapi_tool_params(tool.name, tool.desc, tool.extra,
+                                                       tool_type_info.server_host, tool_type_info.auth_method,
+                                                       tool_type_info.auth_type, tool_type_info.api_key)
 
     async def init_personal_tools(self, tool_list: List[GptsTools], callbacks: Callbacks = None):
         """
