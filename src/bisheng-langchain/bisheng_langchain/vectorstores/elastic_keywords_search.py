@@ -228,7 +228,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         # llm or jiaba extract keywords
         if self.llm_chain:
             keywords_str = self.llm_chain.run(query)
-            print('keywords_str:', keywords_str)
+            print('llm search keywords:', keywords_str)
             try:
                 keywords = eval(keywords_str)
                 if not isinstance(keywords, list):
@@ -238,6 +238,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
                 keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
         else:
             keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
+            print('jieba search keywords:', keywords)
         match_query = {'bool': {must_or_should: []}}
         for key in keywords:
             match_query['bool'][must_or_should].append({query_strategy: {'text': key}})

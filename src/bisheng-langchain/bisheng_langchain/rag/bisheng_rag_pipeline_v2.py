@@ -12,6 +12,7 @@ from loguru import logger
 from tqdm import tqdm
 from langchain.docstore.document import Document
 from langchain.chains.question_answering import load_qa_chain
+from langchain.chains.llm import LLMChain
 from bisheng_langchain.retrievers import EnsembleRetriever
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from bisheng_langchain.rag.init_retrievers import (
@@ -69,10 +70,16 @@ class BishengRagPipeline:
         )
 
         # es
+        if self.params['elasticsearch'].get('extract_key_by_llm', False):
+            extract_key_prompt = import_class(f'bisheng_langchain.rag.prompts.EXTRACT_KEY_PROMPT')
+            llm_chain = LLMChain(llm=self.llm, prompt=extract_key_prompt)
+        else:
+            llm_chain = None
         self.keyword_store = ElasticKeywordsSearch(
             index_name='default_es',
             elasticsearch_url=self.params['elasticsearch']['url'],
             ssl_verify=self.params['elasticsearch']['ssl_verify'],
+            llm_chain=llm_chain
         )
 
         # init retriever
