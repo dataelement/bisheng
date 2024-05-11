@@ -6,6 +6,7 @@ from bisheng.api import router, router_rpc
 from bisheng.database.base import init_default_data
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
+from bisheng.settings import settings
 from bisheng.utils.http_middleware import CustomMiddleware
 from bisheng.utils.logger import configure
 from bisheng.utils.threadpool import thread_pool
@@ -16,7 +17,6 @@ from fastapi.responses import FileResponse, JSONResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
-from bisheng.settings import settings
 from loguru import logger
 
 
@@ -127,6 +127,13 @@ def setup_app(static_files_dir: Optional[Path] = None) -> FastAPI:
     app = create_app()
     setup_static_files(app, static_files_dir)
     return app
+
+
+def setup_promethues(app: FastAPI):
+    # Add prometheus asgi middleware to route /metrics requests
+    from prometheus_client import make_asgi_app
+    metrics_app = make_asgi_app()
+    app.mount('/metrics', metrics_app)
 
 
 configure(settings.logger_conf)
