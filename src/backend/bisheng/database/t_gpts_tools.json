@@ -42,7 +42,7 @@
     "create_time": "2024-03-29 14:39:37",
     "update_time": "2024-03-29 14:39:37",
     "id": 3,
-    "api_params": "[]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"search query to look up\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "Dalle3绘画",
@@ -57,7 +57,7 @@
     "create_time": "2024-03-29 14:40:32",
     "update_time": "2024-03-29 14:40:32",
     "id": 4,
-    "api_params": "[{\"name\": \"prompt\", \"description\": \"图像提示词\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"size\", \"description\": \"图像比例，默认值：1024x1024，可选范围：1024x1024, 1024x1792 or 1792x1024\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"Description about image.\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "Bing web搜索",
@@ -72,7 +72,7 @@
     "create_time": "2024-03-29 14:41:16",
     "update_time": "2024-03-29 14:41:16",
     "id": 5,
-    "api_params": "[{\"name\": \"query\", \"description\": \"用户检索query，不可为空。\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"count\", \"description\": \"返回的搜索结果数。，默认值为10，最大值为50。实际返回的数量可能少于请求的数量。\", \"in\": \"query\", \"schema\": {\"type\": \"integer\"}}, {\"name\": \"offset\", \"description\": \"偏移量，例如每次要检索20条结果时，可将count设为20，并将offset设置为 0 以获取第一次结果。对于每次检索将offset增加 20。\", \"in\": \"query\", \"schema\": {\"type\": \"integer\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"query to look up in Bing search\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "代码执行器",
@@ -87,7 +87,7 @@
     "create_time": "2024-03-29 14:42:17",
     "update_time": "2024-03-29 14:42:17",
     "id": 6,
-    "api_params": "[{\"name\": \"code\", \"description\": \"必填\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"upload_file_name\", \"description\": \"当LLM收到文件链接时，把文件名放入此参数中\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"upload_file_url\", \"description\": \"当LLM收到文件链接时，把文件URL放入此参数中，并将文件保存到特定位置\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"python_code\", \"description\": \"The pure python script to be evaluated. \\nThe contents will be in main.py. \\nIt should not be in markdown format.\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "人员所有公司",
@@ -102,7 +102,7 @@
     "create_time": "2024-03-29 14:44:34",
     "update_time": "2024-03-29 14:44:34",
     "id": 7,
-    "api_params": "[{\"name\": \"hid\", \"description\": \"人id（humanName和hid只需输入其中一个）\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}, {\"name\": \"humanName\", \"description\": \"姓名（humanName和hid只需输入其中一个）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"cid\", \"description\": \"公司id（cid和name只需输入其中一个）\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}, {\"name\": \"name\", \"description\": \"公司名称（cid和name只需输入其中一个）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"human who you want to search\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"name\", \"description\": \"company name which human worked\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "搜索企业",
@@ -117,7 +117,7 @@
     "create_time": "2024-03-29 14:50:07",
     "update_time": "2024-03-29 14:50:07",
     "id": 9,
-    "api_params": "[{\"name\": \"word\", \"description\": \"关键词。\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"pageSize\", \"description\": \"每页条数（默认20条，最大20条）\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}, {\"name\": \"pageNum\", \"description\": \"当前页数（默认第1页）\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业基本信息",
@@ -132,7 +132,7 @@
     "create_time": "2024-03-29 14:51:06",
     "update_time": "2024-03-29 14:51:06",
     "id": 10,
-    "api_params": "[{\"name\": \"keyword\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）。\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业知识产权信息",
@@ -147,7 +147,7 @@
     "create_time": "2024-03-29 14:51:33",
     "update_time": "2024-03-29 14:51:33",
     "id": 11,
-    "api_params": "[{\"name\": \"keyword\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）。\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业司法风险",
@@ -162,7 +162,7 @@
     "create_time": "2024-03-29 14:52:13",
     "update_time": "2024-03-29 14:52:13",
     "id": 12,
-    "api_params": "[{\"name\": \"keyword\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）。\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业法律诉讼",
@@ -177,7 +177,7 @@
     "create_time": "2024-03-29 14:52:36",
     "update_time": "2024-03-29 14:52:36",
     "id": 13,
-    "api_params": "[{\"name\": \"keyword\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"pageSize\", \"description\": \"每页条数（默认20条，最大20条）\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}, {\"name\": \"pageNum\", \"description\": \"当前页数（默认第1页）\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业工商信息",
@@ -192,7 +192,7 @@
     "create_time": "2024-03-29 14:53:06",
     "update_time": "2024-03-29 14:53:06",
     "id": 14,
-    "api_params": "[{\"name\": \"keyword\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业工商信息变更记录",
@@ -207,7 +207,7 @@
     "create_time": "2024-03-29 14:54:02",
     "update_time": "2024-03-29 14:54:02",
     "id": 15,
-    "api_params": "[{\"name\": \"keyword\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"pageSize\", \"description\": \"每页条数（默认20条，最大20条）\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}, {\"name\": \"pageNum\", \"description\": \"当前页数（默认第1页）\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业股东",
@@ -222,7 +222,7 @@
     "create_time": "2024-03-29 14:54:28",
     "update_time": "2024-03-29 14:54:28",
     "id": 16,
-    "api_params": "[{\"name\": \"keyword\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"pageSize\", \"description\": \"每页条数（默认20条，最大20条）\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}, {\"name\": \"pageNum\", \"description\": \"当前页数（默认第1页）\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业天眼风险",
@@ -237,7 +237,7 @@
     "create_time": "2024-03-29 14:54:57",
     "update_time": "2024-03-29 14:54:57",
     "id": 17,
-    "api_params": "[{\"name\": \"keyword\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "股票实时行情",
@@ -252,7 +252,7 @@
     "create_time": "2024-03-29 14:56:15",
     "update_time": "2024-03-29 14:56:15",
     "id": 18,
-    "api_params": "[{\"name\": \"list\", \"description\": \"股票or指数代码。由三部分组成：\\\"s_\\\"+\\\"交易所简写\\\"+\\\"6位数代码\\\"，    - s_ 为固定前缀，表示返回简略数据。\\n    - 交易所简写：股票上市的交易所，或者发布行情指数的交易所。可选项有\\\"sh\\\"(上海证券交易所)、\\\" sz\\\"( 深圳证券交易所)、\\\"bj\\\"( 北京证券交易所)\\n    - 6 位数代码：\\n      - 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n      - 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\\\"sh000300\\\"和\\\"sz399300\\\"两个代码。\", \"in\": \"query\", \"schema\": {\"type\": \"list\"}}]"
+    "api_params": "[{\"name\": \"prefix\", \"description\": \"前缀。如果是\\\"stock_symbol\\\"传入的为股票代码，则需要传入s_;\\n如果\\\"stock_symbol\\\"传入的为指数代码，则为空。\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_exchange\", \"description\": \"交易所简写。股票上市的交易所，或者发布行情指数的交易所。可选项有\\\"sh\\\"(上海证券交易所)、\\\" sz\\\"( 深圳证券交易所)、\\\"bj\\\"( 北京证券交易所)\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_symbol\", \"description\": \"6位数字的股票或者指数代码。\\n参考信息：\\n- 如果问题中未给出，可能需要上网查询。\\n- 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n- 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\\\"sh000300\\\"和\\\"sz399300\\\"两个代码。\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "股票历史行情",
@@ -267,7 +267,7 @@
     "create_time": "2024-03-29 14:56:38",
     "update_time": "2024-03-29 14:56:38",
     "id": 19,
-    "api_params": "[{\"name\": \"symbol\", \"description\": \"股票or指数代码前使用sh或者sz区分沪深。由两部分组成：\\\"交易所简写\\\"+\\\"6位数代码\\\"，    - 交易所简写：股票上市的交易所，或者发布行情指数的交易所。可选项有\\\"sh\\\"(上海证券交易所)、\\\" sz\\\"( 深圳证券交易所)、\\\"bj\\\"( 北京证券交易所)\\n    - 6 位数代码：\\n      - 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n      - 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\\\"sh000300\\\"和\\\"sz399300\\\"两个代码。\", \"in\": \"query\", \"schema\": {\"type\": \"str\"}}, {\"name\": \"scale\", \"description\": \"时间周期，默认240（日K）\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}, {\"name\": \"ma\", \"description\": \"均线参数，默认5\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}, {\"name\": \"datalen\", \"description\": \"时间长度，默认1\", \"in\": \"query\", \"schema\": {\"type\": \"number\"}}]"
+    "api_params": "[{\"name\": \"date\", \"description\": \"需要查询的时间，按照”2024-03-26“格式，传入日期\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_exchange\", \"description\": \"交易所简写。股票上市的交易所，或者发布行情指数的交易所。可选项有\\\"sh\\\"(上海证券交易所)、\\\" sz\\\"( 深圳证券交易所)、\\\"bj\\\"( 北京证券交易所)\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_symbol\", \"description\": \"6位数字的股票或者指数代码。\\n参考信息：\\n- 如果问题中未给出，可能需要上网查询。\\n- 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n- 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\\\"sh000300\\\"和\\\"sz399300\\\"两个代码。\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "社会融资规模增量",
@@ -282,7 +282,7 @@
     "create_time": "2024-03-29 14:59:06",
     "update_time": "2024-03-29 14:59:06",
     "id": 20,
-    "api_params": "[]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "GDP",
@@ -297,7 +297,7 @@
     "create_time": "2024-03-29 14:59:38",
     "update_time": "2024-03-29 14:59:38",
     "id": 21,
-    "api_params": "[]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "CPI",
@@ -312,7 +312,7 @@
     "create_time": "2024-03-29 15:00:00",
     "update_time": "2024-03-29 15:00:00",
     "id": 22,
-    "api_params": "[]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "PPI",
@@ -327,7 +327,7 @@
     "create_time": "2024-03-29 15:00:24",
     "update_time": "2024-03-29 15:00:24",
     "id": 23,
-    "api_params": "[]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "货币供应量",
@@ -342,7 +342,7 @@
     "create_time": "2024-03-29 15:00:54",
     "update_time": "2024-03-29 15:00:54",
     "id": 24,
-    "api_params": "[]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "社会消费品零售总额",
@@ -357,7 +357,7 @@
     "create_time": "2024-03-29 15:01:47",
     "update_time": "2024-03-29 15:01:47",
     "id": 25,
-    "api_params": "[]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "PMI",
@@ -372,7 +372,7 @@
     "create_time": "2024-04-15 12:01:11",
     "update_time": "2024-04-15 12:01:11",
     "id": 26,
-    "api_params": "[]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "中美国债收益率",
@@ -387,6 +387,6 @@
     "create_time": "2024-04-15 12:03:27",
     "update_time": "2024-04-15 12:03:27",
     "id": 27,
-    "api_params": "[]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
   }
 ]
