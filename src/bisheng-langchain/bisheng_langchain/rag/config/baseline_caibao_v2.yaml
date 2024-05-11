@@ -1,7 +1,7 @@
 data:
   origin_file_path: '/home/public/rag_benchmark_finance_report'
   question: '/home/public/rag_benchmark_finance_report/finance_report_data_100_single.xlsx'
-  save_answer: '/home/public/rag_benchmark_finance_report/finance_report_data_100_single_qwen1.5_72b_20chunk_chunk_size_1000_with_source_title.xlsx'
+  save_answer: '/home/public/rag_benchmark_finance_report/finance_report_data_100_single_command-r-plus_20chunk_chunk_size_1000_with_source_title_overlap100.xlsx'
 
 milvus:
   host: '110.16.193.170'
@@ -13,6 +13,7 @@ elasticsearch:
   ssl_verify:
     basic_auth: ["elastic", "oSGL-zVvZ5P3Tm7qkDLC"]
   drop_old: True
+  extract_key_by_llm: False 
 
 embedding:
   type: 'OpenAIEmbeddings'
@@ -27,18 +28,26 @@ embedding:
 #   openai_proxy: ''
 #   temperature: 0.0
 
+chat_llm:
+  type: 'ChatCohere'
+  model: 'command-r-plus'
+  cohere_api_key: ''
+  max_tokens: 1000
+  temperature: 0.01
+
 # chat_llm:
-#   type: 'ChatCohere'
-#   model: 'command-r-plus'
-#   cohere_api_key: ''
-#   max_tokens: 1000
+#   type: 'ChatQWen'
+#   model_name: 'qwen1.5-110b-chat'
+#   api_key: ''
 #   temperature: 0.01
 
-chat_llm:
-  type: 'ChatQWen'
-  model_name: 'qwen1.5-72b-chat'
-  api_key: ''
-  temperature: 0.01
+# chat_llm:
+#   type: 'ChatOpenAI'
+#   model: 'qwen1.5-110b-chat'
+#   openai_api_base: 'http://60.31.21.42:12511/v1'
+#   openai_api_key : "Z9b8x3V7C2n0Q5T"
+#   openai_proxy: ''
+#   temperature: 0.01
 
 loader: 
   type: 'ElemUnstructuredLoader'
@@ -46,7 +55,7 @@ loader:
 
 retriever: 
   type: 'EnsembleRetriever' # 不动
-  suffix: 'benchmark_caibao_1000_source_title'
+  suffix: 'benchmark_caibao_1000_source_title_overlap100'
   add_aux_info: True
   retrievers: 
     - type: 'KeywordRetriever'
@@ -55,7 +64,7 @@ retriever:
           # type: 'ElemCharacterTextSplitter'
           type: 'RecursiveCharacterTextSplitter'
           chunk_size: 1000
-          chunk_overlap: 0
+          chunk_overlap: 100
           separators: ["\n\n"]
       retrieval:
         search_type: 'similarity'
@@ -67,7 +76,7 @@ retriever:
           # type: 'ElemCharacterTextSplitter'
           type: 'RecursiveCharacterTextSplitter'
           chunk_size: 1000
-          chunk_overlap: 0
+          chunk_overlap: 100
           separators: ["\n\n"]
       retrieval:
         search_type: 'similarity'
@@ -86,7 +95,7 @@ post_retrieval:
 
 generate:
   with_retrieval: True
-  max_content: 30000
+  max_content: 100000
   chain_type: 'stuff'
   # prompt_type: 'BASE_PROMPT'
   prompt_type: 'CHAT_PROMPT'
