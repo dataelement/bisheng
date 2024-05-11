@@ -27,7 +27,12 @@ class FlowService:
         根据技能ID 获取技能的所有版本信息
         """
         data = FlowVersionDao.get_list_by_flow(flow_id)
-        return resp_200(data=data)
+        # 包含已删除版本
+        all_version_num = FlowVersionDao.count_list_by_flow(flow_id, include_delete=True)
+        return resp_200(data={
+            'data': data,
+            'total': all_version_num
+        })
 
     @classmethod
     def get_version_info(cls, user: UserPayload, version_id: int) -> UnifiedResponseModel[FlowVersion]:

@@ -3,6 +3,8 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from sqlalchemy import func
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 # if TYPE_CHECKING:
@@ -133,6 +135,17 @@ class FlowVersionDao(FlowVersion):
                 FlowVersion.flow_id == flow_id, FlowVersion.is_delete == 0).order_by(FlowVersion.id.desc())
             ret = session.exec(statement).mappings().all()
             return [FlowVersionRead.model_validate(f) for f in ret]
+
+    @classmethod
+    def count_list_by_flow(cls, flow_id: str, include_delete: bool = False) -> int:
+        """
+        根据技能ID 技能版本的数量
+        """
+        with session_getter() as session:
+            count_statement = session.query(func.count()).where(FlowVersion.flow_id == flow_id)
+            if not include_delete:
+                count_statement = count_statement.where(FlowVersion.is_delete == 0)
+            return count_statement.scalar()
 
     @classmethod
     def get_list_by_flow_ids(cls, flow_ids: List[str]) -> List[FlowVersionRead]:
