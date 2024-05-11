@@ -243,6 +243,7 @@ def addEmbedding(collection_name,
                  knowledge_files: List[KnowledgeFile],
                  callback: str,
                  extra_meta: str = None):
+    logger.info("start init Milvus")
     error_msg = ''
     try:
         vectore_client, es_client = None, None
@@ -253,6 +254,7 @@ def addEmbedding(collection_name,
         error_msg = 'MilvusExcept:' + str(e)
         logger.exception(e)
 
+    logger.info("start init ElasticKeywordsSearch")
     try:
         es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
     except Exception as e:
@@ -384,19 +386,22 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             if not resp or resp.status_code != 200:
                 logger.error(f'file_pdf=not_success resp={resp.text}')
                 raise Exception(f'当前文件无法解析， {resp.text}')
-            if len(resp.text) < 300:
+            resp = resp.json()
+            if resp["status_code"] != 200:
                 logger.error(f'file_pdf=not_success resp={resp.text}')
-            b64_data = resp.json()['b64_pdf']
+                raise Exception(f'当前文件无法解析， {resp.text}')
+            b64_data = resp['b64_pdf']
             # 替换历史文件
             with open(input_file, 'wb') as fout:
                 fout.write(base64.b64decode(b64_data))
             file_name = file_name.rsplit('.', 1)[0] + '.pdf'
-
+        logger.info(f'file_pdf=success')
         loader = ElemUnstructuredLoader(
             file_name,
             input_file,
             unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
         documents = loader.load()
+        logger.info(f'file_loader=success')
 
         # 按照新的规则对每个分块做 标题提取
         try:
@@ -410,11 +415,13 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
                 # 配置了相关llm的话，就对文档做总结
                 title = extract_title(llm, one.page_content)
                 one.metadata['title'] = title
+        logger.info(f'file_extract_title=success')
 
         text_splitter = ElemCharacterTextSplitter(separators=separator,
                                                   chunk_size=size,
                                                   chunk_overlap=chunk_overlap)
         texts = text_splitter.split_documents(documents)
+        logger.info(f'file_split=success')
 
         raw_texts = [t.metadata.get("source", '') + '\n' + t.metadata.get('title', '') + '\n' + t.page_content
                      for t in texts]

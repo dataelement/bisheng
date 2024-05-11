@@ -298,6 +298,7 @@ async def post_chunks(*,
 
     index_name = db_knowledge.index_name or db_knowledge.collection_name
     try:
+        logger.info("start upload minio")
         minio_client = MinioClient()
         db_file.object_name = 'original/' + str(db_file.id) + '.' + file_name.rsplit('.', 1)[-1]
         minio_client.upload_minio(db_file.object_name, file_path)
