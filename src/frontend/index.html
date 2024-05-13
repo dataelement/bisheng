@@ -15,5 +15,15 @@
     <div style="width: 100vw; height:100vh" id='root'></div>
     <script type="module" src="/src/index.tsx"></script>
 </body>
+<script>
+    // 触摸板禁止手指缩放
+    document.addEventListener('wheel', function (event) {
+        if (event.ctrlKey) {
+            event.preventDefault()
+        }
+    }, {
+        passive: false
+    })
+</script>
 
 </html>

@@ -497,7 +497,7 @@
   },
   "tools": {
     "addTool": "Add Tool",
-    "createCustomTool": "Create Custom Tool",
+    "createCustomTool": " Custom Tool",
     "builtinTools": "Built-in Tools",
     "customTools": "Custom Tools",
     "search": "Search",

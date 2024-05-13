@@ -56,7 +56,8 @@ export default function Skills() {
 
     const handleSetting = (data) => {
         // console.log('data :>> ', data);
-        navigate("/build/skill/" + data.id)
+        const vid = data.version_list.find(item => item.is_current === 1)?.id
+        navigate(`/build/skill/${data.id}/${vid}`)
     }
 
     // 选模板(创建技能)
@@ -118,7 +119,7 @@ export default function Skills() {
                                     onAddTemp={toggleTempModal}
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={handleDelete}
-                                    onSetting={handleSetting}
+                                    onSetting={(item) => handleSetting(item)}
                                     headSelecter={(
                                         <CardSelectVersion
                                             showPop={item.status !== 2}

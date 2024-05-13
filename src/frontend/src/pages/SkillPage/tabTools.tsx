@@ -4,9 +4,9 @@ import { SearchInput } from "@/components/bs-ui/input";
 import { getAssistantToolsApi } from "@/controllers/API/assistant";
 import { PersonIcon, StarFilledIcon } from "@radix-ui/react-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import EditTool from "./components/EditTool";
 import ToolItem from "./components/ToolItem";
-import { useTranslation } from "react-i18next";
 
 export default function tabTools({ select = null, onSelect }) {
   const [keyword, setKeyword] = useState(" ");
@@ -46,22 +46,20 @@ export default function tabTools({ select = null, onSelect }) {
             className="mt-4 w-full"
             onClick={() => editRef.current.open()}
           >
-            {t("tools.createCustomTool")}
+            {t('create')}{t("tools.createCustomTool")}
           </Button>
           <div className="mt-4">
             <div
-              className={`flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 transition-all duration-200 hover:bg-muted-foreground/10 ${
-                type === "" && "bg-muted-foreground/10"
-              }`}
+              className={`flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 transition-all duration-200 hover:bg-muted-foreground/10 ${type === "" && "bg-muted-foreground/10"
+                }`}
               onClick={() => setType("")}
             >
               <PersonIcon />
               <span>{t("tools.builtinTools")}</span>
             </div>
             <div
-              className={`mt-1 flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 transition-all duration-200 hover:bg-muted-foreground/10 ${
-                type === "edit" && "bg-muted-foreground/10"
-              }`}
+              className={`mt-1 flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 transition-all duration-200 hover:bg-muted-foreground/10 ${type === "edit" && "bg-muted-foreground/10"
+                }`}
               onClick={() => setType("edit")}
             >
               <StarFilledIcon />
@@ -97,7 +95,12 @@ export default function tabTools({ select = null, onSelect }) {
         </p>
       </div>
 
-      <EditTool onReload={loadData} ref={editRef} />
+      <EditTool onReload={() => {
+        // 切换自定义工具 并 刷新
+        setType('edit');
+        type === 'edit' && loadData();
+      }}
+        ref={editRef} />
     </div>
   );
 }

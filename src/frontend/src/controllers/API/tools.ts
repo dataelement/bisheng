@@ -56,3 +56,22 @@ export const deleteTool = async (id: number): Promise<any> => {
 export const downloadToolSchema = async (data: { download_url: string } | { file_content: string }): Promise<any> => {
     return await axios.post(`/api/v1/assistant/tool_schema`, data);
 };
+
+/**
+ * 工具测试接口
+ * @returns 
+ */
+export const testToolApi = async (data: {
+    server_host: string
+    extra: string
+    auth_method: number
+    auth_type: string
+    api_key: string
+    request_params: Object
+}): Promise<any> => {
+    return await axios({
+        method: 'post',
+        url: '/api/v1/assistant/tool_test',
+        data
+    })
+};

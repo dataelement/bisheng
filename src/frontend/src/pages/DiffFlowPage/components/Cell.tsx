@@ -1,7 +1,11 @@
 import Skeleton from "@/components/bs-ui/skeleton";
+import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { useDiffFlowStore } from "@/store/diffFlowStore";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-
+import ReactMarkdown from "react-markdown";
+import rehypeMathjax from "rehype-mathjax";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 
 const Cell = forwardRef((props, ref) => {
 
@@ -26,7 +30,40 @@ const Cell = forwardRef((props, ref) => {
 
     if (loading) return <Skeleton className="h-4 w-[200px]" />
 
-    return <div>{value}</div>
+    return <div>
+        <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeMathjax]}
+            linkTarget="_blank"
+            className="bs-mkdown inline-block break-all max-w-full text-sm text-[#111]"
+            components={{
+                code: ({ node, inline, className, children, ...props }) => {
+                    if (children.length) {
+                        if (children[0] === "▍") {
+                            return (<span className="form-modal-markdown-span"> ▍ </span>);
+                        }
+
+                        children[0] = (children[0] as string).replace("`▍`", "▍");
+                    }
+
+                    const match = /language-(\w+)/.exec(className || "");
+
+                    return !inline ? (
+                        <CodeBlock
+                            key={Math.random()}
+                            language={(match && match[1]) || ""}
+                            value={String(children).replace(/\n$/, "")}
+                            {...props}
+                        />
+                    ) : (
+                        <code className={className} {...props}> {children} </code>
+                    );
+                },
+            }}
+        >
+            {value.toString()}
+        </ReactMarkdown>
+    </div>
 })
 
 

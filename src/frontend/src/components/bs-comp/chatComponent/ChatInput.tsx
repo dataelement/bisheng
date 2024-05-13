@@ -133,7 +133,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     if (currentChatIdRef.current && currentChatIdRef.current !== data.chat_id) return
                     handleWsMessage(data)
                     // 群聊@自己时，开启input
-                    if (data.type === 'end' && data.receiver?.is_self) {
+                    if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
                         setInputLock({ locked: true, reason: '' })
                     }
                 }
@@ -186,7 +186,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 message: data.message,
                 thought: data.intermediate_steps
             })
-        } else if (data.type === 'end') {
+        } else if (['end', 'end_cover'].includes(data.type)) {
             updateCurrentMessage({
                 ...data,
                 end: true,
@@ -194,7 +194,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 messageId: data.message_id,
                 noAccess: false,
                 liked: 0
-            })
+            }, data.type === 'end_cover')
         } else if (data.type === "close") {
             setInputLock({ locked: false, reason: '' })
         }

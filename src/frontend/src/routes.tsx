@@ -58,7 +58,7 @@ const router = createBrowserRouter([
         ]
       },
       { path: "build/skill", element: <L2Edit /> },
-      { path: "build/skill/:id", element: <L2Edit /> },
+      { path: "build/skill/:id/:vid", element: <L2Edit /> },
       { path: "build/temps", element: <Templates /> },
       { path: "model", element: <ModelPage /> },
       { path: "sys", element: <SystemPage /> },

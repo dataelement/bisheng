@@ -16,7 +16,7 @@ export default function RunForm({ show, flow, onChangeShow, onSubmit }) {
             <DialogDescription>请输入上游依赖参数</DialogDescription>
         </DialogHeader>
         {
-            show && <ChatReportForm ref={formRef} type='diff' flow={flow} onStart={onSubmit} />
+            show && <ChatReportForm ref={formRef} type='diff' vid={flow.id} flow={flow} onStart={onSubmit} />
         }
         <DialogFooter>
             <DialogClose>

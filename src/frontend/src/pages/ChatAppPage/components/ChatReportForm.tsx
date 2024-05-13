@@ -12,7 +12,7 @@ import { Variable, VariableType, getVariablesApi } from "../../../controllers/AP
  * @description
  * 表单项数据由组件的参数信息和单独接口获取的必填信息及排序信息而来。
  */
-const ChatReportForm = forwardRef(({ type = 'chat', flow, onStart }, ref) => {
+const ChatReportForm = forwardRef(({ type = 'chat', vid = 0, flow, onStart }, ref) => {
     const { setErrorData } = useContext(alertContext);
     const { t } = useTranslation()
 
@@ -28,7 +28,7 @@ const ChatReportForm = forwardRef(({ type = 'chat', flow, onStart }, ref) => {
         // chat -》L1； diff -> 对比测试
         type === 'chat' ? getVariablesApi({ flow_id: flow.flow_id || flow.id }).then(
             res => setItems(res)
-        ) : getVariablesApi({ flow_id: flow.flow_id || flow.id }).then(
+        ) : getVariablesApi({ version_id: vid, flow_id: flow.flow_id || flow.id }).then(
             res => setItems(res)
         )
     }, [])

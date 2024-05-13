@@ -68,7 +68,7 @@ export function delVariableApi(id) {
 /**
  * 保存变量和filenodename必填和排序信息
  */
-export function saveReportFormApi(flowId, data: Variable[]) {
+export function saveReportFormApi(vid, flowId, data: Variable[]) {
     const _data = data.map((item) => {
         const { id, maxLength, name: variable_name, nodeId: node_id, options, required, type } = item
         const types = {
@@ -79,6 +79,7 @@ export function saveReportFormApi(flowId, data: Variable[]) {
         const typeInfo = types[type]()
         return {
             id,
+            version_id: vid,
             flow_id: flowId,
             node_id,
             is_option: Number(required),
@@ -245,7 +246,7 @@ export async function reloadCustom(code): Promise<any> {
  * @returns {Promise<any>}.
  * @throws .
  */
-export async function getFlowVersions(flow_id): Promise<FlowVersionItem[]> {
+export async function getFlowVersions(flow_id): Promise<{ data: FlowVersionItem[], total: number }> {
     return await axios.get(`/api/v1/flows/versions`, {
         params: { flow_id }
     });
@@ -258,7 +259,7 @@ export async function getFlowVersions(flow_id): Promise<FlowVersionItem[]> {
  * @returns {Promise<any>}.
  * @throws .
  */
-export async function createFlowVersion(flow_id, versionData: { name: string, description: string, data: any }) {
+export async function createFlowVersion(flow_id, versionData: { name: string, description: string, original_version_id: number, data: any }) {
     return await axios.post(`/api/v1/flows/versions?flow_id=${flow_id}`, versionData);
 }
 

@@ -206,7 +206,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>{t('system.skillName')}</TableHead>
+                                <TableHead>{t('lib.libraryName')}</TableHead> 
                                 <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
                                 <TableHead className="text-right">{t('system.usePermission')}</TableHead>
                                 <TableHead className="text-right">{t('system.managePermission')}</TableHead>

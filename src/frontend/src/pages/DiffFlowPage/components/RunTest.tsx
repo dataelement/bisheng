@@ -21,7 +21,7 @@ export default function RunTest({ nodeId }) {
     const { t } = useTranslation()
     const [formShow, setFormShow] = useState(false)
     const { running, runningType, mulitVersionFlow, readyVersions, questions, removeQuestion, cellRefs,
-        allRunStart, rowRunStart, colRunStart, overQuestions, addQuestion } = useDiffFlowStore()
+        allRunStart, rowRunStart, colRunStart, overQuestions, addQuestion, updateQuestion } = useDiffFlowStore()
 
     // 是否展示表单
     const isForm = useMemo(() => {
@@ -29,6 +29,16 @@ export default function RunTest({ nodeId }) {
         if (!flowData) return false
 
         return flowData.nodes.some(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
+    }, [mulitVersionFlow])
+
+    // 选中的测试版本数
+    const versionColWidth = useMemo(() => {
+        const count = mulitVersionFlow.reduce((count, cur) => {
+            return cur ? count + 1 : count
+        }, 0) + 1 // +1 测试用例列 
+
+        const width = `${100 / (count + 1)}%`
+        return width
     }, [mulitVersionFlow])
 
     const handleUploadTxt = () => {
@@ -144,10 +154,10 @@ export default function RunTest({ nodeId }) {
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[100px]">{t('test.testCase')}</TableHead>
+                        <TableHead style={{ width: versionColWidth }}>{t('test.testCase')}</TableHead>
                         {
                             mulitVersionFlow.map(version =>
-                                version && <TableHead key={version.id}>
+                                version && <TableHead key={version.id} style={{ width: versionColWidth }}>
                                     <div className="flex items-center gap-2">
                                         <span>{version.name}</span>
                                         {readyVersions[version.id] && <Button
@@ -161,7 +171,7 @@ export default function RunTest({ nodeId }) {
                                 </TableHead>
                             )
                         }
-                        <TableHead className="text-right">
+                        <TableHead className="text-right max-w-[135px]">
                             <Button variant="link" disabled={runningType !== '' || !running} onClick={handleDownExcle}><DownloadIcon className="mr-1" />{t('test.downloadResults')}</Button>
                         </TableHead>
                     </TableRow>
@@ -172,11 +182,16 @@ export default function RunTest({ nodeId }) {
                             <TableRow>
                                 <TableCell>
                                     <div className="flex items-center gap-2 font-medium">
-                                        {question.q}
+                                        <Input
+                                            disabled={['all', 'row'].includes(runningType)}
+                                            placeholder={t('test.testCases')}
+                                            value={question.q}
+                                            onChange={(e) => updateQuestion(e.target.value, index)}
+                                        ></Input>
                                         {question.ready && <Button
                                             disabled={['all'].includes(runningType)}
                                             size='icon'
-                                            className="w-6 h-6"
+                                            className="min-w-6 h-6"
                                             title="运行"
                                             onClick={() => handleRowRunTest(index)}
                                         ><PlayIcon /></Button>}
@@ -237,12 +252,13 @@ const useBuild = () => {
         let res = null
         // Step 1: Make a POST request to send the flow data and receive a unique session ID
         const _flow = { ...flow, id: flow.flow_id }
-        const { flowId } = await postBuildInit(_flow, chatId);
+        const { flowId } = await postBuildInit({ flow: _flow, chatId, versionId: flow.id });
         // Step 2: Use the session ID to establish an SSE connection using EventSource
         let validationResults = [];
         let finished = false;
         let buildEnd = false
-        const apiUrl = `/api/v1/build/stream/${flowId}?chat_id=${chatId}`;
+        const qstr = flow.id ? `&version_id=${flow.id}` : ''
+        const apiUrl = `/api/v1/build/stream/${flowId}?chat_id=${chatId}${qstr}`;
         const eventSource = new EventSource(apiUrl);
 
         eventSource.onmessage = (event) => {

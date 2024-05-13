@@ -23,10 +23,13 @@ export default function ChatPanne({ customWsHost = '', data }) {
     const [flow, setFlow] = useState<any>(null)
     const flowRef = useRef(null)
     const [assistant, setAssistant] = useState<any>(null)
-    const { assistantState, loadAssistantState } = useAssistantStore()
+    const { assistantState, loadAssistantState, destroy } = useAssistantStore()
     // console.log('data :>> ', flow);
     const build = useBuild()
-    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, destory } = useMessageStore()
+    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId } = useMessageStore()
+    useEffect(() => {
+        return destroy
+    }, [])
 
     const init = async () => {
         if (type === 'flow') {
@@ -222,7 +225,7 @@ const useBuild = () => {
     // SSE 服务端推送
     async function streamNodeData(flow: FlowType, chatId: string) {
         // Step 1: Make a POST request to send the flow data and receive a unique session ID
-        const { flowId } = await postBuildInit(flow, chatId);
+        const { flowId } = await postBuildInit({ flow, chatId });
         // Step 2: Use the session ID to establish an SSE connection using EventSource
         let validationResults = [];
         let finished = false;

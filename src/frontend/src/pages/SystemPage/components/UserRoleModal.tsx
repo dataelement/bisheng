@@ -1,13 +1,11 @@
-import { Listbox } from "@headlessui/react"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import MultiSelect from "@/components/bs-ui/select/multi"
-import { CheckIcon, ChevronsUpDown } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "../../../components/bs-ui/button"
 import { getRolesApi, getUserRoles, updateUserRoles } from "../../../controllers/API/user"
-import { ROLE } from "../../../types/api/user"
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
+import { ROLE } from "../../../types/api/user"
 
 export default function UserRoleModal({ id, onClose, onChange }) {
     const { t } = useTranslation()
@@ -53,6 +51,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
             </DialogHeader>
             <div className="">
                 <MultiSelect
+                    className="max-w-[600px]"
                     value={selected.map(item => {
                         return item.role_id.toString()
                     })}

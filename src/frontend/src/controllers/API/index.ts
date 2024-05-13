@@ -332,9 +332,11 @@ export async function getVersion() {
  *
  */
 export async function getBuildStatus(
-  flowId: string
+  flowId: string,
+  versionId?: number
 ): Promise<BuildStatusTypeAPI> {
-  return await axios.get(`/api/v1/build/${flowId}/status`);
+  const qstr = versionId ? `?version_id=${versionId}` : "";
+  return await axios.get(`/api/v1/build/${flowId}/status${qstr}`);
 }
 
 //docs for postbuildinit
@@ -344,11 +346,14 @@ export async function getBuildStatus(
  * @returns {Promise<InitTypeAPI>} A promise that resolves to an AxiosResponse containing the build status.
  *
  */
-export async function postBuildInit(
-  flow: FlowType,
+export async function postBuildInit(data: {
+  flow: FlowType
   chatId?: string
-): Promise<any> {
-  return await axios.post(`/api/v1/build/init/${flow.id}`, chatId ? { chat_id: chatId } : flow);
+  versionId?: number
+}): Promise<any> {
+  const { flow, chatId, versionId } = data;
+  const qstr = versionId ? `?version_id=${versionId}` : ''
+  return await axios.post(`/api/v1/build/init/${flow.id}${qstr}`, chatId ? { chat_id: chatId } : flow);
 }
 
 // fetch(`/upload/${id}`, {

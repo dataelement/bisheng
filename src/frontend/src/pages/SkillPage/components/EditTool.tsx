@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { createTool, deleteTool, downloadToolSchema, updateTool } from "@/controllers/API/tools"
+import { createTool, deleteTool, downloadToolSchema, testToolApi, updateTool } from "@/controllers/API/tools"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { PlusIcon } from "@radix-ui/react-icons"
 import { forwardRef, useImperativeHandle, useRef, useState } from "react"
@@ -17,19 +17,47 @@ import { useTranslation } from "react-i18next"
 
 const TestDialog = forwardRef((props: any, ref) => {
     const [testShow, setTestShow] = useState(false)
+    const [apiData, setApiData] = useState<any>({})
+    const toolRef = useRef<any>({})
+    const formRef = useRef<any>({})
+
     useImperativeHandle(ref, () => ({
-        open: (item) => {
+        open: (item, tool) => {
+            toolRef.current = tool
+            setResult('')
+            setApiData(item)
             setTestShow(true)
+            // fill form
+            item.api_params.forEach(param => {
+                formRef.current[param.name] = ''
+            });
         }
     }))
+
+    const [loading, setLoading] = useState(false)
+    const [result, setResult] = useState('')
+    const handleTest = async () => {
+        setLoading(true)
+
+        const { server_host, children, auth_method, auth_type, api_key } = toolRef.current
+        await testToolApi({
+            server_host,
+            extra: children.find(el => el.id === apiData.id).extra,
+            auth_method,
+            auth_type,
+            api_key,
+            request_params: formRef.current
+        }).then(setResult)
+        setLoading(false)
+    }
 
     return <Dialog open={testShow} onOpenChange={setTestShow}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
                 <DialogTitle>测试【名称】</DialogTitle>
             </DialogHeader>
-            <div className="flex flex-col gap-8 py-6">
-                <div className="">
+            {testShow && <div className="flex flex-col gap-8 py-6">
+                <div className="max-h-[600px] overflow-y-auto scrollbar-hide">
                     <label htmlFor="name" className="bisheng-label">参数和值</label>
                     <Table>
                         <TableHeader>
@@ -40,11 +68,13 @@ const TestDialog = forwardRef((props: any, ref) => {
                         </TableHeader>
                         <TableBody>
                             {
-                                new Array(2).fill(0).map((item, index) =>
-                                    <TableRow key={index}>
-                                        <TableCell>woeid</TableCell>
+                                apiData.api_params.map((param) =>
+                                    <TableRow key={param.id}>
+                                        <TableCell>{param.name}</TableCell>
                                         <TableCell>
-                                            <Input></Input>
+                                            <Input onChange={(e) => {
+                                                formRef.current[param.name] = e.target.value;
+                                            }}></Input>
                                         </TableCell>
                                     </TableRow>
                                 )
@@ -52,19 +82,35 @@ const TestDialog = forwardRef((props: any, ref) => {
                         </TableBody>
                     </Table>
                 </div>
-                <Button>测试</Button>
+                <Button onClick={handleTest} disabled={loading}>测试</Button>
                 <div className="">
                     <label htmlFor="desc" className="bisheng-label">测试结果</label>
-                    <Textarea id="desc" name="desc" placeholder="点击按钮，输出结果" readOnly className="mt-2" />
+                    <Textarea id="desc" name="desc" value={result} placeholder="点击按钮，输出结果" readOnly className="mt-2" />
                 </div>
-            </div>
+            </div>}
         </DialogContent>
     </Dialog>
 })
 
 const formData = {
     toolName: "",
-    schemaContent: "",
+    schemaContent: `{
+        "openapi": "3.1.0",
+        "info": {
+          "title": "Untitled",
+          "description": "Your OpenAPI specification",
+          "version": "v1.0.0"
+        },
+        "servers": [
+          {
+            "url": ""
+          }
+        ],
+        "paths": {},
+        "components": {
+          "schemas": {}
+        }
+      }`,
     authType: "basic",
     apiKey: "",
     authMethod: "none",
@@ -125,7 +171,7 @@ const EditTool = forwardRef((props: any, ref) => {
         captureAndAlertRequestErrorHoc(downloadToolSchema({ download_url: schemaUrl.current })).then(res => {
             schemaUrl.current = ''
             if (!res) return
-            fromDataRef.current = res
+            fromDataRef.current = { ...res, id: fromDataRef.current.id }
             const fetchedSchema = res.openapi_schema; // 替换为后端返回的Schema
             setFormState(prevState => ({
                 ...prevState,
@@ -142,7 +188,7 @@ const EditTool = forwardRef((props: any, ref) => {
         file_content && captureAndAlertRequestErrorHoc(downloadToolSchema({ file_content })).then(res => {
             schemaUrl.current = ''
             if (!res) return
-            fromDataRef.current = res
+            fromDataRef.current = { ...res, id: fromDataRef.current.id }
             const fetchedSchema = res.openapi_schema; // 替换为后端返回的Schema
             setFormState(prevState => ({
                 ...prevState,
@@ -208,7 +254,7 @@ const EditTool = forwardRef((props: any, ref) => {
         <Sheet open={editShow} onOpenChange={setEditShow}>
             <SheetContent className="w-[800px] sm:max-w-[800px] p-4">
                 <SheetHeader>
-                    <SheetTitle>{t('tools.createCustomTool')}</SheetTitle>
+                    <SheetTitle>{delShow ? t('edit') : t('create')}{t('tools.createCustomTool')}</SheetTitle>
                 </SheetHeader>
                 <div className="mt-4 overflow-y-auto h-screen pb-40">
                     {/* name */}
@@ -348,7 +394,7 @@ const EditTool = forwardRef((props: any, ref) => {
                                     <TableHead >{t('tools.description')}</TableHead>
                                     <TableHead >{t('tools.method')}</TableHead>
                                     <TableHead >{t('tools.path')}</TableHead>
-                                    {/* <TableHead >操作</TableHead> */}
+                                    <TableHead >操作</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -359,13 +405,13 @@ const EditTool = forwardRef((props: any, ref) => {
                                             <TableCell>{item.desc}</TableCell>
                                             <TableCell>{item.extra.method}</TableCell>
                                             <TableCell>{item.extra.path}</TableCell>
-                                            {/* <TableCell>
+                                            <TableCell>
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    onClick={() => testDialogRef.current.open(item)}
+                                                    onClick={() => testDialogRef.current.open(item, fromDataRef.current)}
                                                 >测试</Button>
-                                            </TableCell> */}
+                                            </TableCell>
                                         </TableRow>
                                     ) :
                                         <TableRow>

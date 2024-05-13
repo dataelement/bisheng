@@ -20,7 +20,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 export default function l2Edit() {
     const { t } = useTranslation()
 
-    const { id } = useParams()
+    const { id, vid } = useParams()
     const { flow: nextFlow, setFlow, saveFlow } = useContext(TabsContext);
     const { setErrorData, setSuccessData } = useContext(alertContext);
     const flow = useMemo(() => {
@@ -215,7 +215,7 @@ export default function l2Edit() {
                         </div>
                     }
                     {/* 表单设置 */}
-                    {isForm && <FormSet ref={formRef} id={id}></FormSet>}
+                    {isForm && <FormSet ref={formRef} id={id} vid={vid}></FormSet>}
                 </div>
             </div>
         </div>

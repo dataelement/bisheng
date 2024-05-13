@@ -6,6 +6,7 @@ import ToolItem from "@/pages/SkillPage/components/ToolItem";
 import { useTranslation } from "react-i18next";
 import { PersonIcon, StarFilledIcon } from "@radix-ui/react-icons";
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/bs-ui/button";
 
 export default function ToolsSheet({ select, onSelect, children }) {
     const { t } = useTranslation()
@@ -35,6 +36,12 @@ export default function ToolsSheet({ select, onSelect, children }) {
                     <div className="w-fit p-6">
                         <SheetTitle>{t('build.addTool')}</SheetTitle>
                         <SearchInput placeholder={t('build.search')} className="mt-6" onChange={(e) => setKeyword(e.target.value)} />
+                        <Button
+                            className="mt-4 w-full"
+                            onClick={() => window.open("/build/tools")}
+                        >
+                            {t('create')}{t("tools.createCustomTool")}
+                        </Button>
                         <div className="mt-4">
                             <div
                                 className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 ${type === 'default' && 'bg-muted-foreground/10'}`}

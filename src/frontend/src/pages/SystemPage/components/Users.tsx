@@ -36,7 +36,6 @@ export default function Users(params) {
             onOk(next) {
                 captureAndAlertRequestErrorHoc(disableUserApi(user.user_id, 1).then(res => {
                     reload()
-                    close()
                 }))
                 next()
             }
@@ -45,7 +44,6 @@ export default function Users(params) {
     const handleEnableUser = (user) => {
         captureAndAlertRequestErrorHoc(disableUserApi(user.user_id, 0).then(res => {
             reload()
-            close()
         }))
     }
 

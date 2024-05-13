@@ -75,8 +75,8 @@ export default function index(params) {
 const useVersions = (flowId) => {
     const [versions, setVersions] = useState<FlowVersionItem[]>([])
     useEffect(() => {
-        getFlowVersions(flowId).then(vers => {
-            setVersions(vers)
+        getFlowVersions(flowId).then(({ data }) => {
+            setVersions(data)
         })
     }, [])
 

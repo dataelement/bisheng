@@ -36,8 +36,8 @@ export default function Component({ compId, options, disables, version, classNam
                         options.map(vs => (
                             <SelectItem key={vs.id} value={vs.id} textValue={'vs.name'} disabled={disables.includes(vs.id)}>
                                 <div className="flex justify-between w-64">
-                                    <span className="w-46 overflow-hidden text-ellipsis whitespace-nowrap">{vs.name}</span>
-                                    <span className="text-xs text-muted-foreground">{vs.update_time.replace('T', ' ')}</span>
+                                    <span className="w-36 overflow-hidden text-ellipsis whitespace-nowrap">{vs.name}</span>
+                                    <span className="text-xs text-muted-foreground">{vs.update_time.replace('T', ' ').substring(0, 16)}</span>
                                 </div>
                             </SelectItem>
                         ))
@@ -55,16 +55,16 @@ export default function Component({ compId, options, disables, version, classNam
                     <SelectValue placeholder="选择版本" />
                 </SelectTrigger>
                 <SelectContent>
-                        {
-                            options.map(vs => (
-                                <SelectItem key={vs.id} value={vs.id} textValue={'vs.name'} disabled={disables.includes(vs.id)}>
-                                    <div className="flex justify-between w-72">
-                                        <span className="w-46 overflow-hidden text-ellipsis whitespace-nowrap">{vs.name}</span>
-                                        <span className="text-xs text-muted-foreground">{vs.update_time.replace('T', ' ').substring(0, 16)}</span>
-                                    </div>
-                                </SelectItem>
-                            ))
-                        }
+                    {
+                        options.map(vs => (
+                            <SelectItem key={vs.id} value={vs.id} textValue={'vs.name'} disabled={disables.includes(vs.id)}>
+                                <div className="flex justify-between w-64">
+                                    <span className="w-36 overflow-hidden text-ellipsis whitespace-nowrap text-left">{vs.name}</span>
+                                    <span className="text-xs text-muted-foreground">{vs.update_time.replace('T', ' ').substring(0, 16)}</span>
+                                </div>
+                            </SelectItem>
+                        ))
+                    }
                 </SelectContent>
             </Select>
             <span className="text-sm text-muted-foreground relative pr-8">
@@ -86,7 +86,7 @@ export default function Component({ compId, options, disables, version, classNam
                 nodes.map(node => (
                     <div className="flex odd:bg-gray-50 bg-[#f4f5f8] gap-1 mt-1 px-2 py-1 text-sm rounded-sm">
                         <span className="min-w-12 w-28 break-all self-center">{node.data.type}</span>
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 pointer-events-none opacity-60">
                             {
                                 <ComponentParameter
                                     disabled

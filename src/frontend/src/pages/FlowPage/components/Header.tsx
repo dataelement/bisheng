@@ -21,7 +21,7 @@ import ExportModal from "@/modals/exportModal";
 import { FlowVersionItem } from "@/types/flow";
 import { ArrowDownIcon, ArrowUpIcon, BellIcon, CodeIcon, ExitIcon, LayersIcon, StackIcon } from "@radix-ui/react-icons";
 import { t } from "i18next";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import TipPng from "../../../assets/tip.jpg";
@@ -43,15 +43,15 @@ export default function Header({ flow }) {
 
     const handleSaveNewVersion = async () => {
         // 累加版本 vx ++
-        let maxNo = 0
-        versions.forEach(v => {
-            const match = v.name.match(/[vV](\d+)/)
-            maxNo = match ? Math.max(Number(match[1]), maxNo) : maxNo
-        })
-        maxNo++
+        const maxNo = lastVersionIndexRef.current + 1
+        // versions.forEach(v => {
+        //     const match = v.name.match(/[vV](\d+)/)
+        //     maxNo = match ? Math.max(Number(match[1]), maxNo) : maxNo
+        // })
+        // maxNo++
         // save
         const res = await captureAndAlertRequestErrorHoc(
-            createFlowVersion(flow.id, { name: `v${maxNo}`, description: '', data: flow.data })
+            createFlowVersion(flow.id, { name: `v${maxNo}`, description: '', data: flow.data, original_version_id: version.id })
         )
         message({
             variant: "success",
@@ -59,27 +59,34 @@ export default function Header({ flow }) {
             description: ""
         })
         // 更新版本列表
-        refrenshVersions()
+        await refrenshVersions()
+        // 切换到最新版本
+        setVersionId(res.id)
     }
+    // 
+    const [saveVersionId, setVersionId] = useState('')
+    useEffect(() => {
+        saveVersionId && handleChangeVersion(saveVersionId)
+    }, [saveVersionId])
 
     // 版本管理
     const [loading, setLoading] = useState(false)
-    const { versions, version, changeName, deleteVersion, refrenshVersions, setCurrentVersion } = useVersion(flow)
+    const { versions, version, lastVersionIndexRef, changeName, deleteVersion, refrenshVersions, setCurrentVersion } = useVersion(flow)
     // 切换版本
     const handleChangeVersion = async (versionId) => {
         setLoading(true)
         reactFlowInstance.setNodes([]) // 便于重新渲染节点
         // 保存当前版本
-        updateVersion(version.id, { name: version.name, description: '', data: flow.data })
+        // updateVersion(version.id, { name: version.name, description: '', data: flow.data })
         // 切换版本UI
-        const currentVersion = setCurrentVersion(Number(versionId))
+        setCurrentVersion(Number(versionId))
         // 加载选中版本data
         const res = await getVersionDetails(versionId)
         // 自动触发 page的 clone flow
         setFlow('versionChange', { ...flow, data: res.data })
         message({
             variant: "success",
-            title: `切换到 ${currentVersion.name}`,
+            title: `切换到 ${res.name}`,
             description: ""
         })
         setLoading(false)
@@ -87,12 +94,15 @@ export default function Header({ flow }) {
     // 保存版本
     const handleSaveVersion = async () => {
         // 保存当前版本
-        captureAndAlertRequestErrorHoc(updateVersion(version.id, { name: version.name, description: '', data: flow.data }).then(_ =>
+        captureAndAlertRequestErrorHoc(updateVersion(version.id, { name: version.name, description: '', data: flow.data }).then(_ => {
+            setFlow('versionChange', { ...flow }) // 更新clone flow，避免触发diff不同
+
             _ && message({
                 variant: "success",
                 title: t('success'),
                 description: ""
-            })))
+            })
+        }))
     }
 
     return <div className="flex justify-between items-center border-b px-4">
@@ -151,7 +161,7 @@ export default function Header({ flow }) {
                                                 maxLength={30}
                                                 onSave={val => changeName(vers.id, val)}
                                             ></TextInput>
-                                            <p className="text-sm text-muted-foreground mt-2">{vers.update_time.replace('T', ' ')}</p>
+                                            <p className="text-sm text-muted-foreground mt-2">{vers.update_time.replace('T', ' ').substring(0, 16)}</p>
                                         </div>
                                         {
                                             // 最后一个 V0 版本和当前选中版本不允许删除
@@ -198,11 +208,13 @@ export default function Header({ flow }) {
 const useVersion = (flow) => {
     const [versions, setVersions] = useState<FlowVersionItem[]>([])
     const { version, setVersion, updateOnlineVid } = useContext(TabsContext)
+    const lastVersionIndexRef = useRef(0)
 
     const refrenshVersions = () => {
-        getFlowVersions(flow.id).then(res => {
-            setVersions(res)
-            const currentV = res.find(el => el.is_current === 1)
+        return getFlowVersions(flow.id).then(({ data, total }) => {
+            setVersions(data)
+            lastVersionIndexRef.current = total - 1
+            const currentV = data.find(el => el.is_current === 1)
             setVersion(currentV)
             // 记录上线的版本
             updateOnlineVid(currentV?.id)
@@ -231,7 +243,7 @@ const useVersion = (flow) => {
             desc: `${t('skills.deleteOrNot')} ${version.name} ${t('skills.version')}?`,
             onOk: (next) => {
                 captureAndAlertRequestErrorHoc(deleteVersion(version.id)).then(res => {
-                    if (res) {
+                    if (res === null) {
                         // 乐观更新
                         setVersions(versions.filter((_, i) => i !== index))
                     }
@@ -244,6 +256,7 @@ const useVersion = (flow) => {
     return {
         versions,
         version,
+        lastVersionIndexRef,
         setCurrentVersion(versionId) {
             const currentV = versions.find(el => el.id === versionId)
             setVersion(currentV)

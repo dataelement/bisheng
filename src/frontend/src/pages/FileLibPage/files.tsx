@@ -127,14 +127,16 @@ export default function FilesPage() {
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <ShadTooltip content="back" side="top">
-            <button className="extra-side-bar-buttons w-[36px] absolute top-[16px]" onClick={() => { }} >
-                <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
-            </button>
-        </ShadTooltip>
         <div className="h-full overflow-y-auto pb-10 bg-[#fff]">
-            <div className="flex justify-between items-center">
-                <span className=" text-gray-700 text-sm font-black pl-14">{title}</span>
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center">
+                    <ShadTooltip content="back" side="top">
+                        <button className="extra-side-bar-buttons w-[36px]" onClick={() => { }} >
+                            <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
+                        </button>
+                    </ShadTooltip>
+                    <span className=" text-gray-700 text-sm font-black pl-4">{title}</span>
+                </div>
                 <div className="flex gap-4 items-center">
                     <SearchInput placeholder={t('lib.fileName')} onChange={(e) => search(e.target.value)}></SearchInput>
                     {hasPermission && <Button className="px-8" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
@@ -204,24 +206,24 @@ export default function FilesPage() {
         <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen} onResult={handleUploadResult}></UploadModal>
         {/* 重复文件提醒 */}
         <dialog className={`modal ${repeatFiles.length && 'modal-open'}`}>
-    <div className="modal-box w-[560px] bg-[#fff] shadow-lg dark:bg-background">
-        <h3 className="font-bold text-lg relative">{t('lib.modalTitle')}
-            <X className="absolute right-0 top-0 text-gray-400 cursor-pointer" size={20} onClick={() => setRepeatFiles([])}></X>
-        </h3>
-        <p className="py-4">{t('lib.modalMessage')}</p>
-        <ul className="overflow-y-auto max-h-[400px]">
-            {repeatFiles.map(el => (
-                <li key={el.id} className="py-2 text-red-500">{el.remark}</li>
-            ))}
-        </ul>
-        <div className="modal-action">
-            <Button className="h-8" variant="outline" onClick={() => setRepeatFiles([])}>{t('lib.keepOriginal')}</Button>
-            <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
-                {retryLoad && <span className="loading loading-spinner loading-xs"></span>}{t('lib.override')}
-            </Button>
-        </div>
-    </div>
-</dialog>
+            <div className="modal-box w-[560px] bg-[#fff] shadow-lg dark:bg-background">
+                <h3 className="font-bold text-lg relative">{t('lib.modalTitle')}
+                    <X className="absolute right-0 top-0 text-gray-400 cursor-pointer" size={20} onClick={() => setRepeatFiles([])}></X>
+                </h3>
+                <p className="py-4">{t('lib.modalMessage')}</p>
+                <ul className="overflow-y-auto max-h-[400px]">
+                    {repeatFiles.map(el => (
+                        <li key={el.id} className="py-2 text-red-500">{el.remark}</li>
+                    ))}
+                </ul>
+                <div className="modal-action">
+                    <Button className="h-8" variant="outline" onClick={() => setRepeatFiles([])}>{t('lib.keepOriginal')}</Button>
+                    <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
+                        {retryLoad && <span className="loading loading-spinner loading-xs"></span>}{t('lib.override')}
+                    </Button>
+                </div>
+            </div>
+        </dialog>
 
     </div >
 };

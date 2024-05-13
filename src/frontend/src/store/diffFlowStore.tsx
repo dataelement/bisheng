@@ -115,6 +115,11 @@ export const useDiffFlowStore = create<State & Actions>((set, get) => ({
             questions: [...state.questions, { q, id: generateUUID(5), ready: get().running }]
         }))
     },
+    updateQuestion(q, index) {
+        set((state) => ({
+            questions: state.questions.map((el, i) => i === index ? { ...el, q, ready: get().running } : el)
+        }))
+    },
     removeQuestion(index) {
         set((state) => ({
             questions: state.questions.filter((_, i) => i !== index)
