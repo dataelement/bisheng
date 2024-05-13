@@ -116,6 +116,11 @@ def init_default_data():
                      select 'v0', `id` as flow_id, `data`, `user_id`, 1, 0 from `flow`;")
                     session.execute(sql_query)
                     session.commit()
+                    # 修改表单数据表
+                    sql_query = text(
+                        "UPDATE `t_variable_value` a SET a.version_id=(SELECT `id` from `flowversion` WHERE flow_id=a.flow_id and is_current=1)")
+                    session.execute(sql_query)
+                    session.commit()
             # 初始化数据库config
             init_config()
         except Exception as exc:

@@ -9,6 +9,7 @@ from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, V
     NotFoundFlowError, \
     FlowOnlineEditError
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500
 from bisheng.chat.utils import process_node_data
 from bisheng.database.models.flow import FlowDao, FlowStatus
@@ -16,6 +17,7 @@ from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead
 from bisheng.database.models.role_access import RoleAccessDao, AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.database.models.variable_value import VariableDao
 from bisheng.processing.process import process_graph_cached, process_tweaks
 
 
@@ -94,8 +96,8 @@ class FlowService:
         return resp_200()
 
     @classmethod
-    def create_new_version(cls, user: UserPayload, flow_id: str, flow_version: FlowVersionCreate) -> \
-            UnifiedResponseModel[FlowVersion]:
+    def create_new_version(cls, user: UserPayload, flow_id: str, original_version_id: int,
+                           flow_version: FlowVersionCreate) -> UnifiedResponseModel[FlowVersion]:
         """
         创建新版本
         """
@@ -114,7 +116,19 @@ class FlowService:
         flow_version = FlowVersion(flow_id=flow_id, name=flow_version.name, description=flow_version.description,
                                    user_id=user.user_id, data=flow_version.data)
 
+        # 创建新版本
         flow_version = FlowVersionDao.create_version(flow_version)
+
+        # 将原始版本的表单数据拷贝到新版本内
+        VariableDao.copy_variables(flow_version.flow_id, original_version_id, flow_version.id)
+
+        try:
+            # 重新整理此版本的表单数据
+            if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
+                logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
+        except:
+            pass
+
         return resp_200(data=flow_version)
 
     @classmethod
@@ -146,6 +160,13 @@ class FlowService:
         version_info.is_delete = 0
 
         flow_version = FlowVersionDao.update_version(version_info)
+
+        try:
+            # 重新整理此版本的表单数据
+            if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
+                logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
+        except:
+            pass
         return resp_200(data=flow_version)
 
     @classmethod
