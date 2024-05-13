@@ -315,7 +315,9 @@ async def stream_build(flow_id: str, chat_id: Optional[str] = None,
         artifacts = {}
         try:
             flow_data_key = 'flow_data_' + flow_id
-            if version_id:
+            if chat_id:
+                pass
+            elif version_id:
                 flow_data_key = flow_data_key + '_' + str(version_id)
             if not flow_data_store.exists(flow_data_key):
                 error_message = 'Invalid session ID'
