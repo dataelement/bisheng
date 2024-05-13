@@ -61,8 +61,8 @@ export default function SkillChatSheet({ children, onSelect }) {
                                 onClick={() => { onSelect(flow); setOpen(false) }}
                             />
                         )) : <div className="flex flex-col items-center justify-center pt-40 w-full">
-                            <p className="text-sm text-muted-foreground mb-3">空空如也</p>
-                            <Button className="w-[200px]" onClick={() => navigate('/build/assist')}>去上线技能&助手</Button>
+                            <p className="text-sm text-muted-foreground mb-3">{t('build.empty')}</p>
+                            <Button className="w-[200px]" onClick={() => navigate('/build/assist')}>{t('build.onlineSA')}</Button>
                         </div>
                     }
                 </div>

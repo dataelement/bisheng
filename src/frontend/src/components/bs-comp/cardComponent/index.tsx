@@ -96,7 +96,7 @@ export default function CardComponent<T>({
   }
 
   // 新建小卡片（sheet）
-  if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-transparent" onClick={onClick}>
+  if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
     <CardHeader>
       <div className="flex justify-between pb-2"><PlusIcon className="group-hover:text-primary transition-none" /></div>
       <CardTitle className="">{title}</CardTitle>
@@ -111,7 +111,7 @@ export default function CardComponent<T>({
 
 
   // 新建卡片
-  if (!id) return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-transparent" onClick={onClick}>
+  if (!id) return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
     <CardHeader>
       <div className="flex justify-between pb-2"><PlusIcon className="group-hover:text-primary transition-none" /></div>
       <CardTitle className="">{title}</CardTitle>
@@ -148,7 +148,7 @@ export default function CardComponent<T>({
 
 
   // 技能组件
-  return <Card className="group w-[320px] cursor-pointer" onClick={() => edit && onClick()}>
+  return <Card className="group w-[320px] cursor-pointer bg-background-Assistant hover:bg-background-hoverAssistant" onClick={() => edit && onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
         <TitleIconBg id={id} >

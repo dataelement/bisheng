@@ -56,7 +56,10 @@
     "roleNameRequired": "Role name is required",
     "roleNameExists": "Role name already exists",
     "parameterConfig": "Parameter Configuration",
-    "language": "Language"
+    "language": "Language",
+    "assistantAuthorization": "Assistant Authorization",
+    "assistantName": "Assistant Name",
+    "userList": "User List"
   },
   "skills": {
     "manageTemplate": "Manage Skill Templates",
@@ -473,6 +476,7 @@
     "addTool": "Add Tool",
     "search": "Search",
     "empty": "Nothing here",
+    "onlineSA": "Go online skills&assistants",
     "params": "Parameters",
     "added": "Added",
     "add": "Add",
@@ -502,6 +506,7 @@
     "name": "Name",
     "enterToolName": "Enter tool name",
     "openapiSchema": "OpenAPI Schema",
+    "enterOpenAPISchema": "Enter your OpenAPI schema",
     "importFromUrl": "Import from URL",
     "examples": "Examples",
     "weatherJson": "Weather (JSON)",

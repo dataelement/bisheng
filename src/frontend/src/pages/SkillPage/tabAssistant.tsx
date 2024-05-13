@@ -93,7 +93,7 @@ export default function Assistants() {
             }
         </div>
         {/* footer */}
-        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-[#F4F5F8] h-16 items-center px-10">
+        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10">
             <p className="text-sm text-muted-foreground break-keep">{t('build.manageAssistant')}</p>
             <AutoPagination className="m-0 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage}></AutoPagination>
         </div>

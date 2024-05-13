@@ -112,20 +112,24 @@ export const LoginPage = () => {
         encrypt.setPublicKey(public_key)
         return encrypt.encrypt(pwd) as string
     }
-    return <div className='w-full h-full bg-[#F4F5F8]'>
-        <div className='fixed z-10 sm:w-[1280px] w-full sm:h-[720px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden bg-[#fff]'>
-            <div className='w-[420px] h-[704px] m-[8px] hidden sm:block'><img src="/login-logo-big.png" alt="logo_picture" className='w-full h-full' /></div>
+
+    return <div className='w-full h-full bg-background-dark'>
+        <div className='fixed z-10 sm:w-[1280px] w-full sm:h-[720px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden bg-background-login'>
+            <div className='w-[420px] h-[704px] m-[8px] hidden sm:block'>
+                <img src="/login-logo-big.png" alt="logo_picture" className='w-full h-full dark:hidden' />
+                <img src="/login-logo-dark.png" alt="logo_picture" className='w-full h-full hidden dark:block' />
+                </div>
             <div className='absolute w-full h-full z-10 flex justify-end top-0'>
-                <div className='w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-[rgba(255,255,255,1)] dark:bg-gray-950 relative'>
+                <div className='w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-background-login relative'>
                     <div>
                         <img src="/login-logo-small.png" alt="small_logo" className='block w-[114px] h-[36px] m-auto mt-[140px]' />
-                        <span className='block w-fit m-auto font-normal text-[14px] text-[rgb(200,200,200)] mt-[24px]'>{t('login.slogen')}</span>
+                        <span className='block w-fit m-auto font-normal text-[14px] text-tx-color mt-[24px]'>{t('login.slogen')}</span>
                     </div>
                     <div className="grid gap-[12px] mt-[68px]">
                         <div className="grid">
                             <Input
                                 id="email"
-                                className='h-[48px]'
+                                className='h-[48px] dark:bg-login-input'
                                 ref={mailRef}
                                 placeholder={t('login.account')}
                                 type="email"
@@ -137,7 +141,7 @@ export const LoginPage = () => {
                         <div className="grid">
                             <Input
                                 id="pwd"
-                                className='h-[48px]'
+                                className='h-[48px] dark:bg-login-input'
                                 ref={pwdRef}
                                 placeholder={t('login.password')}
                                 type="password"
@@ -146,7 +150,7 @@ export const LoginPage = () => {
                         {
                             !showLogin && <div className="grid">
                                 <Input id="pwd"
-                                    className='h-[48px]'
+                                    className='h-[48px] dark:bg-login-input'
                                     ref={agenPwdRef}
                                     placeholder={t('login.confirmPassword')}
                                     type="password" />
@@ -176,7 +180,7 @@ export const LoginPage = () => {
                                     <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a>
                                 </div>
                                 <Button
-                                    className='h-[48px] mt-[32px]'
+                                    className='h-[48px] mt-[32px] dark:bg-button'
                                     disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button>
                             </> :
                                 <>
@@ -184,7 +188,7 @@ export const LoginPage = () => {
                                         <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(true)}>{t('login.haveAccountLogin')}</a>
                                     </div>
                                     <Button
-                                        className='h-[48px] mt-[32px]'
+                                        className='h-[48px] mt-[32px] dark:bg-button'
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }

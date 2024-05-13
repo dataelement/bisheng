@@ -230,7 +230,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         // setInputEmpty(textarea.value.trim() === '')
     }
 
-    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff]">
+    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className={`relative ${clear && 'pl-9'}`}>
             {/* form */}
             {
@@ -282,7 +282,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 disabled={inputLock.locked}
                 onInput={handleTextAreaHeight}
                 placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
-                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide text-gray-800" + (form && ' pl-10')}
+                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();

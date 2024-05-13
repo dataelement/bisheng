@@ -28,7 +28,7 @@ const SearchInput = React.forwardRef<HTMLInputElement, InputProps & { inputClass
     ({ className, inputClassName, iconClassName, ...props }, ref) => {
         return <div className={cname("relative", className)}>
             <SearchIcon className={cname("h-5 w-5 absolute left-2 top-2", iconClassName)} />
-            <Input type="text" ref={ref} className={cname("pl-8", inputClassName)} {...props}></Input>
+            <Input type="text" ref={ref} className={cname("pl-8 bg-search-input", inputClassName)} {...props}></Input>
         </div>
     }
 )

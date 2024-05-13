@@ -8,7 +8,7 @@ import { TechnologyIcon } from "@/components/bs-icons/technology";
 import { KnowledgeIcon } from "@/components/bs-icons/knowledge";
 import { ModelIcon } from "@/components/bs-icons/model";
 import { MoonIcon } from "@/components/bs-icons/moon";
-import { QuitIcon } from "@/components/bs-icons/quit";
+import { QuitIcon, QuitIconDark } from "@/components/bs-icons/quit";
 import { EnIcon } from "@/components/bs-icons/en";
 
 import { useContext, useEffect, useState } from "react";
@@ -39,7 +39,7 @@ export default function MainLayout() {
     }
 
     return <div className="flex">
-        <div className="bg-[#f4f5f8] w-full h-screen">
+        <div className="bg-background-main w-full h-screen">
             <div className="flex justify-between h-[64px]">
                 <div className="flex h-9 my-[14px]">
                     <Link className="inline-block" to='/'><img src='/login-logo-small.png' className="w-[114px] h-9 ml-8 rounded" alt="" /></Link>
@@ -48,7 +48,7 @@ export default function MainLayout() {
                     <div className="flex">
                         <TooltipProvider>
                             <Tooltip>
-                                <TooltipTrigger className="h-8 w-8 bg-[white] rounded-lg cursor-pointer my-4" onClick={() => setDark(!dark)}>
+                                <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={() => setDark(!dark)}>
                                     <div className="">
                                         {dark ? (
                                             <SunIcon className="side-bar-button-size mx-auto w-[13px] h-[13px]" />
@@ -60,10 +60,10 @@ export default function MainLayout() {
                                 <TooltipContent><p>{t('menu.themeSwitch')}</p></TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
-                        <Separator className="mx-[4px]" orientation="vertical" />
+                        <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
                         <TooltipProvider>
                             <Tooltip>
-                                <TooltipTrigger className="h-8 w-8 bg-[white] rounded-lg cursor-pointer my-4" onClick={changLanguage}>
+                                <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={changLanguage}>
                                     <div className="">
                                         {language === 'en'
                                             ? <EnIcon className="side-bar-button-size mx-auto w-[19px] h-[19px]" />
@@ -82,23 +82,23 @@ export default function MainLayout() {
                 </div>
             </div>
             <div className="flex" style={{ height: "calc(100vh - 64px)" }}>
-                <div className="relative z-10 bg-[#f4f5f8] h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
+                <div className="relative z-10 bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
                     <nav className="">
-                        <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px]`}>
+                        <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                             <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
                         </NavLink>
-                        <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px]`} >
+                        <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
                             <TechnologyIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.skills')}</span>
                         </NavLink>
-                        <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px]`}>
+                        <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                             <KnowledgeIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.knowledge')}</span>
                         </NavLink>
-                        <NavLink to='/model' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px]`}>
+                        <NavLink to='/model' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                             <ModelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.models')}</span>
                         </NavLink>
                         {
                             user.role === 'admin' && <>
-                                <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-[white] h-12 mb-[3.5px]`}>
+                                <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.system')}</span>
                                 </NavLink>
                             </>
@@ -109,7 +109,7 @@ export default function MainLayout() {
                         <div className="flex  items-between my-3">
                             <TooltipProvider>
                                 <Tooltip>
-                                    <TooltipTrigger className="h-[72px] w-[78px] cursor-pointer bg-[white] rounded-lg hover:bg-[#1b1f23] hover:text-[white] transition-all">
+                                    <TooltipTrigger className="h-[72px] w-[78px] cursor-pointer bg-background-tip rounded-lg hover:bg-[#1b1f23] hover:text-[white] transition-all dark:hover:bg-background-tip-darkhover">
                                         <Link to={"https://github.com/dataelement/bisheng"} target="_blank">
                                             <GithubIcon className="side-bar-button-size mx-auto w-5 h-5 " />
                                             <span className="block text-[12px] mt-[8px] font-bold">{t("menu.github")}</span>
@@ -121,7 +121,7 @@ export default function MainLayout() {
                             <Separator className="mx-1" orientation="vertical" />
                             <TooltipProvider>
                                 <Tooltip>
-                                    <TooltipTrigger className="h-[72px] w-[78px] cursor-pointer bg-[white] rounded-lg p-0 align-top hover:bg-[#0055e3] hover:text-[white]  transition-all">
+                                    <TooltipTrigger className="h-[72px] w-[78px] cursor-pointer bg-background-tip rounded-lg p-0 align-top hover:bg-[#0055e3] hover:text-[white]  transition-all">
                                         <Link className="m-0 p-0" to={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
                                             <BookOpenIcon className=" mx-auto w-5 h-5" />
                                             <span className="block text-[12px] mt-[8px] font-bold">{t("menu.bookopen")}</span>
@@ -133,14 +133,15 @@ export default function MainLayout() {
                         </div>
                         <Separator className="mx-1" />
                         <div className="flex h-[48px] w-[160px]">
-                            <div className="flex-1 py-1  flex justify-center bg-[#EBEDF1] hover:bg-gray-400 gap-2 items-center rounded-md cursor-pointer" onClick={handleLogout}>
-                                <QuitIcon className="side-bar-button-size" />
+                            <div className="flex-1 py-1  flex justify-center bg-background-tip hover:bg-gray-400 dark:hover:text-[white] dark:hover:bg-background-tip-darkhover gap-2 items-center rounded-md cursor-pointer" onClick={handleLogout}>
+                                <QuitIcon className="side-bar-button-size dark:hidden"/>
+                                <QuitIconDark className="side-bar-button-size hidden dark:block"/>
                                 <span>{t('menu.logout')}</span>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div className="flex-1  bg-[white] rounded-lg w-[calc(100vw-184px)]">
+                <div className="flex-1 bg-background-main-content rounded-lg w-[calc(100vw-184px)]">
                     <ErrorBoundary
                         onReset={() => window.location.href = window.location.href}
                         FallbackComponent={CrashErrorComponent}

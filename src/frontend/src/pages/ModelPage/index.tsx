@@ -76,7 +76,7 @@ function ConfigModal({ data, readonly, open, setOpen, onSave }) {
                 <div className="grid gap-4 py-4 mt-2 w-full">
                     <div className="grid grid-cols-8 items-center">
                         <Label htmlFor="name" className="text-left">{t('model.modelName')}</Label>
-                        <p className=" text-sm text-gray-500 col-span-7 text-left ml-[-10px]">{data.model}</p>
+                        <p className=" text-sm text-gray-500 col-span-7 text-left ml-4">{data.model}</p>
                     </div>
                     <div className="grid grid-cols-8 items-center gap-4 mt-4">
                         <Label htmlFor="desc" className="text-left self-start col-span-8">{t('model.modelConfigLabel')}</Label>

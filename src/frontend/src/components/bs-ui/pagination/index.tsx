@@ -57,6 +57,8 @@ const PaginationLink = ({
                 size,
             }),
             "text-gray-950",
+            "dark:text-[#585858]",
+            isActive && "dark:bg-[#34353A] dark:text-[#F2F2F2]", // 暗黑模式设计
             className
         )}
         {...props}

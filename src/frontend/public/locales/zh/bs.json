@@ -57,7 +57,10 @@
     "roleNameRequired": "角色名称不能为空",
     "roleNameExists": "角色名称已存在",
     "parameterConfig": "参数配置",
-    "language": "语言"
+    "language": "语言",
+    "assistantAuthorization": "助手授权",
+    "assistantName": "助手名称",
+    "userList": "用户列表"
   },
   "skills": {
     "manageTemplate": "管理技能模板",
@@ -470,6 +473,7 @@
     "addTool": "添加工具",
     "search": "搜索",
     "empty": "空空如也",
+    "onlineSA": "Go online skills&assistants",
     "params": "参数",
     "added": "已添加",
     "add": "添加",
@@ -499,6 +503,7 @@
     "name": "名称",
     "enterToolName": "输入工具名称",
     "openapiSchema": "OpenAPI Schema",
+    "enterOpenAPISchema": "输入您的 OpenAPI schema",
     "importFromUrl": "从 URL 导入",
     "examples": "示例",
     "weatherJson": "天气(JSON)",

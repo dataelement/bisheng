@@ -7,7 +7,7 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useDebounce } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import ChatPanne from "./components/ChatPanne";
-import { PlusBoxIcon } from "@/components/bs-icons/plusBox";
+import { PlusBoxIcon, PlusBoxIconDark } from "@/components/bs-icons/plusBox";
 import { gradients } from "@/components/bs-comp/cardComponent";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
@@ -65,10 +65,11 @@ export default function SkillChatPage() {
 
     return <div className="flex h-full">
         <div className="h-full w-[220px] relative border-r">
-            <div className="absolute flex top-0 w-full bg-[#fff] z-10 p-2">
+            <div className="absolute flex top-0 w-full bg-background-main-content z-10 p-2">
                 <SkillChatSheet onSelect={handlerSelectFlow}>
-                    <div id="newchat" className="flex justify-around items-center w-[200px] h-[48px] rounded-lg px-10 py-2 mx-auto text-center text-sm cursor-pointer bg-[#fff] hover:bg-gray-100 dark:hover:bg-gray-800 relative z-10">
-                        <PlusBoxIcon></PlusBoxIcon>
+                    <div id="newchat" className="flex justify-around items-center w-[200px] h-[48px] rounded-lg px-10 py-2 mx-auto text-center text-sm cursor-pointer bg-background-main-content hover:bg-gray-100 dark:hover:bg-gray-800 relative z-10">
+                        <PlusBoxIcon className="dark:hidden"></PlusBoxIcon>
+                        <PlusBoxIconDark className="hidden dark:block"></PlusBoxIconDark>
                         {t('chat.newChat')}
                     </div>
                 </SkillChatSheet>
@@ -77,13 +78,13 @@ export default function SkillChatPage() {
                 {
                     chatList.map((chat, i) => (
                         <div key={chat.chat_id}
-                            className={` group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-gray-800 ${chatId === chat.chat_id ? 'bg-[#EDEFF6] dark:bg-gray-800' : 'bg-[#f9f9fc]'}`}
+                            className={` group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-[#34353A] ${chatId === chat.chat_id ? 'bg-[#EDEFF6] dark:bg-[#34353A]' : 'bg-[#f9f9fc] dark:bg-[#212122]'}`}
                             onClick={() => handleSelectChat(chat)}>
-                            <p className="break-words text-sm font-bold text-gray-950 leading-6">
+                            <p className="break-words text-sm font-bold text-gray-950 dark:text-[#F2F2F2] leading-6">
                                 <span className={`relative top-[-1px] inline-block w-2 h-2 mr-2 ${chat.flow_type === 'flow' ? 'bg-[#111]' : 'bg-primary'}`}></span>
                                 {chat.flow_name}
                             </p>
-                            <span className="block text-xs text-gray-600 mt-3 break-words truncate-multiline">{chat.flow_description}</span>
+                            <span className="block text-xs text-gray-600 dark:text-[#8D8D8E] mt-3 break-words truncate-multiline">{chat.flow_description}</span>
                             <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
                         </div>
                     ))
