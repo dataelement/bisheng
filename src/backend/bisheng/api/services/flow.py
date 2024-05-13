@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Dict
+from typing import List, Dict, AsyncGenerator
 
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
@@ -10,7 +10,8 @@ from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, V
     FlowOnlineEditError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_L2_param_from_flow
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
+    StreamData
 from bisheng.chat.utils import process_node_data
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
@@ -224,46 +225,41 @@ class FlowService:
         })
 
     @classmethod
-    async def compare_flow_node(cls, user: UserPayload, req: FlowCompareReq) -> UnifiedResponseModel[Dict]:
+    async def get_compare_tasks(cls, user: UserPayload, req: FlowCompareReq) -> List:
         """
-        比较两个版本中某个节点的 输出结果
+        获取比较任务
         """
         if req.question_list is None or len(req.question_list) == 0:
-            return resp_200(data=[])
+            return []
         if req.version_list is None or len(req.version_list) == 0:
-            return resp_200(data=[])
+            return []
         if req.node_id is None:
-            return resp_200(data=[])
-
-        # 特殊处理下inputs, 保持和通过websocket会话的格式一致
-        if req.inputs.get('data', None):
-            for one in req.inputs['data']:
-                one['id'] = one['nodeId']
-                if 'InputFile' in one['id']:
-                    one['file_path'] = one['value']
+            return []
 
         # 获取版本数据
-        res = [{} for _ in range(len(req.question_list))]
         version_infos = FlowVersionDao.get_list_by_ids(req.version_list)
         # 启动一个新的事件循环
         tasks = []
         for index, question in enumerate(req.question_list):
             question_index = index
             tmp_inputs = req.inputs.copy()
-            task = asyncio.create_task(cls.exec_flow_node(
-                tmp_inputs, res, question_index, question, version_infos))
-            tasks.append(task)
-        try:
-            await asyncio.gather(*tasks)
-        except Exception as e:
-            return resp_500(message="技能对比错误：{}".format(str(e)))
-        return resp_200(data=res)
+            tmp_inputs, tmp_tweaks = cls.parse_compare_inputs(tmp_inputs, question)
+            for version in version_infos:
+                task = asyncio.create_task(cls.exec_flow_node(
+                    tmp_inputs, tmp_tweaks, question_index, [version]))
+                tasks.append(task)
+        return tasks
 
     @classmethod
-    async def exec_flow_node(cls, inputs: Dict, res: List[Dict], index: int, question: str,
-                             versions: List[FlowVersion]):
-        # 替换answer
-        answer_result = {}
+    def parse_compare_inputs(cls, inputs: Dict, question) -> (Dict, Dict):
+        # 特殊处理下inputs, 保持和通过websocket会话的格式一致
+        if inputs.get('data', None):
+            for one in inputs['data']:
+                one['id'] = one['nodeId']
+                if 'InputFile' in one['id']:
+                    one['file_path'] = one['value']
+
+        # 填充question 和生成替换的tweaks
         for key, val in inputs.items():
             if key != 'data' and key != 'id':
                 # 默认输入key，替换第一个需要输入的key
@@ -276,7 +272,48 @@ class FlowService:
             node_data = inputs.pop('data')
             if node_data:
                 tweaks = process_node_data(node_data)
+        return inputs, tweaks
 
+    @classmethod
+    async def compare_flow_node(cls, user: UserPayload, req: FlowCompareReq) -> UnifiedResponseModel[Dict]:
+        """
+        比较两个版本中某个节点的 输出结果
+        """
+        tasks = await cls.get_compare_tasks(user, req)
+        if len(tasks) == 0:
+            return resp_200(data=[])
+        res = [{} for _ in range(len(req.question_list))]
+        try:
+            for one in asyncio.as_completed(tasks):
+                index, answer = await one
+                if res[index]:
+                    res[index].update(answer)
+                else:
+                    res[index] = answer
+        except Exception as e:
+            return resp_500(message="技能对比错误：{}".format(str(e)))
+        return resp_200(data=res)
+
+    @classmethod
+    async def compare_flow_stream(cls, user: UserPayload, req: FlowCompareReq) -> AsyncGenerator:
+        """
+        比较两个版本中某个节点的 输出结果
+        """
+        tasks = await cls.get_compare_tasks(user, req)
+        if len(tasks) == 0:
+            return
+        for one in asyncio.as_completed(tasks):
+            index, answer_dict = await one
+            for version_id, answer in answer_dict.items():
+                yield str(StreamData(event='message',
+                                     data={'question': req.question_list[index],
+                                           'version_id': version_id,
+                                           'answer': answer}))
+
+    @classmethod
+    async def exec_flow_node(cls, inputs: Dict, tweaks: Dict, index: int, versions: List[FlowVersion]):
+        # 替换answer
+        answer_result = {}
         # 执行两个版本的节点
         for one in versions:
             graph_data = process_tweaks(one.data, tweaks)
@@ -299,4 +336,4 @@ class FlowService:
 
             answer_result[one.id] = list(task_result.values())[0]
 
-        res[index] = answer_result
+        return index, answer_result

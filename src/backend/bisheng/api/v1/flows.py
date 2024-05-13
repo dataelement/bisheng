@@ -2,12 +2,14 @@ import json
 from typing import List
 from uuid import UUID
 
+from starlette.responses import StreamingResponse
+
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import (access_check, build_flow_no_yield, get_L2_param_from_flow,
                                remove_api_keys)
 from bisheng.api.v1.schemas import FlowListCreate, FlowListRead, UnifiedResponseModel, resp_200, FlowVersionCreate, \
-    FlowCompareReq
+    FlowCompareReq, StreamData
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate, FlowDao
 from bisheng.database.models.role_access import AccessType
@@ -262,3 +264,27 @@ async def compare_flow_node(*, item: FlowCompareReq, Authorize: AuthJWT = Depend
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
     return await FlowService.compare_flow_node(user, item)
+
+
+@router.get('/compare/stream', status_code=200, response_class=StreamingResponse)
+async def compare_flow_node_stream(*, item: FlowCompareReq, Authorize: AuthJWT = Depends()):
+    """ 技能多版本对比 """
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+
+    async def event_stream(req: FlowCompareReq):
+        yield str(StreamData(event='message', data={'type': 'start', 'data': 'start'}))
+        try:
+            async for one in FlowService.compare_flow_stream(user, req):
+                yield one
+            yield str(StreamData(event='message', data={'type': 'end', 'data': ''}))
+        except Exception as e:
+            logger.exception('compare flow stream error')
+            yield str(StreamData(event='message', data={'type': 'end', 'message': str(e)}))
+
+    try:
+        return StreamingResponse(event_stream(item), media_type='text/event-stream')
+    except Exception as exc:
+        logger.error(exc)
+        raise HTTPException(status_code=500, detail=str(exc))
