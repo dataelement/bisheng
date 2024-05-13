@@ -263,7 +263,9 @@ class FlowService:
         for key, val in inputs.items():
             if key != 'data' and key != 'id':
                 # 默认输入key，替换第一个需要输入的key
+                logger.info(f"replace_inputs {key} replace to {question}")
                 inputs[key] = question
+                break
         if 'id' in inputs:
             inputs.pop('id')
         # 替换节点的参数, 替换inputFileNode和VariableNode的参数
