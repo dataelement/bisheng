@@ -149,7 +149,10 @@ export default function Header({ flow }) {
                     )}
                     dropDown={(
                         <div className=" overflow-y-auto max-h-96 max-h">
-                            <RadioGroup value={version.id + ''} onValueChange={handleChangeVersion} className="gap-0">
+                            <RadioGroup value={version.id + ''} onValueChange={(vid) => {
+                                updateVersion(version.id, { name: version.name, description: '', data: flow.data })
+                                handleChangeVersion(vid)
+                            }} className="gap-0">
                                 {versions.map((vers, index) => (
                                     <div key={vers.id} className="group flex items-center gap-4 px-4 py-2 cursor-pointer hover:bg-gray-100 border-b">
                                         <RadioGroupItem value={vers.id + ''} />

@@ -12,7 +12,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { createTool, deleteTool, downloadToolSchema, testToolApi, updateTool } from "@/controllers/API/tools"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { PlusIcon } from "@radix-ui/react-icons"
-import { forwardRef, useImperativeHandle, useRef, useState } from "react"
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 const TestDialog = forwardRef((props: any, ref) => {
@@ -20,6 +20,7 @@ const TestDialog = forwardRef((props: any, ref) => {
     const [apiData, setApiData] = useState<any>({})
     const toolRef = useRef<any>({})
     const formRef = useRef<any>({})
+    const formRuleRef = useRef<any>({})
 
     useImperativeHandle(ref, () => ({
         open: (item, tool) => {
@@ -30,31 +31,55 @@ const TestDialog = forwardRef((props: any, ref) => {
             // fill form
             item.api_params.forEach(param => {
                 formRef.current[param.name] = ''
+                formRuleRef.current[param.name] = param.required
             });
         }
     }))
+    // 重置
+    useEffect(() => {
+        if (!testShow) {
+            formRef.current = {}
+            formRuleRef.current = {}
+        }
+    }, [testShow])
 
+    const { message } = useToast()
     const [loading, setLoading] = useState(false)
     const [result, setResult] = useState('')
     const handleTest = async () => {
+        // 校验
+        const errors = []
+        Object.keys(formRef.current).forEach(key => {
+            if (formRuleRef.current[key] && formRef.current[key] === '') {
+                errors.push(key + '为必填项')
+            }
+        })
+        if (errors.length > 0) {
+            return message({
+                title: '提示',
+                description: errors,
+                variant: 'warning'
+            })
+        }
+
         setLoading(true)
 
         const { server_host, children, auth_method, auth_type, api_key } = toolRef.current
-        await testToolApi({
+        await captureAndAlertRequestErrorHoc(testToolApi({
             server_host,
             extra: children.find(el => el.id === apiData.id).extra,
             auth_method,
             auth_type,
             api_key,
             request_params: formRef.current
-        }).then(setResult)
+        }).then(setResult))
         setLoading(false)
     }
 
     return <Dialog open={testShow} onOpenChange={setTestShow}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
-                <DialogTitle>测试【名称】</DialogTitle>
+                <DialogTitle>{apiData.name}</DialogTitle>
             </DialogHeader>
             {testShow && <div className="flex flex-col gap-8 py-6">
                 <div className="max-h-[600px] overflow-y-auto scrollbar-hide">
@@ -70,7 +95,7 @@ const TestDialog = forwardRef((props: any, ref) => {
                             {
                                 apiData.api_params.map((param) =>
                                     <TableRow key={param.id}>
-                                        <TableCell>{param.name}</TableCell>
+                                        <TableCell>{param.name}{param.required && <span className="text-red-500">*</span>}</TableCell>
                                         <TableCell>
                                             <Input onChange={(e) => {
                                                 formRef.current[param.name] = e.target.value;
@@ -131,7 +156,7 @@ const EditTool = forwardRef((props: any, ref) => {
 
     const schemaUrl = useRef('')
     const [formState, setFormState] = useState({ ...formData });
-    const fromDataRef = useRef<any>({})
+    const fromDataRef = useRef<any>({}) // 与formState同步，fromDataRef属性更多，透传保存
 
     // 表格数据（api接口列表）
     const [tableData, setTableData] = useApiTableData()
@@ -184,6 +209,8 @@ const EditTool = forwardRef((props: any, ref) => {
 
     // 根据模板设置Schema内容
     const handleSelectTemplate = (key = '') => {
+        if (!editShow) return
+
         const file_content = key ? Example[key] : formState.schemaContent
         file_content && captureAndAlertRequestErrorHoc(downloadToolSchema({ file_content })).then(res => {
             schemaUrl.current = ''
@@ -203,6 +230,19 @@ const EditTool = forwardRef((props: any, ref) => {
     // 发送数据给后端保存
     const handleSave = () => {
         // console.log("保存数据:", formState, fromDataRef.current);
+        if (!formState.toolName) {
+            return message({
+                description: '工具名称不能为空',
+                variant: "warning"
+            })
+        }
+        if (!formState.schemaContent) {
+            return message({
+                description: 'schema不能为空',
+                variant: "warning"
+            })
+        }
+
         const fromData = fromDataRef.current
         // 参数合并
         const data = {
@@ -210,7 +250,8 @@ const EditTool = forwardRef((props: any, ref) => {
             api_key: formState.apiKey || fromData.api_key,
             auth_method: formState.authMethod === 'apikey' ? 1 : 0,
             auth_type: formState.authType,
-            name: formState.toolName || fromData.name
+            name: formState.toolName,
+            openapi_schema: formState.schemaContent
         }
 
         const methodApi = delShow ? updateTool : createTool
@@ -286,7 +327,7 @@ const EditTool = forwardRef((props: any, ref) => {
                                             onChange={(e) => schemaUrl.current = e.target.value}
                                         />
                                         <PopoverClose>
-                                            <Button size="sm" className="w-16" onClick={handleImportSchema}>{t('tools.import')}</Button>
+                                            <Button size="sm" className="w-16" onClick={handleImportSchema}>{t('skills.import')}</Button>
                                         </PopoverClose>
                                     </div>
                                 </PopoverContent>

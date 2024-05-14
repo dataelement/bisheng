@@ -203,7 +203,7 @@ export const useDiffFlowStore = create<State & Actions>((set, get) => ({
  */
 const runTest = ({ questions, questionIndexs, nodeId, versionIds, inputs, refs }) => {
     // loading
-    console.log(refs, 222);
+    // console.log(refs, 222);
     const runIds = []
     questionIndexs.forEach(qIndex => {
         versionIds.forEach(versionId => {
@@ -212,21 +212,56 @@ const runTest = ({ questions, questionIndexs, nodeId, versionIds, inputs, refs }
         })
     });
     // 运行
-    return captureAndAlertRequestErrorHoc(runTestCase({
+    const data = JSON.stringify({
         question_list: questionIndexs.map(qIndex => questions[qIndex].q),
         version_list: versionIds,
         inputs,
         node_id: nodeId
-    }).then(data => {
-        data.forEach((row, rowIndex) => {
-            Object.keys(row).forEach(vId => {
-                refs[`${questionIndexs[rowIndex]}-${vId}`].current.setData(row[vId])
-            })
-        })
-    }), () => {
-        // error callback
-        runIds.forEach(id => {
-            refs[id].current.loaded()
-        })
     })
+
+    return new Promise((resolve, reject) => {
+        const apiUrl = `/api/v1/flows/compare/stream?data=${encodeURIComponent(data)}`;
+        const eventSource = new EventSource(apiUrl);
+
+        eventSource.onmessage = (event) => {
+            if (!event.data) {
+                return;
+            }
+            const parsedData = JSON.parse(event.data);
+            const { type, question_index, version_id, answer } = parsedData;
+            if (!type) {
+                refs[`${questionIndexs[question_index]}-${version_id}`].current.setData(answer)
+            } else if (type === 'end') {
+                resolve('')
+            }
+        }
+
+        eventSource.onerror = (error: any) => {
+            console.error('event :>> ', error);
+            eventSource.close();
+            runIds.forEach(id => {
+                refs[id].current.loaded()
+            })
+
+            reject(error);
+        }
+    })
+    // runTestCaseStream()
+    // return captureAndAlertRequestErrorHoc(runTestCase({
+    //     question_list: questionIndexs.map(qIndex => questions[qIndex].q),
+    //     version_list: versionIds,
+    //     inputs,
+    //     node_id: nodeId
+    // }).then(data => {
+    //     data.forEach((row, rowIndex) => {
+    //         Object.keys(row).forEach(vId => {
+    //             refs[`${questionIndexs[rowIndex]}-${vId}`].current.setData(row[vId])
+    //         })
+    //     })
+    // }), () => {
+    //     // error callback
+    //     runIds.forEach(id => {
+    //         refs[id].current.loaded()
+    //     })
+    // })
 }

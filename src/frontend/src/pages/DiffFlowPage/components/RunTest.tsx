@@ -66,8 +66,9 @@ export default function RunTest({ nodeId }) {
         setFormShow(false)
         const res = await build(mulitVersionFlow[0])
         // console.log('res  :>> ', res);
-        const inputKeys = res.input_keys[0]
-        inputsRef.current = { id: nodeId, [Object.keys(inputKeys)[0]]: query, data: inputs }
+        const input = res.input_keys.find((el: any) => !el.type)
+        const inputKey = input ? Object.keys(input)[0] : '';
+        inputsRef.current = { ...input, id: nodeId, [inputKey]: query, data: inputs }
         //
         if (questions.length === 0) return message({
             title: t('prompt'),
@@ -252,13 +253,13 @@ const useBuild = () => {
         let res = null
         // Step 1: Make a POST request to send the flow data and receive a unique session ID
         const _flow = { ...flow, id: flow.flow_id }
-        const { flowId } = await postBuildInit({ flow: _flow, chatId, versionId: flow.id });
+        const { flowId } = await postBuildInit({ flow: _flow, versionId: flow.id });
         // Step 2: Use the session ID to establish an SSE connection using EventSource
         let validationResults = [];
         let finished = false;
         let buildEnd = false
-        const qstr = flow.id ? `&version_id=${flow.id}` : ''
-        const apiUrl = `/api/v1/build/stream/${flowId}?chat_id=${chatId}${qstr}`;
+        const qstr = flow.id ? `?version_id=${flow.id}` : ''
+        const apiUrl = `/api/v1/build/stream/${flowId}${qstr}`;
         const eventSource = new EventSource(apiUrl);
 
         eventSource.onmessage = (event) => {

@@ -21,7 +21,14 @@ const Cell = forwardRef((props, ref) => {
         },
         setData: (val) => {
             setLoading(false)
-            setValue(val)
+
+            let i = 0
+            const print = () => {
+                const value = val.substring(0, i++)
+                setValue(value)
+                i < val.length && setTimeout(print, Math.floor(Math.random() * 10) + 20)
+            }
+            print()
         },
         getData() {
             return value
