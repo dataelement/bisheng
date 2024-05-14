@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import List, Any
 from uuid import UUID
 
 from starlette.responses import StreamingResponse
@@ -266,11 +266,13 @@ async def compare_flow_node(*, item: FlowCompareReq, Authorize: AuthJWT = Depend
 
 
 @router.get('/compare/stream', status_code=200, response_class=StreamingResponse)
-async def compare_flow_node_stream(*, item: FlowCompareReq, Authorize: AuthJWT = Depends()):
+async def compare_flow_node_stream(*, data: Any = Query(description="对比所需数据的json序列化后的字符串"),
+                                   Authorize: AuthJWT = Depends()):
     """ 技能多版本对比 """
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
+    item = FlowCompareReq(**json.loads(data))
 
     async def event_stream(req: FlowCompareReq):
         yield str(StreamData(event='message', data={'type': 'start', 'data': 'start'}))
