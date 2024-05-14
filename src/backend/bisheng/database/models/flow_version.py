@@ -23,6 +23,7 @@ class FlowVersionBase(SQLModelSerializable):
     user_id: Optional[int] = Field(index=True, description="创建者")
     is_current: Optional[int] = Field(default=0, description="是否为正在使用版本")
     is_delete: Optional[int] = Field(default=0, description="是否删除")
+    original_version_id: Optional[int] = Field(default=None, description="来源版本的ID")
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(sa_column=Column(

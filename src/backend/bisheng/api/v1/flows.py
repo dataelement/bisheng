@@ -58,7 +58,6 @@ def get_versions(*,
 @router.post('/versions', status_code=200)
 def create_versions(*,
                     flow_id: UUID,
-                    original_version_id: int = Query(..., description='来源版本ID'),
                     flow_version: FlowVersionCreate,
                     Authorize: AuthJWT = Depends()):
     """
@@ -68,7 +67,7 @@ def create_versions(*,
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
     flow_id = flow_id.hex
-    return FlowService.create_new_version(user, flow_id, original_version_id, flow_version)
+    return FlowService.create_new_version(user, flow_id, flow_version)
 
 
 @router.put('/versions/{version_id}', status_code=200)

@@ -97,8 +97,8 @@ class FlowService:
         return resp_200()
 
     @classmethod
-    def create_new_version(cls, user: UserPayload, flow_id: str, original_version_id: int,
-                           flow_version: FlowVersionCreate) -> UnifiedResponseModel[FlowVersion]:
+    def create_new_version(cls, user: UserPayload, flow_id: str, flow_version: FlowVersionCreate) \
+            -> UnifiedResponseModel[FlowVersion]:
         """
         创建新版本
         """
@@ -115,13 +115,14 @@ class FlowService:
             return VersionNameExistsError.return_resp()
 
         flow_version = FlowVersion(flow_id=flow_id, name=flow_version.name, description=flow_version.description,
-                                   user_id=user.user_id, data=flow_version.data)
+                                   user_id=user.user_id, data=flow_version.data,
+                                   original_version_id=flow_version.original_version_id)
 
         # 创建新版本
         flow_version = FlowVersionDao.create_version(flow_version)
 
         # 将原始版本的表单数据拷贝到新版本内
-        VariableDao.copy_variables(flow_version.flow_id, original_version_id, flow_version.id)
+        VariableDao.copy_variables(flow_version.flow_id, flow_version.original_version_id, flow_version.id)
 
         try:
             # 重新整理此版本的表单数据
