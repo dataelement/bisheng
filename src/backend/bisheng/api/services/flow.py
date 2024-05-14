@@ -309,7 +309,7 @@ class FlowService:
             index, answer_dict = await one
             for version_id, answer in answer_dict.items():
                 yield str(StreamData(event='message',
-                                     data={'question': req.question_list[index],
+                                     data={'question_index': index,
                                            'version_id': version_id,
                                            'answer': answer}))
 
