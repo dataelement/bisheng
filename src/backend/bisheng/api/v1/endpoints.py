@@ -177,6 +177,10 @@ async def process_flow(
             else:
                 logger.error(f'task_id={task_id} exception task result={task}')
 
+        if isinstance(task_result, str):
+            task_result = {
+                "answer": task_result
+            }
         # 判断溯源
         source_documents = task_result.pop('source_documents', '')
         answer = list(task_result.values())[0]
