@@ -104,11 +104,19 @@ async def judge_source(result, source_document, chat_id, extra: Dict):
                 doc.metadata.get('extra') and json.loads(doc.metadata.get('extra')).get('url')
                 for doc in source_document):
             source = 3
-            doc = [{
-                'title': doc.metadata.get('source'),
-                'url': json.loads(doc.metadata.get('extra', '{}')).get('url')
-            } for doc in source_document]
-            extra.update({'doc': [dict(s) for s in set(frozenset(d.items()) for d in doc)]})
+            repeat_doc = {}
+            doc = []
+            # 来源文档做去重，不能改变原有的顺序
+            for one in source_document:
+                title = one.metadata.get('source')
+                url = json.loads(one.metadata.get('extra', '{}')).get('url')
+                repeat_key = (title, url)
+                # 重复的丢掉，不返回
+                if repeat_doc.get(repeat_key):
+                    continue
+                doc.append({'title': title, 'url': url})
+                repeat_doc[repeat_key] = 1
+            extra.update({'doc': doc})
         else:
             source = 1
 
