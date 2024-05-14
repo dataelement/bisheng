@@ -4,7 +4,7 @@
     "logo": null,
     "desc": "返回当前时间，如果未指定时区，将使用 UTC+8 时间",
     "tool_key": "get_current_time",
-    "type": 0,
+    "type": 1,
     "extra": "{}",
     "is_preset": 1,
     "is_delete": 0,
@@ -19,7 +19,7 @@
     "logo": null,
     "desc": "使用 Python 内置工具进行数学表达式计算",
     "tool_key": "calculator",
-    "type": 0,
+    "type": 2,
     "extra": "{}",
     "is_preset": 1,
     "is_delete": 0,
@@ -34,7 +34,7 @@
     "logo": null,
     "desc": "从 Arxiv 网站检索论文的工具，输入为检索关键词。",
     "tool_key": "arxiv",
-    "type": 0,
+    "type": 3,
     "extra": "{}",
     "is_preset": 1,
     "is_delete": 0,
@@ -49,7 +49,7 @@
     "logo": null,
     "desc": "根据提示词生成图像。",
     "tool_key": "dalle_image_generator",
-    "type": 0,
+    "type": 4,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.dalle_image_generator\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -64,7 +64,7 @@
     "logo": null,
     "desc": "使用 query 进行 Bing 搜索并返回返回结果。",
     "tool_key": "bing_search",
-    "type": 0,
+    "type": 5,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.bing_search\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -72,14 +72,14 @@
     "create_time": "2024-03-29 14:41:16",
     "update_time": "2024-03-29 14:41:16",
     "id": 5,
-    "api_params": "[{\"name\": \"query\", \"description\": \"query to look up in Bing search\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"query to look up in Bing search\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "代码执行器",
     "logo": null,
     "desc": "可以执行 Python  和 shell 代码，并在 600 秒内返回结果，适合处理数学、编程、图片和文件等问题场景。",
     "tool_key": "bisheng_code_interpreter",
-    "type": 0,
+    "type": 6,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.bisheng_code_interpreter\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -87,14 +87,14 @@
     "create_time": "2024-03-29 14:42:17",
     "update_time": "2024-03-29 14:42:17",
     "id": 6,
-    "api_params": "[{\"name\": \"python_code\", \"description\": \"The pure python script to be evaluated. \\nThe contents will be in main.py. \\nIt should not be in markdown format.\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"python_code\", \"description\": \"The pure python script to be evaluated. \\nThe contents will be in main.py. \\nIt should not be in markdown format.\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "人员所有公司",
     "logo": null,
     "desc": "可以通过公司名称或ID和人名获取企业人员的所有相关公司，包括其担任法人、股东、董监高的公司信息",
     "tool_key": "tianyancha_all_companys_by_company",
-    "type": 0,
+    "type": 7,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.tianyancha\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -102,14 +102,14 @@
     "create_time": "2024-03-29 14:44:34",
     "update_time": "2024-03-29 14:44:34",
     "id": 7,
-    "api_params": "[{\"name\": \"query\", \"description\": \"human who you want to search\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"name\", \"description\": \"company name which human worked\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"human who you want to search\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"name\", \"description\": \"company name which human worked\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "搜索企业",
     "logo": null,
     "desc": "可以通过关键词获取企业列表，企业列表包括公司名称或ID、类型、成立日期、经营状态、统一社会信用代码等字段的详细信息",
     "tool_key": "tianyancha_search_company",
-    "type": 0,
+    "type": 7,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.tianyancha\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -117,14 +117,14 @@
     "create_time": "2024-03-29 14:50:07",
     "update_time": "2024-03-29 14:50:07",
     "id": 9,
-    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业基本信息",
     "logo": null,
     "desc": "可以通过公司名称或ID获取企业基本信息，企业基本信息包括公司名称或ID、类型、成立日期、经营状态、注册资本、法人、工商注册号、统一社会信用代码、组织机构代码、纳税人识别号等字段信息",
     "tool_key": "tianyancha_get_company_baseinfo",
-    "type": 0,
+    "type": 7,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.tianyancha\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -132,14 +132,14 @@
     "create_time": "2024-03-29 14:51:06",
     "update_time": "2024-03-29 14:51:06",
     "id": 10,
-    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业知识产权信息",
     "logo": null,
     "desc": "可以通过公司名称或ID获取包含商标、专利、作品著作权、软件著作权、网站备案等维度的相关信息",
     "tool_key": "tianyancha_ip_rights",
-    "type": 0,
+    "type": 7,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.tianyancha\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -147,14 +147,14 @@
     "create_time": "2024-03-29 14:51:33",
     "update_time": "2024-03-29 14:51:33",
     "id": 11,
-    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业司法风险",
     "logo": null,
     "desc": "可以通过公司名称或ID获取包含法律诉讼、法院公告、开庭公告、失信人、被执行人、立案信息、送达公告等维度的相关信息",
     "tool_key": "tianyancha_judicial_risk",
-    "type": 0,
+    "type": 7,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.tianyancha\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -162,14 +162,14 @@
     "create_time": "2024-03-29 14:52:13",
     "update_time": "2024-03-29 14:52:13",
     "id": 12,
-    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业法律诉讼",
     "logo": null,
     "desc": "可以通过公司名称或ID获取企业法律诉讼信息，法律诉讼包括案件名称、案由、案件身份、案号等字段的详细信息",
     "tool_key": "tianyancha_law_suit_case",
-    "type": 0,
+    "type": 7,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.tianyancha\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -177,14 +177,14 @@
     "create_time": "2024-03-29 14:52:36",
     "update_time": "2024-03-29 14:52:36",
     "id": 13,
-    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业工商信息",
     "logo": null,
     "desc": "可以通过公司名称或ID获取包含企业基本信息、主要人员、股东信息、对外投资、分支机构等维度的相关信息",
     "tool_key": "tianyancha_ic_info",
-    "type": 0,
+    "type": 7,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.tianyancha\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -192,14 +192,14 @@
     "create_time": "2024-03-29 14:53:06",
     "update_time": "2024-03-29 14:53:06",
     "id": 14,
-    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业工商信息变更记录",
     "logo": null,
     "desc": "可以通过公司名称或ID获取企业变更记录，变更记录包括工商变更事项、变更前后信息等字段的详细信息",
     "tool_key": "tianyancha_company_change_info",
-    "type": 0,
+    "type": 7,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.tianyancha\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -207,14 +207,14 @@
     "create_time": "2024-03-29 14:54:02",
     "update_time": "2024-03-29 14:54:02",
     "id": 15,
-    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业股东",
     "logo": null,
     "desc": "可以通过公司名称或ID获取企业股东信息，股东信息包括股东名、出资比例、出资金额、股东总数等字段的详细信息",
     "tool_key": "tianyancha_company_holders",
-    "type": 0,
+    "type": 7,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.tianyancha\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -222,14 +222,14 @@
     "create_time": "2024-03-29 14:54:28",
     "update_time": "2024-03-29 14:54:28",
     "id": 16,
-    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "企业天眼风险",
     "logo": null,
     "desc": "可以通过关键字（公司名称、公司id、注册号或社会统一信用代码）获取企业相关天眼风险列表，包括企业自身/周边/预警风险信息。",
     "tool_key": "tianyancha_riskinfo",
-    "type": 0,
+    "type": 7,
     "extra": "{\"&initdb_conf_key\": \"gpts.tools.tianyancha\"}",
     "is_preset": 1,
     "is_delete": 0,
@@ -237,14 +237,14 @@
     "create_time": "2024-03-29 14:54:57",
     "update_time": "2024-03-29 14:54:57",
     "id": 17,
-    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"query\", \"description\": \"搜索关键字（公司名称、公司id、注册号或社会统一信用代码）\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "股票实时行情",
     "logo": null,
     "desc": "查询中国A股（沪深北交易所）股票或指数的实时行情数据，返回：现价、涨跌额、涨跌幅、成交量、成交额。",
     "tool_key": "sina_realtime_info",
-    "type": 0,
+    "type": 8,
     "extra": null,
     "is_preset": 1,
     "is_delete": 0,
@@ -252,14 +252,14 @@
     "create_time": "2024-03-29 14:56:15",
     "update_time": "2024-03-29 14:56:15",
     "id": 18,
-    "api_params": "[{\"name\": \"prefix\", \"description\": \"前缀。如果是\\\"stock_symbol\\\"传入的为股票代码，则需要传入s_;\\n如果\\\"stock_symbol\\\"传入的为指数代码，则为空。\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_exchange\", \"description\": \"交易所简写。股票上市的交易所，或者发布行情指数的交易所。可选项有\\\"sh\\\"(上海证券交易所)、\\\" sz\\\"( 深圳证券交易所)、\\\"bj\\\"( 北京证券交易所)\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_symbol\", \"description\": \"6位数字的股票或者指数代码。\\n参考信息：\\n- 如果问题中未给出，可能需要上网查询。\\n- 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n- 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\\\"sh000300\\\"和\\\"sz399300\\\"两个代码。\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"prefix\", \"description\": \"前缀。如果是\\\"stock_symbol\\\"传入的为股票代码，则需要传入s_;\\n如果\\\"stock_symbol\\\"传入的为指数代码，则为空。\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_exchange\", \"description\": \"交易所简写。股票上市的交易所，或者发布行情指数的交易所。可选项有\\\"sh\\\"(上海证券交易所)、\\\" sz\\\"( 深圳证券交易所)、\\\"bj\\\"( 北京证券交易所)\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_symbol\", \"description\": \"6位数字的股票或者指数代码。\\n参考信息：\\n- 如果问题中未给出，可能需要上网查询。\\n- 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n- 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\\\"sh000300\\\"和\\\"sz399300\\\"两个代码。\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "股票历史行情",
     "logo": null,
     "desc": "查询中国A股（沪深北交易所）股票或指数的的历史行情数据，返回：时间、开盘价、最高价、最低价、收盘价、成交量（股）。",
     "tool_key": "sina_history_KLine",
-    "type": 0,
+    "type": 8,
     "extra": null,
     "is_preset": 1,
     "is_delete": 0,
@@ -267,14 +267,14 @@
     "create_time": "2024-03-29 14:56:38",
     "update_time": "2024-03-29 14:56:38",
     "id": 19,
-    "api_params": "[{\"name\": \"date\", \"description\": \"需要查询的时间，按照”2024-03-26“格式，传入日期\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_exchange\", \"description\": \"交易所简写。股票上市的交易所，或者发布行情指数的交易所。可选项有\\\"sh\\\"(上海证券交易所)、\\\" sz\\\"( 深圳证券交易所)、\\\"bj\\\"( 北京证券交易所)\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_symbol\", \"description\": \"6位数字的股票或者指数代码。\\n参考信息：\\n- 如果问题中未给出，可能需要上网查询。\\n- 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n- 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\\\"sh000300\\\"和\\\"sz399300\\\"两个代码。\", \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"date\", \"description\": \"需要查询的时间，按照”2024-03-26“格式，传入日期\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_exchange\", \"description\": \"交易所简写。股票上市的交易所，或者发布行情指数的交易所。可选项有\\\"sh\\\"(上海证券交易所)、\\\" sz\\\"( 深圳证券交易所)、\\\"bj\\\"( 北京证券交易所)\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"stock_symbol\", \"description\": \"6位数字的股票或者指数代码。\\n参考信息：\\n- 如果问题中未给出，可能需要上网查询。\\n- 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n- 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\\\"sh000300\\\"和\\\"sz399300\\\"两个代码。\", \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "社会融资规模增量",
     "logo": null,
     "desc": "中国社会融资规模增量月度统计数据。返回数据包括：月份，社会融资规模增量(单位：亿元)，社融增量分项数据。分项数据具体包括：人民币贷款，外币贷款，委托贷款，信托贷款，未贴现银行承兑汇票，企业债券，非金融企业境内股票融资。",
     "tool_key": "macro_china_shrzgm",
-    "type": 0,
+    "type": 8,
     "extra": null,
     "is_preset": 1,
     "is_delete": 0,
@@ -282,14 +282,14 @@
     "create_time": "2024-03-29 14:59:06",
     "update_time": "2024-03-29 14:59:06",
     "id": 20,
-    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "GDP",
     "logo": null,
     "desc": " 中国国内生产总值（GDP）季度统计数据。返回数据包括：季度，当年累计GDP 绝对值及同比增长情况，第一、二、三产业 GDP 绝对值以及同比增长情况。",
     "tool_key": "macro_china_gdp_yearly",
-    "type": 0,
+    "type": 8,
     "extra": null,
     "is_preset": 1,
     "is_delete": 0,
@@ -297,14 +297,14 @@
     "create_time": "2024-03-29 14:59:38",
     "update_time": "2024-03-29 14:59:38",
     "id": 21,
-    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "CPI",
     "logo": null,
     "desc": "中国居民消费价格指数(CPI，上年同月=100)月度统计数据。返回数据包括：月份，全国当月 CPI，全国当月同比增长，全国当月环比增长，全国当年 CPI 累计值；城市当月 CPI，城市当月同比增长，城市当月环比增长，城市当年 CPI 累计值；农村当月 CPI，农村当月同比增长，农村当月环比增长，农村当年 CPI 累计值。",
     "tool_key": "macro_china_cpi",
-    "type": 0,
+    "type": 8,
     "extra": null,
     "is_preset": 1,
     "is_delete": 0,
@@ -312,14 +312,14 @@
     "create_time": "2024-03-29 15:00:00",
     "update_time": "2024-03-29 15:00:00",
     "id": 22,
-    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "PPI",
     "logo": null,
     "desc": "中国工业品出厂价格指数（PPI）月度统计数据。返回数据包括：月份，当月 PPI，当月同比增长，当年 PPI 累计值。",
     "tool_key": "macro_china_ppi",
-    "type": 0,
+    "type": 8,
     "extra": null,
     "is_preset": 1,
     "is_delete": 0,
@@ -327,14 +327,14 @@
     "create_time": "2024-03-29 15:00:24",
     "update_time": "2024-03-29 15:00:24",
     "id": 23,
-    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "货币供应量",
     "logo": null,
     "desc": "中国货币供应量月度统计数据。返回数据包括：月份，当月 M0、M1、M2数量以及同、环比情况。",
     "tool_key": "macro_china_money_supply",
-    "type": 0,
+    "type": 8,
     "extra": null,
     "is_preset": 1,
     "is_delete": 0,
@@ -342,14 +342,14 @@
     "create_time": "2024-03-29 15:00:54",
     "update_time": "2024-03-29 15:00:54",
     "id": 24,
-    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "社会消费品零售总额",
     "logo": null,
     "desc": "中国社会消费品零售总额月度统计数据。返回数据包括：月份，当月总额以及同、环比，当年累计总额以及同比情况。",
     "tool_key": "macro_china_consumer_goods_retail",
-    "type": 0,
+    "type": 8,
     "extra": null,
     "is_preset": 1,
     "is_delete": 0,
@@ -357,14 +357,14 @@
     "create_time": "2024-03-29 15:01:47",
     "update_time": "2024-03-29 15:01:47",
     "id": 25,
-    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "PMI",
     "logo": null,
     "desc": "中国 PMI （采购经理人指数）月度统计数据。返回数据包括：月份制造业 PMI，制造业 PMI 同比增长，非制造业 PMI，非制造业 PMI 同比增长。",
     "tool_key": "macro_china_pmi",
-    "type": 0,
+    "type": 8,
     "extra": null,
     "is_preset": 1,
     "is_delete": 0,
@@ -372,14 +372,14 @@
     "create_time": "2024-04-15 12:01:11",
     "update_time": "2024-04-15 12:01:11",
     "id": 26,
-    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   },
   {
     "name": "中美国债收益率",
     "logo": null,
     "desc": "本接口返回指定时间段[start_date,end_date]内交易日的中美两国的 2 年、5 年、10 年、30 年、10 年-2 年收益率数据。start_date表示起始日期，end_date表示结束日期，日期格式例如 2024-04-07",
     "tool_key": "macro_bond_zh_us_rate",
-    "type": 0,
+    "type": 8,
     "extra": null,
     "is_preset": 1,
     "is_delete": 0,
@@ -387,6 +387,6 @@
     "create_time": "2024-04-15 12:03:27",
     "update_time": "2024-04-15 12:03:27",
     "id": 27,
-    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"schema\": {\"type\": \"string\"}}]"
+    "api_params": "[{\"name\": \"start_date\", \"description\": \"开始月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}, {\"name\": \"end_date\", \"description\": \"结束月份, 使用YYYY-MM-DD 方式表示\",  \"in\": \"query\", \"required\": true, \"schema\": {\"type\": \"string\"}}]"
   }
 ]

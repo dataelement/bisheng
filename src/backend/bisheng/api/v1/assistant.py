@@ -203,6 +203,8 @@ async def get_tool_schema(*,
             logger.exception(f'file {download_url} download error')
             return resp_500(message="url文件下载失败：" + str(e))
 
+    if not file_content:
+        return resp_500(message="schema内容不能为空")
     # 根据文件内容是否以`{`开头判断用什么解析方式
     try:
         if file_content.startswith("{"):
