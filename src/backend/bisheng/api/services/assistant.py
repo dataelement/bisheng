@@ -328,7 +328,9 @@ class AssistantService(AssistantUtils):
             return ToolTypeRepeatError.return_resp()
 
         exist_tool_type.name = req.name
+        exist_tool_type.logo = req.logo
         exist_tool_type.description = req.description
+        exist_tool_type.server_host = req.server_host
         exist_tool_type.auth_method = req.auth_method
         exist_tool_type.api_key = req.api_key
         exist_tool_type.auth_type = req.auth_type
