@@ -118,7 +118,7 @@ export const LoginPage = () => {
             <div className='w-[420px] h-[704px] m-[8px] hidden sm:block'>
                 <img src="/login-logo-big.png" alt="logo_picture" className='w-full h-full dark:hidden' />
                 <img src="/login-logo-dark.png" alt="logo_picture" className='w-full h-full hidden dark:block' />
-                </div>
+            </div>
             <div className='absolute w-full h-full z-10 flex justify-end top-0'>
                 <div className='w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-background-login relative'>
                     <div>
@@ -195,12 +195,14 @@ export const LoginPage = () => {
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>
-                        <a href={"https://github.com/dataelement/bisheng"} target="_blank">
-                            <GithubIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px] mx-[8px] hover:bg-[#1b1f23] hover:text-[white] hover:cursor-pointer"/>
-                        </a>
-                        <a href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
-                            <BookOpenIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px]  hover:bg-[#0055e3] hover:text-[white] hover:cursor-pointer"/>
-                        </a>
+                        <div className='help flex'>
+                            <a href={"https://github.com/dataelement/bisheng"} target="_blank">
+                                <GithubIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px] mx-[8px] hover:bg-[#1b1f23] hover:text-[white] hover:cursor-pointer" />
+                            </a>
+                            <a href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
+                                <BookOpenIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px]  hover:bg-[#0055e3] hover:text-[white] hover:cursor-pointer" />
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -46,7 +46,7 @@ export default function MainLayout() {
                 </div>
                 <div className="flex w-fit relative z-50">
                     <div className="flex">
-                        <TooltipProvider>
+                        {/* <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={() => setDark(!dark)}>
                                     <div className="">
@@ -59,7 +59,7 @@ export default function MainLayout() {
                                 </TooltipTrigger>
                                 <TooltipContent><p>{t('menu.themeSwitch')}</p></TooltipContent>
                             </Tooltip>
-                        </TooltipProvider>
+                        </TooltipProvider> */}
                         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
                         <TooltipProvider>
                             <Tooltip>
@@ -106,7 +106,7 @@ export default function MainLayout() {
                     </nav>
                     <div className="absolute left-0 bottom-0 w-[180px] p-2">
                         {/* <Separator /> */}
-                        <div className="flex  items-between my-3">
+                        <div className="help flex items-between my-3">
                             <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger className="h-[72px] w-[78px] cursor-pointer bg-background-tip rounded-lg hover:bg-[#1b1f23] hover:text-[white] transition-all dark:hover:bg-background-tip-darkhover">

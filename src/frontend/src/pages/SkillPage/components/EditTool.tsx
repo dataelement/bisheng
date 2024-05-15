@@ -16,6 +16,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { useTranslation } from "react-i18next"
 
 const TestDialog = forwardRef((props: any, ref) => {
+    const {t} = useTranslation()
     const [testShow, setTestShow] = useState(false)
     const [apiData, setApiData] = useState<any>({})
     const toolRef = useRef<any>({})
@@ -67,7 +68,7 @@ const TestDialog = forwardRef((props: any, ref) => {
         const { server_host, children, auth_method, auth_type, api_key } = toolRef.current
         await captureAndAlertRequestErrorHoc(testToolApi({
             server_host,
-            extra: children.find(el => el.id === apiData.id).extra,
+            extra: children.find(el => el.name === apiData.name).extra,
             auth_method,
             auth_type,
             api_key,
@@ -83,12 +84,12 @@ const TestDialog = forwardRef((props: any, ref) => {
             </DialogHeader>
             {testShow && <div className="flex flex-col gap-8 py-6">
                 <div className="max-h-[600px] overflow-y-auto scrollbar-hide">
-                    <label htmlFor="name" className="bisheng-label">参数和值</label>
+                    <label htmlFor="name" className="bisheng-label">{t('test.parametersAndValues')}</label>
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="w-[100px]">参数</TableHead>
-                                <TableHead >值</TableHead>
+                                <TableHead className="w-[100px]">{t('test.parameter')}</TableHead>
+                                <TableHead >{t('test.value')}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -104,13 +105,18 @@ const TestDialog = forwardRef((props: any, ref) => {
                                     </TableRow>
                                 )
                             }
+                            {
+                                apiData.api_params.length === 0 && <TableRow>
+                                    <TableCell colSpan={2}>None</TableCell>
+                                </TableRow>
+                            }
                         </TableBody>
                     </Table>
                 </div>
-                <Button onClick={handleTest} disabled={loading}>测试</Button>
+                <Button onClick={handleTest} disabled={loading}>{t('test.test')}</Button>
                 <div className="">
-                    <label htmlFor="desc" className="bisheng-label">测试结果</label>
-                    <Textarea id="desc" name="desc" value={result} placeholder="点击按钮，输出结果" readOnly className="mt-2" />
+                    <label htmlFor="desc" className="bisheng-label">{t('test.result')}</label>
+                    <Textarea id="desc" name="desc" value={result} placeholder={t('test.outResultPlaceholder')} readOnly className="mt-2" />
                 </div>
             </div>}
         </DialogContent>
@@ -239,6 +245,12 @@ const EditTool = forwardRef((props: any, ref) => {
         if (!formState.schemaContent) {
             return message({
                 description: 'schema不能为空',
+                variant: "warning"
+            })
+        }
+        if (formState.authMethod === "apikey" && !formState.apiKey) {
+            return message({
+                description: 'apikey不能为空',
                 variant: "warning"
             })
         }
@@ -379,7 +391,7 @@ const EditTool = forwardRef((props: any, ref) => {
                         </div>
                         {formState.authMethod === "apikey" && (<>
                             <div className="px-6 mb-4">
-                                <label htmlFor="apiKey">API Key</label>
+                                <label className="bisheng-label" htmlFor="apiKey">API Key</label>
                                 <Input
                                     id="apiKey"
                                     name="apiKey"
@@ -435,7 +447,7 @@ const EditTool = forwardRef((props: any, ref) => {
                                     <TableHead >{t('tools.description')}</TableHead>
                                     <TableHead >{t('tools.method')}</TableHead>
                                     <TableHead >{t('tools.path')}</TableHead>
-                                    <TableHead >操作</TableHead>
+                                    <TableHead >{t('operations')}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -451,12 +463,12 @@ const EditTool = forwardRef((props: any, ref) => {
                                                     size="sm"
                                                     variant="outline"
                                                     onClick={() => testDialogRef.current.open(item, fromDataRef.current)}
-                                                >测试</Button>
+                                                >{t('test.test')}</Button>
                                             </TableCell>
                                         </TableRow>
                                     ) :
                                         <TableRow>
-                                            <TableCell colSpan={4}>{t('tools.none')}</TableCell>
+                                            <TableCell colSpan={5}>{t('tools.none')}</TableCell>
                                         </TableRow>
                                 }
                             </TableBody>

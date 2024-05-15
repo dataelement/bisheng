@@ -25,8 +25,9 @@ export default function Component({ compId, options, disables, version, classNam
         return version.data.nodes.filter(node => showNodes[node.id])
     }, [version, compId])
 
+    // empty
     if (!version) return <div className="bg-[#fff] rounded-md p-2 shadow-sm">
-        <div className="group flex justify-center items-center pb-2 border-b">
+        <div className="group flex justify-center items-center pb-2 border-b relative">
             <Select onValueChange={onChangeVersion}>
                 <SelectTrigger className="w-[120px] h-6">
                     <SelectValue placeholder="选择版本" />
@@ -44,10 +45,15 @@ export default function Component({ compId, options, disables, version, classNam
                     }
                 </SelectContent>
             </Select>
+            <DelIcon
+                className="absolute right-0 -top-1 cursor-pointer text-muted-foreground hidden group-hover:block"
+                onClick={onClose}
+            />
         </div>
         <div className="min-h-[100px]"></div>
     </div>
 
+    // 版本信息
     return <div className={'bg-[#fff] rounded-md p-2 shadow-sm ' + className}>
         <div className="group flex justify-between items-center pb-2 border-b">
             <Select value={version.id} onValueChange={onChangeVersion}>

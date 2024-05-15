@@ -69,7 +69,7 @@ export default function Skills() {
             res.user_name = user.user_name
             res.write = true
             setOpen(false)
-            navigate("/build/skill/" + res.id)
+            navigate(`/build/skill/${res.id}/${res.version_id}`)
         }))
     }
 

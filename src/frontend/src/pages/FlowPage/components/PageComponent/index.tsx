@@ -23,7 +23,6 @@ import ReactFlow, {
 } from "reactflow";
 import GenericNode from "../../../../CustomNodes/GenericNode";
 import Chat from "../../../../components/chatComponent";
-import { Button } from "../../../../components/ui/button";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
 import { undoRedoContext } from "../../../../contexts/undoRedoContext";
@@ -39,6 +38,8 @@ import { alertContext } from "../../../../contexts/alertContext";
 import Header from "../Header";
 import { Badge } from "@/components/bs-ui/badge";
 import { LayersIcon } from "@radix-ui/react-icons";
+import { Button } from "@/components/bs-ui/button";
+import { updateVersion } from "@/controllers/API/flow";
 
 const nodeTypes = {
   genericNode: GenericNode,
@@ -307,7 +308,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
 
   // 离开并保存
   const handleSaveAndClose = async () => {
-    await saveFlow(flow)
+    await updateVersion(version.id, { name: version.name, description: '', data: flow.data })
     blocker.proceed?.()
   }
 
@@ -456,9 +457,9 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
           <h3 className="font-bold text-lg">{t('prompt')}</h3>
           <p className="py-4">{t('flow.unsavedChangesConfirmation')}</p>
           <div className="modal-action">
-            <Button className="h-8 rounded-full" variant="outline" onClick={() => blocker.reset?.()}>{t('cancel')}</Button>
-            <Button className="h-8 rounded-full" variant="destructive" onClick={() => blocker.proceed?.()}>{t('flow.leave')}</Button>
-            <Button className="h-8 rounded-full" onClick={handleSaveAndClose}>{t('flow.leaveAndSave')}</Button>
+            <Button className="h-8" variant="outline" onClick={() => blocker.reset?.()}>{t('cancel')}</Button>
+            <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>{t('flow.leave')}</Button>
+            <Button className="h-8" onClick={handleSaveAndClose}>{t('flow.leaveAndSave')}</Button>
           </div>
         </form>
       </dialog>

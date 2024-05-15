@@ -37,8 +37,7 @@ export default function RunTest({ nodeId }) {
             return cur ? count + 1 : count
         }, 0) + 1 // +1 测试用例列 
 
-        const width = `${100 / (count + 1)}%`
-        return width
+        return 100 / (count + 1)
     }, [mulitVersionFlow])
 
     const handleUploadTxt = () => {
@@ -125,6 +124,8 @@ export default function RunTest({ nodeId }) {
         }, 0);
     }
 
+    const notDiffVersion = useMemo(() => !mulitVersionFlow.some((version) => version), [mulitVersionFlow])
+
     return <div className="mt-4 px-4">
         <div className="bg-[#fff] p-2">
             <div className="flex items-center justify-between ">
@@ -144,21 +145,21 @@ export default function RunTest({ nodeId }) {
                 {
                     isForm ? <Dialog open={formShow} onOpenChange={setFormShow}>
                         <DialogTrigger asChild>
-                            <Button size="sm" disabled={runningType === 'all'}><PlayIcon />{t('test.testRun')}</Button>
+                            <Button size="sm" disabled={runningType === 'all' || notDiffVersion}><PlayIcon />{t('test.testRun')}</Button>
                         </DialogTrigger>
                         <RunForm show={formShow} flow={mulitVersionFlow[0]} onChangeShow={setFormShow} onSubmit={handleRunTest} />
                     </Dialog> :
-                        <Button size="sm" disabled={runningType === 'all'} onClick={() => handleRunTest()}><PlayIcon />{t('test.testRun')}</Button>
+                        <Button size="sm" disabled={runningType === 'all' || notDiffVersion} onClick={() => handleRunTest()}><PlayIcon />{t('test.testRun')}</Button>
                 }
             </div>
             {/* table */}
-            <Table>
+            <Table className="table-fixed">
                 <TableHeader>
                     <TableRow>
-                        <TableHead style={{ width: versionColWidth }}>{t('test.testCase')}</TableHead>
+                        <TableHead style={{ width: `${versionColWidth}%` }}>{t('test.testCase')}</TableHead>
                         {
                             mulitVersionFlow.map(version =>
-                                version && <TableHead key={version.id} style={{ width: versionColWidth }}>
+                                version && <TableHead key={version.id} style={{ width: `${versionColWidth + 10}%` }}>
                                     <div className="flex items-center gap-2">
                                         <span>{version.name}</span>
                                         {readyVersions[version.id] && <Button
@@ -172,7 +173,7 @@ export default function RunTest({ nodeId }) {
                                 </TableHead>
                             )
                         }
-                        <TableHead className="text-right max-w-[135px]">
+                        <TableHead className="text-right max-w-[135px]" style={{ width: '10%' }}>
                             <Button variant="link" disabled={runningType !== '' || !running} onClick={handleDownExcle}><DownloadIcon className="mr-1" />{t('test.downloadResults')}</Button>
                         </TableHead>
                     </TableRow>
@@ -190,7 +191,7 @@ export default function RunTest({ nodeId }) {
                                             onChange={(e) => updateQuestion(e.target.value, index)}
                                         ></Input>
                                         {question.ready && <Button
-                                            disabled={['all'].includes(runningType)}
+                                            disabled={['all'].includes(runningType) || notDiffVersion}
                                             size='icon'
                                             className="min-w-6 h-6"
                                             title="运行"
@@ -200,7 +201,7 @@ export default function RunTest({ nodeId }) {
                                 </TableCell>
                                 {/* 版本 */}
                                 {mulitVersionFlow.map(flow =>
-                                    flow && <TableCell key={index + '-' + flow.id}>
+                                    flow && <TableCell key={index + '-' + flow.id} className=''>
                                         <CellWarp qIndex={index} versionId={flow.id} />
                                     </TableCell>
                                 )}

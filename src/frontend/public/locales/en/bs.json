@@ -526,6 +526,7 @@
     "save": "Save"
   },
   "test": {
+    "test": "Test",
     "addTest": "Please add test cases first",
     "uploadTest": "Upload test cases",
     "explain": "The test case is the input of the current component and only supports txt files, with a maximum of 20 lines",
@@ -533,6 +534,11 @@
     "testCase": "Test Case",
     "run": "Run",
     "downloadResults": "Download Run Results",
-    "testCases": "Enter test cases..."
+    "testCases": "Enter test cases...",
+    "parametersAndValues": "Parameters and Values",
+    "parameter": "Parameter",
+    "value": "Value",
+    "result": "Test Result",
+    "outResultPlaceholder": "Click the button to output the result"
   }
 }

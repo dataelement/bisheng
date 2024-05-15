@@ -51,8 +51,8 @@ export default function ToolItem({
                                             <span className="text-primary cursor-pointer">{t("build.params")}</span>
                                         </TooltipTrigger>
                                         <TooltipContent side="right" className="bg-gray-50 border shadow-md p-4 text-gray-950 max-w-[520px]">
-                                            <p className="flex gap-2 items-center"><Badge>{JSON.parse(api.extra)?.method}</Badge><span className="text-xl">{api.name}</span></p>
-                                            <p className="text-sm leading-none mt-2">{api.desc}</p>
+                                            <p className="flex gap-2 items-center"><Badge>{JSON.parse(api.extra)?.method || 'http'}</Badge><span className="text-xl">{api.name}</span></p>
+                                            <p className="text-sm mt-2 text-gray-500">{api.desc}</p>
                                             {
                                                 api.api_params.map(param => (
                                                     <div key={param.name}>
@@ -61,7 +61,7 @@ export default function ToolItem({
                                                             <span>{param.schema.type}</span>
                                                             {param.required && <span className="text-red-500">必填</span>}
                                                         </p>
-                                                        <p className="">{param.description}</p>
+                                                        <p className="text-gray-500">{param.description}</p>
                                                     </div>
                                                 ))
                                             }

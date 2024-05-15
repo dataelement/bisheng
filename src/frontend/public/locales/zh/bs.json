@@ -523,13 +523,19 @@
     "save": "保存"
   },
   "test": {
-    "addTest": "请先添加测试用例",
+    "test": "测试",
+    "addTest": "请先填写测试用例",
     "uploadTest": "上传测试用例",
     "explain": "为测试用例是当前组件的输入，只支持 txt 文件，最多 20 行",
     "testRun": "测试运行",
     "testCase": "测试用例",
     "run": "运行",
     "downloadResults": "下载运行结果",
-    "testCases": "输入测试用例..."
+    "testCases": "输入测试用例...",
+    "parametersAndValues": "参数和值",
+    "parameter": "参数",
+    "value": "值",
+    "result": "测试结果",
+    "outResultPlaceholder": "点击按钮，输出结果"
   }
 }
