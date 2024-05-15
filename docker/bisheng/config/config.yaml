@@ -29,7 +29,7 @@ logger_conf:
   # 默认输出到sys.stdout的日志级别, 大于等于此级别都会输出
   level: DEBUG
   # 默认输出格式
-  format: '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
+  format: '<level>[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}] [{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
   # 参考loguru.add()中的参数可以配置多个handler
   handlers:
       # 文件路径，支持插入一些系统环境变量，若环境变量不存在则置空。例如 HOSTNAME: 主机名。后端会处理环境变量的替换
