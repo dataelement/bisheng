@@ -12,6 +12,7 @@ from bisheng.api.v1.schemas import FlowListCreate, FlowListRead, UnifiedResponse
     FlowCompareReq, StreamData
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate, FlowDao
+from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
@@ -38,7 +39,11 @@ def create_flow(*, flow: FlowCreate, Authorize: AuthJWT = Depends()):
     db_flow = Flow.model_validate(flow)
     # 创建新的技能
     db_flow = FlowDao.create_flow(db_flow)
-    return resp_200(data=FlowRead.model_validate(db_flow))
+
+    current_version = FlowVersionDao.get_version_by_flow(db_flow.id.hex)
+    ret = FlowRead.model_validate(db_flow)
+    ret.version_id = current_version.id
+    return resp_200(data=ret)
 
 
 @router.get('/versions', status_code=200)
@@ -214,39 +219,6 @@ def delete_flow(*, flow_id: UUID, Authorize: AuthJWT = Depends()):
         raise HTTPException(status_code=500, detail='没有权限删除此技能')
     FlowDao.delete_flow(flow)
     return resp_200(message='删除成功')
-
-
-# Define a new model to handle multiple flows
-@router.post('/batch/', response_model=UnifiedResponseModel[List[FlowRead]], status_code=201)
-def create_flows(*, flow_list: FlowListCreate, Authorize: AuthJWT = Depends()):
-    """Create multiple new flows."""
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-
-    db_flows = []
-    with session_getter() as session:
-        for flow in flow_list.flows:
-            db_flow = Flow.from_orm(flow)
-            db_flow.user_id = payload.get('user_id')
-            session.add(db_flow)
-            db_flows.append(db_flow)
-        session.commit()
-        for db_flow in db_flows:
-            session.refresh(db_flow)
-    return resp_200(db_flows)
-
-
-@router.post('/upload/', response_model=UnifiedResponseModel[List[FlowRead]], status_code=201)
-async def upload_file(*, file: UploadFile = File(...), Authorize: AuthJWT = Depends()):
-    """Upload flows from a file."""
-    contents = await file.read()
-    data = json.loads(contents)
-    if 'flows' in data:
-        flow_list = FlowListCreate(**data)
-    else:
-        flow_list = FlowListCreate(flows=[FlowCreate(**flow) for flow in data])
-
-    return create_flows(flow_list=flow_list, Authorize=Authorize)
 
 
 @router.get('/download/', response_model=UnifiedResponseModel[FlowListRead], status_code=200)

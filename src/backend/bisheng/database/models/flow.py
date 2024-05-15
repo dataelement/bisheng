@@ -70,6 +70,7 @@ class FlowCreate(FlowBase):
 class FlowRead(FlowBase):
     id: UUID
     user_name: Optional[str]
+    version_id: Optional[int]
 
 
 class FlowReadWithStyle(FlowRead):
@@ -93,7 +94,8 @@ class FlowDao(FlowBase):
         with session_getter() as session:
             session.add(flow_info)
             # 创建一个默认的版本
-            flow_version = FlowVersion(name="v0", is_current=1, flow_id=flow_info.id.hex, user_id=flow_info.user_id)
+            flow_version = FlowVersion(name="v0", is_current=1, data=flow_info.data, flow_id=flow_info.id.hex,
+                                       user_id=flow_info.user_id)
             session.add(flow_version)
             session.commit()
             session.refresh(flow_info)
