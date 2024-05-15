@@ -105,9 +105,9 @@ def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
     smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
                   func.max(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
-                      ChatMessage.user_id == payload.get('user_id')).group_by(
-                          ChatMessage.flow_id,
-                          ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
+        ChatMessage.user_id == payload.get('user_id')).group_by(
+        ChatMessage.flow_id,
+        ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
     with session_getter() as session:
         db_message = session.exec(smt).all()
     flow_ids = [message.flow_id for message in db_message]
@@ -195,6 +195,7 @@ async def chat(
         websocket: WebSocket,
         t: Optional[str] = None,
         chat_id: Optional[str] = None,
+        version_id: Optional[int] = None,
         Authorize: AuthJWT = Depends(),
 ):
     """Websocket endpoint for chat."""
@@ -222,6 +223,8 @@ async def chat(
             graph_data = db_flow.data
         else:
             flow_data_key = 'flow_data_' + flow_id
+            if version_id:
+                flow_data_key = flow_data_key + '_' + str(version_id)
             if not flow_data_store.exists(flow_data_key) or str(
                     flow_data_store.hget(flow_data_key, 'status'),
                     'utf-8') != BuildStatus.SUCCESS.value:
@@ -291,11 +294,12 @@ async def init_build(*, graph_data: dict, flow_id: str,
 
 
 @router.get('/build/{flow_id}/status', response_model=UnifiedResponseModel[BuiltResponse])
-async def build_status(flow_id: str, version_id: Optional[int] = Query(default=None, description='技能版本ID')):
+async def build_status(flow_id: str, chat_id: Optional[str] = None,
+                       version_id: Optional[int] = Query(default=None, description='技能版本ID')):
     """Check the flow_id is in the flow_data_store."""
     try:
         flow_data_key = 'flow_data_' + flow_id
-        if version_id:
+        if not chat_id and version_id:
             flow_data_key = flow_data_key + '_' + str(version_id)
         built = (flow_data_store.hget(flow_data_key, 'status') == BuildStatus.SUCCESS.value)
         return resp_200(BuiltResponse(built=built, ))
@@ -315,9 +319,7 @@ async def stream_build(flow_id: str, chat_id: Optional[str] = None,
         artifacts = {}
         try:
             flow_data_key = 'flow_data_' + flow_id
-            if chat_id:
-                pass
-            elif version_id:
+            if not chat_id and version_id:
                 flow_data_key = flow_data_key + '_' + str(version_id)
             if not flow_data_store.exists(flow_data_key):
                 error_message = 'Invalid session ID'
