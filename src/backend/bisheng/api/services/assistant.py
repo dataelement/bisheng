@@ -1,20 +1,21 @@
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Optional
 from uuid import UUID
 
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
-                                           AssistantNotEditError, AssistantNotExistsError)
+                                           AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
+                                           ToolTypeEmptyError, ToolTypeNotExistsError, ToolTypeIsPresetError)
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
-                                    StreamData, UnifiedResponseModel, resp_200)
+                                    StreamData, UnifiedResponseModel, resp_200, resp_500)
 from bisheng.cache import InMemoryCache
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao
-from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead
+from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead, GptsToolsTypeRead, GptsTools
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
@@ -97,6 +98,8 @@ class AssistantService(AssistantUtils):
         llm_conf = cls.get_llm_conf(assistant.model_name)
         assistant.model_name = llm_conf['model_name']
         assistant.temperature = llm_conf['temperature']
+
+        logger.info(f"assistant original prompt id: {assistant.id}, desc: {assistant.prompt}")
 
         # 自动生成描述
         assistant, _, _ = await cls.get_auto_info(assistant)
@@ -260,9 +263,133 @@ class AssistantService(AssistantUtils):
         return resp_200()
 
     @classmethod
-    def get_gpts_tools(cls, user_id: Any) -> List[GptsToolsRead]:
+    def get_gpts_tools(cls, user_id: Any, is_preset: Optional[bool] = None) -> List[GptsToolsTypeRead]:
         """ 获取用户可见的工具列表 """
-        return GptsToolsDao.get_list_by_user(user_id)
+        # 获取用户可见的工具类别
+        all_tool_type = GptsToolsDao.get_tool_type(user_id, is_preset)
+        tool_type_id = [one.id for one in all_tool_type]
+        res = []
+        tool_type_children = {}
+        for one in all_tool_type:
+            tool_type_id.append(one.id)
+            tool_type_children[one.id] = []
+            res.append(one.model_dump())
+
+        # 获取对应类别下的工具列表
+        tool_list = GptsToolsDao.get_list_by_type(tool_type_id)
+        for one in tool_list:
+            tool_type_children[one.type].append(one)
+
+        for one in res:
+            one["children"] = tool_type_children.get(one["id"], [])
+
+        return res
+
+    @classmethod
+    def add_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
+        """ 添加自定义工具 """
+        req.id = None
+        if req.name.__len__() > 30 or req.name.__len__() == 0:
+            return resp_500(message="名字不符合规范：至少1个字符，不能超过30个字符")
+        # 判断类别是否已存在
+        tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
+        if tool_type:
+            return ToolTypeRepeatError.return_resp()
+        if len(req.children) == 0:
+            return ToolTypeEmptyError.return_resp()
+        req.user_id = user.user_id
+
+        for one in req.children:
+            one.id = None
+            one.user_id = user.user_id
+            one.is_delete = 0
+            one.is_preset = False
+
+        # 添加工具类别和对应的 工具列表
+        res = GptsToolsDao.insert_tool_type(req)
+        return resp_200(data=res)
+
+    @classmethod
+    def update_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
+        """
+        更新工具类别，包括更新工具类别的名称和删除、新增工具类别的API
+        """
+        exist_tool_type = GptsToolsDao.get_one_tool_type(req.id)
+        if not exist_tool_type:
+            return ToolTypeNotExistsError.return_resp()
+        if len(req.children) == 0:
+            return ToolTypeEmptyError.return_resp()
+        if req.name.__len__() > 30 or req.name.__len__() == 0:
+            return resp_500(message="名字不符合规范：最少一个字符，不能超过30个字符")
+
+        # 判断工具类别名称是否重复
+        tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
+        if tool_type and tool_type.id != exist_tool_type.id:
+            return ToolTypeRepeatError.return_resp()
+
+        exist_tool_type.name = req.name
+        exist_tool_type.logo = req.logo
+        exist_tool_type.description = req.description
+        exist_tool_type.server_host = req.server_host
+        exist_tool_type.auth_method = req.auth_method
+        exist_tool_type.api_key = req.api_key
+        exist_tool_type.auth_type = req.auth_type
+        exist_tool_type.openapi_schema = req.openapi_schema
+
+        children_map = {}
+        for one in req.children:
+            save_key = GptsToolsDao.get_tool_key(exist_tool_type.id, one.tool_key)
+            save_key_prefix = save_key.split("_")[0]
+            if one.tool_key.startswith(save_key_prefix):
+                # 说明api和数据库的一致，没有通过openapiSchema重新解析
+                children_map[one.tool_key] = one
+            else:
+                children_map[save_key] = one
+
+        # 获取此类别下旧的API列表
+        old_tool_list = GptsToolsDao.get_list_by_type([exist_tool_type.id])
+        # 需要被删除的工具列表
+        delete_tool_id_list = []
+        # 需要被更新的工具列表
+        update_tool_list = []
+        for one in old_tool_list:
+            # 说明此工具 需要删除
+            if children_map.get(one.tool_key) is None:
+                delete_tool_id_list.append(one.id)
+            else:
+                # 说明此工具需要更新
+                new_tool_info = children_map.pop(one.tool_key)
+                one.name = new_tool_info.name
+                one.desc = new_tool_info.desc
+                one.extra = new_tool_info.extra
+                one.api_params = new_tool_info.api_params
+                update_tool_list.append(one)
+
+        add_children = []
+        for one in children_map.values():
+            one.id = None
+            one.user_id = user.user_id
+            one.is_preset = False
+            one.is_delete = 0
+            add_children.append(one)
+
+        GptsToolsDao.update_tool_type(exist_tool_type, delete_tool_id_list,
+                                      add_children, update_tool_list)
+
+        children = GptsToolsDao.get_list_by_type([exist_tool_type.id])
+        res = GptsToolsTypeRead(**exist_tool_type.model_dump(), children=children)
+        return resp_200(data=res)
+
+    @classmethod
+    def delete_gpts_tools(cls, user: UserPayload, tool_type_id: int) -> UnifiedResponseModel:
+        """ 删除工具类别 """
+        exist_tool_type = GptsToolsDao.get_one_tool_type(tool_type_id)
+        if not exist_tool_type:
+            return resp_200()
+        if exist_tool_type.is_preset:
+            return ToolTypeIsPresetError.return_resp()
+        GptsToolsDao.delete_tool_type(tool_type_id)
+        return resp_200()
 
     @classmethod
     def get_models(cls) -> UnifiedResponseModel:
@@ -345,28 +472,37 @@ class AssistantService(AssistantUtils):
         return assistant, [], []
 
     @classmethod
-    def get_auto_tool_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[GptsToolsRead]:
-        # 自动选择工具
-        all_tool = cls.get_gpts_tools(user_id=assistant.user_id)
-        tool_list = []
-        all_tool_dict = {}
-        for one in all_tool:
-            all_tool_dict[one.name] = one
-            tool_list.append({
-                'name': one.name,
-                'description': one.desc if one.desc else '',
-            })
-        tool_list = auto_agent.choose_tools(tool_list, assistant.prompt)
-        tool_info = []
-        for one in tool_list:
-            if all_tool_dict.get(one):
-                tool_info.append(all_tool_dict[one])
-        return tool_info
+    def get_auto_tool_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[GptsTools]:
+        # 分页自动选择工具
+        res = []
+        page = 1
+        page_num = 50
+        while True:
+            all_tool = GptsToolsDao.get_list_by_user(assistant.user_id, page, page_num)
+            if len(all_tool) == 0:
+                break
+            logger.info(f"auto select tools: page: {page}, number: {len(all_tool)}")
+            tool_list = []
+            all_tool_dict = {}
+            for one in all_tool:
+                all_tool_dict[one.name] = one
+                tool_list.append({
+                    'name': one.name,
+                    'description': one.desc if one.desc else '',
+                })
+            tool_info = []
+            tool_list = auto_agent.choose_tools(tool_list, assistant.prompt)
+            for one in tool_list:
+                if all_tool_dict.get(one):
+                    tool_info.append(all_tool_dict[one])
+            res += tool_info
+            page += 1
+        return res
 
     @classmethod
     def get_auto_flow_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[Flow]:
         # 自动选择技能, 挑选前50个技能用来做自动选择
-        all_flow = FlowDao.get_user_access_online_flows(assistant.user_id, 50)
+        all_flow = FlowDao.get_user_access_online_flows(assistant.user_id, 1, 50)
         flow_dict = {}
         flow_list = []
         for one in all_flow:

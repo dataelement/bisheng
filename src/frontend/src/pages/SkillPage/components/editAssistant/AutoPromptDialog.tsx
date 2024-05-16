@@ -8,6 +8,7 @@ import { useAssistantStore } from "@/store/assistantStore";
 import { AssistantTool } from "@/types/assistant";
 import { FlowType } from "@/types/flow";
 import { ReloadIcon } from "@radix-ui/react-icons";
+import { t } from "i18next";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
@@ -54,7 +55,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                     setLoading(--queue)
                     if (parsedData.message) {
                         toast({
-                            title: '提示',
+                            title: t('tip'),
                             variant: 'error',
                             description: parsedData.message
                         });
@@ -107,8 +108,8 @@ export default function AutoPromptDialog({ onOpenChange }) {
         dispatchAssistant('setPrompt', { prompt: value })
         message({
             variant: 'success',
-            title: '提示',
-            description: '提示词已替换'
+            title: t('tip'),
+            description: t('build.promptReplaced')
         })
     }
 
@@ -116,8 +117,8 @@ export default function AutoPromptDialog({ onOpenChange }) {
         dispatchAssistant('setQuestion', { guide_question: [...question, ''] })
         message({
             variant: 'success',
-            title: '提示',
-            description: '引导词已替换'
+            title: t('tip'),
+            description: t('build.guideReplaced')
         })
     }
 
@@ -126,8 +127,8 @@ export default function AutoPromptDialog({ onOpenChange }) {
         dispatchAssistant('setGuideword', { guide_word: value })
         message({
             variant: 'success',
-            title: '提示',
-            description: '开场白已替换'
+            title: t('tip'),
+            description: t('build.openingReplaced')
         })
     }
 
@@ -135,8 +136,8 @@ export default function AutoPromptDialog({ onOpenChange }) {
         dispatchAssistant('setTools', { tool_list: tools })
         message({
             variant: 'success',
-            title: '提示',
-            description: '工具已替换'
+            title: t('tip'),
+            description: t('build.toolsReplaced')
         })
     }
 
@@ -144,8 +145,8 @@ export default function AutoPromptDialog({ onOpenChange }) {
         dispatchAssistant('setFlows', { flow_list: flows })
         message({
             variant: 'success',
-            title: '提示',
-            description: '技能已替换'
+            title: t('tip'),
+            description: t('build.skillsReplaced')
         })
     }
 
@@ -158,8 +159,8 @@ export default function AutoPromptDialog({ onOpenChange }) {
         // 收集结果
         message({
             variant: 'success',
-            title: '提示',
-            description: '已全部替换'
+            title: t('tip'),
+            description: t('build.allReplaced')
         })
         onOpenChange(false)
     }
@@ -170,41 +171,41 @@ export default function AutoPromptDialog({ onOpenChange }) {
             {/* 提示词 */}
             <div className="w-[50%] relative pr-6">
                 <div className="flex items-center justify-between">
-                    <span className="text-lg font-semibold leading-none tracking-tight flex">助手画像优化{LoadType.Prompt === loading && <LoadIcon className="ml-2 text-gray-600" />}</span>
-                    <Button variant="link" size="sm" onClick={handleReload} disabled={!!loading} ><ReloadIcon className="mr-2" />重试</Button>
+                    <span className="text-lg font-semibold leading-none tracking-tight flex">{t('build.portraitOptimization')}{LoadType.Prompt === loading && <LoadIcon className="ml-2 text-gray-600" />}</span>
+                    <Button variant="link" size="sm" onClick={handleReload} disabled={!!loading} ><ReloadIcon className="mr-2" />{t('build.retry')}</Button>
                 </div>
                 <div className="group flex justify-end mt-2 h-[600px] relative">
                     <Textarea ref={areaRef} className="h-full" defaultValue={assistantState.prompt}
-                        placeholder="详细、具体地描述助手与用户的交互方式，例如助手的身份、完成任务的具体方法和步骤、回答问题时的语气以及应该注意什么问题等"
+                        placeholder={t('build.prompt')}
                     ></Textarea>
-                    <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.Prompt <= loading} size="sm" onClick={handleUsePropmt}>使用</Button>
+                    <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.Prompt <= loading} size="sm" onClick={handleUsePropmt}>{t('build.use')}</Button>
                 </div>
             </div>
             {/* 自动配置 */}
             <div className="w-[50%] border-l pl-6">
                 <div>
-                    <span className="text-lg font-semibold leading-none tracking-tight">自动为您选择相关配置</span>
+                    <span className="text-lg font-semibold leading-none tracking-tight">{t('build.automaticallyConfigurations')}</span>
                 </div>
                 <div className="max-h-[660px] overflow-y-auto">
                     {/* 开场白 */}
                     <div className="group relative pb-12 bg-gray-100 mt-4 px-4 py-2 rounded-md">
-                        <div className="text-md mb-2 font-medium leading-none flex">开场白{LoadType.GuideWord === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
+                        <div className="text-md mb-2 font-medium leading-none flex">{t('build.openingRemarks')}{LoadType.GuideWord === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         <Textarea ref={guideAreaRef} className="bg-transparent border-none bg-gray-50"></Textarea>
-                        <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideWord <= loading} size="sm" onClick={handleUseGuide}>使用</Button>
+                        <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideWord <= loading} size="sm" onClick={handleUseGuide}>{t('build.use')}</Button>
                     </div>
                     {/* 引导词 */}
                     <div className="group relative pb-12 bg-gray-100 mt-4 px-4 py-2 rounded-md">
-                        <div className="text-md mb-2 font-medium leading-none flex">引导问题{LoadType.GuideQuestion === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
+                        <div className="text-md mb-2 font-medium leading-none flex">{t('build.guidingQuestions')}{LoadType.GuideQuestion === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         {
                             question.map(qs => (
                                 <p key={qs} className="text-sm text-muted-foreground bg-gray-50 px-2 py-1 rounded-xl mb-2">{qs}</p>
                             ))
                         }
-                        <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideQuestion <= loading} size="sm" onClick={handleUserQuestion}>使用</Button>
+                        <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideQuestion <= loading} size="sm" onClick={handleUserQuestion}>{t('build.use')}</Button>
                     </div>
                     {/* 工具 */}
                     <div className="group relative pb-10 bg-gray-100 mt-4 px-4 py-2 rounded-md">
-                        <div className="text-md mb-2 font-medium leading-none flex">工具{LoadType.Tool === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
+                        <div className="text-md mb-2 font-medium leading-none flex">{t('build.tools')}{LoadType.Tool === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         <div className="pt-1">
                             {
                                 tools.map(tool => (
@@ -219,11 +220,11 @@ export default function AutoPromptDialog({ onOpenChange }) {
                             className="group-hover:flex hidden h-6 absolute bottom-4 right-4"
                             disabled={LoadType.Tool <= loading || !tools.length} size="sm"
                             onClick={handleUseTools}
-                        >使用</Button>
+                        >{t('build.use')}</Button>
                     </div>
                     {/* 技能 */}
                     <div className="group relative pb-10 bg-gray-100 mt-4 px-4 py-2 rounded-md">
-                        <div className="text-md mb-2 font-medium leading-none flex">技能{LoadType.Flow === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
+                        <div className="text-md mb-2 font-medium leading-none flex">{t('build.skill')}{LoadType.Flow === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         <div className="pt-1">
                             {
                                 flows.map(flow => (
@@ -239,16 +240,16 @@ export default function AutoPromptDialog({ onOpenChange }) {
                             disabled={LoadType.Flow <= loading || !flows.length}
                             size="sm"
                             onClick={handleUseFlows}
-                        >使用</Button>
+                        >{t('build.use')}</Button>
                     </div>
                 </div>
             </div>
         </div>
         <DialogFooter>
             <DialogClose>
-                <Button variant="outline" className="px-11" type="button">取消</Button>
+                <Button variant="outline" className="px-11" type="button">{t('cancle')}</Button>
             </DialogClose>
-            <Button type="submit" className="px-11" disabled={!!loading} onClick={handleUseAll}>全部使用</Button>
+            <Button type="submit" className="px-11" disabled={!!loading} onClick={handleUseAll}>{t('build.useAll')}</Button>
         </DialogFooter>
     </DialogContent>
 };

@@ -1,17 +1,24 @@
+import hashlib
 import json
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from uuid import UUID
 
+import yaml
+from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+
 from bisheng.api.services.assistant import AssistantService
+from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.utils import get_url_content
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantInfo, AssistantUpdateReq,
-                                    StreamData, UnifiedResponseModel, resp_200)
+                                    StreamData, UnifiedResponseModel, resp_200, resp_500, DeleteToolTypeReq,
+                                    TestToolReq)
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.types import WorkType
 from bisheng.database.models.assistant import Assistant
-from bisheng.database.models.gpts_tools import GptsToolsRead
+from bisheng.database.models.gpts_tools import GptsToolsTypeRead, GptsTools
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, UploadFile, File
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
@@ -174,9 +181,112 @@ async def chat(*,
             await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=message)
 
 
-@router.get('/tool_list', response_model=UnifiedResponseModel[GptsToolsRead])
-def get_tool_list(*, Authorize: AuthJWT = Depends()):
+@router.get('/tool_list', response_model=UnifiedResponseModel)
+def get_tool_list(*, is_preset: Optional[bool] = None, Authorize: AuthJWT = Depends()):
     """查询所有可见的tool 列表"""
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-    return resp_200(AssistantService.get_gpts_tools(current_user.get('user_id')))
+    return resp_200(AssistantService.get_gpts_tools(current_user.get('user_id'), is_preset))
+
+
+@router.post('/tool_schema', response_model=UnifiedResponseModel)
+async def get_tool_schema(*,
+                          download_url: Optional[str] = Body(default=None,
+                                                             description='下载url不为空的话优先用下载url'),
+                          file_content: Optional[str] = Body(default=None, description='上传的文件'),
+                          Authorize: AuthJWT = Depends()):
+    """ 下载或者解析openapi schema的内容 转为助手自定义工具的格式 """
+    if download_url:
+        try:
+            file_content = await get_url_content(download_url)
+        except Exception as e:
+            logger.exception(f'file {download_url} download error')
+            return resp_500(message="url文件下载失败：" + str(e))
+
+    if not file_content:
+        return resp_500(message="schema内容不能为空")
+    # 根据文件内容是否以`{`开头判断用什么解析方式
+    try:
+        if file_content.startswith("{"):
+            res = json.loads(file_content)
+        else:
+            res = yaml.safe_load(file_content)
+    except Exception as e:
+        logger.exception(f'openapi schema parse error')
+        return resp_500(message=f"openapi schema解析报错，请检查内容是否符合json或者yaml格式: {str(e)}")
+
+    # 解析openapi schema转为助手工具的格式
+    try:
+        schema = OpenApiSchema(res)
+        schema.parse_server()
+        if not schema.default_server.startswith(("http", "https")):
+            return resp_500(message=f"server中的url必须以http或者https开头: {schema.default_server}")
+        tool_type = GptsToolsTypeRead(name=schema.title, description=schema.description,
+                                      is_preset=0, is_delete=0, server_host=schema.default_server,
+                                      openapi_schema=file_content, children=[])
+        # 解析获取所有的api
+        schema.parse_paths()
+        for one in schema.apis:
+            tool_type.children.append(GptsTools(
+                name=one['operationId'],
+                desc=one['description'],
+                tool_key=hashlib.md5(one['operationId'].encode("utf-8")).hexdigest(),
+                is_preset=0,
+                is_delete=0,
+                api_params=one["parameters"],
+                extra=json.dumps(one, ensure_ascii=False),
+            ))
+        return resp_200(data=tool_type)
+    except Exception as e:
+        logger.exception(f'openapi schema parse error')
+        return resp_500(message="openapi schema解析失败：" + str(e))
+
+
+@router.post('/tool_list', response_model=UnifiedResponseModel[GptsToolsTypeRead])
+def add_tool_type(*, req: Dict = Body(default={}, description="openapi解析后的工具对象"),
+                  Authorize: AuthJWT = Depends()):
+    """ 新增自定义tool """
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**current_user)
+    req = GptsToolsTypeRead(**req)
+    return AssistantService.add_gpts_tools(user, req)
+
+
+@router.put('/tool_list', response_model=UnifiedResponseModel[GptsToolsTypeRead])
+def update_tool_type(*, req: Dict = Body(default={}, description="通过openapi 解析后的内容，包含类别的唯一ID"),
+                     Authorize: AuthJWT = Depends()):
+    """ 更新自定义tool """
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**current_user)
+    req = GptsToolsTypeRead(**req)
+    return AssistantService.update_gpts_tools(user, req)
+
+
+@router.delete('/tool_list', response_model=UnifiedResponseModel)
+def delete_tool_type(*, req: DeleteToolTypeReq, Authorize: AuthJWT = Depends()):
+    """ 删除自定义工具 """
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**current_user)
+    return AssistantService.delete_gpts_tools(user, req.tool_type_id)
+
+
+@router.post('/tool_test', response_model=UnifiedResponseModel)
+async def test_tool_type(*, req: TestToolReq, Authorize: AuthJWT = Depends()):
+    """ 测试自定义工具 """
+    Authorize.jwt_required()
+    current_user = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**current_user)
+
+    tool_params = OpenApiSchema.parse_openapi_tool_params('test', 'test', req.extra, req.server_host,
+                                                          req.auth_method, req.auth_type, req.api_key)
+
+    openapi_tool = OpenApiTools.get_api_tool('test', **tool_params)
+    try:
+        resp = await openapi_tool.arun(req.request_params)
+        return resp_200(data=resp)
+    except Exception as e:
+        logger.exception('tool_test error')
+        return resp_500(message=f"测试请求出错：{str(e)}")

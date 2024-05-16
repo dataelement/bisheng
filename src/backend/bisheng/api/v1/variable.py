@@ -1,9 +1,13 @@
 from typing import List, Optional
 from uuid import UUID
 
+from loguru import logger
+
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import session_getter
-from bisheng.database.models.variable_value import Variable, VariableCreate, VariableRead
+from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.flow_version import FlowVersionDao
+from bisheng.database.models.variable_value import Variable, VariableCreate, VariableRead, VariableDao
 from fastapi import APIRouter, HTTPException
 from sqlmodel import delete, select
 
@@ -14,6 +18,8 @@ router = APIRouter(prefix='/variable', tags=['variable'])
 @router.post('/', status_code=200, response_model=UnifiedResponseModel[VariableRead])
 def post_variable(variable: Variable):
     try:
+        if not variable.version_id:
+            raise HTTPException(status_code=500, detail='version_id is required')
         if variable.id:
             # 更新，采用全量替换
             with session_getter() as session:
@@ -27,7 +33,8 @@ def post_variable(variable: Variable):
                 db_variable = session.exec(
                     select(Variable).where(
                         Variable.node_id == variable.node_id,
-                        Variable.variable_name == variable.variable_name)).all()
+                        Variable.variable_name == variable.variable_name,
+                        Variable.version_id == variable.version_id)).all()
             if db_variable:
                 raise HTTPException(status_code=500, detail='name repeat, please choose another')
             db_variable = Variable.from_orm(variable)
@@ -38,6 +45,7 @@ def post_variable(variable: Variable):
             session.refresh(db_variable)
         return resp_200(db_variable)
     except Exception as e:
+        logger.exception("post variable error: ")
         return HTTPException(status_code=500, detail=str(e))
 
 
@@ -45,16 +53,14 @@ def post_variable(variable: Variable):
 def get_variables(*,
                   flow_id: str,
                   node_id: Optional[str] = None,
-                  variable_name: Optional[str] = None):
+                  variable_name: Optional[str] = None,
+                  version_id: Optional[int]= None):
     try:
         flow_id = UUID(flow_id).hex
-        query = select(Variable).where(Variable.flow_id == flow_id)
-        if node_id:
-            query = query.where(Variable.node_id == node_id)
-        if variable_name:
-            query = query.where(Variable.variable_name == variable_name)
-        with session_getter() as session:
-            res = session.exec(query.order_by(Variable.id.asc())).all()
+        # 没传ID默认获取当前版本的数据
+        if version_id is None:
+            version_id = FlowVersionDao.get_version_by_flow(flow_id).id
+        res = VariableDao.get_variables(flow_id, node_id, variable_name, version_id)
         return resp_200(res)
 
     except Exception as e:

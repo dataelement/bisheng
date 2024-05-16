@@ -1,0 +1,47 @@
+assistant:
+  prompt_type: 'ASSISTANT_PROMPT_DEFAULT'
+  llm:
+    type: 'ChatOpenAI'
+    model: 'gpt-4-0125-preview'
+    openai_api_key: ''
+    openai_proxy: ''
+    temperature: 0.0
+
+  tools:
+    # - type: bisheng_rag
+    #   name: "bisheng_rag_jinyu"
+    #   description: "金宇生物技术股份有限公司知识库问答"
+    #   collection_name: "rag_finance_report_0_benchmark_caibao_1000_source_title"
+    
+    # - type: bisheng_rag
+    #   name: "bisheng_rag_jianghuawei"
+    #   description: "江阴江化微电子材料股份有限公司知识库问答"
+    #   collection_name: "rag_finance_report_1_benchmark_caibao_1000_source_title"
+
+    # - type: bisheng_rag
+    #   name: "bisheng_rag_maiwei"
+    #   description: "苏州迈为科技股份有限公司知识库问答"
+    #   collection_name: "rag_finance_report_2_benchmark_caibao_1000_source_title"
+    
+    # - type: bisheng_rag
+    #   name: "bisheng_rag_xuelong"
+    #   description: "雪龙集团股份有限公司知识库问答"
+    #   collection_name: "rag_finance_report_3_benchmark_caibao_1000_source_title"
+
+    # - type: bisheng_rag
+    #   name: "bisheng_rag_jinyu"
+    #   description: "金宇生物技术股份有限公司知识库问答"
+    #   collection_name: "rag_finance_report_0_benchmark_caibao_1000_source_title"
+    
+    - type: bisheng_rag
+      name: "bisheng_rag_annual_financial_report"
+      description: "金融年报财报知识库问答"
+      collection_name: "rag_benchmark_finance_report_benchmark_caibao_1000_knowledge_source_title"
+      max_content: 15000
+      sort_by_source_and_index: True
+
+
+  agent_executor:
+    type: 'get_openai_functions_agent_executor'
+    interrupt_before_action: False
+    recursion_limit: 50

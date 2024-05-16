@@ -1,6 +1,6 @@
 import { Combine, Copy, Download, MoreHorizontal, SaveAll, Settings2, Trash2 } from "lucide-react";
 import cloneDeep from "lodash-es/cloneDeep";
-import { useContext, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { useReactFlow } from "reactflow";
 import ShadTooltip from "../../../../components/ShadTooltipComponent";
 import { TabsContext } from "../../../../contexts/tabsContext";
@@ -12,7 +12,10 @@ import { downloadNode, expandGroupNode, removeApiKeys, updateFlowPosition } from
 import { userContext } from "../../../../contexts/userContext";
 import { alertContext } from "../../../../contexts/alertContext";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-
+import { CounterClockwiseClockIcon } from "@radix-ui/react-icons";
+import { typesContext } from "@/contexts/typesContext";
+import { useNavigate, useParams } from "react-router-dom";
+// 组件头部按钮组
 const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
   const [nodeLength, setNodeLength] = useState(
     Object.keys(data.node.template).filter(
@@ -30,7 +33,7 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
     ).length
   );
 
-  const { paste } = useContext(TabsContext);
+  const { version, paste } = useContext(TabsContext);
   const reactFlowInstance = useReactFlow();
   const isGroup = !!data.node?.flow;
 
@@ -43,6 +46,14 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
     });
   }
 
+  const { types } = useContext(typesContext);
+  const hasVersion = useMemo(() => {
+    // 部分组件开放“历史/history”入口：agent、chains、retrievers 、vector store 4类组件。
+    return ["chains", "agents", "vectorstores", "retrievers"].includes(types[data.type])
+  }, [data, types])
+
+  const navigate = useNavigate()
+  const { id: flowId } = useParams()
   const { addSavedComponent, checkComponentsName } = useContext(userContext)
   const handleSelectChange = (event) => {
     switch (event) {
@@ -79,6 +90,13 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
         break;
       case "disabled":
         break;
+      case "version":
+        navigate(`/diff/${flowId}/${version.id}/${data.id}`)
+        break;
+      case "export":
+        const cleanFlow = removeApiKeys({ data: { nodes: [{ data }] } } as any)
+        downloadNode(cleanFlow.data.nodes[0].data);
+        break;
       case "ungroup":
         takeSnapshot();
         expandGroupNode(
@@ -98,6 +116,7 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
     <>
       <div className="w-26 h-10">
         <span className="isolate inline-flex rounded-md shadow-sm">
+          {/* 删除 */}
           <ShadTooltip content="delete" side="top">
             <button
               className="rounded-l-md bg-background px-2 py-2 shadow-md ring-inset transition-all hover:bg-muted"
@@ -106,7 +125,7 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
               <Trash2 className="h-4 w-4"></Trash2>
             </button>
           </ShadTooltip>
-
+          {/* 复制 */}
           <ShadTooltip content="copy" side="top">
             <button
               className="-ml-px bg-background px-2 py-2 shadow-md ring-inset transition-all hover:bg-muted"
@@ -129,23 +148,28 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
               <Copy className="h-4 w-4"></Copy>
             </button>
           </ShadTooltip>
-
-          <ShadTooltip
-            content={"export"}
-            side="top"
-          >
-            <button
-              className={"-ml-px bg-background px-2 py-2 shadow-md ring-inset transition-all hover:bg-muted"}
-              onClick={(event) => {
-                event.preventDefault();
-                const cleanFlow = removeApiKeys({ data: { nodes: [{ data }] } } as any)
-                downloadNode(cleanFlow.data.nodes[0].data);
-              }}
-            >
-              <Download className="h-4 w-4"></Download>
-            </button>
-          </ShadTooltip>
-
+          {/* 版本 */}
+          {
+            hasVersion && !isGroup && <ShadTooltip content="version" side="top">
+              <button
+                className="-ml-px bg-background px-2 py-2 shadow-md ring-inset transition-all hover:bg-muted"
+                onClick={() => handleSelectChange('version')}
+              >
+                <CounterClockwiseClockIcon className="h-4 w-4"></CounterClockwiseClockIcon>
+              </button>
+            </ShadTooltip>
+          }
+          {/* 编辑 */}
+          {
+            nodeLength > 0 && <ShadTooltip content="edit" side="top">
+              <button
+                className="-ml-px bg-background px-2 py-2 shadow-md ring-inset transition-all hover:bg-muted"
+                onClick={() => handleSelectChange('advanced')}
+              >
+                <Settings2 className="h-4 w-4"></Settings2>
+              </button>
+            </ShadTooltip>
+          }
           {/* more */}
           <Select onValueChange={handleSelectChange} value="">
             <ShadTooltip content="More" side="top">
@@ -167,17 +191,12 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
               </SelectTrigger>
             </ShadTooltip>
             <SelectContent>
-              {nodeLength > 0 && (
-                <SelectItem value={nodeLength === 0 ? "disabled" : "advanced"}>
-                  <div className="flex" data-testid="edit-button-modal">
-                    <Settings2
-                      name="Settings2"
-                      className="relative top-0.5 mr-2 h-4 w-4"
-                    />{" "}
-                    Edit{" "}
-                  </div>{" "}
-                </SelectItem>
-              )}
+              <SelectItem value={"export"}>
+                <div className="flex" data-testid="save-button-modal">
+                  <Download className="relative top-0.5 mr-2 h-4 w-4" />
+                  {" "}export{" "}
+                </div>{" "}
+              </SelectItem>
               <SelectItem value={"saveCom"}>
                 <div className="flex" data-testid="save-button-modal">
                   <SaveAll className="relative top-0.5 mr-2 h-4 w-4" />

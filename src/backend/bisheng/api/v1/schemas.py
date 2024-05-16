@@ -6,7 +6,7 @@ from uuid import UUID
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
-from bisheng.database.models.gpts_tools import GptsToolsRead
+from bisheng.database.models.gpts_tools import GptsToolsRead, AuthMethod, AuthType
 from bisheng.database.models.knowledge import KnowledgeRead
 from langchain.docstore.document import Document
 from orjson import orjson
@@ -49,7 +49,7 @@ class ExportedFlow(BaseModel):
 
 
 class InputRequest(BaseModel):
-    input: Union[dict, str] = Field(description='question or command asked LLM to do')
+    input: str = Field(description='question or command asked LLM to do')
 
 
 class TweaksRequest(BaseModel):
@@ -152,7 +152,10 @@ class ChatResponse(ChatMessage):
 
     @validator('type')
     def validate_message_type(cls, v):
-        if v not in ['start', 'stream', 'end', 'error', 'info', 'file', 'begin', 'close']:
+        """
+        end_cover: 结束并覆盖上一条message
+        """
+        if v not in ['start', 'stream', 'end', 'error', 'info', 'file', 'begin', 'close', 'end_cover']:
             raise ValueError('type must be start, stream, end, error, info, or file')
         return v
 
@@ -265,3 +268,32 @@ class AssistantInfo(AssistantBase):
     tool_list: List[GptsToolsRead] = Field(default=[], description='助手的工具ID列表')
     flow_list: List[FlowRead] = Field(default=[], description='助手的技能ID列表')
     knowledge_list: List[KnowledgeRead] = Field(default=[], description='知识库ID列表')
+
+
+class FlowVersionCreate(BaseModel):
+    name: Optional[str] = Field(default=..., description="版本的名字")
+    description: Optional[str] = Field(default=None, description="版本的描述")
+    data: Optional[Dict] = Field(default=None, description='技能版本的节点数据数据')
+    original_version_id: Optional[int] = Field(default=None, description="版本的来源版本ID")
+
+
+class FlowCompareReq(BaseModel):
+    inputs: Any = Field(default=None, description='技能运行所需要的输入')
+    question_list: List[str] = Field(default=[], description='测试case列表')
+    version_list: List[int] = Field(default=[], description='对比版本ID列表')
+    node_id: str = Field(default=None, description='需要对比的节点唯一ID')
+    thread_num: Optional[int] = Field(default=1, description='对比线程数')
+
+
+class DeleteToolTypeReq(BaseModel):
+    tool_type_id: int = Field(description="要删除的工具类别ID")
+
+
+class TestToolReq(BaseModel):
+    server_host: str = Field(default='', description="服务的根地址")
+    extra: str = Field(default='', description="Api 对象解析后的extra字段")
+    auth_method: int = Field(default=AuthMethod.NO.value, description="认证类型")
+    auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description="Auth Type")
+    api_key: Optional[str] = Field(default='', description="api key")
+
+    request_params: Dict = Field(default=None, description="用户填写的请求参数")

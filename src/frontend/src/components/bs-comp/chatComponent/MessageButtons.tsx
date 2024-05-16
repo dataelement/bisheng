@@ -34,17 +34,32 @@ export default function MessageButtons({ id, onCopy, data, onUnlike }) {
     return <div className="flex gap-1">
         <ThunmbIcon
             type='copy'
-            className={`cursor-pointer hover:text-gray-500 ${copied && 'text-primary hover:text-primary'}`}
+            className={`cursor-pointer dark:hidden hover:text-gray-500 ${copied && 'text-primary hover:text-primary'}`}
+            onClick={handleCopy}
+        />
+        <ThunmbIcon
+            type='copyDark'
+            className={`cursor-pointer hidden dark:block hover:text-gray-500 ${copied && 'text-primary hover:text-primary'}`}
             onClick={handleCopy}
         />
         <ThunmbIcon
             type='like'
-            className={`cursor-pointer hover:text-gray-500 ${state === ThumbsState.ThumbsUp && 'text-primary hover:text-primary'}`}
+            className={`cursor-pointer dark:hidden hover:text-gray-500 ${state === ThumbsState.ThumbsUp && 'text-primary hover:text-primary'}`}
+            onClick={() => handleClick(ThumbsState.ThumbsUp)}
+        />
+        <ThunmbIcon
+            type='likeDark'
+            className={`cursor-pointer hidden dark:block hover:text-gray-500 ${state === ThumbsState.ThumbsUp && 'text-primary hover:text-primary'}`}
             onClick={() => handleClick(ThumbsState.ThumbsUp)}
         />
         <ThunmbIcon
             type='unLike'
-            className={`cursor-pointer hover:text-gray-500 ${state === ThumbsState.ThumbsDown && 'text-primary hover:text-primary'}`}
+            className={`cursor-pointer dark:hidden hover:text-gray-500 ${state === ThumbsState.ThumbsDown && 'text-primary hover:text-primary'}`}
+            onClick={() => handleClick(ThumbsState.ThumbsDown)}
+        />
+        <ThunmbIcon
+            type='unLikeDark'
+            className={`cursor-pointer hidden dark:block hover:text-gray-500 ${state === ThumbsState.ThumbsDown && 'text-primary hover:text-primary'}`}
             onClick={() => handleClick(ThumbsState.ThumbsDown)}
         />
     </div>

@@ -147,12 +147,12 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
         </div>
         {/* 助手 */}
         <div className="">
-            <SearchPanne title={'助手授权'} role_id={roleId} type={'assistant'}>
+            <SearchPanne title={t('system.assistantAuthorization')} role_id={roleId} type={'assistant'}>
                 {(data) => (
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>助手名称</TableHead>
+                                <TableHead>{t('system.assistantName')}</TableHead>
                                 <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
                                 <TableHead className="text-right">{t('system.usePermission')}</TableHead>
                             </TableRow>
@@ -206,7 +206,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>{t('system.skillName')}</TableHead>
+                                <TableHead>{t('lib.libraryName')}</TableHead> 
                                 <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
                                 <TableHead className="text-right">{t('system.usePermission')}</TableHead>
                                 <TableHead className="text-right">{t('system.managePermission')}</TableHead>

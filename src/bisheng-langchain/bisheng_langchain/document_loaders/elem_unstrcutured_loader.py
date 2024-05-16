@@ -85,16 +85,18 @@ class ElemUnstructuredLoader(BasePDFLoader):
                        mode='partition',
                        parameters=parameters)
 
-        resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload).json()
+        resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload)
+        if resp.status_code != 200:
+            raise Exception(f'file partition {os.path.basename(self.file_name)} failed resp={resp.text}')
 
+        resp = resp.json()
         if 200 != resp.get('status_code'):
-            logger.info(f'not return resp={resp}')
+            logger.info(f'file partition {os.path.basename(self.file_name)} error resp={resp}')
         partitions = resp['partitions']
         if not partitions:
             logger.info(f'partition_error resp={resp}')
         logger.info(f'unstruct_return code={resp.get("status_code")}')
 
-        partitions = resp['partitions']
         content, metadata = merge_partitions(partitions)
         metadata['source'] = self.file_name
 

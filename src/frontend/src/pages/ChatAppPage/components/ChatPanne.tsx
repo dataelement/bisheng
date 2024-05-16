@@ -23,10 +23,13 @@ export default function ChatPanne({ customWsHost = '', data }) {
     const [flow, setFlow] = useState<any>(null)
     const flowRef = useRef(null)
     const [assistant, setAssistant] = useState<any>(null)
-    const { assistantState, loadAssistantState } = useAssistantStore()
+    const { assistantState, loadAssistantState, destroy } = useAssistantStore()
     // console.log('data :>> ', flow);
     const build = useBuild()
-    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, destory } = useMessageStore()
+    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId } = useMessageStore()
+    useEffect(() => {
+        return destroy
+    }, [])
 
     const init = async () => {
         if (type === 'flow') {
@@ -149,8 +152,8 @@ export default function ChatPanne({ customWsHost = '', data }) {
 
     if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg">
         <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src="/application-start-logo.png" alt="" />
-        <p className="text-center text-3xl w-[182px] whitespace-normal leading-[64px] text-[#111111] mx-auto mt-[20px] font-light">
-            选择一个<b className="text-[#111111] font-semibold">对话</b><br />开始<b className="text-[#111111] font-semibold">文擎睿见</b>
+        <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] text-[#111111] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
+            {t('chat.chooseOne')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
         </p>
         {
             !customWsHost && <div
@@ -170,7 +173,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
         {
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
-                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1">
+                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
                     <TitleIconBg className="" id={flow.id}></TitleIconBg>
                     <span className="text-sm">{flow.name}</span>
                 </div>
@@ -189,7 +192,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
         {
             assistant && <div className={`w-full chat-box h-full relative px-6 ${type !== 'flow' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
-                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1">
+                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
                     <TitleIconBg className="" id={assistant.id}><AssistantIcon /></TitleIconBg>
                     <span className="text-sm">{assistant.name}</span>
                 </div>
@@ -222,7 +225,7 @@ const useBuild = () => {
     // SSE 服务端推送
     async function streamNodeData(flow: FlowType, chatId: string) {
         // Step 1: Make a POST request to send the flow data and receive a unique session ID
-        const { flowId } = await postBuildInit(flow, chatId);
+        const { flowId } = await postBuildInit({ flow, chatId });
         // Step 2: Use the session ID to establish an SSE connection using EventSource
         let validationResults = [];
         let finished = false;

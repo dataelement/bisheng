@@ -1,5 +1,5 @@
 import json
-from typing import Optional
+from typing import Optional, Union
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.user import User
@@ -20,7 +20,7 @@ def set_cookie(*,
                deptId: Optional[str] = None,
                deptName: Optional[str] = None,
                menu: Optional[str] = '',
-               user_id: Optional[int] = None,
+               user_id: Optional[Union[int, str]] = None,
                role_id: Optional[int] = None,
                Authorize: AuthJWT = Depends()):
     """设置默认"""

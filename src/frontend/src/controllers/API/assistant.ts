@@ -54,8 +54,6 @@ export const deleteAssistantApi = async (id) => {
 };
 
 
-
-
 // 获取会话选择列表
 export const getChatOnlineApi = async () => {
     return await axios.get(`/api/v1/chat/online`)
@@ -63,6 +61,11 @@ export const getChatOnlineApi = async () => {
 
 
 // 获取工具集合
-export const getAssistantToolsApi = async (): Promise<any> => {
-    return await axios.get(`/api/v1/assistant/tool_list`)
+export const getAssistantToolsApi = async (type: 'all' | 'default' | 'custom'): Promise<any> => {
+    const queryStr = {
+        all: '',
+        default: '?is_preset=true',
+        custom: '?is_preset=false'
+    }
+    return await axios.get(`/api/v1/assistant/tool_list${queryStr[type]}`)
 };

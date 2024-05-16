@@ -1,12 +1,41 @@
 import os
-from typing import Dict, Optional, Union
-
+from typing import Dict, Optional, Union, List
+import re
 import yaml
+from pydantic import BaseModel
+
 from bisheng.database.models.config import Config
 from bisheng.utils.logger import logger
 from cryptography.fernet import Fernet
 from langchain.pydantic_v1 import BaseSettings, root_validator, validator
 from sqlmodel import select
+
+
+class LoggerConf(BaseModel):
+    level: str = 'DEBUG'
+    format: str = '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
+    handlers: List[Dict] = []
+
+    @classmethod
+    def parse_logger_sink(cls, sink: str) -> str:
+        match = re.search(r'\{(.+?)\}', sink)
+        if not match:
+            return sink
+        env_keys = {}
+        for one in match.groups():
+            env_keys[one] = os.getenv(one, "")
+        return sink.format(**env_keys)
+
+    @validator('handlers', pre=True)
+    @classmethod
+    def set_handlers(cls, value):
+        if value is None:
+            value = []
+        for one in value:
+            one['sink'] = cls.parse_logger_sink(one['sink'])
+            if one.get('filter'):
+                one['filter'] = eval(one['filter'])
+        return value
 
 
 class Settings(BaseSettings):
@@ -42,6 +71,7 @@ class Settings(BaseSettings):
     gpts: dict = {}
     openai_conf = {}
     minio_conf = {}
+    logger_conf: LoggerConf = LoggerConf()
 
     @validator('database_url', pre=True)
     def set_database_url(cls, value):

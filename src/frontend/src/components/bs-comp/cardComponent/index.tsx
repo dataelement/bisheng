@@ -10,6 +10,7 @@ import { SkillIcon } from "../../bs-icons/skill";
 import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { Switch } from "../../bs-ui/switch";
+import { useTranslation } from "react-i18next";
 
 interface IProps<T> {
   data: T,
@@ -22,6 +23,7 @@ interface IProps<T> {
   checked?: boolean,
   user?: string,
   isAdmin?: boolean,
+  headSelecter?: React.ReactNode,
   footer?: React.ReactNode,
   icon?: any,
   onClick?: () => void,
@@ -74,6 +76,7 @@ export default function CardComponent<T>({
   isAdmin,
   description,
   footer = null,
+  headSelecter = null,
   onClick,
   onSwitchClick,
   onDelete,
@@ -84,6 +87,8 @@ export default function CardComponent<T>({
 
   const [_checked, setChecked] = useState(checked)
 
+  const { t } = useTranslation()
+
   const handleCheckedChange = async (bln) => {
     const res = await onCheckedChange(bln, data)
     if (res === false) return
@@ -91,7 +96,7 @@ export default function CardComponent<T>({
   }
 
   // 新建小卡片（sheet）
-  if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-transparent" onClick={onClick}>
+  if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
     <CardHeader>
       <div className="flex justify-between pb-2"><PlusIcon className="group-hover:text-primary transition-none" /></div>
       <CardTitle className="">{title}</CardTitle>
@@ -106,7 +111,7 @@ export default function CardComponent<T>({
 
 
   // 新建卡片
-  if (!id) return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-transparent" onClick={onClick}>
+  if (!id) return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
     <CardHeader>
       <div className="flex justify-between pb-2"><PlusIcon className="group-hover:text-primary transition-none" /></div>
       <CardTitle className="">{title}</CardTitle>
@@ -143,13 +148,22 @@ export default function CardComponent<T>({
 
 
   // 技能组件
-  return <Card className="group w-[320px] cursor-pointer" onClick={() => edit && onClick()}>
+  return <Card className="group w-[320px] cursor-pointer bg-background-Assistant hover:bg-background-hoverAssistant" onClick={() => edit && onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
         <TitleIconBg id={id} >
           {type === 'skill' ? <SkillIcon /> : <AssistantIcon />}
         </TitleIconBg>
-        <Switch checked={_checked} onCheckedChange={(b) => edit && handleCheckedChange(b)} onClick={e => { e.stopPropagation(); onSwitchClick?.() }}></Switch>
+        <div className="flex gap-1 items-center">
+          {headSelecter}
+          <Switch
+            checked={_checked}
+            className="w-12"
+            texts={[t('skills.online'), t('skills.offline')]}
+            onCheckedChange={(b) => edit && handleCheckedChange(b)}
+            onClick={e => { e.stopPropagation(); onSwitchClick?.() }}
+          ></Switch>
+        </div>
       </div>
       <CardTitle className="truncate-doubleline leading-5">{title}</CardTitle>
     </CardHeader>
@@ -159,7 +173,7 @@ export default function CardComponent<T>({
     <CardFooter className="flex justify-between h-10">
       <div className="flex gap-1 items-center">
         <UserIcon />
-        <span className="text-sm text-muted-foreground">创建用户</span>
+        <span className="text-sm text-muted-foreground">{t('skills.createdBy')}</span>
         <span className="text-sm font-medium leading-none overflow-hidden text-ellipsis max-w-32 ">{user}</span>
       </div>
       {edit

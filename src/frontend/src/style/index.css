@@ -6,6 +6,36 @@
 @layer base {
 
   :root {
+    --background-login: #fff;
+
+    --text-color: rgba(17, 17, 17, 0.3);
+
+    --background-main: rgba(244, 245, 248, 1);
+
+    --background-main-content: rgba(255, 255, 255, 1);
+
+    --background-tip: white;
+
+    --background-tip-darkhover: #0055e3;
+
+    --background-prompt: hsla(0, 0%, 100%, 1);
+
+    --background-new: hsla(240, 14%, 99%, 1);
+
+    --background-hoverAssistant: hsla(0, 0%, 100%, 1);
+
+    --background-Assistant: hsla(0, 0%, 100%, 1);
+
+    --nav-hover: white;
+
+    --header-icon: white;
+
+    --text-answer: #111;
+
+    --text-prompt: hsla(0, 0%, 18%, 1);
+
+    --search-input: hsla(220, 100%, 99%, 1);
+
     --background: 0 0% 100%;
     /* hsl(0 0% 100%) */
     --foreground: 222.2 47.4% 11.2%;
@@ -76,8 +106,44 @@
   }
 
   .dark {
-    --background: 224 35% 7.5%;
-    /* hsl(224 40% 10%) */
+    --background-login: #1B1B1B;
+
+    --text-color: rgba(255, 255, 255, 0.3);
+
+    --login-input: #272728;
+
+    --button: #024FE5;
+
+    --background-main: rgba(17, 17, 17, 1);
+
+    --background-main-content: rgba(27, 27, 27, 1);
+
+    --background-tip: rgba(33, 33, 34, 1);
+
+    --background-prompt: hsla(225, 4%, 20%, 1);
+
+    --background-new: hsla(0, 0%, 9%, 1);
+
+    --background-hoverAssistant: hsla(240, 1%, 13%, 1);
+
+    --background-Assistant: hsla(240, 1%, 16%, 1);
+
+    --nav-hover: rgba(52, 53, 58, 1);
+
+    --header-icon: rgba(33, 33, 34, 1);
+
+    --text-answer: #F2F2F2;
+
+    --text-prompt: hsla(180, 2%, 90%, 1);
+
+    --search-input: hsla(225, 5%, 17%, 1);
+
+    --autoPages: hsla(230, 5%, 22%, 1);
+
+    --background-thumb: hsla(219, 100%, 88%, 1);
+
+    --background: 219 100% 88%;
+    /* hsl(0 0% 7%) */
     --foreground: 213 31% 80%;
     /* hsl(213 31% 91%) */
 
@@ -98,10 +164,10 @@
 
     --border: 216 24% 17%;
     /* hsl(216 34% 17%) */
-    --input: 216 24% 17%;
+    --input: 0 0% 9%;
     /* hsl(216 34% 17%) */
 
-    --primary: 210 20% 80%;
+    --primary: 220 98% 45%;
     /* hsl(210 20% 80%) */
     --primary-foreground: 222.2 27.4% 1.2%;
     /* hsl(222 47% 1%) */

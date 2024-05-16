@@ -25,11 +25,8 @@ def patching(record):
     record['extra']['serialized'] = serialize(record)
 
 
-def configure(log_level: Optional[str] = None, log_file: Optional[Path] = None):
-    if log_level is None:
-        log_level = 'INFO'
-    # Human-readable
-    log_format = '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'  # noqa
+def configure(logger_conf: 'LoggerConf'):
+    log_level = logger_conf.level
 
     # log_format = log_format_dev if log_level.upper() == "DEBUG" else log_format_prod
     logger.remove()  # Remove default handlers
@@ -38,36 +35,22 @@ def configure(log_level: Optional[str] = None, log_file: Optional[Path] = None):
 
     logger.configure(handlers=[{
         'sink':
-        RichHandler(console=Console(width=300),
-                    markup=True,
-                    log_time_format='[%Y-%m-%d %H:%M:%S.%f]',
-                    show_path=False,
-                    show_level=False),
-        'format':
-        log_format,
-        'level':
-        log_level.upper(),
-    }],
-                     extra={'trace_id': '1'})
+            RichHandler(console=Console(width=300),
+                        markup=True,
+                        log_time_format='[%Y-%m-%d %H:%M:%S.%f]',
+                        show_path=False,
+                        show_level=False),
+        'format': logger_conf.format,
+        'level': log_level.upper(),
+    }], extra={'trace_id': '1'})
 
-    if not log_file:
-        log_file = 'data/bisheng.log'
-
-    log_file = Path(log_file)
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    log_format_file = '[{time:YYYY-MM-DD at HH:mm:ss.SSS}] [{level.name} process-{process.id}-{thread.id} {name}:{line}] - trace={extra[trace_id]} {message}'  # noqa
-    logger.add(
-        sink=str(log_file),
-        level=log_level.upper(),
-        format=log_format_file,
-        rotation='00:00',  # Log rotation based on file size
-        retention='3 days',
-        serialize=False,
-    )
+    for one in logger_conf.handlers:
+        log_file = Path(one['sink'])
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        logger.add(**one)
+        logger.debug(f'Logger set up with log handler: {one["sink"]}')
 
     logger.debug(f'Logger set up with log level: {log_level}')
-    if log_file:
-        logger.debug(f'Log file: {log_file}')
 
 
 class InterceptHandler(logging.Handler):

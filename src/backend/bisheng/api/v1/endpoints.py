@@ -1,6 +1,7 @@
 import copy
 import json
 from typing import Annotated, Optional, Union
+from uuid import UUID
 
 import yaml
 from bisheng import settings
@@ -29,7 +30,6 @@ except ImportError:
 
     def process_graph_cached_task(*args, **kwargs):
         raise NotImplementedError('Celery is not installed')
-
 
 # build router
 router = APIRouter(tags=['Base'])
@@ -107,7 +107,7 @@ def save_config(data: dict):
 @router.post('/predict/{flow_id}', response_model=UnifiedResponseModel[ProcessResponse])
 @router.post('/process/{flow_id}', response_model=UnifiedResponseModel[ProcessResponse])
 async def process_flow(
-        flow_id: str,
+        flow_id: UUID,
         inputs: Optional[dict] = None,
         tweaks: Optional[dict] = None,
         history_count: Optional[int] = 10,
@@ -124,6 +124,7 @@ async def process_flow(
 
     logger.info(
         f'act=api_call sessionid={session_id} flow_id={flow_id} inputs={inputs} tweaks={tweaks}')
+    flow_id = flow_id.hex
 
     try:
         with session_getter() as session:
@@ -176,6 +177,10 @@ async def process_flow(
             else:
                 logger.error(f'task_id={task_id} exception task result={task}')
 
+        if isinstance(task_result, str):
+            task_result = {
+                "answer": task_result
+            }
         # 判断溯源
         source_documents = task_result.pop('source_documents', '')
         answer = list(task_result.values())[0]

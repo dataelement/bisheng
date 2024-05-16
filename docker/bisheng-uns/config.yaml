@@ -1,0 +1,56 @@
+# 可根据loguru的文档配置不同 handlers
+logger_conf:
+  # 默认输出到控制台的日志级别, 大于等于此级别都会输出
+  level: DEBUG
+  # 默认输出格式
+  format: '[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}] [{level.name} process-{process.id}-{thread.id} {name}:{line}] - trace={extra[trace_id]} {message}'
+  # 参考loguru.add()中的参数可以配置多个handler
+  handlers:
+      # 文件路径，支持插入一些系统环境变量，若环境变量不存在则置空。例如 HOSTNAME: 主机名。后端会处理环境变量的替换
+    - sink: "/app/logs/bisheng_uns.log"
+      # 日志级别
+      level: INFO
+      # 和原生不一样，后端会将配置使用eval()执行转为函数用来过滤特定日志级别。推荐lambda
+      # filter: "lambda record: record['level'].name == 'INFO'"
+      # 日志格式化函数，extra内支持trace_id
+      format: "[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}]|{level}|BISHENG|{extra[trace_id]}|{process.id}|{thread.id}|{message}"
+      # 每天的几点进行切割
+      rotation: "00:00"
+      retention: "3 Days"
+    - sink: "/app/logs/err-v0-BISHENG-UNS-{HOSTNAME}.log"
+      level: ERROR
+      filter: "lambda record: record['level'].name == 'ERROR'"
+      format: "[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}]|{level}|BISHENG|{extra[trace_id]}||{process.id}|{thread.id}|||#EX_ERR:POS={name},line {line},ERR=500,EMSG={message}"
+      rotation: "00:00"
+      retention: "3 Days"
+
+# pdf解析需要用到的模型配置, 配置了rt_server环境变量的话会替换为对应的地址
+pdf_model_params:
+  layout_ep: "http://192.168.106.12:9001/v2.1/models/elem_layout_v1/infer"
+  cell_model_ep: "http://192.168.106.12:9001/v2.1/models/elem_table_cell_detect_v1/infer"
+  rowcol_model_ep: "http://192.168.106.12:9001/v2.1/models/elem_table_rowcol_detect_v1/infer"
+  table_model_ep: "http://192.168.106.12:9001/v2.1/models/elem_table_detect_v1/infer"
+  ocr_model_ep: "http://192.168.106.12:9001/v2.1/models/elem_ocr_collection_v3/infer"
+
+
+# ocr识别需要的配置项
+ocr_conf:
+  params:
+    sort_filter_boxes: true,
+    enable_huarong_box_adjust: true,
+    rotateupright: false,
+    support_long_image_segment: true,
+    split_long_sentence_blank: true
+  scene_mapping:
+    print:
+      det: general_text_det_mrcnn_v2.0
+      recog: transformer-blank-v0.2-faster
+    hand:
+      det: general_text_det_mrcnn_v2.0
+      recog: transformer-hand-v1.16-faster
+    print_recog:
+      recog: transformer-blank-v0.2-faster
+    hand_recog:
+      recog: transformer-hand-v1.16-faster
+    det:
+      det: general_text_det_mrcnn_v2.0

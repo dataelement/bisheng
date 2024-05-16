@@ -59,7 +59,7 @@ export default function ParameterComponent({
   const updateNodeInternals = useUpdateNodeInternals();
   const [position, setPosition] = useState(0);
   const { closePopUp } = useContext(PopUpContext);
-  const { setTabsState, flow } = useContext(TabsContext);
+  const { setTabsState, flow, version } = useContext(TabsContext);
 
   const groupedEdge = useRef(null); // 用yu过滤菜单的数据
 
@@ -89,7 +89,7 @@ export default function ParameterComponent({
   }, [id, data, reactFlowInstance])
   // milvus 组件，知识库不为空是 embbeding取消必填限制
   useEffect(() => {
-    const {embedding, index_name, collection_name, connection_args} = data.node.template
+    const { embedding, index_name, collection_name, connection_args } = data.node.template
     if ((index_name || collection_name) && embedding) {
       const hidden = disabled ? false : !!(collection_name || index_name).value
       data.node.template.embedding.required = !hidden
@@ -99,7 +99,7 @@ export default function ParameterComponent({
     }
   }, [data, disabled])
   const handleRemoveMilvusEmbeddingEdge = (nodeId) => {
-    const edges = reactFlowInstance.getEdges().filter(edge => edge.targetHandle.indexOf('Embeddings|embedding|'+nodeId) === -1)
+    const edges = reactFlowInstance.getEdges().filter(edge => edge.targetHandle.indexOf('Embeddings|embedding|' + nodeId) === -1)
     reactFlowInstance.setEdges(edges)
   }
   const [myData, setMyData] = useState(useContext(typesContext).data);
@@ -511,7 +511,7 @@ export default function ParameterComponent({
           </div>
         ) : left === true && type === "variable" ? (
           <div className="mt-2 w-full">
-            <VariablesComponent nodeId={data.id} flowId={flowId} onChange={(newValue) => {
+            <VariablesComponent vid={version?.id} nodeId={data.id} flowId={flowId} onChange={(newValue) => {
               data.node!.template[name].value = newValue;
               handleOnNewValue(newValue);
             }} />

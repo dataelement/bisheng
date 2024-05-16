@@ -14,7 +14,7 @@ export default function Chat({ flow }: { flow: ChatType['flow'], reactFlowInstan
   const [open, setOpen] = useState(false);
   const [isBuilt, setIsBuilt] = useState(false); // 构建完成
   const [canOpen, setCanOpen] = useState(false); // 是否可打开对话
-  const { tabsState } = useContext(TabsContext);
+  const { version, tabsState } = useContext(TabsContext);
 
   // 打开对话框快捷键
   useEffect(() => {
@@ -36,15 +36,16 @@ export default function Chat({ flow }: { flow: ChatType['flow'], reactFlowInstan
 
   // 获取构建状态
   useEffect(() => {
+    if (!flow || !version) return;
     // Define an async function within the useEffect hook
     const fetchBuildStatus = async () => {
-      const response = await getBuildStatus(flow.id);
+      const response = await getBuildStatus(flow.id, version.id);
       setIsBuilt(response.built);
     };
 
     // Call the async function
     fetchBuildStatus();
-  }, [flow]);
+  }, [flow, version]);
 
   // 根据tabsState跟新build和canopen状态
   const prevNodesRef = useRef<any[] | undefined>();

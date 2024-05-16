@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMessageStore } from "./messageStore"
+import { useTranslation } from "react-i18next"
 
 // 引导词推荐
 export default function GuideQuestions({ locked, chatId, questions, onClick }) {
     const [showGuideQuestion, setShowGuideQuestion] = useMessageStore(state => [state.showGuideQuestion, state.setShowGuideQuestion])
+
+    const { t } = useTranslation()
 
     useEffect(() => {
         questions.length && setShowGuideQuestion(true)
@@ -25,7 +28,7 @@ export default function GuideQuestions({ locked, chatId, questions, onClick }) {
 
     if (showGuideQuestion) return <div className="relative">
         <div className="absolute left-0 bottom-0">
-            <p className="text-gray-950 text-sm mb-2 bg-[rgba(255,255,255,0.8)] rounded-md w-fit px-2 py-1">推荐问题</p>
+            <p className="text-gray-950 text-sm mb-2 bg-[rgba(255,255,255,0.8)] rounded-md w-fit px-2 py-1">{t('chat.recommendationQuestions')}</p>
             {
                 words.map((question, index) => (
                     <div

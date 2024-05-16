@@ -14,7 +14,7 @@ export default function MessageSystem({ data }) {
 
         message({
             variant: 'success',
-            title: '提示',
+            title: t('prompt'),
             description: t('chat.copyTip')
         })
     }
@@ -24,7 +24,7 @@ export default function MessageSystem({ data }) {
         () => (
             data.thought && <ReactMarkdown
                 linkTarget="_blank"
-                className="bs-mkdown text-gray-600 inline-block break-all max-w-full text-sm [&>pre]:text-wrap"
+                className="bs-mkdown text-gray-600 dark:text-[white] inline-block break-all max-w-full text-sm [&>pre]:text-wrap"
             >
                 {data.thought.toString()}
             </ReactMarkdown>

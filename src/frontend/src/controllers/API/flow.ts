@@ -1,5 +1,5 @@
 import { ReactFlowJsonObject } from "reactflow";
-import { FlowStyleType, FlowType } from "../../types/flow";
+import { FlowStyleType, FlowType, FlowVersionItem } from "../../types/flow";
 import axios from "../request";
 
 /**
@@ -68,7 +68,7 @@ export function delVariableApi(id) {
 /**
  * 保存变量和filenodename必填和排序信息
  */
-export function saveReportFormApi(flowId, data: Variable[]) {
+export function saveReportFormApi(vid, flowId, data: Variable[]) {
     const _data = data.map((item) => {
         const { id, maxLength, name: variable_name, nodeId: node_id, options, required, type } = item
         const types = {
@@ -79,6 +79,7 @@ export function saveReportFormApi(flowId, data: Variable[]) {
         const typeInfo = types[type]()
         return {
             id,
+            version_id: vid,
             flow_id: flowId,
             node_id,
             is_option: Number(required),
@@ -236,4 +237,80 @@ export async function reloadCustom(code): Promise<any> {
         "frontend_node": {}
     });
     return response
+}
+
+
+/**
+ * 获取技能对应的版本列表.
+ *
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function getFlowVersions(flow_id): Promise<{ data: FlowVersionItem[], total: number }> {
+    return await axios.get(`/api/v1/flows/versions`, {
+        params: { flow_id }
+    });
+}
+
+/**
+ * 创建新的技能版本.
+ *
+ * @param {object} versionData - 新版本的数据.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function createFlowVersion(flow_id, versionData: { name: string, description: string, original_version_id: number, data: any }) {
+    return await axios.post(`/api/v1/flows/versions?flow_id=${flow_id}`, versionData);
+}
+
+/**
+ * 获取单个版本的信息.
+ *
+ * @param {string} versionId - 版本的ID.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function getVersionDetails(versionId: string) {
+    return await axios.get(`/api/v1/flows/versions/${versionId}`);
+}
+
+/**
+ * 更新版本信息.
+ *
+ * @param {string} versionId - 要更新的版本ID.
+ * @param {object} versionData - 更新的版本数据.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function updateVersion(versionId: string, versionData: { name: string, description: string, data: any }) {
+    return await axios.put(`/api/v1/flows/versions/${versionId}`, versionData);
+}
+
+/**
+ * 删除版本.
+ *
+ * @param {string} versionId - 要删除的版本ID.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function deleteVersion(versionId: string) {
+    return await axios.delete(`/api/v1/flows/versions/${versionId}`);
+}
+
+/**
+ * 切换版本.
+ *
+ * @param {object} versionData - 包含要更改到的版本ID的数据.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function changeCurrentVersion({ flow_id, version_id }: { flow_id: string, version_id: number }) {
+    return await axios.post(`/api/v1/flows/change_version?flow_id=${flow_id}&version_id=${version_id}`);
+}
+
+/**
+ * 运行测试用例.
+ */
+export async function runTestCase(data: { question_list, version_list, node_id, inputs }): Promise<any[]> {
+    return await axios.post(`/api/v1/flows/compare`, data);
 }

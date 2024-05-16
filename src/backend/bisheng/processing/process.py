@@ -162,7 +162,11 @@ async def process_graph_cached(
     if session_id is None:
         session_id = session_service.generate_key(session_id=session_id, data_graph=data_graph)
     # Load the graph using SessionService
-    session = await session_service.load_session(session_id, data_graph)
+    session = await session_service.load_session(session_id, data_graph,
+                                                 artifacts={},
+                                                 process_file=True,
+                                                 flow_id=flow_id,
+                                                 chat_id="")
     graph, artifacts = session if session else (None, None)
     if not graph:
         raise ValueError('Graph not found in the session')

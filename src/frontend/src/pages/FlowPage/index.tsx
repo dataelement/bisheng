@@ -14,6 +14,8 @@ export default function FlowPage() {
       // 切换技能重新加载flow数据
       getFlowApi(id).then(_flow => setFlow('flow_init', _flow))
     }
+
+    return () => setFlow('destroy', null)
   }, [])
 
   const [copyFlow, preFlow] = useMemo(() => {

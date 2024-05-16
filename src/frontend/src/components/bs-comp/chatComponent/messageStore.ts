@@ -31,7 +31,7 @@ type Actions = {
     destory: () => void;
     createSendMsg: (inputs: any, inputKey?: string) => void;
     createWsMsg: (data: any) => void;
-    updateCurrentMessage: (wsdata: any) => void;
+    updateCurrentMessage: (wsdata: any, cover: boolean) => void;
     changeChatId: (chatId: string) => void;
     startNewRound: () => void;
     insetSeparator: (text: string) => void;
@@ -146,7 +146,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         })
     },
     // stream end
-    updateCurrentMessage(wsdata) {
+    updateCurrentMessage(wsdata, cover = false) {
         // console.log( wsdata.chat_id, get().chatId);
         // if (wsdata.end) {
         //     debugger
@@ -184,9 +184,10 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             // }
             // 删除重复消息
             const prevMessage = messages[currentMessageIndex - 1];
-            if (prevMessage
+            if ((prevMessage
                 && prevMessage.message === newCurrentMessage.message
-                && prevMessage.thought === newCurrentMessage.thought) {
+                && prevMessage.thought === newCurrentMessage.thought)
+                || cover) {
                 const removedMsg = messages.pop()
                 // 使用最后一条的信息作为准确信息
                 Object.keys(prevMessage).forEach((key) => {

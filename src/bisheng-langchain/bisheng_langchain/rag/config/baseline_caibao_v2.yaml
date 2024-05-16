@@ -1,0 +1,112 @@
+data:
+  origin_file_path: '/home/public/rag_benchmark_finance_report'
+  question: '/home/public/rag_benchmark_finance_report/finance_report_data_100_single.xlsx'
+  save_answer: '/home/public/rag_benchmark_finance_report/finance_report_data_100_single_command-r-plus_20chunk_chunk_size_1000_with_source_title_overlap100.xlsx'
+
+milvus:
+  host: '110.16.193.170'
+  port: '50062'
+  drop_old: True
+
+elasticsearch:
+  url: 'http://110.16.193.170:50062/es'
+  ssl_verify:
+    basic_auth: ["elastic", "oSGL-zVvZ5P3Tm7qkDLC"]
+  drop_old: True
+  extract_key_by_llm: False 
+
+embedding:
+  type: 'OpenAIEmbeddings'
+  model: 'text-embedding-ada-002'
+  openai_api_key: ''
+  openai_proxy: ''
+
+# chat_llm:
+#   type: 'ChatOpenAI'
+#   model: 'gpt-4-1106-preview'
+#   openai_api_key: ''
+#   openai_proxy: ''
+#   temperature: 0.0
+
+chat_llm:
+  type: 'ChatCohere'
+  model: 'command-r-plus'
+  cohere_api_key: ''
+  max_tokens: 1000
+  temperature: 0.01
+
+# chat_llm:
+#   type: 'ChatQWen'
+#   model_name: 'qwen1.5-110b-chat'
+#   api_key: ''
+#   temperature: 0.01
+
+# chat_llm:
+#   type: 'ChatOpenAI'
+#   model: 'qwen1.5-110b-chat'
+#   openai_api_base: 'http://60.31.21.42:12511/v1'
+#   openai_api_key : "Z9b8x3V7C2n0Q5T"
+#   openai_proxy: ''
+#   temperature: 0.01
+
+loader: 
+  type: 'ElemUnstructuredLoader'
+  unstructured_api_url: 'https://bisheng.dataelem.com/api/v1/etl4llm/predict'
+
+retriever: 
+  type: 'EnsembleRetriever' # 不动
+  suffix: 'benchmark_caibao_1000_source_title_overlap100'
+  add_aux_info: True
+  retrievers: 
+    - type: 'KeywordRetriever'
+      splitter:
+        text_splitter:
+          # type: 'ElemCharacterTextSplitter'
+          type: 'RecursiveCharacterTextSplitter'
+          chunk_size: 1000
+          chunk_overlap: 100
+          separators: ["\n\n"]
+      retrieval:
+        search_type: 'similarity'
+        search_kwargs: 
+          k: 10
+    - type: 'BaselineVectorRetriever'
+      splitter: 
+        text_splitter:
+          # type: 'ElemCharacterTextSplitter'
+          type: 'RecursiveCharacterTextSplitter'
+          chunk_size: 1000
+          chunk_overlap: 100
+          separators: ["\n\n"]
+      retrieval:
+        search_type: 'similarity'
+        search_kwargs: 
+          k: 10
+          
+post_retrieval:
+  delete_duplicate: False
+  with_rank: False
+  rerank:
+    type: 'CustomReranker'
+    model_path: '/home/public/llm/bge-reranker-large'
+    device_id: 'cuda:0'
+    threshold: 0.0
+  sort_by_source_and_index: False
+
+generate:
+  with_retrieval: True
+  max_content: 100000
+  chain_type: 'stuff'
+  # prompt_type: 'BASE_PROMPT'
+  prompt_type: 'CHAT_PROMPT'
+
+metric:
+  type: 'bisheng-ragas'
+  question_column: '问题'
+  gt_column: 'GT'
+  answer_column: 'rag_answer'
+  query_type_column: '问题类型'
+  # metrics: ['answer_correctness_bisheng']
+  metrics: ['answer_recall_bisheng']
+  gt_split_column: 'gt_split_point'
+  batch_size: 5

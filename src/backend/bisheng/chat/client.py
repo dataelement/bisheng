@@ -1,6 +1,13 @@
 import json
+import os
+import time
 from typing import Dict
 from uuid import UUID, uuid4
+
+from loguru import logger
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain.tools.render import format_tool_to_openai_tool
+from fastapi import WebSocket, status
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
@@ -9,9 +16,7 @@ from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
-from fastapi import WebSocket, status
-from langchain_core.messages import AIMessage, HumanMessage
-from loguru import logger
+from bisheng.settings import settings
 
 
 class ChatClient:
@@ -31,6 +36,7 @@ class ChatClient:
         self.chat_history = []
         # 和模型对话时传入的 完整的历史对话轮数
         self.latest_history_num = 5
+        self.gpts_conf = settings.get_from_db('gpts')
 
     async def send_message(self, message: str):
         await self.websocket.send_text(message)
@@ -196,14 +202,34 @@ class ChatClient:
             for one in result:
                 if isinstance(one, AIMessage):
                     answer += one.content
+
+            # todo: 后续优化代码解释器的实现方案，保证输出的文件可以公开访问
+            # 获取minio的share地址，把share域名去掉, 为毕昇的部署方案特殊处理下
+            if gpts_tool_conf := self.gpts_conf.get('tools'):
+                if bisheng_code_conf := gpts_tool_conf.get("bisheng_code_interpreter"):
+                    answer = answer.replace(f"http://{bisheng_code_conf['minio']['MINIO_SHAREPOIN']}", "")
+
             res = await self.add_message('bot', answer, 'answer')
             await self.send_response('answer', 'start', '')
-            await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
-            logger.info(f'gpts agent chat_id: {self.chat_id} question: {input_msg}')
-            logger.info(f'gpts agent chat_id: {self.chat_id} answer: {answer}')
+            await self.send_response('answer', 'end_cover', answer, message_id=res.id if res else None)
+            logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
+            logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')
         except Exception as e:
             logger.exception('handle gpts message error: ')
             await self.send_response('system', 'start', '')
             await self.send_response('system', 'end', 'Error: ' + str(e))
         finally:
             await self.send_response('processing', 'close', '')
+
+        # 记录助手的聊天历史
+        if os.getenv("BISHENG_RECORD_HISTORY"):
+            try:
+                os.makedirs("/app/data/history", exist_ok=True)
+                with open(f"/app/data/history/{self.client_id}_{time.time()}.json", "w", encoding="utf-8") as f:
+                    json.dump({
+                        "system": self.gpts_agent.assistant.prompt,
+                        "message": self.chat_history,
+                        "tools": [format_tool_to_openai_tool(t) for t in self.gpts_agent.tools]
+                    }, f, ensure_ascii=False)
+            except Exception as e:
+                logger.error("record assistant history error: ", e)

@@ -20,7 +20,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 export default function l2Edit() {
     const { t } = useTranslation()
 
-    const { id } = useParams()
+    const { id, vid } = useParams()
     const { flow: nextFlow, setFlow, saveFlow } = useContext(TabsContext);
     const { setErrorData, setSuccessData } = useContext(alertContext);
     const flow = useMemo(() => {
@@ -37,13 +37,13 @@ export default function l2Edit() {
         // 无id不再请求
         if (!id) return
         // 已有flow 数据时，不再请求
-        if (flow?.id === id) {
-            setIsL2(true)
-            nameRef.current.value = flow.name
-            descRef.current.value = flow.description
-            guideRef.current.value = flow.guide_word
-            return
-        }
+        // if (flow?.id === id) {
+        //     setIsL2(true)
+        //     nameRef.current.value = flow.name
+        //     descRef.current.value = flow.description
+        //     guideRef.current.value = flow.guide_word
+        //     return
+        // }
         // 无flow从db获取
         getFlowApi(id).then(_flow => {
             // 回填flow
@@ -108,6 +108,8 @@ export default function l2Edit() {
         const name = nameRef.current.value
         const description = descRef.current.value
         const guideWords = guideRef.current.value
+        // 上线技能直接跳转L3
+        if (flow.status === 2) return navigate('/flow/' + id, { replace: true })
         // 高级配置信息有误直接跳转L3
         if (isParamError(name, description)) return navigate('/flow/' + id, { replace: true })
         // 保存在跳
@@ -213,7 +215,7 @@ export default function l2Edit() {
                         </div>
                     }
                     {/* 表单设置 */}
-                    {isForm && <FormSet ref={formRef} id={id}></FormSet>}
+                    {isForm && <FormSet ref={formRef} id={id} vid={vid}></FormSet>}
                 </div>
             </div>
         </div>

@@ -7,7 +7,7 @@ import { SearchInput } from "../input"
 const MultiItem = ({ active, children, value, onClick }) => {
 
     return <div key={value}
-        className={`relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 mb-1 text-sm outline-none hover:bg-[#EBF0FF] hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 
+        className={`relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 mb-1 text-sm outline-none hover:bg-[#EBF0FF] hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 break-all 
     ${active && 'bg-[#EBF0FF]'}`}
         onClick={() => { onClick(value) }}
     >

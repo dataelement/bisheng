@@ -98,9 +98,9 @@ async def process_knowledge(*,
     callback_url = data.get('callback_url')
 
     if auto_p:
-        separator = ['\n\n', '\n', ' ', '']
-        chunk_size = 500
-        chunk_overlap = 50
+        separator = ['\n\n']
+        chunk_size = 1000
+        chunk_overlap = 100
 
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
     if not access_check(payload=payload,

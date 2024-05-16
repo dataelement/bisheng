@@ -62,3 +62,17 @@ export type targetHandleType = {
   id: string;
   proxy?: { field: string; id: string };
 };
+
+
+export type FlowVersionItem = {
+  create_time: string;
+  data: null | any; // Replace 'any' with a more specific type if known
+  description: null | string;
+  flow_id: string;
+  id: number;
+  is_current: number;
+  is_delete: number;
+  name: string;
+  update_time: string;
+  user_id: null | string;
+};

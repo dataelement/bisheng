@@ -16,6 +16,9 @@ import L2Edit from "./pages/SkillPage/l2Edit";
 import SystemPage from "./pages/SystemPage";
 import BuildLayout from "./layout/BuildLayout";
 import Templates from "./pages/SkillPage/temps";
+import DiffFlowPage from "./pages/DiffFlowPage";
+import { ErrorBoundary } from "react-error-boundary";
+import CrashErrorComponent from "./components/CrashErrorComponent";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -23,6 +26,18 @@ import Templates from "./pages/SkillPage/temps";
 // const SkillPage = lazy(() => import(/* webpackChunkName: "SkillPage" */ "./pages/SkillPage"));
 // const SkillChatPage = lazy(() => import(/* webpackChunkName: "SkillChatPage" */ "./pages/SkillChatPage"));
 // const FileViewPage = lazy(() => import(/* webpackChunkName: "FileViewPage" */ "./pages/FileViewPage"));
+
+const ErrorHoc = ({ Comp }) => {
+  return (
+    <ErrorBoundary
+      onReset={() => window.location.href = window.location.href}
+      FallbackComponent={CrashErrorComponent}
+    >
+      <Comp />
+    </ErrorBoundary>
+  );
+}
+
 
 const router = createBrowserRouter([
   {
@@ -43,7 +58,7 @@ const router = createBrowserRouter([
         ]
       },
       { path: "build/skill", element: <L2Edit /> },
-      { path: "build/skill/:id", element: <L2Edit /> },
+      { path: "build/skill/:id/:vid", element: <L2Edit /> },
       { path: "build/temps", element: <Templates /> },
       { path: "model", element: <ModelPage /> },
       { path: "sys", element: <SystemPage /> },
@@ -53,7 +68,7 @@ const router = createBrowserRouter([
   {
     path: "/flow/:id/",
     children: [
-      { path: "", element: <FlowPage /> }
+      { path: "", element: <ErrorHoc Comp={FlowPage} /> }
     ]
   },
   {
@@ -66,6 +81,7 @@ const router = createBrowserRouter([
   { path: "/chat", element: <SkillChatPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
   { path: "/report/:id/", element: <Report /> },
+  { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
   // { path: "/test", element: <Test /> },
   { path: "*", element: <Navigate to="/" replace /> }
 ]);

@@ -1,0 +1,82 @@
+data:
+  origin_file_path: '/home/public/rag_benchmark_v1.0/rag_benchmark_processed'
+  question: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/questions_info_with_answer_sample.xlsx'
+  save_answer: '/home/gulixin/workspace/llm/bisheng/src/bisheng-langchain/experimental/rag/data/finance_report_data_100_single_gpt3.5_20chunk.xlsx'
+
+milvus:
+  host: '110.16.193.170'
+  port: '50062'
+  drop_old: True
+
+elasticsearch:
+  url: 'http://110.16.193.170:50062/es'
+  ssl_verify:
+    basic_auth: ["elastic", "oSGL-zVvZ5P3Tm7qkDLC"]
+  drop_old: True
+
+embedding:
+  type: 'OpenAIEmbeddings'
+  model: 'text-embedding-ada-002'
+  openai_api_key: ''
+  openai_proxy: ''
+
+chat_llm:
+  type: 'ChatOpenAI'
+  model: 'gpt-4-1106-preview'
+  openai_api_key: ''
+  openai_proxy: ''
+  temperature: 0.0
+
+loader: 
+  type: 'ElemUnstructuredLoader'
+  unstructured_api_url: 'http://bisheng.dataelem.com/v1/etl4llm/predict'
+
+retriever: 
+  type: 'EnsembleRetriever' # 不动
+  suffix: 'test_mix'
+  retrievers: 
+    - type: 'MixRetriever'
+      splitter:
+        vector_text_splitter:
+          type: 'ElemCharacterTextSplitter'
+          chunk_size: 500
+          chunk_overlap: 50
+          separators: ["\n\n", "\n", " ", ""]
+        keyword_text_splitter:
+          type: 'ElemCharacterTextSplitter'
+          chunk_size: 500
+          chunk_overlap: 50
+          separators: ["\n\n", "\n", " ", ""]
+      retrieval:
+        combine_strategy: 'mix'
+        search_type: 'similarity'
+        vector_search_kwargs: 
+          k: 6
+        keyword_search_kwargs: 
+          k: 6
+          
+post_retrieval:
+  delete_duplicate: False
+  with_rank: False
+  rerank:
+    type: 'CustomReranker'
+    model_path: '/home/public/llm/bge-reranker-large'
+    device_id: 'cuda:0'
+    threshold: 0.0
+
+generate:
+  with_retrieval: True
+  chain_type: 'stuff'
+  # prompt_type: 'BASE_PROMPT'
+  prompt_type: 'CHAT_PROMPT'
+
+metric:
+  type: 'bisheng-ragas'
+  question_column: '问题'
+  gt_column: 'GT'
+  answer_column: 'rag_answer'
+  query_type_column: '问题类型'
+  # metrics: ['answer_correctness_bisheng']
+  metrics: ['answer_recall_bisheng']
+  gt_split_column: 'gt_split_point'
+  batch_size: 5

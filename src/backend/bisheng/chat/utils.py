@@ -1,5 +1,6 @@
 import json
 from typing import Dict, List
+from urllib.parse import unquote, urlparse
 
 from bisheng.api.v1.schemas import ChatMessage
 from bisheng.database.base import session_getter
@@ -103,11 +104,19 @@ async def judge_source(result, source_document, chat_id, extra: Dict):
                 doc.metadata.get('extra') and json.loads(doc.metadata.get('extra')).get('url')
                 for doc in source_document):
             source = 3
-            doc = [{
-                'title': doc.metadata.get('source'),
-                'url': json.loads(doc.metadata.get('extra', '{}')).get('url')
-            } for doc in source_document]
-            extra.update({'doc': [dict(s) for s in set(frozenset(d.items()) for d in doc)]})
+            repeat_doc = {}
+            doc = []
+            # 来源文档做去重，不能改变原有的顺序
+            for one in source_document:
+                title = one.metadata.get('source')
+                url = json.loads(one.metadata.get('extra', '{}')).get('url')
+                repeat_key = (title, url)
+                # 重复的丢掉，不返回
+                if repeat_doc.get(repeat_key):
+                    continue
+                doc.append({'title': title, 'url': url})
+                repeat_doc[repeat_key] = 1
+            extra.update({'doc': doc})
         else:
             source = 1
 
@@ -159,3 +168,34 @@ async def process_source_document(source_document: List[Document], chat_id, mess
         with session_getter() as db_session:
             db_session.add_all(batch_insert)
             db_session.commit()
+
+
+# 将需要额外输入的节点数据，转为tweak
+def process_node_data(node_data: List[Dict]) -> Dict:
+    tweak = {}
+    for nd in node_data:
+        if nd.get('id') not in tweak:
+            tweak[nd.get('id')] = {}
+        if 'InputFile' in nd.get('id', ''):
+            file_path = nd.get('file_path')
+            url_path = urlparse(file_path)
+            if url_path.netloc:
+                file_name = unquote(url_path.path.split('/')[-1])
+            else:
+                file_name = file_path.split('_', 1)[1] if '_' in file_path else ''
+            nd['value'] = file_name
+            tweak[nd.get('id')] = {'file_path': file_path, 'value': file_name}
+        elif 'VariableNode' in nd.get('id', ''):
+            # general key value
+            variables = nd.get('name')
+            variable_value = nd.get('value')
+            # actual key varaialbes & variable_value
+            variables_list = tweak[nd.get('id')].get('variables', [])
+            if not variables_list:
+                tweak[nd.get('id')]['variables'] = variables_list
+                tweak[nd.get('id')]['variable_value'] = []
+            variables_list.append(variables)
+            # value
+            variables_value_list = tweak[nd.get('id')].get('variable_value', [])
+            variables_value_list.append(variable_value)
+    return tweak

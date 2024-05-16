@@ -4,7 +4,6 @@ import time
 import uuid
 from collections import defaultdict
 from typing import Any, Dict, List
-from urllib.parse import unquote, urlparse
 from uuid import UUID
 
 from bisheng.api.utils import build_flow_no_yield
@@ -14,6 +13,7 @@ from bisheng.cache.flow import InMemoryCache
 from bisheng.cache.manager import Subject
 from bisheng.chat.client import ChatClient
 from bisheng.chat.types import IgnoreException, WorkType
+from bisheng.chat.utils import process_node_data
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.user import User
@@ -571,31 +571,6 @@ class ChatManager:
         return flow_id, chat_id
 
     def refresh_graph_data(self, graph_data: dict, node_data: List[dict]):
-        tweak = {}
-        for nd in node_data:
-            if nd.get('id') not in tweak:
-                tweak[nd.get('id')] = {}
-            if 'InputFile' in nd.get('id', ''):
-                file_path = nd.get('file_path')
-                url_path = urlparse(file_path)
-                if url_path.netloc:
-                    file_name = unquote(url_path.path.split('/')[-1])
-                else:
-                    file_name = file_path.split('_', 1)[1] if '_' in file_path else ''
-                nd['value'] = file_name
-                tweak[nd.get('id')] = {'file_path': file_path, 'value': file_name}
-            elif 'VariableNode' in nd.get('id', ''):
-                # general key value
-                variables = nd.get('name')
-                variable_value = nd.get('value')
-                # actual key varaialbes & variable_value
-                variables_list = tweak[nd.get('id')].get('variables', [])
-                if not variables_list:
-                    tweak[nd.get('id')]['variables'] = variables_list
-                    tweak[nd.get('id')]['variable_value'] = []
-                variables_list.append(variables)
-                # value
-                variables_value_list = tweak[nd.get('id')].get('variable_value', [])
-                variables_value_list.append(variable_value)
+        tweak = process_node_data(node_data)
         """upload file to make flow work"""
         return process_tweaks(graph_data, tweaks=tweak)

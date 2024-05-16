@@ -8,9 +8,12 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import CardComponent from "../cardComponent";
 import { SkillIcon } from "@/components/bs-icons/skill";
 import { AssistantIcon } from "@/components/bs-icons/assistant";
+import { useTranslation } from "react-i18next";
 
 export default function SkillChatSheet({ children, onSelect }) {
     const [open, setOpen] = useState(false)
+
+    const { t } = useTranslation()
 
     const navigate = useNavigate()
 
@@ -36,9 +39,9 @@ export default function SkillChatSheet({ children, onSelect }) {
         <SheetContent className="sm:min-w-[966px] bg-gray-100">
             <div className="flex h-full" onClick={e => e.stopPropagation()}>
                 <div className="w-fit p-6">
-                    <SheetTitle>对话选择</SheetTitle>
-                    <SheetDescription>选择一个您想使用的线上技能或助手</SheetDescription>
-                    <SearchInput value={keyword} placeholder="搜索" className="my-6" onChange={(e) => setKeyword(e.target.value)} />
+                    <SheetTitle>{t('chat.dialogueSelection')}</SheetTitle>
+                    <SheetDescription>{t('chat.chooseSkillOrAssistant')}</SheetDescription>
+                    <SearchInput value={keyword} placeholder={t('chat.search')} className="my-6" onChange={(e) => setKeyword(e.target.value)} />
                 </div>
                 <div className="flex-1 min-w-[696px] bg-[#fff] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
                     {
@@ -58,8 +61,8 @@ export default function SkillChatSheet({ children, onSelect }) {
                                 onClick={() => { onSelect(flow); setOpen(false) }}
                             />
                         )) : <div className="flex flex-col items-center justify-center pt-40 w-full">
-                            <p className="text-sm text-muted-foreground mb-3">空空如也</p>
-                            <Button className="w-[200px]" onClick={() => navigate('/build/assist')}>去上线技能&助手</Button>
+                            <p className="text-sm text-muted-foreground mb-3">{t('build.empty')}</p>
+                            <Button className="w-[200px]" onClick={() => navigate('/build/assist')}>{t('build.onlineSA')}</Button>
                         </div>
                     }
                 </div>

@@ -14,6 +14,11 @@ minio_conf: &minio_conf
   MINIO_SECRET_KEY: "minioadmin"
 
 knowledges:
+  # 知识库所需的大模型配置，用来对文档内容总结一个标题，然后将标题和chunk合并存储到向量库内, 不配置则不总结文档
+  llm:
+    type: "ChatOpenAi"
+    model: "gpt-3.5-turbo"
+    <<: *openai_conf
   unstructured_api_url: ""  # 毕昇非结构化数据解析服务地址，提供包括OCR文字识别、表格识别、版式分析等能力。非必填，溯源必填
   embeddings: # 配置知识库的embedding服务，以下示例填写了两类embedding服务的配置方法，第一个是openai的embedding模型服务的配置方法，第二个是本地部署的embedding模型服务的配置方法，如果有多个可以添加多个
     text-embedding-ada-002: # 知识库下拉框中显示的embedding模型的名称，可自定义
@@ -59,6 +64,10 @@ llm_request:
   max_retries: 1
   stream: true
 
+# v2免登录接口使用的默认操作用户
+default_operator:
+  user: 3
+  url: https://bisheng.dataelem.com
 
 # 是否需要验证码
 use_captcha:
@@ -86,6 +95,12 @@ gpts:
   llms:
     - type: 'ChatOpenAI'
       model_name: 'gpt-4-0125-preview'
+      # 助手内 挂载的知识库检索参数，可按需配置。配置参数和模型有关
+      knowledge_retrive:
+        # 传给模型的最大字符数，超过会自动截断
+        max_content: 15000
+        # 是否将检索的chunk重新排序，必须是031版本之后创建的知识库才支持排序
+        sort_by_source_and_index: false
       temperature: 0.3
       <<: *openai_conf
     - type: 'CustomLLMChat'
