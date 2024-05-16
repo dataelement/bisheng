@@ -23,7 +23,10 @@ export default function ToolsSheet({ select, onSelect, children }) {
     }, [type])
 
     const options = useMemo(() => {
-        return allData.filter(el => el.name.toLowerCase().includes(keyword.toLowerCase()))
+        return allData.filter(el => 
+            el.name.toLowerCase().includes(keyword.toLowerCase())
+            || el.description.toLowerCase().includes(keyword.toLowerCase())
+        )
     }, [keyword, allData])
 
     return (

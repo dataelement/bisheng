@@ -29,6 +29,7 @@ export default function tabTools({ select = null, onSelect }) {
   const options = useMemo(() => {
     return allData.filter((el) =>
       el.name.toLowerCase().includes(keyword.toLowerCase())
+      || el.description.toLowerCase().includes(keyword.toLowerCase())
     );
   }, [keyword, allData]);
 

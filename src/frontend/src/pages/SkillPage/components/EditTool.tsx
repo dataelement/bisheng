@@ -283,7 +283,7 @@ const EditTool = forwardRef((props: any, ref) => {
     const handleDelete = () => {
         bsConfirm({
             title: t('prompt'),
-            desc: t('skills,deleteSure'),
+            desc: t('skills.deleteSure'),
             onOk(next) {
                 // api
                 captureAndAlertRequestErrorHoc(deleteTool(fromDataRef.current.id)).then(res => {

@@ -30,7 +30,7 @@ const SelectTrigger = React.forwardRef<
     >
         {children}
         <SelectPrimitive.Icon asChild>
-            <CaretDownIcon className="h-5 w-5 opacity-80 group-data-[state=open]:rotate-180" />
+            <CaretDownIcon className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
         </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
 ))
