@@ -32,8 +32,11 @@ class PromptFrontendNode(FrontendNode):
             field.field_type = 'prompt'
             field.advanced = False
 
-        if ('Union' in field.field_type and 'BaseMessagePromptTemplate' in field.field_type):
-            field.field_type = 'BaseMessagePromptTemplate'
+        if 'Union' in field.field_type:
+            if 'BaseMessagePromptTemplate' in field.field_type:
+                field.field_type = 'BaseMessagePromptTemplate'
+            elif 'StringPromptTemplate' in field.field_type:
+                field.field_type = 'StringPromptTemplate'
 
         # All prompt fields should be password=False
         field.password = False
