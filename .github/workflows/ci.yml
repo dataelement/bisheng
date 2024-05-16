@@ -72,6 +72,13 @@ jobs:
           # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          registry: https://cr.dataelem.com/
+          username: docker
+          password: dataelem
           
       # 构建 backend 并推送到 Docker hub
       - name: Set up QEMU
@@ -109,6 +116,8 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
             ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
+            cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
+            cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
       # 构建 Docker frontend 并推送到 Docker hub
       - name: Build frontend and push
         id: docker_build_frontend
@@ -127,6 +136,8 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+            cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
+            cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
       
       - name: Process git message
         id: process_message
