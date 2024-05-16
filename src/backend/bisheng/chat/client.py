@@ -1,6 +1,13 @@
 import json
+import os
+import time
 from typing import Dict
 from uuid import UUID, uuid4
+
+from loguru import logger
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain.tools.render import format_tool_to_openai_tool
+from fastapi import WebSocket, status
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
@@ -9,10 +16,6 @@ from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
-from fastapi import WebSocket, status
-from langchain_core.messages import AIMessage, HumanMessage
-from loguru import logger
-
 from bisheng.settings import settings
 
 
@@ -217,3 +220,16 @@ class ChatClient:
             await self.send_response('system', 'end', 'Error: ' + str(e))
         finally:
             await self.send_response('processing', 'close', '')
+
+        # 记录助手的聊天历史
+        if os.getenv("BISHENG_RECORD_HISTORY"):
+            try:
+                os.makedirs("/app/data/history", exist_ok=True)
+                with open(f"/app/data/history/{self.client_id}_{time.time()}.json", "w", encoding="utf-8") as f:
+                    json.dump({
+                        "system": self.gpts_agent.assistant.prompt,
+                        "message": self.chat_history,
+                        "tools": [format_tool_to_openai_tool(t) for t in self.gpts_agent.tools]
+                    }, f, ensure_ascii=False)
+            except Exception as e:
+                logger.error("record assistant history error: ", e)
