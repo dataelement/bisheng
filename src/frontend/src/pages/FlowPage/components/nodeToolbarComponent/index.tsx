@@ -15,7 +15,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { CounterClockwiseClockIcon } from "@radix-ui/react-icons";
 import { typesContext } from "@/contexts/typesContext";
 import { useNavigate, useParams } from "react-router-dom";
-
+// 组件头部按钮组
 const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
   const [nodeLength, setNodeLength] = useState(
     Object.keys(data.node.template).filter(
@@ -150,7 +150,7 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
           </ShadTooltip>
           {/* 版本 */}
           {
-            hasVersion && <ShadTooltip content="version" side="top">
+            hasVersion && !isGroup && <ShadTooltip content="version" side="top">
               <button
                 className="-ml-px bg-background px-2 py-2 shadow-md ring-inset transition-all hover:bg-muted"
                 onClick={() => handleSelectChange('version')}
