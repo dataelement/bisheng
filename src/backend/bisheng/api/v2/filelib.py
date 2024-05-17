@@ -1,9 +1,11 @@
 import hashlib
+import os
 from typing import Dict, List, Optional
 
-from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, delete_es,
-                                                delete_knowledge_by, delete_knowledge_file_vectors,
-                                                delete_vector, text_knowledge)
+from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, decide_vectorstores,
+                                                delete_es, delete_knowledge_by,
+                                                delete_knowledge_file_vectors, delete_vector,
+                                                text_knowledge)
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
@@ -14,6 +16,7 @@ from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFile
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
+from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
@@ -21,6 +24,7 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Uploa
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, or_
 from sqlmodel import select
+from starlette.responses import FileResponse
 
 # build router
 router = APIRouter(prefix='/filelib')
@@ -298,7 +302,7 @@ async def post_chunks(*,
 
     index_name = db_knowledge.index_name or db_knowledge.collection_name
     try:
-        logger.info("start upload minio")
+        logger.info('start upload minio')
         minio_client = MinioClient()
         db_file.object_name = 'original/' + str(db_file.id) + '.' + file_name.rsplit('.', 1)[-1]
         minio_client.upload_minio(db_file.object_name, file_path)
@@ -414,3 +418,26 @@ async def clear_tmp_chunks_data(body: Dict):
             delete_vector(collection_name, None)
 
     return resp_200()
+
+
+@router.get('/dump_vector', status_code=200)
+def dump_vector_knowledge(collection_name: str, expr: str = None, store: str = 'Milvus'):
+    # dump vector db
+    embedding_tmp = FakeEmbedding()
+    vector_store = decide_vectorstores(collection_name, store, embedding_tmp)
+
+    if vector_store and vector_store.col:
+        fields = [
+            s.name for s in vector_store.col.schema.fields
+            if s.name not in ['pk', 'bbox', 'vector']
+        ]
+        res_list = vector_store.col.query('file_id>1', output_fields=fields)
+        return resp_200(res_list)
+    else:
+        return resp_500('参数错误')
+
+
+@router.get('/download_statistic')
+def download_statistic_file(file_path: str):
+    file_name = os.path.basename(file_path)
+    return FileResponse(file_path, filename=file_name)
