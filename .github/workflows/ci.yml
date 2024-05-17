@@ -116,8 +116,6 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
             ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
-            # cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
-            # cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
       # 构建 Docker frontend 并推送到 Docker hub
       - name: Build frontend and push
         id: docker_build_frontend
