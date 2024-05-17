@@ -2,7 +2,7 @@ import { Accordion } from "@/components/bs-ui/accordion";
 import { SearchInput } from "@/components/bs-ui/input";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
 import { getAssistantToolsApi } from "@/controllers/API/assistant";
-import ToolItem from "@/pages/SkillPage/components/ToolItem";
+import ToolItem from "@/pages/BuildPage/components/ToolItem";
 import { useTranslation } from "react-i18next";
 import { PersonIcon, StarFilledIcon } from "@radix-ui/react-icons";
 import { useEffect, useMemo, useState } from "react";

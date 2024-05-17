@@ -1,8 +1,8 @@
-import { IconCheck, IconClipboard, IconDownload } from "@tabler/icons-react";
 import { useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { copyText, programmingLanguages } from "../../../../utils";
+import { CheckIcon, ClipboardCopyIcon, DownloadIcon } from "@radix-ui/react-icons";
 
 interface Props {
   language: string;
@@ -48,11 +48,11 @@ export function CodeBlock({ language, value }) {
 
         <div className="flex items-center">
           <button className="code-block-modal-button" onClick={copyToClipboard}>
-            {isCopied ? <IconCheck size={18} /> : <IconClipboard size={18} />}
+            {isCopied ? <CheckIcon /> : <ClipboardCopyIcon />}
             {isCopied ? "Copied!" : "Copy code"}
           </button>
           <button className="code-block-modal-button" onClick={downloadAsFile}>
-            <IconDownload size={18} />
+            <DownloadIcon />
           </button>
         </div>
       </div>

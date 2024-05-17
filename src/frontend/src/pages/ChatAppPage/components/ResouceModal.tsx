@@ -5,6 +5,9 @@ import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
 import { downloadFile } from "../../../util/utils";
 import FileView, { checkSassUrl } from "./FileView";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
+import { Badge } from "@/components/bs-ui/badge";
 
 // 顶部答案区
 const Anwser = ({ id, msg, onInit, onAdd }) => {
@@ -82,24 +85,34 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
         {/* left */}
         <div className="w-[300px] bg-gray-100 rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar">
             {/* label */}
-            <div className="mb-4 text-sm font-bold">
+            <div className="mb-4 text-sm font-bold flex items-center gap-2">
                 {t('chat.filterLabel')}
-                <div className="tooltip fixed" data-tip={t('chat.tooltipText')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
+                <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <QuestionMarkCircledIcon />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>{t('chat.tooltipText')}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
             </div>
             <div className="flex flex-wrap gap-2">
-                {words.map((str, i) => <div key={str} className="badge badge-info h-[auto] gap-2 text-gray-600 bg-[rgba(53,126,249,.15)]">{str}<span className="cursor-pointer" onClick={() => onClose(i)}>x</span></div>)}
+                {words.map((str, i) => <Badge key={str} variant="secondary" className="gap-2 text-gray-600 bg-[rgba(53,126,249,.15)] hover:bg-gray-300">{str}<span className="cursor-pointer" onClick={() => onClose(i)}>x</span></Badge>)}
                 {/* 自定义 */}
                 {
-                    editCustomKey ? <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.15)]"><input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none bg-gray-50"
-                        onKeyDown={(event) => {
-                            if (event.key === "Enter" && !event.shiftKey) {
+                    editCustomKey ? <Badge variant="secondary" className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.15)] hover:bg-gray-300">
+                        <input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none bg-gray-50"
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter" && !event.shiftKey) {
+                                    handleAddKeyword(inputRef.current.value);
+                                }
+                            }}
+                            onBlur={() => {
                                 handleAddKeyword(inputRef.current.value);
-                            }
-                        }}
-                        onBlur={() => {
-                            handleAddKeyword(inputRef.current.value);
-                        }}></input></div> :
-                        <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>{t('chat.addCustomLabel')}</span></div>
+                            }}></input></Badge> :
+                        <Badge variant="secondary" className="gap-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50 hover:bg-[rgba(53,126,249,.86)]" onClick={handleOpenInput}><span>{t('chat.addCustomLabel')}</span></Badge>
                 }
             </div>
             {/* files */}

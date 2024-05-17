@@ -117,7 +117,7 @@ export default function Header({ flow }) {
             <Button
                 variant="outline"
                 size="icon"
-                onClick={() => navgate('/build/skills', { replace: true })}
+                onClick={() => navgate('/build/skills')}
             ><ExitIcon className="h-4 w-4 rotate-180" /></Button>
             <Button variant="outline" onClick={() => { takeSnapshot(); uploadFlow() }} >
                 <ArrowUpIcon className="h-4 w-4 mr-1" />{t('skills.import')}

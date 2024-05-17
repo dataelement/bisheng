@@ -11,6 +11,7 @@ import "./style/applies.css";
 import "./style/classes.css";
 // @ts-ignore
 import "./style/markdown.css";
+import "./style/bs-ui.css"
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement

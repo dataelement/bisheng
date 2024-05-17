@@ -1,10 +1,11 @@
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { Zap } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { NodeToolbar } from "reactflow";
 import ShadTooltip from "../../components/ShadTooltipComponent";
-import Tooltip from "../../components/TooltipComponent";
 import { Button } from "../../components/ui/button";
+import EditLabel from "../../components/ui/editLabel";
 import { useSSE } from "../../contexts/SSEContext";
 import { alertContext } from "../../contexts/alertContext";
 import { PopUpContext } from "../../contexts/popUpContext";
@@ -18,7 +19,6 @@ import {
   toTitleCase,
 } from "../../utils";
 import ParameterComponent from "./components/parameterComponent";
-import EditLabel from "../../components/ui/editLabel";
 
 export default function GenericNode({ data, xPos, yPos, selected }: {
   data: NodeDataType;
@@ -102,39 +102,44 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
             /> */}
             <div className="round-button-div">
               <div>
-                <Tooltip
-                  title={
-                    isBuilding ? (<span>build...</span>) :
-                      !validationStatus ? (
-                        <span className="flex">
-                          Build{" "} <Zap className="mx-0.5 h-5 fill-build-trigger stroke-build-trigger stroke-1" strokeWidth={1.5} />{" "} flow to validate status.
-                        </span>
-                      ) : (
-                        <div className="max-h-96 overflow-auto">
-                          {validationStatus.params ? validationStatus.params.split("\n")
-                            .map((line, index) => <div key={index}>{line}</div>)
-                            : ""}
-                        </div>
-                      )
-                  }
-                >
-                  <div className="generic-node-status-position">
-                    <div
-                      className={classNames(
-                        validationStatus && validationStatus.valid ? "green-status" : "status-build-animation", "status-div"
-                      )}
-                    ></div>
-                    <div
-                      className={classNames(
-                        validationStatus && !validationStatus.valid ? "red-status" : "status-build-animation", "status-div"
-                      )}
-                    ></div>
-                    <div
-                      className={classNames(
-                        !validationStatus || isBuilding ? "yellow-status" : "status-build-animation", "status-div"
-                      )}
-                    ></div>
-                  </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="generic-node-status-position">
+                      <div
+                        className={classNames(
+                          validationStatus && validationStatus.valid ? "green-status" : "status-build-animation", "status-div"
+                        )}
+                      ></div>
+                      <div
+                        className={classNames(
+                          validationStatus && !validationStatus.valid ? "red-status" : "status-build-animation", "status-div"
+                        )}
+                      ></div>
+                      <div
+                        className={classNames(
+                          !validationStatus || isBuilding ? "yellow-status" : "status-build-animation", "status-div"
+                        )}
+                      ></div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    avoidCollisions={false}
+                    sticky="always">
+                    {
+                      isBuilding ? (<span>build...</span>) :
+                        !validationStatus ? (
+                          <span className="flex">
+                            Build{" "} <Zap className="mx-0.5 h-5 fill-build-trigger stroke-build-trigger stroke-1" strokeWidth={1.5} />{" "} flow to validate status.
+                          </span>
+                        ) : (
+                          <div className="max-h-96 overflow-auto">
+                            {validationStatus.params ? validationStatus.params.split("\n")
+                              .map((line, index) => <div key={index}>{line}</div>)
+                              : ""}
+                          </div>
+                        )
+                    }
+                  </TooltipContent>
                 </Tooltip>
               </div>
             </div>
@@ -143,10 +148,10 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
                 <div className="generic-node-tooltip-div text-[#111]">
                   {isGroup ? <EditLabel
                     rule={[
-                      {required: true}
+                      { required: true }
                     ]}
                     str={data.node.display_name}
-                    onChange={(val) => {(data.node.display_name = val);fouceUpdateNode(!_)}}>
+                    onChange={(val) => { (data.node.display_name = val); fouceUpdateNode(!_) }}>
                     {(val) => <div className="max-w-[300px] overflow-hidden text-ellipsis">{val}</div>}
                   </EditLabel> : data.node.display_name}
                 </div>

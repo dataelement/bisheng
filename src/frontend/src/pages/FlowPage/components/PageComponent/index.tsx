@@ -1,3 +1,9 @@
+import { Badge } from "@/components/bs-ui/badge";
+import { Button } from "@/components/bs-ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { updateVersion } from "@/controllers/API/flow";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { LayersIcon } from "@radix-ui/react-icons";
 import cloneDeep from "lodash-es/cloneDeep";
 import isEqual from "lodash-es/isEqual";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +29,7 @@ import ReactFlow, {
 } from "reactflow";
 import GenericNode from "../../../../CustomNodes/GenericNode";
 import Chat from "../../../../components/chatComponent";
+import { alertContext } from "../../../../contexts/alertContext";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
 import { undoRedoContext } from "../../../../contexts/undoRedoContext";
@@ -32,15 +39,9 @@ import { generateFlow, generateNodeFromFlow, reconnectEdges, validateSelection }
 import { intersectArrays } from "../../../../util/utils";
 import { isValidConnection } from "../../../../utils";
 import ConnectionLineComponent from "../ConnectionLineComponent";
+import Header from "../Header";
 import SelectionMenu from "../SelectionMenuComponent";
 import ExtraSidebar from "../extraSidebarComponent";
-import { alertContext } from "../../../../contexts/alertContext";
-import Header from "../Header";
-import { Badge } from "@/components/bs-ui/badge";
-import { LayersIcon } from "@radix-ui/react-icons";
-import { Button } from "@/components/bs-ui/button";
-import { updateVersion } from "@/controllers/API/flow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 const nodeTypes = {
   genericNode: GenericNode,
@@ -339,6 +340,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     <div className="flex flex-col h-full overflow-hidden">
       <Header flow={flow}></Header>
       <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* menu */}
         {Object.keys(data).length ? <ExtraSidebar flow={flow} /> : <></>}
         {/* Main area */}
         <main className="flex flex-1" ref={keyBoardPanneRef}>
@@ -452,18 +454,21 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
           </div>
         </main>
       </div>
-      {/* 删除确认 */}
-      <dialog className={`modal ${blocker.state === "blocked" && 'modal-open'}`}>
-        <form method="dialog" className="modal-box w-[360px] bg-[#fff] shadow-lg dark:bg-background">
-          <h3 className="font-bold text-lg">{t('prompt')}</h3>
-          <p className="py-4">{t('flow.unsavedChangesConfirmation')}</p>
-          <div className="modal-action">
+      {/* 离开确认 */}
+      <Dialog open={blocker.state === "blocked"} onOpenChange={() => blocker.reset?.()}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{t('prompt')}</DialogTitle>
+            <DialogDescription>{t('flow.unsavedChangesConfirmation')}</DialogDescription>
+          </DialogHeader>
+          <div></div>
+          <DialogFooter>
             <Button className="h-8" variant="outline" onClick={() => blocker.reset?.()}>{t('cancel')}</Button>
             <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>{t('flow.leave')}</Button>
             <Button className="h-8" onClick={handleSaveAndClose}>{t('flow.leaveAndSave')}</Button>
-          </div>
-        </form>
-      </dialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

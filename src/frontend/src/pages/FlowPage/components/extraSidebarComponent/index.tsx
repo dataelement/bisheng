@@ -12,6 +12,7 @@ import { getNodeNames, nodeColors, nodeIconsLucide } from "../../../../utils";
 import DisclosureComponent from "../DisclosureComponent";
 import PersonalComponents from "./PersonalComponents";
 
+// 技能组件分类菜单
 export default function ExtraSidebar({ flow }: { flow: FlowType }) {
   const { t } = useTranslation()
 
@@ -57,66 +58,6 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
   const nodeNames = getNodeNames()
   return (
     <div className="side-bar-arrangement">
-      {/* 简化 */}
-      {/* <div className="flex absolute right-[80px] top-20 z-10">
-        <ShadTooltip content={t('flow.simplifyConfig')} side="bottom">
-          <button className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-l-full rounded-r-none" onClick={() => setOpen(true)}>
-            <Combine strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" color="#34d399"></Combine>{t('flow.simplify')}
-          </button>
-        </ShadTooltip>
-        <ShadTooltip content={t('flow.notifications')} side="bottom">
-          <button
-            className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-none"
-            onClick={(event: React.MouseEvent<HTMLElement>) => {
-              setNotificationCenter(false);
-              const { top, left } = (event.target as Element).getBoundingClientRect();
-              openPopUp(
-                <>
-                  <div className="absolute z-10" style={{ top: top + 40, left: left - AlertWidth }} ><AlertDropdown /></div>
-                  <div className="header-notifications-box"></div>
-                </>
-              );
-            }}
-          >
-            {notificationCenter && <div className="header-notifications"></div>}
-            <Bell className="side-bar-button-size" aria-hidden="true" />{t('flow.notifications')}
-          </button>
-        </ShadTooltip>
-        <ShadTooltip content={t('flow.exit')} side="bottom">
-          <button className="extra-side-bar-buttons whitespace-pre bg-gray-0 rounded-r-full rounded-l-none" onClick={() => navgate('/build/skill/' + flow.id, { replace: true })} >
-            <LogOut strokeWidth={1.5} className="side-bar-button-size mr-2 pr-[2px]" ></LogOut>{t('flow.exit')}
-          </button>
-        </ShadTooltip>
-      </div> */}
-      {/* 顶部按钮组 */}
-      {/* <div className="side-bar-buttons-arrangement">
-        <ShadTooltip content={t('flow.import')} side="bottom">
-          <button className="extra-side-bar-buttons" onClick={() => { takeSnapshot(); uploadFlow() }} >
-            <FileUp strokeWidth={1.5} className="side-bar-button-size " ></FileUp>
-          </button>
-        </ShadTooltip>
-        <ShadTooltip content={t('flow.export')} side="bottom">
-          <button className={classNames("extra-side-bar-buttons")} onClick={(event) => { openPopUp(<ExportModal />); }} >
-            <FileDown strokeWidth={1.5} className="side-bar-button-size" ></FileDown>
-          </button>
-        </ShadTooltip>
-        <ShadTooltip content={t('flow.code')} side="bottom">
-          <button className={classNames("extra-side-bar-buttons")} onClick={(event) => { openPopUp(<ApiModal flow={flow} />); }} >
-            <TerminalSquare strokeWidth={1.5} className="side-bar-button-size"></TerminalSquare>
-          </button>
-        </ShadTooltip>
-
-        <ShadTooltip content={t('save')} side="bottom">
-          <button className="extra-side-bar-buttons" onClick={(event) =>
-            saveFlow(flow).then(_ =>
-              _ && setSuccessData({ title: t('success') }))
-          }
-            disabled={!isPending}
-          >
-            <Save strokeWidth={1.5} className={"side-bar-button-size" + (isPending ? " " : " extra-side-bar-save-disable")} ></Save>
-          </button>
-        </ShadTooltip>
-      </div> */}
       {/* <Separator /> */}
       <div className="side-bar-search-div-placement">
         <input type="text" name="search" id="search" placeholder={t('flow.searchComponent')} className="input-search rounded-full"

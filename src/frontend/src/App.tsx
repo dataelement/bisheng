@@ -175,7 +175,9 @@ export default function App() {
     //need parent component with width and height
     <div className="flex h-full flex-col">
       {(user?.user_id || noAuthPages.includes(path)) ? <RouterProvider router={router} />
-        : user ? <div className="loading"></div>
+        : user ? <div className="w-full h-full flex justify-center items-center">
+          <div className="loading w-52 translate-y-[-20%]"></div>
+        </div>
           : <LoginPage></LoginPage>}
       <div></div>
       <div className="app-div" style={{ zIndex: 1000 }}>

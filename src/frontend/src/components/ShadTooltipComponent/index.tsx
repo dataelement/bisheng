@@ -1,5 +1,5 @@
 import { ShadToolTipType } from "../../types/components";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../bs-ui/tooltip";
 
 export default function ShadTooltip({
   content,
@@ -14,7 +14,7 @@ export default function ShadTooltip({
       <TooltipTrigger asChild={asChild}>{children}</TooltipTrigger>
 
       <TooltipContent
-        className={styleClasses}
+        className={`${styleClasses} bg-popover text-sm shadow-md text-popover-foreground`}
         side={side}
         avoidCollisions={false}
         sticky="always"

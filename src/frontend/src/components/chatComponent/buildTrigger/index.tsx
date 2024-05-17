@@ -1,4 +1,3 @@
-import { Transition } from "@headlessui/react";
 import { Zap } from "lucide-react";
 import { useContext, useState } from "react";
 import Loading from "../../../components/ui/loading";
@@ -157,16 +156,6 @@ export default function BuildTrigger({
   };
 
   return (
-    <Transition
-      show={!open}
-      appear={true}
-      enter="transition ease-out duration-300"
-      enterFrom="translate-y-96"
-      enterTo="translate-y-0"
-      leave="transition ease-in duration-300"
-      leaveFrom="translate-y-0"
-      leaveTo="translate-y-96"
-    >
       <div className="fixed bottom-20 right-4">
         <div
           className={`${eventClick} round-button-form`}
@@ -200,6 +189,5 @@ export default function BuildTrigger({
           </button>
         </div>
       </div>
-    </Transition>
   );
 }
