@@ -1,4 +1,5 @@
 import asyncio
+import copy
 from typing import List, Dict, AsyncGenerator
 
 from fastapi.encoders import jsonable_encoder
@@ -243,11 +244,11 @@ class FlowService:
         tasks = []
         for index, question in enumerate(req.question_list):
             question_index = index
-            tmp_inputs = req.inputs.copy()
+            tmp_inputs = copy.deepcopy(req.inputs)
             tmp_inputs, tmp_tweaks = cls.parse_compare_inputs(tmp_inputs, question)
             for version in version_infos:
                 task = asyncio.create_task(cls.exec_flow_node(
-                    tmp_inputs, tmp_tweaks, question_index, [version]))
+                    copy.deepcopy(tmp_inputs), tmp_tweaks, question_index, [version]))
                 tasks.append(task)
         return tasks
 
