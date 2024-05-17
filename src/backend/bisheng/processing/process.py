@@ -73,7 +73,9 @@ def get_result_and_thought(langchain_object: Any, inputs: dict):
         try:
             # all use chat handlers
             # action = 'default'
-            output = langchain_object(inputs, return_only_outputs=True)
+            from bisheng.api.v1 import callback
+            callbacks = [callback.StreamingLLMCallbackHandler(None, flow_id=None, chat_id=None)]
+            output = langchain_object(inputs, return_only_outputs=True, callbacks=callbacks)
         except ValueError as exc:
             # make the error message more informative
             logger.debug(f'Error: {str(exc)}')
@@ -162,11 +164,12 @@ async def process_graph_cached(
     if session_id is None:
         session_id = session_service.generate_key(session_id=session_id, data_graph=data_graph)
     # Load the graph using SessionService
-    session = await session_service.load_session(session_id, data_graph,
+    session = await session_service.load_session(session_id,
+                                                 data_graph,
                                                  artifacts={},
                                                  process_file=True,
                                                  flow_id=flow_id,
-                                                 chat_id="")
+                                                 chat_id='')
     graph, artifacts = session if session else (None, None)
     if not graph:
         raise ValueError('Graph not found in the session')
