@@ -40,6 +40,7 @@ import { Badge } from "@/components/bs-ui/badge";
 import { LayersIcon } from "@radix-ui/react-icons";
 import { Button } from "@/components/bs-ui/button";
 import { updateVersion } from "@/controllers/API/flow";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 const nodeTypes = {
   genericNode: GenericNode,
@@ -308,7 +309,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
 
   // 离开并保存
   const handleSaveAndClose = async () => {
-    await updateVersion(version.id, { name: version.name, description: '', data: flow.data })
+    await captureAndAlertRequestErrorHoc(updateVersion(version.id, { name: version.name, description: '', data: flow.data }))
     blocker.proceed?.()
   }
 

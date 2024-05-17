@@ -7,7 +7,7 @@ export default function Component({ compId, options, disables, version, classNam
 
     // 保留当前compId和上游组件
     const nodes = useMemo(() => {
-        if (!version) return [];
+        if (!version?.data) return [];
         const showNodes = {}
         const edges = version.data.edges
 

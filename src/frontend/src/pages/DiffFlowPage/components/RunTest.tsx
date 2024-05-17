@@ -37,7 +37,7 @@ export default function RunTest({ nodeId }) {
             return cur ? count + 1 : count
         }, 0) + 1 // +1 测试用例列 
 
-        return 100 / (count + 1)
+        return 100 / (count === 2 ? 2 : count + 1) // hack 两个 按 45% 分
     }, [mulitVersionFlow])
 
     const handleUploadTxt = () => {
@@ -173,7 +173,7 @@ export default function RunTest({ nodeId }) {
                                 </TableHead>
                             )
                         }
-                        <TableHead className="text-right max-w-[135px]" style={{ width: '10%' }}>
+                        <TableHead className="text-right min-w-[135px]" style={{ width: 135 }}>
                             <Button variant="link" disabled={runningType !== '' || !running} onClick={handleDownExcle}><DownloadIcon className="mr-1" />{t('test.downloadResults')}</Button>
                         </TableHead>
                     </TableRow>
