@@ -94,9 +94,10 @@ class VariableDao(Variable):
             query = select(Variable).where(Variable.flow_id == flow_id, Variable.version_id == old_version_id)
             old_version = session.exec(query).all()
             for one in old_version:
-                one.id = None
-                one.version_id = version_id
-                session.add(one)
+                new_version = Variable.from_orm(one)
+                new_version.id = None
+                new_version.version_id = version_id
+                session.add(new_version)
             session.commit()
             return old_version
 
