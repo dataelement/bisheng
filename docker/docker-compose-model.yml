@@ -59,7 +59,7 @@ services:
 
   bisheng-unstructured:
     container_name: bisheng-unstructured
-    image: dataelement/bisheng-unstructured:0.0.3.4
+    image: dataelement/bisheng-unstructured:latest
     ports:
       - "10001:10001"
     environment:

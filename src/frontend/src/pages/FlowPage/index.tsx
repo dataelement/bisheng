@@ -15,7 +15,7 @@ export default function FlowPage() {
       getFlowApi(id).then(_flow => setFlow('flow_init', _flow))
     }
 
-    return () => setFlow('destroy', null)
+    // return () => setFlow('destroy', null)
   }, [])
 
   const [copyFlow, preFlow] = useMemo(() => {
