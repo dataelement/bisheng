@@ -134,8 +134,6 @@ jobs:
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
             ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
-            cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
-            cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
       
       - name: Process git message
         id: process_message
