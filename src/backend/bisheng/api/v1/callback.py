@@ -58,10 +58,13 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
                              **kwargs: Any) -> Any:
         """Run when chain starts running."""
         logger.debug(f'on_chain_start inputs={inputs} kwargs={kwargs}')
+        logger.info('k=s act=on_chain_start flow_id={} input_dict={}', self.flow_id, inputs)
 
     async def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
         logger.debug(f'on_chain_end outputs={outputs} kwargs={kwargs}')
+        outputs.pop('source_documents', '')
+        logger.info('k=s act=on_chain_end flow_id={} output_dict={}', self.flow_id, outputs)
 
     async def on_chain_error(self, error: Union[Exception, KeyboardInterrupt],
                              **kwargs: Any) -> Any:
@@ -73,6 +76,8 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         """Run when tool starts running."""
         logger.debug(
             f'on_tool_start  serialized={serialized} input_str={input_str} kwargs={kwargs}')
+        logger.info('k=s act=on_tool_start flow_id={} tool_name={} input_str={}', self.flow_id,
+                    serialized.get('name'), input_str)
 
         resp = ChatResponse(type='stream',
                             intermediate_steps=f'Tool input: {input_str}',
@@ -83,6 +88,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
         logger.debug(f'on_tool_end  output={output} kwargs={kwargs}')
+        logger.info("k=s act=on_tool_end flow_id={} output='{}'", self.flow_id, output)
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
         # from langchain.docstore.document import Document # noqa
         # result = eval(output).get('result')
@@ -114,6 +120,12 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # to the LLM, adding it will send the final prompt
         # to the frontend
         logger.debug(f'on_text text={text} kwargs={kwargs}')
+        if 'Prompt after formatting:' in text:
+            prompt_str = text[24:]
+            logger.info(
+                "k=s act=on_text prompt='{}'",
+                prompt_str,
+            )
         sender = kwargs.get('sender')
         receiver = kwargs.get('receiver')
         if kwargs.get('sender'):
@@ -165,7 +177,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
 
     async def on_agent_action(self, action: AgentAction, **kwargs: Any):
         logger.debug(f'on_agent_action action={action} kwargs={kwargs}')
-
+        logger.info('k=s act=on_agent_action {}', action)
         log = f'\nThought: {action.log}'
         # if there are line breaks, split them and send them
         # as separate messages
@@ -179,6 +191,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""
         logger.debug(f'on_agent_finish finish={finish} kwargs={kwargs}')
+        logger.info('k=s act=on_agent_finish {}', finish)
         resp = ChatResponse(flow_id=self.flow_id,
                             chat_id=self.chat_id,
                             type='stream',
@@ -189,11 +202,17 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
                                  **kwargs: Any) -> Any:
         """Run when retriever start running."""
         logger.debug(f'on_retriever_start serialized={serialized} query={query} kwargs={kwargs}')
+        logger.info('k=s act=on_retriever_start flow_id={} query={} meta={}', self.flow_id, query,
+                    serialized.get('repr'))
 
     async def on_retriever_end(self, result: List[Document], **kwargs: Any) -> Any:
         """Run when retriever end running."""
         # todo 判断技能权限
         logger.debug(f'on_retriever_end result={result} kwargs={kwargs}')
+        if result:
+            [doc.metadata.pop('bbox', '') for doc in result]
+            logger.info('k=s act=on_retriever_end flow_id={} result_without_bbox={}', self.flow_id,
+                        result)
 
     async def on_chat_model_start(self, serialized: Dict[str, Any],
                                   messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
@@ -203,6 +222,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # await self.websocket.send_json(stream.dict())
         logger.debug(
             f'on_chat_model_start serialized={serialized} messages={messages} kwargs={kwargs}')
+        logger.info('k=s act=on_chat_model_start messages={}', messages)
 
 
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
@@ -218,23 +238,25 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
                             type='stream',
                             flow_id=self.flow_id,
                             chat_id=self.chat_id)
-
-        loop = asyncio.get_event_loop()
-        coroutine = self.websocket.send_json(resp.dict())
-        asyncio.run_coroutine_threadsafe(coroutine, loop)
+        if self.websocket:
+            loop = asyncio.get_event_loop()
+            coroutine = self.websocket.send_json(resp.dict())
+            asyncio.run_coroutine_threadsafe(coroutine, loop)
 
     def on_agent_action(self, action: AgentAction, **kwargs: Any) -> Any:
         log = f'\nThought: {action.log}'
         # if there are line breaks, split them and send them
         # as separate messages
-        log = log.replace("\n", "\n\n")
+        log = log.replace('\n', '\n\n')
         resp = ChatResponse(type='stream',
                             intermediate_steps=log,
                             flow_id=self.flow_id,
                             chat_id=self.chat_id)
-        loop = asyncio.get_event_loop()
-        coroutine = self.websocket.send_json(resp.dict())
-        asyncio.run_coroutine_threadsafe(coroutine, loop)
+        if self.websocket:
+            loop = asyncio.get_event_loop()
+            coroutine = self.websocket.send_json(resp.dict())
+            asyncio.run_coroutine_threadsafe(coroutine, loop)
+        logger.info('k=s act=on_agent_action {}', action)
 
     def on_agent_finish(self, finish: AgentFinish, **kwargs: Any) -> Any:
         """Run on agent end."""
@@ -242,9 +264,11 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
                             intermediate_steps=finish.log,
                             flow_id=self.flow_id,
                             chat_id=self.chat_id)
-        loop = asyncio.get_event_loop()
-        coroutine = self.websocket.send_json(resp.dict())
-        asyncio.run_coroutine_threadsafe(coroutine, loop)
+        if self.websocket:
+            loop = asyncio.get_event_loop()
+            coroutine = self.websocket.send_json(resp.dict())
+            asyncio.run_coroutine_threadsafe(coroutine, loop)
+        logger.info('k=s act=on_agent_finish {}', finish)
 
     def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
@@ -252,9 +276,12 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
                             intermediate_steps=f'Tool input: {input_str}',
                             flow_id=self.flow_id,
                             chat_id=self.chat_id)
-        loop = asyncio.get_event_loop()
-        coroutine = self.websocket.send_json(resp.dict())
-        asyncio.run_coroutine_threadsafe(coroutine, loop)
+        if self.websocket:
+            loop = asyncio.get_event_loop()
+            coroutine = self.websocket.send_json(resp.dict())
+            asyncio.run_coroutine_threadsafe(coroutine, loop)
+        logger.info('k=s act=on_tool_start flow_id={} tool_name={} input_str={}', self.flow_id,
+                    serialized.get('name'), input_str)
 
     def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
@@ -273,30 +300,40 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
                             chat_id=self.chat_id)
 
         # Try to send the response, handle potential errors.
-
         try:
-            loop = asyncio.get_event_loop()
-            coroutine = self.websocket.send_json(resp.dict())
-            asyncio.run_coroutine_threadsafe(coroutine, loop)
+            if self.websocket:
+                loop = asyncio.get_event_loop()
+                coroutine = self.websocket.send_json(resp.dict())
+                asyncio.run_coroutine_threadsafe(coroutine, loop)
         except Exception as e:
             logger.error(e)
+        logger.info("k=s act=on_tool_end flow_id={} output='{}'", self.flow_id, output)
 
     def on_retriever_start(self, serialized: Dict[str, Any], query: str, **kwargs: Any) -> Any:
         """Run when retriever start running."""
+        logger.info('k=s act=on_retriever_start flow_id={} query={} meta={}', self.flow_id, query,
+                    serialized.get('repr'))
 
     def on_retriever_end(self, result: List[Document], **kwargs: Any) -> Any:
         """Run when retriever end running."""
         # todo 判断技能权限
         logger.debug(f'retriver_result result={result}')
+        if result:
+            [doc.metadata.pop('bbox', '') for doc in result]
+            logger.info('k=s act=on_retriever_end flow_id={} result_without_bbox={}', self.flow_id,
+                        result)
 
     def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any],
                        **kwargs: Any) -> Any:
         """Run when chain starts running."""
         logger.debug(f'on_chain_start inputs={inputs}')
+        logger.info('k=s act=on_chain_start flow_id={} input_dict={}', self.flow_id, inputs)
 
     def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
         logger.debug(f'on_chain_end outputs={outputs}')
+        outputs.pop('source_documents', '')
+        logger.info('k=s act=on_chain_end flow_id={} output_dict={}', self.flow_id, outputs)
 
     def on_chat_model_start(self, serialized: Dict[str, Any], messages: List[List[BaseMessage]],
                             **kwargs: Any) -> Any:
@@ -312,9 +349,16 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         # asyncio.run_coroutine_threadsafe(coroutine2, loop)
         # asyncio.run_coroutine_threadsafe(coroutine3, loop)
         logger.debug(f'on_chat result={messages}')
+        logger.info('k=s act=on_chat_model_start messages={}', messages)
 
     def on_text(self, text: str, **kwargs) -> Any:
         logger.info(text)
+        if 'Prompt after formatting:' in text:
+            prompt_str = text[24:]
+            logger.info(
+                "k=s act=on_text prompt='{}'",
+                prompt_str,
+            )
 
 
 class AsyncGptsLLMCallbackHandler(AsyncStreamingLLMCallbackHandler):
@@ -461,14 +505,17 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             await self.websocket.send_json(resp.dict())
 
             # 保存工具调用记录
+            tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))
             self.tool_cache.pop(kwargs.get('run_id').hex)
             ChatMessageDao.insert_one(
-                ChatMessageModel(is_bot=1,
-                                 message=json.dumps(output_info),
-                                 intermediate_steps=f'{input_info["steps"]}\n\nTool output:\n\n  Error: ' + str(error),
-                                 category=tool_category,
-                                 type='end',
-                                 flow_id=self.flow_id,
-                                 chat_id=self.chat_id,
-                                 user_id=self.user_id,
-                                 extra=json.dumps({'run_id': kwargs.get('run_id').hex})))
+                ChatMessageModel(
+                    is_bot=1,
+                    message=json.dumps(output_info),
+                    intermediate_steps=f'{input_info["steps"]}\n\nTool output:\n\n  Error: ' +
+                    str(error),
+                    category=tool_category,
+                    type='end',
+                    flow_id=self.flow_id,
+                    chat_id=self.chat_id,
+                    user_id=self.user_id,
+                    extra=json.dumps({'run_id': kwargs.get('run_id').hex})))

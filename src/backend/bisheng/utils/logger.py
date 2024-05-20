@@ -1,8 +1,8 @@
 import logging
 from pathlib import Path
-from typing import Optional
 
 import orjson
+from bisheng.settings import LoggerConf
 from loguru import logger
 from rich.console import Console
 from rich.logging import RichHandler
@@ -25,7 +25,7 @@ def patching(record):
     record['extra']['serialized'] = serialize(record)
 
 
-def configure(logger_conf: 'LoggerConf'):
+def configure(logger_conf: LoggerConf):
     log_level = logger_conf.level
 
     # log_format = log_format_dev if log_level.upper() == "DEBUG" else log_format_prod
@@ -35,14 +35,17 @@ def configure(logger_conf: 'LoggerConf'):
 
     logger.configure(handlers=[{
         'sink':
-            RichHandler(console=Console(width=300),
-                        markup=True,
-                        log_time_format='[%Y-%m-%d %H:%M:%S.%f]',
-                        show_path=False,
-                        show_level=False),
-        'format': logger_conf.format,
-        'level': log_level.upper(),
-    }], extra={'trace_id': '1'})
+        RichHandler(console=Console(width=300),
+                    markup=True,
+                    log_time_format='[%Y-%m-%d %H:%M:%S.%f]',
+                    show_path=False,
+                    show_level=False),
+        'format':
+        logger_conf.format,
+        'level':
+        log_level.upper(),
+    }],
+                     extra={'trace_id': '1'})
 
     for one in logger_conf.handlers:
         log_file = Path(one['sink'])
