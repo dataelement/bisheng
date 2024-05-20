@@ -309,6 +309,8 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
 
   // 离开并保存
   const handleSaveAndClose = async () => {
+    setFlow('leave and save', { ...flow })
+    
     await captureAndAlertRequestErrorHoc(updateVersion(version.id, { name: version.name, description: '', data: flow.data }))
     blocker.proceed?.()
   }
