@@ -108,7 +108,7 @@ jobs:
           # 是否 docker push
           push: true
           # docker build arg, 注入 APP_NAME/APP_VERSION
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           build-args: |
             APP_NAME="bisheng-backend"
             APP_VERSION=${{ steps.get_version.outputs.VERSION }}

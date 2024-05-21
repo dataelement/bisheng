@@ -39,7 +39,7 @@ class OpenApiSchema:
                 }
                 if method not in ['get', 'post', 'put', 'delete']:
                     continue
-                one_api_info["description"] = method_info.get('description', '')
+                one_api_info["description"] = method_info.get('description', '') or method_info.get('summary', '')
                 one_api_info["operationId"] = method_info['operationId']
                 one_api_info["parameters"] = method_info.get('parameters', [])
                 self.apis.append(one_api_info)
