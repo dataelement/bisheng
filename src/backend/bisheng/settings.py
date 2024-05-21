@@ -4,11 +4,13 @@ import re
 import yaml
 from pydantic import BaseModel
 
-from bisheng.database.models.config import Config
-from bisheng.utils.logger import logger
+from loguru import logger
 from cryptography.fernet import Fernet
+
 from langchain.pydantic_v1 import BaseSettings, root_validator, validator
 from sqlmodel import select
+
+from bisheng.database.models.config import Config
 
 
 class LoggerConf(BaseModel):

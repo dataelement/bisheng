@@ -2,10 +2,11 @@ import logging
 from pathlib import Path
 
 import orjson
-from bisheng.settings import LoggerConf
 from loguru import logger
 from rich.console import Console
 from rich.logging import RichHandler
+
+from bisheng.settings import LoggerConf
 
 VALID_LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', 'EXCEPTION']
 
