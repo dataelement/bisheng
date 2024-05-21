@@ -65,7 +65,8 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         """Run when chain ends running."""
         logger.debug(f'on_chain_end outputs={outputs} kwargs={kwargs}')
         tmp_output = copy.deepcopy(outputs)
-        tmp_output.pop('source_documents', '')
+        if isinstance(tmp_output, dict):
+            tmp_output.pop('source_documents', '')
         logger.info('k=s act=on_chain_end flow_id={} output_dict={}', self.flow_id, tmp_output)
 
     async def on_chain_error(self, error: Union[Exception, KeyboardInterrupt],
@@ -337,7 +338,8 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         """Run when chain ends running."""
         logger.debug(f'on_chain_end outputs={outputs}')
         tmp_output = copy.deepcopy(outputs)
-        tmp_output.pop('source_documents', '')
+        if isinstance(tmp_output, dict):
+            tmp_output.pop('source_documents', '')
         logger.info('k=s act=on_chain_end flow_id={} output_dict={}', self.flow_id, tmp_output)
 
     def on_chat_model_start(self, serialized: Dict[str, Any], messages: List[List[BaseMessage]],
