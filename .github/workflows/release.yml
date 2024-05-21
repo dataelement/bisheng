@@ -97,6 +97,7 @@ jobs:
           context: "./src/backend/"
           # 是否 docker push
           push: true
+          platforms: linux/amd64,linux/arm64
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-backend"
@@ -113,6 +114,7 @@ jobs:
           context: "./src/frontend/"
           # 是否 docker push
           push: true
+          platforms: linux/amd64,linux/arm64
           # docker build arg, 注入 APP_NAME/APP_VERSION
           build-args: |
             APP_NAME="bisheng-frontend"
