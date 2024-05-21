@@ -263,6 +263,7 @@ def get_knowledge(*,
         return resp_200({'data': res, 'total': total_count})
 
     except Exception as e:
+        logger.exception("get_knowledge error")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
