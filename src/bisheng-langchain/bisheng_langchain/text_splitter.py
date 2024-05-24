@@ -163,7 +163,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
             searcher = IntervalSearch(indexes)
             split_texts = self.split_text(text)
             for chunk in split_texts:
-                new_metadata = {}
+                new_metadata = copy.deepcopy(metadatas[i])
                 index = text.find(chunk, index + 1)
                 inter0 = [index, index + len(chunk) - 1]
                 norm_inter = searcher.find(inter0)
