@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import { Button } from "../../../components/ui/button";
 import { Button } from "@/components/bs-ui/button";
@@ -11,19 +11,22 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { userContext } from "../../../contexts/userContext";
-import { disableUserApi, getUsersApi } from "../../../controllers/API/user";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/bs-ui/popover";
+import { disableUserApi, getUsersApi, getUserGroupTypes, getRoleTypes } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import UserRoleModal from "./UserRoleModal";
 import { SearchInput } from "../../../components/bs-ui/input";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
+import { FilterIcon } from "@/components/bs-icons/filter";
+import FilterUserGroup from "@/components/bs-ui/select/filter";
 
 export default function Users(params) {
     const { user } = useContext(userContext);
     const { t } = useTranslation()
 
-    const { page, pageSize, data: users, total, loading, setPage, search, reload } = useTable({ pageSize: 13 }, (param) =>
+    const { page, pageSize, data: users, total, loading, setPage, search, reload, filterData } = useTable({ pageSize: 13 }, (param) =>
         getUsersApi(param.keyword, param.page, param.pageSize)
     )
 
@@ -54,6 +57,40 @@ export default function Users(params) {
         reload()
     }
 
+    // 搜索返回的数据
+    const [data, setData] = useState('')
+    const getFilterData = (data) => {
+        setData(data)
+    }
+
+    const [flagUg, setFlagUg] = useState(false)
+    const getUgIsOpen = (is) => {
+        setFlagUg(is)
+    }
+    const [flagRo, setFlagRo] = useState(false)
+    const getRoIsOpen = (is) => {
+        setFlagRo(is)
+    }
+
+    // 获取用户组类型数据
+    const [userGroups, setUserGroups] = useState([])
+    const getUserGoups = () => {
+        const res = getUserGroupTypes()
+        setUserGroups(res)
+    }
+    // 获取角色类型数据
+    const [roles, setRoles] = useState([])
+    const getRoles = () => {
+        const res = getRoleTypes()
+        setRoles(res)
+    }
+
+    useEffect(() => {
+        getUserGoups()
+        getRoles()
+        return () => {setUserGroups([]); setRoles([])}
+    },[])
+
     return <div className="relative">
         <div className="h-[calc(100vh-136px)] overflow-y-auto pb-10">
             <div className="flex justify-end">
@@ -66,6 +103,32 @@ export default function Users(params) {
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[200px]">{t('system.username')}</TableHead>
+                        <TableHead>
+                            <div className="flex items-center">
+                                {t('system.userGroup')}
+                                <Popover open={flagUg} onOpenChange={() => setFlagUg(!flagUg)}> {/* onOpenChange点击空白区域触发 */}
+                                    <PopoverTrigger>
+                                        <FilterIcon onClick={() => setFlagUg(!flagUg)} className="text-gray-400 ml-3"/>
+                                    </PopoverTrigger>
+                                    <PopoverContent>
+                                        <FilterUserGroup arr={userGroups} placeholder={t('system.searchUserGroups')} onButtonClick={getFilterData} onIsOpen={getUgIsOpen}></FilterUserGroup>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                        </TableHead> 
+                        <TableHead>
+                            <div className="flex items-center">
+                                {t('system.role')}
+                                <Popover open={flagRo} onOpenChange={() => setFlagRo(!flagRo)}>
+                                    <PopoverTrigger>
+                                        <FilterIcon onClick={() => setFlagRo(!flagRo)} className="text-blue-500 ml-3"/>
+                                    </PopoverTrigger>
+                                    <PopoverContent>
+                                        <FilterUserGroup arr={roles} placeholder={t('system.searchRoles')} onButtonClick={getFilterData} onIsOpen={getRoIsOpen}></FilterUserGroup>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                        </TableHead> 
                         <TableHead>{t('createTime')}</TableHead>
                         <TableHead className="text-right">{t('operations')}</TableHead>
                     </TableRow>
@@ -75,6 +138,8 @@ export default function Users(params) {
                         <TableRow key={el.id}>
                             <TableCell className="font-medium max-w-md truncate">{el.user_name}</TableCell>
                             {/* <TableCell>{el.role}</TableCell> */}
+                            <TableCell>用户组A</TableCell>
+                            <TableCell>角色B</TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
                                 {user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-6">{t('edit')}</Button> :
