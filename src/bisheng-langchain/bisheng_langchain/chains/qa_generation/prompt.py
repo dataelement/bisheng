@@ -9,7 +9,7 @@ from langchain_core.prompts.prompt import PromptTemplate
 
 templ1 = """You are a smart assistant designed to help high school teachers come up with reading comprehension questions.
 Given a piece of text, you must come up with a question and answer pair that can be used to test a student's reading comprehension abilities.
-When coming up with this question/answer pair, you must respond in the following format:
+When coming up with this question/answer pair, you must respond in the following format and in same language as the text:
 ```
 {{
     "question": "$YOUR_QUESTION_HERE",
@@ -30,7 +30,7 @@ CHAT_PROMPT = ChatPromptTemplate.from_messages(
 )
 templ = """You are a smart assistant designed to help high school teachers come up with reading comprehension questions.
 Given a piece of text, you must come up with a question and answer pair that can be used to test a student's reading comprehension abilities.
-When coming up with this question/answer pair, you must respond in the following format:
+When coming up with this question/answer pair, you must respond in the following format and in same language as the text:
 ```
 {{
     "question": "$YOUR_QUESTION_HERE",
