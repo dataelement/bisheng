@@ -78,7 +78,9 @@
     "flowCtrlStrategy": "Flow control strategy",
     "limit": "Limit",
     "unlimited": "Unlimited",
-    "iconHover": "Simultaneously constrained by the overall traffic control strategy of the user group"
+    "iconHover": "Simultaneously constrained by the overall traffic control strategy of the user group",
+    "maximum": "Maximum of",
+    "perMinute": "concurrent conversations per minute"
   },
   "skills": {
     "manageTemplate": "Manage Skill Templates",

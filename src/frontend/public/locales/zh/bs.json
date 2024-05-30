@@ -79,7 +79,9 @@
     "flowCtrlStrategy": "流量控制策略",
     "limit": "有限制",
     "unlimited": "无限制",
-    "iconHover": "同时受用户组整体流量控制策略约束"
+    "iconHover": "同时受用户组整体流量控制策略约束",
+    "maximum": "每分钟最多",
+    "perMinute": "个对话"
   },
   "skills": {
     "manageTemplate": "管理技能模板",

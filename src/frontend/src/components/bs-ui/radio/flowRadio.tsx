@@ -16,7 +16,7 @@ export default function FlowRadio({limit, onChange}) {
     }
 
     return <div>
-        <RadioGroup className="flex space-x-3 h-[20px]" defaultValue={limit ? 'true' : 'false'}
+        <RadioGroup className="flex space-x-2 h-[20px]" defaultValue={limit ? 'true' : 'false'}
         onValueChange={(value) => handleChange(value)}>
             <div>
                 <Label className="flex justify-center">
@@ -31,8 +31,8 @@ export default function FlowRadio({limit, onChange}) {
             {limit && <div>
                 <Label>
                     <p className="mt-[-3px]">
-                        每分钟最多<Input type="number" value={number} className="inline h-5 w-[70px]" 
-                        onChange={handleInput}/>个并发对话
+                        {t('system.maximum')}<Input type="number" value={number} className="inline h-5 w-[70px]" 
+                        onChange={handleInput}/>{t('system.perMinute')}
                     </p>
                 </Label>
             </div>}
