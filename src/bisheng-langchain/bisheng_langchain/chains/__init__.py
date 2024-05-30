@@ -5,10 +5,12 @@ from bisheng_langchain.chains.retrieval.retrieval_chain import RetrievalChain
 from bisheng_langchain.chains.router.multi_rule import MultiRuleChain
 from bisheng_langchain.chains.router.rule_router import RuleBasedRouter
 from bisheng_langchain.chains.transform import TransformChain
+from bisheng_langchain.chains.qa_generation.base import QAGenerationChain
 
 from .loader_output import LoaderOutputChain
 
 __all__ = [
     'StuffDocumentsChain', 'LoaderOutputChain', 'AutoGenChain', 'RuleBasedRouter',
-    'MultiRuleChain', 'RetrievalChain', 'ConversationalRetrievalChain', 'TransformChain'
+    'MultiRuleChain', 'RetrievalChain', 'ConversationalRetrievalChain', 'TransformChain',
+    'QAGenerationChain'
 ]
