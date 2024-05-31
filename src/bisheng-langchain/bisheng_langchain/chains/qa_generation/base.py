@@ -57,8 +57,8 @@ class QAGenerationChain(Chain):
         cls,
         documents: List[Document],
         llm: BaseLanguageModel,
-        prompt: Optional[BasePromptTemplate] = None,
         k: Optional[int] = None,
+        chunk_size: int = 512,
         **kwargs: Any,
     ) -> QAGenerationChain:
         """
@@ -72,9 +72,14 @@ class QAGenerationChain(Chain):
         Returns:
             a QAGenerationChain class
         """
-        _prompt = prompt or PROMPT_SELECTOR.get_prompt(llm)
+        _prompt = PROMPT_SELECTOR.get_prompt(llm)
         chain = LLMChain(llm=llm, prompt=_prompt)
-        return cls(documents=documents, llm_chain=chain, k=k, **kwargs)
+        text_splitter = RecursiveCharacterTextSplitter(
+            separators=["\n\n", "\n", " ", ""],
+            chunk_size=chunk_size,
+            chunk_overlap=50,
+        )
+        return cls(documents=documents, llm_chain=chain, k=k, text_splitter=text_splitter, **kwargs)
 
     @property
     def _chain_type(self) -> str:
