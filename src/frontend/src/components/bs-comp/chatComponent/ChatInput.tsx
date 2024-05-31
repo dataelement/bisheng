@@ -18,7 +18,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
 
-    const { messages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
+    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
 
@@ -32,14 +32,14 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         if (changeChatedRef.current) {
             changeChatedRef.current = false
             // 新建的 form 技能,弹出窗口并锁定 input
-            if (form && messages.length === 0) {
+            if (form && messages.length === 0 && hisMessages.length === 0) {
                 setInputLock({ locked: true, reason: '' })
                 setFormShow(true)
                 setShowWhenLocked(true)
             }
         }
 
-    }, [messages])
+    }, [messages, hisMessages])
     useEffect(() => {
         if (!chatId) return
         setInputLock({ locked: false, reason: '' })

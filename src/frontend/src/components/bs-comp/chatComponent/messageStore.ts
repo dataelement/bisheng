@@ -19,6 +19,8 @@ type State = {
     /** 没有更多历史纪录 */
     historyEnd: boolean,
     messages: ChatMessageType[]
+    /** 历史回话独立存储 */
+    hisMessages: ChatMessageType[]
     /**
      * 控制引导问题的显示状态
      */
@@ -26,8 +28,8 @@ type State = {
 }
 
 type Actions = {
-    loadHistoryMsg: (flowid: string, chatId: string) => Promise<void>;
-    loadMoreHistoryMsg: (flowid: string) => Promise<void>;
+    loadHistoryMsg: (flowid: string, chatId: string, data: { appendHistory: boolean, lastMsg: string }) => Promise<void>;
+    loadMoreHistoryMsg: (flowid: string, appendHistory: boolean) => Promise<void>;
     destory: () => void;
     createSendMsg: (inputs: any, inputKey?: string) => void;
     createWsMsg: (data: any) => void;
@@ -76,18 +78,32 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     running: false,
     chatId: '',
     messages: [],
+    hisMessages: [],
     historyEnd: false,
     showGuideQuestion: false,
     setShowGuideQuestion(bln: boolean) {
         set({ showGuideQuestion: bln })
     },
-    async loadHistoryMsg(flowid, chatId) {
+    async loadHistoryMsg(flowid, chatId, { appendHistory, lastMsg }) {
         const res = await getChatHistory(flowid, chatId, 30, 0)
         const msgs = handleHistoryMsg(res)
         currentChatId = chatId
-        set({ historyEnd: false, messages: msgs.reverse() })
+        const hisMessages = appendHistory ? [] : msgs.reverse()
+        if (hisMessages.length) {
+            hisMessages.push({
+                ...bsMsgItem,
+                id: Math.random() * 1000000,
+                category: 'divider',
+                message: lastMsg,
+            })
+        }
+        set({
+            historyEnd: false,
+            messages: appendHistory ? msgs.reverse() : [],
+            hisMessages
+        })
     },
-    async loadMoreHistoryMsg(flowid) {
+    async loadMoreHistoryMsg(flowid, appendHistory) {
         if (get().running) return // 会话进行中禁止加载more历史
         if (get().historyEnd) return // 没有更多历史纪录
         const chatId = get().chatId
@@ -101,7 +117,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         }
         const msgs = handleHistoryMsg(res)
         if (msgs.length) {
-            set({ messages: [...msgs.reverse(), ...prevMsgs] })
+            set({ [appendHistory ? 'messages' : 'hisMessages']: [...msgs.reverse(), ...prevMsgs] })
         } else {
             set({ historyEnd: true })
         }
@@ -155,9 +171,16 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         const messages = get().messages
         const isRunLog = runLogsTypes.includes(wsdata.category);
         // run log类型存在嵌套情况，使用 extra 匹配 currentMessage; 否则取最近
-        const currentMessageIndex = isRunLog ?
-            messages.findLastIndex((msg) => msg.extra === wsdata.extra)
-            : messages.findLastIndex((msg) => !runLogsTypes.includes(msg.category))
+        let currentMessageIndex = 0
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (isRunLog && messages[i].extra === wsdata.extra) {
+                currentMessageIndex = i;
+                break;
+            } else if (!isRunLog && !runLogsTypes.includes(messages[i].category)) {
+                currentMessageIndex = i;
+                break;
+            }
+        }
         const currentMessage = messages[currentMessageIndex]
 
         const newCurrentMessage = {

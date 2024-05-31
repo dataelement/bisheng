@@ -16,7 +16,7 @@ import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 
-export default function ChatPanne({ customWsHost = '', data }) {
+export default function ChatPanne({ customWsHost = '', appendHistory = false, data }) {
     const { id, chatId, type } = data
     const { t } = useTranslation()
 
@@ -36,7 +36,10 @@ export default function ChatPanne({ customWsHost = '', data }) {
             setAssistant(null)
             const _flow = await getFlowApi(id)
             await build(_flow, chatId)
-            loadHistoryMsg(_flow.id, chatId)
+            loadHistoryMsg(_flow.id, chatId, {
+                appendHistory,
+                lastMsg: t('historicalMessages')
+            })
             flowRef.current = _flow
             setFlow(_flow)
             changeChatId(chatId) // ws
@@ -44,7 +47,10 @@ export default function ChatPanne({ customWsHost = '', data }) {
             flowRef.current = null
             setFlow(null)
             const _assistant = await loadAssistantState(id)
-            loadHistoryMsg(_assistant.id, chatId)
+            loadHistoryMsg(_assistant.id, chatId, {
+                appendHistory,
+                lastMsg: t('historicalMessages')
+            })
             setAssistant(_assistant)
             changeChatId(chatId) // ws
         }
@@ -183,7 +189,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
                     guideWord={flow.guide_word}
                     wsUrl={wsUrl}
                     onBeforSend={getWsParamData}
-                    loadMore={() => loadMoreHistoryMsg(flow.id)}
+                    loadMore={() => loadMoreHistoryMsg(flow.id, appendHistory)}
                     inputForm={flowSate.isForm ? <ChatReportForm flow={flow} onStart={sendReport} /> : null}
                 />
             </div>
@@ -202,7 +208,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
                     guideWord={assistantState.guide_word}
                     wsUrl={wsUrl}
                     onBeforSend={getWsParamData}
-                    loadMore={() => loadMoreHistoryMsg(assistant.id)}
+                    loadMore={() => loadMoreHistoryMsg(assistant.id, appendHistory)}
                     inputForm={null}
                 />
             </div>

@@ -8,6 +8,7 @@ import Doc from "./pages/ModelPage/doc";
 import Report from "./pages/Report";
 import SkillChatPage from "./pages/ChatAppPage";
 import ChatShare from "./pages/ChatAppPage/chatShare";
+import ChatPro from "./pages/ChatAppPage/chatWebview";
 import SkillAssisPage from "./pages/SkillPage/tabAssistant";
 import EditAssistantPage from "./pages/SkillPage/editAssistant";
 import SkillsPage from "./pages/SkillPage/tabSkills";
@@ -80,6 +81,7 @@ const router = createBrowserRouter([
   // 独立会话页
   { path: "/chat", element: <SkillChatPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
+  { path: "/chatpro/:id/", element: <ChatPro /> },
   { path: "/report/:id/", element: <Report /> },
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
   // { path: "/test", element: <Test /> },

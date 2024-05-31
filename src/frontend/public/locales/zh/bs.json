@@ -161,7 +161,8 @@
     "dialogueSelection": "对话选择",
     "chooseSkillOrAssistant": "选择一个您想使用的线上技能或助手",
     "search": "搜索",
-    "recommendationQuestions": "推荐问题"
+    "recommendationQuestions": "推荐问题",
+    "historicalMessages": "以上为历史消息"
   },
   "model": {
     "modelConfiguration": "模型配置",

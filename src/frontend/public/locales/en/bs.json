@@ -165,7 +165,8 @@
     "dialogueSelection": "Dialogue selection",
     "chooseSkillOrAssistant": "Choose an online skill or assistant you want to use",
     "search": "Search",
-    "recommendationQuestions": "Recommendation questions"
+    "recommendationQuestions": "Recommendation questions",
+    "historicalMessages": "Historical Messages"
   },
   "model": {
     "modelConfiguration": "Model Configuration",

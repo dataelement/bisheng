@@ -92,7 +92,7 @@ export default function SkillChatPage() {
             </div>
         </div>
         {/* chat */}
-        <ChatPanne data={selectChat}></ChatPanne>
+        <ChatPanne appendHistory data={selectChat}></ChatPanne>
     </div>
 };
 /**

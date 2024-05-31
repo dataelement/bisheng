@@ -12,7 +12,7 @@ import { useMessageStore } from "./messageStore";
 
 export default function MessagePanne({ useName, guideWord, loadMore }) {
     const { t } = useTranslation()
-    const { chatId, messages } = useMessageStore()
+    const { chatId, messages, hisMessages } = useMessageStore()
 
     // 反馈
     const thumbRef = useRef(null)
@@ -61,7 +61,7 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
             key={9999}
             data={{ message: guideWord, isSend: false, chatKey: '', end: true, user_name: '' }} />}
         {
-            messages.map(msg => {
+            [...hisMessages, ...messages].map(msg => {
                 // 工厂
                 let type = 'llm'
                 if (msg.isSend) {
