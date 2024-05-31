@@ -218,15 +218,20 @@ class BishengRAGTool:
             docs = sorted(docs, key=lambda x: (x.metadata['source'], x.metadata['chunk_index']))
         return docs
     
-    def run(self, query) -> str:
+    def run(self, query, return_only_outputs=True) -> Any:
         docs = self.retrieval_and_rerank(query)
         try:
-            ans = self.qa_chain({"input_documents": docs, "question": query}, return_only_outputs=True)
+            ans = self.qa_chain({"input_documents": docs, "question": query}, return_only_outputs=return_only_outputs)
         except Exception as e:
             logger.error(f'question: {query}\nerror: {e}')
             ans = {'output_text': str(e)}
-        rag_answer = ans['output_text']
-        return rag_answer
+        if return_only_outputs:
+            rag_answer = ans['output_text']
+            return rag_answer
+        else:
+            rag_answer = ans['output_text']
+            input_documents = ans['input_documents']
+            return rag_answer, input_documents
     
     async def arun(self, query: str) -> str:
         rag_answer = self.run(query)
