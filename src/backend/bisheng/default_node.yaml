@@ -352,6 +352,10 @@ vectorstores:
     documentation: https://python.langchain.com/docs/integrations/vectorstores/elasticsearch
   Milvus:
     documentation: "http://192.168.106.116:8030"
+  MilvusWithPermissionCheck:
+    documentation: "http://192.168.106.116:8030"
+  ElasticsearchWithPermissionCheck:
+    documentation: "http://192.168.106.116:8030"
   Chroma:
     documentation: "https://python.langchain.com/docs/modules/data_connection/vectorstores/integrations/chroma"
   Qdrant:

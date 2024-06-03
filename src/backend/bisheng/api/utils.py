@@ -189,21 +189,22 @@ async def build_flow_no_yield(graph_data: dict,
             if vertex.base_type == 'vectorstores':
                 # 注入user_name
                 vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
-                # 知识库通过参数传参
-                if 'collection_name' in kwargs and 'collection_name' in vertex.params:
-                    vertex.params['collection_name'] = kwargs['collection_name']
-                if 'collection_name' in kwargs and 'index_name' in vertex.params:
-                    vertex.params['index_name'] = kwargs['collection_name']
+                if vertex.vertex_type not in ["MilvusWithPermissionCheck", "ElasticsearchWithPermissionCheck"]:
+                    # 知识库通过参数传参
+                    if 'collection_name' in kwargs and 'collection_name' in vertex.params:
+                        vertex.params['collection_name'] = kwargs['collection_name']
+                    if 'collection_name' in kwargs and 'index_name' in vertex.params:
+                        vertex.params['index_name'] = kwargs['collection_name']
 
-                if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
-                    vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
-                    logger.info(f"rename_vector_col col={vertex.params['collection_name']}")
-                    if process_file:
-                        # L1 清除Milvus历史记录
-                        vertex.params['drop_old'] = True
-                elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
-                    # es
-                    vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
+                    if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
+                        vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
+                        logger.info(f"rename_vector_col col={vertex.params['collection_name']}")
+                        if process_file:
+                            # L1 清除Milvus历史记录
+                            vertex.params['drop_old'] = True
+                    elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
+                        # es
+                        vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
 
             if vertex.base_type == 'chains' and 'retriever' in vertex.params:
                 vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''

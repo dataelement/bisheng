@@ -77,3 +77,9 @@ class UserDao(UserBase):
         with session_getter() as session:
             statement = select(User).where(User.user_id.in_(user_ids))
             return session.exec(statement).all()
+
+    @classmethod
+    def get_user_by_username(cls, username: str) -> User | None:
+        with session_getter() as session:
+            statement = select(User).where(User.user_name == username)
+            return session.exec(statement).first()

@@ -42,7 +42,8 @@ def python_function(text: str) -> str:
 PYTHON_BASIC_TYPES = [str, bool, int, float, tuple, list, dict, set]
 
 DIRECT_TYPES = [
-    'str', 'bool', 'dict', 'int', 'float', 'Any', 'prompt', 'code', 'NestedDict', 'variable'
+    'str', 'bool', 'dict', 'int', 'float', 'Any', 'prompt', 'code', 'NestedDict', 'variable', 'knowledge_list',
+    'knowledge_one'
 ]
 
 # 新增用来记录node_id 和 对象之间关系的key

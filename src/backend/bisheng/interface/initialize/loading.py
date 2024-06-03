@@ -6,9 +6,11 @@ import httpx
 import openai
 from bisheng.cache.utils import file_download
 from bisheng.chat.config import ChatConfig
+from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.interface.agents.base import agent_creator
 from bisheng.interface.chains.base import chain_creator
 from bisheng.interface.custom_lists import CUSTOM_NODES
+from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import (eval_custom_component_code, get_function,
                                                import_by_type)
 from bisheng.interface.initialize.llm import initialize_vertexai
@@ -36,6 +38,8 @@ from langchain_community.utils.openai import is_openai_v1
 from loguru import logger
 from pydantic import SecretStr, ValidationError, create_model
 from pydantic.fields import FieldInfo
+
+from bisheng.utils.embedding import decide_embeddings
 
 if TYPE_CHECKING:
     from bisheng import CustomComponent
@@ -114,7 +118,7 @@ async def instantiate_based_on_type(class_object,
     elif base_type == 'embeddings':
         return instantiate_embedding(class_object, params)
     elif base_type == 'vectorstores':
-        return instantiate_vectorstore(class_object, params)
+        return instantiate_vectorstore(node_type, class_object, params)
     elif base_type == 'documentloaders':
         return instantiate_documentloader(class_object, params)
     elif base_type == 'textsplitters':
@@ -467,12 +471,32 @@ def instantiate_embedding(class_object, params: Dict):
         return class_object(**params)
 
 
-def instantiate_vectorstore(class_object: Type[VectorStore], params: Dict):
+def instantiate_vectorstore(node_type: str, class_object: Type[VectorStore], params: Dict):
     user_name = params.pop('user_name', '')
     search_kwargs = params.pop('search_kwargs', {})
     search_type = params.pop('search_type', 'similarity')
     if 'documents' not in params:
         params['documents'] = []
+
+    # 过滤掉用户没有权限的知识库
+    # TODO zgq 后续统一技能执行流程后将和业务有关的逻辑都迁移到初始化技能对象之前
+    if node_type == "MilvusWithPermissionCheck" or node_type == "ElasticsearchWithPermissionCheck":
+
+        # 获取执行用户 有权限查看的知识库列表
+        knowledge_ids = [one["key"] for one in params["collection_name"]]
+        knowledge_list = KnowledgeDao.judge_knowledge_permission(user_name, knowledge_ids)
+        logger.debug(f"{node_type} after filter, get knowledge_list: {knowledge_list}")
+
+        if not knowledge_list:
+            logger.warning(f"{node_type}: after filter, get zero knowledge")
+
+        # 没有任何知识库的话，提供假的embedding和空的collection_name
+        if node_type == "MilvusWithPermissionCheck":
+            params["collection_name"] = [knowledge.collection_name for knowledge in knowledge_list]
+            params["embedding"] = decide_embeddings(knowledge_list[0].model) if knowledge_list else FakeEmbedding()
+        else:
+            params["collection_name"] = [knowledge.index_name or knowledge.collection_name
+                                         for knowledge in knowledge_list]
 
     if initializer := vecstore_initializer.get(class_object.__name__):
         vecstore = initializer(class_object, params, search_kwargs)
@@ -537,8 +561,8 @@ def instantiate_documentloader(class_object: Type[BaseLoader], params: Dict):
 
 
 def instantiate_textsplitter(
-    class_object,
-    params: Dict,
+        class_object,
+        params: Dict,
 ):
     try:
         documents = params.pop('documents')
@@ -549,7 +573,7 @@ def instantiate_textsplitter(
                          'Try changing the chunk_size of the Text Splitter.') from exc
 
     if ('separator_type' in params
-            and params['separator_type'] == 'Text') or 'separator_type' not in params:
+        and params['separator_type'] == 'Text') or 'separator_type' not in params:
         params.pop('separator_type', None)
         # separators might come in as an escaped string like \\n
         # so we need to convert it to a string
@@ -580,7 +604,7 @@ def replace_zero_shot_prompt_with_prompt_template(nodes):
             # Build Prompt Template
             tools = [
                 tool for tool in nodes if tool['type'] != 'chatOutputNode'
-                and 'Tool' in tool['data']['node']['base_classes']
+                                          and 'Tool' in tool['data']['node']['base_classes']
             ]
             node['data'] = build_prompt_template(prompt=node['data'], tools=tools)
             break

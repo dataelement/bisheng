@@ -71,3 +71,13 @@ class RoleAccessDao(RoleAccessBase):
                 RoleAccess.type == access_type.value,
                 RoleAccess.third_id == third_id
             )).first()
+
+    @classmethod
+    def find_role_access(cls, role_ids: List[int], third_ids: List[str], access_type: AccessType) -> List[RoleAccess]:
+        with session_getter() as session:
+            if access_type:
+                return session.exec(
+                    select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
+                                             RoleAccess.third_id.in_(third_ids),
+                                             RoleAccess.type == access_type.value)).all()
+            return session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(role_ids))).all()
