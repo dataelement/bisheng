@@ -13,6 +13,7 @@ elasticsearch:
   ssl_verify:
     basic_auth: ["elastic", "oSGL-zVvZ5P3Tm7qkDLC"]
   drop_old: True
+  extract_key_by_llm: False
 
 embedding:
   type: 'OpenAIEmbeddings'
@@ -42,7 +43,7 @@ retriever:
           # type: 'ElemCharacterTextSplitter'
           type: 'RecursiveCharacterTextSplitter'
           chunk_size: 1000
-          chunk_overlap: 0
+          chunk_overlap: 100
           separators: ["\n\n"]
       retrieval:
         search_type: 'similarity'
@@ -54,7 +55,7 @@ retriever:
           # type: 'ElemCharacterTextSplitter'
           type: 'RecursiveCharacterTextSplitter'
           chunk_size: 1000
-          chunk_overlap: 0
+          chunk_overlap: 100
           separators: ["\n\n"]
       retrieval:
         search_type: 'similarity'

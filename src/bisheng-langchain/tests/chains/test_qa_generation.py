@@ -7,20 +7,20 @@ from bisheng_langchain.chat_models import ChatQWen
 from bisheng_langchain.chains import QAGenerationChain, QAGenerationChainV2
 
 
-# openai_proxy = os.getenv('OPENAI_PROXY')
-# async_http_client = httpx.AsyncClient(proxies=openai_proxy)
-# httpx_client = httpx.Client(proxies=openai_proxy)
-# llm = ChatOpenAI(
-#     model='gpt-4-0125-preview',
-#     temperature=0.3,
-#     http_async_client=async_http_client,
-#     http_client=httpx_client,
-# )
-
-llm = ChatQWen(
-    model_name='qwen1.5-72b-chat',
+openai_proxy = os.getenv('OPENAI_PROXY')
+async_http_client = httpx.AsyncClient(proxies=openai_proxy)
+httpx_client = httpx.Client(proxies=openai_proxy)
+llm = ChatOpenAI(
+    model='gpt-4-0125-preview',
     temperature=0.3,
+    http_async_client=async_http_client,
+    http_client=httpx_client,
 )
+
+# llm = ChatQWen(
+#     model_name='qwen1.5-72b-chat',
+#     temperature=0.3,
+# )
 
 
 def generator():
