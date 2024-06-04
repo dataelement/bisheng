@@ -99,16 +99,19 @@ def comment_resp(*, data: ChatInput, Authorize: AuthJWT = Depends()):
 
 
 @router.get('/chat/list', response_model=UnifiedResponseModel[List[ChatList]], status_code=200)
-def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
+def get_chatlist_list(*,
+                      page: Optional[int] = 1,
+                      limit: Optional[int] = 10,
+                      Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
 
     smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
                   func.max(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
-                      ChatMessage.user_id == payload.get('user_id')).group_by(
-                          ChatMessage.flow_id,
-                          ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
+        ChatMessage.user_id == payload.get('user_id')).group_by(
+        ChatMessage.flow_id,
+        ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
     with session_getter() as session:
         db_message = session.exec(smt).all()
     flow_ids = [message.flow_id for message in db_message]
@@ -142,14 +145,18 @@ def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
         else:
             # 通过接口创建的会话记录，不关联技能或者助手
             logger.debug(f'unknown message.flow_id={message.flow_id}')
-    return resp_200(chat_list)
+    return resp_200(chat_list[(page-1)*limit:page*limit])
 
 
 # 获取所有已上线的技能和助手
 @router.get('/chat/online',
             response_model=UnifiedResponseModel[List[FlowGptsOnlineList]],
             status_code=200)
-def get_online_chat(*, Authorize: AuthJWT = Depends()):
+def get_online_chat(*,
+                    keyword: Optional[str]=None,
+                    page: Optional[int] = 1,
+                    limit: Optional[int] = 10,
+                    Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
@@ -158,11 +165,11 @@ def get_online_chat(*, Authorize: AuthJWT = Depends()):
     # 获取所有已上线的助手
     if user.is_admin():
         all_assistant = AssistantDao.get_all_online_assistants()
-        flows = FlowDao.get_all_online_flows()
+        flows = FlowDao.get_all_online_flows(keyword)
     else:
-        assistants = AssistantService.get_assistant(user, None, AssistantStatus.ONLINE.value, 0, 0)
+        assistants = AssistantService.get_assistant(user, keyword, AssistantStatus.ONLINE.value, 0, 0)
         all_assistant = assistants.data.get('data')
-        flows = FlowDao.get_user_access_online_flows(user_id)
+        flows = FlowDao.get_user_access_online_flows(user_id, keyword=keyword)
     for one in all_assistant:
         res.append(
             FlowGptsOnlineList(id=one.id.hex,
@@ -182,7 +189,7 @@ def get_online_chat(*, Authorize: AuthJWT = Depends()):
                                update_time=one.update_time,
                                flow_type='flow'))
     res.sort(key=lambda x: x.update_time, reverse=True)
-    return resp_200(data=res)
+    return resp_200(data=res[(page - 1) * limit:page * limit])
 
 
 @router.websocket('/chat/{flow_id}')
