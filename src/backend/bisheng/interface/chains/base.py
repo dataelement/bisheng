@@ -28,6 +28,9 @@ class ChainCreator(LangChainTypeCreator):
         'LLMCheckerChain': 'from_llm',
         'SQLDatabaseChain': 'from_llm',
         'LLMRouterChain': 'from_llm',
+        'BishengRetrievalQA': 'from_llm',
+        'QAGenerationChain': 'from_llm',
+        'QAGenerationChainV2': 'from_llm',
     }
 
     @property

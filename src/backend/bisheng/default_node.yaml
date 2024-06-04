@@ -45,6 +45,10 @@ chains:
     documentation: ""
   TransformChain:
     documentation: ""
+  QAGenerationChain:
+    documentation: ""
+  QAGenerationChainV2:
+    documentation: ""
   SimpleSequentialChain:
     documentation: ""
   SequentialChain:
@@ -67,6 +71,8 @@ chains:
     documentation: ""
   RetrievalQA:
     documentation: "https://python.langchain.com/docs/modules/chains/popular/vector_db_qa"
+  BishengRetrievalQA:
+    documentation: ""
   RetrievalQAWithSourcesChain:
     documentation: ""
   ConversationalRetrievalChain:

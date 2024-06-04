@@ -97,7 +97,7 @@ class ChainFrontendNode(FrontendNode):
             field.value = None
 
         field.advanced = False
-        if 'key' in field.name:
+        if 'key' in field.name and field.name != 'keyword_store':  # 特殊处理下bishengRetrievalQA组件
             field.password = False
             field.show = False
         if field.name in ['input_key', 'output_key']:
