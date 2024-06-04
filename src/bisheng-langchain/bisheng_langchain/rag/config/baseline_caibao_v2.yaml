@@ -13,7 +13,7 @@ elasticsearch:
   ssl_verify:
     basic_auth: ["elastic", "oSGL-zVvZ5P3Tm7qkDLC"]
   drop_old: True
-  extract_key_by_llm: False 
+  extract_key_by_llm: False
 
 embedding:
   type: 'OpenAIEmbeddings'

@@ -19,3 +19,12 @@ export type ROLE = {
     role_name: string
     update_time: string
 }
+
+export type UserGroup = {
+    create_time: string
+    id: number
+    user_group_id: number
+    remark: string
+    user_group_name: string
+    update_time: string
+}

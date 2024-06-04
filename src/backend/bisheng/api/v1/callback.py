@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 from typing import Any, Dict, List, Union
 
@@ -63,8 +64,10 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     async def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
         logger.debug(f'on_chain_end outputs={outputs} kwargs={kwargs}')
-        outputs.pop('source_documents', '')
-        logger.info('k=s act=on_chain_end flow_id={} output_dict={}', self.flow_id, outputs)
+        tmp_output = copy.deepcopy(outputs)
+        if isinstance(tmp_output, dict):
+            tmp_output.pop('source_documents', '')
+        logger.info('k=s act=on_chain_end flow_id={} output_dict={}', self.flow_id, tmp_output)
 
     async def on_chain_error(self, error: Union[Exception, KeyboardInterrupt],
                              **kwargs: Any) -> Any:
@@ -210,9 +213,10 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # todo 判断技能权限
         logger.debug(f'on_retriever_end result={result} kwargs={kwargs}')
         if result:
-            [doc.metadata.pop('bbox', '') for doc in result]
+            tmp_result = copy.deepcopy(result)
+            [doc.metadata.pop('bbox', '') for doc in tmp_result]
             logger.info('k=s act=on_retriever_end flow_id={} result_without_bbox={}', self.flow_id,
-                        result)
+                        tmp_result)
 
     async def on_chat_model_start(self, serialized: Dict[str, Any],
                                   messages: List[List[BaseMessage]], **kwargs: Any) -> Any:
@@ -319,9 +323,10 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         # todo 判断技能权限
         logger.debug(f'retriver_result result={result}')
         if result:
-            [doc.metadata.pop('bbox', '') for doc in result]
+            tmp_result = copy.deepcopy(result)
+            [doc.metadata.pop('bbox', '') for doc in tmp_result]
             logger.info('k=s act=on_retriever_end flow_id={} result_without_bbox={}', self.flow_id,
-                        result)
+                        tmp_result)
 
     def on_chain_start(self, serialized: Dict[str, Any], inputs: Dict[str, Any],
                        **kwargs: Any) -> Any:
@@ -332,8 +337,10 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
     def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> Any:
         """Run when chain ends running."""
         logger.debug(f'on_chain_end outputs={outputs}')
-        outputs.pop('source_documents', '')
-        logger.info('k=s act=on_chain_end flow_id={} output_dict={}', self.flow_id, outputs)
+        tmp_output = copy.deepcopy(outputs)
+        if isinstance(tmp_output, dict):
+            tmp_output.pop('source_documents', '')
+        logger.info('k=s act=on_chain_end flow_id={} output_dict={}', self.flow_id, tmp_output)
 
     def on_chat_model_start(self, serialized: Dict[str, Any], messages: List[List[BaseMessage]],
                             **kwargs: Any) -> Any:
@@ -512,7 +519,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                     is_bot=1,
                     message=json.dumps(output_info),
                     intermediate_steps=f'{input_info["steps"]}\n\nTool output:\n\n  Error: ' +
-                    str(error),
+                                       str(error),
                     category=tool_category,
                     type='end',
                     flow_id=self.flow_id,

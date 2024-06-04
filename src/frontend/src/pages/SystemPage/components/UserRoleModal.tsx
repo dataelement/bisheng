@@ -3,7 +3,7 @@ import MultiSelect from "@/components/bs-ui/select/multi"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "../../../components/bs-ui/button"
-import { getRolesApi, getUserRoles, updateUserRoles } from "../../../controllers/API/user"
+import { getRolesApi, getUserRoles, getUserGroupsApi, updateUserRoles, updateUserGroups } from "../../../controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request"
 import { ROLE } from "../../../types/api/user"
 
@@ -12,11 +12,20 @@ export default function UserRoleModal({ id, onClose, onChange }) {
 
     const [roles, setRoles] = useState<ROLE[]>([])
     const [selected, setSelected] = useState([])
+
+    const [userGroups, setUserGroups] = useState([])
+    const [ugSelected, setUgSelected] = useState([])
     const [error, setError] = useState(false)
 
     useEffect(() => {
         if (!id) return
+        getUserGroupsApi().then(res => {
+            setUserGroups(res.data)
+            const ug = res.data.find(ug => ug.name == '默认用户组')
+            setUgSelected([ug,...ugSelected])
+        })
         getRolesApi().then(data => {
+            //@ts-ignore
             const roleOptions = data.filter(role => role.id !== 1)
                 .map(role => ({ ...role, role_id: role.id }))
             setRoles(roleOptions);
@@ -29,7 +38,6 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                 }
                 setSelected(userRoles)
             })
-            // console.log(roles)
         })
         setError(false)
     }, [id])
@@ -40,12 +48,38 @@ export default function UserRoleModal({ id, onClose, onChange }) {
 
     const handleSave = async () => {
         if (!selected.length) return setError(true)
+        if(ugSelected.length === 0) return setError(true)
         const res = await captureAndAlertRequestErrorHoc(updateUserRoles(id, selected.map(item => item.role_id)))
+        const resUg = await captureAndAlertRequestErrorHoc(updateUserGroups(id, ugSelected.map(ug => ug.name)))
         console.log('res :>> ', res);
         onChange()
     }
     return <Dialog open={id} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-[625px]">
+            <DialogHeader>
+                <DialogTitle>{t('system.userGroupsSel')}</DialogTitle>
+            </DialogHeader>
+            <div className="">
+                <MultiSelect
+                    className="max-w-[600px]"
+                    value={ugSelected.map(ug => {
+                        return ug.id.toString()
+                    })}
+                    options={userGroups.map((ug) => {
+                        return {
+                            label: ug.name,
+                            value: ug.id.toString()
+                        }
+                    })}
+                    lockedValues={["01"]}
+                    onChange={(values) => {
+                        setUgSelected(userGroups.filter(ug => {
+                            return values.includes(ug.id.toString())
+                        }))
+                    }}
+                >
+                </MultiSelect>
+            </div>
             <DialogHeader>
                 <DialogTitle>{t('system.roleSelect')}</DialogTitle>
             </DialogHeader>

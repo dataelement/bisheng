@@ -388,8 +388,8 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
                 raise Exception(f'当前文件无法解析， {resp.text}')
             resp = resp.json()
             if resp["status_code"] != 200:
-                logger.error(f'file_pdf=not_success resp={resp.text}')
-                raise Exception(f'当前文件无法解析， {resp.text}')
+                logger.error(f'file_pdf=not_success resp={resp}')
+                raise Exception(f'当前文件无法解析， {resp}')
             b64_data = resp['b64_pdf']
             # 替换历史文件
             with open(input_file, 'wb') as fout:

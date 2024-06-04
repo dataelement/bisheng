@@ -38,6 +38,30 @@ export async function disableUserApi(userid, status) {
 export async function getRolesApi(searchkey = ''): Promise<{ data: ROLE[] }> {
     return await axios.get(`/api/v1/role/list?role_name=${searchkey}`)
 }
+// 用户组列表
+export async function getUserGroupsApi() {
+    return {
+        data: [
+            {id:'01', name: '默认用户组', admin: [{id:'01',name:'用户X'},{id:'02',name:'用户Y'}],flowController:true, time:'2024-05-28 15:30'},
+            {id:'02', name: '测试数据二',admin: [{id:'01',name:'用户X'}],flowController:true, time:'2024-05-28 15:30'},
+            {id:'03', name: '测试数据三',admin: [{id:'01',name:'用户Y'}],flowController:false, time:'2024-05-28 15:30'},
+            {id:'04', name: '测试数据四',admin: [{id:'01',name:'用户Z'}],flowController:false, time:'2024-05-28 15:30'}
+        ],
+        total: 4
+    }
+}
+// 所有用户
+export async function getAllUsersApi() {
+    return {
+        data:[
+            {id:'01',name:'admin'},
+            {id:'02',name:'用户X'},
+            {id:'03',name:'用户Y'},
+            {id:'04',name:'用户Z'},
+            {id:'05',name:'用户W'},
+        ]
+    }
+}
 /**
  * 获取配置
  */
@@ -119,6 +143,10 @@ export async function updateRoleNameApi(roleId, name) {
 export async function delRoleApi(roleId) {
     return axios.delete(`/api/v1/role/${roleId}`)
 }
+// 
+export async function delUserGroupApi(ugId) {
+    
+}
 
 /**
  * 获取用户的角色信息
@@ -135,4 +163,30 @@ export async function updateUserRoles(userId, roles) {
         user_id: userId,
         role_id: roles
     });
+}
+// 更新用户组
+export async function updateUserGroups(userId, userGroups) {
+
+}
+// 获取用户组类别
+export function getUserGroupTypes() {
+    return [
+        {id:'01', name: '默认用户组'},
+        {id:'02', name: '用户组A'},
+        {id:'03', name: '用户组B'}
+    ]
+}
+// 获取用户角色类别
+export function getRoleTypes() {
+    return [
+        {id:'01', name:'普通用户'},
+        {id:'02', name:'用户A'},
+        {id:'03', name:'用户B'}
+    ]
+}
+
+// 用户组/角色 筛选功能
+export function getSearchRes(name: string, ...param:string[]) {
+    console.log([...param])
+    return []
 }

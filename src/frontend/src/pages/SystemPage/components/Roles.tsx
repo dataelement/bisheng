@@ -5,7 +5,6 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
     Table,
     TableBody,
-    TableCaption,
     TableCell,
     TableHead,
     TableHeader,
