@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Optional, Type, Union
 from bisheng.interface.base import CustomChain
 from bisheng.interface.utils import extract_input_variables_from_prompt
 from bisheng_langchain.chains.question_answering import load_qa_chain
-from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
 from langchain.base_language import BaseLanguageModel
 from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.chains import ConversationChain, LLMChain
@@ -223,5 +222,4 @@ CUSTOM_CHAINS: Dict[str, Type[Union[ConversationChain, CustomChain]]] = {
     'MidJourneyPromptChain': MidJourneyPromptChain,
     'TimeTravelGuideChain': TimeTravelGuideChain,
     'DalleGeneratorChain': DalleGeneratorChain,
-    'BishengRetrievalQA': BishengRetrievalQA,
 }

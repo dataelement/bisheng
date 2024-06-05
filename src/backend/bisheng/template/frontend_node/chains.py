@@ -95,6 +95,9 @@ class ChainFrontendNode(FrontendNode):
             field.show = True
             field.required = False
             field.value = None
+        if name == 'BishengRetrievalQA' and field.name == 'max_content':
+            field.show = True
+            field.required = False
 
         field.advanced = False
         if 'key' in field.name and field.name != 'keyword_store':  # 特殊处理下bishengRetrievalQA组件

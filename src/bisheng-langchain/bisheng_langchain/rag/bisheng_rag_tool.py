@@ -245,8 +245,8 @@ class BishengRAGTool:
             input_documents = ans['input_documents']
             return rag_answer, input_documents
     
-    async def arun(self, query: str) -> str:
-        rag_answer = self.run(query)
+    async def arun(self, query: str, return_only_outputs=True) -> str:
+        rag_answer = self.run(query, return_only_outputs)
         return rag_answer
     
     @classmethod
