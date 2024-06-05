@@ -184,9 +184,32 @@ export function getRoleTypes() {
         {id:'03', name:'用户B'}
     ]
 }
-
 // 用户组/角色 筛选功能
 export function getSearchRes(name: string, ...param:string[]) {
     console.log([...param])
     return []
+}
+// 获取用户组的所有用户关联的助手
+export async function getUserGroupAssistApi() {
+    return {
+        data:[
+            {id:'01',name:'助手一',createdBy:'用户X',flowCtrl:false},
+            {id:'02',name:'助手二',createdBy:'用户Y',flowCtrl:true},
+            {id:'03',name:'助手三',createdBy:'用户Z',flowCtrl:false},
+            {id:'04',name:'助手四',createdBy:'用户W',flowCtrl:true},
+        ],
+        total:4
+    }
+}
+// 获取用户组的所有用户关联的技能
+export async function getUserGroupSkillApi() {
+    return {
+        data:[
+            {id:'01',name:'技能一',createdBy:'用户X',flowCtrl:false},
+            {id:'02',name:'技能二',createdBy:'用户Y',flowCtrl:true},
+            {id:'03',name:'技能三',createdBy:'用户Z',flowCtrl:false},
+            {id:'04',name:'技能四',createdBy:'用户W',flowCtrl:true},
+        ],
+        total:4
+    }
 }

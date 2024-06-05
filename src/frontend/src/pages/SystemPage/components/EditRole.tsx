@@ -200,7 +200,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
             </SearchPanne>
         </div>
         {/* 知识库 */}
-        <div className="">
+        <div className="mb-20">
             <SearchPanne title={t('system.knowledgeAuthorization')} role_id={roleId} type={'lib'}>
                 {(data) => (
                     <Table>
@@ -230,7 +230,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
                 )}
             </SearchPanne>
         </div>
-        <div className="flex justify-center gap-4 mt-16">
+        <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-[white]">
             <Button variant="outline" className="px-16" onClick={() => onChange()}>{t('cancel')}</Button>
             <Button className="px-16" onClick={handleSave}>{t('save')}</Button>
         </div>

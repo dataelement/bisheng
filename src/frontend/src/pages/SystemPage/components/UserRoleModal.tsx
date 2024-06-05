@@ -14,7 +14,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
     const [selected, setSelected] = useState([])
 
     const [userGroups, setUserGroups] = useState([])
-    const [ugSelected, setUgSelected] = useState([])
+    const [userGroupSelected, setUserGroupSelected] = useState([])
     const [error, setError] = useState(false)
 
     useEffect(() => {
@@ -22,7 +22,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
         getUserGroupsApi().then(res => {
             setUserGroups(res.data)
             const ug = res.data.find(ug => ug.name == '默认用户组')
-            setUgSelected([ug,...ugSelected])
+            setUserGroupSelected([ug,...userGroupSelected])
         })
         getRolesApi().then(data => {
             //@ts-ignore
@@ -48,9 +48,9 @@ export default function UserRoleModal({ id, onClose, onChange }) {
 
     const handleSave = async () => {
         if (!selected.length) return setError(true)
-        if(ugSelected.length === 0) return setError(true)
+        if(userGroupSelected.length === 0) return setError(true)
         const res = await captureAndAlertRequestErrorHoc(updateUserRoles(id, selected.map(item => item.role_id)))
-        const resUg = await captureAndAlertRequestErrorHoc(updateUserGroups(id, ugSelected.map(ug => ug.name)))
+        const resUg = await captureAndAlertRequestErrorHoc(updateUserGroups(id, userGroupSelected.map(ug => ug.name)))
         console.log('res :>> ', res);
         onChange()
     }
@@ -62,7 +62,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
             <div className="">
                 <MultiSelect
                     className="max-w-[600px]"
-                    value={ugSelected.map(ug => {
+                    value={userGroupSelected.map(ug => {
                         return ug.id.toString()
                     })}
                     options={userGroups.map((ug) => {
@@ -73,7 +73,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                     })}
                     lockedValues={["01"]}
                     onChange={(values) => {
-                        setUgSelected(userGroups.filter(ug => {
+                        setUserGroupSelected(userGroups.filter(ug => {
                             return values.includes(ug.id.toString())
                         }))
                     }}
