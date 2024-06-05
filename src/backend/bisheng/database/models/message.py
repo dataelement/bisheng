@@ -6,7 +6,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy import JSON, Column, DateTime, String, Text, text
+from sqlalchemy import JSON, Column, DateTime, String, Text, func, text
 from sqlmodel import Field, delete, select
 
 
@@ -56,6 +56,24 @@ class ChatMessageCreate(MessageBase):
     pass
 
 
+class MessageDao(MessageBase):
+
+    @classmethod
+    def static_msg_liked(cls, liked: int, flow_id: str, create_time_begin: datetime,
+                         create_time_end: datetime):
+        base_condition = select(func.count(ChatMessage.id)).where(ChatMessage.liked == liked)
+
+        if flow_id:
+            base_condition = base_condition.where(ChatMessage.flow_id == flow_id)
+
+        if create_time_begin and create_time_end:
+            base_condition = base_condition.where(ChatMessage.create_time > create_time_begin,
+                                                  ChatMessage.create_time < create_time_end)
+
+        with session_getter() as session:
+            return session.scalar(base_condition)
+
+
 class ChatMessageDao(MessageBase):
 
     @classmethod
@@ -74,9 +92,7 @@ class ChatMessageDao(MessageBase):
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
-            statement = statement.limit(limit).order_by(
-                ChatMessage.create_time.asc()
-            )
+            statement = statement.limit(limit).order_by(ChatMessage.create_time.asc())
             return session.exec(statement).all()
 
     @classmethod
