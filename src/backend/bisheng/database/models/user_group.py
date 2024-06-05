@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -8,7 +8,9 @@ from sqlmodel import Field, select
 
 
 class UserGroupBase(SQLModelSerializable):
-    group_name: str = Field(index=False, description='前端展示名称', unique=True)
+    user_id: int = Field(index=True, description='用户id')
+    group_id: int = Field(index=True, description='组id')
+    is_group_admin: bool = Field(index=False, description='是否是组管理员')
     remark: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -28,7 +30,9 @@ class UserGroupRead(UserGroupBase):
 
 
 class UserGroupUpdate(UserGroupBase):
-    role_name: Optional[str]
+    user_id: Optional[int]
+    group_id: Optional[int]
+    is_group_admin: Optional[bool]
     remark: Optional[str]
 
 
@@ -39,7 +43,15 @@ class UserGroupCreate(UserGroupBase):
 class UserGroupDao(UserGroupBase):
 
     @classmethod
-    def get_user_group(cls, user_id: int):
+    def get_user_group(cls, user_id: int) -> List[UserGroup]:
         with session_getter() as session:
             statement = select(UserGroup).where(UserGroup.user_id == user_id)
             return session.exec(statement).all()
+
+    @classmethod
+    def insert_user_group(cls, user_group: UserGroupCreate) -> UserGroup:
+        with session_getter() as session:
+            session.add(user_group)
+            session.commit()
+            session.refresh(user_group)
+            return user_group

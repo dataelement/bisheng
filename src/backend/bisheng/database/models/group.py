@@ -39,7 +39,21 @@ class GroupCreate(GroupBase):
 class GroupDao(GroupBase):
 
     @classmethod
-    def get_user_group(cls, id: int):
+    def get_user_group(cls, group_id: int) -> Group | None:
         with session_getter() as session:
-            statement = select(Group).where(Group.id == id)
+            statement = select(Group).where(Group.id == group_id)
             return session.exec(statement).first()
+
+    @classmethod
+    def insert_group(cls, group: GroupCreate) -> Group:
+        with session_getter() as session:
+            session.add(group)
+            session.commit()
+            session.refresh(group)
+            return group
+
+    @classmethod
+    def get_all_group(cls) -> list[Group]:
+        with session_getter() as session:
+            statement = select(Group)
+            return session.exec(statement).all()
