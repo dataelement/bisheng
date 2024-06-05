@@ -330,14 +330,21 @@ class VectorStoreFrontendNode(FrontendNode):
                 field.show = False
                 field.required = False
         elif field.name == 'collection_name':
+            field.show = True
+            field.advanced = False
             field.value = ''
             field.field_type = 'knowledge_one'  # 知识库单选类型，前端渲染单选列表
             if name == 'MilvusWithPermissionCheck':
                 field.is_list = True
                 field.field_type = 'knowledge_list'  # 知识库多选类型，前端渲染多选列表
         elif field.name == 'index_name':
+            field.show = True
+            field.advanced = False
             field.value = ''
             field.field_type = 'knowledge_one'
+            if name == 'ElasticsearchWithPermissionCheck':
+                field.is_list = True
+                field.field_type = 'knowledge_list'  # 知识库多选类型，前端渲染多选列表
 
         elif field.name in basic_fields:
             field.show = True
