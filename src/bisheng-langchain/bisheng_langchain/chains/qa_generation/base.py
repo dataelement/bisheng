@@ -107,11 +107,11 @@ class QAGenerationChain(Chain):
         results = self.llm_chain.generate(
             [{"text": d.page_content} for d in docs], run_manager=run_manager
         )
-        qa = []
+        qa = ''
         for res in results.generations:
             try:
-                response = json.loads(parse_json(res[0].text))
-                qa.append(response)
+                # response = json.loads(parse_json(res[0].text))
+                qa += res[0].text
             except Exception as e:
                 logger.error(f"Failed to parse response: {res[0].text}. Error: {e}")
                 continue
