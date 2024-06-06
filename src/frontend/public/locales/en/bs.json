@@ -57,6 +57,9 @@
     "roleNamePrompt": "Role name cannot exceed 50 characters",
     "roleNameRequired": "Role name is required",
     "roleNameExists": "Role name already exists",
+    "groupNameExists": "UserGroup name already exists",
+    "groupNamePrompt": "UserGroup name cannot exceed 30 characters",
+    "groupNameRequired": "UserGroup name is required",
     "parameterConfig": "Parameter Configuration",
     "language": "Language",
     "assistantAuthorization": "Assistant Authorization",
@@ -69,7 +72,7 @@
     "searchRoles": "Search roles",
     "reset": "Reset",
     "confirm": "Confirm",
-    "userGroupName": "UserGroup Name",
+    "userGroupName": "Enter UserGroup Name",
     "admins": "Admin",
     "flowControl": "Overall User Flow Control",
     "AssistantFlowCtrl": "Assistant Flow Control",
@@ -80,7 +83,7 @@
     "unlimited": "Unlimited",
     "iconHover": "Simultaneously constrained by the overall traffic control strategy of the user group",
     "maximum": "Maximum of",
-    "perMinute": "concurrent conversations per minute"
+    "perMinute": "concurrent conversations per second"
   },
   "skills": {
     "manageTemplate": "Manage Skill Templates",

@@ -18,7 +18,7 @@ type Actions = {
   destroy: () => void
 }
 
-type Action = 'setBaseInfo' | 'setting' | 'setPrompt' | 'setGuideword' | 'setTools' | 'setFlows' | 'setQuestion'
+type Action = 'setBaseInfo' | 'setting' | 'setPrompt' | 'setGuideword' | 'setTools' | 'setFlows' | 'setQuestion' | 'setContentSecurity'
 
 const assistantReducer = (state: State, action: Action, data: Partial<AssistantDetail>) => {
   console.log('action :>> ', action, data);
@@ -46,6 +46,13 @@ const assistantTemp = {
   user_id: 1,
   create_time: "",
   update_time: "",
+  content_security: {
+    open: true, // 是否开启内容安全审查
+    reviewType: '',
+    vocabularyType: [],
+    vocabularyInput: '',
+    automaticReply: ''
+  }, // 内容安全审查对象
   tool_list: [],
   flow_list: [],
   knowledge_list: [],

@@ -66,20 +66,34 @@ class UserGroupDao(UserGroupBase):
             session.commit()
 
     @classmethod
-    def get_group_user(cls, group_id: int) -> List[UserGroup]:
+    def get_group_user(cls,
+                       group_id: int,
+                       page_size: str = None,
+                       page_num: str = None) -> List[UserGroup]:
         with session_getter() as session:
             statement = select(UserGroup).where(UserGroup.group_id == group_id)
+            if page_num and page_size:
+                statement = statement.offset(
+                    (int(page_num) - 1) * int(page_size)).limit(int(page_size))
             return session.exec(statement).all()
 
     @classmethod
-    def get_all_group(cls,
-                      group_name: str = None,
-                      page_size: int = None,
-                      page_num: int = None) -> List[UserGroup]:
+    def is_users_in_group(cls, group_id: int, user_ids: List[int]) -> List[UserGroup]:
         with session_getter() as session:
-            statement = select(UserGroup)
-            if group_name:
-                statement = statement.where(UserGroup.group_name == group_name)
-            if page_size and page_num:
-                statement = statement.offset((page_num - 1) * page_size).limit(page_size)
+            statement = select(UserGroup).where(UserGroup.group_id == group_id,
+                                                UserGroup.user_id.in_(user_ids))
             return session.exec(statement).all()
+
+    @classmethod
+    def get_groups_admins(cls, group_ids: List[int]) -> List[UserGroup]:
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids),
+                                                UserGroup.is_group_admin is True)
+            return session.exec(statement).all()
+
+    @classmethod
+    def update_user_groups(cls, user_groups: List[UserGroup]) -> List[UserGroup]:
+        with session_getter() as session:
+            session.add_all(user_groups)
+            session.commit()
+            return user_groups

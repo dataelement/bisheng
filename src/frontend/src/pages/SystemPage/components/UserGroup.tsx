@@ -15,27 +15,28 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import EditUserGroup from "./EditUserGroup";
+import { UserGroup } from "@/types/api/user";
 
 export default function UserGroups() {
     const { t } = useTranslation()
-    const [userGroups, setUserGroups] = useState([])
+    const [userGroups, setUserGroups] = useState<UserGroup[]>([])
     const [userGroup, setUserGroup] = useState(null)
-    const tempRef = useRef([]) // 搜索功能的数据暂存
+    const tempRef = useRef<UserGroup[]>([]) // 搜索功能的数据暂存
 
     const loadData = async () => {
         const res = await getUserGroupsApi()  
-        setUserGroups(res.data)  
-        tempRef.current = res.data
+        setUserGroups(res.data.records)  
+        tempRef.current = res.data.records
     }
 
     const handleSearch = (e) => {
         const word = e.target.value
-        const newUgs = tempRef.current.filter(ug => ug.name.toUpperCase().includes(word.toUpperCase()))
+        const newUgs = tempRef.current.filter(ug => ug.groupName.toUpperCase().includes(word.toUpperCase()))
         setUserGroups(newUgs)
     }
     const handleDelete = (userGroup) => {
         bsConfirm({
-            desc: `${t('system.confirmText')} 【${userGroup.name}】 ?`,
+            desc: `${t('system.confirmText')} 【${userGroup.groupName}】 ?`,
             okTxt: t('delete'),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(delUserGroupApi(userGroup.id).then(loadData))
@@ -46,7 +47,7 @@ export default function UserGroups() {
 
     const checkSameName = (name: string) => {
         return (userGroups.find(ug =>
-            ug.name === name && ug.id !== userGroup.id))
+            ug.groupName === name && ug.id !== userGroup.id))
     }
     const handleChange = (flag:boolean) => {
         flag && loadData()
@@ -55,10 +56,7 @@ export default function UserGroups() {
 
     useEffect(() => { loadData() }, [])
 
-    if(userGroup) {
-        return <EditUserGroup id={userGroup.id || ''} name={userGroup.name || ''} admins={userGroup.admin} 
-                limit={userGroup.flowController || false} onBeforeChange={checkSameName} onChange={handleChange}/>
-    }
+    if(userGroup) return <EditUserGroup id={userGroup.id || ''} name={userGroup.groupName || ''} onBeforeChange={checkSameName} onChange={handleChange}/>
 
     return <div className="relative">
         <div className="h-[calc(100vh-136px)] overflow-y-auto pb-10">
@@ -84,13 +82,13 @@ export default function UserGroups() {
                 <TableBody>
                     {userGroups.map((ug) => (
                         <TableRow key={ug.id}>
-                            <TableCell className="font-medium">{ug.name}</TableCell>
-                            <TableCell>{ug.admin.map(a => a.name).join('，')}</TableCell>
-                            <TableCell>{ug.flowController ? '有限制' : '无限制'}</TableCell>
-                            <TableCell>{ug.time.replace('T', ' ')}</TableCell>
+                            <TableCell className="font-medium">{ug.groupName}</TableCell>
+                            <TableCell>{ug.adminUser.replaceAll(',', '，')}</TableCell>
+                            <TableCell>{ug.groupLimit ? t('system.limit') : t('system.unlimited')}</TableCell>
+                            <TableCell>{ug.updateTime.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
                                 <Button variant="link" onClick={() => setUserGroup(ug)} className="px-0 pl-6">{t('edit')}</Button>
-                                <Button variant="link" disabled={['01'].includes(ug.id)} onClick={() => handleDelete(ug)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
+                                <Button variant="link" disabled={[1].includes(ug.id)} onClick={() => handleDelete(ug)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
                             </TableCell>
                         </TableRow>
                     ))}

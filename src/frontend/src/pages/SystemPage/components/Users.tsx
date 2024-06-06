@@ -1,7 +1,13 @@
+import { FilterIcon } from "@/components/bs-icons/filter";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Button } from "@/components/bs-ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
+import FilterUserGroup from "@/components/bs-ui/select/filter";
+import { getSearchRes } from "@/controllers/API/user";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-// import { Button } from "../../../components/ui/button";
-import { Button } from "@/components/bs-ui/button";
+import { SearchInput } from "../../../components/bs-ui/input";
+import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import {
     Table,
     TableBody,
@@ -11,17 +17,49 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { userContext } from "../../../contexts/userContext";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/bs-ui/popover";
-import { disableUserApi, getUsersApi, getUserGroupTypes, getRoleTypes } from "../../../controllers/API/user";
+import { disableUserApi, getRoleTypes, getUserGroupTypes, getUsersApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
-import UserRoleModal from "./UserRoleModal";
-import { SearchInput } from "../../../components/bs-ui/input";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
-import { FilterIcon } from "@/components/bs-icons/filter";
-import FilterUserGroup from "@/components/bs-ui/select/filter";
 import UserPwdModal from "./UserPwdModal";
+import UserRoleModal from "./UserRoleModal";
+
+
+function UsersFilter({ arr, placeholder, onButtonClick, onIsOpen }) {
+    const setDefault = (array) => {
+        return array.map((a, index) => (a.name == '默认用户组' || a.name == '普通用户') ? { ...a, checked: true } : a)
+    }
+
+    const [items, setItems] = useState(setDefault(arr))
+    const handlerChecked = (id) => {
+        const newItems = items.map((item: any) => item.id === id ? { ...item, checked: !item.checked } : item)
+        setItems(newItems)
+    }
+
+    const filterData = () => {
+        const res = getSearchRes('zgj')
+        onButtonClick(res)
+        onIsOpen(false)
+    }
+    const getSearchKey = (e) => {
+        const key = e.target.value
+        let newItems = []
+        if (!key.toUpperCase()) {
+            newItems = setDefault(arr)
+        } else {
+            newItems = setDefault(arr.filter(a => a.name.toUpperCase().includes(key.toUpperCase())))
+        }
+        setItems(newItems)
+    }
+
+    return <FilterUserGroup
+        options={items}
+        placeholder={placeholder}
+        onChecked={handlerChecked}
+        search={getSearchKey}
+        onClearChecked={() => setItems(setDefault(arr))}
+        onOk={filterData}
+    />
+}
 
 export default function Users(params) {
     const { user } = useContext(userContext);
@@ -65,14 +103,8 @@ export default function Users(params) {
         setData(data)
     }
 
-    const [flagUg, setFlagUg] = useState(false)
-    const getUgIsOpen = (is) => {
-        setFlagUg(is)
-    }
-    const [flagRo, setFlagRo] = useState(false)
-    const getRoIsOpen = (is) => {
-        setFlagRo(is)
-    }
+    const [flagUserGroup, setFlagUserGroup] = useState(false)
+    const [flagRole, setFlagRole] = useState(false)
 
     // 获取用户组类型数据
     const [userGroups, setUserGroups] = useState([])
@@ -108,12 +140,13 @@ export default function Users(params) {
                         <TableHead>
                             <div className="flex items-center">
                                 {t('system.userGroup')}
-                                <Popover open={flagUg} onOpenChange={() => setFlagUg(!flagUg)}> {/* onOpenChange点击空白区域触发 */}
+                                <Popover open={flagUserGroup} onOpenChange={() => setFlagUserGroup(!flagUserGroup)}> {/* onOpenChange点击空白区域触发 */}
                                     <PopoverTrigger>
-                                        <FilterIcon onClick={() => setFlagUg(!flagUg)} className="text-gray-400 ml-3" />
+                                        <FilterIcon onClick={() => setFlagUserGroup(!flagUserGroup)} className="text-gray-400 ml-3" />
                                     </PopoverTrigger>
                                     <PopoverContent>
-                                        <FilterUserGroup arr={userGroups} placeholder={t('system.searchUserGroups')} onButtonClick={getFilterData} onIsOpen={getUgIsOpen}></FilterUserGroup>
+                                        <UsersFilter arr={userGroups} placeholder={t('system.searchUserGroups')}
+                                            onButtonClick={getFilterData} onIsOpen={(is) => setFlagUserGroup(is)}></UsersFilter>
                                     </PopoverContent>
                                 </Popover>
                             </div>
@@ -121,12 +154,13 @@ export default function Users(params) {
                         <TableHead>
                             <div className="flex items-center">
                                 {t('system.role')}
-                                <Popover open={flagRo} onOpenChange={() => setFlagRo(!flagRo)}>
+                                <Popover open={flagRole} onOpenChange={() => setFlagRole(!flagRole)}>
                                     <PopoverTrigger>
-                                        <FilterIcon onClick={() => setFlagRo(!flagRo)} className="text-blue-500 ml-3" />
+                                        <FilterIcon onClick={() => setFlagRole(!flagRole)} className="text-blue-500 ml-3" />
                                     </PopoverTrigger>
                                     <PopoverContent>
-                                        <FilterUserGroup arr={roles} placeholder={t('system.searchRoles')} onButtonClick={getFilterData} onIsOpen={getRoIsOpen}></FilterUserGroup>
+                                        <UsersFilter arr={roles} placeholder={t('system.searchRoles')}
+                                            onButtonClick={getFilterData} onIsOpen={(is) => setFlagRole(is)}></UsersFilter>
                                     </PopoverContent>
                                 </Popover>
                             </div>
