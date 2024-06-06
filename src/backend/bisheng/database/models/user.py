@@ -12,6 +12,7 @@ class UserBase(SQLModelSerializable):
     user_name: str = Field(index=True, unique=True)
     email: Optional[str] = Field(index=True)
     phone_number: Optional[str] = Field(index=True)
+    dept_id: Optional[str] = Field(index=True)
     remark: Optional[str] = Field(index=False)
     delete: int = Field(index=False, default=0)
     create_time: Optional[datetime] = Field(sa_column=Column(

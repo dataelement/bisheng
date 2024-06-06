@@ -4,12 +4,13 @@ from typing import List, Optional
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, text
-from sqlmodel import Field
+from sqlmodel import Field, select
 
 
-class RoleBase(SQLModelSerializable):
-    role_name: str = Field(index=False, description='前端展示名称', unique=True)
-    group_id: Optional[int] = Field(index=True)
+class UserGroupBase(SQLModelSerializable):
+    user_id: int = Field(index=True, description='用户id')
+    group_id: int = Field(index=True, description='组id')
+    is_group_admin: bool = Field(index=False, description='是否是组管理员')
     remark: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -20,34 +21,37 @@ class RoleBase(SQLModelSerializable):
                          onupdate=text('CURRENT_TIMESTAMP')))
 
 
-class Role(RoleBase, table=True):
+class UserGroup(UserGroupBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
-class RoleRead(RoleBase):
+class UserGroupRead(UserGroupBase):
     id: Optional[int]
 
 
-class RoleUpdate(RoleBase):
-    role_name: Optional[str]
+class UserGroupUpdate(UserGroupBase):
+    user_id: Optional[int]
+    group_id: Optional[int]
+    is_group_admin: Optional[bool]
     remark: Optional[str]
 
 
-class RoleCreate(RoleBase):
+class UserGroupCreate(UserGroupBase):
     pass
 
 
-class RoleDao(RoleBase):
+class UserGroupDao(UserGroupBase):
 
     @classmethod
-    def get_role_by_group(cls, group: List[int]):
+    def get_user_group(cls, user_id: int) -> List[UserGroup]:
         with session_getter() as session:
-            return session.query(Role).filter(Role.group_id.in_(group)).all()
+            statement = select(UserGroup).where(UserGroup.user_id == user_id)
+            return session.exec(statement).all()
 
     @classmethod
-    def insert_role(cls, role: RoleCreate):
+    def insert_user_group(cls, user_group: UserGroupCreate) -> UserGroup:
         with session_getter() as session:
-            session.add(role)
+            session.add(user_group)
             session.commit()
-            session.refresh(role)
-            return role
+            session.refresh(user_group)
+            return user_group

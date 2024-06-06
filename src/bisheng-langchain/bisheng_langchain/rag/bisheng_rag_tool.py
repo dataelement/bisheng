@@ -7,6 +7,8 @@ from loguru import logger
 from langchain_core.tools import BaseTool, Tool
 from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
 from langchain_core.language_models.base import LanguageModelLike
+from langchain_core.prompts import ChatPromptTemplate
+from langchain.chains.llm import LLMChain
 from langchain.chains.question_answering import load_qa_chain
 from bisheng_langchain.retrievers import EnsembleRetriever
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
@@ -39,6 +41,7 @@ class BishengRAGTool:
         keyword_store: Optional[ElasticKeywordsSearch] = None,
         llm: Optional[LanguageModelLike] = None,
         collection_name: Optional[str] = None,
+        QA_PROMPT: Optional[ChatPromptTemplate] = None,
         **kwargs
     ) -> None:
         if collection_name is None and (keyword_store is None or vector_store is None):
@@ -54,6 +57,19 @@ class BishengRAGTool:
         sort_by_source_and_index = kwargs.get("sort_by_source_and_index", True)
         self.params['generate']['max_content'] = max_content
         self.params['post_retrieval']['sort_by_source_and_index'] = sort_by_source_and_index
+
+        # init llm
+        if llm:
+            self.llm = llm
+        else:
+            llm_params = self.params['chat_llm']
+            llm_object = import_by_type(_type='llms', name=llm_params['type'])
+            if llm_params['type'] == 'ChatOpenAI' and llm_params['openai_proxy']:
+                llm_params.pop('type')
+                self.llm = llm_object(http_client=httpx.Client(proxies=llm_params['openai_proxy']), **llm_params)
+            else:
+                llm_params.pop('type')
+                self.llm = llm_object(**llm_params)
         
         # init milvus
         if vector_store:
@@ -83,24 +99,17 @@ class BishengRAGTool:
         if keyword_store:
             self.keyword_store = keyword_store
         else:
+            if self.params['elasticsearch'].get('extract_key_by_llm', False):
+                extract_key_prompt = import_class(f'bisheng_langchain.rag.prompts.EXTRACT_KEY_PROMPT')
+                llm_chain = LLMChain(llm=self.llm, prompt=extract_key_prompt)
+            else:
+                llm_chain = None
             self.keyword_store = ElasticKeywordsSearch(
                 index_name='default_es',
                 elasticsearch_url=self.params['elasticsearch']['url'],
                 ssl_verify=self.params['elasticsearch']['ssl_verify'],
+                llm_chain=llm_chain,
             )
-        
-        # init llm
-        if llm:
-            self.llm = llm
-        else:
-            llm_params = self.params['chat_llm']
-            llm_object = import_by_type(_type='llms', name=llm_params['type'])
-            if llm_params['type'] == 'ChatOpenAI' and llm_params['openai_proxy']:
-                llm_params.pop('type')
-                self.llm = llm_object(http_client=httpx.Client(proxies=llm_params['openai_proxy']), **llm_params)
-            else:
-                llm_params.pop('type')
-                self.llm = llm_object(**llm_params)
 
         # init retriever
         retriever_list = []
@@ -117,11 +126,14 @@ class BishengRAGTool:
         self.retriever = EnsembleRetriever(retrievers=retriever_list)
 
         # init qa chain    
-        if 'prompt_type' in self.params['generate']:
-            prompt_type = self.params['generate']['prompt_type']
-            prompt = import_class(f'bisheng_langchain.rag.prompts.{prompt_type}')
+        if QA_PROMPT:
+            prompt = QA_PROMPT
         else:
-            prompt = None
+            if 'prompt_type' in self.params['generate']:
+                prompt_type = self.params['generate']['prompt_type']
+                prompt = import_class(f'bisheng_langchain.rag.prompts.{prompt_type}')
+            else:
+                prompt = None
         self.qa_chain = load_qa_chain(
             llm=self.llm, 
             chain_type=self.params['generate']['chain_type'], 
@@ -218,18 +230,23 @@ class BishengRAGTool:
             docs = sorted(docs, key=lambda x: (x.metadata['source'], x.metadata['chunk_index']))
         return docs
     
-    def run(self, query) -> str:
+    def run(self, query, return_only_outputs=True) -> Any:
         docs = self.retrieval_and_rerank(query)
         try:
-            ans = self.qa_chain({"input_documents": docs, "question": query}, return_only_outputs=True)
+            ans = self.qa_chain({"input_documents": docs, "question": query}, return_only_outputs=return_only_outputs)
         except Exception as e:
             logger.error(f'question: {query}\nerror: {e}')
             ans = {'output_text': str(e)}
-        rag_answer = ans['output_text']
-        return rag_answer
+        if return_only_outputs:
+            rag_answer = ans['output_text']
+            return rag_answer
+        else:
+            rag_answer = ans['output_text']
+            input_documents = ans['input_documents']
+            return rag_answer, input_documents
     
-    async def arun(self, query: str) -> str:
-        rag_answer = self.run(query)
+    async def arun(self, query: str, return_only_outputs=True) -> str:
+        rag_answer = self.run(query, return_only_outputs)
         return rag_answer
     
     @classmethod

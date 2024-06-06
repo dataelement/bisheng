@@ -375,8 +375,9 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
             'page': t.metadata.get('page') or 0,
             'source': file_name,
+            'chunk_index': t_index,
             'extra': ''
-        } for t in texts]
+        } for t_index, t in enumerate(texts)]
     else:
         # 如果文件不是pdf 需要内部转pdf
         if file_name.rsplit('.', 1)[-1].lower() != 'pdf':
@@ -430,8 +431,9 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             'page': t.metadata.get('chunk_bboxes')[0].get('page'),
             'source': t.metadata.get('source', ''),
             'title': t.metadata.get('title', ''),
+            'chunk_index': t_index,
             'extra': '',
-        } for t in texts]
+        } for t_index,t in enumerate(texts)]
     return (raw_texts, metadatas)
 
 
