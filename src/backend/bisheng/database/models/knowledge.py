@@ -111,7 +111,7 @@ class KnowledgeDao(KnowledgeBase):
             return KnowledgeDao.get_list_by_ids(knowledge_ids)
 
         # 查询角色 有使用权限的知识库列表
-        role_access_list = RoleAccessDao.find_role_access(role_id_list, knowledge_ids, AccessType.KNOWLEDGE.value)
+        role_access_list = RoleAccessDao.find_role_access(role_id_list, knowledge_ids, AccessType.KNOWLEDGE)
         if not role_access_list:
             return []
         statement = select(Knowledge).where(Knowledge.id.in_([access.third_id for access in role_access_list]))
