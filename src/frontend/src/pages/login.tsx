@@ -10,10 +10,12 @@ import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
 import { getPublicKeyApi, loginApi, getCaptchaApi, registerApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { useNavigate } from 'react-router-dom';
 export const LoginPage = () => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t, i18n } = useTranslation();
     const { message, toast } = useToast()
+    const navigate = useNavigate()
 
     const isLoading = false
 
@@ -58,8 +60,13 @@ export const LoginPage = () => {
             localStorage.setItem('ws_token', res.access_token)
             localStorage.setItem('isLogin', '1')
             location.href = '/'
-        }))
-
+        }), (error) => {
+            if (error === '密码不正确') {
+                localStorage.setItem('account', mail)
+                navigate('/reset', { state: { noback: true } })
+            }
+        })
+        
         fetchCaptchaData()
     }
 

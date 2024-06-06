@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import { Button } from "../../../components/ui/button";
 import { Button } from "@/components/bs-ui/button";
@@ -21,6 +21,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import { FilterIcon } from "@/components/bs-icons/filter";
 import FilterUserGroup from "@/components/bs-ui/select/filter";
+import UserPwdModal from "./UserPwdModal";
 
 export default function Users(params) {
     const { user } = useContext(userContext);
@@ -52,6 +53,7 @@ export default function Users(params) {
 
     // 编辑
     const [roleOpenId, setRoleOpenId] = useState(null)
+    const userPwdModalRef = useRef(null)
     const handleRoleChange = () => {
         setRoleOpenId(null)
         reload()
@@ -88,8 +90,8 @@ export default function Users(params) {
     useEffect(() => {
         getUserGoups()
         getRoles()
-        return () => {setUserGroups([]); setRoles([])}
-    },[])
+        return () => { setUserGroups([]); setRoles([]) }
+    }, [])
 
     return <div className="relative">
         <div className="h-[calc(100vh-136px)] overflow-y-auto pb-10">
@@ -108,27 +110,27 @@ export default function Users(params) {
                                 {t('system.userGroup')}
                                 <Popover open={flagUg} onOpenChange={() => setFlagUg(!flagUg)}> {/* onOpenChange点击空白区域触发 */}
                                     <PopoverTrigger>
-                                        <FilterIcon onClick={() => setFlagUg(!flagUg)} className="text-gray-400 ml-3"/>
+                                        <FilterIcon onClick={() => setFlagUg(!flagUg)} className="text-gray-400 ml-3" />
                                     </PopoverTrigger>
                                     <PopoverContent>
                                         <FilterUserGroup arr={userGroups} placeholder={t('system.searchUserGroups')} onButtonClick={getFilterData} onIsOpen={getUgIsOpen}></FilterUserGroup>
                                     </PopoverContent>
                                 </Popover>
                             </div>
-                        </TableHead> 
+                        </TableHead>
                         <TableHead>
                             <div className="flex items-center">
                                 {t('system.role')}
                                 <Popover open={flagRo} onOpenChange={() => setFlagRo(!flagRo)}>
                                     <PopoverTrigger>
-                                        <FilterIcon onClick={() => setFlagRo(!flagRo)} className="text-blue-500 ml-3"/>
+                                        <FilterIcon onClick={() => setFlagRo(!flagRo)} className="text-blue-500 ml-3" />
                                     </PopoverTrigger>
                                     <PopoverContent>
                                         <FilterUserGroup arr={roles} placeholder={t('system.searchRoles')} onButtonClick={getFilterData} onIsOpen={getRoIsOpen}></FilterUserGroup>
                                     </PopoverContent>
                                 </Popover>
                             </div>
-                        </TableHead> 
+                        </TableHead>
                         <TableHead>{t('createTime')}</TableHead>
                         <TableHead className="text-right">{t('operations')}</TableHead>
                     </TableRow>
@@ -142,8 +144,12 @@ export default function Users(params) {
                             <TableCell>角色B</TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
+                                {/* 编辑 */}
                                 {user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-6">{t('edit')}</Button> :
                                     <Button variant="link" onClick={() => setRoleOpenId(el.user_id)} className="px-0 pl-6">{t('edit')}</Button>}
+                                {/* 重置密码 */}
+                                {user.role === 'admin' && <Button variant="link" className="px-0 pl-6" onClick={() => userPwdModalRef.current.open(el.user_id)}>重置密码</Button>}
+                                {/* 禁用 */}
                                 {
                                     el.delete === 1 ? <Button variant="link" onClick={() => handleEnableUser(el)} className="text-green-500 px-0 pl-6">{t('enable')}</Button> :
                                         user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-6">{t('disable')}</Button> :
@@ -169,5 +175,6 @@ export default function Users(params) {
         </div>
 
         <UserRoleModal id={roleOpenId} onClose={() => setRoleOpenId(null)} onChange={handleRoleChange}></UserRoleModal>
+        <UserPwdModal ref={userPwdModalRef} onSuccess={reload} />
     </div>
 };

@@ -562,5 +562,19 @@
     "value": "Value",
     "result": "Test Result",
     "outResultPlaceholder": "Click the button to output the result"
+  },
+  "resetPassword": {
+    "slogen": "Securely Reset Your Password",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "pleaseEnterCurrentPassword": "Please enter your current password.",
+    "pleaseEnterNewPassword": "Please enter your new password.",
+    "pleaseEnterConfirmPassword": "Please confirm your new password.",
+    "newPasswordTooShort": "New password must be at least 8 characters.",
+    "passwordMismatch": "The new passwords do not match.",
+    "resetButton": "Reset Password",
+    "passwordResetSuccess": "Your password has been successfully reset.",
+    "resetFailed": "Pwd Reset Failed"
   }
 }

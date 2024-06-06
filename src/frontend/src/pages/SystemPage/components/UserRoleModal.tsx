@@ -54,6 +54,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
         console.log('res :>> ', res);
         onChange()
     }
+
     return <Dialog open={id} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
@@ -85,6 +86,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
             </DialogHeader>
             <div className="">
                 <MultiSelect
+                    multiple
                     className="max-w-[600px]"
                     value={selected.map(item => {
                         return item.role_id.toString()

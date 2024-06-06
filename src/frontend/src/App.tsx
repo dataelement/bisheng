@@ -14,8 +14,7 @@ import { Toaster } from "./components/bs-ui/toast";
 import { alertContext } from "./contexts/alertContext";
 import { locationContext } from "./contexts/locationContext";
 import { userContext } from "./contexts/userContext";
-import { LoginPage } from "./pages/login";
-import router from "./routes";
+import { privateRouter, publicRouter } from "./routes";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -174,9 +173,9 @@ export default function App() {
   return (
     //need parent component with width and height
     <div className="flex h-full flex-col">
-      {(user?.user_id || noAuthPages.includes(path)) ? <RouterProvider router={router} />
+      {(user?.user_id || noAuthPages.includes(path)) ? <RouterProvider router={privateRouter} />
         : user ? <div className="loading"></div>
-          : <LoginPage></LoginPage>}
+          : <RouterProvider router={publicRouter} />}
       <div></div>
       <div className="app-div" style={{ zIndex: 1000 }}>
         {alertsList.map((alert) => (

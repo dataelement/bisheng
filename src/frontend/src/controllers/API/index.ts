@@ -248,14 +248,14 @@ export async function postValidatePrompt(
 /**
  * 获取会话列表
  */
-export const getChatsApi = () => {
-  return (axios.get(`/api/v1/chat/list`) as Promise<any[]>).then(res =>
-    res?.filter(el => el.chat_id) || []
+export const getChatsApi = (page) => {
+  return (axios.get(`/api/v1/chat/list?page=${page}&limit=40`) as Promise<any[]>).then(res =>
+    res?.filter((el,i) => el.chat_id && i < 20) || []
   )
 };
 
 /**
- * 获取会话列表
+ * 删除会话
  */
 export const deleteChatApi = (chatId) => {
   return axios.delete(`/api/v1/chat/${chatId}`)

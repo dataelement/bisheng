@@ -559,5 +559,19 @@
     "value": "值",
     "result": "测试结果",
     "outResultPlaceholder": "点击按钮，输出结果"
+  },
+  "resetPassword": {
+    "slogen": "安全地重置您的密码",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "confirmNewPassword": "确认新密码",
+    "pleaseEnterCurrentPassword": "请输入当前密码。",
+    "pleaseEnterNewPassword": "请输入新密码。",
+    "pleaseEnterConfirmPassword": "请确认新密码。",
+    "newPasswordTooShort": "新密码必须至少8个字符。",
+    "passwordMismatch": "新密码不匹配。",
+    "resetButton": "重置密码",
+    "passwordResetSuccess": "您的密码已成功重置。",
+    "resetFailed": "密码重置失败"
   }
 }
