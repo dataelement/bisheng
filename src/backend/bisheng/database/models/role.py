@@ -40,7 +40,7 @@ class RoleCreate(RoleBase):
 class RoleDao(RoleBase):
 
     @classmethod
-    def get_role_by_group(cls, group: List[int]):
+    def get_role_by_groups(cls, group: List[int]):
         with session_getter() as session:
             return session.query(Role).filter(Role.group_id.in_(group)).all()
 
@@ -51,3 +51,13 @@ class RoleDao(RoleBase):
             session.commit()
             session.refresh(role)
             return role
+
+    @classmethod
+    def get_role_by_ids(cls, role_ids: List[int]) -> List[Role]:
+        with session_getter() as session:
+            return session.query(Role).filter(Role.id.in_(role_ids)).all()
+
+    @classmethod
+    def get_role_by_id(cls, role_id: int) -> Role:
+        with session_getter() as session:
+            return session.query(Role).filter(Role.id == role_id).first()
