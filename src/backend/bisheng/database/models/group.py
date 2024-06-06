@@ -10,6 +10,8 @@ from sqlmodel import Field, select
 class GroupBase(SQLModelSerializable):
     group_name: str = Field(index=False, description='前端展示名称', unique=True)
     remark: Optional[str] = Field(index=False)
+    create_user: Optional[str] = Field(description="创建用户的ID")
+    update_user: Optional[str] = Field(description="最近一次更新时，操作用户的ID")
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
