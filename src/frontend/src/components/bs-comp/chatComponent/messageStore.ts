@@ -133,7 +133,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             let newChat = cloneDeep(state.messages);
             newChat.push({
                 isSend: false,
-                message: runLogsTypes.includes(data.category) ? JSON.parse(data.message) : '',
+                message: runLogsTypes.includes(data.category) ? JSON.parse(data.message) : '\u200B',
                 chatKey: '',
                 thought: data.intermediate_steps || '',
                 category: data.category || '',

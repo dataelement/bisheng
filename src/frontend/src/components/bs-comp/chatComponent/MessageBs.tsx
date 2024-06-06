@@ -83,7 +83,7 @@ export default function MessageBs({ data, onUnlike = () => { }, onSource }: { da
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
                     <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} ><AvatarIcon /></div>
-                    {data.message.toString() ?
+                    {(data.message.toString() && data.message!=="\u200B")?
                         <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
                             {mkdown}
                             {/* @user */}
