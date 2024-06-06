@@ -1,7 +1,13 @@
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-// import { Button } from "../../../components/ui/button";
+import { FilterIcon } from "@/components/bs-icons/filter";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
+import FilterUserGroup from "@/components/bs-ui/select/filter";
+import { getSearchRes } from "@/controllers/API/user";
+import { SearchInput } from "../../../components/bs-ui/input";
+import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import {
     Table,
     TableBody,
@@ -11,44 +17,21 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { userContext } from "../../../contexts/userContext";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/bs-ui/popover";
-import { disableUserApi, getUsersApi, getUserGroupTypes, getRoleTypes } from "../../../controllers/API/user";
+import { disableUserApi, getRoleTypes, getUserGroupTypes, getUsersApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import UserRoleModal from "./UserRoleModal";
-import { SearchInput } from "../../../components/bs-ui/input";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
-import { FilterIcon } from "@/components/bs-icons/filter";
-import FilterUserGroup from "@/components/bs-ui/select/filter";
-import { getSearchRes } from "@/controllers/API/user";
 
 
 function UsersFilter({arr, placeholder, onButtonClick, onIsOpen}) {
     const setDefault = (array) => {
-        let temp = []
-        array.forEach((a, index) => {
-            const item = {
-                id: index + '',
-                name: a.name,
-                checked: false
-            }
-            if(a.name == '默认用户组' ||  a.name == '普通用户') {
-                item.checked = true
-            }
-            temp.push(item)
-        })
-        return temp
+        return array.map((a, index) => (a.name == '默认用户组' ||  a.name == '普通用户') ? {...a, checked:true} : a)
     }
 
     const [items, setItems] = useState(setDefault(arr))
     const handlerChecked = (id) => {
       const newItems = items.map((item:any) => item.id === id ? {...item, checked:!item.checked} : item)
       setItems(newItems)
-    }
-
-    const clearChecked = () => {
-      setItems(setDefault(arr))
     }
 
     const filterData = () => {
@@ -72,7 +55,7 @@ function UsersFilter({arr, placeholder, onButtonClick, onIsOpen}) {
     placeholder={placeholder} 
     onChecked={handlerChecked} 
     search={getSearchKey} 
-    onClearChecked={clearChecked} 
+    onClearChecked={() => setItems(setDefault(arr))} 
     onOk={filterData} 
   />
 }
@@ -119,13 +102,7 @@ export default function Users(params) {
     }
 
     const [flagUserGroup, setFlagUserGroup] = useState(false)
-    const getUgIsOpen = (is) => {
-        setFlagUserGroup(is)
-    }
     const [flagRole, setFlagRole] = useState(false)
-    const getRoIsOpen = (is) => {
-        setFlagRole(is)
-    }
 
     // 获取用户组类型数据
     const [userGroups, setUserGroups] = useState([])
@@ -167,7 +144,7 @@ export default function Users(params) {
                                     </PopoverTrigger>
                                     <PopoverContent>
                                         <UsersFilter arr={userGroups} placeholder={t('system.searchUserGroups')} 
-                                        onButtonClick={getFilterData} onIsOpen={getUgIsOpen}></UsersFilter>
+                                        onButtonClick={getFilterData} onIsOpen={(is) => setFlagUserGroup(is)}></UsersFilter>
                                     </PopoverContent>
                                 </Popover>
                             </div>
@@ -181,7 +158,7 @@ export default function Users(params) {
                                     </PopoverTrigger>
                                     <PopoverContent>
                                         <UsersFilter arr={roles} placeholder={t('system.searchRoles')} 
-                                        onButtonClick={getFilterData} onIsOpen={getRoIsOpen}></UsersFilter>
+                                        onButtonClick={getFilterData} onIsOpen={(is) => setFlagRole(is)}></UsersFilter>
                                     </PopoverContent>
                                 </Popover>
                             </div>

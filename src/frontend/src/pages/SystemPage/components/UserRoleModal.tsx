@@ -20,8 +20,8 @@ export default function UserRoleModal({ id, onClose, onChange }) {
     useEffect(() => {
         if (!id) return
         getUserGroupsApi().then(res => {
-            setUserGroups(res.data)
-            const ug = res.data.find(ug => ug.name == '默认用户组')
+            setUserGroups(res.data.records)
+            const ug = res.data.records.find(ug => ug.id == 2) // 暂时设置
             setUserGroupSelected([ug,...userGroupSelected])
         })
         getRolesApi().then(data => {
@@ -67,11 +67,11 @@ export default function UserRoleModal({ id, onClose, onChange }) {
                     })}
                     options={userGroups.map((ug) => {
                         return {
-                            label: ug.name,
+                            label: ug.groupName,
                             value: ug.id.toString()
                         }
                     })}
-                    lockedValues={["01"]}
+                    lockedValues={["2"]}
                     onChange={(values) => {
                         setUserGroupSelected(userGroups.filter(ug => {
                             return values.includes(ug.id.toString())

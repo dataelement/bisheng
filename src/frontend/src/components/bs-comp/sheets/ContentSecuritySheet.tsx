@@ -4,12 +4,15 @@ import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { UploadIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function ContentSecuritySheet({isOpen, data, onCloseSheet, onSave, children}) {
     const { t } = useTranslation()
+    const { toast, message } = useToast()
+
     const [content, setContent] = useState({
         reviewType: '',
         vocabularyType: [],
@@ -41,7 +44,22 @@ export default function ContentSecuritySheet({isOpen, data, onCloseSheet, onSave
         }
     }
     const confirmSave = () => {
+        if(content.reviewType === '') {
+            toast({title:t('prompt'), variant:'error',description:'审查类型至少选择一个'})
+            return
+        }
+        if(content.reviewType === '敏感词表匹配') {
+            if(content.vocabularyType.length === 0) {
+                toast({title: t('prompt'), variant: 'error', description: '词表至少需要选择一个'})
+                return
+            }
+            if(content.automaticReply === '') {
+                toast({title: t('prompt'), variant: 'error', description: '自动回复内容不可为空'})
+                return 
+            }
+        }
         onSave(content)
+        message({title: t('prompt'), variant: 'success', description: '保存成功'})
         onCloseSheet()
     }
     

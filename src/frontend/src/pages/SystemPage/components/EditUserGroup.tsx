@@ -1,31 +1,28 @@
 import { Button } from "@/components/bs-ui/button";
-import MultiSelect from "@/components/bs-ui/select/multi";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { getAllUsersApi, getUserGroupAssistApi, getUserGroupSkillApi } from "@/controllers/API/user";
-import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
-import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Input, SearchInput } from "../../../components/bs-ui/input";
-import { Table, TableHead, TableHeader, TableRow, TableCell, TableBody } from "@/components/bs-ui/table";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { Label } from "@/components/bs-ui/label";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
+import MultiSelect from "@/components/bs-ui/select/multi";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { getAllUsersApi, getUserGroupAssistApi, getUserGroupDetail, getUserGroupSkillApi, saveUserGroup } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
+import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Input, SearchInput } from "../../../components/bs-ui/input";
 
 function FlowRadio({limit, onChange}) {
     const { t } = useTranslation()
-    const [number, setNumber] = useState(100)
-    const handleChange = (value) => {
-        onChange(value === 'true' ? true : false)
-    }
+    const [number, setNumber] = useState(10)
     const handleInput = (e) => {
         setNumber(parseFloat(e.target.value))
     }
 
     return <div>
-        <RadioGroup className="flex space-x-2 h-[20px]" defaultValue={limit ? 'true' : 'false'}
-        onValueChange={(value) => handleChange(value)}>
+        <RadioGroup className="flex space-x-2 h-[20px]" value={limit ? 'true' : 'false'}
+        onValueChange={(value) => onChange(value === 'true')}>
             <div>
                 <Label className="flex justify-center">
                     <RadioGroupItem className="mr-2" value="false"/>{t('system.unlimited')}
@@ -48,10 +45,10 @@ function FlowRadio({limit, onChange}) {
     </div>
 }
 
-function FlowControl({name, label, onSearch}) {
+function FlowControl({name, label}) {
     const { t } = useTranslation()
-    const { page, pageSize, data, total, loading, setPage, search } = useTable({ pageSize: 10 }, (params) =>
-        label == '助手流量控制' ? getUserGroupAssistApi() : getUserGroupSkillApi()
+    const { page, pageSize, data, total, setPage, search } = useTable({ pageSize: 10 }, (params) =>
+        label === '助手流量控制' ? getUserGroupAssistApi() : getUserGroupSkillApi()
     ) // search函数触发会重新执行回调函数，列表更新需要api参数设计
     const [items, setItems] = useState(data)
     const handleChange = (value, id) => {
@@ -62,7 +59,6 @@ function FlowControl({name, label, onSearch}) {
     }
     const handleSearch = (e) => {
         search(e.target.value)
-        onSearch(items)
     }
     useEffect(() => {
         data && setItems(data)
@@ -112,69 +108,60 @@ function FlowControl({name, label, onSearch}) {
     </>
 }
 
-export default function EditUserGroup({id, name, admins, limit, onBeforeChange, onChange}) {
+export default function EditUserGroup({id, name, onBeforeChange, onChange}) {
     const { t } = useTranslation()
     const { toast } = useToast() // 类似于alert
 
     const [form, setForm] = useState({
-        name,
-        admins:[],
-        flowControl:limit
+        groupName: name,
+        adminUser:'',
+        groupLimit:null,
+        adminUserId: "",
+        assistantList: "",
+        skillList: ""
     })
     const [options, setOptions] = useState([])
     const [selected, setSelected] = useState([])
     const [assistants, setAssistants] = useState([]) // 助手流量
     const [skills, setSkills] = useState([]) // 技能流量
 
-    const assisRef = useRef([]) // 数据暂存
-    const skillRef = useRef([])
-    const assisSearchValues = (assistants) => {
-        console.log(assistants)
-        setAssistants(assistants)
-    }
-    const skillSearchValues = (skills) => {
-        console.log(skills)
-        setSkills(skills)
-    }
-
-    const getFlowCtrl = (flag) => {
-        setForm({...form, flowControl:flag})
-    }
     const handleSave = () => {
-        if (!form.name.length || form.name.length > 30) {
+        if (!form.groupName.length || form.groupName.length > 30) {
+            setForm({...form, groupName:name})
             return toast({
                 title: t('prompt'),
-                description: [t('system.roleNameRequired'), t('system.roleNamePrompt')],
+                description: [t('system.roleNameRequired'),t('system.groupNamePrompt')],
                 variant: 'error'
             });
         }
-        const flag = onBeforeChange(form.name)
+        const flag = onBeforeChange(form.groupName)
         if(flag) {
-            return toast({
-                title: t('prompt'),
-                description: [t('system.roleNameRequired'), t('system.roleNamePrompt')],
-                variant: 'error'
-            });
+            setForm({...form, groupName:''})
+            return toast({title: t('prompt'), description: t('system.groupNameExists'), variant: 'error'});
         }
+        saveUserGroup(form) // 保存
         onChange()
+    }
+    const arrayMap = (arrId, arrName) => {
+        return arrId.map((i,index) => ({id:i, name:arrName[index]}))
     }
 
     useEffect(() => { // 初始化数据
         async function init() {
-            let data = (await getAllUsersApi()).data
+            const data = (await getAllUsersApi()).data
             const admin = data.filter(d => d.name === 'admin')
             const assistData = (await getUserGroupAssistApi()).data
             const skillData = (await getUserGroupSkillApi()).data
             if(!id) {
                 setSelected(admin)
             } else {
-                setSelected([...admin, ...admins])
+                const userGroup = (await getUserGroupDetail(id)).data
+                setForm(userGroup)
+                setSelected([...admin, ...arrayMap(userGroup.adminUserId.split(','), userGroup.adminUser.split(','))])
             }
             setOptions(data)
             setAssistants(assistData)
-            assisRef.current = assistData
             setSkills(skillData)
-            skillRef.current = skillData
         }
         init()
     },[])
@@ -182,7 +169,7 @@ export default function EditUserGroup({id, name, admins, limit, onBeforeChange, 
     return <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-136px)] overflow-y-auto pb-10 scrollbar-hide">
         <div className="font-bold mt-4">
             <p className="text-xl mb-4">{t('system.userGroupName')}</p>
-            <Input placeholder={t('system.userGroupName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={30}></Input>
+            <Input placeholder={t('system.userGroupName')} value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })} maxLength={30}></Input>
         </div>
         <div className="font-bold mt-12">
             <p className="text-xl mb-4">{t('system.admins')}</p>
@@ -192,9 +179,7 @@ export default function EditUserGroup({id, name, admins, limit, onBeforeChange, 
                         label:o.name,
                         value:o.id
                     }
-                })} value={selected.map(s => {
-                    return s.id
-                })} lockedValues={["01"]}
+                })} value={selected.map(s => s.id.toString())} lockedValues={['1']}
                 onChange={(values) => {
                     setSelected(options.filter(o => {
                         return values.includes(o.id.toString())
@@ -204,15 +189,13 @@ export default function EditUserGroup({id, name, admins, limit, onBeforeChange, 
         </div>
         <div className="font-bold mt-12">
             <p className="text-xl mb-4">{t('system.flowControl')}</p>
-            <FlowRadio limit={form.flowControl} onChange={getFlowCtrl}></FlowRadio>
+            <FlowRadio limit={form.groupLimit} onChange={(f) => setForm({...form, groupLimit:f})}></FlowRadio>
         </div>
         <div className="mt-12">
-            <FlowControl name={t('build.assistantName')} label={t('system.AssistantFlowCtrl')} 
-            onSearch={assisSearchValues}></FlowControl>
+            <FlowControl name={t('build.assistantName')} label={t('system.AssistantFlowCtrl')}></FlowControl>
         </div>
         <div className="mt-12 mb-20">
-            <FlowControl name={t('skills.skillName')} label={t('system.SkillFlowCtrl')} 
-            onSearch={skillSearchValues}></FlowControl>
+            <FlowControl name={t('skills.skillName')} label={t('system.SkillFlowCtrl')}></FlowControl>
         </div>
         <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-[white]">
             <Button variant="outline" className="px-16" onClick={onChange}>{t('cancel')}</Button>
