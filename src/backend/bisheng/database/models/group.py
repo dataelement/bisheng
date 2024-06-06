@@ -1,5 +1,6 @@
+from ast import Dict
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -25,7 +26,7 @@ class Group(GroupBase, table=True):
 
 class GroupRead(GroupBase):
     id: Optional[int]
-    group_admins: Optional[list[str]]
+    group_admins: Optional[List[Dict]]
 
 
 class GroupUpdate(GroupBase):
@@ -57,4 +58,12 @@ class GroupDao(GroupBase):
     def get_all_group(cls) -> list[Group]:
         with session_getter() as session:
             statement = select(Group)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_group_by_ids(cls, ids: List[int]) -> list[Group]:
+        if not ids:
+            raise ValueError('ids is empty')
+        with session_getter() as session:
+            statement = select(Group).where(Group.id.in_(ids))
             return session.exec(statement).all()
