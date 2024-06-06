@@ -27,6 +27,8 @@ export interface AssistantDetail {
     create_time: string;
     /** 更新时间 */
     update_time: string;
+    /** 内容安全审查对象 */
+    content_security: object;
     /** 助手的工具ID列表, 空列表则清空绑定的工具，为None则不更新 */
     tool_list?: AssistantTool[];
     /** 助手的技能ID列表，为None则不更新 */

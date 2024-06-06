@@ -1,6 +1,8 @@
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
+import ContentSecuritySheet from "@/components/bs-comp/sheets/ContentSecuritySheet";
 import SkillSheet from "@/components/bs-comp/sheets/SkillSheet";
 import ToolsSheet from "@/components/bs-comp/sheets/ToolsSheet";
+import { SettingIcon } from "@/components/bs-icons/setting";
 import { ToolIcon } from "@/components/bs-icons/tool";
 import {
   Accordion,
@@ -10,6 +12,7 @@ import {
 } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { InputList, Textarea } from "@/components/bs-ui/input";
+import { Switch } from "@/components/bs-ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -24,8 +27,10 @@ import {
   QuestionMarkCircledIcon,
   ReloadIcon,
 } from "@radix-ui/react-icons";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import ContentShow from "../ContentShow";
 import KnowledgeBaseMulti from "./KnowledgeBaseMulti";
 import ModelSelect from "./ModelSelect";
 import Temperature from "./Temperature";
@@ -33,7 +38,23 @@ import Temperature from "./Temperature";
 export default function Setting() {
   const { t } = useTranslation();
 
-  const { assistantState, dispatchAssistant } = useAssistantStore();
+  let { assistantState, dispatchAssistant } = useAssistantStore();
+  if(!assistantState.content_security) {
+    assistantState = {...assistantState, content_security:{
+      open: true,
+      reviewType: '敏感词表匹配',
+      vocabularyType: ['内置词表','自定义词表'],
+      vocabularyInput: '歧视\n色情\n暴力\n战争',
+      automaticReply: '您的输入带有敏感词汇，我拒绝回答'}}
+  } // 测试数据暂时修改，后期替换
+  
+  const [show, setShow] = useState(false)
+  const [toggle,setToggle] = useState(assistantState.content_security.open)
+
+  const checkedChange = (value) => {
+    setToggle(value)
+    setShow(value)
+  }
 
   return (
     <div
@@ -125,7 +146,30 @@ export default function Setting() {
             </div>
           </AccordionContent>
         </AccordionItem>
+        {/* 内容安全审查 */}
+        <AccordionItem value="item-3">
+          <AccordionTrigger>
+            <div className="flex flex-1 items-center justify-between">
+              <span>内容安全审查</span>
+              <div className="h-[20px] flex items-center">
+                <ContentSecuritySheet data={assistantState.content_security} isOpen={show} 
+                onSave={(data) => {dispatchAssistant('setContentSecurity',{
+                  content_security: {...assistantState.content_security, ...data}
+                }); console.log(assistantState)}}
+                onCloseSheet={() => setShow(false)}>
+                  {toggle && <SettingIcon onClick={(e) => {e.stopPropagation(); setShow(!show)}} className="w-[40px] h-[40px]"/>}
+                </ContentSecuritySheet>
+                <Switch className="mx-4" onClick={(e) => e.stopPropagation()} checked={toggle} 
+                onCheckedChange={checkedChange}/>
+              </div>
+            </div>
+          </AccordionTrigger>
+          {toggle && <AccordionContent className="mb-[-16px]">
+            <ContentShow data={assistantState.content_security}/>
+          </AccordionContent>}
+        </AccordionItem>
       </Accordion>
+      <div className="text-center text-sm bg-[white] text-muted-foreground">通过敏感词表或 API 对会话内容进行安全审查</div>
       <h1 className="border-b bg-gray-50 indent-4 text-sm leading-8 text-muted-foreground">
         {t("build.knowledge")}
       </h1>
