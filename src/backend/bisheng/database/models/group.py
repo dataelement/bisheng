@@ -25,6 +25,7 @@ class Group(GroupBase, table=True):
 
 class GroupRead(GroupBase):
     id: Optional[int]
+    group_admins: Optional[list[str]]
 
 
 class GroupUpdate(GroupBase):
