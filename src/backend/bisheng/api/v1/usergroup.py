@@ -57,7 +57,7 @@ async def get_group_flows(*,
                           resource_type: Annotated[int, Body(embed=True)],
                           Authorize: AuthJWT = Depends()):
     """
-    获取所有分组
+    获取分组下所有的技能
     """
     # await check_permissions(Authorize, ['admin'])
 

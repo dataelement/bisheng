@@ -82,6 +82,14 @@ async def regist(*, user: UserCreate):
         return resp_200(db_user)
 
 
+@router.post('/user/sso', response_model=UnifiedResponseModel[UserRead], status_code=201)
+async def sso(*, user: UserLogin, Authorize: AuthJWT = Depends()):
+    '''给sso提供的接口'''
+    if True:  # 判断sso 是否打开
+        pass
+    pass
+
+
 @router.post('/user/login', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
     # 验证码校验

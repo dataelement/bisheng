@@ -26,6 +26,11 @@ class UserPayload:
         return False
 
 
+def sso_login():
+
+    pass
+
+
 def get_knowledge_list_by_access(role_id: int, name: str, page_num: int, page_size: int):
 
     count_filter = []
