@@ -1,6 +1,7 @@
 from typing import List
 
 from bisheng.database.models.group import GroupDao, GroupRead
+from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 
@@ -52,3 +53,7 @@ class RoleGroupService():
             return UserGroupDao.update_user_groups(usergroups)
         else:
             return None
+
+    def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum):
+        """设置用户组管理员"""
+        return GroupResourceDao.get_group_resource(group_id, resource_type)
