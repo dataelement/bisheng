@@ -16,6 +16,11 @@ import { useHasForm } from "../../util/hook";
 import FormSet from "./components/FormSet";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import ContentSecuritySheet from "@/components/bs-comp/sheets/ContentSecuritySheet";
+import { SettingIcon } from "@/components/bs-icons/setting";
+import { Switch } from "@/components/bs-ui/switch";
+import ContentShow from "./components/ContentShow";
+import { BuildType } from "@/types/assistant";
 
 export default function l2Edit() {
     const { t } = useTranslation()
@@ -32,6 +37,13 @@ export default function l2Edit() {
     const nameRef = useRef(null)
     const descRef = useRef(null)
     const guideRef = useRef(null)
+    const [content,setContent] = useState({
+        open:false,
+        reviewType: '',
+        vocabularyType: [],
+        vocabularyInput: '',
+        automaticReply: ''
+    })
 
     useEffect(() => {
         // 无id不再请求
@@ -45,7 +57,7 @@ export default function l2Edit() {
         //     return
         // }
         // 无flow从db获取
-        getFlowApi(id).then(_flow => {
+        getFlowApi(id).then(_flow => { // 可以获取内容安全审查数据？
             // 回填flow
             setFlow('l2 flow init', _flow)
             setIsL2(true)
@@ -54,6 +66,16 @@ export default function l2Edit() {
             guideRef.current.value = _flow.guide_word
         })
     }, [id])
+    useEffect(() => {
+        if(!id) return 
+        setContent({
+            open: true,
+            reviewType: '敏感词表匹配',
+            vocabularyType: ['内置词表','自定义词表'],
+            vocabularyInput: '歧视\n色情\n暴力\n战争',
+            automaticReply: '您的输入带有敏感词汇，我拒绝回答'
+        })
+    },[id]) // 测试所需
 
 
     // 校验
@@ -100,7 +122,6 @@ export default function l2Edit() {
         setLoading(false)
     }
 
-
     const formRef = useRef(null)
 
     // 编辑回填参数
@@ -145,6 +166,14 @@ export default function l2Edit() {
 
     // isForm
     const isForm = useHasForm(flow)
+
+    // 内容安全审查    如果有id和vid则查询数据库，否则是新建技能
+    const [show, setShow] = useState(false)
+    const [toggle, setToggle] = useState(content.open)
+    const checkedChange = (value) => {
+        setToggle(value)
+        setShow(value)
+    }
 
     return <div className="relative box-border h-full overflow-auto">
         <div className="p-6 pb-48 h-full overflow-y-auto">
@@ -214,6 +243,26 @@ export default function l2Edit() {
                             </div>
                         </div>
                     }
+                    <p className="text-center text-gray-400 mt-8 cursor-pointer flex justify-center" onClick={showContent}>
+                        内容安全审查设置
+                        <ChevronUp />
+                    </p>
+                    {/* base form */}
+                    <div className="w-full overflow-hidden transition-all px-1">
+                        <div className="mt-6 flex items-center justify-center h-[30px]">
+                            <span className="flex-1 text-right mr-[10px]">开启内容安全审查</span>
+                            <div className="flex flex-1 items-center justify-center space-x-6">
+                                <Switch checked={toggle} onCheckedChange={checkedChange}/>
+                                <ContentSecuritySheet data={content} onSave={(data) => setContent(data)}
+                                isOpen={show} onCloseSheet={() => setShow(false)}>
+                                {toggle && <SettingIcon onClick={(e) => {e.stopPropagation(); setShow(!show)}} className="w-[45px] h-[45px]"/>}
+                                </ContentSecuritySheet>
+                            </div>
+                        </div>
+                        {toggle && <div className="flex flex-1 justify-center">
+                            <ContentShow data={content}/>
+                        </div>}
+                    </div>
                     {/* 表单设置 */}
                     {isForm && <FormSet ref={formRef} id={id} vid={vid}></FormSet>}
                 </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback, useReducer } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -16,90 +16,165 @@ import { ROLE } from "../../../types/api/user";
 import EditRole from "./EditRole";
 import { SearchInput } from "../../../components/bs-ui/input";
 import { PlusIcon } from "@/components/bs-icons/plus";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { Label } from "@/components/bs-ui/label";
+
+interface State {
+    roles: ROLE[];
+    role: Partial<ROLE> | null;
+    searchWord: string;
+    group: string;
+    groups: { label: string; value: string }[];
+}
+
+const initialState: State = {
+    roles: [],
+    role: null,
+    searchWord: '',
+    group: '1',
+    groups: [
+        { label: '部门1', value: '1' },
+        { label: '部门2', value: '2' },
+        { label: '部门3', value: '3' },
+        { label: '部门4', value: '4' },
+        { label: '部门5', value: '5' },
+    ]
+};
+
+type Action =
+    | { type: 'SET_ROLES'; payload: ROLE[] }
+    | { type: 'SET_ROLE'; payload: Partial<ROLE> | null }
+    | { type: 'SET_SEARCH_WORD'; payload: string }
+    | { type: 'SET_GROUP'; payload: string };
+
+function reducer(state: State, action: Action): State {
+    switch (action.type) {
+        case 'SET_ROLES':
+            return { ...state, roles: action.payload };
+        case 'SET_ROLE':
+            return { ...state, role: action.payload };
+        case 'SET_SEARCH_WORD':
+            return { ...state, searchWord: action.payload };
+        case 'SET_GROUP':
+            return { ...state, group: action.payload };
+        default:
+            return state;
+    }
+}
+
 export default function Roles() {
-    const { t } = useTranslation()
+    const { t } = useTranslation();
+    const [state, dispatch] = useReducer(reducer, initialState);
+    const allRolesRef = useRef<ROLE[]>([]);
 
-    const [role, setRole] = useState<Partial<ROLE> | null>(null)
-    const [roles, setRoles] = useState<ROLE[]>([])
-    const allRolesRef = useRef([])
+    const loadData = useCallback(async () => {
+        const inputDom = document.getElementById('role-input') as HTMLInputElement;
+        if (inputDom) {
+            inputDom.value = '';
+        }
+        try {
+            const data = await getRolesApi();
+            dispatch({ type: 'SET_ROLES', payload: data });
+            allRolesRef.current = data;
+        } catch (error) {
+            console.error(error);
+        }
+    }, []);
 
-    const handleChange = (change: boolean) => {
-        change && loadData()
-        setRole(null)
-    }
+    useEffect(() => {
+        // TODO
+        // 获取最近修改用户组
+        dispatch({ type: 'SET_GROUP', payload: '2' });
+    }, []);
 
-    const loadData = () => {
-        getRolesApi().then(data => {
-            setRoles(data)
-            allRolesRef.current = data
-        })
-    }
+    useEffect(() => {
+        loadData();
+    }, [state.group, loadData]);
 
-    useEffect(() => loadData(), [])
-
-    // 删除
-    const handleDelete = (item) => {
+    const handleDelete = async (item: ROLE) => {
         bsConfirm({
             desc: `${t('system.confirmText')} 【${item.role_name}】 ?`,
             okTxt: t('delete'),
-            onOk(next) {
-                captureAndAlertRequestErrorHoc(delRoleApi(item.id).then(loadData))
-                next()
+            onOk: async (next) => {
+                try {
+                    await captureAndAlertRequestErrorHoc(delRoleApi(item.id));
+                    await loadData();
+                    next();
+                } catch (error) {
+                    console.error(error);
+                }
             }
-        })
+        });
+    };
+
+    const checkSameName = useCallback((name: string) => {
+        return state.roles.find(_role => _role.role_name === name && state.role?.id !== _role.id);
+    }, [state.roles, state.role]);
+
+    const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const word = e.target.value;
+        dispatch({ type: 'SET_SEARCH_WORD', payload: word });
+        dispatch({ type: 'SET_ROLES', payload: allRolesRef.current.filter(item => item.role_name.toUpperCase().includes(word.toUpperCase())) });
+    };
+
+    if (state.role) {
+        return <EditRole id={state.role.id || -1} name={state.role.role_name || ''} onBeforeChange={checkSameName} onChange={() => dispatch({ type: 'SET_ROLE', payload: null })} />;
     }
 
-    // 验证重名
-    const checkSameName = (name: string) => {
-        return (roles.find(_role =>
-            _role.role_name === name && role.id !== _role.id))
-    }
-
-    // search
-    const [searchWord, setSearchWord] = useState('')
-    const handleSearch = (e) => {
-        const word = e.target.value
-        setSearchWord(word)
-        setRoles(allRolesRef.current.filter(item => item.role_name.toUpperCase().includes(word.toUpperCase())))
-    }
-
-    if (role) return <EditRole id={role.id || -1} name={role.role_name || ''} onBeforeChange={checkSameName} onChange={handleChange}></EditRole>
-
-    return <div className="relative">
-        <div className="h-[calc(100vh-136px)] overflow-y-auto pb-10">
-            <div className="flex gap-6 items-center justify-end">
-                <div className="w-[180px] relative">
-                    <SearchInput placeholder={t('system.roleName')} onChange={handleSearch}></SearchInput>
+    return (
+        <div className="relative">
+            <div className="h-[calc(100vh-136px)] overflow-y-auto pt-2 pb-10">
+                <div className="flex justify-between">
+                    <div>
+                        <Label>当前用户组</Label>
+                        <Select value={state.group} onValueChange={(value) => dispatch({ type: 'SET_GROUP', payload: value })}>
+                            <SelectTrigger className="w-[180px] inline-flex ml-2">
+                                <SelectValue placeholder="默认用户组" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    {state.groups.map(el => (
+                                        <SelectItem key={el.value} value={el.value}>{el.label}</SelectItem>
+                                    ))}
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex gap-6 items-center justify-between">
+                        <div className="w-[180px] relative">
+                            <SearchInput id="role-input" placeholder={t('system.roleName')} onChange={handleSearch} />
+                        </div>
+                        <Button className="flex justify-around" onClick={() => dispatch({ type: 'SET_ROLE', payload: {} })}>
+                            <PlusIcon className="text-primary" />
+                            <span className="text-[#fff] mx-4">{t('create')}</span>
+                        </Button>
+                    </div>
                 </div>
-                <Button className="flex justify-around" onClick={() => setRole({})}>
-                    <PlusIcon className="text-primary" />
-                    <span className="text-[#fff] mx-4">{t('create')}</span>
-                </Button>
-            </div>
-            <Table className="mb-10">
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-[200px]">{t('system.roleName')}</TableHead>
-                        <TableHead>{t('createTime')}</TableHead>
-                        <TableHead className="text-right">{t('operations')}</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {roles.map((el) => (
-                        <TableRow key={el.id}>
-                            <TableCell className="font-medium">{el.role_name}</TableCell>
-                            <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-                            <TableCell className="text-right">
-                                <Button variant="link" onClick={() => setRole(el)} className="px-0 pl-6">{t('edit')}</Button>
-                                <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
-                            </TableCell>
+                <Table className="mb-10">
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[200px]">{t('system.roleName')}</TableHead>
+                            <TableHead>{t('createTime')}</TableHead>
+                            <TableHead className="text-right">{t('operations')}</TableHead>
                         </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+                    </TableHeader>
+                    <TableBody>
+                        {state.roles.map(el => (
+                            <TableRow key={el.id}>
+                                <TableCell className="font-medium">{el.role_name}</TableCell>
+                                <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
+                                <TableCell className="text-right">
+                                    <Button variant="link" onClick={() => dispatch({ type: 'SET_ROLE', payload: el })} className="px-0 pl-6">{t('edit')}</Button>
+                                    <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+            <div className="bisheng-table-footer">
+                <p className="desc">{t('system.roleList')}.</p>
+            </div>
         </div>
-        <div className="bisheng-table-footer">
-            <p className="desc">{t('system.roleList')}.</p>
-        </div>
-    </div>
-};
+    );
+}

@@ -14,15 +14,15 @@ export default function UserRoleModal({ id, onClose, onChange }) {
     const [selected, setSelected] = useState([])
 
     const [userGroups, setUserGroups] = useState([])
-    const [ugSelected, setUgSelected] = useState([])
+    const [userGroupSelected, setUserGroupSelected] = useState([])
     const [error, setError] = useState(false)
 
     useEffect(() => {
         if (!id) return
         getUserGroupsApi().then(res => {
-            setUserGroups(res.data)
-            const ug = res.data.find(ug => ug.name == '默认用户组')
-            setUgSelected([ug,...ugSelected])
+            setUserGroups(res.data.records)
+            const ug = res.data.records.find(ug => ug.id == 2) // 暂时设置
+            setUserGroupSelected([ug,...userGroupSelected])
         })
         getRolesApi().then(data => {
             //@ts-ignore
@@ -48,12 +48,13 @@ export default function UserRoleModal({ id, onClose, onChange }) {
 
     const handleSave = async () => {
         if (!selected.length) return setError(true)
-        if(ugSelected.length === 0) return setError(true)
+        if(userGroupSelected.length === 0) return setError(true)
         const res = await captureAndAlertRequestErrorHoc(updateUserRoles(id, selected.map(item => item.role_id)))
-        const resUg = await captureAndAlertRequestErrorHoc(updateUserGroups(id, ugSelected.map(ug => ug.name)))
+        const resUg = await captureAndAlertRequestErrorHoc(updateUserGroups(id, userGroupSelected.map(ug => ug.name)))
         console.log('res :>> ', res);
         onChange()
     }
+
     return <Dialog open={id} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
@@ -62,18 +63,18 @@ export default function UserRoleModal({ id, onClose, onChange }) {
             <div className="">
                 <MultiSelect
                     className="max-w-[600px]"
-                    value={ugSelected.map(ug => {
+                    value={userGroupSelected.map(ug => {
                         return ug.id.toString()
                     })}
                     options={userGroups.map((ug) => {
                         return {
-                            label: ug.name,
+                            label: ug.groupName,
                             value: ug.id.toString()
                         }
                     })}
-                    lockedValues={["01"]}
+                    lockedValues={["2"]}
                     onChange={(values) => {
-                        setUgSelected(userGroups.filter(ug => {
+                        setUserGroupSelected(userGroups.filter(ug => {
                             return values.includes(ug.id.toString())
                         }))
                     }}
@@ -85,6 +86,7 @@ export default function UserRoleModal({ id, onClose, onChange }) {
             </DialogHeader>
             <div className="">
                 <MultiSelect
+                    multiple
                     className="max-w-[600px]"
                     value={selected.map(item => {
                         return item.role_id.toString()

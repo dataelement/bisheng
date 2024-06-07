@@ -14,7 +14,7 @@ import { EnIcon } from "@/components/bs-icons/en";
 import { useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useTranslation } from "react-i18next";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import CrashErrorComponent from "../components/CrashErrorComponent";
 import { Separator } from "../components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
@@ -23,12 +23,13 @@ import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
+import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
+import { LockClosedIcon } from "@radix-ui/react-icons";
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
     // 角色
     const { user, setUser } = useContext(userContext);
-    const location = useLocation();
     const { language, options, changLanguage, t } = useLanguage(user)
 
     const handleLogout = () => {
@@ -36,6 +37,13 @@ export default function MainLayout() {
             setUser(null)
             localStorage.removeItem('isLogin')
         })
+    }
+
+    // 充值密码
+    const navigator = useNavigate()
+    const JumpResetPage = () => {
+        localStorage.setItem('account', user.user_name)
+        navigator('/reset')
     }
 
     return <div className="flex">
@@ -77,7 +85,13 @@ export default function MainLayout() {
                     </div>
                     <div className="flex items-center h-7 my-4">
                         <img className="h-7 w-7 rounded-2xl mr-4" src="/user.png" alt="" />
-                        <span className="leading-8 text-[14px] mr-8">{t("menu.user")}</span>
+                        <SelectHover
+                            triagger={
+                                <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">{user.user_name}</span>
+                            }>
+                            <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>修改密码</span></SelectHoverItem>
+                            <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>退出登录</span></SelectHoverItem>
+                        </SelectHover>
                     </div>
                 </div>
             </div>
@@ -131,14 +145,14 @@ export default function MainLayout() {
                                 </Tooltip>
                             </TooltipProvider>
                         </div>
-                        <Separator className="mx-1" />
+                        {/* <Separator className="mx-1" />
                         <div className="flex h-[48px] w-[160px]">
-                            <div className="flex-1 py-1  flex justify-center bg-background-tip hover:bg-gray-400 dark:hover:text-[white] dark:hover:bg-background-tip-darkhover gap-2 items-center rounded-md cursor-pointer" onClick={handleLogout}>
-                                <QuitIcon className="side-bar-button-size dark:hidden"/>
-                                <QuitIconDark className="side-bar-button-size hidden dark:block"/>
+                            <div className="flex-1 py-1  flex justify-center bg-background-tip hover:bg-gray-400 dark:hover:text-[white] dark:hover:bg-background-tip-darkhover gap-2 items-center rounded-md cursor-pointer" >
+                                <QuitIcon className="side-bar-button-size dark:hidden" />
+                                <QuitIconDark className="side-bar-button-size hidden dark:block" />
                                 <span>{t('menu.logout')}</span>
                             </div>
-                        </div>
+                        </div> */}
                     </div>
                 </div>
                 <div className="flex-1 bg-background-main-content rounded-lg w-[calc(100vw-184px)]">
@@ -166,7 +180,7 @@ export default function MainLayout() {
                 </div>
             </div>
         </div>
-    </div>
+    </div >
 };
 
 const useLanguage = (user: User) => {

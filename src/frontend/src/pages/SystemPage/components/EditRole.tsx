@@ -26,9 +26,17 @@ const SearchPanne = ({ role_id, title, type, children }) => {
             page_num: page,
             page_size: pageSize
         }
-        return type === 'skill' ? getRoleSkillsApi(param)
-            : (type === 'assistant' ? getRoleAssistApi({ ...param, type: 'assistant' })
-                : getRoleLibsApi(param))
+
+        switch (type) {
+            case 'skill':
+                return getRoleSkillsApi(param);
+            case 'tool':
+                return getRoleSkillsApi(param);
+            case 'assistant':
+                return getRoleAssistApi({ ...param, type: 'assistant' });
+            default:
+                return getRoleLibsApi(param);
+        }
     })
 
     return <>
@@ -200,13 +208,13 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
             </SearchPanne>
         </div>
         {/* 知识库 */}
-        <div className="">
+        <div className="mb-20">
             <SearchPanne title={t('system.knowledgeAuthorization')} role_id={roleId} type={'lib'}>
                 {(data) => (
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>{t('lib.libraryName')}</TableHead> 
+                                <TableHead>{t('lib.libraryName')}</TableHead>
                                 <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
                                 <TableHead className="text-right">{t('system.usePermission')}</TableHead>
                                 <TableHead className="text-right">{t('system.managePermission')}</TableHead>
@@ -230,7 +238,38 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
                 )}
             </SearchPanne>
         </div>
-        <div className="flex justify-center gap-4 mt-16">
+        {/* 工具 */}
+        <div className="">
+            <SearchPanne title={'工具授权'} role_id={roleId} type={'tool'}>
+                {(data) => (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>{t('lib.libraryName')}</TableHead>
+                                <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
+                                <TableHead className="text-right">{t('system.usePermission')}</TableHead>
+                                <TableHead className="text-right">{t('system.managePermission')}</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {data.map((el) => (
+                                <TableRow key={el.id}>
+                                    <TableCell className="font-medium">{el.name}</TableCell>
+                                    <TableCell>{el.user_name}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Switch checked={form.useLibs.includes(el.id)} onCheckedChange={(bln) => switchUseLib(el.id, bln)} />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Switch checked={form.manageLibs.includes(el.id)} onCheckedChange={(bln) => switchLibManage(el.id, bln)} />
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </SearchPanne>
+        </div>
+        <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-[white]">
             <Button variant="outline" className="px-16" onClick={() => onChange()}>{t('cancel')}</Button>
             <Button className="px-16" onClick={handleSave}>{t('save')}</Button>
         </div>

@@ -57,6 +57,9 @@
     "roleNamePrompt": "Role name cannot exceed 50 characters",
     "roleNameRequired": "Role name is required",
     "roleNameExists": "Role name already exists",
+    "groupNameExists": "UserGroup name already exists",
+    "groupNamePrompt": "UserGroup name cannot exceed 30 characters",
+    "groupNameRequired": "UserGroup name is required",
     "parameterConfig": "Parameter Configuration",
     "language": "Language",
     "assistantAuthorization": "Assistant Authorization",
@@ -69,7 +72,7 @@
     "searchRoles": "Search roles",
     "reset": "Reset",
     "confirm": "Confirm",
-    "userGroupName": "UserGroup Name",
+    "userGroupName": "Enter UserGroup Name",
     "admins": "Admin",
     "flowControl": "Overall User Flow Control",
     "AssistantFlowCtrl": "Assistant Flow Control",
@@ -80,7 +83,7 @@
     "unlimited": "Unlimited",
     "iconHover": "Simultaneously constrained by the overall traffic control strategy of the user group",
     "maximum": "Maximum of",
-    "perMinute": "concurrent conversations per minute"
+    "perMinute": "concurrent conversations per second"
   },
   "skills": {
     "manageTemplate": "Manage Skill Templates",
@@ -562,5 +565,19 @@
     "value": "Value",
     "result": "Test Result",
     "outResultPlaceholder": "Click the button to output the result"
+  },
+  "resetPassword": {
+    "slogen": "Securely Reset Your Password",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "pleaseEnterCurrentPassword": "Please enter your current password.",
+    "pleaseEnterNewPassword": "Please enter your new password.",
+    "pleaseEnterConfirmPassword": "Please confirm your new password.",
+    "newPasswordTooShort": "New password must be at least 8 characters.",
+    "passwordMismatch": "The new passwords do not match.",
+    "resetButton": "Reset Password",
+    "passwordResetSuccess": "Your password has been successfully reset.",
+    "resetFailed": "Pwd Reset Failed"
   }
 }

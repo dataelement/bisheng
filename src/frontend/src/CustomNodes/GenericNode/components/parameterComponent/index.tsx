@@ -33,6 +33,7 @@ import {
   nodeColors,
   nodeIconsLucide
 } from "../../../../utils";
+import KnowledgeSelect from "@/components/bs-comp/selectKnowledge";
 
 export default function ParameterComponent({
   left,
@@ -296,35 +297,36 @@ export default function ParameterComponent({
             type === "int" ||
             type === "variable" ||
             type === "button" ||
+            type === "knowledge_one" ||
+            type === "knowledge_list" ||
             type === "NestedDict" ||
             type === "dict") &&
-          !optionalHandle ? (
-          <></>
-        ) : (
-          <ShadTooltip
-            styleClasses={"tooltip-fixed-width custom-scroll nowheel"}
-            delayDuration={0}
-            content={refHtml.current}
-            side={left ? "left" : "right"}
-          >
-            <Handle
-              type={left ? "target" : "source"}
-              position={left ? Position.Left : Position.Right}
-              id={id}
-              isValidConnection={(connection) =>
-                isValidConnection(connection, reactFlowInstance)
-              }
-              className={classNames(
-                left ? "-ml-0.5 " : "-mr-0.5 ",
-                "h-3 w-3 rounded-full border-2 bg-background"
-              )}
-              style={{
-                borderColor: color,
-                top: position,
-              }}
-            ></Handle>
-          </ShadTooltip>
-        )}
+          !optionalHandle ? (<></>)
+          : (
+            <ShadTooltip
+              styleClasses={"tooltip-fixed-width custom-scroll nowheel"}
+              delayDuration={0}
+              content={refHtml.current}
+              side={left ? "left" : "right"}
+            >
+              <Handle
+                type={left ? "target" : "source"}
+                position={left ? Position.Left : Position.Right}
+                id={id}
+                isValidConnection={(connection) =>
+                  isValidConnection(connection, reactFlowInstance)
+                }
+                className={classNames(
+                  left ? "-ml-0.5 " : "-mr-0.5 ",
+                  "h-3 w-3 rounded-full border-2 bg-background"
+                )}
+                style={{
+                  borderColor: color,
+                  top: position,
+                }}
+              ></Handle>
+            </ShadTooltip>
+          )}
 
         {/* 左侧input输入项 */}
         {!data.node.template[name] ? null : left === true &&
@@ -354,10 +356,6 @@ export default function ParameterComponent({
             ) : ['index_name', 'collection_name'].includes(name) ? (
               // 知识库选择
               <CollectionNameComponent
-                setNodeClass={(nodeClass) => {
-                  data.node = nodeClass;
-                }}
-                nodeClass={data.node}
                 disabled={disabled}
                 id={data.node.template[name].collection_id ?? ""}
                 value={data.node.template[name].value ?? ""}
@@ -373,6 +371,35 @@ export default function ParameterComponent({
                 onChange={handleOnNewValue}
               />
             )}
+          </div>
+        ) : left === true && type === "knowledge_one" ? (
+          // 单选知识库
+          <div className="mt-2 w-full">
+            <CollectionNameComponent
+              disabled={disabled}
+              id={data.node.template[name].collection_id ?? ""}
+              value={data.node.template[name].value ?? ""}
+              onSelect={(val, id) => { handleOnNewLibValue(val, id); val && handleRemoveMilvusEmbeddingEdge(data.id) }}
+              onChange={() => { }}
+            />
+          </div>
+        ) : left === true && type === "knowledge_list" ? (
+          // 多选知识库
+          <div className="mt-2 w-full">
+            <KnowledgeSelect
+              multiple
+              disabled={disabled}
+              value={data.node.template[name].value?.map?.((item) => ({
+                label: item.value,
+                value: item.key,
+              })) || []}
+              onChange={(vals) => {
+                handleOnNewValue(vals.map(v => ({
+                  key: v.value,
+                  value: v.label
+                })))
+              }}
+            />
           </div>
         ) : left === true && type === "bool" ? (
           <div className="mt-2 w-full">
