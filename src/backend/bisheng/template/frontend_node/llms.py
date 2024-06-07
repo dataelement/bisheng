@@ -160,8 +160,11 @@ class LLMFrontendNode(FrontendNode):
         if name and 'vertex' in name.lower():
             LLMFrontendNode.format_vertex_field(field, name)
         SHOW_FIELDS = ['repo_id']
+        HIDDEN_FIELDS = ['custom_get_token_ids']
         if field.name in SHOW_FIELDS:
             field.show = True
+        if field.name in HIDDEN_FIELDS:
+            field.show = False
 
         if 'api' in field.name and ('key' in field.name or
                                     ('token' in field.name and 'tokens' not in field.name)):

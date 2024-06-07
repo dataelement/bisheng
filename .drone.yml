@@ -24,6 +24,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - name: bisheng-cache
         path: /app/build # 将应用打包好的Jar和执行脚本挂载出来
     environment:
+      RELEASE_VERSION: 99.99.99
       NEXUS_USER:
         from_secret: NEXUS_USER
       NEXUS_PASSWORD:
@@ -55,6 +56,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     - cd ./src/backend/
     - echo $REPO
     - REPO2=$(echo $REPO | sed 's/http:\\/\\///g')
+    - sed -i '/apt-get/ a$PROXY' Dockerfile
     - sed -i '6i\RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
     - sed -i '23i\RUN poetry source add --priority=supplemental foo http://'$NEXUS_PUBLIC':'$NEXUS_PUBLIC_PASSWORD'@'$REPO2'simple' Dockerfile
     - sed -i '23i\RUN poetry source add --priority=primary qh https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
