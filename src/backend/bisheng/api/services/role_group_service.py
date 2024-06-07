@@ -2,7 +2,7 @@ from typing import List
 
 from bisheng.database.models.group import GroupDao, GroupRead
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
-from bisheng.database.models.user import UserDao
+from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 
 
@@ -25,6 +25,17 @@ class RoleGroupService():
                 users_dict.get(user.user_id) for user in user_admin if user.group_id == group.id
             ]
         return groups
+
+    def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
+        """获取全量的group列表"""
+
+        # 查询user
+        user_group_list = UserGroupDao.get_group_user(group_id, page_size, page_num)
+        if user_group_list:
+            user_ids = [user.user_id for user in user_group_list]
+            return UserDao.get_user_by_ids(user_ids)
+
+        return None
 
     def insert_user_group(self, user_group: UserGroupCreate) -> UserGroupRead:
         """插入用户组"""
@@ -54,6 +65,8 @@ class RoleGroupService():
         else:
             return None
 
-    def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum):
+    def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum, name: str,
+                            page_size: int, page_num: int):
         """设置用户组管理员"""
-        return GroupResourceDao.get_group_resource(group_id, resource_type)
+        return GroupResourceDao.get_group_resource(group_id, resource_type, name, page_size,
+                                                   page_num)

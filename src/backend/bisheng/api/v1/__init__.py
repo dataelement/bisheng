@@ -10,22 +10,12 @@ from bisheng.api.v1.report import router as report_router
 from bisheng.api.v1.server import router as server_router
 from bisheng.api.v1.skillcenter import router as skillcenter_router
 from bisheng.api.v1.user import router as user_router
+from bisheng.api.v1.usergroup import router as group_router
 from bisheng.api.v1.validate import router as validate_router
 from bisheng.api.v1.variable import router as variable_router
 
 __all__ = [
-    'chat_router',
-    'endpoints_router',
-    'validate_router',
-    'flows_router',
-    'skillcenter_router',
-    'knowledge_router',
-    'server_router',
-    'user_router',
-    'qa_router',
-    'variable_router',
-    'report_router',
-    'finetune_router',
-    'component_router',
-    'assistant_router',
+    'chat_router', 'endpoints_router', 'validate_router', 'flows_router', 'skillcenter_router',
+    'knowledge_router', 'server_router', 'user_router', 'qa_router', 'variable_router',
+    'report_router', 'finetune_router', 'component_router', 'assistant_router', 'group_router'
 ]

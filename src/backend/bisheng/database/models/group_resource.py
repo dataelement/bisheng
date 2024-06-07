@@ -57,9 +57,17 @@ class GroupResourceDao(GroupResourceBase):
             return group_resource
 
     @classmethod
-    def get_group_resource(cls, group_id: int,
-                           resource_type: ResourceTypeEnum) -> list[GroupResource]:
+    def get_group_resource(cls,
+                           group_id: int,
+                           resource_type: ResourceTypeEnum,
+                           name: str = None,
+                           page_size: int = None,
+                           page_num: int = None) -> list[GroupResource]:
         with session_getter() as session:
             statement = select(GroupResource).where(GroupResource.group_id == group_id,
                                                     GroupResource.type == resource_type.value)
+            if name:
+                statement = statement.where(GroupResource.third_id.like(f'%{name}%'))
+            if page_num and page_size:
+                statement = statement.offset(page_size * (page_num - 1)).limit(page_size)
             return session.exec(statement).all()
