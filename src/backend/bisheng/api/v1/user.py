@@ -9,8 +9,10 @@ from typing import Optional
 from uuid import UUID
 
 import rsa
+
+from bisheng.api.JWT import get_login_user
 from bisheng.api.services.captcha import verify_captcha
-from bisheng.api.services.user_service import get_assistant_list_by_access
+from bisheng.api.services.user_service import get_assistant_list_by_access, UserPayload
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
@@ -474,7 +476,7 @@ async def knowledge_list(*,
             'id': access[0].id
         } for access in db_role_access],
         'total':
-        total_count
+            total_count
     })
 
 
@@ -523,7 +525,7 @@ async def flow_list(*,
             'id': access[0]
         } for access in db_role_access],
         'total':
-        total_count
+            total_count
     })
 
 
@@ -568,6 +570,33 @@ async def get_rsa_publish_key():
     pubkey_str = pubkey.save_pkcs1().decode()
 
     return resp_200({'public_key': pubkey_str})
+
+
+@router.post("/user/reset_password", status_code=200)
+async def reset_password(*, user_id: int, password: str, login_user: UserPayload = Depends(get_login_user), ):
+    """
+    重置用户的密码，只能超级管理员重置普通用户的密码
+    """
+    # todo zgq: 补充完善逻辑
+    return resp_200()
+
+
+@router.post("/user/change_password", status_code=200)
+async def change_password(*, password: str, new_password: str, login_user: UserPayload = Depends(get_login_user)):
+    """
+    登录用户 修改自己的密码
+    """
+    # todo zgq: 补充完善逻辑
+    return resp_200()
+
+
+@router.post("/user/change_password_public", status_code=200)
+async def change_password_public(*, username: str, password: str, new_password: str):
+    """
+    登录用户 修改自己的密码
+    """
+    # todo zgq: 补充完善逻辑
+    return resp_200()
 
 
 def md5_hash(string):
