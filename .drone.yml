@@ -14,7 +14,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       https_proxy:
         from_secret: PROXY
     commands:
-    - git clone https://github.com/yaojin3616/bisheng.git .
+    - git clone https://github.com/dataelement/bisheng.git .
     - git checkout $DRONE_COMMIT
 
   - name: package # 流水线名称
