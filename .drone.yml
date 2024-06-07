@@ -84,6 +84,34 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         from_secret: NEXUS_USER
       password:
         from_secret: NEXUS_PASSWORD
+  
+  - name: notify-start # notify
+    image: plugins/webhook
+    settings:
+      debug: true
+      urls: 
+        from_secret: FEISHU_URL
+      content_type: application/json
+      template: |
+        {
+          "msg_type": "interactive",
+          "card": {
+            "type": "template",
+            "data": {
+              "template_id": "AAqkI9bnY5FUs",
+              "template_variable": {
+                "repo_name": "{{ repo.name }}",
+                "build_branch": "{{build.branch}}",
+                "build_author": "{{ DRONE_COMMIT_AUTHOR }}",
+                "link": "{{build.link}}",
+                "commit_msg": "{{ trim build.message }}",
+                "build_tag":"{{build.tag}}",
+                "build_start":"{{build.started}}",
+                "status": "{{ build.status }}"
+              }
+            }
+          }
+        }
 
 trigger:
   branch:
