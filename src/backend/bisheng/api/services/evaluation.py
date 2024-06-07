@@ -2,7 +2,7 @@ import os
 import uuid
 from typing import List
 
-from fastapi import UploadFile
+from fastapi import UploadFile, HTTPException
 
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
@@ -74,6 +74,15 @@ class EvaluationService:
             data.append(evaluation_item)
 
         return resp_200(data={'data': data, 'total': total})
+
+    @classmethod
+    def delete_evaluation(cls, evaluation_id: int, user_payload: UserPayload) -> UnifiedResponseModel:
+        evaluation = EvaluationDao.get_user_one_evaluation(user_payload.user_id, evaluation_id)
+        if not evaluation:
+            raise HTTPException(status_code=404, detail='Evaluation not found')
+
+        EvaluationDao.delete_evaluation(evaluation)
+        return resp_200()
 
     @classmethod
     def get_user_name(cls, user_id: int):

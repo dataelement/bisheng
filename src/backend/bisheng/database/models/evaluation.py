@@ -60,3 +60,17 @@ class EvaluationDao(EvaluationBase):
                 Evaluation.update_time.desc()
             )
             return session.exec(statement).all(), session.exec(count_statement).scalar()
+
+    @classmethod
+    def delete_evaluation(cls, data: Evaluation) -> Evaluation:
+        with session_getter() as session:
+            data.is_delete = 1
+            session.add(data)
+            session.commit()
+            return data
+
+    @classmethod
+    def get_user_one_evaluation(cls, user_id: int, evaluation_id: int) -> Evaluation:
+        with session_getter() as session:
+            statement = select(Evaluation).where(and_(Evaluation.id == evaluation_id, Evaluation.user_id == user_id))
+            return session.exec(statement).first()
