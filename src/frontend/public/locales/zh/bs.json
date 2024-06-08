@@ -271,6 +271,7 @@
     "id": "任务ID",
     "filename": "测试文件名称",
     "skillAssistant": "技能助手",
+    "status": "状态",
     "score": "评测分数",
     "createDate": "创建日期",
     "download": "下载",

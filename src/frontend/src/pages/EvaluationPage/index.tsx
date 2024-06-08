@@ -13,26 +13,33 @@ import {
     TabsContent,
 } from "../../components/bs-ui/tabs";
 
-import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { userContext } from "../../contexts/userContext";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Evaluation, deleteEvaluationApi, getEvaluationApi, getEvaluationUrlApi } from "@/controllers/API/evaluate";
-import { TypeEvaluation } from "@/utils";
+import { EvaluationStatus, TypeEvaluation } from "@/utils";
 import { downloadFile } from "@/util/utils";
 import { checkSassUrl } from "../ChatAppPage/components/FileView";
+import { Badge } from "@/components/bs-ui/badge";
+import { useEffect } from "react";
 
 export default function EvaluationPage() {
-    const [open, setOpen] = useState(false);
-    const { user } = useContext(userContext);
     const navigate = useNavigate()
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
         getEvaluationApi(param.page, param.pageSize)
     )
+
+    useEffect(() => {
+        const intervalId = setInterval(() => {
+          reload(); 
+        }, 60000); // 每 60 秒轮询一次
+    
+        return () => clearInterval(intervalId);
+      }, [reload]);
+    
 
     const handleDelete = (id) => {
         bsConfirm({
@@ -68,10 +75,11 @@ export default function EvaluationPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="w-[200px]">{t('evaluation.id')}</TableHead>
-                                    <TableHead>{t('evaluation.filename')}</TableHead>
+                                    <TableHead className="w-[80px]">{t('evaluation.id')}</TableHead>
+                                    <TableHead className="w-[100px]">{t('evaluation.filename')}</TableHead>
                                     <TableHead>{t('evaluation.skillAssistant')}</TableHead>
-                                    <TableHead>{t('evaluation.score')}</TableHead>
+                                    <TableHead className="w-[80px]">{t('evaluation.status')}</TableHead>
+                                    <TableHead className="w-[80px]">{t('evaluation.score')}</TableHead>
                                     <TableHead>{t('createTime')}</TableHead>
                                     <TableHead className="text-right">{t('operations')}</TableHead>
                                 </TableRow>
@@ -82,15 +90,22 @@ export default function EvaluationPage() {
                                     <TableRow key={el.id}>
                                         <TableCell className="font-medium">{el.id}</TableCell>
                                         <TableCell>{el.file_name || '--'}</TableCell>
-                                        <TableCell>{TypeEvaluation[el.exec_type]}&nbsp;{el.unique_name}&nbsp;{el.version_name}</TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center">
+                                                <Badge className="whitespace-nowrap">{TypeEvaluation[el.exec_type]}</Badge>&nbsp;<span className="whitespace-nowrap">{el.unique_name}</span>&nbsp;{el.version_name && <Button variant="link">{el.version_name}</Button>}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>{EvaluationStatus[el.status]}</TableCell>
                                         <TableCell>{el.result_score}</TableCell>
                                         <TableCell>{el.create_time.replace('T', ' ') || '--'}</TableCell>
                                         <TableCell className="text-right" onClick={() => {
                                             // @ts-ignore
                                             window.libname = el.name;
                                         }}>
-                                            <Button variant="link" className="no-underline hover:underline" onClick={()=>handleDownload(el)}>{t('evaluation.download')}</Button>
-                                            <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500 px-0">{t('delete')}</Button>
+                                            <div className="flex">
+                                                <Button variant="link" className="no-underline hover:underline" onClick={()=>handleDownload(el)}>{t('evaluation.download')}</Button>
+                                                <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-1 text-red-500 px-0">{t('delete')}</Button>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))}
