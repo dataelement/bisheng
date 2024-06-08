@@ -2,11 +2,13 @@ import asyncio
 import os
 import uuid
 import io
+import json
 from typing import List
 
 from fastapi import UploadFile, HTTPException
 import pandas as pd
 from bisheng.settings import settings
+from collections import defaultdict
 
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
@@ -116,13 +118,25 @@ class EvaluationService:
         file_name = file.filename
 
         file_ext = os.path.basename(file.filename).split('.')[-1]
-        file_path = f'{EvaluationService.get_file_root()}/{file_id}.{file_ext}'
+        file_path = f'evaluation/dataset/{file_id}.{file_ext}'
         minio_client.upload_minio_file(file_path, file.file, file.size, content_type=file.content_type)
         return file_name, file_path
 
     @classmethod
-    def get_file_root(cls):
-        return "evaluation/dataset"
+    async def upload_result_file(cls, df: pd.DataFrame):
+        minio_client = MinioClient()
+        file_id = uuid.uuid4().hex
+
+        csv_buffer = io.BytesIO()
+        df.to_csv(csv_buffer, index=False)
+        csv_buffer.seek(0)
+
+        file_path = f'evaluation/result/{file_id}.csv'
+        minio_client.upload_minio_data(object_name=file_path,
+                                       data=csv_buffer,
+                                       length=csv_buffer.getbuffer().nbytes,
+                                       content_type='application/csv')
+        return file_path
 
     @classmethod
     def read_csv_file(cls, file_path: str):
@@ -185,8 +199,10 @@ def add_evaluation_task(evaluation_id: int):
         llm_params = {
             "type": "ChatOpenAI",
             "model": "gpt-3.5-turbo",
-            **settings.get_all_config().get('openai_conf', {})
+            "openai_api_key": settings.get_all_config().get('openai_conf', {}).get("openai_api_key")
         }
+        print("start evaluate")
+        print(llm_params)
         llm_type = llm_params.pop("type")
         llm_object = import_by_type(_type='llms', name=llm_type)
         _llm = llm_object(**llm_params)
@@ -196,16 +212,62 @@ def add_evaluation_task(evaluation_id: int):
             "answer": [one.get('answer') for one in csv_data],
             "ground_truths": [[one.get('ground_truth')] for one in csv_data]
         }
+
         dataset = Dataset.from_dict(data_samples)
         answer_correctness_bisheng = AnswerCorrectnessBisheng(llm=llm)
         score = evaluate(dataset, metrics=[answer_correctness_bisheng])
         df = score.to_pandas()
         result = df.to_dict(orient="list")
-        #
-        # evaluation.result_score = '0'
-        # evaluation.status = EvaluationTaskStatus.success.value
-        # EvaluationDao.update_evaluation(evaluation=evaluation)
-        print(result)
+
+        question = result.get('question', [])
+        columns = [
+            # 字段:标题:类型(1:文本 2:数字 3:百分比)
+            ("question", "question", 1),
+            ("ground_truth", "ground_truth", 1),
+            ("answer", "answer", 1),
+            ("statements_num_gt_only", "statements_num_gt_only", 2),
+            ("statements_num_answer_only", "statements_num_answer_only", 2),
+            ("statements_overlap", "statements_overlap", 2),
+            ("answer_recall", "recall", 3),
+            ("answer_precision", "precision", 3),
+            ("answer_f1", "F1", 3)
+        ]
+        row_list = []
+        tmp_dict = defaultdict(int)
+        total_dict = {}
+
+        print("next 11111111")
+
+        for (index, one) in question:
+            row_data = {}
+            for field, title, unit_type in columns:
+                value = result.get(field)[index]
+                if unit_type != 1:
+                    tmp_dict[field] += value
+                if unit_type == 3:
+                    value = f'{value * 100:.2f}%'
+                row_data[title] = value
+            row_list.append(row_data)
+
+        print("next 2222222")
+        total_row_data = {}
+        for field, title, unit_type in columns:
+            value = tmp_dict.get(field)
+            if unit_type == 3:
+                value = f'{(value / len(row_list)) * 100:.2f}%'
+                total_dict[field] = value
+            total_row_data[title] = value
+        row_list.append(total_row_data)
+
+        df = pd.DataFrame(data=row_list, columns=[one[1] for one in columns])
+        result_file_path = asyncio.run(EvaluationService.upload_result_file(df))
+
+        print(result_file_path)
+        evaluation.result_score = json.dumps(total_dict)
+        evaluation.status = EvaluationTaskStatus.success.value
+        evaluation.result_file_path = result_file_path
+        EvaluationDao.update_evaluation(evaluation=evaluation)
+        logger.info(f'Evaluation task success id={evaluation_id}')
 
     except Exception as e:
         logger.error(f'Evaluation task failed id={evaluation_id} {e}')
