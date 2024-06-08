@@ -75,6 +75,11 @@ export enum TypeModal {
   PROMPT = 2,
 }
 
+export enum TypeEvaluation {
+  flow = '技能',
+  assistant = '助手'
+}
+
 export const textColors = {
   white: "text-white",
   red: "text-red-700",
