@@ -198,6 +198,34 @@ class AssistantDao(Assistant):
             filters.append(Assistant.is_delete == 0)
             return session.exec(count_statement.where(*filters)).scalar()
 
+    @classmethod
+    def filter_assistant_by_id(cls, assistant_ids: List[UUID], keywords: str = None, page: int = 0,
+                               limit: int = 0) -> (List[Assistant], int):
+        """
+        根据关键字和助手id过滤出对应的助手
+        """
+        statement = select(Assistant).where(Assistant.is_delete == 0)
+        count_statement = select(func.count(Assistant.id)).where(Assistant.is_delete == 0)
+        if assistant_ids:
+            statement = statement.where(Assistant.id.in_(assistant_ids))
+            count_statement = count_statement.where(Assistant.id.in_(assistant_ids))
+        if keywords:
+            statement = statement.where(or_(
+                Assistant.name.like(f'%{keywords}%'),
+                Assistant.desc.like(f'%{keywords}%')
+            ))
+            count_statement = count_statement.where(or_(
+                Assistant.name.like(f'%{keywords}%'),
+                Assistant.desc.like(f'%{keywords}%')
+            ))
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement.order_by(Assistant.update_time.desc())
+
+        with session_getter() as session:
+            result = session.exec(statement).all()
+            return result, session.scalar(count_statement)
+
 
 class AssistantLinkDao(AssistantLink):
 

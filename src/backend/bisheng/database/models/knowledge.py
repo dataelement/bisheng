@@ -1,8 +1,8 @@
 from datetime import datetime
 from typing import Any, List, Optional, Tuple
 
-from sqlalchemy import Column, DateTime, and_, text
-from sqlmodel import Field, select
+from sqlalchemy import Column, DateTime, and_, text, func
+from sqlmodel import Field, select, or_
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -118,3 +118,30 @@ class KnowledgeDao(KnowledgeBase):
 
         with session_getter() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    def filter_knowledge_by_ids(cls, knowledge_ids: List[int], keyword: str = None,
+                                page: int = 0, limit: int = 0) -> (List[Knowledge], int):
+        """
+        根据关键字和知识库id过滤出对应的知识库
+
+        """
+        statement = select(Knowledge)
+        count_statement = select(func.count(Knowledge.id))
+        if knowledge_ids:
+            statement = statement.where(Knowledge.id.in_(knowledge_ids))
+            count_statement = count_statement.where(Knowledge.id.in_(knowledge_ids))
+        if keyword:
+            statement = statement.where(or_(
+                Knowledge.name.like('%' + keyword + '%'),
+                Knowledge.description.like('%' + keyword + '%')
+            ))
+            count_statement = count_statement.where(or_(
+                Knowledge.name.like('%' + keyword + '%'),
+                Knowledge.description.like('%' + keyword + '%')
+            ))
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(Knowledge.update_time.desc())
+        with session_getter() as session:
+            return session.exec(statement).all(), session.scalar(count_statement)

@@ -51,14 +51,22 @@ class AssistantService(AssistantUtils):
             res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit)
 
         for one in res:
-            simple_dict = one.model_dump(include={
-                'id', 'name', 'desc', 'logo', 'status', 'user_id', 'create_time', 'update_time'
-            })
+            simple_assistant = cls.return_simple_assistant_info(one)
             if one.user_id == user.user_id or user.is_admin():
-                simple_dict['write'] = True
-            simple_dict['user_name'] = cls.get_user_name(one.user_id)
-            data.append(AssistantSimpleInfo(**simple_dict))
+                simple_assistant.write = True
+            data.append(simple_assistant)
         return resp_200(data={'data': data, 'total': total})
+
+    @classmethod
+    def return_simple_assistant_info(cls, one: Assistant) -> AssistantSimpleInfo:
+        """
+        将数据库的 助手model简化 处理后成返回前端的格式
+        """
+        simple_dict = one.model_dump(include={
+            'id', 'name', 'desc', 'logo', 'status', 'user_id', 'create_time', 'update_time'
+        })
+        simple_dict['user_name'] = cls.get_user_name(one.user_id)
+        return AssistantSimpleInfo(**simple_dict)
 
     @classmethod
     def get_assistant_info(cls, assistant_id: UUID, user_id: str):

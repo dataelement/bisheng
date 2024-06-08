@@ -1,13 +1,20 @@
 # build router
 from typing import List, Annotated
+from uuid import UUID
 
 from bisheng.api.JWT import get_login_user
+from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.role_group_service import RoleGroupService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import check_permissions
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, AssistantSimpleInfo
+from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.group import GroupRead
-from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.group_resource import ResourceTypeEnum, GroupResourceDao
+from bisheng.database.models.knowledge import KnowledgeDao
+from bisheng.database.models.role import RoleDao
+from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupRead
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi_jwt_auth import AuthJWT
@@ -65,7 +72,7 @@ async def get_group_flows(*,
     return RoleGroupService().get_group_list()
 
 
-@router.get("/roles", response_model=UnifiedResponseModel[GroupRead])
+@router.get("/roles", response_model=UnifiedResponseModel)
 async def get_group_roles(*,
                           group_id: int = Query(..., description="用户组ID"),
                           keyword: str = Query(None, description="搜索关键字"),
@@ -75,26 +82,20 @@ async def get_group_roles(*,
     """
     获取用户组内的角色列表
     """
+    # 判断是否是用户组的管理员
+    if not user.check_group_admin(group_id):
+        return UnAuthorizedError.return_resp()
+    # 查询组下角色列表
+    role_list = RoleDao.get_role_by_groups([group_id], keyword, page, limit)
+    total = RoleDao.count_role_by_groups([group_id], keyword)
+
     return resp_200(data={
-        "data": [
-            {
-                "id": "role-id",
-                "name": "角色名字",
-                "create_user": "xxx",
-                "create_time": "2022-01-01 00:00:00"
-            },
-            {
-                "id": "role-id",
-                "name": "角色名字2",
-                "create_user": "xxx",
-                "create_time": "2022-01-01 00:00:00"
-            }
-        ],
-        "total": 10
+        "data": role_list,
+        "total": total
     })
 
 
-@router.get("/assistant", response_model=UnifiedResponseModel[GroupRead])
+@router.get("/assistant", response_model=UnifiedResponseModel[List[AssistantSimpleInfo]])
 async def get_group_assistant(*,
                               group_id: int = Query(..., description="用户组ID"),
                               keyword: str = Query(None, description="搜索关键字"),
@@ -104,22 +105,23 @@ async def get_group_assistant(*,
     """
     获取用户组可见的助手列表
     """
+    # 判断是否是用户组的管理员
+    if not user.check_group_admin(group_id):
+        return UnAuthorizedError.return_resp()
+
+    # 查询用户组下的助手ID列表
+    resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.ASSISTANT)
+    res = []
+    total = 0
+    if resource_list:
+        assistant_ids = [UUID(resource.third_id) for resource in resource_list]        # 查询助手
+        data, total = AssistantDao.filter_assistant_by_id(assistant_ids, keyword, page, limit)
+        for one in data:
+            simple_one = AssistantService.return_simple_assistant_info(one)
+            res.append(simple_one)
     return resp_200(data={
-        "data": [
-            {
-                "id": "assistant-id",
-                "name": "助手名字",
-                "create_user": "xxx",
-                "create_time": "2022-01-01 00:00:00"
-            },
-            {
-                "id": "assistant-id",
-                "name": "助手名字2",
-                "create_user": "xxx",
-                "create_time": "2022-01-01 00:00:00"
-            }
-        ],
-        "total": 10
+        "data": res,
+        "total": total
     })
 
 
@@ -133,20 +135,27 @@ async def get_group_knowledge(*,
     """
     获取用户组可见的知识库列表
     """
+
+    # 判断是否是用户组的管理员
+    if not user.check_group_admin(group_id):
+        return UnAuthorizedError.return_resp()
+
+    # 查询用户组下的知识库ID列表
+    resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.KNOWLEDGE)
+    res = []
+    total = 0
+    if resource_list:
+        knowledge_ids = [int(resource.third_id) for resource in resource_list]
+        # 查询知识库
+        data, total = KnowledgeDao.filter_knowledge_by_ids(knowledge_ids, keyword, page, limit)
+        db_user_ids = {one.user_id for one in data}
+        user_list = UserDao.get_user_by_ids(list(db_user_ids))
+        user_map = {user.user_id: user.user_name for user in user_list}
+        for one in data:
+            one_dict = one.model_dump()
+            one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
+            res.append(one_dict)
     return resp_200(data={
-        "data": [
-            {
-                "id": "knowledge-id",
-                "name": "知识库名字",
-                "create_user": "xxx",
-                "create_time": "2022-01-01 00:00:00"
-            },
-            {
-                "id": "knowledge-id",
-                "name": "知识库名字2",
-                "create_user": "xxx",
-                "create_time": "2022-01-01 00:00:00"
-            }
-        ],
-        "total": 10
+        "data": res,
+        "total": total
     })

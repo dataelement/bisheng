@@ -12,12 +12,13 @@ class ResourceTypeEnum(Enum):
     KNOWLEDGE = 1
     FLOW = 2
     ASSISTANT = 3
+    TOOL = 4
 
 
 class GroupResourceBase(SQLModelSerializable):
     group_id: str = Field(index=True)
     third_id: str = Field(index=False)
-    type: int = Field(index=False, description='1:知识库 2:工作流 3:知识库写权限 4:工作流写权限 5:助手读权限 6:助手写权限')
+    type: int = Field(index=False, description='资源类别 1:知识库 2:技能 3:助手 4:工具')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
