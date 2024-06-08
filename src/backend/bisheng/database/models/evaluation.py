@@ -13,6 +13,12 @@ class ExecType(Enum):
     ASSISTANT = 'assistant'
 
 
+class EvaluationTaskStatus(Enum):
+    running = 1
+    failed = 2
+    success = 3
+
+
 class EvaluationBase(SQLModelSerializable):
     user_id: int = Field(default=None, index=True)
     file_name: str = Field(default='', description='上传的文件名')
@@ -74,3 +80,17 @@ class EvaluationDao(EvaluationBase):
         with session_getter() as session:
             statement = select(Evaluation).where(and_(Evaluation.id == evaluation_id, Evaluation.user_id == user_id))
             return session.exec(statement).first()
+
+    @classmethod
+    def get_one_evaluation(cls, evaluation_id: int) -> Evaluation:
+        with session_getter() as session:
+            statement = select(Evaluation).where(Evaluation.id == evaluation_id)
+            return session.exec(statement).first()
+
+    @classmethod
+    def update_evaluation(cls, evaluation: Evaluation) -> Evaluation:
+        with session_getter() as session:
+            session.add(evaluation)
+            session.commit()
+            session.refresh(evaluation)
+            return evaluation

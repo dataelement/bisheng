@@ -1,8 +1,10 @@
 import os
 import uuid
+import io
 from typing import List
 
 from fastapi import UploadFile, HTTPException
+import pandas as pd
 
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
@@ -10,10 +12,13 @@ from bisheng.cache import InMemoryCache
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.evaluation import (Evaluation, EvaluationDao, ExecType)
+from bisheng.api.services.flow import FlowService
+from bisheng.database.models.evaluation import (Evaluation, EvaluationDao, ExecType, EvaluationTaskStatus)
 from bisheng.database.models.user import UserDao
 from bisheng.utils.minio_client import MinioClient
 from fastapi.encoders import jsonable_encoder
+from bisheng.utils.logger import logger
+from bisheng.api.services.assistant_agent import AssistantAgent
 
 
 class EvaluationService:
@@ -111,3 +116,66 @@ class EvaluationService:
     @classmethod
     def get_file_root(cls):
         return "evaluation/dataset"
+
+    @classmethod
+    def read_csv_file(cls, file_path: str):
+        minio_client = MinioClient()
+        resp = minio_client.download_minio(file_path)
+        if resp is None:
+            return None
+        new_data = io.BytesIO()
+        for d in resp.stream(32 * 1024):
+            new_data.write(d)
+        resp.close()
+        resp.release_conn()
+        new_data.seek(0)
+        return new_data
+
+    @classmethod
+    def parse_csv(cls, file_data: io.BytesIO):
+        df = pd.read_csv(file_data)
+        df = df.dropna(axis=0, how='all').dropna(axis=1, how='all')
+        if df.shape[1] < 2:
+            raise ValueError("CSV file must have at least two columns")
+        if df.columns[0] != 'question' or df.columns[1] != 'ground_truth':
+            raise ValueError(
+                "CSV file must have 'question' as the first column and 'ground_truth' as the second column")
+        formatted_data = [{"question": row[0], "ground_truth": row[1]} for row in df.values]
+        return formatted_data
+
+
+async def add_evaluation_task(evaluation_id: int):
+    evaluation = EvaluationDao.get_one_evaluation(evaluation_id=evaluation_id)
+    if not evaluation:
+        return
+    try:
+        file_data = EvaluationService.read_csv_file(evaluation.file_path)
+        csv_data = EvaluationService.parse_csv(file_data)
+
+        if evaluation.exec_type == ExecType.FLOW.value:
+            flow_version = FlowVersionDao.get_version_by_id(version_id=evaluation.version)
+            if not flow_version:
+                raise Exception("Flow version not found")
+            for csv_item in csv_data:
+                flow_index, flow_result = await FlowService.exec_flow_node(inputs={"input": csv_item.get('question')},
+                                                                           tweaks={},
+                                                                           index=0,
+                                                                           versions=[flow_version])
+                csv_item["answer"] = flow_result.get(flow_version.id)
+
+        if evaluation.exec_type == ExecType.ASSISTANT.value:
+            assistant = AssistantDao.get_one_assistant(evaluation.unique_id)
+            if not assistant:
+                raise Exception("Assistant not found")
+            gpts_agent = AssistantAgent(assistant_info=assistant, chat_id="")
+            await gpts_agent.init_assistant()
+            for csv_item in csv_data:
+                messages = await gpts_agent.run(csv_item.get('question'))
+                if len(messages):
+                    csv_item["answer"] = messages[0].content
+
+        print(csv_data)
+    except Exception as e:
+        logger.error(f'Evaluation task failed id={evaluation_id} {e}')
+        evaluation.status = EvaluationTaskStatus.failed.value
+        EvaluationDao.update_evaluation(evaluation=evaluation)
