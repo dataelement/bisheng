@@ -29,7 +29,7 @@ class EvaluationBase(SQLModelSerializable):
     status: int = Field(index=True, default=1, description='任务执行状态。1:执行中 2: 执行失败 3:执行成功')
     prompt: str = Field(default='', sa_column=Column(Text), description='评测指令文本')
     result_file_path: str = Field(default='', description='评测结果的 minio 地址')
-    result_score: Optional[Dict] = Field(sa_column=Column(JSON), description='最终评测分数')
+    result_score: Optional[Dict] = Field(sa_column=Column(JSON), default=None, description='最终评测分数')
     is_delete: int = Field(default=0, description='是否删除')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))

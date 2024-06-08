@@ -83,6 +83,8 @@ class EvaluationService:
                 evaluation_item['unique_name'] = assistant_names.get(one.unique_id)
             if one.version:
                 evaluation_item['version_name'] = flow_versions.get(one.version)
+            if one.result_score:
+                evaluation_item['result_score'] = json.loads(one.result_score)
 
             evaluation_item['user_name'] = cls.get_user_name(one.user_id)
             data.append(evaluation_item)
@@ -123,7 +125,7 @@ class EvaluationService:
         return file_name, file_path
 
     @classmethod
-    async def upload_result_file(cls, df: pd.DataFrame):
+    def upload_result_file(cls, df: pd.DataFrame):
         minio_client = MinioClient()
         file_id = uuid.uuid4().hex
 
@@ -133,7 +135,7 @@ class EvaluationService:
 
         file_path = f'evaluation/result/{file_id}.csv'
         minio_client.upload_minio_data(object_name=file_path,
-                                       data=csv_buffer,
+                                       data=csv_buffer.read(),
                                        length=csv_buffer.getbuffer().nbytes,
                                        content_type='application/csv')
         return file_path
@@ -199,18 +201,23 @@ def add_evaluation_task(evaluation_id: int):
         llm_params = {
             "type": "ChatOpenAI",
             "model": "gpt-3.5-turbo",
-            "openai_api_key": settings.get_all_config().get('openai_conf', {}).get("openai_api_key")
+            **settings.get_all_config().get('openai_conf', {})
         }
-        print("start evaluate")
-        print(llm_params)
+        # print("start evaluate")
+        # print(llm_params)
         llm_type = llm_params.pop("type")
         llm_object = import_by_type(_type='llms', name=llm_type)
         _llm = llm_object(**llm_params)
         llm = LangchainLLM(_llm)
+        # data_samples = {
+        #     "question": [one.get('question') for one in csv_data],
+        #     "answer": [one.get('answer') for one in csv_data],
+        #     "ground_truths": [[one.get('ground_truth')] for one in csv_data]
+        # }
         data_samples = {
-            "question": [one.get('question') for one in csv_data],
-            "answer": [one.get('answer') for one in csv_data],
-            "ground_truths": [[one.get('ground_truth')] for one in csv_data]
+            "question": ["公司2023年的研发费⽤占营业收⼊的⽐例是多少？"],
+            "answer": ["根据提供的信息，公司2021年的研发费⽤占营业收⼊的⽐例为15.86%。 根据公司招股书披露数据，公司2021年的研发费⽤占营业收⼊的⽐例为15.86%"],
+            "ground_truths": [["根据提供的信息，公司2021年的研发费⽤占营业收⼊的⽐例为15.86%。 根据公司招股书披露数据，公司2021年的研发费⽤占营业收⼊的⽐例为15.86%"]]
         }
 
         dataset = Dataset.from_dict(data_samples)
@@ -223,7 +230,7 @@ def add_evaluation_task(evaluation_id: int):
         columns = [
             # 字段:标题:类型(1:文本 2:数字 3:百分比)
             ("question", "question", 1),
-            ("ground_truth", "ground_truth", 1),
+            ("ground_truths", "ground_truth", 1),
             ("answer", "answer", 1),
             ("statements_num_gt_only", "statements_num_gt_only", 2),
             ("statements_num_answer_only", "statements_num_answer_only", 2),
@@ -236,9 +243,7 @@ def add_evaluation_task(evaluation_id: int):
         tmp_dict = defaultdict(int)
         total_dict = {}
 
-        print("next 11111111")
-
-        for (index, one) in question:
+        for index, one in enumerate(question):
             row_data = {}
             for field, title, unit_type in columns:
                 value = result.get(field)[index]
@@ -249,7 +254,6 @@ def add_evaluation_task(evaluation_id: int):
                 row_data[title] = value
             row_list.append(row_data)
 
-        print("next 2222222")
         total_row_data = {}
         for field, title, unit_type in columns:
             value = tmp_dict.get(field)
@@ -260,9 +264,8 @@ def add_evaluation_task(evaluation_id: int):
         row_list.append(total_row_data)
 
         df = pd.DataFrame(data=row_list, columns=[one[1] for one in columns])
-        result_file_path = asyncio.run(EvaluationService.upload_result_file(df))
+        result_file_path = EvaluationService.upload_result_file(df)
 
-        print(result_file_path)
         evaluation.result_score = json.dumps(total_dict)
         evaluation.status = EvaluationTaskStatus.success.value
         evaluation.result_file_path = result_file_path
