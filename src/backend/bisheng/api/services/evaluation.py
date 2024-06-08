@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 import io
@@ -5,6 +6,7 @@ from typing import List
 
 from fastapi import UploadFile, HTTPException
 import pandas as pd
+from bisheng.settings import settings
 
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
@@ -19,6 +21,11 @@ from bisheng.utils.minio_client import MinioClient
 from fastapi.encoders import jsonable_encoder
 from bisheng.utils.logger import logger
 from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng_ragas import evaluate
+from bisheng_ragas.llms.langchain import LangchainLLM
+from bisheng_ragas.metrics import AnswerCorrectnessBisheng
+from datasets import Dataset
+from bisheng_langchain.gpts.utils import import_by_type
 
 
 class EvaluationService:
@@ -144,7 +151,7 @@ class EvaluationService:
         return formatted_data
 
 
-async def add_evaluation_task(evaluation_id: int):
+def add_evaluation_task(evaluation_id: int):
     evaluation = EvaluationDao.get_one_evaluation(evaluation_id=evaluation_id)
     if not evaluation:
         return
@@ -157,10 +164,11 @@ async def add_evaluation_task(evaluation_id: int):
             if not flow_version:
                 raise Exception("Flow version not found")
             for csv_item in csv_data:
-                flow_index, flow_result = await FlowService.exec_flow_node(inputs={"input": csv_item.get('question')},
-                                                                           tweaks={},
-                                                                           index=0,
-                                                                           versions=[flow_version])
+                flow_index, flow_result = asyncio.run(FlowService.exec_flow_node(
+                    inputs={"input": csv_item.get('question')},
+                    tweaks={},
+                    index=0,
+                    versions=[flow_version]))
                 csv_item["answer"] = flow_result.get(flow_version.id)
 
         if evaluation.exec_type == ExecType.ASSISTANT.value:
@@ -168,13 +176,37 @@ async def add_evaluation_task(evaluation_id: int):
             if not assistant:
                 raise Exception("Assistant not found")
             gpts_agent = AssistantAgent(assistant_info=assistant, chat_id="")
-            await gpts_agent.init_assistant()
+            asyncio.run(gpts_agent.init_assistant())
             for csv_item in csv_data:
-                messages = await gpts_agent.run(csv_item.get('question'))
+                messages = asyncio.run(gpts_agent.run(csv_item.get('question')))
                 if len(messages):
                     csv_item["answer"] = messages[0].content
 
-        print(csv_data)
+        llm_params = {
+            "type": "ChatOpenAI",
+            "model": "gpt-3.5-turbo",
+            **settings.get_all_config().get('openai_conf', {})
+        }
+        llm_type = llm_params.pop("type")
+        llm_object = import_by_type(_type='llms', name=llm_type)
+        _llm = llm_object(**llm_params)
+        llm = LangchainLLM(_llm)
+        data_samples = {
+            "question": [one.get('question') for one in csv_data],
+            "answer": [one.get('answer') for one in csv_data],
+            "ground_truths": [[one.get('ground_truth')] for one in csv_data]
+        }
+        dataset = Dataset.from_dict(data_samples)
+        answer_correctness_bisheng = AnswerCorrectnessBisheng(llm=llm)
+        score = evaluate(dataset, metrics=[answer_correctness_bisheng])
+        df = score.to_pandas()
+        result = df.to_dict(orient="list")
+        #
+        # evaluation.result_score = '0'
+        # evaluation.status = EvaluationTaskStatus.success.value
+        # EvaluationDao.update_evaluation(evaluation=evaluation)
+        print(result)
+
     except Exception as e:
         logger.error(f'Evaluation task failed id={evaluation_id} {e}')
         evaluation.status = EvaluationTaskStatus.failed.value
