@@ -19,11 +19,12 @@ import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Evaluation, deleteEvaluationApi, getEvaluationApi, getEvaluationUrlApi } from "@/controllers/API/evaluate";
-import { EvaluationStatus, TypeEvaluation } from "@/utils";
+import { EvaluationScore, EvaluationStatus, TypeEvaluation } from "@/utils";
 import { downloadFile } from "@/util/utils";
 import { checkSassUrl } from "../ChatAppPage/components/FileView";
 import { Badge } from "@/components/bs-ui/badge";
 import { useEffect } from "react";
+import { map } from "lodash";
 
 export default function EvaluationPage() {
     const navigate = useNavigate()
@@ -35,7 +36,7 @@ export default function EvaluationPage() {
     useEffect(() => {
         const intervalId = setInterval(() => {
           reload(); 
-        }, 60000); // 每 60 秒轮询一次
+        }, 6000); // 每 6 秒轮询一次
     
         return () => clearInterval(intervalId);
       }, [reload]);
@@ -55,8 +56,8 @@ export default function EvaluationPage() {
     }
 
     const handleDownload = async (el) => {
-        const { url } = await getEvaluationUrlApi('evaluation/dataset/32ae590662e24e8f98fd75d525273812.docx')
-        await downloadFile(checkSassUrl(url), el.file_path)
+        const { url } = await getEvaluationUrlApi(el.result_file_path)        
+        await downloadFile(url, el.file_name)
     }
 
     const { t } = useTranslation();
@@ -79,7 +80,7 @@ export default function EvaluationPage() {
                                     <TableHead className="w-[100px]">{t('evaluation.filename')}</TableHead>
                                     <TableHead>{t('evaluation.skillAssistant')}</TableHead>
                                     <TableHead className="w-[80px]">{t('evaluation.status')}</TableHead>
-                                    <TableHead className="w-[80px]">{t('evaluation.score')}</TableHead>
+                                    <TableHead>{t('evaluation.score')}</TableHead>
                                     <TableHead>{t('createTime')}</TableHead>
                                     <TableHead className="text-right">{t('operations')}</TableHead>
                                 </TableRow>
@@ -96,12 +97,15 @@ export default function EvaluationPage() {
                                             </div>
                                         </TableCell>
                                         <TableCell>{EvaluationStatus[el.status]}</TableCell>
-                                        <TableCell>{el.result_score}</TableCell>
+                                        <TableCell>
+                                            <div className="flex flex-wrap">
+                                                {map(el.result_score,(value,key)=>{
+                                                    return <span className="whitespace-nowrap">{EvaluationScore[key]}：{value}</span>
+                                                })}
+                                            </div>
+                                        </TableCell>
                                         <TableCell>{el.create_time.replace('T', ' ') || '--'}</TableCell>
-                                        <TableCell className="text-right" onClick={() => {
-                                            // @ts-ignore
-                                            window.libname = el.name;
-                                        }}>
+                                        <TableCell className="text-right">
                                             <div className="flex">
                                                 <Button variant="link" className="no-underline hover:underline" onClick={()=>handleDownload(el)}>{t('evaluation.download')}</Button>
                                                 <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-1 text-red-500 px-0">{t('delete')}</Button>

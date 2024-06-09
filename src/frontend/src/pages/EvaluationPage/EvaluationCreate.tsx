@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { useContext, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import ShadTooltip from "../../components/ShadTooltipComponent";
@@ -12,18 +12,23 @@ import { useHasForm } from "../../util/hook";
 import { Select, SelectContent, SelectGroup, SelectTrigger, SelectItem, SelectValue } from "../../components/bs-ui/select";
 import { useDropzone } from "react-dropzone";
 import { UploadIcon } from "@/components/bs-icons/upload";
+import { QuestionMarkIcon } from "@/components/bs-icons/questionMark";
 import { AssistantItemDB, getAssistantsApi } from "@/controllers/API/assistant";
-import { find } from "lodash";
+import { debounce, find } from "lodash";
 import { TypeModal } from "@/utils";
 import PromptAreaComponent from "@/components/promptComponent";
 import defaultPrompt from "./defaultPrompt";
 import { createEvaluationApi } from "@/controllers/API/evaluate";
+import { TooltipProvider,Tooltip, TooltipTrigger, TooltipContent } from "../../components/bs-ui/tooltip";
+import { Input } from "@/components/bs-ui/input";
+import { SelectViewport } from "@radix-ui/react-select";
+
 
 export default function EvaluatingCreate() {
     const { t } = useTranslation()
 
 
-    const { id, vid } = useParams()
+    const { id } = useParams()
     const { flow: nextFlow } = useContext(TabsContext);
     const { setErrorData } = useContext(alertContext);
     const flow = useMemo(() => {
@@ -32,7 +37,9 @@ export default function EvaluatingCreate() {
     const [selectedType, setSelectedType] = useState<'flow' | 'assistant' | ''>('')
     const [selectedKeyId, setSelectedKeyId] = useState('')
     const [selectedVersion, setSelectedVersion] = useState('')
+    const [searchName, setSearchName] = useState('')
     const [dataSource, setDataSource] = useState([])
+    const [uniqueDataSource, setUniqueDataSource] = useState([])
     const [prompt, setPrompt]=useState(defaultPrompt)
     
 
@@ -90,11 +97,8 @@ export default function EvaluatingCreate() {
 
     // 助手技能发生变化
     const handleTypeChange = (type) => {
-        setSelectedType(type)
         if(type === 'flow') {
-            readFlowsFromDatabase(1,100,'').then(_flow => {
-                console.log(_flow);
-                // setFlow('flow_init', _flow)
+            readFlowsFromDatabase(1,100,searchName).then(_flow => {
                 setDataSource(_flow.data)
             })
         } else if(type === 'assistant') {
@@ -112,6 +116,21 @@ export default function EvaluatingCreate() {
         link.click();
         document.body.removeChild(link);
     }
+
+    const debouncedFetchData = useCallback(
+        debounce(() => {
+            handleTypeChange(selectedType)
+        }, 500),
+        []
+      );
+    
+      // 处理输入变化
+      useEffect(() => {
+        debouncedFetchData();
+        return () => {
+          debouncedFetchData.cancel();
+        };
+      }, [searchName, debouncedFetchData]);
 
     // isForm
     const isForm = useHasForm(flow)
@@ -134,7 +153,10 @@ export default function EvaluatingCreate() {
                         <div className="mt-4 flex items-center">
                             <Label className="w-[180px] text-right whitespace-nowrap">{t('evaluation.selectLabel')}</Label>
                             <div className="mt-2 flex-1 flex gap-2">
-                                <Select value={selectedType} onValueChange={(value)=>handleTypeChange(value)}>
+                                <Select value={selectedType} onValueChange={(value)=> {
+                                    setSelectedType(value as any)
+                                    handleTypeChange(value)
+                                }}>
                                     <SelectTrigger>
                                         <SelectValue className={`mt-2 ${error.name && 'border-red-400'} w-auto`} placeholder={t('evaluation.selectPlaceholder')} />
                                     </SelectTrigger>
@@ -148,15 +170,18 @@ export default function EvaluatingCreate() {
                                 <Select value={selectedKeyId} onValueChange={(id)=> setSelectedKeyId(id)} onOpenChange={()=>{
                                     if(!selectedType) return handleError([t('evaluation.enterExecType')])
                                 }}>
-                                    <SelectTrigger className="max-w-[200px]">
+                                    <SelectTrigger slot="" className="max-w-[200px]">
                                         <SelectValue className={`mt-2 max-w-[200px] ${error.name && 'border-red-400'}`} placeholder={t('evaluation.selectPlaceholder')} />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectGroup>
-                                            {dataSource.map(item =>{
-                                                return <SelectItem value={item.id}>{item.name}</SelectItem>
-                                            })}
-                                        </SelectGroup>
+                                        {/* <SelectViewport> */}
+                                            {/* <Input value={searchName} onChange={(e)=> setSearchName(e.target.value)} className={`mt-2 max-w-[200px] ${error.name && 'border-red-400'}`} placeholder={t('evaluation.selectInputPlaceholder')} /> */}
+                                            <SelectGroup>
+                                                {dataSource.map(item =>{
+                                                    return <SelectItem value={item.id}>{item.name}</SelectItem>
+                                                })}
+                                            </SelectGroup>
+                                        {/* </SelectViewport> */}
                                     </SelectContent>
                                 </Select>
                                 {selectedType === 'flow' &&
@@ -195,7 +220,24 @@ export default function EvaluatingCreate() {
                         </div>
                         <div className="mt-4 flex items-center">
                             <div className="min-w-[180px] text-right">
-                                <Label className="whitespace-nowrap">{t('evaluation.promptLabel')}</Label>
+                                <Label className="whitespace-nowrap flex items-center justify-end">
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button variant="link">
+                                                <QuestionMarkIcon
+                                                    className={"icons-parameters-comp hover:text-accent-foreground mr-1"}
+                                                />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                        <p>{t('evaluation.tooltip')}</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                                    
+                                    {t('evaluation.promptLabel')}
+                                </Label>
                             </div>
                             <div className="flex-1 max-w-[300px]">
                                 <PromptAreaComponent

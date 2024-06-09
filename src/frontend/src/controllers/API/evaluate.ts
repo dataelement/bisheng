@@ -8,7 +8,11 @@ export type Evaluation = {
     file_name: string,
     unique_id: string,
     prompt: string,
-    result_score: string,
+    result_score: {
+        answer_f1: string,
+        answer_precision: string,
+        answer_recall: string,
+    },
     create_time: string,
     id: number,
     user_id: number,

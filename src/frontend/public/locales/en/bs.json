@@ -292,7 +292,8 @@
     "enterVersion": "请选择技能的版本",
     "enterFile": "请选择测试集数据",
     "enterPrompt": "请如何评测指令文本",
-    "evaluationCollection": "评测集合"
+    "evaluationCollection": "评测集合",
+    "tooltip": "该指令文本用于指导大模型对 ground truth 和 answer 提取要点，如无特别需求请勿修改"
   },
   "code": {
     "editPythonCodeDescription": "Edit your Python code here. This code snippet accepts module imports and a function definition. Make sure your function returns a string.",

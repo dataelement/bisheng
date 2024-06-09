@@ -80,7 +80,13 @@ export enum TypeEvaluation {
   assistant = '助手'
 }
 
-export const EvaluationStatus = ['执行中','执行失败','执行成功']
+export enum EvaluationScore {
+  answer_f1 = 'F1',
+  answer_precision = '准确率',
+  answer_recall = '召回率',
+}
+
+export const EvaluationStatus = ['进行中','失败','成功']
 
 export const textColors = {
   white: "text-white",
