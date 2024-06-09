@@ -87,7 +87,7 @@ class EvaluationService:
             if one.result_score:
                 evaluation_item['result_score'] = json.loads(one.result_score)
 
-            if one.status != EvaluationTaskStatus.running:
+            if one.status != EvaluationTaskStatus.running.value:
                 evaluation_item['progress'] = f'100%'
             elif redis_client.exists(EvaluationService.get_redis_key(one.id)):
                 evaluation_item['progress'] = f'{redis_client.get(EvaluationService.get_redis_key(one.id))}%'
