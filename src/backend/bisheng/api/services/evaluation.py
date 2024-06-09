@@ -28,6 +28,7 @@ from bisheng_ragas.llms.langchain import LangchainLLM
 from bisheng_ragas.metrics import AnswerCorrectnessBisheng
 from datasets import Dataset
 from bisheng_langchain.gpts.utils import import_by_type
+from bisheng.cache.redis import redis_client
 
 
 class EvaluationService:
@@ -85,6 +86,13 @@ class EvaluationService:
                 evaluation_item['version_name'] = flow_versions.get(one.version)
             if one.result_score:
                 evaluation_item['result_score'] = json.loads(one.result_score)
+
+            if one.status != EvaluationTaskStatus.running:
+                evaluation_item['progress'] = f'100%'
+            elif redis_client.exists(EvaluationService.get_redis_key(one.id)):
+                evaluation_item['progress'] = f'{redis_client.get(EvaluationService.get_redis_key(one.id))}%'
+            else:
+                evaluation_item['progress'] = f'0%'
 
             evaluation_item['user_name'] = cls.get_user_name(one.user_id)
             data.append(evaluation_item)
@@ -166,26 +174,37 @@ class EvaluationService:
         formatted_data = [{"question": row[0], "ground_truth": row[1]} for row in df.values]
         return formatted_data
 
+    @classmethod
+    def get_redis_key(cls, evaluation_id: int):
+        return f'evaluation_task_progress_{evaluation_id}'
+
 
 def add_evaluation_task(evaluation_id: int):
     evaluation = EvaluationDao.get_one_evaluation(evaluation_id=evaluation_id)
     if not evaluation:
         return
+
+    redis_key = EvaluationService.get_redis_key(evaluation_id)
+
     try:
         file_data = EvaluationService.read_csv_file(evaluation.file_path)
         csv_data = EvaluationService.parse_csv(file_data)
+        progress_increment = 80 / len(csv_data)
+        current_progress = 0
 
         if evaluation.exec_type == ExecType.FLOW.value:
             flow_version = FlowVersionDao.get_version_by_id(version_id=evaluation.version)
             if not flow_version:
                 raise Exception("Flow version not found")
-            for csv_item in csv_data:
+            for index, one in enumerate(csv_data):
                 flow_index, flow_result = asyncio.run(FlowService.exec_flow_node(
-                    inputs={"input": csv_item.get('question')},
+                    inputs={"input": one.get('question')},
                     tweaks={},
                     index=0,
                     versions=[flow_version]))
-                csv_item["answer"] = flow_result.get(flow_version.id)
+                one["answer"] = flow_result.get(flow_version.id)
+                current_progress += progress_increment
+                redis_client.set(redis_key, round(current_progress))
 
         if evaluation.exec_type == ExecType.ASSISTANT.value:
             assistant = AssistantDao.get_one_assistant(evaluation.unique_id)
@@ -193,10 +212,12 @@ def add_evaluation_task(evaluation_id: int):
                 raise Exception("Assistant not found")
             gpts_agent = AssistantAgent(assistant_info=assistant, chat_id="")
             asyncio.run(gpts_agent.init_assistant())
-            for csv_item in csv_data:
-                messages = asyncio.run(gpts_agent.run(csv_item.get('question')))
+            for index, one in enumerate(csv_data):
+                messages = asyncio.run(gpts_agent.run(one.get('question')))
                 if len(messages):
-                    csv_item["answer"] = messages[0].content
+                    one["answer"] = messages[0].content
+                current_progress += progress_increment
+                redis_client.set(redis_key, round(current_progress))
 
         llm_params = settings.get_default_llm()
         logger.info(f'start evaluate with default llm: {llm_params}')
@@ -260,9 +281,11 @@ def add_evaluation_task(evaluation_id: int):
         evaluation.status = EvaluationTaskStatus.success.value
         evaluation.result_file_path = result_file_path
         EvaluationDao.update_evaluation(evaluation=evaluation)
+        redis_client.delete(redis_key)
         logger.info(f'evaluation task success id={evaluation_id}')
 
     except Exception as e:
         logger.error(f'evaluation task failed id={evaluation_id} {e}')
         evaluation.status = EvaluationTaskStatus.failed.value
         EvaluationDao.update_evaluation(evaluation=evaluation)
+        redis_client.delete(redis_key)

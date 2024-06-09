@@ -86,6 +86,7 @@ platformdirs = ">=2.5"
 scipy = "*"
 arxiv = "2.1.0"
 matplotlib = "3.8.4"
+bisheng-ragas = {version = "^1.0.0", source = "dataelem-index"}
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
@@ -120,3 +121,8 @@ line-length = 120
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[[tool.poetry.source]]
+name = "dataelem-index"
+url = "https://public:26rS9HRxDqaVy5T@nx.dataelem.com/repository/pypi-hosted/simple"
+priority = "explicit"
