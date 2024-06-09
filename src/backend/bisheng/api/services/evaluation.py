@@ -198,26 +198,16 @@ def add_evaluation_task(evaluation_id: int):
                 if len(messages):
                     csv_item["answer"] = messages[0].content
 
-        llm_params = {
-            "type": "ChatOpenAI",
-            "model": "gpt-3.5-turbo",
-            **settings.get_all_config().get('openai_conf', {})
-        }
-        # print("start evaluate")
-        # print(llm_params)
+        llm_params = settings.get_default_llm()
+        logger.info(f'start evaluate with default llm: {llm_params}')
         llm_type = llm_params.pop("type")
         llm_object = import_by_type(_type='llms', name=llm_type)
         _llm = llm_object(**llm_params)
         llm = LangchainLLM(_llm)
-        # data_samples = {
-        #     "question": [one.get('question') for one in csv_data],
-        #     "answer": [one.get('answer') for one in csv_data],
-        #     "ground_truths": [[one.get('ground_truth')] for one in csv_data]
-        # }
         data_samples = {
-            "question": ["公司2023年的研发费⽤占营业收⼊的⽐例是多少？"],
-            "answer": ["根据提供的信息，公司2021年的研发费⽤占营业收⼊的⽐例为15.86%。 根据公司招股书披露数据，公司2021年的研发费⽤占营业收⼊的⽐例为15.86%"],
-            "ground_truths": [["根据提供的信息，公司2021年的研发费⽤占营业收⼊的⽐例为15.86%。 根据公司招股书披露数据，公司2021年的研发费⽤占营业收⼊的⽐例为15.86%"]]
+            "question": [one.get('question') for one in csv_data],
+            "answer": [one.get('answer') for one in csv_data],
+            "ground_truths": [[one.get('ground_truth')] for one in csv_data]
         }
 
         dataset = Dataset.from_dict(data_samples)
@@ -270,9 +260,9 @@ def add_evaluation_task(evaluation_id: int):
         evaluation.status = EvaluationTaskStatus.success.value
         evaluation.result_file_path = result_file_path
         EvaluationDao.update_evaluation(evaluation=evaluation)
-        logger.info(f'Evaluation task success id={evaluation_id}')
+        logger.info(f'evaluation task success id={evaluation_id}')
 
     except Exception as e:
-        logger.error(f'Evaluation task failed id={evaluation_id} {e}')
+        logger.error(f'evaluation task failed id={evaluation_id} {e}')
         evaluation.status = EvaluationTaskStatus.failed.value
         EvaluationDao.update_evaluation(evaluation=evaluation)

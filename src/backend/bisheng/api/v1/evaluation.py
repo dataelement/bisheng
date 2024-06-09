@@ -31,6 +31,7 @@ def create_evaluation(*,
                       exec_type: str = Form(),
                       unique_id: str = Form(),
                       version: Optional[int] = Form(default=None),
+                      background_tasks: BackgroundTasks,
                       authorize: AuthJWT = Depends()):
     """ 创建评测任务. """
     authorize.jwt_required()
@@ -49,6 +50,8 @@ def create_evaluation(*,
         session.add(db_evaluation)
         session.commit()
         session.refresh(db_evaluation)
+
+    background_tasks.add_task(add_evaluation_task, evaluation_id=db_evaluation.id)
 
     return resp_200(db_evaluation.copy())
 
