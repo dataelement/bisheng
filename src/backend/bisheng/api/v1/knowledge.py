@@ -7,16 +7,19 @@ from uuid import uuid4
 
 from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
                                                 delete_knowledge_file_vectors, retry_files)
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import access_check
 from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500
 from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import session_getter
+from bisheng.database.models.group_resource import GroupResource, ResourceTypeEnum, GroupResourceDao
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
                                                KnowledgeRead)
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
                                                     KnowledgeFileRead)
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
@@ -178,6 +181,7 @@ def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends
     """ 创建知识库. """
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
+    user_payload = UserPayload(**payload)
     user_id = payload.get('user_id')
     knowledge.is_partition = knowledge.is_partition or settings.get_knowledge().get(
         'vectorstores', {}).get('Milvus', {}).get('is_partition', True)
@@ -203,7 +207,23 @@ def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends
         session.add(db_knowldge)
         session.commit()
         session.refresh(db_knowldge)
+    create_knowledge_hook(db_knowldge, user_payload)
     return resp_200(db_knowldge.copy())
+
+
+def create_knowledge_hook(knowledge: Knowledge, user_payload: UserPayload):
+    # 查询下用户所在的用户组
+    user_group = UserGroupDao.get_user_group(user_payload.user_id)
+    if user_group:
+        # 批量将助手资源插入到关联表里
+        batch_resource = []
+        for one in user_group:
+            batch_resource.append(GroupResource(
+                group_id=one.group_id,
+                third_id=knowledge.id,
+                type=ResourceTypeEnum.KNOWLEDGE))
+        GroupResourceDao.insert_group_batch(batch_resource)
+    return True
 
 
 @router.get('/', status_code=200)
@@ -391,6 +411,11 @@ def delete_knowledge(*, knowledge_id: int, Authorize: AuthJWT = Depends()):
         session.delete(knowledge)
         session.commit()
     return resp_200(message='删除成功')
+
+
+def delete_knowledge_hook(knowledge: Knowledge, user_payload: UserPayload):
+    logger.info(f'delete_knowledge_hook id={knowledge.id}, user: {user_payload.user_id}')
+    GroupResourceDao.delete_group_resource_by_third_id(str(knowledge.id), ResourceTypeEnum.KNOWLEDGE)
 
 
 @router.delete('/file/{file_id}', status_code=200)

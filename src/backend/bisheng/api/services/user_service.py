@@ -13,6 +13,7 @@ class UserPayload:
     def __init__(self, **kwargs):
         self.user_id = kwargs.get('user_id')
         self.user_role = kwargs.get('role')
+        self.user_name = kwargs.get('user_name')
 
     def is_admin(self):
         return self.user_role == 'admin'

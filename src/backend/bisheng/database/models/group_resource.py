@@ -4,7 +4,7 @@ from typing import List, Optional, Dict
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, text, delete
 from sqlmodel import Field, select
 
 
@@ -57,9 +57,25 @@ class GroupResourceDao(GroupResourceBase):
             return group_resource
 
     @classmethod
+    def insert_group_batch(cls, group_resources: List[GroupResource]) -> List[GroupResource]:
+        with session_getter() as session:
+            session.add_all(group_resources)
+            session.commit()
+            return group_resources
+
+    @classmethod
     def get_group_resource(cls, group_id: int,
                            resource_type: ResourceTypeEnum) -> list[GroupResource]:
         with session_getter() as session:
             statement = select(GroupResource).where(GroupResource.group_id == group_id,
                                                     GroupResource.type == resource_type.value)
             return session.exec(statement).all()
+
+    @classmethod
+    def delete_group_resource_by_third_id(cls, third_id: str, resource_type: ResourceTypeEnum) -> None:
+        with (session_getter() as session):
+            statement = delete(GroupResource).where(
+                GroupResource.third_id == third_id).where(
+                GroupResource.type == resource_type.value)
+            session.exec(statement)
+            session.commit()

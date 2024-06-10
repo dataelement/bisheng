@@ -13,7 +13,9 @@ from bisheng.api.v1.schemas import FlowListCreate, FlowListRead, UnifiedResponse
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate, FlowDao
 from bisheng.database.models.flow_version import FlowVersionDao
+from bisheng.database.models.group_resource import GroupResource, ResourceTypeEnum, GroupResourceDao
 from bisheng.database.models.role_access import AccessType
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -29,6 +31,7 @@ def create_flow(*, flow: FlowCreate, Authorize: AuthJWT = Depends()):
     """Create a new flow."""
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
+    user_payload = UserPayload(**payload)
     # 判断用户是否重复技能名
     with session_getter() as session:
         if session.exec(
@@ -43,7 +46,22 @@ def create_flow(*, flow: FlowCreate, Authorize: AuthJWT = Depends()):
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id.hex)
     ret = FlowRead.model_validate(db_flow)
     ret.version_id = current_version.id
+    create_flow_hook(db_flow, user_payload)
     return resp_200(data=ret)
+
+
+def create_flow_hook(flow: Flow, user_payload: UserPayload):
+    # 创建新的技能
+    user_group = UserGroupDao.get_user_group(user_payload.user_id)
+    if user_group:
+        # 批量将助手资源插入到关联表里
+        batch_resource = []
+        for one in user_group:
+            batch_resource.append(GroupResource(
+                group_id=one.group_id,
+                third_id=flow.id.hex,
+                type=ResourceTypeEnum.FLOW))
+        GroupResourceDao.insert_group_batch(batch_resource)
 
 
 @router.get('/versions', status_code=200)
@@ -219,6 +237,11 @@ def delete_flow(*, flow_id: UUID, Authorize: AuthJWT = Depends()):
         raise HTTPException(status_code=500, detail='没有权限删除此技能')
     FlowDao.delete_flow(flow)
     return resp_200(message='删除成功')
+
+
+def delete_flow_hook(flow: Flow, user_payload: UserPayload):
+    logger.info(f"delete_flow_hook flow: {flow.id}, user_payload: {user_payload.user_id}")
+    GroupResourceDao.delete_group_resource_by_third_id(flow.id.hex, ResourceTypeEnum.FLOW)
 
 
 @router.get('/download/', response_model=UnifiedResponseModel[FlowListRead], status_code=200)
