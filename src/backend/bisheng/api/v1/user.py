@@ -4,6 +4,7 @@ import random
 import string
 import uuid
 from base64 import b64decode, b64encode
+from datetime import datetime
 from io import BytesIO
 from typing import Optional
 from uuid import UUID
@@ -11,6 +12,7 @@ from uuid import UUID
 import rsa
 
 from bisheng.api.JWT import get_login_user
+from bisheng.api.errcode.user import UserNotPasswordError, UserValidateError, UserPasswordExpireError
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import get_assistant_list_by_access, UserPayload
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
@@ -20,10 +22,11 @@ from bisheng.database.models.flow import Flow
 from bisheng.database.models.knowledge import Knowledge
 from bisheng.database.models.role import Role, RoleCreate, RoleUpdate
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleRefresh
-from bisheng.database.models.user import User, UserCreate, UserLogin, UserRead, UserUpdate
+from bisheng.database.models.user import User, UserCreate, UserLogin, UserRead, UserUpdate, UserDao
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRole, UserRoleCreate
 from bisheng.settings import settings
-from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY
+from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR
 from bisheng.utils.logger import logger
 from captcha.image import ImageCaptcha
 from fastapi import APIRouter, Depends, HTTPException
@@ -98,38 +101,60 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
     else:
         password = md5_hash(user.password)
 
-    with session_getter() as session:
-        db_user = session.exec(
-            select(User).where(User.user_name == user.user_name,
-                               User.password == password)).first()
-    if db_user:
-        if 1 == db_user.delete:
+    db_user = UserDao.get_user_by_username(user.user_name)
+    # 检查密码
+    if not db_user or not db_user.password:
+        return UserValidateError.return_resp()
+
+    if 1 == db_user.delete:
+        raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
+
+    password_conf = settings.get_password_conf()
+
+    if db_user.password and db_user.password != password:
+        # 判断是否需要记录错误次数
+        if not password_conf.login_error_time_window or not password_conf.max_error_times:
+            return UserValidateError.return_resp()
+        error_key = USER_PASSWORD_ERROR + db_user.user_name
+        error_num = redis_client.get(error_key)
+        if error_num and int(error_num) >= password_conf.max_error_times:
+            # 错误次数到达上限，封禁账号
+            db_user.delete = 1
+            UserDao.update_user(db_user)
             raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
-        # 查询角色
-        with session_getter() as session:
-            db_user_role = session.exec(
-                select(UserRole).where(UserRole.user_id == db_user.user_id)).all()
 
-        if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
-            # 是管理员，忽略其他的角色
-            role = 'admin'
-        else:
-            role = [user_role.role_id for user_role in db_user_role]
-        # 生成JWT令牌
-        payload = {'user_name': user.user_name, 'user_id': db_user.user_id, 'role': role}
-        # Create the tokens and passing to set_access_cookies or set_refresh_cookies
-        access_token = Authorize.create_access_token(subject=json.dumps(payload),
-                                                     expires_time=86400)
+        # 设置错误次数
+        redis_client.incr(error_key, password_conf.login_error_time_window * 60)
+        return UserValidateError.return_resp()
 
-        refresh_token = Authorize.create_refresh_token(subject=user.user_name)
+    # 判断下密码是否长期未修改
+    if password_conf.password_valid_period and password_conf.password_valid_period > 0:
+        if (datetime.now() - db_user.password_update_time).days >= password_conf.password_valid_period:
+            return UserPasswordExpireError.return_resp()
 
-        # Set the JWT cookies in the response
-        Authorize.set_access_cookies(access_token)
-        Authorize.set_refresh_cookies(refresh_token)
+    # 查询角色
+    with session_getter() as session:
+        db_user_role = session.exec(
+            select(UserRole).where(UserRole.user_id == db_user.user_id)).all()
 
-        return resp_200(UserRead(role=str(role), access_token=access_token, **db_user.__dict__))
+    if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
+        # 是管理员，忽略其他的角色
+        role = 'admin'
     else:
-        raise HTTPException(status_code=500, detail='密码不正确')
+        role = [user_role.role_id for user_role in db_user_role]
+    # 生成JWT令牌
+    payload = {'user_name': user.user_name, 'user_id': db_user.user_id, 'role': role}
+    # Create the tokens and passing to set_access_cookies or set_refresh_cookies
+    access_token = Authorize.create_access_token(subject=json.dumps(payload),
+                                                 expires_time=86400)
+
+    refresh_token = Authorize.create_refresh_token(subject=user.user_name)
+
+    # Set the JWT cookies in the response
+    Authorize.set_access_cookies(access_token)
+    Authorize.set_refresh_cookies(refresh_token)
+
+    return resp_200(UserRead(role=str(role), access_token=access_token, **db_user.__dict__))
 
 
 @router.get('/user/info', response_model=UnifiedResponseModel[UserRead], status_code=201)
@@ -575,9 +600,24 @@ async def get_rsa_publish_key():
 @router.post("/user/reset_password", status_code=200)
 async def reset_password(*, user_id: int, password: str, login_user: UserPayload = Depends(get_login_user), ):
     """
-    重置用户的密码，只能超级管理员重置普通用户的密码
+    管理员重置用户密码
     """
-    # todo zgq: 补充完善逻辑
+    # 获取要修改密码的用户信息
+    user_info = UserDao.get_user(user_id)
+    if not user_info:
+        raise HTTPException(status_code=404, detail='用户不存在')
+
+    # 查询用户所在的用户组
+    user_groups = UserGroupDao.get_user_group(user_info.user_id)
+    user_group_ids = [one.group_id for one in user_groups]
+
+    # 检查是否有分组的管理权限
+    if not login_user.check_groups_admin(user_group_ids):
+        raise HTTPException(status_code=403, detail='没有权限重置密码')
+
+    user_info.password = md5_hash(password)
+    user_info.password_update_time = datetime.now()
+    UserDao.update_user(user_info)
     return resp_200()
 
 
@@ -586,16 +626,35 @@ async def change_password(*, password: str, new_password: str, login_user: UserP
     """
     登录用户 修改自己的密码
     """
-    # todo zgq: 补充完善逻辑
+    user_info = UserDao.get_user(login_user.user_id)
+    if not user_info.password:
+        return UserNotPasswordError.return_resp()
+
+    if user_info.password != md5_hash(password):
+        return UserValidateError.return_resp()
+
+    user_info.password = md5_hash(new_password)
+    user_info.password_update_time = datetime.now()
+    UserDao.update_user(user_info)
     return resp_200()
 
 
 @router.post("/user/change_password_public", status_code=200)
 async def change_password_public(*, username: str, password: str, new_password: str):
     """
-    登录用户 修改自己的密码
+    未登录用户 修改自己的密码
     """
-    # todo zgq: 补充完善逻辑
+
+    user_info = UserDao.get_user_by_username(username)
+    if not user_info.password:
+        return UserValidateError.return_resp()
+
+    if user_info.password != md5_hash(password):
+        return UserValidateError.return_resp()
+
+    user_info.password = md5_hash(new_password)
+    user_info.password_update_time = datetime.now()
+    UserDao.update_user(user_info)
     return resp_200()
 
 

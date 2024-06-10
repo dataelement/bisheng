@@ -107,6 +107,16 @@ class RedisClient:
         finally:
             self.close()
 
+    def incr(self, key, expiration=3600) -> int:
+        try:
+            self.cluster_nodes(key)
+            value = self.connection.incr(key)
+            if expiration:
+                self.connection.expire(key, expiration)
+            return value
+        finally:
+            self.close()
+
     def delete(self, key):
         try:
             self.cluster_nodes(key)

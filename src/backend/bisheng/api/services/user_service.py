@@ -1,4 +1,5 @@
 import functools
+from typing import List
 
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
@@ -24,6 +25,7 @@ class UserPayload:
         权限检查的装饰器
         如果是admin用户则不执行后续具体的检查逻辑
         """
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             if args[0].is_admin():
@@ -55,6 +57,14 @@ class UserPayload:
         if not user_group:
             return False
         return user_group.is_group_admin
+
+    @wrapper_access_check
+    def check_groups_admin(self, group_ids: List[int]) -> bool:
+        user_groups = UserGroupDao.get_user_group(self.user_id)
+        for one in user_groups:
+            if one.is_group_admin and one.group_id in group_ids:
+                return True
+        return False
 
 
 def get_knowledge_list_by_access(role_id: int, name: str, page_num: int, page_size: int):

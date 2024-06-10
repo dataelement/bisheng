@@ -2,7 +2,7 @@ import os
 from typing import Dict, Optional, Union, List
 import re
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from loguru import logger
 from cryptography.fernet import Fernet
@@ -40,6 +40,12 @@ class LoggerConf(BaseModel):
         return value
 
 
+class PasswordConf(BaseModel):
+    password_valid_period: Optional[int] = Field(description="密码超过X天必须进行修改, 登录提示重新修改密码")
+    login_error_time_window: Optional[int] = Field(description="登录错误时间窗口,单位分钟")
+    max_error_times: Optional[int] = Field(description="最大错误次数，超过后会封禁用户")
+
+
 class Settings(BaseSettings):
     chains: dict = {}
     agents: dict = {}
@@ -74,6 +80,7 @@ class Settings(BaseSettings):
     openai_conf = {}
     minio_conf = {}
     logger_conf: LoggerConf = LoggerConf()
+    password_conf: PasswordConf = PasswordConf()
 
     @validator('database_url', pre=True)
     def set_database_url(cls, value):
@@ -136,6 +143,11 @@ class Settings(BaseSettings):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
         all_config = self.get_all_config()
         return all_config.get('default_llm', {})
+
+    def get_password_conf(self) -> PasswordConf:
+        # 获取密码相关的配置项
+        all_config = self.get_all_config()
+        return PasswordConf(**all_config.get('password_conf', {}))
 
     def get_from_db(self, key: str):
         # 先获取所有的key
