@@ -85,7 +85,22 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         from_secret: NEXUS_USER
       password:
         from_secret: NEXUS_PASSWORD
-  
+
+  - name: ssh deploy
+    image: appleboy/drone-ssh
+    pull: if-not-exists
+    settings:
+      host: 192.168.106.116
+      username: root
+      password:
+        from_secret: sshpwd
+      script:
+       - echo =======找到目录=======
+       - cd /opt/server/bisheng-test
+       - echo =======直接启动=======
+       - docker compose pull
+       - docker compose up -d
+
   - name: notify-start # notify
     pull: if-not-exists
     image: plugins/webhook
@@ -114,22 +129,6 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
             }
           }
         }
-
-  - name: ssh deploy
-    image: appleboy/drone-ssh
-    pull: if-not-exists
-    settings:
-      host: 192.168.106.116
-      username: root
-      password:
-        from_secret: sshpwd
-      script:
-       - echo =======找到目录=======
-       - cd /opt/server/bisheng-test
-       - echo =======直接启动=======
-       - docker compose pull
-       - docker compose up -d
-
 trigger:
   branch:
   - release
