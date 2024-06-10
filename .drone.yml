@@ -8,6 +8,7 @@ clone:
 steps: # 定义流水线执行步骤，这些步骤将顺序执行
   - name: clone
     image: alpine/git
+    pull: if-not-exists
     environment:
       http_proxy: 
         from_secret: PROXY
