@@ -75,19 +75,6 @@ export enum TypeModal {
   PROMPT = 2,
 }
 
-export enum TypeEvaluation {
-  flow = '技能',
-  assistant = '助手'
-}
-
-export enum EvaluationScore {
-  answer_f1 = 'F1',
-  answer_precision = '准确率',
-  answer_recall = '召回率',
-}
-
-export const EvaluationStatus = ['进行中','失败','成功']
-
 export const textColors = {
   white: "text-white",
   red: "text-red-700",

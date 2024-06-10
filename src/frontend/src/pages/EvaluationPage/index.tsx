@@ -19,17 +19,18 @@ import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Evaluation, deleteEvaluationApi, getEvaluationApi, getEvaluationUrlApi } from "@/controllers/API/evaluate";
-import { EvaluationScore, EvaluationStatus, TypeEvaluation } from "@/utils";
 import { downloadFile } from "@/util/utils";
-import { checkSassUrl } from "../ChatAppPage/components/FileView";
 import { Badge } from "@/components/bs-ui/badge";
 import { useEffect } from "react";
 import { map } from "lodash";
+import { classNames } from "@/utils";
+import { EvaluationScore, EvaluationScoreLabelMap, EvaluationStatusLabelMap, EvaluationType, EvaluationTypeLabelMap } from "./types";
 
 export default function EvaluationPage() {
     const navigate = useNavigate()
+    const { t } = useTranslation();
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({cancelLoadingWhenReload: true}, (param) =>
         getEvaluationApi(param.page, param.pageSize)
     )
 
@@ -56,11 +57,9 @@ export default function EvaluationPage() {
     }
 
     const handleDownload = async (el) => {
-        const { url } = await getEvaluationUrlApi(el.result_file_path)        
+        const { url } = await getEvaluationUrlApi(el.file_path)        
         await downloadFile(url, el.file_name)
     }
-
-    const { t } = useTranslation();
 
     return (
         <div className="w-full h-full px-2 py-4 relative">
@@ -76,12 +75,12 @@ export default function EvaluationPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="w-[80px]">{t('evaluation.id')}</TableHead>
-                                    <TableHead className="w-[100px]">{t('evaluation.filename')}</TableHead>
+                                    <TableHead className="min-w-[60px]">{t('evaluation.id')}</TableHead>
+                                    <TableHead className="min-w-[100px]">{t('evaluation.filename')}</TableHead>
                                     <TableHead>{t('evaluation.skillAssistant')}</TableHead>
                                     <TableHead className="w-[80px]">{t('evaluation.status')}</TableHead>
-                                    <TableHead>{t('evaluation.score')}</TableHead>
-                                    <TableHead>{t('createTime')}</TableHead>
+                                    <TableHead className="w-[310px]">{t('evaluation.score')}</TableHead>
+                                    <TableHead className="min-w-[160px]">{t('createTime')}</TableHead>
                                     <TableHead className="text-right">{t('operations')}</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -93,14 +92,19 @@ export default function EvaluationPage() {
                                         <TableCell>{el.file_name || '--'}</TableCell>
                                         <TableCell>
                                             <div className="flex items-center">
-                                                <Badge className="whitespace-nowrap">{TypeEvaluation[el.exec_type]}</Badge>&nbsp;<span className="whitespace-nowrap">{el.unique_name}</span>&nbsp;{el.version_name && <Button variant="link">{el.version_name}</Button>}
+                                                <Badge className="whitespace-nowrap">{EvaluationTypeLabelMap[EvaluationType[el.exec_type]].label}</Badge>&nbsp;<span className="whitespace-nowrap text-medium-indigo">{el.unique_name}</span>&nbsp;<span className="whitespace-nowrap text-medium-indigo ml-1">{el.version_name}</span>
                                             </div>
                                         </TableCell>
-                                        <TableCell>{EvaluationStatus[el.status]}</TableCell>
+                                        <TableCell>
+                                            {el.status && 
+                                            <Badge className={classNames(el.status === 3 ? "!bg-status-green" : el.status === 2 ? "!bg-status-red" : "!bg-primary"," whitespace-nowrap")}>
+                                                {EvaluationStatusLabelMap[el.status].label}
+                                            </Badge>}
+                                        </TableCell>
                                         <TableCell>
                                             <div className="flex flex-wrap">
                                                 {map(el.result_score,(value,key)=>{
-                                                    return <span className="whitespace-nowrap">{EvaluationScore[key]}：{value}</span>
+                                                    return <span className="whitespace-nowrap">{EvaluationScoreLabelMap[EvaluationScore[key].label]}:{value}&nbsp;</span>
                                                 })}
                                             </div>
                                         </TableCell>
@@ -130,7 +134,6 @@ export default function EvaluationPage() {
                     />
                 </div>
             </div>
-            {/* <CreateModal datalist={datalist} open={open} setOpen={setOpen}></CreateModal> */}
         </div>
     );
 }
