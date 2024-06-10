@@ -20,11 +20,13 @@ class RoleGroupService():
             users = UserDao.get_user_by_ids(user_ids)
             users_dict = {user.user_id: user for user in users}
 
-        for group in groups:
-            group.group_admins = [
-                users_dict.get(user.user_id) for user in user_admin if user.group_id == group.id
-            ]
-        return groups
+        groupReads = [GroupRead.validate(group) for group in groups]
+        for group in groupReads:
+            group.group_admins = ','.join([
+                users_dict.get(user.user_id).user_name for user in user_admin
+                if user.group_id == group.id
+            ])
+        return groupReads
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
         """获取全量的group列表"""
@@ -57,13 +59,20 @@ class RoleGroupService():
     def set_group_admin(self, user_ids: List[int], group_id: int):
         """设置用户组管理员"""
         usergroups = UserGroupDao.is_users_in_group(group_id, user_ids)
+        ug = []
         if usergroups:
-            # 只能设置组内的人为管理员
             for user in usergroups:
+                user_ids.remove(user.user_id)
                 user.is_group_admin = True
-            return UserGroupDao.update_user_groups(usergroups)
-        else:
-            return None
+            ug.append(UserGroupDao.update_user_groups(usergroups))
+        if user_ids:
+            # 可以分配非组内用户为管理员。进行用户创建
+            for user_id in user_ids:
+                ug.append(
+                    self.insert_user_group(
+                        UserGroupCreate(user_id=user_id, group_id=group_id, is_group_admin=True)))
+
+        return ug
 
     def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum, name: str,
                             page_size: int, page_num: int):

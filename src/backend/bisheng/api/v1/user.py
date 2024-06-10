@@ -5,12 +5,12 @@ import string
 import uuid
 from base64 import b64decode, b64encode
 from io import BytesIO
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 import rsa
 from bisheng.api.services.captcha import verify_captcha
-from bisheng.api.services.user_service import get_assistant_list_by_access
+from bisheng.api.services.user_service import gen_user_jwt, get_assistant_list_by_access
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
@@ -18,7 +18,7 @@ from bisheng.database.models.flow import Flow
 from bisheng.database.models.knowledge import Knowledge
 from bisheng.database.models.role import Role, RoleCreate, RoleUpdate
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleRefresh
-from bisheng.database.models.user import User, UserCreate, UserLogin, UserRead, UserUpdate
+from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_role import UserRole, UserRoleCreate
 from bisheng.settings import settings
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY
@@ -83,11 +83,19 @@ async def regist(*, user: UserCreate):
 
 
 @router.post('/user/sso', response_model=UnifiedResponseModel[UserRead], status_code=201)
-async def sso(*, user: UserLogin, Authorize: AuthJWT = Depends()):
+async def sso(*, user: UserCreate, Authorize: AuthJWT = Depends()):
     '''给sso提供的接口'''
     if True:  # 判断sso 是否打开
-        pass
-    pass
+        account_name = user.user_name
+        user_exist = UserDao.get_unique_user_by_name(account_name)
+        if not user_exist:
+            logger.info('act=create_user account={}', account_name)
+            user_exist = UserDao.create_user(user)
+
+        access_token, refresh_token, _ = gen_user_jwt(user_exist)
+        return access_token, refresh_token
+    else:
+        raise ValueError('不支持接口')
 
 
 @router.post('/user/login', response_model=UnifiedResponseModel[UserRead], status_code=201)
@@ -109,25 +117,7 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
             select(User).where(User.user_name == user.user_name,
                                User.password == password)).first()
     if db_user:
-        if 1 == db_user.delete:
-            raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
-        # 查询角色
-        with session_getter() as session:
-            db_user_role = session.exec(
-                select(UserRole).where(UserRole.user_id == db_user.user_id)).all()
-
-        if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
-            # 是管理员，忽略其他的角色
-            role = 'admin'
-        else:
-            role = [user_role.role_id for user_role in db_user_role]
-        # 生成JWT令牌
-        payload = {'user_name': user.user_name, 'user_id': db_user.user_id, 'role': role}
-        # Create the tokens and passing to set_access_cookies or set_refresh_cookies
-        access_token = Authorize.create_access_token(subject=json.dumps(payload),
-                                                     expires_time=86400)
-
-        refresh_token = Authorize.create_refresh_token(subject=user.user_name)
+        access_token, refresh_token, role = gen_user_jwt(db_user)
 
         # Set the JWT cookies in the response
         Authorize.set_access_cookies(access_token)
@@ -167,7 +157,13 @@ async def logout(Authorize: AuthJWT = Depends()):
 
 
 @router.get('/user/list', status_code=201)
-async def list(*, name: str, page_size: int, page_num: int, Authorize: AuthJWT = Depends()):
+async def list(*,
+               name: str,
+               page_size: int,
+               page_num: int,
+               group_id: List[int] = None,
+               role_id: List[int] = None,
+               Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无查看权限')

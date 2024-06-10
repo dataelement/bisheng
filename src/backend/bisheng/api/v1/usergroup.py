@@ -4,7 +4,7 @@ from typing import Annotated, List
 
 from bisheng.api.services.role_group_service import RoleGroupService
 from bisheng.api.utils import check_permissions
-from bisheng.api.v1.schemas import UnifiedResponseModel
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.models.group import GroupRead
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.user import User
@@ -12,37 +12,42 @@ from bisheng.database.models.user_group import UserGroupCreate, UserGroupRead
 from fastapi import APIRouter, Body, Depends
 from fastapi_jwt_auth import AuthJWT
 
-router = APIRouter(prefix='group', tags=['User'])
+router = APIRouter(prefix='/group', tags=['User'])
 
 
-@router.get('/list', response_model=UnifiedResponseModel(List[GroupRead]))
+@router.get('/list', response_model=UnifiedResponseModel[List[GroupRead]], status_code=200)
 async def get_all_group(Authorize: AuthJWT = Depends()):
     """
     获取所有分组
     """
     await check_permissions(Authorize, ['admin'])
-    return RoleGroupService().get_group_list()
+    groups = RoleGroupService().get_group_list()
+    return resp_200({'records': groups})
 
 
-@router.post('/set_user_group', response_model=UnifiedResponseModel(UserGroupRead))
+@router.post('/set_user_group',
+             response_model=UnifiedResponseModel[UserGroupRead],
+             status_code=200)
 async def set_user_group(user_group: UserGroupCreate, Authorize: AuthJWT = Depends()):
     """
     设置用户分组
     """
     await check_permissions(Authorize, ['admin'])
-    return RoleGroupService().insert_user_group(user_group)
+    return resp_200(RoleGroupService().insert_user_group(user_group))
 
 
-@router.get('/get_user_group', response_model=UnifiedResponseModel(List[GroupRead]))
+@router.get('/get_user_group',
+            response_model=UnifiedResponseModel[List[GroupRead]],
+            status_code=200)
 async def get_user_group(user_id: int, Authorize: AuthJWT = Depends()):
     """
     获取用户所属分组
     """
     # await check_permissions(Authorize, ['admin'])
-    return RoleGroupService().get_user_groups_list(user_id)
+    return resp_200(RoleGroupService().get_user_groups_list(user_id))
 
 
-@router.get('/get_group_user', response_model=UnifiedResponseModel(List[User]))
+@router.get('/get_group_user', response_model=UnifiedResponseModel[List[User]], status_code=200)
 async def get_group_user(group_id: int,
                          page_size: int = None,
                          page_num: int = None,
@@ -54,7 +59,9 @@ async def get_group_user(group_id: int,
     return RoleGroupService().get_group_user_list(group_id, page_size, page_num)
 
 
-@router.post('/set_group_admin', response_model=UnifiedResponseModel(List[UserGroupRead]))
+@router.post('/set_group_admin',
+             response_model=UnifiedResponseModel[List[UserGroupRead]],
+             status_code=200)
 async def set_group_admin(user_ids: Annotated[List[int], Body(embed=True)],
                           group_id: Annotated[int, Body(embed=True)],
                           Authorize: AuthJWT = Depends()):
@@ -62,10 +69,12 @@ async def set_group_admin(user_ids: Annotated[List[int], Body(embed=True)],
     获取分组的admin，批量设置接口，覆盖历史的admin
     """
     await check_permissions(Authorize, ['admin'])
-    return RoleGroupService().set_group_admin(user_ids, group_id)
+    return resp_200(RoleGroupService().set_group_admin(user_ids, group_id))
 
 
-@router.get('/get_group_flows', response_model=UnifiedResponseModel(List[UserGroupRead]))
+@router.get('/get_group_flows',
+            response_model=UnifiedResponseModel[List[UserGroupRead]],
+            status_code=200)
 async def get_group_flows(*,
                           group_id: Annotated[int, Body(embed=True)],
                           resource_type: Annotated[int, Body(embed=True)],
@@ -77,8 +86,9 @@ async def get_group_flows(*,
     """
     # await check_permissions(Authorize, ['admin'])
 
-    return RoleGroupService().get_group_resources(group_id,
-                                                  resource_type=ResourceTypeEnum(resource_type),
-                                                  name=name,
-                                                  page_size=page_size,
-                                                  page_num=page_num)
+    return resp_200(RoleGroupService().get_group_resources(
+        group_id,
+        resource_type=ResourceTypeEnum(resource_type),
+        name=name,
+        page_size=page_size,
+        page_num=page_num))

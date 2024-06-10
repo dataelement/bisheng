@@ -78,3 +78,18 @@ class UserDao(UserBase):
         with session_getter() as session:
             statement = select(User).where(User.user_id.in_(user_ids))
             return session.exec(statement).all()
+
+    @classmethod
+    def get_unique_user_by_name(cls, user_name: str) -> User | None:
+        with session_getter() as session:
+            statement = select(User).where(User.user_name == user_name)
+            return session.exec(statement).first()
+
+    @classmethod
+    def create_user(cls, user: UserCreate) -> User:
+        db_user = User.model_validate(user)
+        with session_getter() as session:
+            session.add(db_user)
+            session.commit()
+            session.refresh(db_user)
+            return db_user
