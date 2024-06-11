@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -25,7 +25,7 @@ class Group(GroupBase, table=True):
 
 class GroupRead(GroupBase):
     id: Optional[int]
-    group_admins: Optional[List[str]]
+    group_admins: Optional[List[Dict]]
 
 
 class GroupUpdate(GroupBase):
@@ -34,7 +34,7 @@ class GroupUpdate(GroupBase):
 
 
 class GroupCreate(GroupBase):
-    pass
+    group_admins: Optional[List[int]]
 
 
 class GroupDao(GroupBase):
@@ -48,10 +48,11 @@ class GroupDao(GroupBase):
     @classmethod
     def insert_group(cls, group: GroupCreate) -> Group:
         with session_getter() as session:
-            session.add(group)
+            group_add = Group.validate(group)
+            session.add(group_add)
             session.commit()
-            session.refresh(group)
-            return group
+            session.refresh(group_add)
+            return group_add
 
     @classmethod
     def get_all_group(cls) -> list[Group]:

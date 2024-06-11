@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, text, delete
+from sqlalchemy import Column, DateTime, delete, text
 from sqlmodel import Field, select
 
 
@@ -51,6 +51,7 @@ class UserGroupDao(UserGroupBase):
     @classmethod
     def insert_user_group(cls, user_group: UserGroupCreate) -> UserGroup:
         with session_getter() as session:
+            user_group = UserGroup.validate(user_group)
             session.add(user_group)
             session.commit()
             session.refresh(user_group)
@@ -89,7 +90,10 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_groups_user(cls, group_ids: List[int], page: int = 0, limit: int = 0) -> List[UserGroup]:
+    def get_groups_user(cls,
+                        group_ids: List[int],
+                        page: int = 0,
+                        limit: int = 0) -> List[UserGroup]:
         with session_getter() as session:
             statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids))
             if page and limit:
@@ -107,7 +111,7 @@ class UserGroupDao(UserGroupBase):
     def get_groups_admins(cls, group_ids: List[int]) -> List[UserGroup]:
         with session_getter() as session:
             statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids),
-                                                UserGroup.is_group_admin is True)
+                                                UserGroup.is_group_admin == 1)
             return session.exec(statement).all()
 
     @classmethod

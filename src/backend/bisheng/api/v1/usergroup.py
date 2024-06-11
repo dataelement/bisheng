@@ -37,8 +37,8 @@ async def get_all_group(Authorize: AuthJWT = Depends()):
         if not groups:
             raise HTTPException(status_code=500, detail='无查看权限')
 
-    groups = RoleGroupService().get_group_list(groups)
-    return resp_200({'records': groups})
+    groups_res = RoleGroupService().get_group_list(groups)
+    return resp_200({'records': groups_res})
 
 
 @router.post('/create', response_model=UnifiedResponseModel[GroupRead], status_code=200)

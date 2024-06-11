@@ -4,6 +4,7 @@ from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRea
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
+from loguru import logger
 
 
 class RoleGroupService():
@@ -27,14 +28,18 @@ class RoleGroupService():
         groupReads = [GroupRead.validate(group) for group in groups]
         for group in groupReads:
             group.group_admins = [
-                users_dict.get(user.user_id) for user in user_admin if user.group_id == group.id
+                users_dict.get(user.user_id).model_dump() for user in user_admin
+                if user.group_id == group.id
             ]
         return groupReads
 
     def create_group(self, group: GroupCreate) -> Group:
         """新建用户组"""
-
+        group_admin = group.group_admins
         group = GroupDao.insert_group(group)
+        if group_admin:
+            logger.info('set_admin group_admins={}', group_admin)
+            self.set_group_admin(group_admin, group.id)
         return group
 
     def update_group(self, group: Group) -> Group:
