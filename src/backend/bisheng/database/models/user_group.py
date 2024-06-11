@@ -78,6 +78,14 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_groups_user(cls, group_ids: List[int], page: int = 0, limit: int = 0) -> List[UserGroup]:
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids))
+            if page and limit:
+                statement = statement.offset((page - 1) * limit).limit(limit)
+            return session.exec(statement).all()
+
+    @classmethod
     def is_users_in_group(cls, group_id: int, user_ids: List[int]) -> List[UserGroup]:
         with session_getter() as session:
             statement = select(UserGroup).where(UserGroup.group_id == group_id,

@@ -4,7 +4,7 @@ from typing import List, Optional
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from pydantic import validator
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, text, func
 from sqlmodel import Field, select
 
 
@@ -78,6 +78,22 @@ class UserDao(UserBase):
         with session_getter() as session:
             statement = select(User).where(User.user_id.in_(user_ids))
             return session.exec(statement).all()
+
+    @classmethod
+    def filter_users(cls, user_ids: List[int], keyword: str = None, page: int = 0, limit: int = 0) -> (List[User], int):
+        statement = select(User)
+        count_statement = select(func.count(User.user_id))
+        if user_ids:
+            statement = statement.where(User.user_id.in_(user_ids))
+            count_statement = count_statement.where(User.user_id.in_(user_ids))
+        if keyword:
+            statement = statement.where(User.user_name.like(f'%{keyword}%'))
+            count_statement = count_statement.where(User.user_name.like(f'%{keyword}%'))
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(User.user_id.desc())
+        with session_getter() as session:
+            return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
     def get_unique_user_by_name(cls, user_name: str) -> User | None:

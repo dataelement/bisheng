@@ -5,21 +5,23 @@ import string
 import uuid
 from base64 import b64decode, b64encode
 from io import BytesIO
-from typing import List, Optional
+from typing import List, Optional, Dict
 from uuid import UUID
 
 import rsa
 from bisheng.api.services.captcha import verify_captcha
-from bisheng.api.services.user_service import gen_user_jwt, get_assistant_list_by_access
+from bisheng.api.services.user_service import gen_user_jwt, get_assistant_list_by_access, UserPayload
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
+from bisheng.database.models.group import GroupDao
 from bisheng.database.models.knowledge import Knowledge
-from bisheng.database.models.role import Role, RoleCreate, RoleUpdate
+from bisheng.database.models.role import Role, RoleCreate, RoleUpdate, RoleDao
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleRefresh
 from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
-from bisheng.database.models.user_role import UserRole, UserRoleCreate
+from bisheng.database.models.user_group import UserGroupDao
+from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao
 from bisheng.settings import settings
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY
 from bisheng.utils.logger import logger
@@ -157,35 +159,108 @@ async def logout(Authorize: AuthJWT = Depends()):
 
 
 @router.get('/user/list', status_code=201)
-async def list(*,
-               name: str,
-               page_size: int,
-               page_num: int,
-               group_id: List[int] = None,
-               role_id: List[int] = None,
-               Authorize: AuthJWT = Depends()):
+async def list_user(*,
+                    name: Optional[str] = None,
+                    page_size: Optional[int] = 10,
+                    page_num: Optional[int] = 1,
+                    group_id: List[int] = None,
+                    role_id: List[int] = None,
+                    Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无查看权限')
-    sql = select(User)
-    count_sql = select(func.count(User.user_id))
-    if name:
-        sql = sql.where(User.user_name.like(f'%{name}%'))
-        count_sql = count_sql.where(User.user_name.like(f'%{name}%'))
+    payload = json.loads(Authorize.get_jwt_subject())
+    login_user = UserPayload(**payload)
+    if login_user.is_admin():
+        groups = group_id
+    else:
+        # 查询下是否是其他用户组的管理员
+        user_groups = UserGroupDao.get_user_group(login_user.user_id)
+        groups = []
+        for one in user_groups:
+            if one.is_group_admin:
+                groups.append(one.group_id)
+        # 不是任何用户组的管理员无查看权限
+        if not groups:
+            raise HTTPException(status_code=500, detail='无查看权限')
+        # 将筛选条件的group_id和管理员有权限的groups做交集
+        if group_id:
+            groups = list(set(groups) & set(group_id))
+            if not groups:
+                raise HTTPException(status_code=500, detail='无查看权限')
 
-    # 总数
-    with session_getter() as session:
-        total_count = session.scalar(count_sql)
+    user_ids = []
+    if groups:
+        groups_user_ids = UserGroupDao.get_groups_admins(groups)
+        if not groups_user_ids:
+            return resp_200({'data': [], 'total': 0})
+        user_ids = list(set([one.user_id for one in groups_user_ids]))
+    if role_id:
+        roles_user_ids = UserRoleDao.get_roles_user(role_id)
+        if not roles_user_ids:
+            return resp_200({'data': [], 'total': 0})
+        roles_user_ids = [one.user_id for one in roles_user_ids]
 
-    if page_size and page_num:
-        sql = sql.order_by(User.user_id.desc()).offset((page_num - 1) * page_size).limit(page_size)
-    # 查询
-    with session_getter() as session:
-        users = session.exec(sql).all()
+        # 如果user_ids不为空，说明是groups一起做交集筛选，否则是只做角色筛选
+        if user_ids:
+            user_ids = list(set(user_ids) & set(roles_user_ids))
+        else:
+            user_ids = list(set(roles_user_ids))
+
+    users, total_count = UserDao.filter_users(user_ids, name, page_num, page_size)
+    res = []
+    role_dict = {}
+    group_dict = {}
+    for one in users:
+        one_data = one.model_dump()
+        one_data["roles"] = get_user_roles(one, role_dict)
+        one_data["groups"] = get_user_groups(one, group_dict)
+        res.append(one_data)
+
     return resp_200({
-        'data': [jsonable_encoder(UserRead.model_validate(user)) for user in users],
+        'data': res,
         'total': total_count
     })
+
+
+def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
+    # 查询用户的角色列表
+    user_roles = UserRoleDao.get_user_roles(user.user_id)
+    user_role_ids: List[int] = [one_role.role_id for one_role in user_roles]
+    res = []
+    for i in range(len(user_role_ids) - 1, -1, -1):
+        if role_cache.get(user_role_ids[i]):
+            res.append(role_cache.get(user_role_ids[i]))
+            del user_role_ids[i]
+    # 将没有缓存的角色信息查询数据库
+    if user_role_ids:
+        role_list = RoleDao.get_role_by_ids(user_role_ids)
+        for role_info in role_list:
+            role_cache[role_info.id] = {
+                "id": role_info.id,
+                "name": role_info.role_name
+            }
+            res.append(role_cache.get(role_info.id))
+    return res
+
+
+def get_user_groups(user: User, group_cache: Dict) -> List[Dict]:
+    # 查询用户的角色列表
+    user_groups = UserGroupDao.get_user_group(user.user_id)
+    user_group_ids: List[int] = [one_group.group_id for one_group in user_groups]
+    res = []
+    for i in range(len(user_group_ids) - 1, -1, -1):
+        if group_cache.get(user_group_ids[i]):
+            res.append(group_cache.get(user_group_ids[i]))
+            del user_group_ids[i]
+    # 将没有缓存的角色信息查询数据库
+    if user_group_ids:
+        group_list = GroupDao.get_group_by_ids(user_group_ids)
+        for group_info in group_list:
+            group_cache[group_info.id] = {
+                "id": group_info.id,
+                "name": group_info.group_name
+            }
+            res.append(group_cache.get(group_info.id))
+    return res
 
 
 @router.post('/user/update', status_code=201)
@@ -478,7 +553,7 @@ async def knowledge_list(*,
             'id': access[0].id
         } for access in db_role_access],
         'total':
-        total_count
+            total_count
     })
 
 
@@ -527,7 +602,7 @@ async def flow_list(*,
             'id': access[0]
         } for access in db_role_access],
         'total':
-        total_count
+            total_count
     })
 
 
