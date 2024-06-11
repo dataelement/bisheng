@@ -5,7 +5,7 @@ import string
 import uuid
 from base64 import b64decode, b64encode
 from io import BytesIO
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Annotated
 from uuid import UUID
 
 import rsa
@@ -26,7 +26,7 @@ from bisheng.settings import settings
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY
 from bisheng.utils.logger import logger
 from captcha.image import ImageCaptcha
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_jwt_auth import AuthJWT
@@ -163,8 +163,8 @@ async def list_user(*,
                     name: Optional[str] = None,
                     page_size: Optional[int] = 10,
                     page_num: Optional[int] = 1,
-                    group_id: List[int] = None,
-                    role_id: List[int] = None,
+                    group_id: Annotated[List[int], Query()] = None,
+                    role_id: Annotated[List[int], Query()] = None,
                     Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())

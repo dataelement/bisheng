@@ -1,15 +1,17 @@
 # build router
+import json
 from os import name
 from typing import Annotated, List, Optional
 
 from bisheng.api.services.role_group_service import RoleGroupService
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import check_permissions
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.models.group import GroupRead
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.user import User
-from bisheng.database.models.user_group import UserGroupCreate, UserGroupRead
-from fastapi import APIRouter, Body, Depends
+from bisheng.database.models.user_group import UserGroupCreate, UserGroupRead, UserGroupDao
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/group', tags=['User'])
@@ -20,8 +22,23 @@ async def get_all_group(Authorize: AuthJWT = Depends()):
     """
     获取所有分组
     """
-    await check_permissions(Authorize, ['admin'])
-    groups = RoleGroupService().get_group_list()
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    login_user = UserPayload(**payload)
+    if login_user.is_admin():
+        groups = []
+    else:
+        # 查询下是否是其他用户组的管理员
+        user_groups = UserGroupDao.get_user_group(login_user.user_id)
+        groups = []
+        for one in user_groups:
+            if one.is_group_admin:
+                groups.append(one.group_id)
+        # 不是任何用户组的管理员无查看权限
+        if not groups:
+            raise HTTPException(status_code=500, detail='无查看权限')
+
+    groups = RoleGroupService().get_group_list(groups)
     return resp_200({'records': groups})
 
 

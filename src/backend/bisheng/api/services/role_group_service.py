@@ -8,10 +8,14 @@ from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, Us
 
 class RoleGroupService():
 
-    def get_group_list(self) -> List[GroupRead]:
+    def get_group_list(self, group_ids: List[int]) -> List[GroupRead]:
         """获取全量的group列表"""
 
-        groups = GroupDao.get_all_group()
+        # 查询group
+        if group_ids:
+            groups = GroupDao.get_group_by_ids(group_ids)
+        else:
+            groups = GroupDao.get_all_group()
         # 查询user
         user_admin = UserGroupDao.get_groups_admins([group.id for group in groups])
         users_dict = {}
