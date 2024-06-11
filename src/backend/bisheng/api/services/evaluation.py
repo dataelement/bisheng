@@ -221,7 +221,7 @@ def add_evaluation_task(evaluation_id: int):
 
         llm_params = settings.get_default_llm()
         logger.info(f'start evaluate with default llm: {llm_params}')
-        llm_type = llm_params.pop("type")
+        llm_type = llm_params.pop("type") if "type" in llm_params else ""
         llm_object = import_by_type(_type='llms', name=llm_type)
         _llm = llm_object(**llm_params)
         llm = LangchainLLM(_llm)
