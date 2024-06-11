@@ -19,6 +19,7 @@ export type Evaluation = {
     exec_type: string,
     version: number,
     status: number,
+    progress?: string,
     result_file_path: string,
     is_delete: number,
     update_time: string,

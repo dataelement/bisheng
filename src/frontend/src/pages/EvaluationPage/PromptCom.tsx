@@ -1,8 +1,8 @@
 import { useContext, useEffect, useState } from "react";
-import { PopUpContext } from "../../contexts/popUpContext";
-import GenericModal from "../../modals/genericModal";
-import { TextAreaComponentType } from "../../types/components";
-import { TypeModal } from "../../utils";
+import { PopUpContext } from "@/contexts/popUpContext";
+import GenericModal from "@/modals/genericModal";
+import { TextAreaComponentType } from "@/types/components";
+import { TypeModal } from "@/utils";
 
 import { ExternalLink } from "lucide-react";
 
@@ -14,7 +14,7 @@ export default function PromptAreaComponent({
   onChange,
   disabled,
   editNode = false,
-  type = TypeModal.PROMPT
+  type = TypeModal.PROMPT,
 }: TextAreaComponentType) {
   const [myValue, setMyValue] = useState(value);
   const { openPopUp } = useContext(PopUpContext);
@@ -28,7 +28,7 @@ export default function PromptAreaComponent({
   const handleSave = (t: string) => {
     setMyValue(t);
     onChange(t);
-  }
+  };
 
   return (
     <div className={disabled ? "pointer-events-none w-full " : "w-full"}>
@@ -54,7 +54,7 @@ export default function PromptAreaComponent({
             editNode
               ? "input-edit-node input-dialog"
               : (disabled ? " input-disable text-ring " : "") +
-              " input-primary whitespace-wrap"
+                " whitespace-wrap input-primary"
           }
         >
           {myValue !== "" ? myValue : "enter your prompt"}
