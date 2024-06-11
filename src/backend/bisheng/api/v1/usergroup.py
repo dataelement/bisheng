@@ -1,6 +1,5 @@
 # build router
 import json
-from os import name
 from typing import Annotated, List, Optional
 
 from bisheng.api.services.role_group_service import RoleGroupService
@@ -95,6 +94,7 @@ async def set_group_admin(user_ids: Annotated[List[int], Body(embed=True)],
 async def get_group_flows(*,
                           group_id: int,
                           resource_type: int,
+                          name: Optional[str] = None,
                           page_size: Optional[int] = 10,
                           page_num: Optional[int] = 1,
                           Authorize: AuthJWT = Depends()):
