@@ -95,7 +95,7 @@ async def sso(*, user: UserCreate, Authorize: AuthJWT = Depends()):
             user_exist = UserDao.create_user(user)
 
         access_token, refresh_token, _ = gen_user_jwt(user_exist)
-        return access_token, refresh_token
+        return resp_200({'access_token': access_token, 'refresh_token': refresh_token})
     else:
         raise ValueError('不支持接口')
 
