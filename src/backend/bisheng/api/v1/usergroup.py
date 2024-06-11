@@ -6,7 +6,7 @@ from bisheng.api.services.role_group_service import RoleGroupService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import check_permissions
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.database.models.group import GroupRead
+from bisheng.database.models.group import GroupRead, GroupCreate, Group
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.user import User
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupRead, UserGroupDao
@@ -39,6 +39,33 @@ async def get_all_group(Authorize: AuthJWT = Depends()):
 
     groups = RoleGroupService().get_group_list(groups)
     return resp_200({'records': groups})
+
+
+@router.post('/create', response_model=UnifiedResponseModel[GroupRead], status_code=200)
+async def create_group(group: GroupCreate, Authorize: AuthJWT = Depends()):
+    """
+    新建用户组
+    """
+    await check_permissions(Authorize, ['admin'])
+    return resp_200(RoleGroupService().create_group(group))
+
+
+@router.put('/create', response_model=UnifiedResponseModel[GroupRead], status_code=200)
+async def update_group(group: Group, Authorize: AuthJWT = Depends()):
+    """
+    编辑用户组
+    """
+    await check_permissions(Authorize, ['admin'])
+    return resp_200(RoleGroupService().update_group(group))
+
+
+@router.delete('/create', status_code=200)
+async def delete_group(group_id: int, Authorize: AuthJWT = Depends()):
+    """
+    删除用户组
+    """
+    await check_permissions(Authorize, ['admin'])
+    return resp_200(RoleGroupService().delete_group(group_id))
 
 
 @router.post('/set_user_group',

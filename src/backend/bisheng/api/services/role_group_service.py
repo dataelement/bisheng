@@ -1,6 +1,6 @@
 from typing import List
 
-from bisheng.database.models.group import GroupDao, GroupRead
+from bisheng.database.models.group import GroupDao, GroupRead, GroupCreate, Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
@@ -31,6 +31,28 @@ class RoleGroupService():
                 if user.group_id == group.id
             ])
         return groupReads
+
+    def create_group(self, group: GroupCreate) -> Group:
+        """新建用户组"""
+
+        group = GroupDao.insert_group(group)
+        return group
+
+    def update_group(self, group: Group) -> Group:
+        """更新用户组"""
+        exist_group = GroupDao.get_user_group(group.id)
+        if not exist_group:
+            raise ValueError('用户组不存在')
+        exist_group.group_name = group.group_name
+        exist_group.remark = group.group_name
+
+        group = GroupDao.update_group(exist_group)
+        return group
+
+    def delete_group(self, group_id: int):
+        """删除用户组"""
+
+        GroupDao.delete_group(group_id)
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
         """获取全量的group列表"""
