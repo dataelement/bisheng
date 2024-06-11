@@ -6,10 +6,10 @@ from bisheng.api.services.role_group_service import RoleGroupService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import check_permissions
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.database.models.group import GroupRead, GroupCreate, Group
+from bisheng.database.models.group import Group, GroupCreate, GroupRead
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.user import User
-from bisheng.database.models.user_group import UserGroupCreate, UserGroupRead, UserGroupDao
+from bisheng.database.models.user_group import UserGroupDao, UserGroupRead
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi_jwt_auth import AuthJWT
 
@@ -71,7 +71,9 @@ async def delete_group(group_id: int, Authorize: AuthJWT = Depends()):
 @router.post('/set_user_group',
              response_model=UnifiedResponseModel[UserGroupRead],
              status_code=200)
-async def set_user_group(user_id: int, group_id: List[int], Authorize: AuthJWT = Depends()):
+async def set_user_group(user_id: Annotated[int, Body(embed=True)],
+                         group_id: Annotated[List[int], Body(embed=True)],
+                         Authorize: AuthJWT = Depends()):
     """
     设置用户分组, 批量替换
     """

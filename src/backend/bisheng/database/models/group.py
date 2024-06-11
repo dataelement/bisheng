@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, text, delete
+from sqlalchemy import Column, DateTime, delete, text
 from sqlmodel import Field, select
 
 
@@ -70,7 +70,7 @@ class GroupDao(GroupBase):
     @classmethod
     def delete_group(cls, group_id: int):
         with session_getter() as session:
-            session.exec(delete(Group.id == group_id))
+            session.exec(delete(Group).where(Group.id == group_id))
             session.commit()
 
     @classmethod
