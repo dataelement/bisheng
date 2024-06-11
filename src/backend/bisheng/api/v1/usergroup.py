@@ -1,6 +1,6 @@
 # build router
 from os import name
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 
 from bisheng.api.services.role_group_service import RoleGroupService
 from bisheng.api.utils import check_permissions
@@ -76,10 +76,10 @@ async def set_group_admin(user_ids: Annotated[List[int], Body(embed=True)],
             response_model=UnifiedResponseModel[List[UserGroupRead]],
             status_code=200)
 async def get_group_flows(*,
-                          group_id: Annotated[int, Body(embed=True)],
-                          resource_type: Annotated[int, Body(embed=True)],
-                          page_size: Annotated[int, Body(embed=True)] = None,
-                          page_num: Annotated[int, Body(embed=True)] = None,
+                          group_id: int,
+                          resource_type: int,
+                          page_size: Optional[int] = 10,
+                          page_num: Optional[int] = 1,
                           Authorize: AuthJWT = Depends()):
     """
     获取分组下所有的技能
