@@ -10,7 +10,7 @@ from uuid import UUID
 
 import rsa
 from bisheng.api.services.captcha import verify_captcha
-from bisheng.api.services.user_service import gen_user_jwt, get_assistant_list_by_access, UserPayload
+from bisheng.api.services.user_service import gen_user_jwt, get_assistant_list_by_access, UserPayload, gen_user_role
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
@@ -137,16 +137,9 @@ async def get_info(Authorize: AuthJWT = Depends()):
     payload = json.loads(Authorize.get_jwt_subject())
     try:
         user_id = payload.get('user_id')
-        with session_getter() as session:
-            user = session.get(User, user_id)
-            # 查询角色
-            db_user_role = session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
-        if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
-            # 是管理员，忽略其他的角色
-            role = 'admin'
-        else:
-            role = [user_role.role_id for user_role in db_user_role]
-        return resp_200(UserRead(role=str(role), **user.__dict__))
+        db_user = UserDao.get_user(user_id)
+        role = gen_user_role(db_user)
+        return resp_200(UserRead(role=str(role), **db_user.__dict__))
     except Exception:
         raise HTTPException(status_code=500, detail='用户信息失败')
 
