@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, text, delete
 from sqlmodel import Field, select
 
 
@@ -63,6 +63,17 @@ class UserGroupDao(UserGroupBase):
                                                 UserGroup.group_id == group_id)
             user_group = session.exec(statement).first()
             session.delete(user_group)
+            session.commit()
+
+    @classmethod
+    def replace_user_groups(cls, user_id: int, group_ids: List[int]):
+        with session_getter() as session:
+            # 先把旧的用户组全部清空
+            session.exec(delete(UserGroup).where(UserGroup.user_id == user_id))
+            # 再把新的用户组添加
+            for one in group_ids:
+                user_group = UserGroup(user_id=user_id, group_id=one, is_group_admin=False)
+                session.add(user_group)
             session.commit()
 
     @classmethod

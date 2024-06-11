@@ -52,6 +52,11 @@ class RoleGroupService():
 
         return UserGroupDao.insert_user_group(user_group)
 
+    def replace_user_groups(self, user_id: int, group_ids: List[int]):
+        """ 覆盖用户的所在的用户组 """
+        UserGroupDao.replace_user_groups(user_id, group_ids)
+        return None
+
     def get_user_groups_list(self, user_id: int) -> List[GroupRead]:
         """获取用户组列表"""
         user_groups = UserGroupDao.get_user_group(user_id)

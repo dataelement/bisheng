@@ -44,12 +44,12 @@ async def get_all_group(Authorize: AuthJWT = Depends()):
 @router.post('/set_user_group',
              response_model=UnifiedResponseModel[UserGroupRead],
              status_code=200)
-async def set_user_group(user_group: UserGroupCreate, Authorize: AuthJWT = Depends()):
+async def set_user_group(user_id: int, group_id: List[int], Authorize: AuthJWT = Depends()):
     """
-    设置用户分组
+    设置用户分组, 批量替换
     """
     await check_permissions(Authorize, ['admin'])
-    return resp_200(RoleGroupService().insert_user_group(user_group))
+    return resp_200(RoleGroupService().replace_user_groups(user_id, group_id))
 
 
 @router.get('/get_user_group',
