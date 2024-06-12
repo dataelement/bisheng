@@ -19,6 +19,8 @@ import Templates from "./pages/SkillPage/temps";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import { ErrorBoundary } from "react-error-boundary";
 import CrashErrorComponent from "./components/CrashErrorComponent";
+import EvaluatingPage from "./pages/EvaluationPage";
+import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -60,6 +62,8 @@ const router = createBrowserRouter([
       { path: "build/skill", element: <L2Edit /> },
       { path: "build/skill/:id/:vid", element: <L2Edit /> },
       { path: "build/temps", element: <Templates /> },
+      { path: "evaluation", element: <EvaluatingPage /> },
+      { path: "evaluation/create", element: <EvaluatingCreate /> },
       { path: "model", element: <ModelPage /> },
       { path: "sys", element: <SystemPage /> },
     ],

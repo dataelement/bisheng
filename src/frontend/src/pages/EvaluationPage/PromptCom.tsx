@@ -1,8 +1,8 @@
 import { useContext, useEffect, useState } from "react";
-import { PopUpContext } from "../../contexts/popUpContext";
-import GenericModal from "../../modals/genericModal";
-import { TextAreaComponentType } from "../../types/components";
-import { TypeModal } from "../../utils";
+import { PopUpContext } from "@/contexts/popUpContext";
+import GenericModal from "@/modals/genericModal";
+import { TextAreaComponentType } from "@/types/components";
+import { TypeModal } from "@/utils";
 
 import { ExternalLink } from "lucide-react";
 
@@ -14,7 +14,7 @@ export default function PromptAreaComponent({
   onChange,
   disabled,
   editNode = false,
-  type = TypeModal.PROMPT
+  type = TypeModal.PROMPT,
 }: TextAreaComponentType) {
   const [myValue, setMyValue] = useState(value);
   const { openPopUp } = useContext(PopUpContext);
@@ -25,28 +25,10 @@ export default function PromptAreaComponent({
     }
   }, [disabled, onChange]);
 
-  // useEffect(() => {
-  //   if (value !== "" && myValue !== value && reactFlowInstance) {
-  //     // only executed once
-  //     setMyValue(value);
-  //     postValidatePrompt(field_name, value, nodeClass)
-  //       .then((apiReturn) => {
-  //         if (apiReturn.data) {
-  //           setNodeClass(apiReturn.data.frontend_node);
-  //           // need to update reactFlowInstance to re-render the nodes.
-  //           reactFlowInstance.setEdges(
-  //             _.cloneDeep(reactFlowInstance.getEdges())
-  //           );
-  //         }
-  //       })
-  //       .catch((error) => {});
-  //   }
-  // }, [reactFlowInstance, field_name, myValue, nodeClass, setNodeClass, value]);
-
   const handleSave = (t: string) => {
     setMyValue(t);
     onChange(t);
-  }
+  };
 
   return (
     <div className={disabled ? "pointer-events-none w-full " : "w-full"}>
@@ -72,7 +54,7 @@ export default function PromptAreaComponent({
             editNode
               ? "input-edit-node input-dialog"
               : (disabled ? " input-disable text-ring " : "") +
-              " input-primary text-muted-foreground whitespace-wrap"
+                " whitespace-wrap input-primary"
           }
         >
           {myValue !== "" ? myValue : "enter your prompt"}
