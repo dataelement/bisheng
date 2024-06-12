@@ -1,4 +1,4 @@
-import KnowledgeSelect from "@/components/bs-comp/selectKnowledge";
+import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import { useMemo } from "react";
 import { TextAreaComponentType } from "../../../../types/components";
 

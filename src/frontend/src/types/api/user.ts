@@ -22,11 +22,10 @@ export type ROLE = {
 
 export type UserGroup = {
     id: number
-    groupName: string
+    group_name: string
     adminUser: string
-    adminUserId: string
-    groupLimit: number
+    group_admins: any[]
     createTime: string
     updateTime: string
-    logicDelete: number
+    groupLimit?: number
 }

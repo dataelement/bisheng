@@ -3,6 +3,7 @@ import axios from "axios";
 import i18next from "i18next";
 axios.defaults.withCredentials = true;
 const customAxios = axios.create({
+    baseURL:''
     // 配置
 });
 

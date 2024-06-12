@@ -1,10 +1,10 @@
 import { JSEncrypt } from 'jsencrypt';
 import { useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
-import { Button } from "../components/bs-ui/button";
-import { Input } from "../components/bs-ui/input";
-import { getPublicKeyApi } from "../controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "../controllers/request";
+import { Button } from "../../components/bs-ui/button";
+import { Input } from "../../components/bs-ui/input";
+import { getPublicKeyApi } from "../../controllers/API/user";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { AlignLeftIcon, ArrowLeftIcon } from '@radix-ui/react-icons';
 import { useLocation, useNavigate } from 'react-router-dom';

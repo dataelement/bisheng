@@ -79,23 +79,14 @@ const MultiSelect = ({
     const [created, creatInput] = useState(false)
     const inputRef = useRef(null)
 
-
-    // 分页模式下，追加选中值到optionFilter
-    const displayedOptions = optionFilter
-    // useMemo(() => {
-    //     return onScrollLoad ? [
-    //         ...values.filter(val => !optionFilter.some(op => op.value === val.value)),
-    //         ...optionFilter] : options
-    // }, [values, optionFilter])
-
     useEffect(() => {
         setValues(value)
     }, [value])
 
     useEffect(() => {
-        if (onScrollLoad) {
-            setOptionFilter(options);
-        }
+        // if (onScrollLoad) {
+        setOptionFilter(options);
+        // }
     }, [options]);
 
     // delete 
@@ -184,9 +175,9 @@ const MultiSelect = ({
             }
         }}
     >
-        <SelectTrigger className="mt-2 h-auto">
+        <SelectTrigger className="h-auto">
             {
-                !multiple && values.length && <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0]).label}</span>
+                !multiple && (values.length ? <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0]).label}</span> : placeholder)
             }
             {
                 multiple && (values.length ? (
@@ -223,7 +214,7 @@ const MultiSelect = ({
         >
             <div className="mt-2">
                 {
-                    displayedOptions.map((item) => (
+                    optionFilter.map((item) => (
                         <MultiItem
                             active={values.some(val => val === item.value || val.value === item.value)}
                             value={item.value}

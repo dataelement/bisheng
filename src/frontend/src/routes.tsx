@@ -18,10 +18,11 @@ import SystemPage from "./pages/SystemPage";
 import BuildLayout from "./layout/BuildLayout";
 import Templates from "./pages/SkillPage/temps";
 import DiffFlowPage from "./pages/DiffFlowPage";
+import LogPage from "./pages/LogPage";
 import { ErrorBoundary } from "react-error-boundary";
 import CrashErrorComponent from "./components/CrashErrorComponent";
-import { LoginPage } from "./pages/login";
-import { ResetPwdPage } from "./pages/resetPwd";
+import { LoginPage } from "./pages/LoginPage/login";
+import { ResetPwdPage } from "./pages/LoginPage/resetPwd";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -65,6 +66,7 @@ export const privateRouter = createBrowserRouter([
       { path: "build/temps", element: <Templates /> },
       { path: "model", element: <ModelPage /> },
       { path: "sys", element: <SystemPage /> },
+      { path: "log", element: <LogPage /> },
     ],
   },
   { path: "model/doc", element: <Doc /> },

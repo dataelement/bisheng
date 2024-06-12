@@ -14,12 +14,20 @@ const Anwser = ({ id, msg, onInit, onAdd }) => {
     // init
     useEffect(() => {
         onInit([])
-        msg && splitWordApi(msg, id).then((res) => {
-            // 匹配
-            const reg = new RegExp(`(${res.join('|')})`, 'g')
-            setHtml(msg.replace(reg, '<span>$1</span>'))
-            onInit(res)
-        })
+        const loadData = () => {
+            splitWordApi(msg, id).then((res) => {
+                // 匹配
+                const reg = new RegExp(`(${res.join('|')})`, 'g')
+                setHtml(msg.replace(reg, '<span>$1</span>'))
+                onInit(res)
+            }).catch(e => {
+                // 自动重试
+                e === '后台处理中，稍后再试' && setTimeout(() => {
+                    loadData()
+                }, 1800);
+            })
+        }
+        msg && loadData()
     }, [])
 
     // add 

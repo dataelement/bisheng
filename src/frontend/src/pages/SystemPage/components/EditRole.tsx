@@ -153,6 +153,43 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
             <p className="text-xl mb-4">{t('system.roleName')}</p>
             <Input placeholder={t('system.roleName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60}></Input>
         </div>
+        {/* 菜单授权 */}
+        <div className="">
+            <div className="mt-20 flex justify-between items-center relative">
+                <p className="text-xl font-bold">菜单授权</p>
+                {/* <SearchInput onChange={(e) => search(e.target.value)}></SearchInput> */}
+            </div>
+            <div className="mt-4">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>一级菜单</TableHead>
+                            <TableHead className="text-right">查看权限</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        <TableRow>
+                            <TableCell className="font-medium">构建</TableCell>
+                            <TableCell className="text-right">
+                                <Switch onCheckedChange={(bln) => { }} />
+                            </TableCell>
+                        </TableRow>
+                        <TableRow>
+                            <TableCell className="font-medium">知识库</TableCell>
+                            <TableCell className="text-right">
+                                <Switch onCheckedChange={(bln) => { }} />
+                            </TableCell>
+                        </TableRow>
+                        <TableRow>
+                            <TableCell className="font-medium">模型</TableCell>
+                            <TableCell className="text-right">
+                                <Switch onCheckedChange={(bln) => { }} />
+                            </TableCell>
+                        </TableRow>
+                    </TableBody>
+                </Table>
+            </div>
+        </div>
         {/* 助手 */}
         <div className="">
             <SearchPanne title={t('system.assistantAuthorization')} role_id={roleId} type={'assistant'}>

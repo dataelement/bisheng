@@ -1,16 +1,17 @@
 import { JSEncrypt } from 'jsencrypt';
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
-import json from "../../package.json";
-import { Button } from "../components/bs-ui/button";
-import { Input } from "../components/bs-ui/input";
+import json from "../../../package.json";
+import { Button } from "../../components/bs-ui/button";
+import { Input } from "../../components/bs-ui/input";
 import { GithubIcon } from '@/components/bs-icons/github';
 import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
 // import { alertContext } from "../contexts/alertContext";
-import { getPublicKeyApi, loginApi, getCaptchaApi, registerApi } from "../controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "../controllers/request";
+import { getPublicKeyApi, loginApi, getCaptchaApi, registerApi } from "../../controllers/API/user";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { useNavigate } from 'react-router-dom';
+import LoginBridge from './loginBridge';
 export const LoginPage = () => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t, i18n } = useTranslation();
@@ -66,7 +67,7 @@ export const LoginPage = () => {
                 navigate('/reset', { state: { noback: true } })
             }
         })
-        
+
         fetchCaptchaData()
     }
 
@@ -199,6 +200,7 @@ export const LoginPage = () => {
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
+                        <LoginBridge />
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>

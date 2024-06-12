@@ -1,20 +1,23 @@
+import {
+    ApplicationIcon,
+    BookOpenIcon,
+    EnIcon,
+    GithubIcon,
+    KnowledgeIcon,
+    LogIcon,
+    ModelIcon,
+    QuitIcon,
+    SystemIcon,
+    TechnologyIcon
+} from "@/components/bs-icons";
+import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
+import { LockClosedIcon } from "@radix-ui/react-icons";
 import i18next from "i18next";
-import { AppWindow, Globe, HardDrive, Languages, LayoutDashboard, LogOut, Puzzle, Settings, SunIcon } from "lucide-react";
-import { GithubIcon } from '@/components/bs-icons/github';
-import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
-import { SystemIcon } from "@/components/bs-icons/system";
-import { ApplicationIcon } from "@/components/bs-icons/application";
-import { TechnologyIcon } from "@/components/bs-icons/technology";
-import { KnowledgeIcon } from "@/components/bs-icons/knowledge";
-import { ModelIcon } from "@/components/bs-icons/model";
-import { MoonIcon } from "@/components/bs-icons/moon";
-import { QuitIcon, QuitIconDark } from "@/components/bs-icons/quit";
-import { EnIcon } from "@/components/bs-icons/en";
-
+import { Globe } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useTranslation } from "react-i18next";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import CrashErrorComponent from "../components/CrashErrorComponent";
 import { Separator } from "../components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
@@ -23,8 +26,6 @@ import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
-import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
-import { LockClosedIcon } from "@radix-ui/react-icons";
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
@@ -114,6 +115,13 @@ export default function MainLayout() {
                             user.role === 'admin' && <>
                                 <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.system')}</span>
+                                </NavLink>
+                            </>
+                        }
+                        {
+                            user.role === 'admin' && <>
+                                <NavLink to='/log' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                    <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.log')}</span>
                                 </NavLink>
                             </>
                         }

@@ -3,8 +3,8 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
 import FilterUserGroup from "@/components/bs-ui/select/filter";
-import { getSearchRes } from "@/controllers/API/user";
-import { useContext, useEffect, useRef, useState } from "react";
+import { getRolesApi, getUserGroupsApi } from "@/controllers/API/user";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
@@ -17,56 +17,65 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { userContext } from "../../../contexts/userContext";
-import { disableUserApi, getRoleTypes, getUserGroupTypes, getUsersApi } from "../../../controllers/API/user";
+import { disableUserApi, getUsersApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import UserPwdModal from "./UserPwdModal";
 import UserRoleModal from "./UserRoleModal";
 
-
-function UsersFilter({ arr, placeholder, onButtonClick, onIsOpen }) {
-    const setDefault = (array) => {
-        return array.map((a, index) => (a.name == '默认用户组' || a.name == '普通用户') ? { ...a, checked: true } : a)
-    }
-
-    const [items, setItems] = useState(setDefault(arr))
+function UsersFilter({ options, nameKey, placeholder, onFilter }) {
+    const [open, setOpen] = useState(false)
+    const [_value, setValue] = useState([])
+    const [searchKey, setSearchKey] = useState('')
+    // 点击 checkbox
     const handlerChecked = (id) => {
-        const newItems = items.map((item: any) => item.id === id ? { ...item, checked: !item.checked } : item)
-        setItems(newItems)
+        setValue(val => {
+            const index = val.indexOf(id)
+            index === -1 ? val.push(id) : val.splice(index, 1)
+            return [...val]
+        })
     }
 
     const filterData = () => {
-        const res = getSearchRes('zgj')
-        onButtonClick(res)
-        onIsOpen(false)
+        onFilter(_value)
+        setOpen(false)
     }
-    const getSearchKey = (e) => {
-        const key = e.target.value
-        let newItems = []
-        if (!key.toUpperCase()) {
-            newItems = setDefault(arr)
-        } else {
-            newItems = setDefault(arr.filter(a => a.name.toUpperCase().includes(key.toUpperCase())))
-        }
-        setItems(newItems)
-    }
+    // 搜索
+    const _options = useMemo(() => {
+        if (!searchKey) return options
+        return options.filter(a => a[nameKey].toUpperCase().includes(searchKey.toUpperCase()))
+    }, [searchKey, options])
 
-    return <FilterUserGroup
-        options={items}
-        placeholder={placeholder}
-        onChecked={handlerChecked}
-        search={getSearchKey}
-        onClearChecked={() => setItems(setDefault(arr))}
-        onOk={filterData}
-    />
+    return <Popover open={open} onOpenChange={(bln) => setOpen(bln)}>
+        <PopoverTrigger>
+            <FilterIcon onClick={() => setOpen(!open)} className={_value.length ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
+        </PopoverTrigger>
+        <PopoverContent>
+            <FilterUserGroup
+                value={_value}
+                options={_options}
+                nameKey={nameKey}
+                placeholder={placeholder}
+                onChecked={handlerChecked}
+                search={(e) => setSearchKey(e.target.value)}
+                onClearChecked={() => setValue([])}
+                onOk={filterData}
+            />
+        </PopoverContent>
+    </Popover>
+
 }
+
 
 export default function Users(params) {
     const { user } = useContext(userContext);
     const { t } = useTranslation()
 
-    const { page, pageSize, data: users, total, loading, setPage, search, reload, filterData } = useTable({ pageSize: 13 }, (param) =>
-        getUsersApi(param.keyword, param.page, param.pageSize)
+    const { page, pageSize, data: users, total, loading, setPage, search, reload, filterData } = useTable({ pageSize: 20 }, (param) =>
+        getUsersApi({
+            ...param,
+            name: param.keyword
+        })
     )
 
     // 禁用确认
@@ -90,32 +99,23 @@ export default function Users(params) {
     }
 
     // 编辑
-    const [roleOpenId, setRoleOpenId] = useState(null)
+    const [currentUser, setCurrentUser] = useState(null)
     const userPwdModalRef = useRef(null)
     const handleRoleChange = () => {
-        setRoleOpenId(null)
+        setCurrentUser(null)
         reload()
     }
 
-    // 搜索返回的数据
-    const [data, setData] = useState('')
-    const getFilterData = (data) => {
-        setData(data)
-    }
-
-    const [flagUserGroup, setFlagUserGroup] = useState(false)
-    const [flagRole, setFlagRole] = useState(false)
-
     // 获取用户组类型数据
     const [userGroups, setUserGroups] = useState([])
-    const getUserGoups = () => {
-        const res = getUserGroupTypes()
-        setUserGroups(res)
+    const getUserGoups = async () => {
+        const res = await getUserGroupsApi()
+        setUserGroups(res.records)
     }
     // 获取角色类型数据
     const [roles, setRoles] = useState([])
-    const getRoles = () => {
-        const res = getRoleTypes()
+    const getRoles = async () => {
+        const res = await getRolesApi()
         setRoles(res)
     }
 
@@ -140,29 +140,23 @@ export default function Users(params) {
                         <TableHead>
                             <div className="flex items-center">
                                 {t('system.userGroup')}
-                                <Popover open={flagUserGroup} onOpenChange={() => setFlagUserGroup(!flagUserGroup)}> {/* onOpenChange点击空白区域触发 */}
-                                    <PopoverTrigger>
-                                        <FilterIcon onClick={() => setFlagUserGroup(!flagUserGroup)} className="text-gray-400 ml-3" />
-                                    </PopoverTrigger>
-                                    <PopoverContent>
-                                        <UsersFilter arr={userGroups} placeholder={t('system.searchUserGroups')}
-                                            onButtonClick={getFilterData} onIsOpen={(is) => setFlagUserGroup(is)}></UsersFilter>
-                                    </PopoverContent>
-                                </Popover>
+                                <UsersFilter
+                                    options={userGroups}
+                                    nameKey='group_name'
+                                    placeholder={t('system.searchUserGroups')}
+                                    onFilter={(ids) => filterData({ groupId: ids })}
+                                ></UsersFilter>
                             </div>
                         </TableHead>
                         <TableHead>
                             <div className="flex items-center">
                                 {t('system.role')}
-                                <Popover open={flagRole} onOpenChange={() => setFlagRole(!flagRole)}>
-                                    <PopoverTrigger>
-                                        <FilterIcon onClick={() => setFlagRole(!flagRole)} className="text-blue-500 ml-3" />
-                                    </PopoverTrigger>
-                                    <PopoverContent>
-                                        <UsersFilter arr={roles} placeholder={t('system.searchRoles')}
-                                            onButtonClick={getFilterData} onIsOpen={(is) => setFlagRole(is)}></UsersFilter>
-                                    </PopoverContent>
-                                </Popover>
+                                <UsersFilter
+                                    options={roles}
+                                    nameKey='role_name'
+                                    placeholder={t('system.searchRoles')}
+                                    onFilter={(ids) => filterData({ roleId: ids })}
+                                ></UsersFilter>
                             </div>
                         </TableHead>
                         <TableHead>{t('createTime')}</TableHead>
@@ -174,13 +168,13 @@ export default function Users(params) {
                         <TableRow key={el.id}>
                             <TableCell className="font-medium max-w-md truncate">{el.user_name}</TableCell>
                             {/* <TableCell>{el.role}</TableCell> */}
-                            <TableCell>用户组A</TableCell>
-                            <TableCell>角色B</TableCell>
+                            <TableCell className="break-all">{(el.groups || []).map(el => el.name).join(',')}</TableCell>
+                            <TableCell className="break-all">{(el.roles || []).map(el => el.name).join(',')}</TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
                                 {/* 编辑 */}
                                 {user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-6">{t('edit')}</Button> :
-                                    <Button variant="link" onClick={() => setRoleOpenId(el.user_id)} className="px-0 pl-6">{t('edit')}</Button>}
+                                    <Button variant="link" onClick={() => setCurrentUser(el)} className="px-0 pl-6">{t('edit')}</Button>}
                                 {/* 重置密码 */}
                                 {user.role === 'admin' && <Button variant="link" className="px-0 pl-6" onClick={() => userPwdModalRef.current.open(el.user_id)}>重置密码</Button>}
                                 {/* 禁用 */}
@@ -208,7 +202,7 @@ export default function Users(params) {
             />
         </div>
 
-        <UserRoleModal id={roleOpenId} onClose={() => setRoleOpenId(null)} onChange={handleRoleChange}></UserRoleModal>
+        <UserRoleModal user={currentUser} onClose={() => setCurrentUser(null)} onChange={handleRoleChange}></UserRoleModal>
         <UserPwdModal ref={userPwdModalRef} onSuccess={reload} />
     </div>
 };

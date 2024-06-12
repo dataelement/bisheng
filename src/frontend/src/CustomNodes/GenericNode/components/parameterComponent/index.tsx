@@ -33,7 +33,7 @@ import {
   nodeColors,
   nodeIconsLucide
 } from "../../../../utils";
-import KnowledgeSelect from "@/components/bs-comp/selectKnowledge";
+import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 
 export default function ParameterComponent({
   left,

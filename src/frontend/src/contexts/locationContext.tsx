@@ -74,7 +74,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         officeUrl: res.office_url,
         dialogTips: res.dialog_tips,
         dialogQuickSearch: res.dialog_quick_search,
-        websocketHost: res.websocket_url || window.location.host
+        websocketHost: res.websocket_url || window.location.host,
+        isPro: true
       })
     })
   }, [])

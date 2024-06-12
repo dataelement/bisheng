@@ -250,7 +250,7 @@ export async function postValidatePrompt(
  */
 export const getChatsApi = (page) => {
   return (axios.get(`/api/v1/chat/list?page=${page}&limit=40`) as Promise<any[]>).then(res =>
-    res?.filter((el,i) => el.chat_id && i < 20) || []
+    res?.filter((el,i) => el.chat_id) || []
   )
 };
 
