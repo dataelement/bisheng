@@ -81,6 +81,8 @@ async def regist(*, user: UserCreate):
                 session.commit()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f'数据库写入错误， {str(e)}') from e
+        # 将用户写入到默认用户组下
+        UserGroupDao.add_default_user_group(db_user.user_id)
         return resp_200(db_user)
 
 
@@ -93,6 +95,7 @@ async def sso(*, user: UserCreate, Authorize: AuthJWT = Depends()):
         if not user_exist:
             logger.info('act=create_user account={}', account_name)
             user_exist = UserDao.create_user(user)
+            UserGroupDao.add_default_user_group(user_exist.user_id)
 
         access_token, refresh_token, _ = gen_user_jwt(user_exist)
         return resp_200({'access_token': access_token, 'refresh_token': refresh_token})

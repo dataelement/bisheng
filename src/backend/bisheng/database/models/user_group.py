@@ -120,3 +120,13 @@ class UserGroupDao(UserGroupBase):
             session.add_all(user_groups)
             session.commit()
             return user_groups
+
+    @classmethod
+    def add_default_user_group(cls, user_id: int) -> None:
+        """
+        给默认用户组内添加用户
+        """
+        with session_getter() as session:
+            user_group = UserGroup(user_id=user_id, group_id=2, is_group_admin=False)
+            session.add(user_group)
+            session.commit()

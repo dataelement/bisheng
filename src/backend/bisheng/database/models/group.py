@@ -22,6 +22,7 @@ class GroupBase(SQLModelSerializable):
 
 
 class Group(GroupBase, table=True):
+    # id = 2 表示默认用户组
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
