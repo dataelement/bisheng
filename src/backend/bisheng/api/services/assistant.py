@@ -134,7 +134,7 @@ class AssistantService(AssistantUtils):
                 batch_resource.append(GroupResource(
                     group_id=one.group_id,
                     third_id=assistant.id.hex,
-                    type=ResourceTypeEnum.ASSISTANT))
+                    type=ResourceTypeEnum.ASSISTANT.value))
             GroupResourceDao.insert_group_batch(batch_resource)
 
     # 删除助手

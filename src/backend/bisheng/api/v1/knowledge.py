@@ -221,7 +221,7 @@ def create_knowledge_hook(knowledge: Knowledge, user_payload: UserPayload):
             batch_resource.append(GroupResource(
                 group_id=one.group_id,
                 third_id=knowledge.id,
-                type=ResourceTypeEnum.KNOWLEDGE))
+                type=ResourceTypeEnum.KNOWLEDGE.value))
         GroupResourceDao.insert_group_batch(batch_resource)
     return True
 

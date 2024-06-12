@@ -60,7 +60,7 @@ def create_flow_hook(flow: Flow, user_payload: UserPayload):
             batch_resource.append(GroupResource(
                 group_id=one.group_id,
                 third_id=flow.id.hex,
-                type=ResourceTypeEnum.FLOW))
+                type=ResourceTypeEnum.FLOW.value))
         GroupResourceDao.insert_group_batch(batch_resource)
 
 
