@@ -136,8 +136,8 @@ export default function EvaluatingCreate() {
         []
     );
 
-    const handleInputChange = (event) => {
-        const newName = event.target.value;        
+    const handleInputChange = (event) => {        
+        const newName = event.target.value;                
         setSearchName(newName);
         DebouncedSearch(newName);
     };
@@ -179,12 +179,12 @@ export default function EvaluatingCreate() {
                                     if(!selectedType) return handleError([t('evaluation.enterExecType')])
                                 }}>
                                     <SelectTrigger slot="" className="max-w-[200px]">
-                                        <SelectValue className={`mt-2 max-w-[200px] ${error.name && 'border-red-400'}`} placeholder={t('evaluation.selectPlaceholder')} />
+                                        <SelectValue className='mt-2' placeholder={t('evaluation.selectPlaceholder')} />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectViewport>
-                                            <Input value={searchName} onChange={handleInputChange} className={`mt-2 max-w-[200px] ${error.name && 'border-red-400'}`} placeholder={t('evaluation.selectInputPlaceholder')} />
-                                            <SelectGroup>
+                                            <Input value={searchName} onChange={handleInputChange} className='mt-2' placeholder={t('evaluation.selectInputPlaceholder')} />
+                                            <SelectGroup className="mt-2">
                                                 {dataSource.map(item =>{
                                                     return <SelectItem value={item.id}>{item.name}</SelectItem>
                                                 })}
