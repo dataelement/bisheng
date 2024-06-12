@@ -4,7 +4,7 @@ from typing import List, Optional
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, delete, text
-from sqlmodel import Field, select
+from sqlmodel import Field, select, update
 
 from bisheng.database.models.group import DefaultGroup
 
