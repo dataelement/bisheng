@@ -98,7 +98,8 @@ class AssistantService(AssistantUtils):
 
     # 创建助手
     @classmethod
-    async def create_assistant(cls, assistant: Assistant) -> UnifiedResponseModel[AssistantInfo]:
+    async def create_assistant(cls, login_user: UserPayload, assistant: Assistant) \
+            -> UnifiedResponseModel[AssistantInfo]:
 
         # 检查下是否有重名
         if cls.judge_name_repeat(assistant.name, assistant.user_id):
@@ -115,6 +116,7 @@ class AssistantService(AssistantUtils):
         assistant, _, _ = await cls.get_auto_info(assistant)
         assistant = AssistantDao.create_assistant(assistant)
 
+        cls.create_assistant_hook(assistant, login_user)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=[],
                                            flow_list=[],
@@ -136,6 +138,7 @@ class AssistantService(AssistantUtils):
                     third_id=assistant.id.hex,
                     type=ResourceTypeEnum.ASSISTANT.value))
             GroupResourceDao.insert_group_batch(batch_resource)
+        return True
 
     # 删除助手
     @classmethod

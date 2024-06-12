@@ -62,9 +62,9 @@ async def create_assistant(*, req: AssistantCreateReq, Authorize: AuthJWT = Depe
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-
-    assistant = Assistant(**req.dict(), user_id=current_user.get('user_id'))
-    return await AssistantService.create_assistant(assistant)
+    login_user = UserPayload(**current_user)
+    assistant = Assistant(**req.dict(), user_id=login_user.user_id)
+    return await AssistantService.create_assistant(login_user, assistant)
 
 
 @router.put('', response_model=UnifiedResponseModel[AssistantInfo])

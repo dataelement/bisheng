@@ -227,3 +227,26 @@ class FlowDao(FlowBase):
                 if role_access:
                     flow_id_extra = [access.third_id for access in role_access]
         return FlowDao.get_flows(user_id, flow_id_extra, keyword, FlowStatus.ONLINE.value, page=page, limit=limit)
+
+    @classmethod
+    def filter_flows_by_ids(cls, flow_ids: List[UUID], keyword: str = None, page: int = 0, limit: int = 0) \
+            -> (List[Flow], int):
+        statement = select(Flow)
+        count_statement = select(func.count(Flow.id))
+        if flow_ids:
+            statement = statement.where(Flow.id.in_(flow_ids))
+            count_statement = count_statement.where(Flow.id.in_(flow_ids))
+        if keyword:
+            statement = statement.where(or_(
+                Flow.name.like(f'%{keyword}%'),
+                Flow.description.like(f'%{keyword}%')
+            ))
+            count_statement = count_statement.where(or_(
+                Flow.name.like(f'%{keyword}%'),
+                Flow.description.like(f'%{keyword}%')
+            ))
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(Flow.update_time.desc())
+        with session_getter() as session:
+            return session.exec(statement).all(), session.scalar(count_statement)

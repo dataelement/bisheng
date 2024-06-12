@@ -1,9 +1,16 @@
 from datetime import datetime
-from typing import List
+from typing import List, Any
+from uuid import UUID
 
+from fastapi.encoders import jsonable_encoder
+
+from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead
+from bisheng.database.models.assistant import AssistantDao
+from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead, DefaultGroup
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from loguru import logger
@@ -128,7 +135,75 @@ class RoleGroupService():
         GroupDao.update_group_update_user(group_id, login_user.user_id)
 
     def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum, name: str,
-                            page_size: int, page_num: int):
-        """设置用户组管理员"""
-        return GroupResourceDao.get_group_resource(group_id, resource_type, name, page_size,
-                                                   page_num)
+                            page_size: int, page_num: int) -> (List[Any], int):
+        """ 获取用户下的资源 """
+        if resource_type.value == ResourceTypeEnum.FLOW.value:
+            return self.get_group_flow(group_id, name, page_size, page_num)
+        elif resource_type.value == ResourceTypeEnum.KNOWLEDGE.value:
+            return self.get_group_knowledge(group_id, name, page_size, page_num)
+        elif resource_type.value == ResourceTypeEnum.ASSISTANT.value:
+            return self.get_group_assistant(group_id, name, page_size, page_num)
+        return [], 0
+
+    def get_user_map(self, user_ids: set[int]):
+        user_list = UserDao.get_user_by_ids(list(user_ids))
+        user_map = {user.user_id: user.user_name for user in user_list}
+        return user_map
+
+    def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any], int):
+        # 默认分组的话，直接搜索和查询对应的资源数据表即可
+        if group_id == DefaultGroup:
+            resource_list = []
+        else:
+            resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.FLOW)
+            if not resource_list:
+                return [], 0
+        res = []
+        flow_ids = [UUID(resource.third_id) for resource in resource_list]
+        data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size)
+        db_user_ids = {one.user_id for one in data}
+        user_map = self.get_user_map(db_user_ids)
+        for one in data:
+            one_dict = jsonable_encoder(one)
+            one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
+            res.append(one_dict)
+
+        return res, total
+
+    def get_group_knowledge(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any], int):
+        """ 获取用户组下的知识库列表 """
+        # 查询用户组下的知识库ID列表
+        if group_id == DefaultGroup:
+            resource_list = []
+        else:
+            resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.KNOWLEDGE)
+            if not resource_list:
+                return [], 0
+        res = []
+        knowledge_ids = [int(resource.third_id) for resource in resource_list]
+        # 查询知识库
+        data, total = KnowledgeDao.filter_knowledge_by_ids(knowledge_ids, keyword, page_num, page_size)
+        db_user_ids = {one.user_id for one in data}
+        user_map = self.get_user_map(db_user_ids)
+        for one in data:
+            one_dict = jsonable_encoder(one)
+            one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
+            res.append(one_dict)
+        return res, total
+
+    def get_group_assistant(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any], int):
+        """ 获取用户组下的助手列表 """
+        # 查询用户组下的助手ID列表
+        if group_id == DefaultGroup:
+            resource_list = []
+        else:
+            resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.ASSISTANT)
+            if not resource_list:
+                return [], 0
+        res = []
+        assistant_ids = [UUID(resource.third_id) for resource in resource_list]  # 查询助手
+        data, total = AssistantDao.filter_assistant_by_id(assistant_ids, keyword, page_num, page_size)
+        for one in data:
+            simple_one = AssistantService.return_simple_assistant_info(one)
+            res.append(simple_one)
+        return res, total

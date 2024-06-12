@@ -1,5 +1,4 @@
 # build router
-from typing import List, Annotated
 from uuid import UUID
 import json
 from typing import Annotated, List, Optional
@@ -12,26 +11,20 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import check_permissions
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, AssistantSimpleInfo
 from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.group import GroupRead
 from bisheng.database.models.group_resource import ResourceTypeEnum, GroupResourceDao
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user import UserDao
-from bisheng.database.models.user_group import UserGroupCreate, UserGroupRead
-from fastapi import APIRouter, Body, Depends, Query
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.models.group import Group, GroupCreate, GroupRead
-from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.user import User
 from bisheng.database.models.user_group import UserGroupDao, UserGroupRead
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/group', tags=['User'])
 
 
 @router.get('/list', response_model=UnifiedResponseModel[List[GroupRead]])
-@router.get('/list', response_model=UnifiedResponseModel[List[GroupRead]], status_code=200)
 async def get_all_group(Authorize: AuthJWT = Depends()):
     """
     获取所有分组
@@ -152,27 +145,34 @@ async def set_update_user(group_id: Annotated[int, Body(embed=True)],
     return resp_200(RoleGroupService().set_group_update_user(login_user, group_id))
 
 
-@router.get('/get_group_flows',
+@router.get('/get_group_resources',
             response_model=UnifiedResponseModel[List[UserGroupRead]],
             status_code=200)
-async def get_group_flows(*,
-                          group_id: int,
-                          resource_type: int,
-                          name: Optional[str] = None,
-                          page_size: Optional[int] = 10,
-                          page_num: Optional[int] = 1,
-                          Authorize: AuthJWT = Depends()):
+async def get_group_resources(*,
+                              group_id: int,
+                              resource_type: int,
+                              name: Optional[str] = None,
+                              page_size: Optional[int] = 10,
+                              page_num: Optional[int] = 1,
+                              user: UserPayload = Depends(get_login_user)):
     """
-    获取分组下所有的技能
+    获取用户组下的资源列表
     """
-    # await check_permissions(Authorize, ['admin'])
-
-    return resp_200(RoleGroupService().get_group_resources(
+    # 判断是否是用户组的管理员
+    if not user.check_group_admin(group_id):
+        return UnAuthorizedError.return_resp()
+    res, total = RoleGroupService().get_group_resources(
         group_id,
         resource_type=ResourceTypeEnum(resource_type),
         name=name,
         page_size=page_size,
-        page_num=page_num))
+        page_num=page_num)
+    return resp_200(data={
+        "data": res,
+        "total": total
+    })
+
+
 @router.get("/roles", response_model=UnifiedResponseModel)
 async def get_group_roles(*,
                           group_id: int = Query(..., description="用户组ID"),
