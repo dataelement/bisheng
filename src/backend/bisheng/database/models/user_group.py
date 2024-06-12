@@ -169,9 +169,4 @@ class UserGroupDao(UserGroupBase):
             session.exec(statement)
             session.commit()
 
-    @classmethod
-    def get_one_user_group(cls, user_id: int, group_id: int) -> UserGroup | None:
-        with session_getter() as session:
-            statement = select(UserGroup).where(UserGroup.user_id == user_id,
-                                                UserGroup.group_id == group_id)
-            return session.exec(statement).first()
+

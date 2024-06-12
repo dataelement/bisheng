@@ -15,7 +15,6 @@ from bisheng.api.JWT import get_login_user
 from bisheng.api.errcode.user import UserNotPasswordError, UserValidateError, UserPasswordExpireError
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import gen_user_jwt, get_assistant_list_by_access, UserPayload, gen_user_role
-from bisheng.api.services.user_service import get_assistant_list_by_access, UserPayload
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
@@ -24,9 +23,6 @@ from bisheng.database.models.group import GroupDao
 from bisheng.database.models.knowledge import Knowledge
 from bisheng.database.models.role import Role, RoleCreate, RoleUpdate, RoleDao
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleRefresh
-from bisheng.database.models.user import User, UserCreate, UserLogin, UserRead, UserUpdate, UserDao
-from bisheng.database.models.user_group import UserGroupDao
-from bisheng.database.models.user_role import UserRole, UserRoleCreate
 from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao

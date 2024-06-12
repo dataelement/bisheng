@@ -60,14 +60,20 @@ class UserPayload:
             检查用户是否是某个组的管理员
         """
         # 判断是否是用户组的管理员
-        user_group = UserGroupDao.get_one_user_group(self.user_id, group_id)
+        user_group = UserGroupDao.get_user_admin_group(self.user_id)
         if not user_group:
             return False
-        return user_group.is_group_admin
+        for one in user_group:
+            if one.group_id == group_id:
+                return True
+        return False
 
     @wrapper_access_check
     def check_groups_admin(self, group_ids: List[int]) -> bool:
-        user_groups = UserGroupDao.get_user_group(self.user_id)
+        """
+        检查用户是否是用户组列表中的管理员，有一个就是true
+        """
+        user_groups = UserGroupDao.get_user_admin_group(self.user_id)
         for one in user_groups:
             if one.is_group_admin and one.group_id in group_ids:
                 return True
