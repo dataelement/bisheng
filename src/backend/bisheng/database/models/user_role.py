@@ -51,3 +51,12 @@ class UserRoleDao(UserRoleBase):
             if page and limit:
                 statement = statement.offset((page - 1) * limit).limit(limit)
             return session.exec(statement).all()
+
+    @classmethod
+    def get_admins_user(cls) -> List[UserRole]:
+        """
+        获取所有超级管理的账号
+        """
+        with session_getter() as session:
+            statement = select(UserRole).where(UserRole.role_id == 1)
+            return session.exec(statement).all()

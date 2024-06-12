@@ -44,8 +44,8 @@ def gen_user_role(db_user: User):
         role = 'admin'
     else:
         # 判断是否是用户组管理员
-        db_user_groups = UserGroupDao.get_user_group(db_user.user_id)
-        if next((user_group for user_group in db_user_groups if user_group.is_group_admin), None):
+        db_user_groups = UserGroupDao.get_user_admin_group(db_user.user_id)
+        if len(db_user_groups) > 0:
             role = 'group_admin'
         else:
             role = [user_role.role_id for user_role in db_user_role]

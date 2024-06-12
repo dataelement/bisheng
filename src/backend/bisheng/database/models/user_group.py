@@ -54,6 +54,15 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_user_admin_group(cls, user_id: int) -> List[UserGroup]:
+        """
+        获取用户是管理员的用户组
+        """
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 1)
+            return session.exec(statement).all()
+
+    @classmethod
     def insert_user_group(cls, user_group: UserGroupCreate) -> UserGroup:
         with session_getter() as session:
             user_group = UserGroup.validate(user_group)

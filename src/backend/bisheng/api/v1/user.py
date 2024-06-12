@@ -133,6 +133,28 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
         raise HTTPException(status_code=500, detail='密码不正确')
 
 
+@router.get('/user/admin', response_model=UnifiedResponseModel[UserRead], status_code=200)
+async def get_admins(Authorize: AuthJWT = Depends()):
+    """
+    获取所有的超级管理员账号
+    """
+    # check if user already exist
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    login_user = UserPayload(**payload)
+    if not login_user.is_admin():
+        raise HTTPException(status_code=500, detail='无查看权限')
+    try:
+        # 获取所有超级管理员账号
+        admins = UserRoleDao.get_admins_user()
+        admins_ids = [admin.user_id for admin in admins]
+        admin_users = UserDao.get_user_by_ids(admins_ids)
+        res = [UserRead(**one.__dict__) for one in admin_users]
+        return resp_200(res)
+    except Exception:
+        raise HTTPException(status_code=500, detail='用户信息失败')
+
+
 @router.get('/user/info', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def get_info(Authorize: AuthJWT = Depends()):
     # check if user already exist
