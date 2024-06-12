@@ -1,5 +1,7 @@
+from datetime import datetime
 from typing import List
 
+from bisheng.api.services.user_service import UserPayload
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.user import User, UserDao
@@ -33,22 +35,26 @@ class RoleGroupService():
             ]
         return groupReads
 
-    def create_group(self, group: GroupCreate) -> Group:
+    def create_group(self, login_user: UserPayload, group: GroupCreate) -> Group:
         """新建用户组"""
         group_admin = group.group_admins
+        group.create_user = login_user.user_id
+        group.update_user = login_user.user_id
         group = GroupDao.insert_group(group)
         if group_admin:
             logger.info('set_admin group_admins={}', group_admin)
             self.set_group_admin(group_admin, group.id)
         return group
 
-    def update_group(self, group: Group) -> Group:
+    def update_group(self, login_user: UserPayload, group: Group) -> Group:
         """更新用户组"""
         exist_group = GroupDao.get_user_group(group.id)
         if not exist_group:
             raise ValueError('用户组不存在')
         exist_group.group_name = group.group_name
         exist_group.remark = group.group_name
+        exist_group.update_user = login_user.user_id
+        exist_group.update_time = datetime.now()
 
         group = GroupDao.update_group(exist_group)
         return group
@@ -78,9 +84,12 @@ class RoleGroupService():
 
         return UserGroupDao.insert_user_group(user_group)
 
-    def replace_user_groups(self, user_id: int, group_ids: List[int]):
+    def replace_user_groups(self, login_user: UserPayload, user_id: int, group_ids: List[int]):
         """ 覆盖用户的所在的用户组 """
         UserGroupDao.replace_user_groups(user_id, group_ids)
+        # 更新用户组的最近修改人
+        for one in group_ids:
+            GroupDao.update_group_update_user(one, login_user.user_id)
         return None
 
     def get_user_groups_list(self, user_id: int) -> List[GroupRead]:

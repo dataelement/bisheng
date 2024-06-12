@@ -47,7 +47,9 @@ async def create_group(group: GroupCreate, Authorize: AuthJWT = Depends()):
     新建用户组
     """
     await check_permissions(Authorize, ['admin'])
-    return resp_200(RoleGroupService().create_group(group))
+    payload = json.loads(Authorize.get_jwt_subject())
+    login_user = UserPayload(**payload)
+    return resp_200(RoleGroupService().create_group(login_user, group))
 
 
 @router.put('/create', response_model=UnifiedResponseModel[GroupRead], status_code=200)
@@ -56,7 +58,9 @@ async def update_group(group: Group, Authorize: AuthJWT = Depends()):
     编辑用户组
     """
     await check_permissions(Authorize, ['admin'])
-    return resp_200(RoleGroupService().update_group(group))
+    payload = json.loads(Authorize.get_jwt_subject())
+    login_user = UserPayload(**payload)
+    return resp_200(RoleGroupService().update_group(login_user, group))
 
 
 @router.delete('/create', status_code=200)
@@ -78,7 +82,9 @@ async def set_user_group(user_id: Annotated[int, Body(embed=True)],
     设置用户分组, 批量替换
     """
     await check_permissions(Authorize, ['admin'])
-    return resp_200(RoleGroupService().replace_user_groups(user_id, group_id))
+    payload = json.loads(Authorize.get_jwt_subject())
+    login_user = UserPayload(**payload)
+    return resp_200(RoleGroupService().replace_user_groups(login_user, user_id, group_id))
 
 
 @router.get('/get_user_group',

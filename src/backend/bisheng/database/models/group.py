@@ -3,13 +3,15 @@ from typing import Dict, List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, delete, text
+from sqlalchemy import Column, DateTime, delete, text, update
 from sqlmodel import Field, select
 
 
 class GroupBase(SQLModelSerializable):
     group_name: str = Field(index=False, description='前端展示名称', unique=True)
     remark: Optional[str] = Field(index=False)
+    create_user: Optional[int] = Field(index=True, description="创建用户的ID")
+    update_user: Optional[int] = Field(description="更新用户的ID")
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
@@ -81,3 +83,11 @@ class GroupDao(GroupBase):
             session.commit()
             session.refresh(group)
             return group
+
+    @classmethod
+    def update_group_update_user(cls, group_id: int, user_id: int):
+        with session_getter() as session:
+            statement = update(Group).where(Group.id == group_id).values(update_user=user_id,
+                                                                         update_time=datetime.now())
+            session.exec(statement)
+            session.commit()
