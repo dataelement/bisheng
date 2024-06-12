@@ -99,22 +99,29 @@ class RoleGroupService():
 
     def set_group_admin(self, login_user: UserPayload, user_ids: List[int], group_id: int):
         """设置用户组管理员"""
-        usergroups = UserGroupDao.is_users_in_group(group_id, user_ids)
-        ug = []
-        if usergroups:
-            for user in usergroups:
-                user_ids.remove(user.user_id)
-                user.is_group_admin = True
-            ug.append(UserGroupDao.update_user_groups(usergroups))
-        if user_ids:
+        # 获取目前用户组的管理员列表
+        user_group_admins = UserGroupDao.get_groups_admins([group_id])
+        res = []
+        need_delete_admin = []
+        need_add_admin = user_ids
+        if user_group_admins:
+            for user in user_group_admins:
+                if user.user_id in need_add_admin:
+                    res.append(user)
+                    need_add_admin.remove(user.user_id)
+                else:
+                    need_delete_admin.append(user.user_id)
+        if need_add_admin:
             # 可以分配非组内用户为管理员。进行用户创建
-            for user_id in user_ids:
-                ug.append(
+            for user_id in need_add_admin:
+                res.append(
                     self.insert_user_group(
                         UserGroupCreate(user_id=user_id, group_id=group_id, is_group_admin=True)))
+        if need_delete_admin:
+            UserGroupDao.delete_group_admins(group_id, need_delete_admin)
         # 修改用户组的最近修改人
         GroupDao.update_group_update_user(group_id, login_user.user_id)
-        return ug
+        return res
 
     def set_group_update_user(self, login_user: UserPayload, group_id: int):
         """设置用户组管理员"""

@@ -6,6 +6,9 @@ from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, delete, text, update
 from sqlmodel import Field, select
 
+# 默认用户组的ID
+DefaultGroup = 2
+
 
 class GroupBase(SQLModelSerializable):
     group_name: str = Field(index=False, description='前端展示名称', unique=True)
