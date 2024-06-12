@@ -40,3 +40,23 @@ class UserRoleDao(UserRoleBase):
     def get_user_roles(cls, user_id: int) -> List[UserRole]:
         with session_getter() as session:
             return session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
+
+    @classmethod
+    def get_roles_user(cls, role_ids: List[int], page: int = 0, limit: int = 0) -> List[UserRole]:
+        """
+        获取角色对应的用户
+        """
+        with session_getter() as session:
+            statement = select(UserRole).where(UserRole.role_id.in_(role_ids))
+            if page and limit:
+                statement = statement.offset((page - 1) * limit).limit(limit)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_admins_user(cls) -> List[UserRole]:
+        """
+        获取所有超级管理的账号
+        """
+        with session_getter() as session:
+            statement = select(UserRole).where(UserRole.role_id == 1)
+            return session.exec(statement).all()

@@ -1,8 +1,8 @@
 # Router for base api
 from bisheng.api.v1 import (assistant_router, chat_router, component_router, endpoints_router,
-                            finetune_router, flows_router, knowledge_router, qa_router,
-                            report_router, server_router, skillcenter_router, user_router,
-                            validate_router, variable_router, group_router)
+                            finetune_router, flows_router, group_router, knowledge_router,
+                            qa_router, report_router, server_router, skillcenter_router,
+                            user_router, validate_router, variable_router)
 from bisheng.api.v2 import chat_router_rpc, knowledge_router_rpc, rpc_router_rpc
 from fastapi import APIRouter
 

@@ -124,3 +124,14 @@ gpts:
     # 天眼查工具所需的配置
     tianyancha:
       api_key: ""
+
+
+system_login_method:
+    # SSO 登录
+    SSO_OAuth: true
+    # LDAP 登录
+    LDAP: true
+    LDAP服务器地址配置: XX
+    
+    # 切换 SSO/LDAP 登录后管理员用户名
+    admin_username: admin

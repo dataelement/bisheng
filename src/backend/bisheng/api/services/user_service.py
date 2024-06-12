@@ -1,3 +1,5 @@
+import json
+
 import functools
 from typing import List
 
@@ -5,6 +7,11 @@ from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeRead
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.user import User, UserDao
+from bisheng.database.models.user_group import UserGroupDao
+from bisheng.database.models.user_role import UserRoleDao
+from fastapi import HTTPException
+from fastapi_jwt_auth import AuthJWT
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 
@@ -67,6 +74,42 @@ class UserPayload:
         return False
 
 
+def sso_login():
+    pass
+
+
+def gen_user_role(db_user: User):
+    # 查询角色
+    db_user_role = UserRoleDao.get_user_roles(db_user.user_id)
+    if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
+        # 是管理员，忽略其他的角色
+        role = 'admin'
+    else:
+        # 判断是否是用户组管理员
+        db_user_groups = UserGroupDao.get_user_admin_group(db_user.user_id)
+        if len(db_user_groups) > 0:
+            role = 'group_admin'
+        else:
+            role = [user_role.role_id for user_role in db_user_role]
+    return role
+
+
+def gen_user_jwt(db_user: User):
+    if 1 == db_user.delete:
+        raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
+    # 查询角色
+    role = gen_user_role(db_user)
+    # 生成JWT令牌
+    payload = {'user_name': db_user.user_name, 'user_id': db_user.user_id, 'role': role}
+    # Create the tokens and passing to set_access_cookies or set_refresh_cookies
+    access_token = AuthJWT().create_access_token(subject=json.dumps(payload), expires_time=86400)
+
+    refresh_token = AuthJWT().create_refresh_token(subject=db_user.user_name)
+
+    # Set the JWT cookies in the response
+    return access_token, refresh_token, role
+
+
 def get_knowledge_list_by_access(role_id: int, name: str, page_num: int, page_size: int):
     count_filter = []
     if name:
@@ -95,6 +138,7 @@ def get_knowledge_list_by_access(role_id: int, name: str, page_num: int, page_si
 
 
 def get_flow_list_by_access(role_id: int, name: str, page_num: int, page_size: int):
+
     count_filter = []
     if name:
         count_filter.append(Flow.name.like('%{}%'.format(name)))
@@ -122,6 +166,7 @@ def get_flow_list_by_access(role_id: int, name: str, page_num: int, page_size: i
 
 
 def get_assistant_list_by_access(role_id: int, name: str, page_num: int, page_size: int):
+
     count_filter = []
     if name:
         count_filter.append(Assistant.name.like('%{}%'.format(name)))

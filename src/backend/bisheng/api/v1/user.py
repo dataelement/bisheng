@@ -6,7 +6,7 @@ import uuid
 from base64 import b64decode, b64encode
 from datetime import datetime
 from io import BytesIO
-from typing import Optional
+from typing import List, Optional, Dict, Annotated
 from uuid import UUID
 
 import rsa
@@ -14,22 +14,27 @@ import rsa
 from bisheng.api.JWT import get_login_user
 from bisheng.api.errcode.user import UserNotPasswordError, UserValidateError, UserPasswordExpireError
 from bisheng.api.services.captcha import verify_captcha
+from bisheng.api.services.user_service import gen_user_jwt, get_assistant_list_by_access, UserPayload, gen_user_role
 from bisheng.api.services.user_service import get_assistant_list_by_access, UserPayload
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
+from bisheng.database.models.group import GroupDao
 from bisheng.database.models.knowledge import Knowledge
-from bisheng.database.models.role import Role, RoleCreate, RoleUpdate
+from bisheng.database.models.role import Role, RoleCreate, RoleUpdate, RoleDao
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleRefresh
 from bisheng.database.models.user import User, UserCreate, UserLogin, UserRead, UserUpdate, UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRole, UserRoleCreate
+from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
+from bisheng.database.models.user_group import UserGroupDao
+from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao
 from bisheng.settings import settings
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR
 from bisheng.utils.logger import logger
 from captcha.image import ImageCaptcha
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_jwt_auth import AuthJWT
@@ -84,7 +89,26 @@ async def regist(*, user: UserCreate):
                 session.commit()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f'数据库写入错误， {str(e)}') from e
+        # 将用户写入到默认用户组下
+        UserGroupDao.add_default_user_group(db_user.user_id)
         return resp_200(db_user)
+
+
+@router.post('/user/sso', response_model=UnifiedResponseModel[UserRead], status_code=201)
+async def sso(*, user: UserCreate, Authorize: AuthJWT = Depends()):
+    '''给sso提供的接口'''
+    if True:  # 判断sso 是否打开
+        account_name = user.user_name
+        user_exist = UserDao.get_unique_user_by_name(account_name)
+        if not user_exist:
+            logger.info('act=create_user account={}', account_name)
+            user_exist = UserDao.create_user(user)
+            UserGroupDao.add_default_user_group(user_exist.user_id)
+
+        access_token, refresh_token, _ = gen_user_jwt(user_exist)
+        return resp_200({'access_token': access_token, 'refresh_token': refresh_token})
+    else:
+        raise ValueError('不支持接口')
 
 
 @router.post('/user/login', response_model=UnifiedResponseModel[UserRead], status_code=201)
@@ -132,29 +156,35 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
         if (datetime.now() - db_user.password_update_time).days >= password_conf.password_valid_period:
             return UserPasswordExpireError.return_resp()
 
-    # 查询角色
-    with session_getter() as session:
-        db_user_role = session.exec(
-            select(UserRole).where(UserRole.user_id == db_user.user_id)).all()
-
-    if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
-        # 是管理员，忽略其他的角色
-        role = 'admin'
-    else:
-        role = [user_role.role_id for user_role in db_user_role]
-    # 生成JWT令牌
-    payload = {'user_name': user.user_name, 'user_id': db_user.user_id, 'role': role}
-    # Create the tokens and passing to set_access_cookies or set_refresh_cookies
-    access_token = Authorize.create_access_token(subject=json.dumps(payload),
-                                                 expires_time=86400)
-
-    refresh_token = Authorize.create_refresh_token(subject=user.user_name)
+    access_token, refresh_token, role = gen_user_jwt(db_user)
 
     # Set the JWT cookies in the response
     Authorize.set_access_cookies(access_token)
     Authorize.set_refresh_cookies(refresh_token)
 
     return resp_200(UserRead(role=str(role), access_token=access_token, **db_user.__dict__))
+
+
+@router.get('/user/admin', response_model=UnifiedResponseModel[UserRead], status_code=200)
+async def get_admins(Authorize: AuthJWT = Depends()):
+    """
+    获取所有的超级管理员账号
+    """
+    # check if user already exist
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    login_user = UserPayload(**payload)
+    if not login_user.is_admin():
+        raise HTTPException(status_code=500, detail='无查看权限')
+    try:
+        # 获取所有超级管理员账号
+        admins = UserRoleDao.get_admins_user()
+        admins_ids = [admin.user_id for admin in admins]
+        admin_users = UserDao.get_user_by_ids(admins_ids)
+        res = [UserRead(**one.__dict__) for one in admin_users]
+        return resp_200(res)
+    except Exception:
+        raise HTTPException(status_code=500, detail='用户信息失败')
 
 
 @router.get('/user/info', response_model=UnifiedResponseModel[UserRead], status_code=201)
@@ -164,16 +194,9 @@ async def get_info(Authorize: AuthJWT = Depends()):
     payload = json.loads(Authorize.get_jwt_subject())
     try:
         user_id = payload.get('user_id')
-        with session_getter() as session:
-            user = session.get(User, user_id)
-            # 查询角色
-            db_user_role = session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
-        if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
-            # 是管理员，忽略其他的角色
-            role = 'admin'
-        else:
-            role = [user_role.role_id for user_role in db_user_role]
-        return resp_200(UserRead(role=str(role), **user.__dict__))
+        db_user = UserDao.get_user(user_id)
+        role = gen_user_role(db_user)
+        return resp_200(UserRead(role=str(role), **db_user.__dict__))
     except Exception:
         raise HTTPException(status_code=500, detail='用户信息失败')
 
@@ -186,29 +209,108 @@ async def logout(Authorize: AuthJWT = Depends()):
 
 
 @router.get('/user/list', status_code=201)
-async def list(*, name: str, page_size: int, page_num: int, Authorize: AuthJWT = Depends()):
+async def list_user(*,
+                    name: Optional[str] = None,
+                    page_size: Optional[int] = 10,
+                    page_num: Optional[int] = 1,
+                    group_id: Annotated[List[int], Query()] = None,
+                    role_id: Annotated[List[int], Query()] = None,
+                    Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无查看权限')
-    sql = select(User)
-    count_sql = select(func.count(User.user_id))
-    if name:
-        sql = sql.where(User.user_name.like(f'%{name}%'))
-        count_sql = count_sql.where(User.user_name.like(f'%{name}%'))
+    payload = json.loads(Authorize.get_jwt_subject())
+    login_user = UserPayload(**payload)
+    if login_user.is_admin():
+        groups = group_id
+    else:
+        # 查询下是否是其他用户组的管理员
+        user_groups = UserGroupDao.get_user_group(login_user.user_id)
+        groups = []
+        for one in user_groups:
+            if one.is_group_admin:
+                groups.append(one.group_id)
+        # 不是任何用户组的管理员无查看权限
+        if not groups:
+            raise HTTPException(status_code=500, detail='无查看权限')
+        # 将筛选条件的group_id和管理员有权限的groups做交集
+        if group_id:
+            groups = list(set(groups) & set(group_id))
+            if not groups:
+                raise HTTPException(status_code=500, detail='无查看权限')
 
-    # 总数
-    with session_getter() as session:
-        total_count = session.scalar(count_sql)
+    user_ids = []
+    if groups:
+        groups_user_ids = UserGroupDao.get_groups_admins(groups)
+        if not groups_user_ids:
+            return resp_200({'data': [], 'total': 0})
+        user_ids = list(set([one.user_id for one in groups_user_ids]))
+    if role_id:
+        roles_user_ids = UserRoleDao.get_roles_user(role_id)
+        if not roles_user_ids:
+            return resp_200({'data': [], 'total': 0})
+        roles_user_ids = [one.user_id for one in roles_user_ids]
 
-    if page_size and page_num:
-        sql = sql.order_by(User.user_id.desc()).offset((page_num - 1) * page_size).limit(page_size)
-    # 查询
-    with session_getter() as session:
-        users = session.exec(sql).all()
+        # 如果user_ids不为空，说明是groups一起做交集筛选，否则是只做角色筛选
+        if user_ids:
+            user_ids = list(set(user_ids) & set(roles_user_ids))
+        else:
+            user_ids = list(set(roles_user_ids))
+
+    users, total_count = UserDao.filter_users(user_ids, name, page_num, page_size)
+    res = []
+    role_dict = {}
+    group_dict = {}
+    for one in users:
+        one_data = one.model_dump()
+        one_data["roles"] = get_user_roles(one, role_dict)
+        one_data["groups"] = get_user_groups(one, group_dict)
+        res.append(one_data)
+
     return resp_200({
-        'data': [jsonable_encoder(UserRead.model_validate(user)) for user in users],
+        'data': res,
         'total': total_count
     })
+
+
+def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
+    # 查询用户的角色列表
+    user_roles = UserRoleDao.get_user_roles(user.user_id)
+    user_role_ids: List[int] = [one_role.role_id for one_role in user_roles]
+    res = []
+    for i in range(len(user_role_ids) - 1, -1, -1):
+        if role_cache.get(user_role_ids[i]):
+            res.append(role_cache.get(user_role_ids[i]))
+            del user_role_ids[i]
+    # 将没有缓存的角色信息查询数据库
+    if user_role_ids:
+        role_list = RoleDao.get_role_by_ids(user_role_ids)
+        for role_info in role_list:
+            role_cache[role_info.id] = {
+                "id": role_info.id,
+                "name": role_info.role_name
+            }
+            res.append(role_cache.get(role_info.id))
+    return res
+
+
+def get_user_groups(user: User, group_cache: Dict) -> List[Dict]:
+    # 查询用户的角色列表
+    user_groups = UserGroupDao.get_user_group(user.user_id)
+    user_group_ids: List[int] = [one_group.group_id for one_group in user_groups]
+    res = []
+    for i in range(len(user_group_ids) - 1, -1, -1):
+        if group_cache.get(user_group_ids[i]):
+            res.append(group_cache.get(user_group_ids[i]))
+            del user_group_ids[i]
+    # 将没有缓存的角色信息查询数据库
+    if user_group_ids:
+        group_list = GroupDao.get_group_by_ids(user_group_ids)
+        for group_info in group_list:
+            group_cache[group_info.id] = {
+                "id": group_info.id,
+                "name": group_info.group_name
+            }
+            res.append(group_cache.get(group_info.id))
+    return res
 
 
 @router.post('/user/update', status_code=201)
