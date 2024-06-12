@@ -87,9 +87,6 @@ class RoleGroupService():
     def replace_user_groups(self, login_user: UserPayload, user_id: int, group_ids: List[int]):
         """ 覆盖用户的所在的用户组 """
         UserGroupDao.replace_user_groups(user_id, group_ids)
-        # 更新用户组的最近修改人
-        for one in group_ids:
-            GroupDao.update_group_update_user(one, login_user.user_id)
         return None
 
     def get_user_groups_list(self, user_id: int) -> List[GroupRead]:
@@ -100,7 +97,7 @@ class RoleGroupService():
         group_ids = [ug.group_id for ug in user_groups]
         return GroupDao.get_group_by_ids(group_ids)
 
-    def set_group_admin(self, user_ids: List[int], group_id: int):
+    def set_group_admin(self, login_user: UserPayload, user_ids: List[int], group_id: int):
         """设置用户组管理员"""
         usergroups = UserGroupDao.is_users_in_group(group_id, user_ids)
         ug = []
@@ -115,8 +112,13 @@ class RoleGroupService():
                 ug.append(
                     self.insert_user_group(
                         UserGroupCreate(user_id=user_id, group_id=group_id, is_group_admin=True)))
-
+        # 修改用户组的最近修改人
+        GroupDao.update_group_update_user(group_id, login_user.user_id)
         return ug
+
+    def set_group_update_user(self, login_user: UserPayload, group_id: int):
+        """设置用户组管理员"""
+        GroupDao.update_group_update_user(group_id, login_user.user_id)
 
     def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum, name: str,
                             page_size: int, page_num: int):

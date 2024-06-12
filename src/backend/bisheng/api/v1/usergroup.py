@@ -120,7 +120,21 @@ async def set_group_admin(user_ids: Annotated[List[int], Body(embed=True)],
     获取分组的admin，批量设置接口，覆盖历史的admin
     """
     await check_permissions(Authorize, ['admin'])
-    return resp_200(RoleGroupService().set_group_admin(user_ids, group_id))
+    payload = json.loads(Authorize.get_jwt_subject())
+    login_user = UserPayload(**payload)
+    return resp_200(RoleGroupService().set_group_admin(login_user, user_ids, group_id))
+
+
+@router.post('/set_update_user', status_code=200)
+async def set_update_user(group_id: Annotated[int, Body(embed=True)],
+                          Authorize: AuthJWT = Depends()):
+    """
+    更新用户组的最近修改人
+    """
+    # await check_permissions(Authorize, ['admin'])
+    payload = json.loads(Authorize.get_jwt_subject())
+    login_user = UserPayload(**payload)
+    return resp_200(RoleGroupService().set_group_update_user(login_user, group_id))
 
 
 @router.get('/get_group_flows',
