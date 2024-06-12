@@ -42,8 +42,8 @@ class RoleGroupService():
         group.update_user = login_user.user_id
         group = GroupDao.insert_group(group)
         if group_admin:
-            logger.info('set_admin group_admins={}', group_admin)
-            self.set_group_admin(group_admin, group.id)
+            logger.info('set_admin group_admins={} group_id={}', group_admin, group.id)
+            self.set_group_admin(login_user, group_admin, group.id)
         return group
 
     def update_group(self, login_user: UserPayload, group: Group) -> Group:
