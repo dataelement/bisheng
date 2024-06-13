@@ -231,7 +231,12 @@ class FlowDao(FlowBase):
     @classmethod
     def filter_flows_by_ids(cls, flow_ids: List[UUID], keyword: str = None, page: int = 0, limit: int = 0) \
             -> (List[Flow], int):
-        statement = select(Flow)
+        """
+        通过技能ID过滤技能列表，只返回简略信息，不包含data
+        """
+        statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
+                           Flow.update_time, Flow.description,
+                           Flow.guide_word)
         count_statement = select(func.count(Flow.id))
         if flow_ids:
             statement = statement.where(Flow.id.in_(flow_ids))
