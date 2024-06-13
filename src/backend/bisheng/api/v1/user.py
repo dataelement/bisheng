@@ -30,7 +30,7 @@ from bisheng.settings import settings
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR
 from bisheng.utils.logger import logger
 from captcha.image import ImageCaptcha
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_jwt_auth import AuthJWT
@@ -41,6 +41,15 @@ from sqlmodel import delete, select
 router = APIRouter(prefix='', tags=['User'])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
+
+
+def decrypt_md5_password(password: str):
+    if value := redis_client.get(RSA_KEY):
+        private_key = value[1]
+        password = md5_hash(rsa.decrypt(b64decode(password), private_key).decode('utf-8'))
+    else:
+        password = md5_hash(password)
+    return password
 
 
 @router.post('/user/regist', response_model=UnifiedResponseModel[UserRead], status_code=201)
@@ -114,12 +123,7 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
         if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
             raise HTTPException(status_code=500, detail='验证码错误')
 
-    # check if user already exist
-    if value := redis_client.get(RSA_KEY):
-        private_key = value[1]
-        password = md5_hash(rsa.decrypt(b64decode(user.password), private_key).decode('utf-8'))
-    else:
-        password = md5_hash(user.password)
+    password = decrypt_md5_password(user.password)
 
     db_user = UserDao.get_user_by_username(user.user_name)
     # 检查密码
@@ -716,10 +720,15 @@ async def get_rsa_publish_key():
 
 
 @router.post("/user/reset_password", status_code=200)
-async def reset_password(*, user_id: int, password: str, login_user: UserPayload = Depends(get_login_user)):
+async def reset_password(*,
+                         user_id: int = Body(embed=True),
+                         password: str = Body(embed=True),
+                         login_user: UserPayload = Depends(get_login_user)):
     """
     管理员重置用户密码
     """
+    if not login_user.is_admin():
+        raise HTTPException(status_code=403, detail='没有权限重置密码')
     # 获取要修改密码的用户信息
     user_info = UserDao.get_user(user_id)
     if not user_info:
@@ -733,14 +742,17 @@ async def reset_password(*, user_id: int, password: str, login_user: UserPayload
     if not login_user.check_groups_admin(user_group_ids):
         raise HTTPException(status_code=403, detail='没有权限重置密码')
 
-    user_info.password = md5_hash(password)
+    user_info.password = decrypt_md5_password(password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
     return resp_200()
 
 
 @router.post("/user/change_password", status_code=200)
-async def change_password(*, password: str, new_password: str, login_user: UserPayload = Depends(get_login_user)):
+async def change_password(*,
+                          password: str = Body(embed=True),
+                          new_password: str = Body(embed=True),
+                          login_user: UserPayload = Depends(get_login_user)):
     """
     登录用户 修改自己的密码
     """
@@ -748,10 +760,12 @@ async def change_password(*, password: str, new_password: str, login_user: UserP
     if not user_info.password:
         return UserNotPasswordError.return_resp()
 
+    password = decrypt_md5_password(password)
+
     if user_info.password != md5_hash(password):
         return UserValidateError.return_resp()
 
-    user_info.password = md5_hash(new_password)
+    user_info.password = decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
     return resp_200()
@@ -767,10 +781,10 @@ async def change_password_public(*, username: str, password: str, new_password: 
     if not user_info.password:
         return UserValidateError.return_resp()
 
-    if user_info.password != md5_hash(password):
+    if user_info.password != decrypt_md5_password(password):
         return UserValidateError.return_resp()
 
-    user_info.password = md5_hash(new_password)
+    user_info.password = decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
     return resp_200()

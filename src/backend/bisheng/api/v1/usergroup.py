@@ -85,13 +85,13 @@ async def delete_group(group_id: int, Authorize: AuthJWT = Depends()):
              status_code=200)
 async def set_user_group(user_id: Annotated[int, Body(embed=True)],
                          group_id: Annotated[List[int], Body(embed=True)],
-                         Authorize: AuthJWT = Depends()):
+                         login_user: UserPayload = Depends(get_login_user)):
     """
-    设置用户分组, 批量替换
+    设置用户分组, 批量替换, 根据操作人权限不同，替换不同的用户组
+    用户组管理就只替换他拥有权限的用户组。超级管理员全量替换
     """
-    await check_permissions(Authorize, ['admin'])
-    payload = json.loads(Authorize.get_jwt_subject())
-    login_user = UserPayload(**payload)
+    if not group_id:
+        raise HTTPException(status_code=500, detail='用户组不能为空')
     return resp_200(RoleGroupService().replace_user_groups(login_user, user_id, group_id))
 
 
@@ -215,7 +215,7 @@ async def get_group_assistant(*,
     res = []
     total = 0
     if resource_list:
-        assistant_ids = [UUID(resource.third_id) for resource in resource_list]        # 查询助手
+        assistant_ids = [UUID(resource.third_id) for resource in resource_list]  # 查询助手
         data, total = AssistantDao.filter_assistant_by_id(assistant_ids, keyword, page, limit)
         for one in data:
             simple_one = AssistantService.return_simple_assistant_info(one)
