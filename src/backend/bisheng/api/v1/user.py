@@ -211,36 +211,37 @@ async def list_user(*,
                     page_num: Optional[int] = 1,
                     group_id: Annotated[List[int], Query()] = None,
                     role_id: Annotated[List[int], Query()] = None,
-                    Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    login_user = UserPayload(**payload)
-    if login_user.is_admin():
-        groups = group_id
-    else:
+                    login_user: UserPayload = Depends(get_login_user)):
+    groups = group_id
+    roles = role_id
+    user_admin_groups = []
+    if not login_user.is_admin():
         # 查询下是否是其他用户组的管理员
-        user_groups = UserGroupDao.get_user_group(login_user.user_id)
-        groups = []
-        for one in user_groups:
-            if one.is_group_admin:
-                groups.append(one.group_id)
+        user_admin_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+        user_admin_groups = [one.group_id for one in user_admin_groups]
+        groups = user_admin_groups
         # 不是任何用户组的管理员无查看权限
         if not groups:
             raise HTTPException(status_code=500, detail='无查看权限')
         # 将筛选条件的group_id和管理员有权限的groups做交集
-        if group_id:
+        if groups:
             groups = list(set(groups) & set(group_id))
             if not groups:
                 raise HTTPException(status_code=500, detail='无查看权限')
-
+    # 通过用户组和角色过滤出来的用户id
     user_ids = []
     if groups:
+        # 查询用户组下的用户ID
         groups_user_ids = UserGroupDao.get_groups_admins(groups)
         if not groups_user_ids:
             return resp_200({'data': [], 'total': 0})
         user_ids = list(set([one.user_id for one in groups_user_ids]))
-    if role_id:
-        roles_user_ids = UserRoleDao.get_roles_user(role_id)
+        # 查询用户组下的角色, 和角色筛选条件做交集，得到真正去查询的角色ID
+        group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0)
+        if role_id:
+            roles = list(set(role_id) & set([one.id for one in group_roles]))
+    if roles:
+        roles_user_ids = UserRoleDao.get_roles_user(roles)
         if not roles_user_ids:
             return resp_200({'data': [], 'total': 0})
         roles_user_ids = [one.user_id for one in roles_user_ids]
@@ -257,8 +258,19 @@ async def list_user(*,
     group_dict = {}
     for one in users:
         one_data = one.model_dump()
-        one_data["roles"] = get_user_roles(one, role_dict)
-        one_data["groups"] = get_user_groups(one, group_dict)
+        user_roles = get_user_roles(one, role_dict)
+        user_groups = get_user_groups(one, group_dict)
+        # 如果不是超级管理，则需要将数据过滤, 不能看到非他操作用户管理的用户组内的角色和用户组列表
+        if user_admin_groups:
+            for i in range(len(user_roles) - 1, -1, -1):
+                if user_roles[i]["group_id"] not in user_admin_groups:
+                    del user_roles[i]
+            for i in range(len(user_groups) - 1, -1, -1):
+                if user_groups[i]["id"] not in user_admin_groups:
+                    del user_groups[i]
+
+        one_data["roles"] = user_roles
+        one_data["groups"] = user_groups
         res.append(one_data)
 
     return resp_200({
@@ -282,6 +294,7 @@ def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
         for role_info in role_list:
             role_cache[role_info.id] = {
                 "id": role_info.id,
+                "group_id": role_info.group_id,
                 "name": role_info.role_name
             }
             res.append(role_cache.get(role_info.id))
@@ -376,29 +389,36 @@ async def update_role(*, role_id: int, role: RoleUpdate, Authorize: AuthJWT = De
 
 
 @router.get('/role/list', status_code=200)
-async def get_role(*, role_name: str = None, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无查看权限')
-
+async def get_role(*,
+                   role_name: str = None,
+                   page: int = 0,
+                   limit: int = 0,
+                   login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取用户可见的角色列表， 根据用户权限不同返回不同的数据
+    """
+    # 参数处理
     if role_name:
         role_name = role_name.strip()
-        sql = select(Role.role_name, Role.remark, Role.create_time, Role.update_time, Role.id)
-        count_sql = select(func.count(Role.id))
-        if role_name:
-            sql = sql.where(Role.role_name.like(f'%{role_name}%'))
-            count_sql = count_sql.where(Role.role_name.like(f'%{role_name}%'))
 
-        sql = sql.order_by(Role.update_time.desc())
-        with session_getter() as session:
-            roles = session.exec(sql)
-        db_role = roles.mappings().all()
-
+    # 判断是否是超级管理员
+    if login_user.is_admin():
+        # 是超级管理员获取全部
+        group_ids = []
     else:
-        # 默认不返回 管理员和普通用户，因为用户无法设置
-        with session_getter() as session:
-            db_role = session.exec(select(Role).where(Role.id > 1)).all()
-    return resp_200([jsonable_encoder(role) for role in db_role])
+        # 查询下是否是其他用户组的管理员
+        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+        group_ids = [one.group_id for one in user_groups if one.is_group_admin]
+        if not group_ids:
+            raise HTTPException(status_code=500, detail='无查看权限')
+
+    # 查询所有的角色列表
+    res = RoleDao.get_role_by_groups(group_ids, role_name, page, limit)
+    total = RoleDao.count_role_by_groups(group_ids, role_name)
+    return resp_200(data={
+        "data": res,
+        "total": total
+    })
 
 
 @router.delete('/role/{role_id}', status_code=200)
@@ -696,7 +716,7 @@ async def get_rsa_publish_key():
 
 
 @router.post("/user/reset_password", status_code=200)
-async def reset_password(*, user_id: int, password: str, login_user: UserPayload = Depends(get_login_user), ):
+async def reset_password(*, user_id: int, password: str, login_user: UserPayload = Depends(get_login_user)):
     """
     管理员重置用户密码
     """

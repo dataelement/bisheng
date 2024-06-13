@@ -49,7 +49,9 @@ class RoleDao(RoleBase):
             limit: 每页条数
         return: 角色列表
         """
-        statement = select(Role).filter(Role.group_id.in_(group))
+        statement = select(Role).where(Role.id > 1)
+        if group:
+            statement = statement.where(Role.group_id.in_(group))
         if keyword:
             statement = statement.filter(Role.role_name.like(f'%{keyword}%'))
         if page and limit:
@@ -62,7 +64,9 @@ class RoleDao(RoleBase):
         """
         统计用户组内的角色数量，参数如上
         """
-        statement = select(func.count(Role.id)).filter(Role.group_id.in_(group))
+        statement = select(func.count(Role.id)).where(Role.id > 1)
+        if group:
+            statement = statement.where(Role.group_id.in_(group))
         if keyword:
             statement = statement.filter(Role.role_name.like(f'%{keyword}%'))
         with session_getter() as session:
