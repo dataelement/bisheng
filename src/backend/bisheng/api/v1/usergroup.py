@@ -36,7 +36,7 @@ async def get_all_group(Authorize: AuthJWT = Depends()):
         groups = []
     else:
         # 查询下是否是其他用户组的管理员
-        user_groups = UserGroupDao.get_user_group(login_user.user_id)
+        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
         groups = []
         for one in user_groups:
             if one.is_group_admin:
