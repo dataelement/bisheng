@@ -254,4 +254,5 @@ class FlowDao(FlowBase):
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(Flow.update_time.desc())
         with session_getter() as session:
-            return session.exec(statement).all(), session.scalar(count_statement)
+            result = session.exec(statement).mappings().all()
+            return [Flow.model_validate(f) for f in result], session.scalar(count_statement)
