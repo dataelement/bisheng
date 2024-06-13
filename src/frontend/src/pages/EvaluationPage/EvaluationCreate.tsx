@@ -7,7 +7,7 @@ import { TypeModal } from "@/utils";
 import { SelectViewport } from "@radix-ui/react-select";
 import { debounce, find } from "lodash";
 import { ArrowLeft } from "lucide-react";
-import { useCallback, useContext, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -48,7 +48,7 @@ export default function EvaluatingCreate() {
   );
   const [selectedKeyId, setSelectedKeyId] = useState("");
   const [selectedVersion, setSelectedVersion] = useState("");
-  const [searchName, setSearchName] = useState("");
+  const [query, setQuery] = useState("");
   const [dataSource, setDataSource] = useState([]);
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [fileName, setFileName] = useState("");
@@ -70,9 +70,6 @@ export default function EvaluatingCreate() {
     onDrop,
     maxFiles: 1,
   });
-
-  // 校验
-  const [error, setError] = useState({ name: false, desc: false }); // 表单error信息展示
 
   const navigate = useNavigate();
 
@@ -110,7 +107,7 @@ export default function EvaluatingCreate() {
 
   // 助手技能发生变化
   const handleTypeChange = (type) => {
-    setSearchName("");
+    setQuery("");
     if (type === "flow") {
       readFlowsFromDatabase(1, 100, "").then((_flow) => {
         setDataSource(_flow.data);
@@ -131,26 +128,28 @@ export default function EvaluatingCreate() {
     document.body.removeChild(link);
   };
 
-  const DebouncedSearch = useCallback(
-    debounce((searchQuery) => {
-      if (selectedType === "flow") {
-        readFlowsFromDatabase(1, 100, searchQuery).then((_flow) => {
+  const handleSearch = useCallback(debounce((value) => {
+    if (selectedType === "flow") {
+        readFlowsFromDatabase(1, 100, value).then((_flow) => {
           setDataSource(_flow.data);
         });
       } else if (selectedType === "assistant") {
-        getAssistantsApi(1, 100, searchQuery).then((data) => {
+        getAssistantsApi(1, 100, value).then((data) => {
           setDataSource((data as any).data as AssistantItemDB[]);
         });
       }
-    }, 500),
-    []
-  );
+  }, 300),[selectedType])
 
   const handleInputChange = (event) => {
-    const newName = event.target.value;
-    setSearchName(newName);
-    DebouncedSearch(newName);
+    setQuery(event.target.value);
+    handleSearch(event.target.value);
   };
+
+  useEffect(() => {
+    return () => {
+        handleSearch.cancel();
+    };
+  }, [handleSearch]);
 
   return (
     <div className="relative box-border h-full overflow-auto">
@@ -186,9 +185,7 @@ export default function EvaluatingCreate() {
                   >
                     <SelectTrigger>
                       <SelectValue
-                        className={`mt-2 ${
-                          error.name && "border-red-400"
-                        } w-auto`}
+                        className="mt-2 w-auto"
                         placeholder={t("evaluation.selectPlaceholder")}
                       />
                     </SelectTrigger>
@@ -211,20 +208,16 @@ export default function EvaluatingCreate() {
                   >
                     <SelectTrigger slot="" className="max-w-[200px]">
                       <SelectValue
-                        className={`mt-2 max-w-[200px] ${
-                          error.name && "border-red-400"
-                        }`}
+                        className="mt-2 max-w-[200px]"
                         placeholder={t("evaluation.selectPlaceholder")}
                       />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectViewport>
                         <Input
-                          value={searchName}
+                          value={query}
                           onChange={handleInputChange}
-                          className={`mb-2 mt-2 w-full ${
-                            error.name && "border-red-400"
-                          }`}
+                          className="my-2 mx-auto"
                           placeholder={t("evaluation.selectInputPlaceholder")}
                         />
                         <SelectGroup>
@@ -250,7 +243,7 @@ export default function EvaluatingCreate() {
                     >
                       <SelectTrigger className="min-w-[50px]">
                         <SelectValue
-                          className={`mt-2 ${error.name && "border-red-400"}`}
+                          className="mt-2"
                           placeholder={t("evaluation.selectPlaceholder")}
                         />
                       </SelectTrigger>

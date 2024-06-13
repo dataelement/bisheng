@@ -166,8 +166,8 @@ export default function EvaluationPage() {
                                 <span className="whitespace-nowrap">
                                   {
                                     EvaluationScoreLabelMap[
-                                      EvaluationScore[key].label
-                                    ]
+                                      EvaluationScore[key]
+                                    ].label
                                   }
                                   :{value}&nbsp;
                                 </span>
