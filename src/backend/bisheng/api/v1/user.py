@@ -77,12 +77,7 @@ async def regist(*, user: UserCreate):
         raise HTTPException(status_code=500, detail='账号已存在')
     else:
         try:
-            if value := redis_client.get(RSA_KEY):
-                private_key = value[1]
-                db_user.password = md5_hash(
-                    rsa.decrypt(b64decode(user.password), private_key).decode('utf-8'))
-            else:
-                db_user.password = md5_hash(user.password)
+            db_user.password = decrypt_md5_password(user.password)
             with session_getter() as session:
                 session.add(db_user)
                 session.flush()
@@ -91,11 +86,11 @@ async def regist(*, user: UserCreate):
                 if db_user.user_id != 1:
                     db_user_role = UserRole(user_id=db_user.user_id, role_id=2)
                     session.add(db_user_role)
+                # 将用户写入到默认用户组下
+                UserGroupDao.add_default_user_group(db_user.user_id)
                 session.commit()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f'数据库写入错误， {str(e)}') from e
-        # 将用户写入到默认用户组下
-        UserGroupDao.add_default_user_group(db_user.user_id)
         return resp_200(db_user)
 
 
