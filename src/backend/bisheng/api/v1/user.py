@@ -767,7 +767,10 @@ async def change_password(*,
 
 
 @router.post("/user/change_password_public", status_code=200)
-async def change_password_public(*, username: str, password: str, new_password: str):
+async def change_password_public(*,
+                                 username: str = Body(embed=True),
+                                 password: str = Body(embed=True),
+                                 new_password: str = Body(embed=True)):
     """
     未登录用户 修改自己的密码
     """
