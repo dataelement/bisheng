@@ -1,14 +1,14 @@
 import json
-from typing import List, Any
+from typing import Any
 from uuid import UUID
 
 from starlette.responses import StreamingResponse
 
+from bisheng.api.JWT import get_login_user
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import (access_check, build_flow_no_yield, get_L2_param_from_flow,
-                               remove_api_keys)
-from bisheng.api.v1.schemas import FlowListCreate, FlowListRead, UnifiedResponseModel, resp_200, FlowVersionCreate, \
+from bisheng.api.utils import build_flow_no_yield, get_L2_param_from_flow, remove_api_keys
+from bisheng.api.v1.schemas import FlowListRead, UnifiedResponseModel, resp_200, FlowVersionCreate, \
     FlowCompareReq, StreamData
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate, FlowDao
@@ -18,7 +18,7 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_jwt_auth import AuthJWT
 from sqlmodel import select
 
@@ -177,17 +177,15 @@ def read_flow(*, flow_id: UUID):
 
 
 @router.patch('/{flow_id}', response_model=UnifiedResponseModel[FlowRead], status_code=200)
-async def update_flow(*, flow_id: UUID, flow: FlowUpdate, Authorize: AuthJWT = Depends()):
+async def update_flow(*, flow_id: UUID, flow: FlowUpdate, login_user: UserPayload = Depends(get_login_user)):
     """Update a flow."""
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-
+    flow_id = flow_id.hex
     with session_getter() as session:
         db_flow = session.get(Flow, flow_id)
     if not db_flow:
         raise HTTPException(status_code=404, detail='Flow not found')
 
-    if not access_check(payload, db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
+    if not login_user.access_check(db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
         raise HTTPException(status_code=500, detail='No right access this flow')
 
     flow_data = flow.model_dump(exclude_unset=True)

@@ -224,19 +224,6 @@ async def build_flow_no_yield(graph_data: dict,
     return graph
 
 
-def access_check(payload: dict, owner_user_id: int, target_id: int, type: AccessType) -> bool:
-    if payload.get('role') != 'admin':
-        # role_access
-        with session_getter() as session:
-            role_access = session.exec(
-                select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
-                                         RoleAccess.type == type.value)).all()
-        third_ids = [access.third_id for access in role_access]
-        if owner_user_id != payload.get('user_id') and str(target_id) not in third_ids:
-            return False
-    return True
-
-
 async def check_permissions(Authorize: AuthJWT, roles: List[str]):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
@@ -408,15 +395,15 @@ def parse_gpus(gpu_str: str) -> List[Dict]:
             'gpu_util')[0]
         res.append({
             'gpu_uuid':
-            gpu_uuid_elem.firstChild.data,
+                gpu_uuid_elem.firstChild.data,
             'gpu_id':
-            gpu_id_elem.firstChild.data,
+                gpu_id_elem.firstChild.data,
             'gpu_total_mem':
-            '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
+                '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
             'gpu_used_mem':
-            '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
+                '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
             'gpu_utility':
-            round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
+                round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
         })
     return res
 
