@@ -61,52 +61,44 @@ async def regist(*, user: UserCreate):
             raise HTTPException(status_code=500, detail='验证码错误')
 
     db_user = User.model_validate(user)
-    # check if admin user
-    with session_getter() as session:
-        admin = session.exec(select(User).where(User.user_id == 1)).all()
-    if not admin:
-        db_user.user_id = 1
-        db_user_role = UserRole(user_id=db_user.user_id, role_id=1)
-        with session_getter() as session:
-            session.add(db_user_role)
-            session.commit()
 
     # check if user already exist
-    with session_getter() as session:
-        name_user = session.exec(select(User).where(User.user_name == user.user_name)).all()
-    if name_user and name_user[0].user_id != 1:
+    user_exists = UserDao.get_user_by_username(db_user.user_name)
+    if user_exists:
         raise HTTPException(status_code=500, detail='账号已存在')
-    else:
-        try:
-            db_user.password = decrypt_md5_password(user.password)
-            with session_getter() as session:
-                session.add(db_user)
-                session.flush()
-                session.refresh(db_user)
-                # 默认加入普通用户
-                if db_user.user_id != 1:
-                    db_user_role = UserRole(user_id=db_user.user_id, role_id=2)
-                    session.add(db_user_role)
-                # 将用户写入到默认用户组下
-                UserGroupDao.add_default_user_group(db_user.user_id)
-                session.commit()
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f'数据库写入错误， {str(e)}') from e
-        return resp_200(db_user)
+    try:
+        db_user.password = decrypt_md5_password(user.password)
+        # 判断下admin用户是否存在
+        admin = UserDao.get_user(1)
+        if admin:
+            db_user = UserDao.add_user_and_default_role(db_user)
+        else:
+            db_user.user_id = 1
+            db_user = UserDao.add_user_and_admin_role(db_user)
+        # 将用户写入到默认用户组下
+        UserGroupDao.add_default_user_group(db_user.user_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'数据库写入错误， {str(e)}') from e
+    return resp_200(db_user)
 
 
 @router.post('/user/sso', response_model=UnifiedResponseModel[UserRead], status_code=201)
-async def sso(*, user: UserCreate, Authorize: AuthJWT = Depends()):
+async def sso(*, user: UserCreate):
     '''给sso提供的接口'''
-    if settings.system_login_method.get('SSO_OAuth', False):  # 判断sso 是否打开
+    if settings.get_system_login_method().get('SSO_OAuth', False):  # 判断sso 是否打开
         account_name = user.user_name
         user_exist = UserDao.get_unique_user_by_name(account_name)
         if not user_exist:
+            # 自动创建用户
+            user_exist = User.model_validate(user)
             logger.info('act=create_user account={}', account_name)
-            user_exist = UserDao.create_user(user)
-            default_admin = settings.system_login_method.get('admin_username')
+            default_admin = settings.get_system_login_method().get('admin_username', None)
             if default_admin and default_admin == account_name:
-                UserRoleDao.set_admin_user(user_exist.user_id)
+                # 创建为超级管理员
+                user_exist = UserDao.add_user_and_admin_role(user_exist)
+            else:
+                # 创建为普通用户
+                user_exist = UserDao.add_user_and_default_role(user_exist)
             UserGroupDao.add_default_user_group(user_exist.user_id)
 
         access_token, refresh_token, _ = gen_user_jwt(user_exist)

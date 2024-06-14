@@ -148,6 +148,11 @@ class Settings(BaseSettings):
         all_config = self.get_all_config()
         return PasswordConf(**all_config.get('password_conf', {}))
 
+    def get_system_login_method(self) -> dict:
+        # 获取密码相关的配置项
+        all_config = self.get_all_config()
+        return all_config.get('system_login_method', {})
+
     def get_from_db(self, key: str):
         # 先获取所有的key
         all_config = self.get_all_config()

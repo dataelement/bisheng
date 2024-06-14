@@ -5,7 +5,6 @@ from contextlib import contextmanager
 from typing import List
 
 from bisheng.database.init_config import init_config
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.service import DatabaseService
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
@@ -25,6 +24,7 @@ def init_default_data():
     from bisheng.database.models.gpts_tools import GptsToolsType
     from bisheng.database.models.sft_model import SftModel
     from bisheng.database.models.flow_version import FlowVersion
+    from bisheng.database.models.user_role import UserRoleDao
 
     if redis_client.setNx('init_default_data', '1'):
         try:

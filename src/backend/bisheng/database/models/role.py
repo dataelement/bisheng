@@ -6,6 +6,11 @@ from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, text, func
 from sqlmodel import Field, select
 
+# 默认普通用户角色的ID
+DefaultRole = 2
+# 超级管理员角色ID
+AdminRole = 1
+
 
 class RoleBase(SQLModelSerializable):
     role_name: str = Field(index=False, description='前端展示名称', unique=True)

@@ -7,6 +7,9 @@ from pydantic import validator
 from sqlalchemy import Column, DateTime, text, func
 from sqlmodel import Field, select
 
+from bisheng.database.models.role import DefaultRole, AdminRole
+from bisheng.database.models.user_role import UserRole
+
 
 class UserBase(SQLModelSerializable):
     user_name: str = Field(index=True, unique=True)
@@ -117,10 +120,38 @@ class UserDao(UserBase):
             return session.exec(statement).first()
 
     @classmethod
-    def create_user(cls, user: UserCreate) -> User:
-        db_user = User.model_validate(user)
+    def create_user(cls, db_user: User) -> User:
         with session_getter() as session:
             session.add(db_user)
             session.commit()
             session.refresh(db_user)
             return db_user
+
+    @classmethod
+    def add_user_and_default_role(cls, user: User) -> User:
+        """
+        新增用户，并添加默认角色
+        """
+        with session_getter() as session:
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            db_user_role = UserRole(user_id=user.user_id, role_id=DefaultRole)
+            session.add(db_user_role)
+            session.refresh(user)
+            return user
+
+    @classmethod
+    def add_user_and_admin_role(cls, user: User) -> User:
+        """
+        新增用户，并添加超级管理员角色
+        """
+        with session_getter() as session:
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            db_user_role = UserRole(user_id=user.user_id, role_id=AdminRole)
+            session.add(db_user_role)
+            session.commit()
+            session.refresh(user)
+            return user
