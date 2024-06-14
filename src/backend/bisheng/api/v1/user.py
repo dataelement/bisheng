@@ -6,22 +6,23 @@ import uuid
 from base64 import b64decode, b64encode
 from datetime import datetime
 from io import BytesIO
-from typing import List, Optional, Dict, Annotated
+from typing import Annotated, Dict, List, Optional
 from uuid import UUID
 
 import rsa
-
+from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
+                                      UserValidateError)
 from bisheng.api.JWT import get_login_user
-from bisheng.api.errcode.user import UserNotPasswordError, UserValidateError, UserPasswordExpireError
 from bisheng.api.services.captcha import verify_captcha
-from bisheng.api.services.user_service import gen_user_jwt, get_assistant_list_by_access, UserPayload, gen_user_role
+from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role,
+                                               get_assistant_list_by_access)
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.knowledge import Knowledge
-from bisheng.database.models.role import Role, RoleCreate, RoleUpdate, RoleDao
+from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleRefresh
 from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_group import UserGroupDao
@@ -97,12 +98,15 @@ async def regist(*, user: UserCreate):
 @router.post('/user/sso', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def sso(*, user: UserCreate, Authorize: AuthJWT = Depends()):
     '''给sso提供的接口'''
-    if True:  # 判断sso 是否打开
+    if settings.system_login_method.get('SSO_OAuth', False):  # 判断sso 是否打开
         account_name = user.user_name
         user_exist = UserDao.get_unique_user_by_name(account_name)
         if not user_exist:
             logger.info('act=create_user account={}', account_name)
             user_exist = UserDao.create_user(user)
+            default_admin = settings.system_login_method.get('admin_username')
+            if default_admin and default_admin == account_name:
+                UserRoleDao.set_admin_user(user_exist.user_id)
             UserGroupDao.add_default_user_group(user_exist.user_id)
 
         access_token, refresh_token, _ = gen_user_jwt(user_exist)
@@ -148,7 +152,8 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
 
     # 判断下密码是否长期未修改
     if password_conf.password_valid_period and password_conf.password_valid_period > 0:
-        if (datetime.now() - db_user.password_update_time).days >= password_conf.password_valid_period:
+        if (datetime.now() -
+                db_user.password_update_time).days >= password_conf.password_valid_period:
             return UserPasswordExpireError.return_resp()
 
     access_token, refresh_token, role = gen_user_jwt(db_user)
@@ -257,25 +262,11 @@ async def list_user(*,
     group_dict = {}
     for one in users:
         one_data = one.model_dump()
-        user_roles = get_user_roles(one, role_dict)
-        user_groups = get_user_groups(one, group_dict)
-        # 如果不是超级管理，则需要将数据过滤, 不能看到非他操作用户管理的用户组内的角色和用户组列表
-        if user_admin_groups:
-            for i in range(len(user_roles) - 1, -1, -1):
-                if user_roles[i]["group_id"] not in user_admin_groups:
-                    del user_roles[i]
-            for i in range(len(user_groups) - 1, -1, -1):
-                if user_groups[i]["id"] not in user_admin_groups:
-                    del user_groups[i]
-
-        one_data["roles"] = user_roles
-        one_data["groups"] = user_groups
+        one_data['roles'] = get_user_roles(one, role_dict)
+        one_data['groups'] = get_user_groups(one, group_dict)
         res.append(one_data)
 
-    return resp_200({
-        'data': res,
-        'total': total_count
-    })
+    return resp_200({'data': res, 'total': total_count})
 
 
 def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
@@ -291,11 +282,7 @@ def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
     if user_role_ids:
         role_list = RoleDao.get_role_by_ids(user_role_ids)
         for role_info in role_list:
-            role_cache[role_info.id] = {
-                "id": role_info.id,
-                "group_id": role_info.group_id,
-                "name": role_info.role_name
-            }
+            role_cache[role_info.id] = {'id': role_info.id, 'name': role_info.role_name}
             res.append(role_cache.get(role_info.id))
     return res
 
@@ -313,10 +300,7 @@ def get_user_groups(user: User, group_cache: Dict) -> List[Dict]:
     if user_group_ids:
         group_list = GroupDao.get_group_by_ids(user_group_ids)
         for group_info in group_list:
-            group_cache[group_info.id] = {
-                "id": group_info.id,
-                "name": group_info.group_name
-            }
+            group_cache[group_info.id] = {'id': group_info.id, 'name': group_info.group_name}
             res.append(group_cache.get(group_info.id))
     return res
 
@@ -414,10 +398,7 @@ async def get_role(*,
     # 查询所有的角色列表
     res = RoleDao.get_role_by_groups(group_ids, role_name, page, limit)
     total = RoleDao.count_role_by_groups(group_ids, role_name)
-    return resp_200(data={
-        "data": res,
-        "total": total
-    })
+    return resp_200(data={"data": res, "total": total})
 
 
 @router.delete('/role/{role_id}', status_code=200)
@@ -618,7 +599,7 @@ async def knowledge_list(*,
             'id': access[0].id
         } for access in db_role_access],
         'total':
-            total_count
+        total_count
     })
 
 
@@ -667,7 +648,7 @@ async def flow_list(*,
             'id': access[0]
         } for access in db_role_access],
         'total':
-            total_count
+        total_count
     })
 
 
@@ -714,11 +695,13 @@ async def get_rsa_publish_key():
     return resp_200({'public_key': pubkey_str})
 
 
-@router.post("/user/reset_password", status_code=200)
-async def reset_password(*,
-                         user_id: int = Body(embed=True),
-                         password: str = Body(embed=True),
-                         login_user: UserPayload = Depends(get_login_user)):
+@router.post('/user/reset_password', status_code=200)
+async def reset_password(
+        *,
+        user_id: int,
+        password: str,
+        login_user: UserPayload = Depends(get_login_user),
+):
     """
     管理员重置用户密码
     """
@@ -743,10 +726,10 @@ async def reset_password(*,
     return resp_200()
 
 
-@router.post("/user/change_password", status_code=200)
+@router.post('/user/change_password', status_code=200)
 async def change_password(*,
-                          password: str = Body(embed=True),
-                          new_password: str = Body(embed=True),
+                          password: str,
+                          new_password: str,
                           login_user: UserPayload = Depends(get_login_user)):
     """
     登录用户 修改自己的密码
@@ -766,11 +749,8 @@ async def change_password(*,
     return resp_200()
 
 
-@router.post("/user/change_password_public", status_code=200)
-async def change_password_public(*,
-                                 username: str = Body(embed=True),
-                                 password: str = Body(embed=True),
-                                 new_password: str = Body(embed=True)):
+@router.post('/user/change_password_public', status_code=200)
+async def change_password_public(*, username: str, password: str, new_password: str):
     """
     未登录用户 修改自己的密码
     """

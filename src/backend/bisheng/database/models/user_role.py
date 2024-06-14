@@ -60,3 +60,15 @@ class UserRoleDao(UserRoleBase):
         with session_getter() as session:
             statement = select(UserRole).where(UserRole.role_id == 1)
             return session.exec(statement).all()
+
+    @classmethod
+    def set_admin_user(cls, user_id: int) -> UserRole:
+        """
+        设置用户为超级管理员
+        """
+        with session_getter() as session:
+            user_role = UserRole(user_id=user_id, role_id=1)
+            session.add(user_role)
+            session.commit()
+            session.refresh(user_role)
+            return user_role

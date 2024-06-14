@@ -1,21 +1,19 @@
 import os
-from typing import Dict, Optional, Union, List
 import re
+from typing import Dict, List, Optional, Union
+
 import yaml
-from pydantic import BaseModel, Field
-
-from loguru import logger
-from cryptography.fernet import Fernet
-
-from langchain.pydantic_v1 import BaseSettings, root_validator, validator
-from sqlmodel import select
-
 from bisheng.database.models.config import Config
+from cryptography.fernet import Fernet
+from langchain.pydantic_v1 import BaseSettings, root_validator, validator
+from loguru import logger
+from pydantic import BaseModel, Field
+from sqlmodel import select
 
 
 class LoggerConf(BaseModel):
     level: str = 'DEBUG'
-    format: str = '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
+    format: str = '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'  # noqa
     handlers: List[Dict] = []
 
     @classmethod
@@ -25,7 +23,7 @@ class LoggerConf(BaseModel):
             return sink
         env_keys = {}
         for one in match.groups():
-            env_keys[one] = os.getenv(one, "")
+            env_keys[one] = os.getenv(one, '')
         return sink.format(**env_keys)
 
     @validator('handlers', pre=True)
@@ -41,9 +39,9 @@ class LoggerConf(BaseModel):
 
 
 class PasswordConf(BaseModel):
-    password_valid_period: Optional[int] = Field(description="密码超过X天必须进行修改, 登录提示重新修改密码")
-    login_error_time_window: Optional[int] = Field(description="登录错误时间窗口,单位分钟")
-    max_error_times: Optional[int] = Field(description="最大错误次数，超过后会封禁用户")
+    password_valid_period: Optional[int] = Field(description='密码超过X天必须进行修改, 登录提示重新修改密码')
+    login_error_time_window: Optional[int] = Field(description='登录错误时间窗口,单位分钟')
+    max_error_times: Optional[int] = Field(description='最大错误次数，超过后会封禁用户')
 
 
 class Settings(BaseSettings):
@@ -81,6 +79,7 @@ class Settings(BaseSettings):
     minio_conf = {}
     logger_conf: LoggerConf = LoggerConf()
     password_conf: PasswordConf = PasswordConf()
+    system_login_method: dict = {}
 
     @validator('database_url', pre=True)
     def set_database_url(cls, value):
@@ -163,7 +162,8 @@ class Settings(BaseSettings):
             return yaml.safe_load(cache)
         else:
             with session_getter() as session:
-                initdb_config = session.exec(select(Config).where(Config.key == 'initdb_config')).first()
+                initdb_config = session.exec(
+                    select(Config).where(Config.key == 'initdb_config')).first()
                 if initdb_config:
                     redis_client.set(redis_key, initdb_config.value, 100)
                     return yaml.safe_load(initdb_config.value)
