@@ -72,6 +72,18 @@ class UserGroupDao(UserGroupBase):
             return user_group
 
     @classmethod
+    def insert_user_group_admin(cls, user_id: int, group_id: int) -> UserGroup:
+        """
+        将用户设置为组管理员
+        """
+        with session_getter() as session:
+            user_group = UserGroup(user_id=user_id, group_id=group_id, is_group_admin=True)
+            session.add(user_group)
+            session.commit()
+            session.refresh(user_group)
+            return user_group
+
+    @classmethod
     def delete_user_group(cls, user_id: int, group_id: int) -> None:
         with session_getter() as session:
             statement = select(UserGroup).where(UserGroup.user_id == user_id,
@@ -81,17 +93,28 @@ class UserGroupDao(UserGroupBase):
             session.commit()
 
     @classmethod
-    def replace_user_groups(cls, user_id: int, group_ids: List[int]):
+    def delete_user_groups(cls, user_id: int, group_ids: List[int]):
         """
-        修改用户所属的用户组
+        将用户从某些组中移除
         """
         with session_getter() as session:
             # 先把旧的用户组全部清空
-            statement = delete(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 0)
+            statement = delete(UserGroup).where(
+                UserGroup.user_id == user_id).where(
+                UserGroup.is_group_admin == 0).where(
+                UserGroup.group_id.in_(group_ids)
+            )
             session.exec(statement)
-            # 再把新的用户组添加
-            for one in group_ids:
-                user_group = UserGroup(user_id=user_id, group_id=one, is_group_admin=False)
+            session.commit()
+
+    @classmethod
+    def add_user_groups(cls, user_id: int, group_ids: List[int]):
+        """
+        将用户添加到某些组
+        """
+        with session_getter() as session:
+            for group_id in group_ids:
+                user_group = UserGroup(user_id=user_id, group_id=group_id, is_group_admin=0)
                 session.add(user_group)
             session.commit()
 
@@ -168,5 +191,3 @@ class UserGroupDao(UserGroupBase):
                 UserGroup.is_group_admin == 1)
             session.exec(statement)
             session.commit()
-
-

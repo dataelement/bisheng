@@ -145,7 +145,7 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
     # 判断下密码是否长期未修改
     if password_conf.password_valid_period and password_conf.password_valid_period > 0:
         if (datetime.now() -
-                db_user.password_update_time).days >= password_conf.password_valid_period:
+            db_user.password_update_time).days >= password_conf.password_valid_period:
             return UserPasswordExpireError.return_resp()
 
     access_token, refresh_token, role = gen_user_jwt(db_user)
@@ -418,32 +418,41 @@ async def delete_role(*, role_id: int, Authorize: AuthJWT = Depends()):
 
 
 @router.post('/user/role_add', status_code=200)
-async def user_addrole(*, userRole: UserRoleCreate, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无设置权限')
+async def user_addrole(*, user_role: UserRoleCreate, login_user: UserPayload = Depends(get_login_user)):
+    """
+    重新设置用户的角色。根据权限不同改动的数据范围不同
+    """
+    # 获取用户的之前的角色列表
+    old_roles = UserRoleDao.get_user_roles(user_role.user_id)
+    old_roles = [one.role_id for one in old_roles]
 
-    with session_getter() as session:
-        db_role = session.exec(select(UserRole).where(
-            UserRole.user_id == userRole.user_id, )).all()
-    role_ids = {role.role_id for role in db_role}
-    db_roles = []
-    for role_id in userRole.role_id:
-        if role_id not in role_ids:
-            db_role = UserRole(user_id=userRole.user_id, role_id=role_id)
-            db_roles.append(db_role)
+    if not login_user.is_admin():
+        # 判断拥有哪些用户组的管理权限
+        admin_group = UserGroupDao.get_user_admin_group(login_user.user_id)
+        admin_group = [one.group_id for one in admin_group]
+        if not admin_group:
+            raise HTTPException(status_code=500, detail='无权限')
+        # 获取管理组下的所有角色列表
+        admin_roles = RoleDao.get_role_by_groups(admin_group, '', 0, 0)
+        for i in range(len(old_roles) - 1, -1, -1):
+            if old_roles[i] not in admin_roles:
+                del old_roles[i]
+        if not old_roles:
+            raise HTTPException(status_code=500, detail='无权限')
+
+    need_add_role = []
+    for one in user_role.role_id:
+        if one not in old_roles:
+            # 需要新增的角色
+            need_add_role.append(one)
         else:
-            role_ids.remove(role_id)
-    if db_roles:
-        with session_getter() as session:
-            session.add_all(db_roles)
-            session.commit()
-    if role_ids:
-        with session_getter() as session:
-            session.exec(
-                delete(UserRole).where(UserRole.user_id == userRole.user_id,
-                                       UserRole.role_id.in_(role_ids)))
-            session.commit()
+            # 剩余的就是需要删除的角色列表
+            old_roles.remove(one)
+    if need_add_role:
+        UserRoleDao.add_user_roles(user_role.user_id, need_add_role)
+    if old_roles:
+        # 删除对应的角色列表
+        UserRoleDao.delete_user_roles(user_role.user_id, old_roles)
     return resp_200()
 
 
@@ -591,7 +600,7 @@ async def knowledge_list(*,
             'id': access[0].id
         } for access in db_role_access],
         'total':
-        total_count
+            total_count
     })
 
 
@@ -640,7 +649,7 @@ async def flow_list(*,
             'id': access[0]
         } for access in db_role_access],
         'total':
-        total_count
+            total_count
     })
 
 
