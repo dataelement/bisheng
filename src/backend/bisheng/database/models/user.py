@@ -56,7 +56,7 @@ class UserLogin(UserBase):
 
 
 class UserCreate(UserBase):
-    password: str
+    password: Optional[str]
     captcha_key: Optional[str]
     captcha: Optional[str]
 
