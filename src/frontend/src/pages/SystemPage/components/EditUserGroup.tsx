@@ -115,15 +115,15 @@ function FlowControl({ groupId, type, onChange }) {
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead className=" w-[160px]">{name}</TableHead>
-                        <TableHead>{t('system.createdBy')}</TableHead>
+                        <TableHead className="w-[150px]">{name}</TableHead>
+                        <TableHead className="w-[100px]">{t('system.createdBy')}</TableHead>
                         <TableHead>{t('system.flowCtrlStrategy')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {data.map((i: any) => (<TableRow key={i.id}>
-                        <TableCell>{i.name}</TableCell>
-                        <TableCell>{i.user_name}</TableCell>
+                        <TableCell className="break-all">{i.name}</TableCell>
+                        <TableCell className="break-all">{i.user_name}</TableCell>
                         <TableCell className="pt-4">
                             <FlowRadio limit={i.limit} onChange={(val) => handleChange(val, i.id)}></FlowRadio>
                         </TableCell>
