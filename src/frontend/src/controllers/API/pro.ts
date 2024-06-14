@@ -74,3 +74,10 @@ export const saveGroupApi = async (data: any): Promise<any> => {
 export function getUserGroupsProApi() {
     return axios.get(`/api/group/list`);
 }
+
+// GET sso URL
+export function getSSOurlApi() {
+    const url = 'http://192.168.106.115:8098/api/oauth2/wx'
+    return Promise.resolve(url)
+    // return axios.get(`/api/group/list`);
+}

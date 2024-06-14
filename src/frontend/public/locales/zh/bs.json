@@ -85,8 +85,8 @@
     "limit": "有限制",
     "unlimited": "无限制",
     "iconHover": "同时受用户组整体流量控制策略约束",
-    "maximum": "每秒最多",
-    "perMinute": "个会话",
+    "maximum": "每分钟最多",
+    "perMinute": "个并发会话",
     "changeTime": "修改时间",
     "deleteGroup": "删除后 【{{name}}】 将不再存在，是否删除?"
   },

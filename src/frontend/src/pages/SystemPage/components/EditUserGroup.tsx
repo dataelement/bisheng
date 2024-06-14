@@ -31,12 +31,12 @@ import { Input, SearchInput } from "../../../components/bs-ui/input";
  * @returns 
  */
 
-function FlowRadio({ limit, onChange }) {
+function FlowRadio({ limit = 0, onChange }) {
     const { t } = useTranslation()
 
     const handleChange = (e) => {
         const value = e.target.value
-        if(value < 0) return 
+        if (value < 0 || value > 9999) return
         onChange(parseInt(value))
     }
 
@@ -55,7 +55,7 @@ function FlowRadio({ limit, onChange }) {
             </div>
             {limit !== 0 && <div className="mt-[-3px]">
                 <Label>{t('system.maximum')}</Label>
-                <Input type="number" value={limit} className="inline h-5 w-[70px] font-medium"onChange={handleChange}/>
+                <Input type="number" value={limit} className="inline h-5 w-[70px] font-medium" onChange={handleChange} />
                 <Label>{t('system.perMinute')}</Label>
             </div>}
         </RadioGroup>
@@ -88,11 +88,13 @@ function FlowControl({ groupId, type, onChange }) {
         onChange(itemsRef.current)
     }
 
+    const searchEndRef = useRef(false)
     const handleSearch = (e) => {
+        searchEndRef.current = true
         search(e.target.value)
     }
 
-    if (!data.length) return null
+    if (!searchEndRef.current && !data.length) return null
 
     return <>
         <div className="flex items-center mb-4 justify-between">
@@ -117,7 +119,7 @@ function FlowControl({ groupId, type, onChange }) {
                     <TableRow>
                         <TableHead className="w-[150px]">{name}</TableHead>
                         <TableHead className="w-[100px]">{t('system.createdBy')}</TableHead>
-                        <TableHead>{t('system.flowCtrlStrategy')}</TableHead>
+                        <TableHead className="w-[380px]">{t('system.flowCtrlStrategy')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -159,11 +161,11 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
     const handleSave = async () => {
         if (!form.groupName) {
             setForm({ ...form, groupName: data.group_name || '' })
-            return toast({title: t('prompt'),description: t('system.groupNameRequired'),variant: 'error'});
+            return toast({ title: t('prompt'), description: t('system.groupNameRequired'), variant: 'error' });
         }
-        if(form.groupName.length > 30) {
+        if (form.groupName.length > 30) {
             setForm({ ...form, groupName: data.group_name || '' })
-            return toast({title: t('prompt'),description: t('system.groupNamePrompt'),variant: 'error'});
+            return toast({ title: t('prompt'), description: t('system.groupNamePrompt'), variant: 'error' });
         }
         const flag = onBeforeChange(form.groupName)
         if (flag) {

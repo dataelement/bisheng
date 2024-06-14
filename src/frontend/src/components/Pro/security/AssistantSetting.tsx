@@ -27,8 +27,13 @@ export default function AssistantSetting({ id, type }) {
     // load
     useEffect(() => {
         id !== 3 && getSensitiveApi(id, type).then(res => {
-            console.log(res, 'xxx');
-
+            const { is_check, auto_reply, words, words_types } = res
+            setForm({
+                isCheck: !!is_check,
+                autoReply: auto_reply,
+                words,
+                wordsType: Array.isArray(words_types) ? words_types : [words_types],
+            })
         })
     }, [id])
 

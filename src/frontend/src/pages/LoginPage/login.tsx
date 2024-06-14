@@ -1,6 +1,6 @@
 import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
 import { GithubIcon } from '@/components/bs-icons/github';
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 import json from "../../../package.json";
 import { Button } from "../../components/bs-ui/button";
@@ -12,11 +12,13 @@ import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import LoginBridge from './loginBridge';
 import { PWD_RULE, handleEncrypt } from './utils';
+import { locationContext } from '@/contexts/locationContext';
 export const LoginPage = () => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t, i18n } = useTranslation();
     const { message, toast } = useToast()
     const navigate = useNavigate()
+    const { appConfig } = useContext(locationContext)
 
     const isLoading = false
 
@@ -193,7 +195,7 @@ export const LoginPage = () => {
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
-                        <LoginBridge />
+                        {appConfig.hasSSO && <LoginBridge />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>

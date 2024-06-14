@@ -59,8 +59,8 @@ export async function disableUserApi(userid, status) {
   });
 }
 // 角色列表
-export async function getRolesApi(searchkey = "", group_id): Promise<{ data: ROLE[] }> {
-  return await axios.get(`/api/v1/role/list?role_name=${searchkey}&group_id=${group_id}`)
+export async function getRolesApi(searchkey = ""): Promise<{ data: ROLE[] }> {
+  return await axios.get(`/api/v1/role/list?role_name=${searchkey}`)
     .then(res => res.data);
 }
 // 用户组下角色列表

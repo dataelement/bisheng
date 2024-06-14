@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import MultiSelect from "@/components/bs-ui/select/multi"
+import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "../../../components/bs-ui/button"
@@ -15,20 +16,18 @@ export default function UserRoleModal({ user, onClose, onChange }) {
 
     const [userGroups, setUserGroups] = useState([])
     const [userGroupSelected, setUserGroupSelected] = useState([])
-    const [error, setError] = useState(false)
 
     useEffect(() => {
         if (!user) return
         // get用户组list
         getUserGroupsApi().then(res => {
-            setUserGroups([{ id: 0, group_name: '默认用户组' }, ...res.records])
+            setUserGroups(res.records)
             setUserGroupSelected(user.groups.map(el => el.id.toString()))
         })
         // get角色list
         getRolesApi().then(data => {
             //@ts-ignore
-            const roleOptions = data.filter(role => role.id !== 1)
-                .map(role => ({ ...role, role_id: role.id }))
+            const roleOptions = data.map(role => ({ ...role, role_id: role.id }))
             setRoles(roleOptions);
             setSelected(user.roles.map(el => el.id.toString()))
             // getUserRoles(id).then(userRoles => {
@@ -40,14 +39,14 @@ export default function UserRoleModal({ user, onClose, onChange }) {
             //     setSelected(userRoles)
             // })
         })
-        setError(false)
     }, [user])
 
+    const { message } = useToast()
     const handleSave = async () => {
-        // if (!selected.length) return setError(true)
-        // if (userGroupSelected.length === 0) return setError(true)
-        captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, selected.filter(id => id !== '2')))
-        captureAndAlertRequestErrorHoc(updateUserGroups(user.user_id, userGroupSelected.filter(id => id !== '0')))
+        if (!selected.length) return message({ title: t('prompt'), variant: 'warning', description: '请选择角色' })
+        if (userGroupSelected.length === 0) return message({ title: t('prompt'), variant: 'warning', description: '请选择用户组' })
+        captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, selected))
+        captureAndAlertRequestErrorHoc(updateUserGroups(user.user_id, userGroupSelected))
         onChange()
     }
 
@@ -73,9 +72,9 @@ export default function UserRoleModal({ user, onClose, onChange }) {
                 <MultiSelect
                     multiple
                     className="max-w-[600px]"
-                    value={['0', ...userGroupSelected]}
+                    value={userGroupSelected}
                     options={groups}
-                    lockedValues={["0"]}
+                    placeholder={t('system.userGroupsSel')}
                     onChange={setUserGroupSelected}
                 >
                 </MultiSelect>
@@ -87,9 +86,9 @@ export default function UserRoleModal({ user, onClose, onChange }) {
                 <MultiSelect
                     multiple
                     className="max-w-[600px]"
-                    value={['2', ...selected]}
+                    value={selected}
                     options={_roles}
-                    lockedValues={["2"]}
+                    placeholder={t('system.roleSelect')}
                     onChange={setSelected}
                 >
                 </MultiSelect>

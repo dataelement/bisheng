@@ -1,11 +1,20 @@
-import { Button } from "@/components/bs-ui/button";
-import { ReactComponent as Wxpro } from "./icons/wxpro.svg";
 import Separator from "@/components/bs-comp/chatComponent/Separator";
+import { Button } from "@/components/bs-ui/button";
+import { getSSOurlApi } from "@/controllers/API/pro";
+import { useEffect, useRef } from "react";
+import { ReactComponent as Wxpro } from "./icons/wxpro.svg";
 
 export default function LoginBridge() {
 
+
+
+    const urlRef = useRef<string>('')
+    useEffect(() => {
+        getSSOurlApi().then(url => urlRef.current = url)
+    }, [])
+
     const clickQwLogin = () => {
-        location.href = window.WX_LOGIN_URL
+        location.href = urlRef.current
     }
 
     return <div>

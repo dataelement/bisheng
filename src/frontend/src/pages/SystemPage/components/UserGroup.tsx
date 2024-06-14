@@ -95,7 +95,7 @@ export default function UserGroups() {
                             <TableCell>{ug.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
                                 <Button variant="link" onClick={() => setUserGroup(ug)} className="px-0 pl-6">{t('edit')}</Button>
-                                <Button variant="link" onClick={() => handleDelete(ug)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
+                                <Button variant="link" disabled={ug.id === 2} onClick={() => handleDelete(ug)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
                             </TableCell>
                         </TableRow>
                     ))}
