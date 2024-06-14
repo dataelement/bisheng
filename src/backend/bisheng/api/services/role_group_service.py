@@ -93,7 +93,31 @@ class RoleGroupService():
 
     def replace_user_groups(self, login_user: UserPayload, user_id: int, group_ids: List[int]):
         """ 覆盖用户的所在的用户组 """
-        UserGroupDao.replace_user_groups(user_id, group_ids)
+        # 获取用户之前的所有分组
+        old_group = UserGroupDao.get_user_group(user_id)
+        old_group = [one.group_id for one in old_group]
+        if not login_user.is_admin():
+            # 获取操作人所管理的组
+            admin_group = UserGroupDao.get_user_admin_group(login_user.user_id)
+            admin_group = [one.group_id for one in admin_group]
+            # 过滤被操作人所在的组，只处理有权限管理的组
+            old_group = [one for one in old_group if one in admin_group]
+            # 说明此用户 不在此用户组管理员所管辖的用户组内
+            if not old_group:
+                raise ValueError('没有权限设置用户组')
+
+        need_add_group = []
+        for one in group_ids:
+            if one not in old_group:
+                # 需要加入的用户组
+                need_add_group.append(one)
+            else:
+                # 旧的用户组里剩余的就是要移出的用户组
+                old_group.remove(one)
+        if old_group:
+            UserGroupDao.delete_user_groups(user_id, old_group)
+        if need_add_group:
+            UserGroupDao.add_user_groups(user_id, need_add_group)
         return None
 
     def get_user_groups_list(self, user_id: int) -> List[GroupRead]:
@@ -121,9 +145,7 @@ class RoleGroupService():
         if need_add_admin:
             # 可以分配非组内用户为管理员。进行用户创建
             for user_id in need_add_admin:
-                res.append(
-                    self.insert_user_group(
-                        UserGroupCreate(user_id=user_id, group_id=group_id, is_group_admin=True)))
+                res.append(UserGroupDao.insert_user_group_admin(user_id, group_id))
         if need_delete_admin:
             UserGroupDao.delete_group_admins(group_id, need_delete_admin)
         # 修改用户组的最近修改人
