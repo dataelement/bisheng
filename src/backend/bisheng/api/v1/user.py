@@ -107,6 +107,10 @@ async def sso(*, user: UserCreate):
         raise ValueError('不支持接口')
 
 
+def get_error_password_key(username: str):
+    return USER_PASSWORD_ERROR + username
+
+
 @router.post('/user/login', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
     # 验证码校验
@@ -130,22 +134,22 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
         # 判断是否需要记录错误次数
         if not password_conf.login_error_time_window or not password_conf.max_error_times:
             return UserValidateError.return_resp()
-        error_key = USER_PASSWORD_ERROR + db_user.user_name
-        error_num = redis_client.get(error_key)
+        # 错误次数加1
+        error_key = get_error_password_key(user.user_name)
+        error_num = redis_client.incr(error_key)
+        if error_num == 1:
+            # 首次设置key的过期时间
+            redis_client.expire_key(error_key, password_conf.login_error_time_window * 60)
         if error_num and int(error_num) >= password_conf.max_error_times:
             # 错误次数到达上限，封禁账号
             db_user.delete = 1
             UserDao.update_user(db_user)
             raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
-
-        # 设置错误次数
-        redis_client.incr(error_key, password_conf.login_error_time_window * 60)
         return UserValidateError.return_resp()
 
     # 判断下密码是否长期未修改
     if password_conf.password_valid_period and password_conf.password_valid_period > 0:
-        if (datetime.now() -
-            db_user.password_update_time).days >= password_conf.password_valid_period:
+        if (datetime.now() - db_user.password_update_time).days >= password_conf.password_valid_period:
             return UserPasswordExpireError.return_resp()
 
     access_token, refresh_token, role = gen_user_jwt(db_user)
@@ -298,12 +302,18 @@ def get_user_groups(user: User, group_cache: Dict) -> List[Dict]:
 
 
 @router.post('/user/update', status_code=201)
-async def update(*, user: UserUpdate, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无查看权限')
-    with session_getter() as session:
-        db_user = session.get(User, user.user_id)
+async def update(*, user: UserUpdate, login_user: UserPayload = Depends(get_login_user)):
+    db_user = UserDao.get_user(user.user_id)
+    if not db_user:
+        raise HTTPException(status_code=500, detail='用户不存在')
+
+    if not login_user.is_admin():
+        # 检查下是否是用户组的管理员
+        user_group = UserGroupDao.get_user_group(db_user.user_id)
+        user_group = [one.group_id for one in user_group]
+        if not login_user.check_groups_admin(user_group):
+            raise HTTPException(status_code=500, detail='无查看权限')
+
     # check if user already exist
     if db_user and user.delete is not None:
         # 判断是否是管理员
@@ -314,6 +324,10 @@ async def update(*, user: UserUpdate, Authorize: AuthJWT = Depends()):
         if admin:
             raise HTTPException(status_code=500, detail='不能操作管理员')
         db_user.delete = user.delete
+    if db_user.delete == 0:  # 启用用户
+        # 清理密码错误次数的计数
+        error_key = get_error_password_key(db_user.user_name)
+        redis_client.delete(error_key)
     with session_getter() as session:
         session.add(db_user)
         session.commit()

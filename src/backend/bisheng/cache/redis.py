@@ -117,6 +117,13 @@ class RedisClient:
         finally:
             self.close()
 
+    def expire_key(self, key, expiration: int):
+        try:
+            self.cluster_nodes(key)
+            self.connection.expire(key, expiration)
+        finally:
+            self.close()
+
     def delete(self, key):
         try:
             self.cluster_nodes(key)

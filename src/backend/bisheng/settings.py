@@ -39,9 +39,9 @@ class LoggerConf(BaseModel):
 
 
 class PasswordConf(BaseModel):
-    password_valid_period: Optional[int] = Field(description='密码超过X天必须进行修改, 登录提示重新修改密码')
-    login_error_time_window: Optional[int] = Field(description='登录错误时间窗口,单位分钟')
-    max_error_times: Optional[int] = Field(description='最大错误次数，超过后会封禁用户')
+    password_valid_period: Optional[int] = Field(default=0, description='密码超过X天必须进行修改, 登录提示重新修改密码')
+    login_error_time_window: Optional[int] = Field(default=0, description='登录错误时间窗口,单位分钟')
+    max_error_times: Optional[int] = Field(default=0, description='最大错误次数，超过后会封禁用户')
 
 
 class Settings(BaseSettings):
