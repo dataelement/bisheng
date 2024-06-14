@@ -59,7 +59,7 @@
     "managePermission": "管理权限",
     "roleNamePrompt": "角色名称不能超过50字符",
     "roleNameRequired": "角色名称不可为空",
-    "groupNameExists": "用户组名称已存在",
+    "groupNameExists": "用户组名称不可重复",
     "groupNamePrompt": "用户组名称不能超过30字符",
     "groupNameRequired": "用户组名称不可为空",
     "roleNameExists": "角色名称已存在",
@@ -86,7 +86,9 @@
     "unlimited": "无限制",
     "iconHover": "同时受用户组整体流量控制策略约束",
     "maximum": "每秒最多",
-    "perMinute": "个对话"
+    "perMinute": "个会话",
+    "changeTime": "修改时间",
+    "deleteGroup": "删除后 【{{name}}】 将不再存在，是否删除?"
   },
   "skills": {
     "manageTemplate": "管理技能模板",

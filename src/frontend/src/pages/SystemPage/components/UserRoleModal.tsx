@@ -3,7 +3,7 @@ import MultiSelect from "@/components/bs-ui/select/multi"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "../../../components/bs-ui/button"
-import { getRolesApi, getUserRoles, getUserGroupsApi, updateUserRoles, updateUserGroups } from "../../../controllers/API/user"
+import { getRolesApi, getUserGroupsApi, updateUserGroups, updateUserRoles } from "../../../controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request"
 import { ROLE } from "../../../types/api/user"
 

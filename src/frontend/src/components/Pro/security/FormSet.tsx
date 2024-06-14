@@ -9,7 +9,7 @@ import { UploadIcon } from "@radix-ui/react-icons";
 import { t } from "i18next";
 import { useEffect, useState } from "react";
 
-export default function FormSet({ data, onChange, onCancel }) {
+export default function FormSet({ data, onChange, onSave, onCancel }) {
 
     const [form, setForm] = useState<any>({})
     useEffect(() => {
@@ -25,7 +25,7 @@ export default function FormSet({ data, onChange, onCancel }) {
         })
     }
 
-    const uploadFile = (e) => {
+    const handleUploadFile = (e) => {
         const file = e.target.files[0]
         if (file) {
             const reader = new FileReader()
@@ -33,11 +33,14 @@ export default function FormSet({ data, onChange, onCancel }) {
                 const text = evt.target.result
                 //@ts-ignore
                 const formatContent = text.replace(/[\s,，\r\n]+/g, '\n') // 将所有符号替换成换行符
-                const temp = form.words
-                setForm({ ...form, words: temp + formatContent })
+                setForm({ ...form, words: formatContent })
             }
             reader.readAsText(file)
         }
+    }
+    const handleSave = () => {
+        onSave()
+        onChange(form)
     }
     return <>
         <div className="px-4 mt-6">
@@ -81,7 +84,7 @@ export default function FormSet({ data, onChange, onCancel }) {
                     <Textarea className="h-[100px]" value={form.words}
                         onChange={(e) => setForm({ ...form, words: e.target.value })}
                         placeholder="使用换行符进行分隔，每行一个"></Textarea>
-                    <input type="file" accept=".txt" id="fileUpload" className="hidden" onChange={uploadFile} />
+                    <input type="file" accept=".txt" id="fileUpload" className="hidden" onChange={handleUploadFile} />
                     <div className="flex items-center absolute right-1 top-1 cursor-pointer" onClick={() => document.querySelector('#fileUpload').click()}>
                         <UploadIcon id="ul" color="blue" className="w-3 h-3" />
                         <Label htmlFor="ul"><span className="text-xs text-primary cursor-pointer">txt文件</span></Label>
@@ -98,7 +101,7 @@ export default function FormSet({ data, onChange, onCancel }) {
         </div>
         <div className="absolute bottom-10 right-4 sapce-x-10 flex space-x-8">
             <Button onClick={onCancel} variant="outline">{t('cancel')}</Button>
-            <Button onClick={() => onChange(form)}>{t('save')}</Button>
+            <Button onClick={handleSave}>{t('save')}</Button>
         </div>
     </>
 };

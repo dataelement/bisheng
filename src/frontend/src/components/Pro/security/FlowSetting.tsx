@@ -17,7 +17,7 @@ export default function FlowSetting({ id, type }) {
     const { toast, message } = useToast()
     const [form, setForm] = useState({
         isCheck: false,
-        autoReply: "您的输入带有敏感词汇，我拒绝回答",
+        autoReply: "",
         words: "",
         wordsType: [],
     })
@@ -59,7 +59,7 @@ export default function FlowSetting({ id, type }) {
                     </SheetTrigger>
                     <SheetContent className="w-[500px]" onClick={(e) => e.stopPropagation()}>
                         <SheetTitle className="font-[500] pl-3 pt-2">内容安全审查设置</SheetTitle>
-                        <FormSet data={form} onChange={handleFormChange} onCancel={() => setOpen(false)} />
+                        <FormSet data={form} onChange={handleFormChange} onSave={() => setOpen(false)} onCancel={() => setOpen(false)} />
                     </SheetContent>
                 </Sheet>
                 <Switch

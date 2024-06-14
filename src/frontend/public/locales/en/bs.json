@@ -85,7 +85,9 @@
     "unlimited": "Unlimited",
     "iconHover": "Simultaneously constrained by the overall traffic control strategy of the user group",
     "maximum": "Maximum of",
-    "perMinute": "concurrent conversations per second"
+    "perMinute": "concurrent conversations per second",
+    "changeTime": "Modification Time",
+    "deleteGroup": "After deletion 【{{name}}】 will no longer exist, Do you want to delete it?"
   },
   "skills": {
     "manageTemplate": "Manage Skill Templates",

@@ -45,6 +45,11 @@ function UsersFilter({ options, nameKey, placeholder, onFilter }) {
         if (!searchKey) return options
         return options.filter(a => a[nameKey].toUpperCase().includes(searchKey.toUpperCase()))
     }, [searchKey, options])
+    // 重置
+    const reset = () => {
+        setValue([])
+        setSearchKey('')
+    }
 
     return <Popover open={open} onOpenChange={(bln) => setOpen(bln)}>
         <PopoverTrigger>
@@ -58,7 +63,7 @@ function UsersFilter({ options, nameKey, placeholder, onFilter }) {
                 placeholder={placeholder}
                 onChecked={handlerChecked}
                 search={(e) => setSearchKey(e.target.value)}
-                onClearChecked={() => setValue([])}
+                onClearChecked={reset}
                 onOk={filterData}
             />
         </PopoverContent>

@@ -39,7 +39,7 @@ export default function UserGroups() {
     }
     const handleDelete = (userGroup) => {
         bsConfirm({
-            desc: `${t('system.confirmText')} 【${userGroup.group_name}】 ?`,
+            desc: t('system.deleteGroup', {name:userGroup.group_name}),
             okTxt: t('delete'),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(delUserGroupApi(userGroup.id).then(loadData))
@@ -69,7 +69,7 @@ export default function UserGroups() {
         <div className="h-[calc(100vh-136px)] overflow-y-auto pb-10">
             <div className="flex gap-6 items-center justify-end">
                 <div className="w-[180px] relative">
-                    <SearchInput placeholder={t('system.userGroupName')} onChange={handleSearch}></SearchInput>
+                    <SearchInput placeholder={t('system.groupName')} onChange={handleSearch}></SearchInput>
                 </div>
                 <Button className="flex justify-around" onClick={() => setUserGroup({})}>
                     <PlusIcon className="text-primary" />
@@ -82,8 +82,8 @@ export default function UserGroups() {
                         <TableHead className="w-[200px]">{t('system.groupName')}</TableHead>
                         <TableHead>{t('system.admins')}</TableHead>
                         {appConfig.isPro && <TableHead className="w-[130px]">{t('system.flowControl')}</TableHead>}
-                        <TableHead className="w-[160px]">{t('createTime')}</TableHead>
-                        <TableHead className="text-right w-[120px]">{t('operations')}</TableHead>
+                        <TableHead className="w-[160px]">{t('system.changeTime')}</TableHead>
+                        <TableHead className="text-right w-[130px]">{t('operations')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>

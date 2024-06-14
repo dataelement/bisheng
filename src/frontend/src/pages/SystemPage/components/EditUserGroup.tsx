@@ -34,6 +34,13 @@ import { Input, SearchInput } from "../../../components/bs-ui/input";
 function FlowRadio({ limit, onChange }) {
     const { t } = useTranslation()
 
+    const handleChange = (e) => {
+        console.log('---------->>>')
+        const value = e.target.value
+        if(value < 0) return 
+        onChange(parseInt(value))
+    }
+
     return <div>
         <RadioGroup className="flex space-x-2 h-[20px]" value={limit ? 'true' : 'false'}
             onValueChange={(value) => onChange(value === 'false' ? 0 : 10)}>
@@ -51,7 +58,7 @@ function FlowRadio({ limit, onChange }) {
                 <Label>
                     <p className="mt-[-3px]">
                         {t('system.maximum')}<Input type="number" value={limit} className="inline h-5 w-[70px]"
-                            onChange={(e) => onChange(parseFloat(e.target.value))} />{t('system.perMinute')}
+                            onChange={handleChange}/>{t('system.perMinute')}
                     </p>
                 </Label>
             </div>}
@@ -154,13 +161,13 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
     const [lockOptions, setLockOptions] = useState([])
 
     const handleSave = async () => {
-        if (!form.groupName || form.groupName.length > 30) {
-            setForm({ ...form, groupName: data.name || '' })
-            return toast({
-                title: t('prompt'),
-                description: [t('system.groupNameRequired'), t('system.groupNamePrompt')],
-                variant: 'error'
-            });
+        if (!form.groupName) {
+            setForm({ ...form, groupName: data.group_name || '' })
+            return toast({title: t('prompt'),description: t('system.groupNameRequired'),variant: 'error'});
+        }
+        if(form.groupName.length > 30) {
+            setForm({ ...form, groupName: data.group_name || '' })
+            return toast({title: t('prompt'),description: t('system.groupNamePrompt'),variant: 'error'});
         }
         const flag = onBeforeChange(form.groupName)
         if (flag) {
@@ -200,8 +207,8 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
 
     return <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-136px)] overflow-y-auto pb-10 scrollbar-hide">
         <div className="font-bold mt-4">
-            <p className="text-xl mb-4">{t('system.userGroupName')}</p>
-            <Input placeholder={t('system.userGroupName')} value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })} maxLength={30}></Input>
+            <p className="text-xl mb-4">{t('system.groupName')}</p>
+            <Input placeholder={t('system.userGroupName')} required value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })}></Input>
         </div>
         <div className="font-bold mt-12">
             <p className="text-xl mb-4">{t('system.admins')}</p>
