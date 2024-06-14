@@ -59,8 +59,14 @@ export async function disableUserApi(userid, status) {
   });
 }
 // 角色列表
-export async function getRolesApi(searchkey = ""): Promise<{ data: ROLE[] }> {
-  return await axios.get(`/api/v1/role/list?role_name=${searchkey}`);
+export async function getRolesApi(searchkey = "", group_id): Promise<{ data: ROLE[] }> {
+  return await axios.get(`/api/v1/role/list?role_name=${searchkey}&group_id=${group_id}`)
+    .then(res => res.data);
+}
+// 用户组下角色列表
+export async function getRolesByGroupApi(searchkey = "", group_id): Promise<{ data: ROLE[] }> {
+  return await axios.get(`/api/v1/group/roles?keyword=${searchkey}&group_id=${group_id}`)
+    .then(res => res.data);
 }
 /**
  * 获取配置
@@ -99,10 +105,25 @@ export async function getRoleLibsApi(
   return await axios.get(`/api/v1/role_access/knowledge`, { params });
 }
 /**
+ * 根据用户组获取资源列表
+ */
+export async function getGroupResourcesApi(
+  params: {
+    group_id: string,
+    resource_type: number,
+    name: string,
+    page_size: number,
+    page_num: number
+  }
+): Promise<{ data: any[]; total: number }> {
+  return await axios.get(`/api/v1/group/get_group_resources`, { params });
+}
+/**
  * 新增角色
  */
-export async function createRole(name) {
+export async function createRole(groupId, name) {
   return await axios.post(`/api/v1/role/add`, {
+    group_id: groupId,
     role_name: name,
     remark: "手动创建用户",
   });
@@ -256,3 +277,23 @@ export async function getAdminsApi(): Promise<any> {
 }
 
 
+/**
+ * 重置密码（管理员专用）
+ */
+export async function resetPasswordApi(userId, password): Promise<any> {
+  return axios.post(`/api/v1/user/reset_password`, {
+    user_id: userId,
+    password
+  });
+}
+
+/**
+ * 重置个人密码
+ */
+export async function changePasswordApi(userName, password, new_password): Promise<any> {
+  return axios.post(`/api/v1/user/change_password_public`, {
+    username: userName,
+    password,
+    new_password
+  });
+}

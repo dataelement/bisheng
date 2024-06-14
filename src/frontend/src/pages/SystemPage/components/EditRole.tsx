@@ -13,29 +13,29 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { alertContext } from "../../../contexts/alertContext";
-import { createRole, getRoleAssistApi, getRoleLibsApi, getRolePermissionsApi, getRoleSkillsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
+import { createRole, getGroupResourcesApi, getRoleAssistApi, getRoleLibsApi, getRolePermissionsApi, getRoleSkillsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 
-const SearchPanne = ({ role_id, title, type, children }) => {
+const SearchPanne = ({ groupId, title, type, children }) => {
     const { page, pageSize, data, total, loading, setPage, search } = useTable({ pageSize: 10 }, (params) => {
         const { page, pageSize, keyword } = params
         const param = {
             name: keyword,
-            role_id,
+            group_id: groupId,
             page_num: page,
             page_size: pageSize
         }
 
         switch (type) {
             case 'skill':
-                return getRoleSkillsApi(param);
+                return getGroupResourcesApi({ ...param, resource_type: 2 });
             case 'tool':
-                return getRoleSkillsApi(param);
+                return getGroupResourcesApi({ ...param, resource_type: 2 });
             case 'assistant':
-                return getRoleAssistApi({ ...param, type: 'assistant' });
+                return getGroupResourcesApi({ ...param, resource_type: 3 });
             default:
-                return getRoleLibsApi(param);
+                return getGroupResourcesApi({ ...param, resource_type: 1 });
         }
     })
 
@@ -57,7 +57,7 @@ const SearchPanne = ({ role_id, title, type, children }) => {
 
 
 // -1 id表示新增
-export default function EditRole({ id, name, onChange, onBeforeChange }) {
+export default function EditRole({ id, name, groupId, onChange, onBeforeChange }) {
     const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t } = useTranslation()
 
@@ -108,7 +108,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
      * 1.验证重名
      * 2.新增时先保存基本信息 创建 ID
      * 3.修改时先更新基本信息
-     * 4.批量 保存各个种类权限信息（助手、技能、知识库等）
+     * 4.再批量 保存各个种类权限信息（助手、技能、知识库等）
      * @returns 
      */
     const handleSave = async () => {
@@ -127,7 +127,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
         // 没有id时需要走创建流程，否则修改
         let roleId = id
         if (id === -1) {
-            const res = await captureAndAlertRequestErrorHoc(createRole(form.name))
+            const res = await captureAndAlertRequestErrorHoc(createRole(groupId, form.name))
             roleId = res.id
         } else {
             // 更新基本信息
@@ -154,10 +154,9 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
             <Input placeholder={t('system.roleName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60}></Input>
         </div>
         {/* 菜单授权 */}
-        <div className="">
+        {/* <div className="">
             <div className="mt-20 flex justify-between items-center relative">
                 <p className="text-xl font-bold">菜单授权</p>
-                {/* <SearchInput onChange={(e) => search(e.target.value)}></SearchInput> */}
             </div>
             <div className="mt-4">
                 <Table>
@@ -189,10 +188,13 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
                     </TableBody>
                 </Table>
             </div>
-        </div>
+        </div> */}
         {/* 助手 */}
         <div className="">
-            <SearchPanne title={t('system.assistantAuthorization')} role_id={roleId} type={'assistant'}>
+            <SearchPanne title={t('system.assistantAuthorization')}
+                groupId={groupId}
+                role_id={roleId}
+                type={'assistant'}>
                 {(data) => (
                     <Table>
                         <TableHeader>
@@ -219,7 +221,11 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
         </div>
         {/* 技能 */}
         <div className="">
-            <SearchPanne title={t('system.skillAuthorization')} role_id={roleId} type={'skill'}>
+            <SearchPanne
+                title={t('system.skillAuthorization')}
+                groupId={groupId}
+                role_id={roleId}
+                type={'skill'}>
                 {(data) => (
                     <Table>
                         <TableHeader>
@@ -246,7 +252,10 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
         </div>
         {/* 知识库 */}
         <div className="mb-20">
-            <SearchPanne title={t('system.knowledgeAuthorization')} role_id={roleId} type={'lib'}>
+            <SearchPanne title={t('system.knowledgeAuthorization')}
+                groupId={groupId}
+                role_id={roleId}
+                type={'lib'}>
                 {(data) => (
                     <Table>
                         <TableHeader>
@@ -276,7 +285,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
             </SearchPanne>
         </div>
         {/* 工具 */}
-        <div className="">
+        {/* <div className="">
             <SearchPanne title={'工具授权'} role_id={roleId} type={'tool'}>
                 {(data) => (
                     <Table>
@@ -305,7 +314,7 @@ export default function EditRole({ id, name, onChange, onBeforeChange }) {
                     </Table>
                 )}
             </SearchPanne>
-        </div>
+        </div> */}
         <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-[white]">
             <Button variant="outline" className="px-16" onClick={() => onChange()}>{t('cancel')}</Button>
             <Button className="px-16" onClick={handleSave}>{t('save')}</Button>

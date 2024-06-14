@@ -1,17 +1,17 @@
-import { JSEncrypt } from 'jsencrypt';
-import { useContext, useEffect, useRef, useState } from "react";
+import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
+import { GithubIcon } from '@/components/bs-icons/github';
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 import json from "../../../package.json";
 import { Button } from "../../components/bs-ui/button";
 import { Input } from "../../components/bs-ui/input";
-import { GithubIcon } from '@/components/bs-icons/github';
-import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
 // import { alertContext } from "../contexts/alertContext";
-import { getPublicKeyApi, loginApi, getCaptchaApi, registerApi } from "../../controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { useNavigate } from 'react-router-dom';
+import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import LoginBridge from './loginBridge';
+import { PWD_RULE, handleEncrypt } from './utils';
 export const LoginPage = () => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t, i18n } = useTranslation();
@@ -62,7 +62,7 @@ export const LoginPage = () => {
             localStorage.setItem('isLogin', '1')
             location.href = '/'
         }), (error) => {
-            if (error === '密码不正确') {
+            if (error === '用户密码长期未修改') { // 有时间改为 code 判断
                 localStorage.setItem('account', mail)
                 navigate('/reset', { state: { noback: true } })
             }
@@ -83,7 +83,7 @@ export const LoginPage = () => {
         if (!/.{8,}/.test(pwd)) {
             error.push(t('login.passwordTooShort'))
         }
-        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(pwd)) {
+        if (!PWD_RULE.test(pwd)) {
             error.push(t('login.passwordError'))
         }
         if (pwd !== apwd) {
@@ -112,13 +112,6 @@ export const LoginPage = () => {
         }))
 
         fetchCaptchaData()
-    }
-
-    const handleEncrypt = async (pwd) => {
-        const { public_key } = await getPublicKeyApi()
-        const encrypt = new JSEncrypt()
-        encrypt.setPublicKey(public_key)
-        return encrypt.encrypt(pwd) as string
     }
 
     return <div className='w-full h-full bg-background-dark'>

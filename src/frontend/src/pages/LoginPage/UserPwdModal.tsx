@@ -6,16 +6,19 @@ import { Pencil2Icon } from "@radix-ui/react-icons";
 import { useTranslation } from "react-i18next";
 // import { resetUserPasswordApi } from "../controllers/API/user"; // 假设这是重置密码的API函数
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { resetPasswordApi } from "@/controllers/API/user";
+import { PWD_RULE, handleEncrypt } from "./utils";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 interface UserPwdModalProps {
-    onSuccess: () => void;
+    // onSuccess: () => void;
 }
 
 interface UserPwdModalRef {
     open: (userId: string) => void;
 }
 
-const UserPwdModal = forwardRef<UserPwdModalRef, UserPwdModalProps>(({ onSuccess }, ref) => {
+const UserPwdModal = forwardRef<UserPwdModalRef, UserPwdModalProps>((props, ref) => {
     const { t } = useTranslation();
     const { message } = useToast();
 
@@ -32,25 +35,20 @@ const UserPwdModal = forwardRef<UserPwdModalRef, UserPwdModalProps>(({ onSuccess
     }));
 
     const handleSubmit = async () => {
-        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(passwordRef.current.value)) {
-            return setError(t('login.passwordError'))
-        }
+        // if (!PWD_RULE.test(passwordRef.current.value)) {
+        //     return setError(t('login.passwordError'))
+        // }
 
-        try {
-            // await resetUserPasswordApi(userIdRef.current, formData.password);
+        const cryptPwd = await handleEncrypt(passwordRef.current.value)
+        const res = await captureAndAlertRequestErrorHoc(resetPasswordApi(userIdRef.current, cryptPwd));
+        if (res) {
             message({
                 title: `${t('prompt')}`,
                 variant: 'success',
                 description: [t('resetPassword.passwordResetSuccess')]
             });
             setEditShow(false);
-            onSuccess();
-        } catch (error) {
-            message({
-                title: `${t('prompt')}`,
-                variant: 'error',
-                description: [error.message || t('resetPassword.resetFailed')]
-            });
+            // onSuccess();
         }
     };
 

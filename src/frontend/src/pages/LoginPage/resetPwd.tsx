@@ -1,13 +1,13 @@
-import { JSEncrypt } from 'jsencrypt';
-import { useRef, useState } from "react";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { ArrowLeftIcon } from '@radix-ui/react-icons';
+import { useRef } from "react";
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from "../../components/bs-ui/button";
 import { Input } from "../../components/bs-ui/input";
-import { getPublicKeyApi } from "../../controllers/API/user";
+import { changePasswordApi } from "../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { AlignLeftIcon, ArrowLeftIcon } from '@radix-ui/react-icons';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { PWD_RULE, handleEncrypt } from './utils';
 
 export const ResetPwdPage = () => {
     const { t } = useTranslation();
@@ -31,7 +31,7 @@ export const ResetPwdPage = () => {
         if (!newPwd) errors.push(t('resetPassword.pleaseEnterNewPassword'));
         if (!confirmPwd) errors.push(t('resetPassword.pleaseEnterConfirmPassword'));
         if (!/.{8,}/.test(newPwd)) errors.push(t('resetPassword.newPasswordTooShort'));
-        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(newPwd)) errors.push(t('login.passwordError'))
+        if (!PWD_RULE.test(newPwd)) errors.push(t('login.passwordError'))
         if (newPwd !== confirmPwd) errors.push(t('resetPassword.passwordMismatch'));
 
         if (errors.length) {
@@ -46,27 +46,22 @@ export const ResetPwdPage = () => {
         const encryptCurrentPwd = await handleEncrypt(currentPwd);
         const encryptNewPwd = await handleEncrypt(newPwd);
 
-        // captureAndAlertRequestErrorHoc(resetPasswordApi(encryptCurrentPwd, encryptNewPwd).then(() => {
-        message({
-            title: `${t('prompt')}`,
-            variant: 'success',
-            description: [t('resetPassword.passwordResetSuccess')]
-        });
-        // Clear input fields
-        if (currentPwdRef.current) currentPwdRef.current.value = '';
-        if (newPwdRef.current) newPwdRef.current.value = '';
-        if (confirmPwdRef.current) confirmPwdRef.current.value = '';
-        if (!state?.noback) {
+        const res = await captureAndAlertRequestErrorHoc(changePasswordApi(account, encryptCurrentPwd, encryptNewPwd))
+        if (res) {
+            message({
+                title: `${t('prompt')}`,
+                variant: 'success',
+                description: [t('resetPassword.passwordResetSuccess')]
+            });
+            // Clear input fields
+            if (currentPwdRef.current) currentPwdRef.current.value = '';
+            if (newPwdRef.current) newPwdRef.current.value = '';
+            if (confirmPwdRef.current) confirmPwdRef.current.value = '';
+            // if (!state?.noback) {
             navigate(-1);
+            // }
         }
         // }));
-    };
-
-    const handleEncrypt = async (pwd: string): Promise<string> => {
-        const { public_key } = await getPublicKeyApi();
-        const encrypt = new JSEncrypt();
-        encrypt.setPublicKey(public_key);
-        return encrypt.encrypt(pwd) as string;
     };
 
     return (

@@ -10,7 +10,7 @@ import {
     TableHeader,
     TableRow
 } from "../../../components/bs-ui/table";
-import { delRoleApi, getRolesApi } from "../../../controllers/API/user";
+import { delRoleApi, getRolesApi, getRolesByGroupApi, getUserGroupsApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { ROLE } from "../../../types/api/user";
 import EditRole from "./EditRole";
@@ -32,20 +32,15 @@ const initialState: State = {
     role: null,
     searchWord: '',
     group: '1',
-    groups: [
-        { label: '部门1', value: '1' },
-        { label: '部门2', value: '2' },
-        { label: '部门3', value: '3' },
-        { label: '部门4', value: '4' },
-        { label: '部门5', value: '5' },
-    ]
+    groups: []
 };
 
 type Action =
     | { type: 'SET_ROLES'; payload: ROLE[] }
     | { type: 'SET_ROLE'; payload: Partial<ROLE> | null }
     | { type: 'SET_SEARCH_WORD'; payload: string }
-    | { type: 'SET_GROUP'; payload: string };
+    | { type: 'SET_GROUP'; payload: string }
+    | { type: 'SET_GROUPS'; payload: any };
 
 function reducer(state: State, action: Action): State {
     switch (action.type) {
@@ -57,6 +52,8 @@ function reducer(state: State, action: Action): State {
             return { ...state, searchWord: action.payload };
         case 'SET_GROUP':
             return { ...state, group: action.payload };
+        case 'SET_GROUPS':
+            return { ...state, groups: action.payload };
         default:
             return state;
     }
@@ -73,23 +70,22 @@ export default function Roles() {
             inputDom.value = '';
         }
         try {
-            const data = await getRolesApi();
+            const data = await getRolesByGroupApi('', state.group);
             dispatch({ type: 'SET_ROLES', payload: data });
             allRolesRef.current = data;
         } catch (error) {
             console.error(error);
         }
-    }, []);
+    }, [state.group]);
 
     useEffect(() => {
-        // TODO
-        // 获取最近修改用户组
-        dispatch({ type: 'SET_GROUP', payload: '2' });
+        getUserGroupsApi().then(res => {
+            const groups = res.records.map(ug => ({ label: ug.group_name, value: ug.id }))
+            // 获取最近修改用户组
+            dispatch({ type: 'SET_GROUP', payload: groups[0].value });
+            dispatch({ type: 'SET_GROUPS', payload: groups });
+        })
     }, []);
-
-    useEffect(() => {
-        loadData();
-    }, [state.group, loadData]);
 
     const handleDelete = async (item: ROLE) => {
         bsConfirm({
@@ -116,9 +112,22 @@ export default function Roles() {
         dispatch({ type: 'SET_SEARCH_WORD', payload: word });
         dispatch({ type: 'SET_ROLES', payload: allRolesRef.current.filter(item => item.role_name.toUpperCase().includes(word.toUpperCase())) });
     };
+    useEffect(() => {
+        loadData()
+    }, [state.group])
+
 
     if (state.role) {
-        return <EditRole id={state.role.id || -1} name={state.role.role_name || ''} onBeforeChange={checkSameName} onChange={() => dispatch({ type: 'SET_ROLE', payload: null })} />;
+        return <EditRole
+            id={state.role.id || -1}
+            name={state.role.role_name || ''}
+            groupId={state.group}
+            onBeforeChange={checkSameName}
+            onChange={() => {
+                dispatch({ type: 'SET_ROLE', payload: null })
+                loadData()
+            }}
+        />;
     }
 
     return (
