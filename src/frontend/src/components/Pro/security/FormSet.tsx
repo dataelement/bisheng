@@ -39,8 +39,9 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
         }
     }
     const handleSave = () => {
-        onSave()
-        onChange(form)
+        onChange(form).then(res => {
+            !res && onSave()
+        })
     }
     return <>
         <div className="px-4 mt-6">

@@ -35,14 +35,13 @@ function FlowRadio({ limit, onChange }) {
     const { t } = useTranslation()
 
     const handleChange = (e) => {
-        console.log('---------->>>')
         const value = e.target.value
         if(value < 0) return 
         onChange(parseInt(value))
     }
 
     return <div>
-        <RadioGroup className="flex space-x-2 h-[20px]" value={limit ? 'true' : 'false'}
+        <RadioGroup className="flex space-x-2 h-[20px] items-center" value={limit ? 'true' : 'false'}
             onValueChange={(value) => onChange(value === 'false' ? 0 : 10)}>
             <div>
                 <Label className="flex justify-center">
@@ -54,13 +53,10 @@ function FlowRadio({ limit, onChange }) {
                     <RadioGroupItem className="mr-2" value="true" />{t('system.limit')}
                 </Label>
             </div>
-            {limit !== 0 && <div>
-                <Label>
-                    <p className="mt-[-3px]">
-                        {t('system.maximum')}<Input type="number" value={limit} className="inline h-5 w-[70px]"
-                            onChange={handleChange}/>{t('system.perMinute')}
-                    </p>
-                </Label>
+            {limit !== 0 && <div className="mt-[-3px]">
+                <Label>{t('system.maximum')}</Label>
+                <Input type="number" value={limit} className="inline h-5 w-[70px] font-medium"onChange={handleChange}/>
+                <Label>{t('system.perMinute')}</Label>
             </div>}
         </RadioGroup>
     </div>
@@ -119,16 +115,16 @@ function FlowControl({ groupId, type, onChange }) {
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead>{name}</TableHead>
+                        <TableHead className=" w-[160px]">{name}</TableHead>
                         <TableHead>{t('system.createdBy')}</TableHead>
-                        <TableHead className="flex justify-evenly items-center">{t('system.flowCtrlStrategy')}</TableHead>
+                        <TableHead>{t('system.flowCtrlStrategy')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {data.map((i: any) => (<TableRow key={i.id}>
                         <TableCell>{i.name}</TableCell>
                         <TableCell>{i.user_name}</TableCell>
-                        <TableCell className="flex justify-evenly items-center pt-[15px]">
+                        <TableCell className="pt-4">
                             <FlowRadio limit={i.limit} onChange={(val) => handleChange(val, i.id)}></FlowRadio>
                         </TableCell>
                     </TableRow>))}

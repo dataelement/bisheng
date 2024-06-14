@@ -36,3 +36,4 @@ export { ToolIcon } from './tool';
 export { UploadIcon } from './upload';
 export { UserIcon } from './user';
 export { LogIcon } from './log';
+export { DropDownIcon } from './down'

@@ -8,7 +8,8 @@ import {
     ModelIcon,
     QuitIcon,
     SystemIcon,
-    TechnologyIcon
+    TechnologyIcon,
+    DropDownIcon
 } from "@/components/bs-icons";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { LockClosedIcon } from "@radix-ui/react-icons";
@@ -88,7 +89,9 @@ export default function MainLayout() {
                         <img className="h-7 w-7 rounded-2xl mr-4" src="/user.png" alt="" />
                         <SelectHover
                             triagger={
-                                <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">{user.user_name}</span>
+                                <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">
+                                    {user.user_name} <DropDownIcon className=" inline-block mt-[-2px]"/>
+                                </span>
                             }>
                             <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>修改密码</span></SelectHoverItem>
                             <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>退出登录</span></SelectHoverItem>

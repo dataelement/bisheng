@@ -8,6 +8,8 @@ import FormView from "./FormView";
 import { getSensitiveApi, sensitiveSaveApi } from "@/controllers/API/pro";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { useTranslation } from "react-i18next";
+import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip";
 
 export default function AssistantSetting({ id, type }) {
 
@@ -52,11 +54,23 @@ export default function AssistantSetting({ id, type }) {
     return <AccordionItem value="item-3">
         <AccordionTrigger>
             <div className="flex flex-1 items-center justify-between">
-                <span>内容安全审查</span>
+                <div className="flex items-center space-x-2">
+                    <span>内容安全审查</span>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger>
+                                <QuestionMarkCircledIcon />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>通过敏感词表或 API 对会话内容进行安全审查</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </div>
                 <div className="h-[20px] flex items-center">
                     <Sheet open={open} onOpenChange={(bln) => setOpen(bln)}>
                         <SheetTrigger>
-                            <SettingIcon onClick={(e) => { e.stopPropagation(); setOpen(!open) }} className="w-[32px] h-[32px]" />
+                            {form.isCheck && <SettingIcon onClick={(e) => { e.stopPropagation(); setOpen(!open) }} className="w-[32px] h-[32px]" />}
                         </SheetTrigger>
                         <SheetContent className="w-[500px]" onClick={(e) => e.stopPropagation()}>
                             <SheetTitle className="font-[500] pl-3 pt-2">内容安全审查设置</SheetTitle>
@@ -74,7 +88,6 @@ export default function AssistantSetting({ id, type }) {
         </AccordionTrigger>
         <AccordionContent className="mb-[-16px]">
             <FormView data={form} />
-            <div className="text-center text-xs text-muted-foreground mb-2">通过敏感词表或 API 对会话内容进行安全审查</div>
         </AccordionContent>
     </AccordionItem>
 };

@@ -1,13 +1,12 @@
 import { SettingIcon } from "@/components/bs-icons";
-import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
 import { Switch } from "@/components/bs-ui/switch";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { getSensitiveApi, sensitiveSaveApi } from "@/controllers/API/pro";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import FormSet from "./FormSet";
 import FormView from "./FormView";
-import { getSensitiveApi, sensitiveSaveApi } from "@/controllers/API/pro";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { useTranslation } from "react-i18next";
 
 export default function FlowSetting({ id, type }) {
 
@@ -55,7 +54,7 @@ export default function FlowSetting({ id, type }) {
             <div className="flex items-center ml-6">
                 <Sheet open={open} onOpenChange={(bln) => setOpen(bln)}>
                     <SheetTrigger>
-                        <SettingIcon onClick={(e) => { e.stopPropagation(); setOpen(!open) }} className="w-[32px] h-[32px]" />
+                        {form.isCheck && <SettingIcon onClick={(e) => { e.stopPropagation(); setOpen(!open) }} className="w-[32px] h-[32px]" />}
                     </SheetTrigger>
                     <SheetContent className="w-[500px]" onClick={(e) => e.stopPropagation()}>
                         <SheetTitle className="font-[500] pl-3 pt-2">内容安全审查设置</SheetTitle>
