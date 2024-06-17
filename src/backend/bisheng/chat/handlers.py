@@ -278,12 +278,13 @@ class Handler:
                     logger.error(f'act=auto_gen act={action}')
             else:
                 # 普通技能的stop
-                thread_pool.cancel_task([key])  # 将进行中的任务进行cancel
-                message = payload.get('inputs') or '手动停止'
-                res = ChatResponse(type='end', message=message)
-                close = ChatResponse(type='close')
-                await session.send_json(client_id, chat_id, res)
-                await session.send_json(client_id, chat_id, close)
+                res = thread_pool.cancel_task([key])  # 将进行中的任务进行cancel
+                if res[0]:
+                    message = payload.get('inputs') or '手动停止'
+                    res = ChatResponse(type='end', user_id=user_id, message=message)
+                    close = ChatResponse(type='close')
+                    await session.send_json(client_id, chat_id, res)
+                    await session.send_json(client_id, chat_id, close)
 
         elif action.lower() == 'continue':
             # autgen_user 对话的时候，进程 wait() 需要换新
