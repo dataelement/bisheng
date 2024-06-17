@@ -61,7 +61,7 @@ export default function AssistantSetting({ id, type }) {
             <div className="flex flex-1 items-center justify-between">
                 <div className="flex items-center space-x-2">
                     <span>内容安全审查</span>
-                    <TooltipProvider>
+                    <TooltipProvider delayDuration={0}>
                         <Tooltip>
                             <TooltipTrigger>
                                 <QuestionMarkCircledIcon />

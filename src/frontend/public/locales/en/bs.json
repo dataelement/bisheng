@@ -84,8 +84,8 @@
     "limit": "Limit",
     "unlimited": "Unlimited",
     "iconHover": "Simultaneously constrained by the overall traffic control strategy of the user group",
-    "maximum": "Maximum of",
-    "perMinute": "concurrent conversations per second",
+    "maximum": "Up to",
+    "perMinute": "simultaneous online sessions",
     "changeTime": "Modification Time",
     "deleteGroup": "After deletion 【{{name}}】 will no longer exist, Do you want to delete it?"
   },

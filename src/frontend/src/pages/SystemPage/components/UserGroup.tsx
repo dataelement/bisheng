@@ -82,7 +82,7 @@ export default function UserGroups() {
                     <TableRow>
                         <TableHead className="w-[200px]">{t('system.groupName')}</TableHead>
                         <TableHead>{t('system.admins')}</TableHead>
-                        {appConfig.isPro && <TableHead className="w-[130px]">{t('system.flowControl')}</TableHead>}
+                        {appConfig.isPro && <TableHead className="w-[150px]">{t('system.flowControl')}</TableHead>}
                         <TableHead className="w-[160px]">{t('system.changeTime')}</TableHead>
                         <TableHead className="text-right w-[130px]">{t('operations')}</TableHead>
                     </TableRow>

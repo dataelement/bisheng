@@ -251,7 +251,7 @@ export default function Setting() {
             <div className="flex flex-1 items-center justify-between">
               <span className="flex items-center gap-1">
                 <span>{t("build.skill")}</span>
-                <TooltipProvider delayDuration={200}>
+                <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <QuestionMarkCircledIcon />

@@ -218,7 +218,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         init()
     }, [])
 
-    return <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-136px)] overflow-y-auto pb-10 scrollbar-hide">
+    return <div className="max-w-[630px] mx-auto pt-4 h-[calc(100vh-136px)] overflow-y-auto pb-10 scrollbar-hide">
         <div className="font-bold mt-4">
             <p className="text-xl mb-4">{t('system.groupName')}</p>
             <Input placeholder={t('system.userGroupName')} required value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })}></Input>

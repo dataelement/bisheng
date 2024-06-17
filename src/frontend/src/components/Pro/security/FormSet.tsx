@@ -83,7 +83,7 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
                     </div>
                 </div>
                 <div className="flex justify-center relative">
-                    <Textarea className="h-[100px]" value={form.words}
+                    <Textarea className="h-[100px] resize-none" value={form.words}
                         onChange={(e) => setForm({ ...form, words: e.target.value })}
                         placeholder="使用换行符进行分隔，每行一个"></Textarea>
                     <input type="file" accept=".txt" id="fileUpload" className="hidden" onChange={handleUploadFile} />
@@ -95,7 +95,7 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
             </div>
             <span className="bisheng-label">自动回复内容</span>
             <div className="flex justify-center mt-4">
-                <Textarea className="h-[100px]" value={form.autoReply}
+                <Textarea className="h-[100px] resize-none" value={form.autoReply}
                     onChange={(e) => setForm({ ...form, autoReply: e.target.value })}
                     maxLength={500}
                     placeholder="填写命中安全审查时的自动回复内容，例如“当前对话内容违反相关规范，请修改后重新输入"></Textarea>

@@ -2,6 +2,8 @@ import { Button } from "@/components/bs-ui/button";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import MultiSelect from "@/components/bs-ui/select/multi";
+import { getUsersApi } from "@/controllers/API/user";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import {
@@ -12,12 +14,38 @@ import {
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import { useEffect, useRef, useState } from "react";
-import { getUsersApi } from "@/controllers/API/user";
+import { getUserGroupsApi } from "@/controllers/API/user";
+
+const useGroups = () => {
+    const [groups, setGroups] = useState([])
+    const loadData = () => {
+        getUserGroupsApi().then(res => setGroups(res.records))
+    }
+    return {
+        groups,
+        loadData
+    }
+}
 
 export default function index() {
     const { t } = useTranslation()
     const { users, reload, loadMore, search } = useUsers()
+    const { groups, loadData } = useGroups()
+
+    const [keys, setKeys] = useState({
+        users: [],
+        group: '',
+        role: '',
+        startTime: '',
+        endTime: '',
+        module: '',
+        action: ''
+    })
+
+    const handleSearch = () => {
+        console.log(keys.users.map(u => u.value))
+        console.log(keys.group)
+    }
 
     return <div className="relative">
         <div className="h-[calc(100vh-98px)] overflow-y-auto px-2 py-4 pb-10">
@@ -25,27 +53,24 @@ export default function index() {
                 <div className="w-[180px] relative">
                     <MultiSelect
                         className=" w-full"
+                        multiple
                         options={users}
-                        value={[]}
+                        value={keys.users}
                         placeholder="选择用户"
                         onLoad={reload}
                         onSearch={search}
                         onScrollLoad={loadMore}
-                        onChange={(values) => console.log(values)}
+                        onChange={(values) => setKeys({...keys,users:values})}
                     ></MultiSelect>
                 </div>
                 <div className="w-[180px] relative">
-                    <Select>
+                    <Select onOpenChange={loadData} onValueChange={(value) => setKeys({...keys,group:value})}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="选择用户组" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
-                                <SelectItem value="apple">Apple</SelectItem>
-                                <SelectItem value="banana">Banana</SelectItem>
-                                <SelectItem value="blueberry">Blueberry</SelectItem>
-                                <SelectItem value="grapes">Grapes</SelectItem>
-                                <SelectItem value="pineapple">Pineapple</SelectItem>
+                                {groups.map(g => <SelectItem value={g.id}>{g.group_name}</SelectItem>)}
                             </SelectGroup>
                         </SelectContent>
                     </Select>
@@ -67,7 +92,7 @@ export default function index() {
                     </Select>
                 </div>
                 <div className="w-[180px] relative">
-                    <DatePicker placeholder='开始日期' onChange={(t) => { }} />
+                    <DatePicker placeholder='开始日期' onChange={(t) => console.log(t)} />
                 </div>
                 <div className="w-[180px] relative">
                     <DatePicker placeholder='结束日期' onChange={(t) => { }} />
@@ -104,7 +129,10 @@ export default function index() {
                         </SelectContent>
                     </Select>
                 </div>
-                <Button>重置</Button>
+                <div>
+                    <Button className=" mr-2" onClick={handleSearch}>查询</Button>
+                    <Button variant="outline">重置</Button>
+                </div>
             </div>
             <Table className="mb-[50px]">
                 {/* <TableCaption>用户列表.</TableCaption> */}
