@@ -164,8 +164,8 @@ def get_chatlist_list(*,
             status_code=200)
 def get_online_chat(*,
                     keyword: Optional[str] = None,
-                    page: Optional[int] = 1,
-                    limit: Optional[int] = 10,
+                    page: Optional[int] = 0,
+                    limit: Optional[int] = 0,
                     Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
@@ -200,7 +200,9 @@ def get_online_chat(*,
                                update_time=one.update_time,
                                flow_type='flow'))
     res.sort(key=lambda x: x.update_time, reverse=True)
-    return resp_200(data=res[(page - 1) * limit:page * limit])
+    if page and limit:
+        res = res[(page - 1) * limit:page * limit]
+    return resp_200(data=res)
 
 
 @router.websocket('/chat/{flow_id}')
