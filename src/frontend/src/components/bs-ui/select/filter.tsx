@@ -33,7 +33,7 @@ const FilterUserGroup: React.FC<FilterUserGroupProps> = ({
       <div>
         <SearchInput placeholder={placeholder} className="w-[240px]" onChange={search}></SearchInput>
       </div>
-      <div className="mt-2 max-h-[550px] min-h-20 overflow-y-auto">
+      <div className="mt-2 max-h-[260px] min-h-20 overflow-y-auto">
         {options.map((i) => (
           <div className="flex items-center space-x-2 text-gray-500 mb-1" key={i.id}>
             <Checkbox id={i.id} checked={value.includes(i.id)} onCheckedChange={() => onChecked(i.id)} />

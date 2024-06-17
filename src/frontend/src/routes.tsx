@@ -85,7 +85,7 @@ export const privateRouter = createBrowserRouter([
   // 独立会话页
   { path: "/chat", element: <SkillChatPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
-  { path: "/chatpro/:id/", element: <ChatPro /> },
+  { path: "/chatpro/:id", element: <ChatPro /> },
   { path: "/report/:id/", element: <Report /> },
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
   { path: "/reset", element: <ResetPwdPage /> },

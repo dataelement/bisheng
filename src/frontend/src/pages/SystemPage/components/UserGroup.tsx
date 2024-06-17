@@ -10,6 +10,7 @@ import {
     Table,
     TableBody,
     TableCell,
+    TableFooter,
     TableHead,
     TableHeader,
     TableRow
@@ -39,7 +40,7 @@ export default function UserGroups() {
     }
     const handleDelete = (userGroup) => {
         bsConfirm({
-            desc: t('system.deleteGroup', {name:userGroup.group_name}),
+            desc: t('system.deleteGroup', { name: userGroup.group_name }),
             okTxt: t('delete'),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(delUserGroupApi(userGroup.id).then(loadData))
@@ -100,6 +101,11 @@ export default function UserGroups() {
                         </TableRow>
                     ))}
                 </TableBody>
+                <TableFooter>
+                    {!userGroups.length && <TableRow>
+                        <TableCell colSpan={5} className="text-center text-gray-400">{t('build.empty')}</TableCell>
+                    </TableRow>}
+                </TableFooter>
             </Table>
         </div>
         <div className="bisheng-table-footer">

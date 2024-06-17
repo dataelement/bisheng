@@ -16,8 +16,9 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
         setForm(data)
     }, [data])
 
-    const handleCheckboxChange = (val, name) => {
+    const handleCheckboxChange = (val, name) => {    
         let temp = form.wordsType
+        // setForm({ ...form, wordsType: [1] })
         val ? setForm({
             ...form, wordsType: [...temp, name]
         }) : setForm({
@@ -66,8 +67,8 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
                         <Checkbox
                             id="c1"
                             value="1"
-                            checked={form.wordsType?.includes('1')}
-                            onCheckedChange={(val) => handleCheckboxChange(val, '1')}
+                            checked={form.wordsType?.includes(1)}
+                            onCheckedChange={(val) => handleCheckboxChange(val, 1)}
                         />
                         <Label htmlFor="c1" className="cursor-pointer">内置词表</Label>
                     </div>
@@ -75,8 +76,8 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
                         <Checkbox
                             id="c2"
                             value="2"
-                            checked={form.wordsType?.includes('2')}
-                            onCheckedChange={(val) => handleCheckboxChange(val, '2')}
+                            checked={form.wordsType?.includes(2)}
+                            onCheckedChange={(val) => handleCheckboxChange(val, 2)}
                         />
                         <Label htmlFor="c2" className="cursor-pointer">自定义词表</Label>
                     </div>
