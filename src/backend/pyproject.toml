@@ -88,6 +88,7 @@ arxiv = "2.1.0"
 matplotlib = "3.8.4"
 cchardet = "^2.1.7"
 llama-index = "0.9.48"
+tenacity = "<8.4.0"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
