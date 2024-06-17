@@ -177,8 +177,8 @@ async def get_group_resources(*,
 async def get_group_roles(*,
                           group_id: int = Query(..., description="用户组ID"),
                           keyword: str = Query(None, description="搜索关键字"),
-                          page: int = 1,
-                          limit: int = 10,
+                          page: int = 0,
+                          limit: int = 0,
                           user: UserPayload = Depends(get_login_user)):
     """
     获取用户组内的角色列表
