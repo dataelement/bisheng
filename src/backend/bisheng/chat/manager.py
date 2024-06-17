@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import json
 import time
 import uuid
@@ -323,7 +324,7 @@ class ChatManager:
                             future.result()
                             logger.debug('task_complete key={}', future_key)
                         except Exception as e:
-                            if isinstance(e, asyncio.CancelledError):
+                            if isinstance(e, concurrent.futures.CancelledError):
                                 continue
                             logger.exception('feature_key={} {}', future_key, e)
                             erro_resp = ChatResponse(**base_param)
