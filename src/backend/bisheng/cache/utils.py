@@ -157,9 +157,9 @@ def detect_encoding_cchardet(file_obj, num_bytes=1024):
 def convert_encoding_cchardet(input_file, output_file, target_encoding='utf-8'):
     """将文件转换为目标编码"""
     source_encoding, confidence = detect_encoding_cchardet(input_file)
-    if confidence < 0.5:  # 检测不出来不做任何处理
-        output_file.write(input_file.read())
-        output_file.seek(0)
+    if confidence < 0.5 or source_encoding.lower() == target_encoding:  # 检测不出来不做任何处理
+        output_file.close()
+        output_file = input_file
         return output_file
 
     source_content = input_file.read().decode(source_encoding)
@@ -203,20 +203,24 @@ def save_uploaded_file(file, folder_name, file_name):
     # Reset the file cursor to the beginning of the file
     file.seek(0)
 
-    with BytesIO() as output_file:
-        # convert no utf-8 file to utf-8
+    output_file = file
+    # convert no utf-8 file to utf-8
+    if file_name.endswith('.txt') or file_name.endswith('.md'):
+        output_file = BytesIO()
         output_file = convert_encoding_cchardet(file, output_file)
-        if settings.get_knowledge().get('minio'):
-            minio_client = MinioClient()
-            # 存储oss
-            file_byte = output_file.read()
-            minio_client.upload_tmp(file_name, file_byte)
-            file_path = minio_client.get_share_link(file_name, tmp_bucket)
-        else:
-            file_path = folder_path / f'{md5_name}_{file_name}'
-            with open(file_path, 'wb') as new_file:
-                while chunk := output_file.read(8192):
-                    new_file.write(chunk)
+
+    if settings.get_knowledge().get('minio'):
+        minio_client = MinioClient()
+        # 存储oss
+        file_byte = output_file.read()
+        minio_client.upload_tmp(file_name, file_byte)
+        file_path = minio_client.get_share_link(file_name, tmp_bucket)
+    else:
+        file_path = folder_path / f'{md5_name}_{file_name}'
+        with open(file_path, 'wb') as new_file:
+            while chunk := output_file.read(8192):
+                new_file.write(chunk)
+    output_file.close()
     return file_path
 
 
