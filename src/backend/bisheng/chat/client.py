@@ -203,15 +203,19 @@ class ChatClient:
                 if isinstance(one, AIMessage):
                     answer += one.content
 
-            # todo: 后续优化代码解释器的实现方案，保证输出的文件可以公开访问
+            # todo: 后续优化代码解释器的实现方案，保证输出的文件可以公开访问 ugly solve
             # 获取minio的share地址，把share域名去掉, 为毕昇的部署方案特殊处理下
             if gpts_tool_conf := self.gpts_conf.get('tools'):
                 if bisheng_code_conf := gpts_tool_conf.get("bisheng_code_interpreter"):
                     answer = answer.replace(f"http://{bisheng_code_conf['minio']['MINIO_SHAREPOIN']}", "")
+            answer_end_type = 'end'
+            # 如果是流式的llm则用end_cover结束, 覆盖之前流式的输出
+            if getattr(self.gpts_agent.llm, 'streaming', False):
+                answer_end_type = 'end_cover'
 
             res = await self.add_message('bot', answer, 'answer')
             await self.send_response('answer', 'start', '')
-            await self.send_response('answer', 'end_cover', answer, message_id=res.id if res else None)
+            await self.send_response('answer', answer_end_type, answer, message_id=res.id if res else None)
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')
         except Exception as e:
