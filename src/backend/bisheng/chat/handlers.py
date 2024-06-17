@@ -10,6 +10,7 @@ from bisheng.database.models.report import Report
 from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
+from bisheng.utils.threadpool import thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.chains.autogen.auto_gen import AutoGenChain
 from sqlmodel import select
@@ -269,11 +270,21 @@ class Handler:
         logger.info(f'reciever_human_interactive langchain={langchain_object}')
         action = payload.get('action')
         if action.lower() == 'stop':
-            if hasattr(langchain_object, 'stop'):
-                logger.info('reciever_human_interactive langchain_objct')
-                await langchain_object.stop()
+            if isinstance(langchain_object, AutoGenChain):
+                if hasattr(langchain_object, 'stop'):
+                    logger.info('reciever_human_interactive langchain_objct')
+                    await langchain_object.stop()
+                else:
+                    logger.error(f'act=auto_gen act={action}')
             else:
-                logger.error(f'act=auto_gen act={action}')
+                # 普通技能的stop
+                thread_pool.cancel_task([key])  # 将进行中的任务进行cancel
+                message = payload.get('inputs') or '手动停止'
+                res = ChatResponse(type='end', message=message)
+                close = ChatResponse(type='close')
+                await session.send_json(client_id, chat_id, res)
+                await session.send_json(client_id, chat_id, close)
+
         elif action.lower() == 'continue':
             # autgen_user 对话的时候，进程 wait() 需要换新
             if hasattr(langchain_object, 'input'):
@@ -327,9 +338,9 @@ class Handler:
                     if 'source_documents' in s:
                         answer = eval(s.split(':', 1)[1])
                         if 'result' in answer:
-                            finally_log += 'Answer: ' + answer.get('result') + "\n\n"
+                            finally_log += 'Answer: ' + answer.get('result') + '\n\n'
                     else:
-                        finally_log += s + "\n\n"
+                        finally_log += s + '\n\n'
                 msg = ChatResponse(intermediate_steps=finally_log, type='end', user_id=user_id)
                 steps.append(msg)
             else:

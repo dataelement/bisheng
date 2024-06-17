@@ -110,6 +110,20 @@ class ChatMessageDao(MessageBase):
         return True
 
     @classmethod
+    def delete_by_message_id(cls, user_id: int, message_id: str):
+        if user_id is None or message_id is None:
+            logger.info('delete_param_error user_id={} chat_id={}', user_id, message_id)
+            return False
+
+        statement = delete(ChatMessage).where(ChatMessage.chat_id == message_id,
+                                              ChatMessage.user_id == user_id)
+
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+        return True
+
+    @classmethod
     def insert_one(cls, message: ChatMessage) -> ChatMessage:
         with session_getter() as session:
             session.add(message)
