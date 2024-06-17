@@ -250,7 +250,7 @@ export async function postValidatePrompt(
  */
 export const getChatsApi = (page) => {
   return (axios.get(`/api/v1/chat/list?page=${page}&limit=40`) as Promise<any[]>).then(res =>
-    res?.filter((el,i) => el.chat_id) || []
+    res?.filter((el, i) => el.chat_id) || []
   )
 };
 
@@ -417,13 +417,17 @@ export async function GPUlistByFinetuneApi(): Promise<any> {
  */
 // 分词
 export async function splitWordApi(word: string, messageId: string): Promise<string[]> {
-  return await axios.get(`/api/v1/qa/keyword?answer=${encodeURIComponent(word)}&message_id=${messageId}`)
+  return await axios.get(`/api/v1/qa/keyword?message_id=${messageId}`)
 }
 
 // 获取 chunks
 export async function getSourceChunksApi(chatId: string, messageId: number, keys: string) {
   try {
-    let chunks: any[] = await axios.get(`/api/v1/qa/chunk?chat_id=${chatId}&message_id=${messageId}&keys=${keys}`)
+    let chunks: any[] = await axios.post(`/api/v1/qa/chunk`, {
+      chat_id: chatId,
+      message_id: messageId,
+      keys,
+    })
 
     const fileMap = {}
     chunks.forEach(chunk => {
