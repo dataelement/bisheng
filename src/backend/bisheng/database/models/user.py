@@ -138,6 +138,7 @@ class UserDao(UserBase):
             session.refresh(user)
             db_user_role = UserRole(user_id=user.user_id, role_id=DefaultRole)
             session.add(db_user_role)
+            session.commit()
             session.refresh(user)
             return user
 
