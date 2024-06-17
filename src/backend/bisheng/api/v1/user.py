@@ -111,6 +111,12 @@ def get_error_password_key(username: str):
     return USER_PASSWORD_ERROR + username
 
 
+def clear_error_password_key(username: str):
+    # 清理密码错误次数的计数
+    error_key = get_error_password_key(username)
+    redis_client.delete(error_key)
+
+
 @router.post('/user/login', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
     # 验证码校验
@@ -326,8 +332,7 @@ async def update(*, user: UserUpdate, login_user: UserPayload = Depends(get_logi
         db_user.delete = user.delete
     if db_user.delete == 0:  # 启用用户
         # 清理密码错误次数的计数
-        error_key = get_error_password_key(db_user.user_name)
-        redis_client.delete(error_key)
+        clear_error_password_key(db_user.user_name)
     with session_getter() as session:
         session.add(db_user)
         session.commit()
@@ -738,6 +743,8 @@ async def reset_password(
     user_info.password = decrypt_md5_password(password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
+
+    clear_error_password_key(user_info.user_name)
     return resp_200()
 
 
@@ -761,6 +768,8 @@ async def change_password(*,
     user_info.password = decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
+
+    clear_error_password_key(user_info.user_name)
     return resp_200()
 
 
@@ -780,6 +789,8 @@ async def change_password_public(*, username: str, password: str, new_password: 
     user_info.password = decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
+
+    clear_error_password_key(username)
     return resp_200()
 
 
