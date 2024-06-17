@@ -2,18 +2,17 @@ import json
 from typing import Any
 from uuid import UUID
 
-from starlette.responses import StreamingResponse
-
 from bisheng.api.JWT import get_login_user
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow_no_yield, get_L2_param_from_flow, remove_api_keys
-from bisheng.api.v1.schemas import FlowListRead, UnifiedResponseModel, resp_200, FlowVersionCreate, \
-    FlowCompareReq, StreamData
+from bisheng.api.v1.schemas import (FlowCompareReq, FlowListRead, FlowVersionCreate, StreamData,
+                                    UnifiedResponseModel, resp_200)
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow, FlowCreate, FlowRead, FlowReadWithStyle, FlowUpdate, FlowDao
+from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle,
+                                          FlowUpdate)
 from bisheng.database.models.flow_version import FlowVersionDao
-from bisheng.database.models.group_resource import GroupResource, ResourceTypeEnum, GroupResourceDao
+from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.settings import settings
@@ -21,6 +20,7 @@ from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_jwt_auth import AuthJWT
 from sqlmodel import select
+from starlette.responses import StreamingResponse
 
 # build router
 router = APIRouter(prefix='/flows', tags=['Flows'])
@@ -57,17 +57,15 @@ def create_flow_hook(flow: Flow, user_payload: UserPayload):
         # 批量将助手资源插入到关联表里
         batch_resource = []
         for one in user_group:
-            batch_resource.append(GroupResource(
-                group_id=one.group_id,
-                third_id=flow.id.hex,
-                type=ResourceTypeEnum.FLOW.value))
+            batch_resource.append(
+                GroupResource(group_id=one.group_id,
+                              third_id=flow.id.hex,
+                              type=ResourceTypeEnum.FLOW.value))
         GroupResourceDao.insert_group_batch(batch_resource)
 
 
 @router.get('/versions', status_code=200)
-def get_versions(*,
-                 flow_id: UUID,
-                 Authorize: AuthJWT = Depends()):
+def get_versions(*, flow_id: UUID, Authorize: AuthJWT = Depends()):
     """
     获取技能对应的版本列表
     """
@@ -108,9 +106,7 @@ def update_versions(*,
 
 
 @router.delete('/versions/{version_id}', status_code=200)
-def delete_versions(*,
-                    version_id: int,
-                    Authorize: AuthJWT = Depends()):
+def delete_versions(*, version_id: int, Authorize: AuthJWT = Depends()):
     """
     删除版本
     """
@@ -121,9 +117,7 @@ def delete_versions(*,
 
 
 @router.get('/versions/{version_id}', status_code=200)
-def get_version_info(*,
-                     version_id: int,
-                     Authorize: AuthJWT = Depends()):
+def get_version_info(*, version_id: int, Authorize: AuthJWT = Depends()):
     """
     获取版本信息
     """
@@ -177,7 +171,10 @@ def read_flow(*, flow_id: UUID):
 
 
 @router.patch('/{flow_id}', response_model=UnifiedResponseModel[FlowRead], status_code=200)
-async def update_flow(*, flow_id: UUID, flow: FlowUpdate, login_user: UserPayload = Depends(get_login_user)):
+async def update_flow(*,
+                      flow_id: UUID,
+                      flow: FlowUpdate,
+                      login_user: UserPayload = Depends(get_login_user)):
     """Update a flow."""
     flow_id = flow_id.hex
     with session_getter() as session:
@@ -197,7 +194,7 @@ async def update_flow(*, flow_id: UUID, flow: FlowUpdate, login_user: UserPayloa
             await build_flow_no_yield(graph_data=db_flow.data,
                                       artifacts=art,
                                       process_file=False,
-                                      flow_id=flow_id.hex)
+                                      flow_id=flow_id)
         except Exception as exc:
             logger.exception(exc)
             raise HTTPException(status_code=500, detail=f'Flow 编译不通过, {str(exc)}')
@@ -238,7 +235,7 @@ def delete_flow(*, flow_id: UUID, Authorize: AuthJWT = Depends()):
 
 
 def delete_flow_hook(flow: Flow, user_payload: UserPayload):
-    logger.info(f"delete_flow_hook flow: {flow.id}, user_payload: {user_payload.user_id}")
+    logger.info(f'delete_flow_hook flow: {flow.id}, user_payload: {user_payload.user_id}')
     GroupResourceDao.delete_group_resource_by_third_id(flow.id.hex, ResourceTypeEnum.FLOW)
 
 
@@ -259,7 +256,8 @@ async def compare_flow_node(*, item: FlowCompareReq, Authorize: AuthJWT = Depend
 
 
 @router.get('/compare/stream', status_code=200, response_class=StreamingResponse)
-async def compare_flow_node_stream(*, data: Any = Query(description="对比所需数据的json序列化后的字符串"),
+async def compare_flow_node_stream(*,
+                                   data: Any = Query(description='对比所需数据的json序列化后的字符串'),
                                    Authorize: AuthJWT = Depends()):
     """ 技能多版本对比 """
     Authorize.jwt_required()
