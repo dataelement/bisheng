@@ -183,7 +183,7 @@ def get_online_chat(*,
         flows = FlowDao.get_user_access_online_flows(user_id, keyword=keyword)
     for one in all_assistant:
         res.append(
-            FlowGptsOnlineList(id=one.id.hex,
+            FlowGptsOnlineList(id=str(one.id),
                                name=one.name,
                                desc=one.desc,
                                create_time=one.create_time,
@@ -193,7 +193,7 @@ def get_online_chat(*,
     # 获取用户可见的所有已上线的技能
     for one in flows:
         res.append(
-            FlowGptsOnlineList(id=one.id.hex,
+            FlowGptsOnlineList(id=str(one.id),
                                name=one.name,
                                desc=one.description,
                                create_time=one.create_time,
