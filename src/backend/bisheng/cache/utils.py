@@ -6,10 +6,12 @@ import json
 import os
 import tempfile
 from collections import OrderedDict
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import unquote, urlparse
 
+import cchardet
 import requests
 from appdirs import user_cache_dir
 from bisheng.settings import settings
@@ -21,7 +23,6 @@ CACHE_DIR = user_cache_dir('bisheng', 'bisheng')
 
 
 def create_cache_folder(func):
-
     def wrapper(*args, **kwargs):
         # Get the destination folder
         cache_path = Path(CACHE_DIR) / PREFIX
@@ -143,6 +144,30 @@ def save_binary_file(content: str, file_name: str, accepted_types: list[str]) ->
     return file_path
 
 
+def detect_encoding_cchardet(file_obj, num_bytes=1024):
+    """使用cchardet检测文件的编码"""
+    raw_data = file_obj.read(num_bytes)
+    result = cchardet.detect(raw_data)
+    encoding = result['encoding']
+    confidence = result['confidence']
+    file_obj.seek(0)
+    return encoding, confidence
+
+
+def convert_encoding_cchardet(input_file, output_file, target_encoding='utf-8'):
+    """将文件转换为目标编码"""
+    source_encoding, confidence = detect_encoding_cchardet(input_file)
+    if confidence < 0.5:  # 检测不出来不做任何处理
+        output_file.write(input_file.read())
+        output_file.seek(0)
+        return output_file
+
+    source_content = input_file.read().decode(source_encoding)
+    output_file.write(source_content.encode(target_encoding))
+    output_file.seek(0)
+    return output_file
+
+
 @create_cache_folder
 def save_uploaded_file(file, folder_name, file_name):
     """
@@ -151,6 +176,7 @@ def save_uploaded_file(file, folder_name, file_name):
     Args:
         file: The uploaded file object.
         folder_name: The name of the folder to save the file in.
+        file_name: The name of the file, including its extension.
 
     Returns:
         The path to the saved file.
@@ -177,19 +203,20 @@ def save_uploaded_file(file, folder_name, file_name):
     # Reset the file cursor to the beginning of the file
     file.seek(0)
 
-    # Save the file with the hash as its name
-    if settings.get_knowledge().get('minio'):
-        minio_client = MinioClient()
-        # 存储oss
-        file_byte = file.read()
-        minio_client.upload_tmp(file_name, file_byte)
-        file_path = minio_client.get_share_link(file_name, tmp_bucket)
-    else:
-        file_path = folder_path / f'{md5_name}_{file_name}'
-        with open(file_path, 'wb') as new_file:
-            while chunk := file.read(8192):
-                new_file.write(chunk)
-
+    with BytesIO() as output_file:
+        # convert no utf-8 file to utf-8
+        output_file = convert_encoding_cchardet(file, output_file)
+        if settings.get_knowledge().get('minio'):
+            minio_client = MinioClient()
+            # 存储oss
+            file_byte = output_file.read()
+            minio_client.upload_tmp(file_name, file_byte)
+            file_path = minio_client.get_share_link(file_name, tmp_bucket)
+        else:
+            file_path = folder_path / f'{md5_name}_{file_name}'
+            with open(file_path, 'wb') as new_file:
+                while chunk := output_file.read(8192):
+                    new_file.write(chunk)
     return file_path
 
 

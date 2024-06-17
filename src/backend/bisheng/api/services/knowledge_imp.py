@@ -214,7 +214,7 @@ def decide_vectorstores(collection_name: str, vector_store: str,
 
     param.update(vector_config)
     class_obj = import_vectorstore(vector_store)
-    return instantiate_vectorstore(class_object=class_obj, params=param)
+    return instantiate_vectorstore(vector_store, class_object=class_obj, params=param)
 
 
 def decide_knowledge_llm() -> Any:

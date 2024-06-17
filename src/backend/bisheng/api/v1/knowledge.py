@@ -138,7 +138,7 @@ async def process_knowledge(*,
                                     status=status,
                                     md5=md5_,
                                     remark=remark,
-                                    user_id=payload.get('user_id'))
+                                    user_id=login_user.user_id)
             with session_getter() as session:
                 session.add(db_file)
                 session.commit()
