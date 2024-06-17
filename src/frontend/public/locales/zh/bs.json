@@ -77,7 +77,7 @@
     "userGroupName": "输入用户组名称",
     "groupName": "用户组名称",
     "admins": "管理员",
-    "flowControl": "用户整体流量控制",
+    "flowControl": "用户组整体流量控制",
     "AssistantFlowCtrl": "助手流量控制",
     "SkillFlowCtrl": "技能流量控制",
     "createdBy": "创建人",

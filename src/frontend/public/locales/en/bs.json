@@ -76,7 +76,7 @@
     "userGroupName": "Enter UserGroup Name",
     "groupName": "UserGroup Name",
     "admins": "Admin",
-    "flowControl": "Overall User Flow Control",
+    "flowControl": "Overall UserGroup Flow Control",
     "AssistantFlowCtrl": "Assistant Flow Control",
     "SkillFlowCtrl": "Skill Flow Control",
     "createdBy": "CreatedBy",
