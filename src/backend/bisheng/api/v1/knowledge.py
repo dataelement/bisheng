@@ -297,8 +297,7 @@ def get_filelist(*,
         db_knowledge = session.get(Knowledge, knowledge_id)
     if not db_knowledge:
         raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
-    writable = login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE)
-    if not writable:
+    if not login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
         raise HTTPException(status_code=500, detail='没有访问权限')
 
     # 查找上传的文件信息
@@ -323,7 +322,7 @@ def get_filelist(*,
     return resp_200({
         'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
         'total': total_count,
-        'writeable': writable
+        'writeable': login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE)
     })
 
 
