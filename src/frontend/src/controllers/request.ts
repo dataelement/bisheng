@@ -4,6 +4,7 @@ import i18next from "i18next";
 axios.defaults.withCredentials = true;
 const customAxios = axios.create({
     baseURL:''
+    // baseURL:'/proapi'
     // 配置
 });
 

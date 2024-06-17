@@ -379,6 +379,7 @@ export default function FormModal({
       );
       sendAll({
         ...reactFlowInstance.toObject(),
+        flow_id: flow.id,
         inputs: inputs,
         chatHistory,
         name: flow.name,

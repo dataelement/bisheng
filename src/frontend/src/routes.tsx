@@ -91,11 +91,17 @@ export const privateRouter = createBrowserRouter([
   { path: "/reset", element: <ResetPwdPage /> },
   // { path: "/test", element: <Test /> },
   { path: "*", element: <Navigate to="/" replace /> }
-]);
+],
+  {
+    // basename: "/pro"
+  });
 
 
 export const publicRouter = createBrowserRouter([
   { path: "/", element: <LoginPage /> },
   { path: "/reset", element: <ResetPwdPage /> },
   { path: "*", element: <LoginPage /> }
-])
+],
+  {
+    // basename: "/pro"
+  })

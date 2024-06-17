@@ -27,7 +27,6 @@ export default function l2Edit() {
     const { id, vid } = useParams()
     const { appConfig } = useContext(locationContext)
     const { flow: nextFlow, setFlow, saveFlow } = useContext(TabsContext);
-    const { setErrorData, setSuccessData } = useContext(alertContext);
     const flow = useMemo(() => {
         return id ? nextFlow : null
     }, [nextFlow])
@@ -133,10 +132,16 @@ export default function l2Edit() {
         setLoading(true)
         formRef.current?.save()
 
-        await saveFlow({ ...flow, name, description, guide_word: guideWords })
+        const res = await captureAndAlertRequestErrorHoc(saveFlow({ ...flow, name, description, guide_word: guideWords }))
         setLoading(false)
-        setSuccessData({ title: t('success') });
-        setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
+        if (res) {
+            message({
+                title: t('prompt'),
+                variant: 'success',
+                description: t('success')
+            });
+            setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
+        }
     }
 
     // 表单收缩
@@ -228,7 +233,7 @@ export default function l2Edit() {
                         </p>
                         {/* base form */}
                         <div className="w-full overflow-hidden transition-all px-1">
-                            <FlowSetting id={id} type={2} />
+                            <FlowSetting id={id} type={2} isOnline={nextFlow?.status === 2} />
                         </div>
                     </div>}
                 </div>

@@ -92,7 +92,7 @@ export default function AssistantSetting({ id, type }) {
             </div>
         </AccordionTrigger>
         <AccordionContent className="mb-[-16px]">
-            <FormView data={form} />
+            {form.isCheck && <FormView data={form} />}
         </AccordionContent>
     </AccordionItem>
 };
