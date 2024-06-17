@@ -115,7 +115,7 @@ class ChatMessageDao(MessageBase):
             logger.info('delete_param_error user_id={} chat_id={}', user_id, message_id)
             return False
 
-        statement = delete(ChatMessage).where(ChatMessage.chat_id == message_id,
+        statement = delete(ChatMessage).where(ChatMessage.id == message_id,
                                               ChatMessage.user_id == user_id)
 
         with session_getter() as session:
