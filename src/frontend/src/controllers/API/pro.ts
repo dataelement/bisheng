@@ -77,7 +77,6 @@ export function getUserGroupsProApi() {
 
 // GET sso URL
 export function getSSOurlApi() {
-    const url = 'http://192.168.106.115:8098/api/oauth2/wx'
-    return Promise.resolve(url)
-    // return axios.get(`/api/group/list`);
+    // return Promise.resolve(url)
+    return axios.get(`/api/oauth2/list`).then(res => res.wx);
 }

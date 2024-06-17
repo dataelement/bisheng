@@ -6,6 +6,7 @@ import {
     Table,
     TableBody,
     TableCell,
+    TableFooter,
     TableHead,
     TableHeader,
     TableRow
@@ -179,6 +180,11 @@ export default function Roles() {
                             </TableRow>
                         ))}
                     </TableBody>
+                    <TableFooter>
+                        {!state.roles.length && <TableRow>
+                            <TableCell colSpan={5} className="text-center text-gray-400">{t('build.empty')}</TableCell>
+                        </TableRow>}
+                    </TableFooter>
                 </Table>
             </div>
             <div className="bisheng-table-footer">

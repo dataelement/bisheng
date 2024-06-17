@@ -140,7 +140,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 ws.onclose = (event) => {
                     wsRef.current = null
                     console.error('链接手动断开 event :>> ', event);
-                    if ([1005, 1008].includes(event.code)) {
+                    if ([1005, 1008, 1009].includes(event.code)) {
                         console.warn('即将废弃 :>> ');
                         setInputLock({ locked: true, reason: event.reason })
                     } else {

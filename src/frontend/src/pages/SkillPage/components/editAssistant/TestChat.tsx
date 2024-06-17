@@ -26,7 +26,7 @@ export default function TestChat({ assisId, guideQuestion }) {
         const inputKey = 'input';
         const msgData = {
             chatHistory: messages,
-            flow_id: '',
+            flow_id: data?.id || '',
             chat_id: '',
             name: assistantState.name,
             description: assistantState.desc,

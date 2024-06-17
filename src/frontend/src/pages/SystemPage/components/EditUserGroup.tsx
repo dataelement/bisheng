@@ -28,34 +28,47 @@ import { Input, SearchInput } from "../../../components/bs-ui/input";
  * 3.再调闭源接口设置 流控
  * 
  * 资源流控控制，每次调接口只传变动的 limit
+ * limitState中转状态，limit只在初始化接收一次（不支持异步加载）
  * @returns 
  */
+const enum LimitType {
+    LIMITED = 'limited',
+    UNLIMITED = 'unlimited'
+}
 
 function FlowRadio({ limit = 0, onChange }) {
     const { t } = useTranslation()
+    const [status, setStatus] = useState(limit ? LimitType.LIMITED : LimitType.UNLIMITED)
+    const [limitState, setLimitState] = useState<any>(limit)
 
-    const handleChange = (e) => {
-        const value = e.target.value
-        if (value < 0 || value > 9999) return
-        onChange(parseInt(value))
+    const handleCommit = (type: LimitType, value: string = '0') => {
+        const valueNum = parseInt(value)
+        if (valueNum < 0 || valueNum > 9999) return
+        setStatus(type)
+        setLimitState(value)
+        onChange(Number(value))
     }
 
     return <div>
-        <RadioGroup className="flex space-x-2 h-[20px] items-center" value={limit ? 'true' : 'false'}
-            onValueChange={(value) => onChange(value === 'false' ? 0 : 10)}>
+        <RadioGroup className="flex space-x-2 h-[20px] items-center" value={status}
+            onValueChange={(value: LimitType) => handleCommit(value, value === LimitType.LIMITED ? '10' : '0')}>
             <div>
                 <Label className="flex justify-center">
-                    <RadioGroupItem className="mr-2" value="false" />{t('system.unlimited')}
+                    <RadioGroupItem className="mr-2" value={LimitType.UNLIMITED} />{t('system.unlimited')}
                 </Label>
             </div>
             <div>
                 <Label className="flex justify-center">
-                    <RadioGroupItem className="mr-2" value="true" />{t('system.limit')}
+                    <RadioGroupItem className="mr-2" value={LimitType.LIMITED} />{t('system.limit')}
                 </Label>
             </div>
-            {limit !== 0 && <div className="mt-[-3px]">
+            {status === LimitType.LIMITED && <div className="mt-[-3px]">
                 <Label>{t('system.maximum')}</Label>
-                <Input type="number" value={limit} className="inline h-5 w-[70px] font-medium" onChange={handleChange} />
+                <Input
+                    type="number"
+                    value={limitState}
+                    className="inline h-5 w-[70px] font-medium"
+                    onChange={(e) => handleCommit(LimitType.LIMITED, e.target.value)} />
                 <Label>{t('system.perMinute')}</Label>
             </div>}
         </RadioGroup>
@@ -159,6 +172,8 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
     const [lockOptions, setLockOptions] = useState([])
 
     const handleSave = async () => {
+        console.log('form', form);
+
         if (!form.groupName) {
             setForm({ ...form, groupName: data.group_name || '' })
             return toast({ title: t('prompt'), description: t('system.groupNameRequired'), variant: 'error' });

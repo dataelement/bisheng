@@ -95,7 +95,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             const inputKey = 'input';
             const msgData = {
                 chatHistory: messages,
-                flow_id: '',
+                flow_id: data?.id || '',
                 chat_id: chatId,
                 name: assistant.name,
                 description: assistant.desc,

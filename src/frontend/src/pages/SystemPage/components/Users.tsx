@@ -12,6 +12,7 @@ import {
     Table,
     TableBody,
     TableCell,
+    TableFooter,
     TableHead,
     TableHeader,
     TableRow
@@ -51,7 +52,7 @@ function UsersFilter({ options, nameKey, placeholder, onFilter }) {
         setSearchKey('')
     }
 
-    return <Popover open={open} onOpenChange={(bln) => setOpen(bln)}>
+    return <Popover open={open} onOpenChange={(bln) => { setOpen(bln); setSearchKey('') }}>
         <PopoverTrigger>
             <FilterIcon onClick={() => setOpen(!open)} className={_value.length ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
         </PopoverTrigger>
@@ -165,7 +166,7 @@ export default function Users(params) {
                             </div>
                         </TableHead>
                         <TableHead>{t('createTime')}</TableHead>
-                        <TableHead className="text-right">{t('operations')}</TableHead>
+                        <TableHead className="text-right w-[164px]">{t('operations')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -178,20 +179,25 @@ export default function Users(params) {
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
                                 {/* 编辑 */}
-                                {user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-6">{t('edit')}</Button> :
-                                    <Button variant="link" onClick={() => setCurrentUser(el)} className="px-0 pl-6">{t('edit')}</Button>}
+                                {user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0">{t('edit')}</Button> :
+                                    <Button variant="link" onClick={() => setCurrentUser(el)} className="px-0">{t('edit')}</Button>}
                                 {/* 重置密码 */}
-                                {user.role === 'admin' && <Button variant="link" className="px-0 pl-6" onClick={() => userPwdModalRef.current.open(el.user_id)}>重置密码</Button>}
+                                {user.role === 'admin' && <Button variant="link" className="px-0 pl-4" onClick={() => userPwdModalRef.current.open(el.user_id)}>重置密码</Button>}
                                 {/* 禁用 */}
                                 {
-                                    el.delete === 1 ? <Button variant="link" onClick={() => handleEnableUser(el)} className="text-green-500 px-0 pl-6">{t('enable')}</Button> :
-                                        user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-6">{t('disable')}</Button> :
-                                            <Button variant="link" onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-6">{t('disable')}</Button>
+                                    el.delete === 1 ? <Button variant="link" onClick={() => handleEnableUser(el)} className="text-green-500 px-0 pl-4">{t('enable')}</Button> :
+                                        user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-4">{t('disable')}</Button> :
+                                            <Button variant="link" onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-4">{t('disable')}</Button>
                                 }
                             </TableCell>
                         </TableRow>
                     ))}
                 </TableBody>
+                <TableFooter>
+                    {!users.length && <TableRow>
+                        <TableCell colSpan={5} className="text-center text-gray-400">{t('build.empty')}</TableCell>
+                    </TableRow>}
+                </TableFooter>
             </Table>
         </div>
         {/* 分页 */}

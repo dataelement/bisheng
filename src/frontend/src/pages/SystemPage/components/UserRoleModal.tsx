@@ -29,7 +29,8 @@ export default function UserRoleModal({ user, onClose, onChange }) {
             //@ts-ignore
             const roleOptions = data.map(role => ({ ...role, role_id: role.id }))
             setRoles(roleOptions);
-            setSelected(user.roles.map(el => el.id.toString()))
+            // 没有初始角色，默认给普通用户2
+            setSelected(user.roles.length ? user.roles.map(el => el.id.toString()) : ['2'])
             // getUserRoles(id).then(userRoles => {
             //     // 默认设置 普通用户
             //     if (!userRoles.find(role => role.role_id === 2)) {
