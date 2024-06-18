@@ -87,7 +87,9 @@
     "maximum": "Up to",
     "perMinute": "simultaneous online sessions",
     "changeTime": "Modification Time",
-    "deleteGroup": "After deletion 【{{name}}】 will no longer exist, Do you want to delete it?"
+    "deleteGroup": "After deletion 【{{name}}】 will no longer exist, Do you want to delete it?",
+    "currentGroup": "Current UserGroup",
+    "defaultGroup": "DefaultGroup"
   },
   "skills": {
     "manageTemplate": "Manage Skill Templates",
@@ -478,7 +480,7 @@
     "skillsReplaced": "Skills replaced",
     "allReplaced": "All replaced",
     "basicConfiguration": "Basic configuration",
-    "modelConfiguration": "AI Model configuration",
+    "modelConfiguration": "AI Model Configuration",
     "model": "Model",
     "temperature": "Temperature",
     "openingIntroduction": "Opening Introduction",
@@ -522,7 +524,28 @@
     "cancel": "Cancel",
     "confirm": "Confirm",
     "forBetter": "For better assistant effect, the description needs to be greater than 20 words",
-    "forExample": "For example, the identity of an assistant, specific methods and steps for completing tasks, tone of voice when answering questions, and what issues to pay attention to, etc"
+    "forExample": "For example, the identity of an assistant, specific methods and steps for completing tasks, tone of voice when answering questions, and what issues to pay attention to, etc",
+    "contentSecurityR": "Content Security Review",
+    "errors": {
+      "selectAtLeastOneWordType": "At least one word type must be selected",
+      "autoReplyNotEmpty": "Auto-reply content cannot be empty"
+    },
+    "saveSuccess": "Saved successfully",
+    "contentSecurity": "Content Security",
+    "contentSecurityDesc": "Review session content for safety with a sensitive word list or API",
+    "contentSecuritySettings": "Content Security Review Settings",
+    "enableContentSecurityReview": "Enable Content Security Review",
+    "reviewType": "Review Type",
+    "sensitiveWordListMatch": "Sensitive Word List Match",
+    "modelReview": "Model Review",
+    "wordListType": "Word List Type",
+    "builtinWordList": "Built-in Word List",
+    "customWordList": "Custom Word List",
+    "autoReplyContent": "Auto-reply Content",
+    "useNewlineToSeparate": "Use newline to separate, each line one item",
+    "txtFile": "txt file",
+    "sensitiveWordMatch": "Sensitive Word Match",
+    "defaultAutoReply": "Enter the auto-reply content for when the safety review is triggered, e.g., 'The current conversation content violates relevant regulations, please modify and re-enter.'"
   },
   "tools": {
     "addTool": "Add Tool",
@@ -583,5 +606,24 @@
     "resetButton": "Reset Password",
     "passwordResetSuccess": "Your password has been successfully reset.",
     "resetFailed": "Pwd Reset Failed"
+  },
+  "log": {
+    "auditManagement": "Audit Management",
+    "searchButton": "Search",
+    "resetButton": "Reset",
+    "auditId": "Audit ID",
+    "username": "Username",
+    "operationTime": "Operation Time",
+    "systemModule": "System Module",
+    "operationAction": "Operation Action",
+    "objectType": "Operation Object Type",
+    "operationObject": "Operation Object",
+    "ipAddress": "IP Address",
+    "remark": "Remark",
+    "selectUser": "Select User",
+    "selectUserGroup": "Select User Group",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "actionBehavior": "Action Behavior"
   }
 }

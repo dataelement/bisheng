@@ -73,77 +73,81 @@ export default function index() {
     return <div className="relative">
         <div className="h-[calc(100vh-98px)] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
-                <div className="w-[180px] relative">
-                    <MultiSelect className=" w-full" multiple
-                        options={users}
-                        value={keys.userIds}
-                        placeholder="选择用户"
-                        onLoad={reload}
-                        onSearch={searchUser}
-                        onScrollLoad={loadMore}
-                        onChange={(values) => setKeys({...keys,userIds:values})}
-                    ></MultiSelect>
-                </div>
-                <div className="w-[180px] relative">
-                    <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({...keys,groupId:value})}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="选择用户组" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="w-[180px] relative">
-                    <DatePicker value={keys.start} placeholder='开始日期' onChange={(t) => setKeys({...keys,start:t})} />
-                </div>
-                <div className="w-[180px] relative">
-                    <DatePicker value={keys.end} placeholder='结束日期' onChange={(t) => setKeys({...keys,end:t})} />
-                </div>
-                <div className="w-[180px] relative">
-                    <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({...keys,moduleId:value})}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="系统模块" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value="apple">Apple</SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="w-[180px] relative">
-                    <Select value={keys.actionId} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({...keys,actionId:value})}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="操作行为" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value="apple">Apple</SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
+            <div className="w-[180px] relative">
+                <MultiSelect className=" w-full" multiple
+                    options={users}
+                    value={keys.userIds}
+                    placeholder={t('log.selectUser')}
+                    onLoad={reload}
+                    onSearch={searchUser}
+                    onScrollLoad={loadMore}
+                    onChange={(values) => setKeys({...keys,userIds:values})}
+                ></MultiSelect>
+            </div>
+            <div className="w-[180px] relative">
+                <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({...keys,groupId:value})}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder={t('log.selectUserGroup')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="w-[180px] relative">
+                <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({...keys,start:t})} />
+            </div>
+            <div className="w-[180px] relative">
+                <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({...keys,end:t})} />
+            </div>
+            <div className="w-[180px] relative">
+                <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({...keys,moduleId:value})}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder={t('log.systemModule')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            <SelectItem value="apple">Apple</SelectItem> {/* Consider localizing static text */}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="w-[180px] relative">
+                <Select value={keys.actionId} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({...keys,actionId:value})}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder={t('log.actionBehavior')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            <SelectItem value="apple">Apple</SelectItem> {/* Consider localizing static text */}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+            </div>
                 <div>
-                    <Button className=" mr-3 px-6" onClick={handleSearch}>查询</Button>
-                    <Button variant="outline" className="px-6" onClick={handleReset}>重置</Button>
+                    <Button className="mr-3 px-6" onClick={handleSearch}>
+                        {t('log.searchButton')}
+                    </Button>
+                    <Button variant="outline" className="px-6" onClick={handleReset}>
+                        {t('log.resetButton')}
+                    </Button>
                 </div>
             </div>
             <Table className="mb-[50px]">
                 {/* <TableCaption>用户列表.</TableCaption> */}
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[200px]">审计ID</TableHead>
-                        <TableHead className="w-[200px]">用户名</TableHead>
-                        <TableHead className="w-[200px]">操作时间</TableHead>
-                        <TableHead className="w-[200px]">系统模块</TableHead>
-                        <TableHead className="w-[200px]">操作行为</TableHead>
-                        <TableHead className="w-[200px]">操作对象类型</TableHead>
-                        <TableHead className="w-[200px]">操作对象</TableHead>
-                        <TableHead className="w-[200px]">IP地址</TableHead>
-                        <TableHead className="w-[200px]">备注</TableHead>
+                        <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.username')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.operationTime')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.systemModule')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.operationAction')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.objectType')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.operationObject')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.ipAddress')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.remark')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -164,7 +168,7 @@ export default function index() {
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
         <div className="bisheng-table-footer">
-            <p className="desc pl-4">审计管理</p>
+            <p className="desc pl-4">{t('log.auditManagement')}</p>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"
                 page={page}
