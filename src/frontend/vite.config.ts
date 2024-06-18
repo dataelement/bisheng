@@ -3,12 +3,24 @@ import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
-const apiRoutes = ["^/api/", "/health"];
+const apiRoutes = ["^/api/", "^/gw/", "/health"];
 import path from "path";
 // Use environment variable to determine the target.
- const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
+const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.120:3002";
+// const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.115:8098";
+// const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.116:7861";
+// const target = process.env.VITE_PROXY_TARGET || "http://192.168.2.7:7860";
 
 const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
+
+  proxyObj['/gw/api/v1/group'] = {
+    target: target,
+    changeOrigin: true,
+    withCredentials: true,
+    rewrite: (path) => path.replace(/^\/gw\/api\/v1\/group/, '/group'),
+    secure: false,
+    ws: true,
+  };
   proxyObj[route] = {
     target: target,
     changeOrigin: true,
@@ -28,7 +40,9 @@ const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
 
 export default defineConfig(() => {
   return {
+    // base: '/poo',
     build: {
+      // minify: 'esbuild', // 使用 esbuild 进行 Tree Shaking 和压缩
       outDir: "build",
       rollupOptions: {
         output: {
