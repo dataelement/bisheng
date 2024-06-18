@@ -175,7 +175,7 @@ async def get_group_resources(*,
 
 @router.get("/roles", response_model=UnifiedResponseModel)
 async def get_group_roles(*,
-                          group_id: int = Query(..., description="用户组ID"),
+                          group_id: List[int] = Query(..., description="用户组ID列表"),
                           keyword: str = Query(None, description="搜索关键字"),
                           page: int = 0,
                           limit: int = 0,
@@ -184,11 +184,11 @@ async def get_group_roles(*,
     获取用户组内的角色列表
     """
     # 判断是否是用户组的管理员
-    if not user.check_group_admin(group_id):
+    if not user.check_groups_admin(group_id):
         return UnAuthorizedError.return_resp()
     # 查询组下角色列表
-    role_list = RoleDao.get_role_by_groups([group_id], keyword, page, limit)
-    total = RoleDao.count_role_by_groups([group_id], keyword)
+    role_list = RoleDao.get_role_by_groups(group_id, keyword, page, limit)
+    total = RoleDao.count_role_by_groups(group_id, keyword)
 
     return resp_200(data={
         "data": role_list,
