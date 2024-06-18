@@ -69,6 +69,7 @@ export default function EvaluatingCreate() {
     useFsAccessApi: false,
     onDrop,
     maxFiles: 1,
+    maxSize: 10 * 1024 * 1024, // 限制文件最大为 10M
   });
 
   const navigate = useNavigate();
