@@ -71,7 +71,7 @@ export default function Roles() {
             inputDom.value = '';
         }
         try {
-            const data = await getRolesByGroupApi('', state.group);
+            const data = await getRolesByGroupApi('', [state.group]);
             dispatch({ type: 'SET_ROLES', payload: data });
             allRolesRef.current = data;
         } catch (error) {
