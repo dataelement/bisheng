@@ -1,7 +1,11 @@
-import React, { useEffect, useRef, useState, useCallback, useReducer } from "react";
+import { PlusIcon } from "@/components/bs-icons/plus";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Label } from "@/components/bs-ui/label";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import React, { useCallback, useEffect, useReducer, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { SearchInput } from "../../../components/bs-ui/input";
 import {
     Table,
     TableBody,
@@ -11,14 +15,10 @@ import {
     TableHeader,
     TableRow
 } from "../../../components/bs-ui/table";
-import { delRoleApi, getRolesApi, getRolesByGroupApi, getUserGroupsApi } from "../../../controllers/API/user";
+import { delRoleApi, getRolesByGroupApi, getUserGroupsApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { ROLE } from "../../../types/api/user";
 import EditRole from "./EditRole";
-import { SearchInput } from "../../../components/bs-ui/input";
-import { PlusIcon } from "@/components/bs-icons/plus";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { Label } from "@/components/bs-ui/label";
 
 interface State {
     roles: ROLE[];

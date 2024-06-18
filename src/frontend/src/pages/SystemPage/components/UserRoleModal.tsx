@@ -4,7 +4,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "../../../components/bs-ui/button"
-import { getRolesApi, getUserGroupsApi, updateUserGroups, updateUserRoles } from "../../../controllers/API/user"
+import { getRolesApi, getUserGroupsApi, getRolesByGroupApi, updateUserGroups, updateUserRoles } from "../../../controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request"
 import { ROLE } from "../../../types/api/user"
 
@@ -41,6 +41,14 @@ export default function UserRoleModal({ user, onClose, onChange }) {
             // })
         })
     }, [user])
+
+    useEffect(() => {
+        getRolesByGroupApi('', userGroupSelected).then(data => {
+            //@ts-ignore
+            const roleOptions = data.map(role => ({ ...role, role_id: role.id }))
+            setRoles(roleOptions);
+        })
+    },[userGroupSelected])
 
     const { message } = useToast()
     const handleSave = async () => {

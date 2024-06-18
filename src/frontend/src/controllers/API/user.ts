@@ -64,8 +64,9 @@ export async function getRolesApi(searchkey = ""): Promise<{ data: ROLE[] }> {
     .then(res => res.data);
 }
 // 用户组下角色列表
-export async function getRolesByGroupApi(searchkey = "", group_id): Promise<{ data: ROLE[] }> {
-  return await axios.get(`/api/v1/group/roles?keyword=${searchkey}&group_id=${group_id}`)
+export async function getRolesByGroupApi(searchkey = "", groupIds:any[]): Promise<{ data: ROLE[] }> {
+  const groupStr = groupIds?.reduce((pre, id) => `${pre}&group_id=${id}`, '') || ''
+  return await axios.get(`/api/v1/group/roles?keyword=${searchkey}${groupStr}`)
     .then(res => res.data);
 }
 /**
