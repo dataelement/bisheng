@@ -161,13 +161,15 @@ def read_flows(*,
 
 
 @router.get('/{flow_id}', response_model=UnifiedResponseModel[FlowReadWithStyle], status_code=200)
-def read_flow(*, flow_id: UUID):
+def read_flow(*, flow_id: UUID, login_user: UserPayload = Depends(get_login_user)):
     """Read a flow."""
-    with session_getter() as session:
-        if flow := session.get(Flow, flow_id):
-            return resp_200(flow)
-
-    raise HTTPException(status_code=404, detail='Flow not found')
+    db_flow = FlowDao.get_flow_by_id(flow_id.hex)
+    if not db_flow:
+        raise HTTPException(status_code=404, detail='Flow not found')
+    # 判断授权
+    if not login_user.access_check(db_flow.user_id, flow_id.hex, AccessType.FLOW):
+        return HTTPException(status_code=500, detail='No right access this flow')
+    return resp_200(db_flow)
 
 
 @router.patch('/{flow_id}', response_model=UnifiedResponseModel[FlowRead], status_code=200)
