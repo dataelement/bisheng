@@ -21,6 +21,9 @@ class UserPayload:
     def __init__(self, **kwargs):
         self.user_id = kwargs.get('user_id')
         self.user_role = kwargs.get('role')
+        if self.user_role != 'admin':  # 非管理员用户，需要获取他的角色列表
+            roles = UserRoleDao.get_user_roles(self.user_id)
+            self.user_role = [one.role_id for one in roles]
         self.user_name = kwargs.get('user_name')
 
     def is_admin(self):
@@ -144,7 +147,6 @@ def get_knowledge_list_by_access(role_id: int, name: str, page_num: int, page_si
 
 
 def get_flow_list_by_access(role_id: int, name: str, page_num: int, page_size: int):
-
     count_filter = []
     if name:
         count_filter.append(Flow.name.like('%{}%'.format(name)))
@@ -172,7 +174,6 @@ def get_flow_list_by_access(role_id: int, name: str, page_num: int, page_size: i
 
 
 def get_assistant_list_by_access(role_id: int, name: str, page_num: int, page_size: int):
-
     count_filter = []
     if name:
         count_filter.append(Assistant.name.like('%{}%'.format(name)))
