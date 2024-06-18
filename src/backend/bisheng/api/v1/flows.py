@@ -3,6 +3,7 @@ from typing import Any
 from uuid import UUID
 
 from bisheng.api.JWT import get_login_user
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow_no_yield, get_L2_param_from_flow, remove_api_keys
@@ -161,13 +162,15 @@ def read_flows(*,
 
 
 @router.get('/{flow_id}', response_model=UnifiedResponseModel[FlowReadWithStyle], status_code=200)
-def read_flow(*, flow_id: UUID):
+def read_flow(*, flow_id: UUID, login_user: UserPayload = Depends(get_login_user)):
     """Read a flow."""
-    with session_getter() as session:
-        if flow := session.get(Flow, flow_id):
-            return resp_200(flow)
-
-    raise HTTPException(status_code=404, detail='Flow not found')
+    db_flow = FlowDao.get_flow_by_id(flow_id.hex)
+    if not db_flow:
+        raise HTTPException(status_code=404, detail='Flow not found')
+    # 判断授权
+    if not login_user.access_check(db_flow.user_id, flow_id.hex, AccessType.FLOW):
+        return UnAuthorizedError.return_resp()
+    return resp_200(db_flow)
 
 
 @router.patch('/{flow_id}', response_model=UnifiedResponseModel[FlowRead], status_code=200)
@@ -183,7 +186,7 @@ async def update_flow(*,
         raise HTTPException(status_code=404, detail='Flow not found')
 
     if not login_user.access_check(db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
-        raise HTTPException(status_code=500, detail='No right access this flow')
+        return UnAuthorizedError.return_resp()
 
     flow_data = flow.model_dump(exclude_unset=True)
 

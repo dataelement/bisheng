@@ -6,6 +6,7 @@ from uuid import UUID
 import yaml
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
+from bisheng.api.JWT import get_login_user
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.services.user_service import UserPayload
@@ -42,10 +43,9 @@ def get_assistant(*,
 
 # 获取某个助手的详细信息
 @router.get('/info/{assistant_id}', response_model=UnifiedResponseModel[AssistantInfo])
-def get_assistant_info(*, assistant_id: UUID, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    return AssistantService.get_assistant_info(assistant_id, current_user.get('user_id'))
+def get_assistant_info(*, assistant_id: UUID, login_user: UserPayload = Depends(get_login_user)):
+    """获取助手信息"""
+    return AssistantService.get_assistant_info(assistant_id, login_user)
 
 
 @router.post('/delete', response_model=UnifiedResponseModel)

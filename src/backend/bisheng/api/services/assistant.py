@@ -71,10 +71,14 @@ class AssistantService(AssistantUtils):
         return AssistantSimpleInfo(**simple_dict)
 
     @classmethod
-    def get_assistant_info(cls, assistant_id: UUID, user_id: str):
+    def get_assistant_info(cls, assistant_id: UUID, login_user: UserPayload):
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
+        # 检查是否有权限获取信息
+        if not login_user.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_READ):
+            return UnAuthorizedError.return_resp()
+
         tool_list = []
         flow_list = []
         knowledge_list = []
@@ -455,7 +459,7 @@ class AssistantService(AssistantUtils):
     def check_update_permission(cls, assistant: Assistant, user_payload: UserPayload) -> Any:
         # 判断权限
         if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
-            return AssistantNotExistsError.return_resp()
+            return UnAuthorizedError.return_resp()
 
         # 已上线不允许改动
         if assistant.status == AssistantStatus.ONLINE.value:

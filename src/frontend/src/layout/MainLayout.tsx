@@ -93,7 +93,7 @@ export default function MainLayout() {
                                     {user.user_name} <DropDownIcon className=" inline-block mt-[-2px]"/>
                                 </span>
                             }>
-                            {/* <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>修改密码</span></SelectHoverItem> */}
+                            <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>修改密码</span></SelectHoverItem>
                             <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>退出登录</span></SelectHoverItem>
                         </SelectHover>
                     </div>
