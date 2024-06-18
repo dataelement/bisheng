@@ -13,14 +13,19 @@ import { cname } from "../utils"
 import { useMemo } from "react"
 
 export function DatePicker({
+    value,
     placeholder = '',
     onChange
 }) {
-    const [date, setDate] = React.useState<Date>()
+    const [date, setDate] = React.useState<Date>(value)
 
     const dateStr = useMemo(() => {
-        return date ? date.toISOString() : ""
+        return date ? date.toISOString().replace('T',' ').split('.')[0] : ""
     }, [date])
+
+    React.useEffect(() => {
+        setDate(value)
+    },[value])
 
     return (
         <Popover>
@@ -42,7 +47,7 @@ export function DatePicker({
                     selected={date}
                     onSelect={(d) => {
                         setDate(d)
-                        onChange?.(d.getTime())
+                        onChange?.(d)
                     }}
                     initialFocus
                 />

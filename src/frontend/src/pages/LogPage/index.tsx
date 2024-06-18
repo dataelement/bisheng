@@ -2,8 +2,10 @@ import { Button } from "@/components/bs-ui/button";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getUsersApi } from "@/controllers/API/user";
-import { useEffect, useRef, useState } from "react";
+import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi } from "@/controllers/API/log";
+import { getUserGroupsApi, getUsersApi } from "@/controllers/API/user";
+import { useTable } from "@/util/hook";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import {
@@ -14,124 +16,119 @@ import {
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import { getUserGroupsApi } from "@/controllers/API/user";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
     const loadData = () => {
         getUserGroupsApi().then(res => setGroups(res.records))
     }
-    return {
-        groups,
-        loadData
+    return { groups, loadData }
+}
+const useModules = () => {
+    const [modules, setModules] = useState([])
+    const loadModules = () => {
+        getModulesApi().then(res => setModules(res.data))
     }
+    return { modules, loadModules }
 }
 
 export default function index() {
     const { t } = useTranslation()
-    const { users, reload, loadMore, search } = useUsers()
+    const { users, reload, loadMore, searchUser } = useUsers()
     const { groups, loadData } = useGroups()
+    const { modules, loadModules } = useModules()
+    const { page, pageSize, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
+        getLogsApi({...param})
+    )
 
+    const [actions, setActions] = useState([])
     const [keys, setKeys] = useState({
-        users: [],
-        group: '',
-        role: '',
-        startTime: '',
-        endTime: '',
-        module: '',
-        action: ''
+        userIds: [],
+        groupId: undefined,
+        start: undefined,
+        end: undefined,
+        moduleId: undefined,
+        actionId: undefined
     })
 
+    const handleActionOpen = () => {
+        keys.moduleId ? getActionsByModuleApi(keys.moduleId).then(res => setActions(res.data))
+        : getActionsApi().then(res => setActions(res.data))
+    }
     const handleSearch = () => {
-        console.log(keys.users.map(u => u.value))
-        console.log(keys.group)
+        console.log(keys)
+        filterData(keys)
+    }
+    const handleReset = () => {
+        setKeys({
+            userIds: [],
+            groupId: undefined,
+            start: undefined,
+            end: undefined,
+            moduleId: undefined,
+            actionId: undefined
+        })
     }
 
     return <div className="relative">
         <div className="h-[calc(100vh-98px)] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
                 <div className="w-[180px] relative">
-                    <MultiSelect
-                        className=" w-full"
-                        multiple
+                    <MultiSelect className=" w-full" multiple
                         options={users}
-                        value={keys.users}
+                        value={keys.userIds}
                         placeholder="选择用户"
                         onLoad={reload}
-                        onSearch={search}
+                        onSearch={searchUser}
                         onScrollLoad={loadMore}
-                        onChange={(values) => setKeys({...keys,users:values})}
+                        onChange={(values) => setKeys({...keys,userIds:values})}
                     ></MultiSelect>
                 </div>
                 <div className="w-[180px] relative">
-                    <Select onOpenChange={loadData} onValueChange={(value) => setKeys({...keys,group:value})}>
+                    <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({...keys,groupId:value})}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="选择用户组" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
-                                {groups.map(g => <SelectItem value={g.id}>{g.group_name}</SelectItem>)}
+                                {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
                             </SelectGroup>
                         </SelectContent>
                     </Select>
                 </div>
                 <div className="w-[180px] relative">
-                    <Select>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="选择角色" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value="apple">Apple</SelectItem>
-                                <SelectItem value="banana">Banana</SelectItem>
-                                <SelectItem value="blueberry">Blueberry</SelectItem>
-                                <SelectItem value="grapes">Grapes</SelectItem>
-                                <SelectItem value="pineapple">Pineapple</SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                    <DatePicker value={keys.start} placeholder='开始日期' onChange={(t) => setKeys({...keys,start:t})} />
                 </div>
                 <div className="w-[180px] relative">
-                    <DatePicker placeholder='开始日期' onChange={(t) => console.log(t)} />
+                    <DatePicker value={keys.end} placeholder='结束日期' onChange={(t) => setKeys({...keys,end:t})} />
                 </div>
                 <div className="w-[180px] relative">
-                    <DatePicker placeholder='结束日期' onChange={(t) => { }} />
-                </div>
-                <div className="w-[180px] relative">
-                    <Select>
+                    <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({...keys,moduleId:value})}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="系统模块" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
                                 <SelectItem value="apple">Apple</SelectItem>
-                                <SelectItem value="banana">Banana</SelectItem>
-                                <SelectItem value="blueberry">Blueberry</SelectItem>
-                                <SelectItem value="grapes">Grapes</SelectItem>
-                                <SelectItem value="pineapple">Pineapple</SelectItem>
                             </SelectGroup>
                         </SelectContent>
                     </Select>
                 </div>
                 <div className="w-[180px] relative">
-                    <Select>
+                    <Select value={keys.actionId} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({...keys,actionId:value})}>
                         <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="操作行为" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
                                 <SelectItem value="apple">Apple</SelectItem>
-                                <SelectItem value="banana">Banana</SelectItem>
-                                <SelectItem value="blueberry">Blueberry</SelectItem>
-                                <SelectItem value="grapes">Grapes</SelectItem>
-                                <SelectItem value="pineapple">Pineapple</SelectItem>
                             </SelectGroup>
                         </SelectContent>
                     </Select>
                 </div>
                 <div>
-                    <Button className=" mr-2" onClick={handleSearch}>查询</Button>
-                    <Button variant="outline">重置</Button>
+                    <Button className=" mr-3 px-6" onClick={handleSearch}>查询</Button>
+                    <Button variant="outline" className="px-6" onClick={handleReset}>重置</Button>
                 </div>
             </div>
             <Table className="mb-[50px]">
@@ -140,37 +137,27 @@ export default function index() {
                     <TableRow>
                         <TableHead className="w-[200px]">审计ID</TableHead>
                         <TableHead className="w-[200px]">用户名</TableHead>
-                        <TableHead className="w-[200px]">用户组</TableHead>
-                        <TableHead className="w-[200px]">角色</TableHead>
                         <TableHead className="w-[200px]">操作时间</TableHead>
                         <TableHead className="w-[200px]">系统模块</TableHead>
                         <TableHead className="w-[200px]">操作行为</TableHead>
                         <TableHead className="w-[200px]">操作对象类型</TableHead>
                         <TableHead className="w-[200px]">操作对象</TableHead>
                         <TableHead className="w-[200px]">IP地址</TableHead>
+                        <TableHead className="w-[200px]">备注</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     <TableRow>
                         <TableCell className="font-medium max-w-md truncate">34</TableCell>
-                        <TableCell>小明</TableCell>
-                        <TableCell>安全部门</TableCell>
-                        <TableCell>普通用户</TableCell>
-                        <TableCell>2024-02-02 12:12:12</TableCell>
-                        <TableCell>位置模块</TableCell>
-                        <TableCell>摸鱼</TableCell>
-                        <TableCell>生物</TableCell>
-                        <TableCell>鱼</TableCell>
-                        <TableCell>192.0.0.2</TableCell>
+                        <TableHead>赵光晶</TableHead>
+                        <TableHead>2024-06-18-15:59</TableHead>
+                        <TableHead>构建</TableHead>
+                        <TableHead>创建应用</TableHead>
+                        <TableHead>助手</TableHead>
+                        <TableHead>代码助手</TableHead>
+                        <TableHead>122.9.35.239</TableHead>
+                        <TableHead>创建了一个很牛的代码助手</TableHead>
                     </TableRow>
-                    {/* {users.map((el) => (
-                        <TableRow key={el.id}>
-                            <TableCell className="font-medium max-w-md truncate">{el.user_name}</TableCell>
-                            <TableCell>用户组A</TableCell>
-                            <TableCell>角色B</TableCell>
-                            <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                        </TableRow>
-                    ))} */}
                 </TableBody>
             </Table>
         </div>
@@ -180,10 +167,10 @@ export default function index() {
             <p className="desc pl-4">审计管理</p>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"
-                page={1}
-                pageSize={50}
-                total={200}
-                onChange={(newPage) => console.log(1)}
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onChange={(newPage) => setPage(newPage)}
             />
         </div>
     </div>
@@ -213,7 +200,7 @@ const useUsers = () => {
         reload() {
             reload(1, '')
         },
-        search(name) {
+        searchUser(name) {
             reload(1, name)
         }
     }

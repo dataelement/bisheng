@@ -36,6 +36,7 @@ export default function AssistantSetting({ id, type }) {
             })
         })
     }, [id])
+    
 
     const handleFormChange = async (_form) => {
         const errors = []
