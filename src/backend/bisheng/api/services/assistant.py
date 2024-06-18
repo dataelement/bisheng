@@ -304,10 +304,27 @@ class AssistantService(AssistantUtils):
         return resp_200()
 
     @classmethod
-    def get_gpts_tools(cls, user_id: Any, is_preset: Optional[bool] = None) -> List[GptsToolsTypeRead]:
+    def get_gpts_tools(cls, user: UserPayload, is_preset: Optional[bool] = None) -> List[GptsToolsTypeRead]:
         """ 获取用户可见的工具列表 """
         # 获取用户可见的工具类别
-        all_tool_type = GptsToolsDao.get_tool_type(user_id, is_preset)
+        tool_type_ids_extra = []
+        if not is_preset:
+            # 获取自定义工具列表时，需要包含用户可用的工具列表
+            user_role = UserRoleDao.get_user_roles(user.user_id)
+            if user_role:
+                role_ids = [role.role_id for role in user_role]
+                role_access = RoleAccessDao.get_role_access(role_ids, AccessType.GPTS_TOOL_READ)
+                if role_access:
+                    tool_type_ids_extra = [int(access.third_id) for access in role_access]
+        # 获取用户可见的所有工具列表
+        if is_preset is None:
+            all_tool_type = GptsToolsDao.get_user_tool_type(user.user_id, tool_type_ids_extra)
+        elif is_preset:
+            # 获取预置工具列表
+            all_tool_type = GptsToolsDao.get_preset_tool_type()
+        else:
+            # 获取用户可见的自定义工具列表
+            all_tool_type = GptsToolsDao.get_user_tool_type(user.user_id, tool_type_ids_extra, False)
         tool_type_id = [one.id for one in all_tool_type]
         res = []
         tool_type_children = {}
@@ -348,7 +365,25 @@ class AssistantService(AssistantUtils):
 
         # 添加工具类别和对应的 工具列表
         res = GptsToolsDao.insert_tool_type(req)
+
+        cls.add_gpts_tools_hook(user, res)
         return resp_200(data=res)
+
+    @classmethod
+    def add_gpts_tools_hook(cls, user: UserPayload, gpts_tool_type: GptsToolsTypeRead) -> bool:
+        """ 添加自定义工具后的hook函数 """
+        # 查询下用户所在的用户组
+        user_group = UserGroupDao.get_user_group(user.user_id)
+        if user_group:
+            # 批量将自定义工具插入到关联表里
+            batch_resource = []
+            for one in user_group:
+                batch_resource.append(GroupResource(
+                    group_id=one.group_id,
+                    third_id=gpts_tool_type.id,
+                    type=ResourceTypeEnum.GPTS_TOOL.value))
+            GroupResourceDao.insert_group_batch(batch_resource)
+        return True
 
     @classmethod
     def update_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
@@ -430,7 +465,15 @@ class AssistantService(AssistantUtils):
         if exist_tool_type.is_preset:
             return ToolTypeIsPresetError.return_resp()
         GptsToolsDao.delete_tool_type(tool_type_id)
+        cls.delete_gpts_tool_hook(user, exist_tool_type)
         return resp_200()
+
+    @classmethod
+    def delete_gpts_tool_hook(cls, user: UserPayload, gpts_tool_type) -> bool:
+        """ 删除自定义工具后的hook函数 """
+        logger.info(f"delete_gpts_tool_hook id: {gpts_tool_type.id}, user: {user.user_id}")
+        GroupResourceDao.delete_group_resource_by_third_id(gpts_tool_type.id, ResourceTypeEnum.GPTS_TOOL)
+        return True
 
     @classmethod
     def get_models(cls) -> UnifiedResponseModel:

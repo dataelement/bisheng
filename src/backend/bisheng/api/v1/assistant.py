@@ -182,11 +182,9 @@ async def chat(*,
 
 
 @router.get('/tool_list', response_model=UnifiedResponseModel)
-def get_tool_list(*, is_preset: Optional[bool] = None, Authorize: AuthJWT = Depends()):
+def get_tool_list(*, is_preset: Optional[bool] = None, login_user: UserPayload = Depends(get_login_user)):
     """查询所有可见的tool 列表"""
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    return resp_200(AssistantService.get_gpts_tools(current_user.get('user_id'), is_preset))
+    return resp_200(AssistantService.get_gpts_tools(login_user, is_preset))
 
 
 @router.post('/tool_schema', response_model=UnifiedResponseModel)

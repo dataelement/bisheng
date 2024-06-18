@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import uuid
 from contextlib import contextmanager
 from typing import List
 
@@ -118,7 +119,8 @@ def init_default_data():
                     session.commit()
                     # 修改表单数据表
                     sql_query = text(
-                        'UPDATE `t_variable_value` a SET a.version_id=(SELECT `id` from `flowversion` WHERE flow_id=a.flow_id and is_current=1)'  # noqa
+                        'UPDATE `t_variable_value` a SET a.version_id=(SELECT `id` from `flowversion` WHERE flow_id=a.flow_id and is_current=1)'
+                        # noqa
                     )
                     session.execute(sql_query)
                     session.commit()
@@ -159,3 +161,10 @@ def read_from_conf(file_path: str) -> str:
         content = f.read()
 
     return content
+
+
+def generate_uuid() -> str:
+    """
+    生成uuid的字符串
+    """
+    return uuid.uuid4().hex

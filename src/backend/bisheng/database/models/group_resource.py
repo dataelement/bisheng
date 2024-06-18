@@ -13,7 +13,7 @@ class ResourceTypeEnum(Enum):
     KNOWLEDGE = 1
     FLOW = 2
     ASSISTANT = 3
-    TOOL = 4
+    GPTS_TOOL = 4
 
 
 class GroupResourceBase(SQLModelSerializable):

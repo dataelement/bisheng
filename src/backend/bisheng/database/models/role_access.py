@@ -44,6 +44,8 @@ class AccessType(Enum):
     FLOW_WRITE = 4
     ASSISTANT_READ = 5
     ASSISTANT_WRITE = 6
+    GPTS_TOOL_READ = 7
+    GPTS_TOOL_WRITE = 8
 
 
 class RoleRefresh(BaseModel):
