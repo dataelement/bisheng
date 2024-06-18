@@ -459,7 +459,7 @@ class AssistantService(AssistantUtils):
     def check_update_permission(cls, assistant: Assistant, user_payload: UserPayload) -> Any:
         # 判断权限
         if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
-            return AssistantNotExistsError.return_resp()
+            return UnAuthorizedError.return_resp()
 
         # 已上线不允许改动
         if assistant.status == AssistantStatus.ONLINE.value:

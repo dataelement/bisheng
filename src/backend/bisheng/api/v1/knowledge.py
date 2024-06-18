@@ -6,6 +6,7 @@ from typing import List, Optional
 from uuid import uuid4
 
 from bisheng.api.JWT import get_login_user
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
                                                 delete_knowledge_file_vectors, retry_files)
 from bisheng.api.services.user_service import UserPayload
@@ -105,7 +106,7 @@ async def process_knowledge(*,
 
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
     if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE):
-        raise HTTPException(status_code=500, detail='当前用户无此知识库操作权限')
+        return UnAuthorizedError.return_resp()
 
     collection_name = knowledge.collection_name
     files = []
@@ -298,7 +299,7 @@ def get_filelist(*,
     if not db_knowledge:
         raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
     if not login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
-        raise HTTPException(status_code=500, detail='没有访问权限')
+        return UnAuthorizedError.return_resp()
 
     # 查找上传的文件信息
     count_sql = select(func.count(
