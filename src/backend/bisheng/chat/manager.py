@@ -332,7 +332,7 @@ class ChatManager:
                             if context.get('status') == 'init':
                                 erro_resp.intermediate_steps = f'LLM 技能执行错误. error={str(e)}'
                             elif context.get('has_file'):
-                                erro_resp.intermediate_steps = f'File is parsed fail. error={str(e)}'
+                                erro_resp.intermediate_steps = f'文件解析失败. error={str(e)}'
                             else:
                                 erro_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
                             context['status'] = 'init'
@@ -469,7 +469,7 @@ class ChatManager:
             self.set_cache(langchain_obj_key, None)  # rebuild object
             has_file = any(['InputFile' in nd.get('id', '') for nd in node_data])
         if has_file:
-            step_resp.intermediate_steps = 'File upload complete and begin to parse'
+            step_resp.intermediate_steps = '文件上传完成，开始解析'
             await self.send_json(client_id, chat_id, start_resp)
             await self.send_json(client_id, chat_id, step_resp, add=False)
             await self.send_json(client_id, chat_id, start_resp)
@@ -485,7 +485,7 @@ class ChatManager:
         over = False
         if isinstance(langchain_obj, Report):
             action = 'report'
-            step_resp.intermediate_steps = 'File parsing complete, generate begin'
+            step_resp.intermediate_steps = '文件解析完成，开始生成报告'
             await self.send_json(client_id, chat_id, step_resp)
         elif 'action' in payload:
             action = 'autogen'
@@ -510,13 +510,13 @@ class ChatManager:
                                    user_id=step_resp.user_id)
                 self.chat_history.add_message(client_id, chat_id, file)
                 step_resp.message = ''
-                step_resp.intermediate_steps = 'File parsing complete'
+                step_resp.intermediate_steps = '文件解析完成'
                 await self.send_json(client_id, chat_id, step_resp)
                 start_resp.type = 'close'
                 await self.send_json(client_id, chat_id, start_resp)
                 over = True
             else:
-                step_resp.intermediate_steps = 'File parsing complete. Analysis starting'
+                step_resp.intermediate_steps = '文件解析完成，开始执行'
                 await self.send_json(client_id, chat_id, step_resp, add=False)
         await asyncio.sleep(-1)  # 快速的跳过
         return action, over
