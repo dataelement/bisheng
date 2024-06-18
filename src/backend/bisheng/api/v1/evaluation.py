@@ -41,9 +41,10 @@ def create_evaluation(*,
 
     try:
         EvaluationService.parse_csv(file_data=io.BytesIO(file.file.read()))
-        file.file.seek(0)
     except ValueError:
         return resp_500(code=400, message='文件格式错误')
+    finally:
+        file.file.seek(0)
 
     file_name, file_path = EvaluationService.upload_file(file=file)
     db_evaluation = Evaluation.model_validate(EvaluationCreate(unique_id=unique_id,
