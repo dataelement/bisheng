@@ -12,21 +12,11 @@ export async function getLogsApi({page, pageSize, userIds, groupId, start, end, 
     action?:string
 }):Promise<{data:any[], total:number}> {
     const uids = userIds?.reduce((pre,val) => `${pre}&operator_ids=${val}`, '') || ''
-    if(!start && end) return await axios.get(
-        `/api/v1/audit?page=${page}&limit=${pageSize}&group_ids=${groupId}${uids}` + 
-        `&end_time=${end}&system_id=${moduleId}&event_type=${action}`
-    )
-    if(!end && start) return await axios.get(
-        `/api/v1/audit?page=${page}&limit=${pageSize}&group_ids=${groupId}${uids}` + 
-        `&start_time=${start}&system_id=${moduleId}&event_type=${action}`
-    )
-    if(!start && !end) return await axios.get(
-        `/api/v1/audit?page=${page}&limit=${pageSize}&group_ids=${groupId}${uids}` + 
-        `&system_id=${moduleId}&event_type=${action}`
-    )
+    const startStr = start ? `&start_time=${start}` : ''
+    const endStr = end ? `&end_time=${end}` : ''
     return await axios.get(
         `/api/v1/audit?page=${page}&limit=${pageSize}&group_ids=${groupId}${uids}` + 
-        `&start_time=${start}&end_time=${end}&system_id=${moduleId}&event_type=${action}`
+        `&system_id=${moduleId}&event_type=${action}` + startStr + endStr
     )
 }
 // 系统模块

@@ -16,6 +16,7 @@ import {
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
+import { formatDate } from "@/util/utils";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -37,39 +38,32 @@ export default function index() {
     const { users, reload, loadMore, searchUser } = useUsers()
     const { groups, loadData } = useGroups()
     const { modules, loadModules } = useModules()
-    const { page, pageSize, data: logs, total, setPage, filterData } = useTable({ pageSize: 13 }, (param) =>
+    const { page, pageSize, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
         getLogsApi({...param})
     )
-
-    const [actions, setActions] = useState<any[]>([])
-    const [keys, setKeys] = useState({
+    const init = {
         userIds: [],
         groupId: '',
         start: undefined,
         end: undefined,
         moduleId: '',
         action: ''
-    })
+    }
 
-    const handleActionOpen = () => {
-        keys.moduleId !== '' ? getActionsByModuleApi(keys.moduleId).then(res => setActions(res.data))
-        : getActionsApi().then(res => setActions(res.data))
+    const [actions, setActions] = useState<any[]>([])
+    const [keys, setKeys] = useState({...init})
+
+    const handleActionOpen = async () => {
+        setActions((keys.moduleId ? await getActionsByModuleApi(keys.moduleId) : await getActionsApi()).data)
     }
     const handleSearch = () => {
         const uids = keys.userIds.map(u => u.value)
-        const startTime = keys.start ? keys.start.toISOString().replace('T',' ').split('.')[0] : undefined
-        const endTime = keys.end ? keys.end.toISOString().replace('T',' ').split('.')[0] : undefined
+        const startTime = keys.start ? formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss') : undefined
+        const endTime = keys.end ? formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss') : undefined
         filterData({...keys, userIds:uids, start:startTime, end:endTime})
     }
     const handleReset = () => {
-        setKeys({
-            userIds: [],
-            groupId: '',
-            start: undefined,
-            end: undefined,
-            moduleId: '',
-            action: ''
-        })
+        setKeys({...init})
     }
 
     return <div className="relative">
@@ -156,14 +150,14 @@ export default function index() {
                     {logs.map(log => (
                     <TableRow>
                         <TableCell className="font-medium max-w-md truncate">{log.id}</TableCell>
-                        <TableHead>{log.operator_name}</TableHead>
-                        <TableHead>{log.create_time}</TableHead>
-                        <TableHead>{log.system_ids}</TableHead>
-                        <TableHead>{log.event_type}</TableHead>
-                        <TableHead>{log.object_type}</TableHead>
-                        <TableHead>{log.object_name}</TableHead>
-                        <TableHead>{log.ip_address}</TableHead>
-                        <TableHead>{log.note}</TableHead>
+                        <TableCell>{log.operator_name}</TableCell>
+                        <TableCell>{log.create_time}</TableCell>
+                        <TableCell>{log.system_ids}</TableCell>
+                        <TableCell>{log.event_type}</TableCell>
+                        <TableCell>{log.object_type}</TableCell>
+                        <TableCell>{log.object_name}</TableCell>
+                        <TableCell>{log.ip_address}</TableCell>
+                        <TableCell>{log.note}</TableCell>
                     </TableRow>
                     ))}
                 </TableBody>
