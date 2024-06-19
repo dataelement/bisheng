@@ -1,28 +1,29 @@
+import { ErrorBoundary } from "react-error-boundary";
 import { Navigate, createBrowserRouter } from "react-router-dom";
+import CrashErrorComponent from "./components/CrashErrorComponent";
+import BuildLayout from "./layout/BuildLayout";
 import MainLayout from "./layout/MainLayout";
-import FileLibPage from "./pages/FileLibPage";
-import FilesPage from "./pages/FileLibPage/files";
-import FlowPage from "./pages/FlowPage";
-import ModelPage from "./pages/ModelPage";
-import Doc from "./pages/ModelPage/doc";
-import Report from "./pages/Report";
 import SkillChatPage from "./pages/ChatAppPage";
 import ChatShare from "./pages/ChatAppPage/chatShare";
 import ChatPro from "./pages/ChatAppPage/chatWebview";
-import SkillAssisPage from "./pages/SkillPage/tabAssistant";
-import EditAssistantPage from "./pages/SkillPage/editAssistant";
-import SkillsPage from "./pages/SkillPage/tabSkills";
-import SkillToolsPage from "./pages/SkillPage/tabTools";
-import L2Edit from "./pages/SkillPage/l2Edit";
-import SystemPage from "./pages/SystemPage";
-import BuildLayout from "./layout/BuildLayout";
-import Templates from "./pages/SkillPage/temps";
 import DiffFlowPage from "./pages/DiffFlowPage";
+import FileLibPage from "./pages/FileLibPage";
+import FilesPage from "./pages/FileLibPage/files";
+import FlowPage from "./pages/FlowPage";
 import LogPage from "./pages/LogPage";
-import { ErrorBoundary } from "react-error-boundary";
-import CrashErrorComponent from "./components/CrashErrorComponent";
 import { LoginPage } from "./pages/LoginPage/login";
 import { ResetPwdPage } from "./pages/LoginPage/resetPwd";
+import ModelPage from "./pages/ModelPage";
+import Doc from "./pages/ModelPage/doc";
+import Page403 from "./pages/Page403";
+import Report from "./pages/Report";
+import EditAssistantPage from "./pages/SkillPage/editAssistant";
+import L2Edit from "./pages/SkillPage/l2Edit";
+import SkillAssisPage from "./pages/SkillPage/tabAssistant";
+import SkillsPage from "./pages/SkillPage/tabSkills";
+import SkillToolsPage from "./pages/SkillPage/tabTools";
+import Templates from "./pages/SkillPage/temps";
+import SystemPage from "./pages/SystemPage";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -94,7 +95,7 @@ const privateRouter = [
   { path: "/report/:id/", element: <Report /> },
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
   { path: "/reset", element: <ResetPwdPage /> },
-  // { path: "/test", element: <Test /> },
+  { path: "/403", element: <Page403 /> },
   { path: "*", element: <Navigate to="/" replace /> }
 ]
 
