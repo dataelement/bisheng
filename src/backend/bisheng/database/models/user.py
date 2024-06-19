@@ -44,6 +44,7 @@ class UserRead(UserBase):
     user_id: Optional[int]
     role: Optional[str]
     access_token: Optional[str]
+    web_menu: Optional[List[str]]
 
 
 class UserQuery(UserBase):

@@ -101,7 +101,7 @@ async def sso(*, user: UserCreate):
                 user_exist = UserDao.add_user_and_default_role(user_exist)
             UserGroupDao.add_default_user_group(user_exist.user_id)
 
-        access_token, refresh_token, _ = gen_user_jwt(user_exist)
+        access_token, refresh_token, _, _ = gen_user_jwt(user_exist)
         return resp_200({'access_token': access_token, 'refresh_token': refresh_token})
     else:
         raise ValueError('不支持接口')
@@ -158,13 +158,13 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
         if (datetime.now() - db_user.password_update_time).days >= password_conf.password_valid_period:
             return UserPasswordExpireError.return_resp()
 
-    access_token, refresh_token, role = gen_user_jwt(db_user)
+    access_token, refresh_token, role, web_menu = gen_user_jwt(db_user)
 
     # Set the JWT cookies in the response
     Authorize.set_access_cookies(access_token)
     Authorize.set_refresh_cookies(refresh_token)
 
-    return resp_200(UserRead(role=str(role), access_token=access_token, **db_user.__dict__))
+    return resp_200(UserRead(role=str(role), web_menu=web_menu, access_token=access_token, **db_user.__dict__))
 
 
 @router.get('/user/admin', response_model=UnifiedResponseModel[UserRead], status_code=200)
@@ -197,8 +197,8 @@ async def get_info(Authorize: AuthJWT = Depends()):
     try:
         user_id = payload.get('user_id')
         db_user = UserDao.get_user(user_id)
-        role = gen_user_role(db_user)
-        return resp_200(UserRead(role=str(role), **db_user.__dict__))
+        role, web_menu = gen_user_role(db_user)
+        return resp_200(UserRead(role=str(role), web_menu=web_menu, **db_user.__dict__))
     except Exception:
         raise HTTPException(status_code=500, detail='用户信息失败')
 

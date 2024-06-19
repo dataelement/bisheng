@@ -12,8 +12,6 @@ from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from fastapi import HTTPException
 from fastapi_jwt_auth import AuthJWT
-from bisheng.database.models.user import UserDao
-from bisheng.database.models.user_group import UserGroupDao
 
 
 class UserPayload:
@@ -88,26 +86,34 @@ def sso_login():
 
 
 def gen_user_role(db_user: User):
-    # 查询角色
+    # 查询用户的角色列表
     db_user_role = UserRoleDao.get_user_roles(db_user.user_id)
-    if next((user_role for user_role in db_user_role if user_role.role_id == 1), None):
-        # 是管理员，忽略其他的角色
-        role = 'admin'
-    else:
+    role = ""
+    role_ids = []
+    for user_role in db_user_role:
+        if user_role.role_id == 1:
+            # 是管理员，忽略其他的角色
+            role = 'admin'
+        else:
+            role_ids.append(user_role.role_id)
+    if role != "admin":
         # 判断是否是用户组管理员
         db_user_groups = UserGroupDao.get_user_admin_group(db_user.user_id)
         if len(db_user_groups) > 0:
             role = 'group_admin'
         else:
-            role = [user_role.role_id for user_role in db_user_role]
-    return role
+            role = role_ids
+    # 获取用户的菜单栏权限列表
+    web_menu = RoleAccessDao.get_role_access(role_ids, AccessType.WEB_MENU)
+    web_menu = list(set([one.third_id for one in web_menu]))
+    return role, web_menu
 
 
 def gen_user_jwt(db_user: User):
     if 1 == db_user.delete:
         raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
     # 查询角色
-    role = gen_user_role(db_user)
+    role, web_menu = gen_user_role(db_user)
     # 生成JWT令牌
     payload = {'user_name': db_user.user_name, 'user_id': db_user.user_id, 'role': role}
     # Create the tokens and passing to set_access_cookies or set_refresh_cookies
@@ -116,7 +122,7 @@ def gen_user_jwt(db_user: User):
     refresh_token = AuthJWT().create_refresh_token(subject=db_user.user_name)
 
     # Set the JWT cookies in the response
-    return access_token, refresh_token, role
+    return access_token, refresh_token, role, web_menu
 
 
 def get_knowledge_list_by_access(role_id: int, name: str, page_num: int, page_size: int):
