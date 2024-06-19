@@ -288,6 +288,7 @@
     "enterUniqueId": "请选择技能或助手ID",
     "enterVersion": "请选择技能的版本",
     "enterFile": "请选择测试集数据",
+    "fileSizeLimit": "测试集数据大小上限设定为10M",
     "enterPrompt": "评测指令不能为空",
     "evaluationCollection": "评测集合",
     "tooltip": "该指令文本用于指导大模型对 ground truth 和 answer 提取要点，如无特别需求请勿修改",

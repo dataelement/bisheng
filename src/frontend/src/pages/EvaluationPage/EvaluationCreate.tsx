@@ -58,6 +58,16 @@ export default function EvaluatingCreate() {
 
   const onDrop = (acceptedFiles) => {
     fileRef.current = acceptedFiles[0];
+    const size = fileRef.current.size
+    const errorlist = [];
+
+    // 限制文件最大为 10M
+    if(size > 10 * 1024 * 1024){
+      errorlist.push(t("evaluation.fileSizeLimit"));
+      fileRef.current = null
+      return handleError(errorlist);
+    }
+    
     const names = acceptedFiles[0].name;
     setFileName(names);
   };
@@ -69,7 +79,6 @@ export default function EvaluatingCreate() {
     useFsAccessApi: false,
     onDrop,
     maxFiles: 1,
-    maxSize: 10 * 1024 * 1024, // 限制文件最大为 10M
   });
 
   const navigate = useNavigate();
