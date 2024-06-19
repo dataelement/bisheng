@@ -19,7 +19,7 @@ from bisheng.chat.types import WorkType
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.gpts_tools import GptsToolsTypeRead, GptsTools
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, UploadFile, File
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
@@ -166,8 +166,9 @@ async def chat(*,
 
         payload = Authorize.get_jwt_subject()
         payload = json.loads(payload)
-        user_id = payload.get('user_id')
-        await chat_manager.dispatch_client(assistant_id, chat_id, user_id, WorkType.GPTS,
+        login_user = UserPayload(**payload)
+        request = websocket
+        await chat_manager.dispatch_client(request, assistant_id, chat_id, login_user, WorkType.GPTS,
                                            websocket)
     except WebSocketException as exc:
         logger.error(f'Websocket exception: {str(exc)}')

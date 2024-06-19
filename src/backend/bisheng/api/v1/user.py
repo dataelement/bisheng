@@ -230,7 +230,7 @@ async def list_user(*,
         if not groups:
             raise HTTPException(status_code=500, detail='无查看权限')
         # 将筛选条件的group_id和管理员有权限的groups做交集
-        if groups:
+        if group_id:
             groups = list(set(groups) & set(group_id))
             if not groups:
                 raise HTTPException(status_code=500, detail='无查看权限')

@@ -1,4 +1,3 @@
-from ast import Dict
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
@@ -78,6 +77,16 @@ class GroupResourceDao(GroupResourceBase):
                 statement = statement.where(GroupResource.third_id.like(f'%{name}%'))
             if page_num and page_size:
                 statement = statement.offset(page_size * (page_num - 1)).limit(page_size)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_resource_group(cls, resource_type: ResourceTypeEnum, third_id: str) -> list[GroupResource]:
+        """
+        获取资源所属的分组
+        """
+        with session_getter() as session:
+            statement = select(GroupResource).where(GroupResource.third_id == third_id,
+                                                    GroupResource.type == resource_type.value)
             return session.exec(statement).all()
 
     @classmethod

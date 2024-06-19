@@ -7,9 +7,11 @@ from uuid import UUID, uuid4
 from loguru import logger
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain.tools.render import format_tool_to_openai_tool
-from fastapi import WebSocket, status
+from fastapi import WebSocket, status, Request
 
 from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import IgnoreException, WorkType
@@ -20,12 +22,14 @@ from bisheng.settings import settings
 
 
 class ChatClient:
-    def __init__(self, client_key: str, client_id: str, chat_id: str, user_id: int,
-                 work_type: WorkType, websocket: WebSocket, **kwargs):
+    def __init__(self, request: Request, client_key: str, client_id: str, chat_id: str, user_id: int,
+                 login_user: UserPayload, work_type: WorkType, websocket: WebSocket, **kwargs):
+        self.request = request
         self.client_key = client_key
         self.client_id = client_id
         self.chat_id = chat_id
         self.user_id = user_id
+        self.login_user = login_user
         self.work_type = work_type
         self.websocket = websocket
         self.kwargs = kwargs
@@ -60,7 +64,7 @@ class ChatClient:
             # debug模式无需保存历史
             return
         is_bot = 0 if msg_type == 'human' else 1
-        return ChatMessageDao.insert_one(ChatMessageModel(
+        msg = ChatMessageDao.insert_one(ChatMessageModel(
             is_bot=is_bot,
             source=0,
             message=message,
@@ -71,6 +75,10 @@ class ChatClient:
             chat_id=self.chat_id,
             user_id=self.user_id,
         ))
+        # 记录审计日志, 是新建会话
+        if len(self.chat_history) <= 1:
+            AuditLogService.create_chat_assistant(self.login_user, self.request.client.host, self.client_id)
+        return msg
 
     async def send_response(self, category: str, msg_type: str, message: str, intermediate_steps: str = '',
                             message_id: int = None):
