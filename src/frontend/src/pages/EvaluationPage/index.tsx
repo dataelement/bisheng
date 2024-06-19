@@ -75,7 +75,7 @@ export default function EvaluationPage() {
   };
 
   const handleDownload = async (el) => {
-    const { url } = await getEvaluationUrlApi(el.file_path);
+    const { url } = await getEvaluationUrlApi(el.result_file_path);
     await downloadFile(url, el.file_name);
   };
 
