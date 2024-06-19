@@ -42,7 +42,7 @@ def create_evaluation(*,
     try:
         EvaluationService.parse_csv(file_data=io.BytesIO(file.file.read()))
     except ValueError:
-        return resp_500(code=400, message='文件格式错误')
+        return resp_500(code=400, message='文件格式不符合要求，请参考模板文件')
     finally:
         file.file.seek(0)
 
