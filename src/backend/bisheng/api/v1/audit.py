@@ -13,7 +13,7 @@ router = APIRouter(prefix='/audit', tags=['AuditLog'])
 @router.get('', response_model=UnifiedResponseModel)
 def get_audit_logs(*,
                    group_ids: Optional[List[str]] = Query(default=None, description='分组id列表'),
-                   operator_id: Optional[int] = Query(default=None, description='操作人id'),
+                   operator_ids: Optional[List[int]] = Query(default=None, description='操作人id列表'),
                    start_time: Optional[datetime] = Query(default=None, description='开始时间'),
                    end_time: Optional[datetime] = Query(default=None, description='结束时间'),
                    system_id: Optional[str] = Query(default=None, description='系统模块'),
