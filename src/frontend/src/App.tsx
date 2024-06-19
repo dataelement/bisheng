@@ -14,7 +14,7 @@ import { Toaster } from "./components/bs-ui/toast";
 import { alertContext } from "./contexts/alertContext";
 import { locationContext } from "./contexts/locationContext";
 import { userContext } from "./contexts/userContext";
-import { getPrivateRouter, publicRouter } from "./routes";
+import { getAdminRouter, getPrivateRouter, publicRouter } from "./routes";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -172,6 +172,7 @@ export default function App() {
 
   // 动态路由根据权限
   const router = useMemo(() => {
+    if (['admin', 'group_admin'].includes(user.role)) return getAdminRouter()
     return user?.user_id ? getPrivateRouter(user.web_menu) : null
   }, [user])
 

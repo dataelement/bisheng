@@ -42,6 +42,10 @@ const ErrorHoc = ({ Comp }) => {
   );
 }
 
+const baseConfig = {
+  // basename: "/pro"
+}
+
 
 const privateRouter = [
   {
@@ -115,9 +119,12 @@ export const getPrivateRouter = (permissions) => {
   }
 
   return createBrowserRouter(permissions ? filterMenuItem(privateRouter) : [],
-    {
-      // basename: "/pro"
-    })
+    baseConfig)
+}
+
+export const getAdminRouter = () => {
+  return createBrowserRouter(privateRouter,
+    baseConfig)
 }
 
 export const publicRouter = createBrowserRouter([
@@ -125,6 +132,4 @@ export const publicRouter = createBrowserRouter([
   { path: "/reset", element: <ResetPwdPage /> },
   { path: "*", element: <LoginPage /> }
 ],
-  {
-    // basename: "/pro"
-  })
+  baseConfig)

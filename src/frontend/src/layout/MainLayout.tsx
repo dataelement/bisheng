@@ -15,7 +15,7 @@ import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { LockClosedIcon } from "@radix-ui/react-icons";
 import i18next from "i18next";
 import { Globe } from "lucide-react";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -47,6 +47,11 @@ export default function MainLayout() {
         localStorage.setItem('account', user.user_name)
         navigator('/reset')
     }
+
+    // 系统管理员(超管、组超管)
+    const isAdmin = useMemo(() => {
+        return ['admin', 'group_admin'].includes(user.role)
+    }, [user])
 
     return <div className="flex">
         <div className="bg-background-main w-full h-screen">
@@ -106,17 +111,17 @@ export default function MainLayout() {
                             <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
                         </NavLink>
                         {
-                            user.web_menu.includes('build') && <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
+                            (isAdmin || user.web_menu.includes('build')) && <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
                                 <TechnologyIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.skills')}</span>
                             </NavLink>
                         }
                         {
-                            user.web_menu.includes('knowledge') && <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            (isAdmin || user.web_menu.includes('knowledge')) && <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <KnowledgeIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.knowledge')}</span>
                             </NavLink>
                         }
                         {
-                            user.web_menu.includes('model') && <NavLink to='/model' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            (isAdmin || user.web_menu.includes('model')) && <NavLink to='/model' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <ModelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.models')}</span>
                             </NavLink>
                         }
