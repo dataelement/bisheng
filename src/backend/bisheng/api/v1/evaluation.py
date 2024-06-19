@@ -1,6 +1,7 @@
 import json
+import io
 from typing import List, Optional
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.database.base import session_getter
 from bisheng.api.services.evaluation import EvaluationService, add_evaluation_task
 from bisheng.api.services.user_service import UserPayload
@@ -37,6 +38,13 @@ def create_evaluation(*,
     authorize.jwt_required()
     payload = json.loads(authorize.get_jwt_subject())
     user_id = payload.get('user_id')
+
+    try:
+        EvaluationService.parse_csv(file_data=io.BytesIO(file.file.read()))
+    except ValueError:
+        return resp_500(code=400, message='文件格式错误')
+    finally:
+        file.file.seek(0)
 
     file_name, file_path = EvaluationService.upload_file(file=file)
     db_evaluation = Evaluation.model_validate(EvaluationCreate(unique_id=unique_id,
