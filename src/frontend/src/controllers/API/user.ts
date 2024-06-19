@@ -206,7 +206,6 @@ export function delUserGroupApi(group_id) {
 }
 // 获取用户组详情
 export async function getUserGroupDetail(userGroupId) {
-  //group/detail/组id 组详情 get 
   return {
     msg: "",
     code: "200",

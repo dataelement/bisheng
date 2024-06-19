@@ -37,36 +37,38 @@ export default function index() {
     const { users, reload, loadMore, searchUser } = useUsers()
     const { groups, loadData } = useGroups()
     const { modules, loadModules } = useModules()
-    const { page, pageSize, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
+    const { page, pageSize, data: logs, total, setPage, filterData } = useTable({ pageSize: 13 }, (param) =>
         getLogsApi({...param})
     )
 
-    const [actions, setActions] = useState([])
+    const [actions, setActions] = useState<any[]>([])
     const [keys, setKeys] = useState({
         userIds: [],
-        groupId: undefined,
+        groupId: '',
         start: undefined,
         end: undefined,
-        moduleId: undefined,
-        actionId: undefined
+        moduleId: '',
+        action: ''
     })
 
     const handleActionOpen = () => {
-        keys.moduleId ? getActionsByModuleApi(keys.moduleId).then(res => setActions(res.data))
+        keys.moduleId !== '' ? getActionsByModuleApi(keys.moduleId).then(res => setActions(res.data))
         : getActionsApi().then(res => setActions(res.data))
     }
     const handleSearch = () => {
-        console.log(keys)
-        filterData(keys)
+        const uids = keys.userIds.map(u => u.value)
+        const startTime = keys.start ? keys.start.toISOString().replace('T',' ').split('.')[0] : undefined
+        const endTime = keys.end ? keys.end.toISOString().replace('T',' ').split('.')[0] : undefined
+        filterData({...keys, userIds:uids, start:startTime, end:endTime})
     }
     const handleReset = () => {
         setKeys({
             userIds: [],
-            groupId: undefined,
+            groupId: '',
             start: undefined,
             end: undefined,
-            moduleId: undefined,
-            actionId: undefined
+            moduleId: '',
+            action: ''
         })
     }
 
@@ -74,7 +76,7 @@ export default function index() {
         <div className="h-[calc(100vh-98px)] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
             <div className="w-[180px] relative">
-                <MultiSelect className=" w-full" multiple
+                <MultiSelect className=" w-full overflow-y-auto" multiple
                     options={users}
                     value={keys.userIds}
                     placeholder={t('log.selectUser')}
@@ -109,19 +111,19 @@ export default function index() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectGroup>
-                            <SelectItem value="apple">Apple</SelectItem> {/* Consider localizing static text */}
+                            {modules.map(m => <SelectItem value={m.value} key={m.value}>{m.name}</SelectItem>)}
                         </SelectGroup>
                     </SelectContent>
                 </Select>
             </div>
             <div className="w-[180px] relative">
-                <Select value={keys.actionId} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({...keys,actionId:value})}>
+                <Select value={keys.action} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({...keys,action:value})}>
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder={t('log.actionBehavior')} />
                     </SelectTrigger>
                     <SelectContent>
                         <SelectGroup>
-                            <SelectItem value="apple">Apple</SelectItem> {/* Consider localizing static text */}
+                            {actions.map(a => <SelectItem value={a.value} key={a.value}>{a.name}</SelectItem>)}
                         </SelectGroup>
                     </SelectContent>
                 </Select>
@@ -151,17 +153,19 @@ export default function index() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
+                    {logs.map(log => (
                     <TableRow>
-                        <TableCell className="font-medium max-w-md truncate">34</TableCell>
-                        <TableHead>赵光晶</TableHead>
-                        <TableHead>2024-06-18-15:59</TableHead>
-                        <TableHead>构建</TableHead>
-                        <TableHead>创建应用</TableHead>
-                        <TableHead>助手</TableHead>
-                        <TableHead>代码助手</TableHead>
-                        <TableHead>122.9.35.239</TableHead>
-                        <TableHead>创建了一个很牛的代码助手</TableHead>
+                        <TableCell className="font-medium max-w-md truncate">{log.id}</TableCell>
+                        <TableHead>{log.operator_name}</TableHead>
+                        <TableHead>{log.create_time}</TableHead>
+                        <TableHead>{log.system_ids}</TableHead>
+                        <TableHead>{log.event_type}</TableHead>
+                        <TableHead>{log.object_type}</TableHead>
+                        <TableHead>{log.object_name}</TableHead>
+                        <TableHead>{log.ip_address}</TableHead>
+                        <TableHead>{log.note}</TableHead>
                     </TableRow>
+                    ))}
                 </TableBody>
             </Table>
         </div>
