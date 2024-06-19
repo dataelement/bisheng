@@ -5,6 +5,7 @@ import io
 import json
 from typing import List
 
+from bisheng.interface.initialize.loading import instantiate_llm
 from fastapi import UploadFile, HTTPException
 import pandas as pd
 from bisheng.settings import settings
@@ -221,9 +222,9 @@ def add_evaluation_task(evaluation_id: int):
 
         llm_params = settings.get_default_llm()
         logger.info(f'start evaluate with default llm: {llm_params}')
-        llm_type = llm_params.pop("type") if "type" in llm_params else ""
-        llm_object = import_by_type(_type='llms', name=llm_type)
-        _llm = llm_object(**llm_params)
+        node_type = llm_params.pop('type', "HostQwenChat")  # 兼容旧配置
+        class_object = import_by_type(_type='llms', name=node_type)
+        _llm = instantiate_llm(node_type, class_object, llm_params)
         llm = LangchainLLM(_llm)
         data_samples = {
             "question": [one.get('question') for one in csv_data],
