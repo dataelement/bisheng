@@ -43,17 +43,18 @@ const ErrorHoc = ({ Comp }) => {
 }
 
 
-export const privateRouter = createBrowserRouter([
+const privateRouter = [
   {
     path: "/",
     element: <MainLayout />,
     children: [
-      { path: "", element: <SkillChatPage /> },
-      { path: "filelib", element: <FileLibPage /> },
-      { path: "filelib/:id", element: <FilesPage /> },
+      { path: "", element: <SkillChatPage />, },
+      { path: "filelib", element: <FileLibPage />, permission: 'knowledge', },
+      { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
       {
         path: "build",
         element: <BuildLayout />,
+        permission: 'build',
         children: [
           { path: "assist", element: <SkillAssisPage /> },
           { path: "skills", element: <SkillsPage /> },
@@ -61,10 +62,10 @@ export const privateRouter = createBrowserRouter([
           { path: "", element: <Navigate to="assist" replace /> },
         ]
       },
-      { path: "build/skill", element: <L2Edit /> },
-      { path: "build/skill/:id/:vid", element: <L2Edit /> },
-      { path: "build/temps", element: <Templates /> },
-      { path: "model", element: <ModelPage /> },
+      { path: "build/skill", element: <L2Edit />, permission: 'build', },
+      { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
+      { path: "build/temps", element: <Templates />, permission: 'build', },
+      { path: "model", element: <ModelPage />, permission: 'model', },
       { path: "sys", element: <SystemPage /> },
       { path: "log", element: <LogPage /> },
     ],
@@ -91,11 +92,33 @@ export const privateRouter = createBrowserRouter([
   { path: "/reset", element: <ResetPwdPage /> },
   // { path: "/test", element: <Test /> },
   { path: "*", element: <Navigate to="/" replace /> }
-],
-  {
-    // basename: "/pro"
-  });
+]
 
+export const getPrivateRouter = (permissions) => {
+  const filterMenuItem = (_privateRouter) => {
+    const result = _privateRouter.reduce((res, cur) => {
+      // 递归
+      if (cur.children?.length) {
+        cur.children = filterMenuItem(cur.children)
+      }
+
+      const { permission, ...other } = cur
+      if (permission && !permissions.includes(permission)) {
+        return res
+      }
+
+      res.push(other)
+      return res
+    }, [])
+
+    return result
+  }
+
+  return createBrowserRouter(permissions ? filterMenuItem(privateRouter) : [],
+    {
+      // basename: "/pro"
+    })
+}
 
 export const publicRouter = createBrowserRouter([
   { path: "/", element: <LoginPage /> },
