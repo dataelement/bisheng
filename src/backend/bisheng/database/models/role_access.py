@@ -47,6 +47,8 @@ class AccessType(Enum):
     GPTS_TOOL_READ = 7
     GPTS_TOOL_WRITE = 8
 
+    WEB_MENU = 99  # 前端菜单栏权限限制
+
 
 class RoleRefresh(BaseModel):
     role_id: int
