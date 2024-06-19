@@ -343,8 +343,8 @@ class AssistantAgent(AssistantUtils):
                 run_id = uuid.uuid4()
                 await callback[0].on_tool_start({
                     'name': one,
-                }, input_str='', run_id=run_id)
-                await callback[0].on_tool_end(output='', name=one, run_id=run_id)
+                }, input_str='flow if offline', run_id=run_id)
+                await callback[0].on_tool_end(output='flow is offline', name=one, run_id=run_id)
         result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
         # 包含了history，将history排除, 默认取最后一个为最终结果
         res = [result[-1]]
