@@ -11,7 +11,7 @@ from uuid import UUID
 
 import rsa
 from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
-                                      UserValidateError)
+                                      UserValidateError, UserPasswordError)
 from bisheng.api.JWT import get_login_user
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role,
@@ -150,7 +150,7 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
             # 错误次数到达上限，封禁账号
             db_user.delete = 1
             UserDao.update_user(db_user)
-            raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
+            raise HTTPException(status_code=500, detail='由于登录失败次数过多，该账号被自动禁用，请联系管理员处理')
         return UserValidateError.return_resp()
 
     # 判断下密码是否长期未修改
@@ -776,8 +776,9 @@ async def change_password(*,
 
     password = decrypt_md5_password(password)
 
+    # 已登录用户告知是密码错误
     if user_info.password != md5_hash(password):
-        return UserValidateError.return_resp()
+        return UserPasswordError.return_resp()
 
     user_info.password = decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()

@@ -379,6 +379,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
                 doc = Document(page_content=meta.pop(self._text_field), metadata=meta)
                 pair = (doc, self._relevance_score_fn(result.score))
                 ret.append(pair)
+            logger.debug(f'MilvusWithPermissionCheck Search {one_col.name} results: {res[0]}')
         ret.sort(key=lambda x: x[1])
         logger.debug(f'MilvusWithPermissionCheck Search all results: {len(ret)}')
         ret = ret[:finally_k]
@@ -485,10 +486,23 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
                     Document(page_content=hit['_source']['text'], metadata=hit['_source']['metadata']),
                     hit['_score']
                 ))
+            logger.debug(f'ElasticsearchWithPermissionCheck Search {one_index_name} results: {hits}')
+        logger.debug(f'ElasticsearchWithPermissionCheck Search all results: {len(ret)}')
         finally_k = kwargs.pop("finally_k", k)
         ret.sort(key=lambda x: x[1])
         ret = ret[:finally_k]
+        logger.debug(f'ElasticsearchWithPermissionCheck Search finally results: {len(ret)}')
         return ret
+
+    def add_texts(
+        self,
+        texts: Iterable[str],
+        metadatas: Optional[List[dict]] = None,
+        ids: Optional[List[str]] = None,
+        refresh_indices: bool = True,
+        **kwargs: Any,
+    ) -> List[str]:
+        pass
 
     @classmethod
     def from_texts(

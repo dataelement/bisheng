@@ -15,3 +15,8 @@ class UserPasswordExpireError(BaseErrorCode):
 class UserNotPasswordError(BaseErrorCode):
     Code: int = 10602
     Msg: str = '用户尚未设置密码，请先联系管理员重置密码'
+
+
+class UserPasswordError(BaseErrorCode):
+    Code: int = 10603
+    Msg: str = '密码错误'
