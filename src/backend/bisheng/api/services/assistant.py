@@ -2,12 +2,15 @@ from datetime import datetime
 from typing import Any, List, Optional
 from uuid import UUID
 
+from fastapi import Request
+
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                            AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
                                            ToolTypeEmptyError, ToolTypeNotExistsError, ToolTypeIsPresetError)
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
+from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500)
@@ -102,7 +105,7 @@ class AssistantService(AssistantUtils):
 
     # 创建助手
     @classmethod
-    async def create_assistant(cls, login_user: UserPayload, assistant: Assistant) \
+    async def create_assistant(cls, request: Request, login_user: UserPayload, assistant: Assistant) \
             -> UnifiedResponseModel[AssistantInfo]:
 
         # 检查下是否有重名
@@ -120,14 +123,14 @@ class AssistantService(AssistantUtils):
         assistant, _, _ = await cls.get_auto_info(assistant)
         assistant = AssistantDao.create_assistant(assistant)
 
-        cls.create_assistant_hook(assistant, login_user)
+        cls.create_assistant_hook(request, assistant, login_user)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=[],
                                            flow_list=[],
                                            knowledge_list=[]))
 
     @classmethod
-    def create_assistant_hook(cls, assistant: Assistant, user_payload: UserPayload) -> bool:
+    def create_assistant_hook(cls, request: Request, assistant: Assistant, user_payload: UserPayload) -> bool:
         """
         创建助手成功后的hook，执行一些其他业务逻辑
         """
@@ -142,27 +145,35 @@ class AssistantService(AssistantUtils):
                     third_id=assistant.id.hex,
                     type=ResourceTypeEnum.ASSISTANT.value))
             GroupResourceDao.insert_group_batch(batch_resource)
+
+        # 写入审计日志
+        AuditLogService.create_build_assistant(user_payload, request.client.host, assistant.id.hex)
         return True
 
     # 删除助手
     @classmethod
-    def delete_assistant(cls, assistant_id: UUID, user_payload: UserPayload) -> UnifiedResponseModel:
+    def delete_assistant(cls, request: Request, login_user: UserPayload, assistant_id: UUID) -> UnifiedResponseModel:
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
 
         # 判断授权
-        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+        if not login_user.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
             return UnAuthorizedError.return_resp()
 
         AssistantDao.delete_assistant(assistant)
+        cls.delete_assistant_hook(request, login_user, assistant)
         return resp_200()
 
     @classmethod
-    def delete_assistant_hook(cls, assistant: Assistant, user_payload: UserPayload) -> bool:
+    def delete_assistant_hook(cls, request: Request, login_user: UserPayload, assistant: Assistant) -> bool:
         """ 清理关联的助手资源 """
-        logger.info(f"delete_assistant_hook id: {assistant.id}, user: {user_payload.user_id}")
+        logger.info(f"delete_assistant_hook id: {assistant.id}, user: {login_user.user_id}")
+        # 清理和用户组的关联
         GroupResourceDao.delete_group_resource_by_third_id(assistant.id.hex, ResourceTypeEnum.ASSISTANT)
+
+        # 写入审计日志
+        AuditLogService.delete_build_assistant(login_user, request.client.host, assistant.id.hex)
         return True
 
     @classmethod
@@ -203,14 +214,14 @@ class AssistantService(AssistantUtils):
         yield str(StreamData(event='message', data={'type': 'flow_list', 'message': flow_info}))
 
     @classmethod
-    async def update_assistant(cls, req: AssistantUpdateReq, user_payload: UserPayload) \
+    async def update_assistant(cls, request: Request, login_user: UserPayload, req: AssistantUpdateReq) \
             -> UnifiedResponseModel[AssistantInfo]:
         """ 更新助手信息 """
         assistant = AssistantDao.get_one_assistant(req.id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
 
-        check_result = cls.check_update_permission(assistant, user_payload)
+        check_result = cls.check_update_permission(assistant, login_user)
         if check_result is not None:
             return check_result
 
@@ -243,19 +254,30 @@ class AssistantService(AssistantUtils):
                                                         flow_id=flow_id_default)
         tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list,
                                                                  req.knowledge_list)
+        cls.update_assistant_hook(request, login_user, assistant)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
                                            flow_list=flow_list,
                                            knowledge_list=knowledge_list))
 
     @classmethod
-    async def update_status(cls, assistant_id: UUID, status: int, user_payload: UserPayload) -> UnifiedResponseModel:
+    def update_assistant_hook(cls, request: Request, login_user: UserPayload, assistant: Assistant) -> bool:
+        """ 更新助手的钩子 """
+        logger.info(f"delete_assistant_hook id: {assistant.id}, user: {login_user.user_id}")
+
+        # 写入审计日志
+        AuditLogService.update_build_assistant(login_user, request.client.host, assistant.id.hex)
+        return True
+
+    @classmethod
+    async def update_status(cls, request: Request, login_user: UserPayload, assistant_id: UUID,
+                            status: int) -> UnifiedResponseModel:
         """ 更新助手的状态 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
         # 判断权限
-        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+        if not login_user.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
             return UnAuthorizedError.return_resp()
         # 状态相等不做改动
         if assistant.status == status:
@@ -271,6 +293,7 @@ class AssistantService(AssistantUtils):
                 return AssistantInitError.return_resp('助手编译报错：' + str(e))
         assistant.status = status
         AssistantDao.update_assistant(assistant)
+        cls.update_assistant_hook(request, login_user, assistant)
         return resp_200()
 
     @classmethod

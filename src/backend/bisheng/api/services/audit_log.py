@@ -10,6 +10,7 @@ from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.v1.schemas import resp_200
+from bisheng.database.models.user_group import UserGroupDao
 
 
 class AuditLogService:
@@ -37,6 +38,7 @@ class AuditLogService:
         """
         新建助手会话的审计日志
         """
+        logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         # 获取助手所属的分组
         assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
         groups = GroupResourceDao.get_resource_group(ResourceTypeEnum.ASSISTANT, assistant_info.id.hex)
@@ -53,13 +55,13 @@ class AuditLogService:
             ip_address=ip_address,
         )
         AuditLogDao.insert_audit_logs([audit_log])
-        logger.info(f"act=create_chat_assistant user={user.user_name} assistant={assistant_id}")
 
     @classmethod
     def create_chat_flow(cls, user: UserPayload, ip_address: str, flow_id: str):
         """
         新建技能会话的审计日志
         """
+        logger.info(f"act=create_chat_flow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = FlowDao.get_flow_by_id(flow_id)
         groups = GroupResourceDao.get_resource_group(ResourceTypeEnum.FLOW, flow_info.id.hex)
         group_ids = [one.group_id for one in groups]
@@ -75,4 +77,87 @@ class AuditLogService:
             ip_address=ip_address,
         )
         AuditLogDao.insert_audit_logs([audit_log])
-        logger.info(f"act=create_chat_flow user={user.user_name} flow={flow_id}")
+
+    @classmethod
+    def _build_log(cls, user: UserPayload, ip_address: str, event_type: str, object_type: str, object_id: str,
+                   object_name: str, resource_type: ResourceTypeEnum):
+
+        # 获取资源属于哪些用户组
+        groups = GroupResourceDao.get_resource_group(resource_type, object_id)
+        group_ids = [one.group_id for one in groups]
+
+        # 插入审计日志
+        audit_log = AuditLog(
+            operator_id=user.user_id,
+            operator_name=user.user_name,
+            group_ids=group_ids,
+            system_id=SystemId.BUILD.value,
+            event_type=event_type,
+            object_type=object_type,
+            object_id=object_id,
+            object_name=object_name,
+            ip_address=ip_address,
+        )
+        AuditLogDao.insert_audit_logs([audit_log])
+
+    @classmethod
+    def create_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str):
+        """
+        新建技能的审计日志
+        """
+        logger.info(f"act=create_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
+        flow_info = FlowDao.get_flow_by_id(flow_id)
+        cls._build_log(user, ip_address, EventType.CREATE_BUILD.value, ObjectType.FLOW.value,
+                       flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
+
+    @classmethod
+    def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str):
+        """
+        更新技能的审计日志
+        """
+        logger.info(f"act=update_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
+        flow_info = FlowDao.get_flow_by_id(flow_id)
+        cls._build_log(user, ip_address, EventType.UPDATE_BUILD.value, ObjectType.FLOW.value,
+                       flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
+
+    @classmethod
+    def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str):
+        """
+        删除技能的审计日志
+        """
+        logger.info(f"act=delete_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
+        flow_info = FlowDao.get_flow_by_id(flow_id)
+        cls._build_log(user, ip_address, EventType.DELETE_BUILD.value, ObjectType.FLOW.value,
+                       flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
+
+    @classmethod
+    def create_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
+        """
+        新建助手的审计日志
+        """
+        logger.info(f"act=create_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
+        assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
+        cls._build_log(user, ip_address, EventType.CREATE_BUILD.value, ObjectType.ASSISTANT.value,
+                       assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)
+
+    @classmethod
+    def update_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
+        """
+        更新助手的审计日志
+        """
+        logger.info(f"act=update_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
+        assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
+
+        cls._build_log(user, ip_address, EventType.UPDATE_BUILD.value, ObjectType.ASSISTANT.value,
+                       assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)
+
+    @classmethod
+    def delete_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
+        """
+        删除助手的审计日志
+        """
+        logger.info(f"act=delete_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
+        assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
+
+        cls._build_log(user, ip_address, EventType.DELETE_BUILD.value, ObjectType.ASSISTANT.value,
+                       assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)

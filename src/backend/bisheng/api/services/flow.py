@@ -1,23 +1,28 @@
 import asyncio
 import copy
 from typing import List, Dict, AsyncGenerator
+from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
+from fastapi import Request
 from loguru import logger
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
     NotFoundFlowError, \
     FlowOnlineEditError
+from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
     StreamData
 from bisheng.chat.utils import process_node_data
-from bisheng.database.models.flow import FlowDao, FlowStatus
+from bisheng.database.models.flow import FlowDao, FlowStatus, Flow
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
+from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import RoleAccessDao, AccessType
 from bisheng.database.models.user import UserDao
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.variable_value import VariableDao
 from bisheng.processing.process import process_graph_cached, process_tweaks
@@ -70,7 +75,8 @@ class FlowService:
         return resp_200()
 
     @classmethod
-    def change_current_version(cls, user: UserPayload, flow_id: str, version_id: int) -> UnifiedResponseModel[None]:
+    def change_current_version(cls, request: Request, login_user: UserPayload, flow_id: str, version_id: int) \
+            -> UnifiedResponseModel[None]:
         """
         修改当前版本
         """
@@ -79,7 +85,7 @@ class FlowService:
             return NotFoundFlowError.return_resp()
 
         # 判断权限
-        if not user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+        if not login_user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
             return UnAuthorizedError.return_resp()
 
         # 技能上线状态不允许 切换版本
@@ -95,6 +101,8 @@ class FlowService:
 
         # 修改当前版本为用户选择的版本
         FlowVersionDao.change_current_version(flow_id, version_info)
+
+        cls.update_flow_hook(request, login_user, flow_info)
         return resp_200()
 
     @classmethod
@@ -342,3 +350,36 @@ class FlowService:
             answer_result[one.id] = list(task_result.values())[0]
 
         return index, answer_result
+
+    @classmethod
+    def create_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
+        logger.info(f'create_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
+        # 将技能关联到对应的用户组下
+        user_group = UserGroupDao.get_user_group(login_user.user_id)
+        if user_group:
+            batch_resource = []
+            for one in user_group:
+                batch_resource.append(
+                    GroupResource(group_id=one.group_id,
+                                  third_id=flow_info.id.hex,
+                                  type=ResourceTypeEnum.FLOW.value))
+            GroupResourceDao.insert_group_batch(batch_resource)
+        # 写入审计日志
+        AuditLogService.create_build_flow(login_user, request.client.host, flow_info.id.hex)
+        return True
+
+    @classmethod
+    def update_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
+        # 写入审计日志
+        AuditLogService.update_build_flow(login_user, request.client.host, flow_info.id.hex)
+        return True
+
+    @classmethod
+    def delete_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
+        logger.info(f'delete_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
+        # 将用户组下关联的技能删除
+        GroupResourceDao.delete_group_resource_by_third_id(flow_info.id.hex, ResourceTypeEnum.FLOW)
+
+        # 写入审计日志
+        AuditLogService.delete_build_flow(login_user, request.client.host, flow_info.id.hex)
+        return True
