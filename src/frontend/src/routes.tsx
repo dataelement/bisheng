@@ -131,6 +131,7 @@ export const getAdminRouter = () => {
 export const publicRouter = createBrowserRouter([
   { path: "/", element: <LoginPage /> },
   { path: "/reset", element: <ResetPwdPage /> },
+  { path: "/chat/:id/", element: <ChatShare /> },
   { path: "*", element: <LoginPage /> }
 ],
   baseConfig)

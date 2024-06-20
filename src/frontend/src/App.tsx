@@ -172,14 +172,14 @@ export default function App() {
 
   // 动态路由根据权限
   const router = useMemo(() => {
-    if (['admin', 'group_admin'].includes(user.role)) return getAdminRouter()
+    if (user && ['admin', 'group_admin'].includes(user.role)) return getAdminRouter()
     return user?.user_id ? getPrivateRouter(user.web_menu) : null
   }, [user])
 
   return (
     //need parent component with width and height
     <div className="flex h-full flex-col">
-      {(user?.user_id || noAuthPages.includes(path)) ? <RouterProvider router={router} />
+      {(user?.user_id || noAuthPages.includes(path)) && router ? <RouterProvider router={router} />
         : user ? <div className="loading"></div>
           : <RouterProvider router={publicRouter} />}
       <div></div>
