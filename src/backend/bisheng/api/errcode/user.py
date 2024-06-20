@@ -9,9 +9,14 @@ class UserValidateError(BaseErrorCode):
 
 class UserPasswordExpireError(BaseErrorCode):
     Code: int = 10601
-    Msg: str = '用户密码长期未修改，需要重新修改账号密码'
+    Msg: str = '您的密码已过期，请及时修改'
 
 
 class UserNotPasswordError(BaseErrorCode):
     Code: int = 10602
     Msg: str = '用户尚未设置密码，请先联系管理员重置密码'
+
+
+class UserPasswordError(BaseErrorCode):
+    Code: int = 10603
+    Msg: str = '密码错误'

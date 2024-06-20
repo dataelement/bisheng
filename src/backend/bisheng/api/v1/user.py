@@ -10,8 +10,10 @@ from typing import Annotated, Dict, List, Optional
 from uuid import UUID
 
 import rsa
+
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
-                                      UserValidateError)
+                                      UserValidateError, UserPasswordError)
 from bisheng.api.JWT import get_login_user
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role,
@@ -22,7 +24,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.knowledge import Knowledge
-from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
+from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate, AdminRole, DefaultRole
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleRefresh
 from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_group import UserGroupDao
@@ -150,11 +152,11 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
             # 错误次数到达上限，封禁账号
             db_user.delete = 1
             UserDao.update_user(db_user)
-            raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
+            raise HTTPException(status_code=500, detail='由于登录失败次数过多，该账号被自动禁用，请联系管理员处理')
         return UserValidateError.return_resp()
 
     # 判断下密码是否长期未修改
-    if password_conf.password_valid_period and password_conf.password_valid_period > 0:
+    if db_user.password and password_conf.password_valid_period and password_conf.password_valid_period > 0:
         if (datetime.now() - db_user.password_update_time).days >= password_conf.password_valid_period:
             return UserPasswordExpireError.return_resp()
 
@@ -238,7 +240,7 @@ async def list_user(*,
     user_ids = []
     if groups:
         # 查询用户组下的用户ID
-        groups_user_ids = UserGroupDao.get_groups_admins(groups)
+        groups_user_ids = UserGroupDao.get_groups_user(groups)
         if not groups_user_ids:
             return resp_200({'data': [], 'total': 0})
         user_ids = list(set([one.user_id for one in groups_user_ids]))
@@ -264,8 +266,18 @@ async def list_user(*,
     group_dict = {}
     for one in users:
         one_data = one.model_dump()
-        one_data['roles'] = get_user_roles(one, role_dict)
-        one_data['groups'] = get_user_groups(one, group_dict)
+        user_roles = get_user_roles(one, role_dict)
+        user_groups = get_user_groups(one, group_dict)
+        # 如果不是超级管理，则需要将数据过滤, 不能看到非他管理的用户组内的角色和用户组列表
+        if user_admin_groups:
+            for i in range(len(user_roles) - 1, -1, -1):
+                if user_roles[i]["group_id"] not in user_admin_groups:
+                    del user_roles[i]
+            for i in range(len(user_groups) - 1, -1, -1):
+                if user_groups[i]["id"] not in user_admin_groups:
+                    del user_groups[i]
+        one_data["roles"] = user_roles
+        one_data["groups"] = user_groups
         res.append(one_data)
 
     return resp_200({'data': res, 'total': total_count})
@@ -284,7 +296,11 @@ def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
     if user_role_ids:
         role_list = RoleDao.get_role_by_ids(user_role_ids)
         for role_info in role_list:
-            role_cache[role_info.id] = {'id': role_info.id, 'name': role_info.role_name}
+            role_cache[role_info.id] = {
+                "id": role_info.id,
+                "group_id": role_info.group_id,
+                "name": role_info.role_name
+            }
             res.append(role_cache.get(role_info.id))
     return res
 
@@ -340,13 +356,14 @@ async def update(*, user: UserUpdate, login_user: UserPayload = Depends(get_logi
 
 
 @router.post('/role/add', status_code=201)
-async def create_role(*, role: RoleCreate, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无查看权限')
-
+async def create_role(*, role: RoleCreate, login_user: UserPayload = Depends(get_login_user)):
+    if not role.group_id:
+        raise HTTPException(status_code=500, detail='用户组ID不能为空')
     if not role.role_name:
         raise HTTPException(status_code=500, detail='角色名称不能为空')
+
+    if not login_user.check_group_admin(role.group_id):
+        return UnAuthorizedError.return_resp()
 
     db_role = Role.model_validate(role)
     try:
@@ -360,26 +377,26 @@ async def create_role(*, role: RoleCreate, Authorize: AuthJWT = Depends()):
 
 
 @router.patch('/role/{role_id}', status_code=201)
-async def update_role(*, role_id: int, role: RoleUpdate, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无查看权限')
+async def update_role(*, role_id: int, role: RoleUpdate, login_user: UserPayload = Depends(get_login_user)):
+    db_role = RoleDao.get_role_by_id(role_id)
+    if not db_role:
+        raise HTTPException(status_code=404, detail='角色不存在')
 
-    with session_getter() as session:
-        db_role = session.get(Role, role_id)
+    if not login_user.check_group_admin(db_role.group_id):
+        return UnAuthorizedError.return_resp()
+
     try:
         if role.role_name:
             db_role.role_name = role.role_name
         if role.remark:
             db_role.remark = role.remark
-
         with session_getter() as session:
             session.add(db_role)
             session.commit()
             session.refresh(db_role)
         return resp_200(db_role)
     except Exception:
-        raise HTTPException(status_code=500, detail='添加失败，检查是否重复添加')
+        raise HTTPException(status_code=500, detail='更新失败，服务端异常')
 
 
 @router.get('/role/list', status_code=200)
@@ -413,14 +430,15 @@ async def get_role(*,
 
 
 @router.delete('/role/{role_id}', status_code=200)
-async def delete_role(*, role_id: int, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无查看权限')
+async def delete_role(*, role_id: int, login_user: UserPayload = Depends(get_login_user)):
+    db_role = RoleDao.get_role_by_id(role_id)
+    if not db_role:
+        return resp_200()
 
-    with session_getter() as session:
-        db_role = session.get(Role, role_id)
-    if db_role.role_name in {'系统管理员', '普通用户'}:
+    if not login_user.check_group_admin(db_role.group_id):
+        return UnAuthorizedError.return_resp()
+
+    if db_role.id == AdminRole or db_role.id == DefaultRole:
         raise HTTPException(status_code=500, detail='内置角色不能删除')
 
     # 删除role相关的数据
@@ -453,11 +471,15 @@ async def user_addrole(*, user_role: UserRoleCreate, login_user: UserPayload = D
             raise HTTPException(status_code=500, detail='无权限')
         # 获取管理组下的所有角色列表
         admin_roles = RoleDao.get_role_by_groups(admin_group, '', 0, 0)
+        admin_roles = [one.id for one in admin_roles]
+        # 做交集，获取用户组管理员可见的角色列表
         for i in range(len(old_roles) - 1, -1, -1):
             if old_roles[i] not in admin_roles:
                 del old_roles[i]
-        if not old_roles:
-            raise HTTPException(status_code=500, detail='无权限')
+        # 判断下重新设置的角色列表是否都在 用户组管理员的名下
+        for i in range(len(user_role.role_id) - 1, -1, -1):
+            if user_role.role_id[i] not in admin_roles:
+                raise HTTPException(status_code=500, detail=f'无权限添加角色{user_role.role_id[i]}')
 
     need_add_role = []
     for one in user_role.role_id:
@@ -477,6 +499,7 @@ async def user_addrole(*, user_role: UserRoleCreate, login_user: UserPayload = D
 
 @router.get('/user/role', status_code=200)
 async def get_user_role(*, user_id: int, Authorize: AuthJWT = Depends()):
+    # 废弃， 全部通过用户列表接口返回
     Authorize.jwt_required()
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无设置权限')
@@ -502,10 +525,13 @@ async def get_user_role(*, user_id: int, Authorize: AuthJWT = Depends()):
 
 
 @router.post('/role_access/refresh', status_code=200)
-async def access_refresh(*, data: RoleRefresh, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无查看权限')
+async def access_refresh(*, data: RoleRefresh, login_user: UserPayload = Depends(get_login_user)):
+    db_role = RoleDao.get_role_by_id(data.role_id)
+    if not db_role:
+        raise HTTPException(status_code=500, detail='角色不存在')
+
+    if not login_user.check_group_admin(db_role.group_id):
+        return UnAuthorizedError.return_resp()
 
     role_id = data.role_id
     access_type = data.type
@@ -528,10 +554,13 @@ async def access_refresh(*, data: RoleRefresh, Authorize: AuthJWT = Depends()):
 
 
 @router.get('/role_access/list', status_code=200)
-async def access_list(*, role_id: int, type: Optional[int] = None, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无查看权限')
+async def access_list(*, role_id: int, type: Optional[int] = None, login_user: UserPayload = Depends(get_login_user)):
+    db_role = RoleDao.get_role_by_id(role_id)
+    if not db_role:
+        raise HTTPException(status_code=500, detail='角色不存在')
+
+    if not login_user.check_group_admin(db_role.group_id):
+        return UnAuthorizedError.return_resp()
 
     sql = select(RoleAccess).where(RoleAccess.role_id == role_id)
     count_sql = select(func.count(RoleAccess.id)).where(RoleAccess.role_id == role_id)
@@ -561,6 +590,7 @@ async def data_by_role(*,
                        name: Optional[str] = None,
                        role_type: str = 'assistant',
                        Authorize: AuthJWT = Depends()):
+    # 废弃，都通过用户组下的资源列表接口获取
     Authorize.jwt_required()
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无查看权限')
@@ -580,6 +610,7 @@ async def knowledge_list(*,
                          page_num: str,
                          name: Optional[str] = None,
                          Authorize: AuthJWT = Depends()):
+    # 废弃
     Authorize.jwt_required()
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无查看权限')
@@ -630,6 +661,7 @@ async def flow_list(*,
                     page_num: int,
                     name: Optional[str] = None,
                     Authorize: AuthJWT = Depends()):
+    # 废弃
     Authorize.jwt_required()
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无查看权限')
@@ -718,8 +750,8 @@ async def get_rsa_publish_key():
 @router.post('/user/reset_password', status_code=200)
 async def reset_password(
         *,
-        user_id: int,
-        password: str,
+        user_id: int = Body(embed=True),
+        password: str = Body(embed=True),
         login_user: UserPayload = Depends(get_login_user),
 ):
     """
@@ -750,8 +782,8 @@ async def reset_password(
 
 @router.post('/user/change_password', status_code=200)
 async def change_password(*,
-                          password: str,
-                          new_password: str,
+                          password: str = Body(embed=True),
+                          new_password: str = Body(embed=True),
                           login_user: UserPayload = Depends(get_login_user)):
     """
     登录用户 修改自己的密码
@@ -762,8 +794,9 @@ async def change_password(*,
 
     password = decrypt_md5_password(password)
 
+    # 已登录用户告知是密码错误
     if user_info.password != md5_hash(password):
-        return UserValidateError.return_resp()
+        return UserPasswordError.return_resp()
 
     user_info.password = decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()
@@ -774,7 +807,10 @@ async def change_password(*,
 
 
 @router.post('/user/change_password_public', status_code=200)
-async def change_password_public(*, username: str, password: str, new_password: str):
+async def change_password_public(*,
+                                 username: str = Body(embed=True),
+                                 password: str = Body(embed=True),
+                                 new_password: str = Body(embed=True)):
     """
     未登录用户 修改自己的密码
     """

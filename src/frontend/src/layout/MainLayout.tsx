@@ -15,7 +15,7 @@ import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { LockClosedIcon } from "@radix-ui/react-icons";
 import i18next from "i18next";
 import { Globe } from "lucide-react";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -41,12 +41,17 @@ export default function MainLayout() {
         })
     }
 
-    // 充值密码
+    // 重置密码
     const navigator = useNavigate()
     const JumpResetPage = () => {
         localStorage.setItem('account', user.user_name)
         navigator('/reset')
     }
+
+    // 系统管理员(超管、组超管)
+    const isAdmin = useMemo(() => {
+        return ['admin', 'group_admin'].includes(user.role)
+    }, [user])
 
     return <div className="flex">
         <div className="bg-background-main w-full h-screen">
@@ -90,11 +95,11 @@ export default function MainLayout() {
                         <SelectHover
                             triagger={
                                 <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">
-                                    {user.user_name} <DropDownIcon className=" inline-block mt-[-2px]"/>
+                                    {user.user_name} <DropDownIcon className=" inline-block mt-[-2px]" />
                                 </span>
                             }>
-                            <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>修改密码</span></SelectHoverItem>
-                            <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>退出登录</span></SelectHoverItem>
+                            <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
+                            <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>{t('menu.logout')}</span></SelectHoverItem>
                         </SelectHover>
                     </div>
                 </div>
@@ -105,24 +110,30 @@ export default function MainLayout() {
                         <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                             <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
                         </NavLink>
-                        <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
-                            <TechnologyIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.skills')}</span>
-                        </NavLink>
-                        <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                            <KnowledgeIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.knowledge')}</span>
-                        </NavLink>
-                        <NavLink to='/model' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                            <ModelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.models')}</span>
-                        </NavLink>
                         {
-                            user.role === 'admin' && <>
+                            (isAdmin || user.web_menu.includes('build')) && <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
+                                <TechnologyIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.skills')}</span>
+                            </NavLink>
+                        }
+                        {
+                            (isAdmin || user.web_menu.includes('knowledge')) && <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                <KnowledgeIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.knowledge')}</span>
+                            </NavLink>
+                        }
+                        {
+                            (isAdmin || user.web_menu.includes('model')) && <NavLink to='/model' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                <ModelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.models')}</span>
+                            </NavLink>
+                        }
+                        {
+                            isAdmin && <>
                                 <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.system')}</span>
                                 </NavLink>
                             </>
                         }
                         {
-                            user.role === 'admin' && <>
+                            isAdmin && <>
                                 <NavLink to='/log' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.log')}</span>
                                 </NavLink>

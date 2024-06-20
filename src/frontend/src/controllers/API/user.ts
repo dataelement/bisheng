@@ -137,6 +137,8 @@ enum ACCESS_TYPE {
   USE_SKILL,
   MANAGE_LIB,
   ASSISTANT = 5,
+  TOOL = 4,
+  MENU = 99
 }
 export async function updateRolePermissionsApi(data: {
   role_id: number;
