@@ -7,13 +7,13 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao
-from bisheng.database.models.group import GroupDao
+from bisheng.database.models.group import GroupDao, Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.v1.schemas import resp_200
 from bisheng.database.models.knowledge import KnowledgeDao
-from bisheng.database.models.role import RoleDao
-from bisheng.database.models.user import UserDao
+from bisheng.database.models.role import RoleDao, Role
+from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
 
 
@@ -264,72 +264,64 @@ class AuditLogService:
                         ObjectType.USER_CONF.value, str(user_id), user_info.user_name, note)
 
     @classmethod
-    def forbid_user(cls, user: UserPayload, ip_address: str, user_id: int):
-        logger.info(f"act=forbid_user user={user.user_name} ip={ip_address} user_id={user_id}")
-        user_info = UserDao.get_user(user_id)
+    def forbid_user(cls, user: UserPayload, ip_address: str, user_info: User):
+        """
+        user: 操作用户
+        user_info: 被操作用户
+        """
+        logger.info(f"act=forbid_user user={user.user_name} ip={ip_address} user_id={user.user_id}")
         # 获取用户所属的分组
-        user_group = UserGroupDao.get_user_group(user_id)
+        user_group = UserGroupDao.get_user_group(user_info.user_id)
         user_group = [one.group_id for one in user_group]
         cls._system_log(user, ip_address, user_group, EventType.FORBID_USER.value,
-                        ObjectType.USER_CONF.value, str(user_id), user_info.user_name)
+                        ObjectType.USER_CONF.value, str(user_info.user_id), user_info.user_name)
 
     @classmethod
-    def recover_user(cls, user: UserPayload, ip_address: str, user_id: int):
-        logger.info(f"act=recover_user user={user.user_name} ip={ip_address} user_id={user_id}")
-        user_info = UserDao.get_user(user_id)
+    def recover_user(cls, user: UserPayload, ip_address: str, user_info: User):
+        logger.info(f"act=recover_user user={user.user_name} ip={ip_address} user_id={user_info.user_id}")
         # 获取用户所属的分组
-        user_group = UserGroupDao.get_user_group(user_id)
+        user_group = UserGroupDao.get_user_group(user_info.user_id)
         user_group = [one.group_id for one in user_group]
         cls._system_log(user, ip_address, user_group, EventType.RECOVER_USER.value,
-                        ObjectType.USER_CONF.value, str(user_id), user_info.user_name)
+                        ObjectType.USER_CONF.value, str(user_info.user_id), user_info.user_name)
 
     @classmethod
-    def create_user_group(cls, user: UserPayload, ip_address: str, group_id: int):
-        logger.info(f"act=create_user_group user={user.user_name} ip={ip_address} group_id={group_id}")
+    def create_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
+        logger.info(f"act=create_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
+        cls._system_log(user, ip_address, [group_info.id], EventType.CREATE_USER_GROUP.value,
+                        ObjectType.USER_GROUP_CONF.value, str(group_info.id), group_info.group_name)
+
+    @classmethod
+    def update_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
+        logger.info(f"act=update_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
         # 获取用户组信息
-        group_info = GroupDao.get_user_group(group_id)
-        cls._system_log(user, ip_address, [group_id], EventType.CREATE_USER_GROUP.value,
-                        ObjectType.USER_GROUP_CONF.value, str(group_id), group_info.group_name)
+        cls._system_log(user, ip_address, [group_info.id], EventType.UPDATE_USER_GROUP.value,
+                        ObjectType.USER_GROUP_CONF.value, str(group_info.id), group_info.group_name)
 
     @classmethod
-    def update_user_group(cls, user: UserPayload, ip_address: str, group_id: int):
-        logger.info(f"act=update_user_group user={user.user_name} ip={ip_address} group_id={group_id}")
+    def delete_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
+        logger.info(f"act=delete_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
         # 获取用户组信息
-        group_info = GroupDao.get_user_group(group_id)
-        cls._system_log(user, ip_address, [group_id], EventType.UPDATE_USER_GROUP.value,
-                        ObjectType.USER_GROUP_CONF.value, str(group_id), group_info.group_name)
+        cls._system_log(user, ip_address, [group_info.id], EventType.DELETE_USER_GROUP.value,
+                        ObjectType.USER_GROUP_CONF.value, str(group_info.id), group_info.group_name)
 
     @classmethod
-    def delete_user_group(cls, user: UserPayload, ip_address: str, group_id: int):
-        logger.info(f"act=delete_user_group user={user.user_name} ip={ip_address} group_id={group_id}")
-        # 获取用户组信息
-        group_info = GroupDao.get_user_group(group_id)
-        cls._system_log(user, ip_address, [group_id], EventType.DELETE_USER_GROUP.value,
-                        ObjectType.USER_GROUP_CONF.value, str(group_id), group_info.group_name)
+    def create_role(cls, user: UserPayload, ip_address: str, role: Role):
+        logger.info(f"act=create_role user={user.user_name} ip={ip_address} role_id={role.id}")
+
+        cls._system_log(user, ip_address, [role.group_id], EventType.CREATE_ROLE.value,
+                        ObjectType.ROLE_CONF.value, str(role.id), role.role_name)
 
     @classmethod
-    def create_role(cls, user: UserPayload, ip_address: str, role_id: int):
-        logger.info(f"act=create_role user={user.user_name} ip={ip_address} role_id={role_id}")
+    def update_role(cls, user: UserPayload, ip_address: str, role: Role):
+        logger.info(f"act=update_role user={user.user_name} ip={ip_address} role_id={role.id}")
 
-        # 获取角色信息
-        role_info = RoleDao.get_role_by_id(role_id)
-        cls._system_log(user, ip_address, [role_info.group_id], EventType.CREATE_ROLE.value,
-                        ObjectType.ROLE_CONF.value, str(role_id), role_info.role_name)
+        cls._system_log(user, ip_address, [role.group_id], EventType.UPDATE_ROLE.value,
+                        ObjectType.ROLE_CONF.value, str(role.id), role.role_name)
 
     @classmethod
-    def update_role(cls, user: UserPayload, ip_address: str, role_id: int):
-        logger.info(f"act=update_role user={user.user_name} ip={ip_address} role_id={role_id}")
+    def delete_role(cls, user: UserPayload, ip_address: str, role: Role):
+        logger.info(f"act=delete_role user={user.user_name} ip={ip_address} role_id={role.id}")
 
-        # 获取角色信息
-        role_info = RoleDao.get_role_by_id(role_id)
-        cls._system_log(user, ip_address, [role_info.group_id], EventType.UPDATE_ROLE.value,
-                        ObjectType.ROLE_CONF.value, str(role_id), role_info.role_name)
-
-    @classmethod
-    def delete_role(cls, user: UserPayload, ip_address: str, role_id: int):
-        logger.info(f"act=delete_role user={user.user_name} ip={ip_address} role_id={role_id}")
-
-        # 获取角色信息
-        role_info = RoleDao.get_role_by_id(role_id)
-        cls._system_log(user, ip_address, [role_info.group_id], EventType.DELETE_ROLE.value,
-                        ObjectType.ROLE_CONF.value, str(role_id), role_info.role_name)
+        cls._system_log(user, ip_address, [role.group_id], EventType.DELETE_ROLE.value,
+                        ObjectType.ROLE_CONF.value, str(role.id), role.role_name)

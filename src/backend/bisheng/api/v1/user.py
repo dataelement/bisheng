@@ -15,6 +15,7 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
                                       UserValidateError, UserPasswordError)
 from bisheng.api.JWT import get_login_user
+from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role,
                                                get_assistant_list_by_access)
@@ -33,7 +34,7 @@ from bisheng.settings import settings
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR
 from bisheng.utils.logger import logger
 from captcha.image import ImageCaptcha
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_jwt_auth import AuthJWT
@@ -324,7 +325,10 @@ def get_user_groups(user: User, group_cache: Dict) -> List[Dict]:
 
 
 @router.post('/user/update', status_code=201)
-async def update(*, user: UserUpdate, login_user: UserPayload = Depends(get_login_user)):
+async def update(*,
+                 request: Request,
+                 user: UserUpdate,
+                 login_user: UserPayload = Depends(get_login_user)):
     db_user = UserDao.get_user(user.user_id)
     if not db_user:
         raise HTTPException(status_code=500, detail='用户不存在')
@@ -345,6 +349,8 @@ async def update(*, user: UserUpdate, login_user: UserPayload = Depends(get_logi
                                        UserRole.user_id == user.user_id)).first()
         if admin:
             raise HTTPException(status_code=500, detail='不能操作管理员')
+        if user.delete == db_user.delete:
+            return resp_200()
         db_user.delete = user.delete
     if db_user.delete == 0:  # 启用用户
         # 清理密码错误次数的计数
@@ -352,11 +358,23 @@ async def update(*, user: UserUpdate, login_user: UserPayload = Depends(get_logi
     with session_getter() as session:
         session.add(db_user)
         session.commit()
+
     return resp_200()
 
 
+def update_user_delete_hook(request: Request, login_user: UserPayload, user: User) -> bool:
+    logger.info(f'update_user_delete_hook: {request}, user={user}')
+    if user.delete == 0:  # 启用用户
+        AuditLogService.forbid_user(login_user, request.client.host, user)
+    elif user.delete == 1:  # 禁用用户
+        AuditLogService.recover_user(login_user, request.client.host, user)
+
+
 @router.post('/role/add', status_code=201)
-async def create_role(*, role: RoleCreate, login_user: UserPayload = Depends(get_login_user)):
+async def create_role(*,
+                      request: Request,
+                      role: RoleCreate,
+                      login_user: UserPayload = Depends(get_login_user)):
     if not role.group_id:
         raise HTTPException(status_code=500, detail='用户组ID不能为空')
     if not role.role_name:
@@ -371,13 +389,23 @@ async def create_role(*, role: RoleCreate, login_user: UserPayload = Depends(get
             session.add(db_role)
             session.commit()
             session.refresh(db_role)
+        create_role_hook(request, login_user, db_role)
         return resp_200(db_role)
     except Exception:
         raise HTTPException(status_code=500, detail='添加失败，检查是否重复添加')
 
 
+def create_role_hook(request: Request, login_user: UserPayload, db_role: Role) -> bool:
+    logger.info(f'create_role_hook: {login_user.user_name}, role={db_role}')
+    AuditLogService.create_role(login_user, request.client.host, db_role)
+
+
 @router.patch('/role/{role_id}', status_code=201)
-async def update_role(*, role_id: int, role: RoleUpdate, login_user: UserPayload = Depends(get_login_user)):
+async def update_role(*,
+                      request: Request,
+                      role_id: int,
+                      role: RoleUpdate,
+                      login_user: UserPayload = Depends(get_login_user)):
     db_role = RoleDao.get_role_by_id(role_id)
     if not db_role:
         raise HTTPException(status_code=404, detail='角色不存在')
@@ -394,9 +422,15 @@ async def update_role(*, role_id: int, role: RoleUpdate, login_user: UserPayload
             session.add(db_role)
             session.commit()
             session.refresh(db_role)
+        update_user_role_hook(request, login_user, db_role)
         return resp_200(db_role)
     except Exception:
         raise HTTPException(status_code=500, detail='更新失败，服务端异常')
+
+
+def update_role_hook(request: Request, login_user: UserPayload, db_role: Role) -> bool:
+    logger.info(f'update_role_hook: {login_user.user_name}, role={db_role}')
+    AuditLogService.update_role(login_user, request.client.host, db_role)
 
 
 @router.get('/role/list', status_code=200)
@@ -430,7 +464,9 @@ async def get_role(*,
 
 
 @router.delete('/role/{role_id}', status_code=200)
-async def delete_role(*, role_id: int, login_user: UserPayload = Depends(get_login_user)):
+async def delete_role(*,
+                      request: Request,
+                      role_id: int, login_user: UserPayload = Depends(get_login_user)):
     db_role = RoleDao.get_role_by_id(role_id)
     if not db_role:
         return resp_200()
@@ -451,11 +487,15 @@ async def delete_role(*, role_id: int, login_user: UserPayload = Depends(get_log
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail='删除角色失败')
+    AuditLogService.delete_role(login_user, request.client.host, db_role)
     return resp_200()
 
 
 @router.post('/user/role_add', status_code=200)
-async def user_addrole(*, user_role: UserRoleCreate, login_user: UserPayload = Depends(get_login_user)):
+async def user_addrole(*,
+                       request: Request,
+                       user_role: UserRoleCreate,
+                       login_user: UserPayload = Depends(get_login_user)):
     """
     重新设置用户的角色。根据权限不同改动的数据范围不同
     """
@@ -482,19 +522,38 @@ async def user_addrole(*, user_role: UserRoleCreate, login_user: UserPayload = D
                 raise HTTPException(status_code=500, detail=f'无权限添加角色{user_role.role_id[i]}')
 
     need_add_role = []
+    need_delete_role = old_roles.copy()
     for one in user_role.role_id:
         if one not in old_roles:
             # 需要新增的角色
             need_add_role.append(one)
         else:
             # 剩余的就是需要删除的角色列表
-            old_roles.remove(one)
+            need_delete_role.remove(one)
     if need_add_role:
         UserRoleDao.add_user_roles(user_role.user_id, need_add_role)
-    if old_roles:
+    if need_delete_role:
         # 删除对应的角色列表
-        UserRoleDao.delete_user_roles(user_role.user_id, old_roles)
+        UserRoleDao.delete_user_roles(user_role.user_id, need_delete_role)
+    update_user_role_hook(request, login_user, user_role.user_id, old_roles, user_role.role_id)
     return resp_200()
+
+
+def update_user_role_hook(request: Request, login_user: UserPayload, user_id: int,
+                          old_roles: List[int], new_roles: List[int]):
+    logger.info(f'update_user_role_hook, user_id: {user_id}, old_roles: {old_roles}, new_roles: {new_roles}')
+    # 写入审计日志
+    role_info = RoleDao.get_role_by_ids(old_roles + new_roles)
+    role_dict = {one.id: one.role_name for one in role_info}
+    note = "编辑前角色："
+    for one in old_roles:
+        note += role_dict[one] + "、"
+    note = note.rstrip("、")
+    note += "编辑后角色："
+    for one in new_roles:
+        note += role_dict[one] + "、"
+    note = note.rstrip("、")
+    AuditLogService.update_user(login_user, request.client.host, user_id, note)
 
 
 @router.get('/user/role', status_code=200)
@@ -525,7 +584,7 @@ async def get_user_role(*, user_id: int, Authorize: AuthJWT = Depends()):
 
 
 @router.post('/role_access/refresh', status_code=200)
-async def access_refresh(*, data: RoleRefresh, login_user: UserPayload = Depends(get_login_user)):
+async def access_refresh(*, request: Request, data: RoleRefresh, login_user: UserPayload = Depends(get_login_user)):
     db_role = RoleDao.get_role_by_id(data.role_id)
     if not db_role:
         raise HTTPException(status_code=500, detail='角色不存在')
@@ -550,6 +609,7 @@ async def access_refresh(*, data: RoleRefresh, login_user: UserPayload = Depends
             role_access = RoleAccess(role_id=role_id, third_id=str(third_id), type=access_type)
             session.add(role_access)
         session.commit()
+    update_role_hook(request, login_user, db_role)
     return resp_200()
 
 

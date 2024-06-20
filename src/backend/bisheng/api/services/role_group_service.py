@@ -56,7 +56,14 @@ class RoleGroupService():
             self.set_group_admin(login_user, group_admin, group.id)
         return group
 
-    def update_group(self, login_user: UserPayload, group: Group) -> Group:
+    def create_group_hook(self, request: Request, login_user: UserPayload, group: Group) -> bool:
+        """ 新建用户组后置操作 """
+        logger.info(f'act=create_group_hook user={login_user.user_name} group_id={group.id}')
+        # 记录审计日志
+        AuditLogService.create_user_group(login_user, request.client.host, group)
+        return True
+
+    def update_group(self, request: Request, login_user: UserPayload, group: Group) -> Group:
         """更新用户组"""
         exist_group = GroupDao.get_user_group(group.id)
         if not exist_group:
@@ -67,12 +74,22 @@ class RoleGroupService():
         exist_group.update_time = datetime.now()
 
         group = GroupDao.update_group(exist_group)
+        self.update_group_hook(request, login_user, group)
         return group
 
-    def delete_group(self, group_id: int):
-        """删除用户组"""
+    def update_group_hook(self, request: Request, login_user: UserPayload, group: Group):
+        logger.info(f'act=update_group_hook user={login_user.user_name} group_id={group.id}')
+        # 记录审计日志
+        AuditLogService.update_user_group(login_user, request.client.host, group)
 
+    def delete_group(self, request: Request, login_user: UserPayload, group_id: int):
+        """删除用户组"""
+        group_info = GroupDao.get_user_group(group_id)
+        if not group_info:
+            return None
         GroupDao.delete_group(group_id)
+        # 记录审计日志
+        AuditLogService.delete_user_group(login_user, request.client.host, group_info)
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
         """获取全量的group列表"""
@@ -146,7 +163,7 @@ class RoleGroupService():
         group_ids = [ug.group_id for ug in user_groups]
         return GroupDao.get_group_by_ids(group_ids)
 
-    def set_group_admin(self, login_user: UserPayload, user_ids: List[int], group_id: int):
+    def set_group_admin(self, request: Request, login_user: UserPayload, user_ids: List[int], group_id: int):
         """设置用户组管理员"""
         # 获取目前用户组的管理员列表
         user_group_admins = UserGroupDao.get_groups_admins([group_id])
@@ -168,6 +185,9 @@ class RoleGroupService():
             UserGroupDao.delete_group_admins(group_id, need_delete_admin)
         # 修改用户组的最近修改人
         GroupDao.update_group_update_user(group_id, login_user.user_id)
+
+        group_info = GroupDao.get_user_group(group_id)
+        self.update_group_hook(request, login_user, group_info)
         return res
 
     def set_group_update_user(self, login_user: UserPayload, group_id: int):

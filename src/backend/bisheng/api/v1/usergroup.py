@@ -61,23 +61,28 @@ async def create_group(group: GroupCreate, Authorize: AuthJWT = Depends()):
 
 
 @router.put('/create', response_model=UnifiedResponseModel[GroupRead], status_code=200)
-async def update_group(group: Group, Authorize: AuthJWT = Depends()):
+async def update_group(request: Request,
+                       group: Group,
+                       login_user: UserPayload = Depends(get_login_user)):
     """
     编辑用户组
     """
-    await check_permissions(Authorize, ['admin'])
-    payload = json.loads(Authorize.get_jwt_subject())
-    login_user = UserPayload(**payload)
-    return resp_200(RoleGroupService().update_group(login_user, group))
+    if not login_user.is_admin():
+        return UnAuthorizedError.return_resp()
+    return resp_200(RoleGroupService().update_group(request, login_user, group))
 
 
 @router.delete('/create', status_code=200)
-async def delete_group(group_id: int, Authorize: AuthJWT = Depends()):
+async def delete_group(request: Request,
+                       group_id: int,
+                       login_user: UserPayload = Depends(get_login_user)):
     """
     删除用户组
     """
-    await check_permissions(Authorize, ['admin'])
-    return resp_200(RoleGroupService().delete_group(group_id))
+
+    if not login_user.is_admin():
+        return UnAuthorizedError.return_resp()
+    return resp_200(RoleGroupService().delete_group(request, login_user, group_id))
 
 
 @router.post('/set_user_group',
@@ -93,7 +98,7 @@ async def set_user_group(request: Request,
     """
     if not group_id:
         raise HTTPException(status_code=500, detail='用户组不能为空')
-    return resp_200(RoleGroupService().replace_user_groups(request,login_user, user_id, group_id))
+    return resp_200(RoleGroupService().replace_user_groups(request, login_user, user_id, group_id))
 
 
 @router.get('/get_user_group',
@@ -122,16 +127,18 @@ async def get_group_user(group_id: int,
 @router.post('/set_group_admin',
              response_model=UnifiedResponseModel[List[UserGroupRead]],
              status_code=200)
-async def set_group_admin(user_ids: Annotated[List[int], Body(embed=True)],
-                          group_id: Annotated[int, Body(embed=True)],
-                          Authorize: AuthJWT = Depends()):
+async def set_group_admin(
+        request: Request,
+        user_ids: Annotated[List[int], Body(embed=True)],
+        group_id: Annotated[int, Body(embed=True)],
+        login_user: UserPayload = Depends(get_login_user)):
     """
     获取分组的admin，批量设置接口，覆盖历史的admin
     """
-    await check_permissions(Authorize, ['admin'])
-    payload = json.loads(Authorize.get_jwt_subject())
-    login_user = UserPayload(**payload)
-    return resp_200(RoleGroupService().set_group_admin(login_user, user_ids, group_id))
+
+    if not login_user.is_admin():
+        return UnAuthorizedError.return_resp()
+    return resp_200(RoleGroupService().set_group_admin(request,login_user, user_ids, group_id))
 
 
 @router.post('/set_update_user', status_code=200)
