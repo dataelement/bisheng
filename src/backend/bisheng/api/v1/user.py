@@ -11,7 +11,7 @@ from uuid import UUID
 
 import rsa
 from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
-                                      UserValidateError)
+                                      UserValidateError, UserPasswordError)
 from bisheng.api.JWT import get_login_user
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role,
@@ -150,11 +150,11 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
             # 错误次数到达上限，封禁账号
             db_user.delete = 1
             UserDao.update_user(db_user)
-            raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
+            raise HTTPException(status_code=500, detail='由于登录失败次数过多，该账号被自动禁用，请联系管理员处理')
         return UserValidateError.return_resp()
 
     # 判断下密码是否长期未修改
-    if password_conf.password_valid_period and password_conf.password_valid_period > 0:
+    if db_user.password and password_conf.password_valid_period and password_conf.password_valid_period > 0:
         if (datetime.now() - db_user.password_update_time).days >= password_conf.password_valid_period:
             return UserPasswordExpireError.return_resp()
 
@@ -230,7 +230,7 @@ async def list_user(*,
         if not groups:
             raise HTTPException(status_code=500, detail='无查看权限')
         # 将筛选条件的group_id和管理员有权限的groups做交集
-        if groups:
+        if group_id:
             groups = list(set(groups) & set(group_id))
             if not groups:
                 raise HTTPException(status_code=500, detail='无查看权限')
@@ -238,7 +238,7 @@ async def list_user(*,
     user_ids = []
     if groups:
         # 查询用户组下的用户ID
-        groups_user_ids = UserGroupDao.get_groups_admins(groups)
+        groups_user_ids = UserGroupDao.get_groups_user(groups)
         if not groups_user_ids:
             return resp_200({'data': [], 'total': 0})
         user_ids = list(set([one.user_id for one in groups_user_ids]))
@@ -264,8 +264,18 @@ async def list_user(*,
     group_dict = {}
     for one in users:
         one_data = one.model_dump()
-        one_data['roles'] = get_user_roles(one, role_dict)
-        one_data['groups'] = get_user_groups(one, group_dict)
+        user_roles = get_user_roles(one, role_dict)
+        user_groups = get_user_groups(one, group_dict)
+        # 如果不是超级管理，则需要将数据过滤, 不能看到非他管理的用户组内的角色和用户组列表
+        if user_admin_groups:
+            for i in range(len(user_roles) - 1, -1, -1):
+                if user_roles[i]["group_id"] not in user_admin_groups:
+                    del user_roles[i]
+            for i in range(len(user_groups) - 1, -1, -1):
+                if user_groups[i]["id"] not in user_admin_groups:
+                    del user_groups[i]
+        one_data["roles"] = user_roles
+        one_data["groups"] = user_groups
         res.append(one_data)
 
     return resp_200({'data': res, 'total': total_count})
@@ -284,7 +294,11 @@ def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
     if user_role_ids:
         role_list = RoleDao.get_role_by_ids(user_role_ids)
         for role_info in role_list:
-            role_cache[role_info.id] = {'id': role_info.id, 'name': role_info.role_name}
+            role_cache[role_info.id] = {
+                "id": role_info.id,
+                "group_id": role_info.group_id,
+                "name": role_info.role_name
+            }
             res.append(role_cache.get(role_info.id))
     return res
 
@@ -718,8 +732,8 @@ async def get_rsa_publish_key():
 @router.post('/user/reset_password', status_code=200)
 async def reset_password(
         *,
-        user_id: int,
-        password: str,
+        user_id: int = Body(embed=True),
+        password: str = Body(embed=True),
         login_user: UserPayload = Depends(get_login_user),
 ):
     """
@@ -750,8 +764,8 @@ async def reset_password(
 
 @router.post('/user/change_password', status_code=200)
 async def change_password(*,
-                          password: str,
-                          new_password: str,
+                          password: str = Body(embed=True),
+                          new_password: str = Body(embed=True),
                           login_user: UserPayload = Depends(get_login_user)):
     """
     登录用户 修改自己的密码
@@ -762,8 +776,9 @@ async def change_password(*,
 
     password = decrypt_md5_password(password)
 
+    # 已登录用户告知是密码错误
     if user_info.password != md5_hash(password):
-        return UserValidateError.return_resp()
+        return UserPasswordError.return_resp()
 
     user_info.password = decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()
@@ -774,7 +789,10 @@ async def change_password(*,
 
 
 @router.post('/user/change_password_public', status_code=200)
-async def change_password_public(*, username: str, password: str, new_password: str):
+async def change_password_public(*,
+                                 username: str = Body(embed=True),
+                                 password: str = Body(embed=True),
+                                 new_password: str = Body(embed=True)):
     """
     未登录用户 修改自己的密码
     """
