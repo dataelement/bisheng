@@ -10,6 +10,7 @@ from uuid import UUID
 from loguru import logger
 from fastapi import WebSocket, WebSocketDisconnect, status, Request
 
+from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
@@ -21,7 +22,8 @@ from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
-from bisheng.database.models.user import User
+from bisheng.database.models.message import ChatMessageDao
+from bisheng.database.models.user import User, UserDao
 from bisheng.processing.process import process_tweaks
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 from bisheng.utils.util import get_cache_key
@@ -394,6 +396,16 @@ class ChatManager:
         start_resp = ChatResponse(type='begin', category='system', **base_param)
         if is_begin:
             await self.send_json(flow_id, chat_id, start_resp)
+            # 判断下是否是首次创建会话
+            if chat_id:
+                res = ChatMessageDao.get_messages_by_chat_id(chat_id=chat_id)
+                if len(res) <= 1:  # 说明是新建会话
+                    websocket = self.active_connections[key]
+                    login_user = UserPayload(**{
+                        "user_id": user_id,
+                        "user_name": UserDao.get_user(user_id).user_name,
+                    })
+                    AuditLogService.create_chat_flow(login_user, websocket.client.host, flow_id)
         start_resp.type = 'start'
 
         # should input data
