@@ -431,7 +431,6 @@ async def get_role(*,
 
 @router.delete('/role/{role_id}', status_code=200)
 async def delete_role(*, role_id: int, login_user: UserPayload = Depends(get_login_user)):
-
     db_role = RoleDao.get_role_by_id(role_id)
     if not db_role:
         return resp_200()
@@ -472,11 +471,15 @@ async def user_addrole(*, user_role: UserRoleCreate, login_user: UserPayload = D
             raise HTTPException(status_code=500, detail='无权限')
         # 获取管理组下的所有角色列表
         admin_roles = RoleDao.get_role_by_groups(admin_group, '', 0, 0)
+        admin_roles = [one.id for one in admin_roles]
+        # 做交集，获取用户组管理员可见的角色列表
         for i in range(len(old_roles) - 1, -1, -1):
             if old_roles[i] not in admin_roles:
                 del old_roles[i]
-        if not old_roles:
-            raise HTTPException(status_code=500, detail='无权限')
+        # 判断下重新设置的角色列表是否都在 用户组管理员的名下
+        for i in range(len(user_role.role_id) - 1, -1, -1):
+            if user_role.role_id[i] not in admin_roles:
+                raise HTTPException(status_code=500, detail=f'无权限添加角色{user_role.role_id[i]}')
 
     need_add_role = []
     for one in user_role.role_id:
