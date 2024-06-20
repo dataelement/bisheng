@@ -46,31 +46,31 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
     }
     return <>
         <div className="px-4 mt-6">
-            <span className="bisheng-label">审查类型</span>
+            <span className="bisheng-label">{t('build.reviewType')}</span>
             <RadioGroup value="1"
                 className="flex space-x-2 h-[20px] mt-4 mb-6">
                 <div>
                     <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" value="1" />敏感词表匹配
+                        <RadioGroupItem className="mr-2" value="1" />{t('build.sensitiveWordListMatch')}
                     </Label>
                 </div>
                 <div>
                     <Label className="flex justify-center">
-                        <RadioGroupItem disabled className="mr-2" value="模型审查" />模型审查
+                        <RadioGroupItem disabled className="mr-2" value="模型审查" />{t('build.modelReview')}
                     </Label>
                 </div>
             </RadioGroup>
-            <div className="mb-6"> {/* 后期更新 */}
-                <span className="bisheng-label">词表类型</span>
+            <div className="mb-6">
+                <span className="bisheng-label">{t('build.wordListType')}</span>
                 <div className="mt-4 mb-6 space-y-3">
                     <div className="space-x-2 flex items-center">
                         <Checkbox
-                            id="c1"
-                            value="1"
-                            checked={form.wordsType?.includes(1)}
-                            onCheckedChange={(val) => handleCheckboxChange(val, 1)}
+                        id="c1"
+                        value="1"
+                        checked={form.wordsType?.includes(1)}
+                        onCheckedChange={(val) => handleCheckboxChange(val, 1)}
                         />
-                        <Label htmlFor="c1" className="cursor-pointer">内置词表</Label>
+                        <Label htmlFor="c1" className="cursor-pointer">{t('build.builtinWordList')}</Label>
                     </div>
                     <div className="space-x-2 flex items-center">
                         <Checkbox
@@ -79,26 +79,26 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
                             checked={form.wordsType?.includes(2)}
                             onCheckedChange={(val) => handleCheckboxChange(val, 2)}
                         />
-                        <Label htmlFor="c2" className="cursor-pointer">自定义词表</Label>
+                        <Label htmlFor="c2" className="cursor-pointer">{t('build.customWordList')}</Label>
                     </div>
                 </div>
                 <div className="flex justify-center relative">
                     <Textarea className="h-[100px] resize-none" value={form.words}
                         onChange={(e) => setForm({ ...form, words: e.target.value })}
-                        placeholder="使用换行符进行分隔，每行一个"></Textarea>
+                        placeholder={t('build.useNewlineToSeparate')}></Textarea>
                     <input type="file" accept=".txt" id="fileUpload" className="hidden" onChange={handleUploadFile} />
                     <div className="flex items-center absolute right-1 top-1 cursor-pointer" onClick={() => document.querySelector('#fileUpload').click()}>
                         <UploadIcon id="ul" color="blue" className="w-3 h-3" />
-                        <Label htmlFor="ul"><span className="text-xs text-primary cursor-pointer">txt文件</span></Label>
+                        <Label htmlFor="ul"><span className="text-xs text-primary cursor-pointer">{t('build.txtFile')}</span></Label>
                     </div>
                 </div>
             </div>
-            <span className="bisheng-label">自动回复内容</span>
+            <span className="bisheng-label">{t('build.autoReplyContent')}</span>
             <div className="flex justify-center mt-4">
                 <Textarea className="h-[100px] resize-none" value={form.autoReply}
                     onChange={(e) => setForm({ ...form, autoReply: e.target.value })}
                     maxLength={500}
-                    placeholder="填写命中安全审查时的自动回复内容，例如“当前对话内容违反相关规范，请修改后重新输入"></Textarea>
+                    placeholder={t('build.defaultAutoReply')}></Textarea>
             </div>
         </div>
         <div className="absolute bottom-10 right-4 sapce-x-10 flex space-x-8">

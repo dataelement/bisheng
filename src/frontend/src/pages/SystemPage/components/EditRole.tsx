@@ -31,7 +31,7 @@ const SearchPanne = ({ groupId, title, type, children }) => {
             case 'skill':
                 return getGroupResourcesApi({ ...param, resource_type: 2 });
             case 'tool':
-                return getGroupResourcesApi({ ...param, resource_type: 2 });
+                return getGroupResourcesApi({ ...param, resource_type: 4 });
             case 'assistant':
                 return getGroupResourcesApi({ ...param, resource_type: 3 });
             default:
@@ -56,32 +56,43 @@ const SearchPanne = ({ groupId, title, type, children }) => {
 }
 
 
+const enum MenuType {
+    BUILD = 'build',
+    KNOWLEDGE = 'knowledge',
+    MODEL = 'model'
+}
 // -1 id表示新增
 export default function EditRole({ id, name, groupId, onChange, onBeforeChange }) {
     const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t } = useTranslation()
 
+    // 使用的权限
     const [form, setForm] = useState({
         name,
         useSkills: [],
         useLibs: [],
         useAssistant: [],
-        manageLibs: []
+        manageLibs: [],
+        useTools: [],
+        useMenu: []
     })
     useEffect(() => {
         if (id !== -1) {
             // 获取详情，初始化选中数据
             getRolePermissionsApi(id).then(res => {
-                const useSkills = [], useLibs = [], manageLibs = [], useAssistant = []
+                const useSkills = [], useLibs = [], manageLibs = [], useAssistant = [], useTools = [],
+                    useMenu = []
                 res.data.forEach(item => {
                     switch (item.type) {
                         case 1: useLibs.push(Number(item.third_id)); break;
                         case 2: useSkills.push(item.third_id); break;
                         case 3: manageLibs.push(Number(item.third_id)); break;
+                        case 4: useTools.push(Number(item.third_id)); break;
                         case 5: useAssistant.push(item.third_id); break;
+                        case 99: useMenu.push(item.third_id); break;
                     }
                 })
-                setForm({ name, useSkills, useLibs, useAssistant, manageLibs })
+                setForm({ name, useSkills, useLibs, useAssistant, manageLibs, useTools, useMenu })
             })
         }
     }, [id])
@@ -138,7 +149,9 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useSkills, type: 2 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useLibs, type: 1 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.manageLibs, type: 3 }),
-            updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 5 })
+            updateRolePermissionsApi({ role_id: roleId, access_id: form.useTools, type: 4 }),
+            updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 5 }),
+            updateRolePermissionsApi({ role_id: roleId, access_id: form.useMenu, type: 99 }),
         ])
 
         console.log('form :>> ', form, res);
@@ -148,13 +161,13 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
 
     const roleId = id === -1 ? 0 : id
 
-    return <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-136px)] overflow-y-auto pb-10 scrollbar-hide">
+    return <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-136px)] overflow-y-auto pb-40 scrollbar-hide">
         <div className="font-bold mt-4">
             <p className="text-xl mb-4">{t('system.roleName')}</p>
             <Input placeholder={t('system.roleName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60}></Input>
         </div>
         {/* 菜单授权 */}
-        {/* <div className="">
+        <div className="">
             <div className="mt-20 flex justify-between items-center relative">
                 <p className="text-xl font-bold">菜单授权</p>
             </div>
@@ -170,25 +183,25 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                         <TableRow>
                             <TableCell className="font-medium">构建</TableCell>
                             <TableCell className="text-right">
-                                <Switch onCheckedChange={(bln) => { }} />
+                                <Switch checked={form.useMenu.includes(MenuType.BUILD)} onCheckedChange={(bln) => switchDataChange(MenuType.BUILD, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
                         <TableRow>
                             <TableCell className="font-medium">知识库</TableCell>
                             <TableCell className="text-right">
-                                <Switch onCheckedChange={(bln) => { }} />
+                                <Switch checked={form.useMenu.includes(MenuType.KNOWLEDGE)} onCheckedChange={(bln) => switchDataChange(MenuType.KNOWLEDGE, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
                         <TableRow>
                             <TableCell className="font-medium">模型</TableCell>
                             <TableCell className="text-right">
-                                <Switch onCheckedChange={(bln) => { }} />
+                                <Switch checked={form.useMenu.includes(MenuType.MODEL)} onCheckedChange={(bln) => switchDataChange(MenuType.MODEL, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
                     </TableBody>
                 </Table>
             </div>
-        </div> */}
+        </div>
         {/* 助手 */}
         <div className="">
             <SearchPanne title={t('system.assistantAuthorization')}
@@ -285,8 +298,12 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             </SearchPanne>
         </div>
         {/* 工具 */}
-        {/* <div className="">
-            <SearchPanne title={'工具授权'} role_id={roleId} type={'tool'}>
+        <div className="">
+            <SearchPanne
+                title={'工具授权'}
+                groupId={groupId}
+                role_id={roleId}
+                type={'tool'}>
                 {(data) => (
                     <Table>
                         <TableHeader>
@@ -294,7 +311,6 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                                 <TableHead>{t('lib.libraryName')}</TableHead>
                                 <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
                                 <TableHead className="text-right">{t('system.usePermission')}</TableHead>
-                                <TableHead className="text-right">{t('system.managePermission')}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -303,10 +319,10 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                                     <TableCell className="font-medium">{el.name}</TableCell>
                                     <TableCell>{el.user_name}</TableCell>
                                     <TableCell className="text-right">
-                                        <Switch checked={form.useLibs.includes(el.id)} onCheckedChange={(bln) => switchUseLib(el.id, bln)} />
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Switch checked={form.manageLibs.includes(el.id)} onCheckedChange={(bln) => switchLibManage(el.id, bln)} />
+                                        <Switch
+                                            checked={form.useTools.includes(el.id)}
+                                            onCheckedChange={(bln) => switchDataChange(el.id, 'useTools', bln)}
+                                        />
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -314,7 +330,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                     </Table>
                 )}
             </SearchPanne>
-        </div> */}
+        </div>
         <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-[white]">
             <Button variant="outline" className="px-16" onClick={() => onChange()}>{t('cancel')}</Button>
             <Button className="px-16" onClick={handleSave}>{t('save')}</Button>

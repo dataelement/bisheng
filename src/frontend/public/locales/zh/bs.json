@@ -88,7 +88,9 @@
     "maximum": "最多",
     "perMinute": "个同时在线会话",
     "changeTime": "修改时间",
-    "deleteGroup": "删除后 【{{name}}】 将不再存在，是否删除?"
+    "deleteGroup": "删除后 【{{name}}】 将不再存在，是否删除?",
+    "currentGroup": "当前用户组",
+    "defaultGroup": "默认用户组"
   },
   "skills": {
     "manageTemplate": "管理技能模板",
@@ -519,7 +521,28 @@
     "cancel": "取消",
     "confirm": "确认",
     "forBetter": "为了更好的助手效果，描述需要大于20 个字",
-    "forExample": "例如助手的身份、完成任务的具体方法和步骤、回答问题时的语气以及应该注意什么问题等"
+    "forExample": "例如助手的身份、完成任务的具体方法和步骤、回答问题时的语气以及应该注意什么问题等",
+    "contentSecurityR": "内容安全审查",
+    "errors": {
+      "selectAtLeastOneWordType": "词表至少需要选择一个",
+      "autoReplyNotEmpty": "自动回复内容不可为空"
+    },
+    "saveSuccess": "保存成功",
+    "contentSecurity": "内容安全",
+    "contentSecurityDesc": "通过敏感词表或 API 对会话内容进行安全审查",
+    "contentSecuritySettings": "内容安全审查设置",
+    "enableContentSecurityReview": "开启内容安全审查",
+    "reviewType": "审查类型",
+    "sensitiveWordListMatch": "敏感词表匹配",
+    "modelReview": "模型审查",
+    "wordListType": "词表类型",
+    "builtinWordList": "内置词表",
+    "customWordList": "自定义词表",
+    "autoReplyContent": "自动回复内容",
+    "useNewlineToSeparate": "使用换行符进行分隔，每行一个",
+    "txtFile": "txt文件",
+    "sensitiveWordMatch": "敏感词匹配",
+    "defaultAutoReply": "填写命中安全审查时的自动回复内容，例如“当前对话内容违反相关规范，请修改后重新输入。"
   },
   "tools": {
     "addTool": "添加工具",
@@ -580,5 +603,24 @@
     "resetButton": "重置密码",
     "passwordResetSuccess": "您的密码已成功重置。",
     "resetFailed": "密码重置失败"
+  },
+  "log": {
+    "auditManagement": "审计管理",
+    "searchButton": "查询",
+    "resetButton": "重置",
+    "auditId": "审计ID",
+    "username": "用户名",
+    "operationTime": "操作时间",
+    "systemModule": "系统模块",
+    "operationAction": "操作行为",
+    "objectType": "操作对象类型",
+    "operationObject": "操作对象",
+    "ipAddress": "IP地址",
+    "remark": "备注",
+    "selectUser": "选择用户",
+    "selectUserGroup": "选择用户组",
+    "startDate": "开始日期",
+    "endDate": "结束日期",
+    "actionBehavior": "操作行为"
   }
 }

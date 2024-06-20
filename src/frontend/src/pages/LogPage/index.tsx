@@ -16,11 +16,12 @@ import {
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
+import { formatDate } from "@/util/utils";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
     const loadData = () => {
-        getUserGroupsApi().then(res => setGroups(res.records))
+        getUserGroupsApi().then((res:any) => setGroups(res.records))
     }
     return { groups, loadData }
 }
@@ -40,131 +41,132 @@ export default function index() {
     const { page, pageSize, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
         getLogsApi({...param})
     )
-
-    const [actions, setActions] = useState([])
-    const [keys, setKeys] = useState({
+    const init = {
         userIds: [],
-        groupId: undefined,
+        groupId: '',
         start: undefined,
         end: undefined,
-        moduleId: undefined,
-        actionId: undefined
-    })
+        moduleId: '',
+        action: ''
+    }
 
-    const handleActionOpen = () => {
-        keys.moduleId ? getActionsByModuleApi(keys.moduleId).then(res => setActions(res.data))
-        : getActionsApi().then(res => setActions(res.data))
+    const [actions, setActions] = useState<any[]>([])
+    const [keys, setKeys] = useState({...init})
+
+    const handleActionOpen = async () => {
+        setActions((keys.moduleId ? await getActionsByModuleApi(keys.moduleId) : await getActionsApi()).data)
     }
     const handleSearch = () => {
-        console.log(keys)
-        filterData(keys)
+        const uids = keys.userIds.map(u => u.value)
+        const startTime = keys.start && formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss')
+        const endTime = keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss')
+        filterData({...keys, userIds:uids, start:startTime, end:endTime})
     }
     const handleReset = () => {
-        setKeys({
-            userIds: [],
-            groupId: undefined,
-            start: undefined,
-            end: undefined,
-            moduleId: undefined,
-            actionId: undefined
-        })
+        setKeys({...init})
     }
 
     return <div className="relative">
         <div className="h-[calc(100vh-98px)] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
-                <div className="w-[180px] relative">
-                    <MultiSelect className=" w-full" multiple
-                        options={users}
-                        value={keys.userIds}
-                        placeholder="选择用户"
-                        onLoad={reload}
-                        onSearch={searchUser}
-                        onScrollLoad={loadMore}
-                        onChange={(values) => setKeys({...keys,userIds:values})}
-                    ></MultiSelect>
-                </div>
-                <div className="w-[180px] relative">
-                    <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({...keys,groupId:value})}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="选择用户组" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="w-[180px] relative">
-                    <DatePicker value={keys.start} placeholder='开始日期' onChange={(t) => setKeys({...keys,start:t})} />
-                </div>
-                <div className="w-[180px] relative">
-                    <DatePicker value={keys.end} placeholder='结束日期' onChange={(t) => setKeys({...keys,end:t})} />
-                </div>
-                <div className="w-[180px] relative">
-                    <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({...keys,moduleId:value})}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="系统模块" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value="apple">Apple</SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="w-[180px] relative">
-                    <Select value={keys.actionId} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({...keys,actionId:value})}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="操作行为" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value="apple">Apple</SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
+            <div className="w-[180px] relative">
+                <MultiSelect className=" w-full overflow-y-auto" multiple
+                    options={users}
+                    value={keys.userIds}
+                    placeholder={t('log.selectUser')}
+                    onLoad={reload}
+                    onSearch={searchUser}
+                    onScrollLoad={loadMore}
+                    onChange={(values) => setKeys({...keys,userIds:values})}
+                ></MultiSelect>
+            </div>
+            <div className="w-[180px] relative">
+                <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({...keys,groupId:value})}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder={t('log.selectUserGroup')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="w-[180px] relative">
+                <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({...keys,start:t})} />
+            </div>
+            <div className="w-[180px] relative">
+                <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({...keys,end:t})} />
+            </div>
+            <div className="w-[180px] relative">
+                <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({...keys,moduleId:value})}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder={t('log.systemModule')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            {modules.map(m => <SelectItem value={m.value} key={m.value}>{m.name}</SelectItem>)}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="w-[180px] relative">
+                <Select value={keys.action} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({...keys,action:value})}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder={t('log.actionBehavior')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            {actions.map(a => <SelectItem value={a.value} key={a.value}>{a.name}</SelectItem>)}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+            </div>
                 <div>
-                    <Button className=" mr-3 px-6" onClick={handleSearch}>查询</Button>
-                    <Button variant="outline" className="px-6" onClick={handleReset}>重置</Button>
+                    <Button className="mr-3 px-6" onClick={handleSearch}>
+                        {t('log.searchButton')}
+                    </Button>
+                    <Button variant="outline" className="px-6" onClick={handleReset}>
+                        {t('log.resetButton')}
+                    </Button>
                 </div>
             </div>
             <Table className="mb-[50px]">
                 {/* <TableCaption>用户列表.</TableCaption> */}
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[200px]">审计ID</TableHead>
-                        <TableHead className="w-[200px]">用户名</TableHead>
-                        <TableHead className="w-[200px]">操作时间</TableHead>
-                        <TableHead className="w-[200px]">系统模块</TableHead>
-                        <TableHead className="w-[200px]">操作行为</TableHead>
-                        <TableHead className="w-[200px]">操作对象类型</TableHead>
-                        <TableHead className="w-[200px]">操作对象</TableHead>
-                        <TableHead className="w-[200px]">IP地址</TableHead>
-                        <TableHead className="w-[200px]">备注</TableHead>
+                        <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.username')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.operationTime')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.systemModule')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.operationAction')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.objectType')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.operationObject')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.ipAddress')}</TableHead>
+                        <TableHead className="w-[200px]">{t('log.remark')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    <TableRow>
-                        <TableCell className="font-medium max-w-md truncate">34</TableCell>
-                        <TableHead>赵光晶</TableHead>
-                        <TableHead>2024-06-18-15:59</TableHead>
-                        <TableHead>构建</TableHead>
-                        <TableHead>创建应用</TableHead>
-                        <TableHead>助手</TableHead>
-                        <TableHead>代码助手</TableHead>
-                        <TableHead>122.9.35.239</TableHead>
-                        <TableHead>创建了一个很牛的代码助手</TableHead>
+                    {logs.map((log:any) => (
+                    <TableRow key={log.id}>
+                        <TableCell className="font-medium max-w-md truncate">{log.id}</TableCell>
+                        <TableCell>{log.operator_name}</TableCell>
+                        <TableCell>{log.create_time}</TableCell>
+                        <TableCell>{log.system_ids}</TableCell>
+                        <TableCell>{log.event_type}</TableCell>
+                        <TableCell>{log.object_type}</TableCell>
+                        <TableCell>{log.object_name}</TableCell>
+                        <TableCell>{log.ip_address}</TableCell>
+                        <TableCell>{log.note}</TableCell>
                     </TableRow>
+                    ))}
                 </TableBody>
             </Table>
         </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
         <div className="bisheng-table-footer">
-            <p className="desc pl-4">审计管理</p>
+            <p className="desc pl-4">{t('log.auditManagement')}</p>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"
                 page={page}

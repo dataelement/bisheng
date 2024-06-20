@@ -177,15 +177,15 @@ export const LoginPage = () => {
                             </div>
                             )
                         }
-                        {
+                        {/* {
                             showLogin ? <>
                                 <div className="text-center">
                                     <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a>
-                                </div>
-                                <Button
-                                    className='h-[48px] mt-[32px] dark:bg-button'
-                                    disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button>
-                            </> :
+                                </div> */}
+                        <Button
+                            className='h-[48px] mt-[32px] dark:bg-button'
+                            disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button>
+                        {/* </> :
                                 <>
                                     <div className="text-center">
                                         <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(true)}>{t('login.haveAccountLogin')}</a>
@@ -194,7 +194,7 @@ export const LoginPage = () => {
                                         className='h-[48px] mt-[32px] dark:bg-button'
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
-                        }
+                        } */}
                         {appConfig.hasSSO && <LoginBridge />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">

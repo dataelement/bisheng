@@ -136,10 +136,10 @@ export default function Roles() {
             <div className="h-[calc(100vh-136px)] overflow-y-auto pt-2 pb-10">
                 <div className="flex justify-between">
                     <div>
-                        <Label>当前用户组</Label>
+                        <Label>{t('system.currentGroup')}</Label>
                         <Select value={state.group} onValueChange={(value) => dispatch({ type: 'SET_GROUP', payload: value })}>
                             <SelectTrigger className="w-[180px] inline-flex ml-2">
-                                <SelectValue placeholder="默认用户组" />
+                                <SelectValue placeholder={t('system.defaultGroup')} />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>

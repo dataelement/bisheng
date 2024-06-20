@@ -15,7 +15,7 @@ export default function chatShare() {
         const params = [];
 
         if (libId) params.push(`knowledge_id=${libId}`);
-        if (tweak) params.push(`tweak=${tweak}`);
+        if (tweak) params.push(`tweak=${encodeURIComponent(tweak)}`);
 
         const paramStr = params.length > 0 ? `${params.join('&')}` : '';
 

@@ -12,7 +12,7 @@ export default function ChatPro() {
     // c41f9bb3-966e-4ded-9f3f-9077f70bc707
     useEffect(() => {
         // sdk 获取用户
-        setData({ id: flowId, chatId: flowId + '-' + user.user_id, type: 'flow' })
+        setData({ id: flowId, chatId: flowId.replace('-', '') + '_' + user.user_id, type: 'flow' })
     }, [])
 
     if (!data) return null

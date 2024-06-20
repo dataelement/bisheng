@@ -25,7 +25,7 @@ export default function SourceEntry({ extra, end, source, className = '', onSour
         {(() => {
             switch (source) {
                 case SourceType.FILE:
-                    return <Badge className="cursor-pointer" onClick={onSource}>{t('chat.source')}</Badge>;
+                    return <Badge className="cursor-pointer hidden md:block" onClick={onSource}>{t('chat.source')}</Badge>;
                 case SourceType.NO_PERMISSION:
                     return <p className="flex text-xs text-gray-400 gap-1 items-center"><InfoCircledIcon className="text-red-300" />{t('chat.noAccess')}</p>;
                 case SourceType.LINK:
