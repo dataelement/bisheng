@@ -32,7 +32,7 @@ const initialState: State = {
     roles: [],
     role: null,
     searchWord: '',
-    group: '1',
+    group: '',
     groups: []
 };
 

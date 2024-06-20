@@ -41,7 +41,7 @@ export default function MainLayout() {
         })
     }
 
-    // 充值密码
+    // 重置密码
     const navigator = useNavigate()
     const JumpResetPage = () => {
         localStorage.setItem('account', user.user_name)
@@ -98,8 +98,8 @@ export default function MainLayout() {
                                     {user.user_name} <DropDownIcon className=" inline-block mt-[-2px]" />
                                 </span>
                             }>
-                            <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>修改密码</span></SelectHoverItem>
-                            <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>退出登录</span></SelectHoverItem>
+                            <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
+                            <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>{t('menu.logout')}</span></SelectHoverItem>
                         </SelectHover>
                     </div>
                 </div>
