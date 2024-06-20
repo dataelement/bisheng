@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from bisheng.api.JWT import get_login_user
 from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
                                                 delete_knowledge_file_vectors, retry_files)
 from bisheng.api.services.user_service import UserPayload
@@ -26,7 +27,7 @@ from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
 from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
@@ -84,6 +85,7 @@ async def get_embedding():
              response_model=UnifiedResponseModel[List[KnowledgeFileRead]],
              status_code=201)
 async def process_knowledge(*,
+                            request: Request,
                             data: dict,
                             background_tasks: BackgroundTasks,
                             login_user: UserPayload = Depends(get_login_user)):
@@ -169,16 +171,22 @@ async def process_knowledge(*,
     with session_getter() as session:
         session.add(knowledge)
         session.commit()
+
+    # 记录审计日志
+    file_name = ""
+    for one in files:
+        file_name += "\n\n" + one.file_name
+    AuditLogService.upload_knowledge_file(login_user, request.client.host, knowledge.id, file_name)
     return resp_200(result)
 
 
 @router.post('/create', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
-def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends()):
+def create_knowledge(*,
+                     request: Request,
+                     knowledge: KnowledgeCreate,
+                     login_user: UserPayload = Depends(get_login_user)):
     """ 创建知识库. """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user_payload = UserPayload(**payload)
-    user_id = payload.get('user_id')
+    user_id = login_user.user_id
     knowledge.is_partition = knowledge.is_partition or settings.get_knowledge().get(
         'vectorstores', {}).get('Milvus', {}).get('is_partition', True)
     db_knowldge = Knowledge.model_validate(knowledge)
@@ -203,13 +211,13 @@ def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends
         session.add(db_knowldge)
         session.commit()
         session.refresh(db_knowldge)
-    create_knowledge_hook(db_knowldge, user_payload)
+    create_knowledge_hook(request, db_knowldge, login_user)
     return resp_200(db_knowldge.copy())
 
 
-def create_knowledge_hook(knowledge: Knowledge, user_payload: UserPayload):
+def create_knowledge_hook(request: Request, knowledge: Knowledge, login_user: UserPayload):
     # 查询下用户所在的用户组
-    user_group = UserGroupDao.get_user_group(user_payload.user_id)
+    user_group = UserGroupDao.get_user_group(login_user.user_id)
     if user_group:
         # 批量将助手资源插入到关联表里
         batch_resource = []
@@ -219,6 +227,9 @@ def create_knowledge_hook(knowledge: Knowledge, user_payload: UserPayload):
                 third_id=knowledge.id,
                 type=ResourceTypeEnum.KNOWLEDGE.value))
         GroupResourceDao.insert_group_batch(batch_resource)
+
+    # 记录审计日志
+    AuditLogService.create_knowledge(login_user, request.client.host, knowledge.id)
     return True
 
 
@@ -351,7 +362,10 @@ def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = De
 
 
 @router.delete('/{knowledge_id}', status_code=200)
-def delete_knowledge(*, knowledge_id: int, login_user: UserPayload = Depends(get_login_user)):
+def delete_knowledge(*,
+                     request: Request,
+                     knowledge_id: int,
+                     login_user: UserPayload = Depends(get_login_user)):
     """ 删除知识库信息. """
 
     with session_getter() as session:
@@ -393,16 +407,23 @@ def delete_knowledge(*, knowledge_id: int, login_user: UserPayload = Depends(get
     with session_getter() as session:
         session.delete(knowledge)
         session.commit()
+    delete_knowledge_hook(request, knowledge, login_user)
     return resp_200(message='删除成功')
 
 
-def delete_knowledge_hook(knowledge: Knowledge, user_payload: UserPayload):
-    logger.info(f'delete_knowledge_hook id={knowledge.id}, user: {user_payload.user_id}')
+def delete_knowledge_hook(request: Request, knowledge: Knowledge, login_user: UserPayload):
+    logger.info(f'delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}')
     GroupResourceDao.delete_group_resource_by_third_id(str(knowledge.id), ResourceTypeEnum.KNOWLEDGE)
+
+    # 删除知识库的审计日志
+    AuditLogService.delete_knowledge(login_user, request.client.host, knowledge.id)
 
 
 @router.delete('/file/{file_id}', status_code=200)
-def delete_knowledge_file(*, file_id: int, login_user: UserPayload = Depends(get_login_user)):
+def delete_knowledge_file(*,
+                          request: Request,
+                          file_id: int,
+                          login_user: UserPayload = Depends(get_login_user)):
     """ 删除知识文件信息 """
 
     knowledge_file = KnowledgeFileDao.select_list([file_id])
@@ -415,5 +436,8 @@ def delete_knowledge_file(*, file_id: int, login_user: UserPayload = Depends(get
     # 处理vectordb
     delete_knowledge_file_vectors([file_id])
     KnowledgeFileDao.delete_batch([file_id])
+
+    # 删除知识库文件的审计日志
+    AuditLogService.delete_knowledge_file(login_user, request.client.host, knowledge.id, knowledge_file.file_name)
 
     return resp_200(message='删除成功')
