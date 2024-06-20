@@ -481,9 +481,12 @@ def instantiate_vectorstore(node_type: str, class_object: Type[VectorStore], par
     # 过滤掉用户没有权限的知识库
     # TODO zgq 后续统一技能执行流程后将和业务有关的逻辑都迁移到初始化技能对象之前
     if node_type == "MilvusWithPermissionCheck" or node_type == "ElasticsearchWithPermissionCheck":
+        col_name = "collection_name"
+        if node_type == "ElasticsearchWithPermissionCheck":
+            col_name = "index_name"
 
         # 获取执行用户 有权限查看的知识库列表
-        knowledge_ids = [one["key"] for one in params["collection_name"]]
+        knowledge_ids = [one["key"] for one in params[col_name]]
         knowledge_list = KnowledgeDao.judge_knowledge_permission(user_name, knowledge_ids)
         logger.debug(f"{node_type} after filter, get knowledge_list: {knowledge_list}")
 
@@ -492,10 +495,10 @@ def instantiate_vectorstore(node_type: str, class_object: Type[VectorStore], par
 
         # 没有任何知识库的话，提供假的embedding和空的collection_name
         if node_type == "MilvusWithPermissionCheck":
-            params["collection_name"] = [knowledge.collection_name for knowledge in knowledge_list]
+            params[col_name] = [knowledge.collection_name for knowledge in knowledge_list]
             params["embedding"] = decide_embeddings(knowledge_list[0].model) if knowledge_list else FakeEmbedding()
         else:
-            params["collection_name"] = [knowledge.index_name or knowledge.collection_name
+            params[col_name] = [knowledge.index_name or knowledge.collection_name
                                          for knowledge in knowledge_list]
 
     if initializer := vecstore_initializer.get(class_object.__name__):
