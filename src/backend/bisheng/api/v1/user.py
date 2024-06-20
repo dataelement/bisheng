@@ -264,8 +264,18 @@ async def list_user(*,
     group_dict = {}
     for one in users:
         one_data = one.model_dump()
-        one_data['roles'] = get_user_roles(one, role_dict)
-        one_data['groups'] = get_user_groups(one, group_dict)
+        user_roles = get_user_roles(one, role_dict)
+        user_groups = get_user_groups(one, group_dict)
+        # 如果不是超级管理，则需要将数据过滤, 不能看到非他管理的用户组内的角色和用户组列表
+        if user_admin_groups:
+            for i in range(len(user_roles) - 1, -1, -1):
+                if user_roles[i]["group_id"] not in user_admin_groups:
+                    del user_roles[i]
+            for i in range(len(user_groups) - 1, -1, -1):
+                if user_groups[i]["id"] not in user_admin_groups:
+                    del user_groups[i]
+        one_data["roles"] = user_roles
+        one_data["groups"] = user_groups
         res.append(one_data)
 
     return resp_200({'data': res, 'total': total_count})
@@ -284,7 +294,11 @@ def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
     if user_role_ids:
         role_list = RoleDao.get_role_by_ids(user_role_ids)
         for role_info in role_list:
-            role_cache[role_info.id] = {'id': role_info.id, 'name': role_info.role_name}
+            role_cache[role_info.id] = {
+                "id": role_info.id,
+                "group_id": role_info.group_id,
+                "name": role_info.role_name
+            }
             res.append(role_cache.get(role_info.id))
     return res
 
