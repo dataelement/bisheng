@@ -238,7 +238,7 @@ async def list_user(*,
     user_ids = []
     if groups:
         # 查询用户组下的用户ID
-        groups_user_ids = UserGroupDao.get_groups_admins(groups)
+        groups_user_ids = UserGroupDao.get_groups_user(groups)
         if not groups_user_ids:
             return resp_200({'data': [], 'total': 0})
         user_ids = list(set([one.user_id for one in groups_user_ids]))
