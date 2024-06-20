@@ -154,7 +154,7 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
         return UserValidateError.return_resp()
 
     # 判断下密码是否长期未修改
-    if password_conf.password_valid_period and password_conf.password_valid_period > 0:
+    if db_user.password and password_conf.password_valid_period and password_conf.password_valid_period > 0:
         if (datetime.now() - db_user.password_update_time).days >= password_conf.password_valid_period:
             return UserPasswordExpireError.return_resp()
 
@@ -238,7 +238,7 @@ async def list_user(*,
     user_ids = []
     if groups:
         # 查询用户组下的用户ID
-        groups_user_ids = UserGroupDao.get_groups_admins(groups)
+        groups_user_ids = UserGroupDao.get_groups_user(groups)
         if not groups_user_ids:
             return resp_200({'data': [], 'total': 0})
         user_ids = list(set([one.user_id for one in groups_user_ids]))
@@ -264,8 +264,18 @@ async def list_user(*,
     group_dict = {}
     for one in users:
         one_data = one.model_dump()
-        one_data['roles'] = get_user_roles(one, role_dict)
-        one_data['groups'] = get_user_groups(one, group_dict)
+        user_roles = get_user_roles(one, role_dict)
+        user_groups = get_user_groups(one, group_dict)
+        # 如果不是超级管理，则需要将数据过滤, 不能看到非他管理的用户组内的角色和用户组列表
+        if user_admin_groups:
+            for i in range(len(user_roles) - 1, -1, -1):
+                if user_roles[i]["group_id"] not in user_admin_groups:
+                    del user_roles[i]
+            for i in range(len(user_groups) - 1, -1, -1):
+                if user_groups[i]["id"] not in user_admin_groups:
+                    del user_groups[i]
+        one_data["roles"] = user_roles
+        one_data["groups"] = user_groups
         res.append(one_data)
 
     return resp_200({'data': res, 'total': total_count})
@@ -284,7 +294,11 @@ def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
     if user_role_ids:
         role_list = RoleDao.get_role_by_ids(user_role_ids)
         for role_info in role_list:
-            role_cache[role_info.id] = {'id': role_info.id, 'name': role_info.role_name}
+            role_cache[role_info.id] = {
+                "id": role_info.id,
+                "group_id": role_info.group_id,
+                "name": role_info.role_name
+            }
             res.append(role_cache.get(role_info.id))
     return res
 
