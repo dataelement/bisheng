@@ -718,8 +718,8 @@ async def get_rsa_publish_key():
 @router.post('/user/reset_password', status_code=200)
 async def reset_password(
         *,
-        user_id: int,
-        password: str,
+        user_id: int = Body(embed=True),
+        password: str = Body(embed=True),
         login_user: UserPayload = Depends(get_login_user),
 ):
     """
@@ -750,8 +750,8 @@ async def reset_password(
 
 @router.post('/user/change_password', status_code=200)
 async def change_password(*,
-                          password: str,
-                          new_password: str,
+                          password: str = Body(embed=True),
+                          new_password: str = Body(embed=True),
                           login_user: UserPayload = Depends(get_login_user)):
     """
     登录用户 修改自己的密码
@@ -774,7 +774,10 @@ async def change_password(*,
 
 
 @router.post('/user/change_password_public', status_code=200)
-async def change_password_public(*, username: str, password: str, new_password: str):
+async def change_password_public(*,
+                                 username: str = Body(embed=True),
+                                 password: str = Body(embed=True),
+                                 new_password: str = Body(embed=True)):
     """
     未登录用户 修改自己的密码
     """
