@@ -179,7 +179,7 @@ export default function App() {
   return (
     //need parent component with width and height
     <div className="flex h-full flex-col">
-      {(user?.user_id || noAuthPages.includes(path)) ? <RouterProvider router={router} />
+      {(user?.user_id || noAuthPages.includes(path)) && router ? <RouterProvider router={router} />
         : user ? <div className="loading"></div>
           : <RouterProvider router={publicRouter} />}
       <div></div>
