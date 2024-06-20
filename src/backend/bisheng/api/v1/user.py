@@ -150,7 +150,7 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
             # 错误次数到达上限，封禁账号
             db_user.delete = 1
             UserDao.update_user(db_user)
-            raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
+            raise HTTPException(status_code=500, detail='由于登录失败次数过多，该账号被自动禁用，请联系管理员处理')
         return UserValidateError.return_resp()
 
     # 判断下密码是否长期未修改
