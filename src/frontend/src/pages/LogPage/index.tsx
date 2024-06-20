@@ -21,7 +21,7 @@ import { formatDate } from "@/util/utils";
 const useGroups = () => {
     const [groups, setGroups] = useState([])
     const loadData = () => {
-        getUserGroupsApi().then(res => setGroups(res.records))
+        getUserGroupsApi().then((res:any) => setGroups(res.records))
     }
     return { groups, loadData }
 }
@@ -58,8 +58,8 @@ export default function index() {
     }
     const handleSearch = () => {
         const uids = keys.userIds.map(u => u.value)
-        const startTime = keys.start ? formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss') : undefined
-        const endTime = keys.end ? formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss') : undefined
+        const startTime = keys.start && formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss')
+        const endTime = keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss')
         filterData({...keys, userIds:uids, start:startTime, end:endTime})
     }
     const handleReset = () => {
@@ -147,8 +147,8 @@ export default function index() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {logs.map(log => (
-                    <TableRow>
+                    {logs.map((log:any) => (
+                    <TableRow key={log.id}>
                         <TableCell className="font-medium max-w-md truncate">{log.id}</TableCell>
                         <TableCell>{log.operator_name}</TableCell>
                         <TableCell>{log.create_time}</TableCell>
