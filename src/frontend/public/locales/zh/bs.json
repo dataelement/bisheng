@@ -36,7 +36,8 @@
     "logout": "退出",
     "logoutDescription": "退出登录",
     "forBestExperience": "为了您的良好体验，请在 PC 端访问该网站",
-    "onlineDocumentation": "在线文档"
+    "onlineDocumentation": "在线文档",
+    "changePwd": "修改密码"
   },
   "system": {
     "userManagement": "用户管理",
@@ -90,7 +91,8 @@
     "changeTime": "修改时间",
     "deleteGroup": "删除后 【{{name}}】 将不再存在，是否删除?",
     "currentGroup": "当前用户组",
-    "defaultGroup": "默认用户组"
+    "defaultGroup": "默认用户组",
+    "resetPwd": "重置密码"
   },
   "skills": {
     "manageTemplate": "管理技能模板",

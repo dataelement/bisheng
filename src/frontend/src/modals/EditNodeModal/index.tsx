@@ -122,7 +122,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
   return (
     <Dialog open={true} onOpenChange={setModalOpen}>
       <DialogTrigger asChild></DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] lg:max-w-[700px]">
+      <DialogContent className="sm:max-w-[700px] lg:max-w-[700px]">
         <DialogHeader>
           <DialogTitle className="flex items-center">
             <span className="pr-2">{data.type}</span>

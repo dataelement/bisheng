@@ -1,14 +1,13 @@
-import { useState, useRef, forwardRef, useImperativeHandle } from "react";
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input } from "@/components/bs-ui/input";
-import { Pencil2Icon } from "@radix-ui/react-icons";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import { resetUserPasswordApi } from "../controllers/API/user"; // 假设这是重置密码的API函数
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { resetPasswordApi } from "@/controllers/API/user";
-import { PWD_RULE, handleEncrypt } from "./utils";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleEncrypt } from "./utils";
 
 interface UserPwdModalProps {
     // onSuccess: () => void;
@@ -38,10 +37,13 @@ const UserPwdModal = forwardRef<UserPwdModalRef, UserPwdModalProps>((props, ref)
         // if (!PWD_RULE.test(passwordRef.current.value)) {
         //     return setError(t('login.passwordError'))
         // }
+        if(!passwordRef.current.value) return message({title:t('prompt'),variant:'error',description:'新密码不能为空'})
 
         const cryptPwd = await handleEncrypt(passwordRef.current.value)
+        console.log(cryptPwd)
         const res = await captureAndAlertRequestErrorHoc(resetPasswordApi(userIdRef.current, cryptPwd));
-        if (res) {
+        console.log(res)
+        if (!res) {
             message({
                 title: `${t('prompt')}`,
                 variant: 'success',
