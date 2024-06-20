@@ -11,7 +11,7 @@ from uuid import UUID
 
 import rsa
 from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
-                                      UserValidateError)
+                                      UserValidateError, UserPasswordError)
 from bisheng.api.JWT import get_login_user
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role,
@@ -776,8 +776,9 @@ async def change_password(*,
 
     password = decrypt_md5_password(password)
 
+    # 已登录用户告知是密码错误
     if user_info.password != md5_hash(password):
-        return UserValidateError.return_resp()
+        return UserPasswordError.return_resp()
 
     user_info.password = decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()
