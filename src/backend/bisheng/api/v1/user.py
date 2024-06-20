@@ -154,7 +154,7 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
         return UserValidateError.return_resp()
 
     # 判断下密码是否长期未修改
-    if password_conf.password_valid_period and password_conf.password_valid_period > 0:
+    if db_user.password and password_conf.password_valid_period and password_conf.password_valid_period > 0:
         if (datetime.now() - db_user.password_update_time).days >= password_conf.password_valid_period:
             return UserPasswordExpireError.return_resp()
 
