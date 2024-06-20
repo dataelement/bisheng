@@ -18,7 +18,7 @@ from bisheng.database.models.user import UserDao
 from bisheng.database.models.group import Group, GroupCreate, GroupRead
 from bisheng.database.models.user import User
 from bisheng.database.models.user_group import UserGroupDao, UserGroupRead
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/group', tags=['User'])
@@ -83,7 +83,8 @@ async def delete_group(group_id: int, Authorize: AuthJWT = Depends()):
 @router.post('/set_user_group',
              response_model=UnifiedResponseModel[UserGroupRead],
              status_code=200)
-async def set_user_group(user_id: Annotated[int, Body(embed=True)],
+async def set_user_group(request: Request,
+                         user_id: Annotated[int, Body(embed=True)],
                          group_id: Annotated[List[int], Body(embed=True)],
                          login_user: UserPayload = Depends(get_login_user)):
     """
@@ -92,7 +93,7 @@ async def set_user_group(user_id: Annotated[int, Body(embed=True)],
     """
     if not group_id:
         raise HTTPException(status_code=500, detail='用户组不能为空')
-    return resp_200(RoleGroupService().replace_user_groups(login_user, user_id, group_id))
+    return resp_200(RoleGroupService().replace_user_groups(request,login_user, user_id, group_id))
 
 
 @router.get('/get_user_group',
