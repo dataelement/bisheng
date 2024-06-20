@@ -37,7 +37,10 @@ class UserBase(SQLModelSerializable):
 class User(UserBase, table=True):
     user_id: Optional[int] = Field(default=None, primary_key=True)
     password: str = Field(index=False)
-    password_update_time: Optional[datetime] = Field(index=False, description="密码最近的修改时间")
+    password_update_time: Optional[datetime] = Field(sa_column=Column(DateTime,
+                                                                      nullable=False,
+                                                                      server_default=text('CURRENT_TIMESTAMP')),
+                                                     description="密码最近的修改时间")
 
 
 class UserRead(UserBase):
