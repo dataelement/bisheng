@@ -50,7 +50,7 @@ const UserPwdModal = forwardRef<UserPwdModalRef, UserPwdModalProps>((props, ref)
             message({
                 title: `${t('prompt')}`,
                 variant: 'success',
-                description: [t('resetPassword.passwordResetSuccess')]
+                description: [t('resetPassword.adminResetSuccess')]
             });
             setEditShow(false);
             // onSuccess();

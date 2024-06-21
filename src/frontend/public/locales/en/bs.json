@@ -18,7 +18,9 @@
     "passwordError": "The password must include upper and lower case letters, numbers, and characters!",
     "passwordMismatch": "Passwords do not match",
     "registrationSuccess": "Registration successful. Please enter your password to log in",
-    "pleaseEnterCaptcha": "Please enter captcha"
+    "pleaseEnterCaptcha": "Please enter captcha",
+    "passwordExpired": "Your password has expired, please change it promptly",
+    "otherMethods": "Other login methods"
   },
   "menu": {
     "app": "Chat",
@@ -91,7 +93,9 @@
     "deleteGroup": "After deletion 【{{name}}】 will no longer exist, Do you want to delete it?",
     "currentGroup": "Current UserGroup",
     "defaultGroup": "DefaultGroup",
-    "resetPwd": "ResetPassword"
+    "resetPwd": "ResetPassword",
+    "selectGroup": "Please select a user group",
+    "selectRole": "Please select a role"
   },
   "skills": {
     "manageTemplate": "Manage Skill Templates",
@@ -605,8 +609,9 @@
     "pleaseEnterConfirmPassword": "Please confirm your new password.",
     "newPasswordTooShort": "New password must be at least 8 characters.",
     "passwordMismatch": "The new passwords do not match.",
-    "resetButton": "Reset Password",
+    "resetButton": "Change Password",
     "passwordResetSuccess": "Your password has been successfully reset.",
+    "adminResetSuccess": "Password has been successfully reset",
     "resetFailed": "Pwd Reset Failed",
     "notEmpty": "The new password cannot be empty"
   },

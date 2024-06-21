@@ -191,7 +191,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         // 过滤系统管理员
         const users = selected.filter(item => !lockOptions.some(id => id === item.value))
 
-        const res = await (data.id ? updateUserGroup(data.id, form, users) : // 修改
+        const res:any = await (data.id ? updateUserGroup(data.id, form, users) : // 修改
             saveUserGroup(form, users)) // 保存
 
         if (appConfig.isPro) {

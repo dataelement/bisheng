@@ -28,7 +28,7 @@ export default function UserGroups() {
     const { appConfig } = useContext(locationContext)
 
     const loadData = async () => {
-        const res = await (appConfig.isPro ? getUserGroupsProApi : getUserGroupsApi)()
+        const res:any = await (appConfig.isPro ? getUserGroupsProApi : getUserGroupsApi)()
         setUserGroups(res.records)
         tempRef.current = res.records
     }
@@ -88,7 +88,7 @@ export default function UserGroups() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {userGroups.map((ug) => (
+                    {userGroups.map((ug:any) => (
                         <TableRow key={ug.id}>
                             <TableCell className="font-medium">{ug.group_name}</TableCell>
                             <TableCell className="break-all">{(ug.admin_user || ug.group_admins).map(el => el.user_name).join(',')}</TableCell>
