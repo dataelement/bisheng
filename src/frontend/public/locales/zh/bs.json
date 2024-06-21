@@ -607,7 +607,7 @@
     "newPasswordTooShort": "新密码必须至少8个字符。",
     "passwordMismatch": "新密码不匹配。",
     "resetButton": "修改密码",
-    "passwordResetSuccess": "您的密码已成功重置。",
+    "passwordResetSuccess": "您的密码已成功修改",
     "adminResetSuccess": "密码已重置",
     "resetFailed": "密码重置失败",
     "notEmpty": "新密码不能为空"

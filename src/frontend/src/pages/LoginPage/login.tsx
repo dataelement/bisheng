@@ -67,7 +67,6 @@ export const LoginPage = () => {
             if (error.indexOf('过期') !== -1) { // 有时间改为 code 判断
                 localStorage.setItem('account', mail)
                 navigate('/reset', { state: { noback: true } })
-                message({title:t('prompt'), variant:'error', description:t('login.passwordExpired')})
             }
         })
 

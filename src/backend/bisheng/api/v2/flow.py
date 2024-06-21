@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request, HTTPException
 from bisheng.api.v1.schemas import resp_200
 from bisheng.database.models.flow import FlowDao
 from bisheng.settings import settings
-router = APIRouter(prefix='/flow', tags=['FlowV2'])
+router = APIRouter(prefix='/flows', tags=['FlowV2'])
 
 
 @router.get("/{flow_id}", status_code=200)
