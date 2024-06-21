@@ -38,7 +38,8 @@ class MilvusWithPermissionCheck(MilvusLangchain):
                  primary_field: str = 'pk',
                  text_field: str = 'text',
                  vector_field: str = 'vector',
-                 partition_field: str = 'knowledge_id'):
+                 partition_field: str = 'knowledge_id',
+                 **kwargs: Any):
         """Initialize the Milvus vector store."""
         try:
             from pymilvus import Collection, utility
@@ -86,17 +87,19 @@ class MilvusWithPermissionCheck(MilvusLangchain):
 
         self.alias = self._create_connection_alias(connection_args)
         self.col: Optional[List[Collection]] = []
+        self.col_partition_key: Optional[List[str]] = []
         # not used
         self.drop_old = drop_old
 
         # Grab the existing collection if it exists
         try:
-            for one_collection_name in self.collection_name:
+            for index, one_collection_name in enumerate(self.collection_name):
                 if utility.has_collection(one_collection_name, using=self.alias):
                     self.col.append(Collection(
                         one_collection_name,
                         using=self.alias,
                     ))
+                    self.col_partition_key.append(kwargs.get('partition_keys')[index])
         except Exception as e:
             logger.error(f'milvus operating error={str(e)}')
             self.close_connection(self.alias)
@@ -351,17 +354,17 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         # Determine result metadata fields.
         output_fields = self.fields[:]
         output_fields.remove(self._vector_field)
-        # partition for multi-tenancy
-        if 'partition_key' in kwargs:
-            # add parttion
-            if expr:
-                expr = f"{expr} and {self._partition_field}==\"{kwargs['partition_key']}\""
-            else:
-                expr = f"{self._partition_field}==\"{kwargs['partition_key']}\""
+
         finally_k = kwargs.pop("k", k)
 
         ret = []
-        for one_col in self.col:
+        for index, one_col in enumerate(self.col):
+            if self.col_partition_key[index]:
+                # add parttion
+                if expr:
+                    expr = f"{expr} and {self._partition_field}==\"{self.col_partition_key[index]}\""
+                else:
+                    expr = f"{self._partition_field}==\"{self.col_partition_key[index]}\""
             # Perform the search.
             res = one_col.search(
                 data=[embedding],
