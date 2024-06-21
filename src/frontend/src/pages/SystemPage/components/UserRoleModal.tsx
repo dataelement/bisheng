@@ -52,8 +52,8 @@ export default function UserRoleModal({ user, onClose, onChange }) {
 
     const { message } = useToast()
     const handleSave = async () => {
-        if (!selected.length) return message({ title: t('prompt'), variant: 'warning', description: '请选择角色' })
-        if (userGroupSelected.length === 0) return message({ title: t('prompt'), variant: 'warning', description: '请选择用户组' })
+        if (!selected.length) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectRole') })
+        if (userGroupSelected.length === 0) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectGroup') })
         captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, selected))
         captureAndAlertRequestErrorHoc(updateUserGroups(user.user_id, userGroupSelected))
         onChange()

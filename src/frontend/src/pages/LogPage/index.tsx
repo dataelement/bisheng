@@ -17,6 +17,7 @@ import {
     TableRow
 } from "../../components/bs-ui/table";
 import { formatDate } from "@/util/utils";
+import Loading from "@/components/ui/loading";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -162,6 +163,7 @@ export default function index() {
                     ))}
                 </TableBody>
             </Table>
+            {!logs.length && <Loading className="absolute left-[50%] top-[50%] transform -translate-x-1/2 -translate-y-1/2"/>}
         </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
