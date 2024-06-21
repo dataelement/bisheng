@@ -495,7 +495,7 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
             logger.debug(f'ElasticsearchWithPermissionCheck Search {one_index_name} results: {hits}')
         logger.debug(f'ElasticsearchWithPermissionCheck Search all results: {len(ret)}')
         finally_k = kwargs.pop("finally_k", k)
-        ret.sort(key=lambda x: x[1])
+        ret.sort(key=lambda x: x[1], reverse=True)
         ret = ret[:finally_k]
         logger.debug(f'ElasticsearchWithPermissionCheck Search finally results: {len(ret)}')
         return ret
