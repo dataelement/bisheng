@@ -20,7 +20,7 @@ export default function UserRoleModal({ user, onClose, onChange }) {
     useEffect(() => {
         if (!user) return
         // get用户组list
-        getUserGroupsApi().then(res => {
+        getUserGroupsApi().then((res:any) => {
             setUserGroups(res.records)
             setUserGroupSelected(user.groups.map(el => el.id.toString()))
         })
@@ -65,7 +65,7 @@ export default function UserRoleModal({ user, onClose, onChange }) {
             value: ug.id.toString()
         }
     }), [userGroups])
-    const _roles = useMemo(() => roles.map((role) => {
+    const _roles = useMemo(() => roles.map((role:any) => {
         return {
             label: role.role_name,
             value: role.role_id.toString()

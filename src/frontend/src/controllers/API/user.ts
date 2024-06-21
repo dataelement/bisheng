@@ -291,7 +291,7 @@ export async function resetPasswordApi(userId, password): Promise<any> {
 }
 
 /**
- * 重置个人密码
+ * 密码过期重置个人密码
  */
 export async function changePasswordApi(userName, password, new_password): Promise<any> {
   return axios.post(`/api/v1/user/change_password_public`, {
@@ -299,4 +299,12 @@ export async function changePasswordApi(userName, password, new_password): Promi
     password,
     new_password
   });
+}
+
+// 已登录状态重置个人密码
+export async function loggedChangePasswordApi(password, new_password): Promise<any> {
+  return axios.post(`/api/v1/user/change_password`, {
+    password,
+    new_password
+  })
 }

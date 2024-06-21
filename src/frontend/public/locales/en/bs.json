@@ -607,7 +607,8 @@
     "passwordMismatch": "The new passwords do not match.",
     "resetButton": "Reset Password",
     "passwordResetSuccess": "Your password has been successfully reset.",
-    "resetFailed": "Pwd Reset Failed"
+    "resetFailed": "Pwd Reset Failed",
+    "notEmpty": "The new password cannot be empty"
   },
   "log": {
     "auditManagement": "Audit Management",
