@@ -604,7 +604,8 @@
     "passwordMismatch": "新密码不匹配。",
     "resetButton": "重置密码",
     "passwordResetSuccess": "您的密码已成功重置。",
-    "resetFailed": "密码重置失败"
+    "resetFailed": "密码重置失败",
+    "notEmpty": "新密码不能为空"
   },
   "log": {
     "auditManagement": "审计管理",

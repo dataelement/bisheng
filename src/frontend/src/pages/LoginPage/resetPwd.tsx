@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from "../../components/bs-ui/button";
 import { Input } from "../../components/bs-ui/input";
-import { changePasswordApi } from "../../controllers/API/user";
+import { loggedChangePasswordApi } from "../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { PWD_RULE, handleEncrypt } from './utils';
 
@@ -46,8 +46,8 @@ export const ResetPwdPage = () => {
         const encryptCurrentPwd = await handleEncrypt(currentPwd);
         const encryptNewPwd = await handleEncrypt(newPwd);
 
-        const res = await captureAndAlertRequestErrorHoc(changePasswordApi(account, encryptCurrentPwd, encryptNewPwd))
-        if (res) {
+        const res = await captureAndAlertRequestErrorHoc(loggedChangePasswordApi(encryptCurrentPwd, encryptNewPwd))
+        if (res === null) {
             message({
                 title: `${t('prompt')}`,
                 variant: 'success',

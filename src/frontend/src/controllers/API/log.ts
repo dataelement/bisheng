@@ -15,8 +15,8 @@ export async function getLogsApi({page, pageSize, userIds, groupId, start, end, 
     const startStr = start ? `&start_time=${start}` : ''
     const endStr = end ? `&end_time=${end}` : ''
     return await axios.get(
-        `/api/v1/audit?page=${page}&limit=${pageSize}&group_ids=${groupId}${uids}` + 
-        `&system_id=${moduleId}&event_type=${action}` + startStr + endStr
+        `/api/v1/audit?page=${page}&limit=${pageSize}&group_ids=${groupId || ''}${uids}` + 
+        `&system_id=${moduleId || ''}&event_type=${action || ''}` + startStr + endStr
     )
 }
 // 系统模块
