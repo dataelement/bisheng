@@ -382,11 +382,12 @@ class MilvusWithPermissionCheck(MilvusLangchain):
             for result in res[0]:
                 meta = {x: result.entity.get(x) for x in output_fields}
                 doc = Document(page_content=meta.pop(self._text_field), metadata=meta)
-                pair = (doc, self._relevance_score_fn(result.score))
+                pair = (doc, result.score)
                 ret.append(pair)
             logger.debug(f'MilvusWithPermissionCheck Search {one_col.name} results: {res[0]}')
         ret.sort(key=lambda x: x[1])
         logger.debug(f'MilvusWithPermissionCheck Search all results: {len(ret)}')
+        # milvus是分数越小越好，所以直接取前几位就行
         ret = ret[:finally_k]
         logger.debug(f'MilvusWithPermissionCheck Search finally results: {len(ret)}')
         return ret
