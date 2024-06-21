@@ -26,5 +26,5 @@ export default function chatShare() {
 
     if (!flowId) return <div>请选择技能</div>
 
-    return <ChatPanne customWsHost={wsUrl} data={data} />
+    return <ChatPanne customWsHost={wsUrl} version="v2" data={data} />
 };

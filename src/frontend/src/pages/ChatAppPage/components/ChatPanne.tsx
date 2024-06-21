@@ -16,7 +16,7 @@ import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 
-export default function ChatPanne({ customWsHost = '', appendHistory = false, data }) {
+export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
     const { t } = useTranslation()
 
@@ -34,9 +34,9 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const init = async () => {
         if (type === 'flow') {
             setAssistant(null)
-            const _flow = await getFlowApi(id)
+            const _flow = await getFlowApi(id, version)
             await build(_flow, chatId)
-            loadHistoryMsg(_flow.id, chatId, {
+            version === 'v1' && loadHistoryMsg(_flow.id, chatId, {
                 appendHistory,
                 lastMsg: t('historicalMessages')
             })

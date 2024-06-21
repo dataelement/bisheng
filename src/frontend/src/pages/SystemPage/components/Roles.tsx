@@ -2,7 +2,7 @@ import { PlusIcon } from "@/components/bs-icons/plus";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import React, { useCallback, useEffect, useReducer, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
 import { SearchInput } from "../../../components/bs-ui/input";
@@ -118,6 +118,15 @@ export default function Roles() {
     }, [state.group])
 
 
+    const [keyWord, setKeyWord] = useState('');
+    const options = useMemo(() => {
+        if (!keyWord || !state.group) return state.groups
+        return state.groups.filter(group =>
+            group.label.toLowerCase().indexOf(keyWord.toLowerCase()) !== -1
+            || group.value === state.group
+        )
+    }, [keyWord, state.group])
+
     if (state.role) {
         return <EditRole
             id={state.role.id || -1}
@@ -137,13 +146,20 @@ export default function Roles() {
                 <div className="flex justify-between">
                     <div>
                         <Label>{t('system.currentGroup')}</Label>
-                        <Select value={state.group} onValueChange={(value) => dispatch({ type: 'SET_GROUP', payload: value })}>
+                        <Select value={state.group}
+                            onOpenChange={(open) => {
+                                !open && setKeyWord('')
+                            }}
+                            onValueChange={(value) =>
+                                dispatch({ type: 'SET_GROUP', payload: value })
+                            }>
                             <SelectTrigger className="w-[180px] inline-flex ml-2">
                                 <SelectValue placeholder={t('system.defaultGroup')} />
                             </SelectTrigger>
                             <SelectContent>
+                                {/* <SearchInput inputClassName="h-8" placeholder={t('log.selectUserGroup')} onChange={(e) => setKeyWord(e.target.value)} iconClassName="w-4 h-4" /> */}
                                 <SelectGroup>
-                                    {state.groups.map(el => (
+                                    {options.map(el => (
                                         <SelectItem key={el.value} value={el.value}>{el.label}</SelectItem>
                                     ))}
                                 </SelectGroup>
