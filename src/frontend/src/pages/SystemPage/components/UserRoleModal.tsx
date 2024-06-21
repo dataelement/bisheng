@@ -1,107 +1,76 @@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
-import MultiSelect from "@/components/bs-ui/select/multi"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { useEffect, useMemo, useState } from "react"
+import { PlusIcon } from "@radix-ui/react-icons"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "../../../components/bs-ui/button"
-import { getRolesApi, getUserGroupsApi, getRolesByGroupApi, updateUserGroups, updateUserRoles } from "../../../controllers/API/user"
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request"
-import { ROLE } from "../../../types/api/user"
+import UserRoleItem from "./UserRoleItem"
+import { updateUserGroups, updateUserRoles } from "@/controllers/API/user"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 
 export default function UserRoleModal({ user, onClose, onChange }) {
     const { t } = useTranslation()
 
-    const [roles, setRoles] = useState<ROLE[]>([])
-    const [selected, setSelected] = useState([])
-
-    const [userGroups, setUserGroups] = useState([])
-    const [userGroupSelected, setUserGroupSelected] = useState([])
-
+    // 初始化数据
+    const [roleItems, setRoleItems] = useState([])
     useEffect(() => {
-        if (!user) return
-        // get用户组list
-        getUserGroupsApi().then((res:any) => {
-            setUserGroups(res.records)
-            setUserGroupSelected(user.groups.map(el => el.id.toString()))
-        })
-        // get角色list
-        getRolesApi().then(data => {
-            //@ts-ignore
-            const roleOptions = data.map(role => ({ ...role, role_id: role.id }))
-            setRoles(roleOptions);
-            // 没有初始角色，默认给普通用户2
-            setSelected(user.roles.length ? user.roles.map(el => el.id.toString()) : ['2'])
-            // getUserRoles(id).then(userRoles => {
-            //     // 默认设置 普通用户
-            //     if (!userRoles.find(role => role.role_id === 2)) {
-            //         const roleByroles = roleOptions.find(role => role.role_id === 2)
-            //         userRoles.unshift({ ...roleByroles })
-            //     }
-            //     setSelected(userRoles)
-            // })
-        })
+        if (user) {
+
+            const { groups, roles } = user
+            console.log(groups, roles);
+            const items = groups.map(item => {
+
+                return {
+                    groupId: item.id,
+                    roles: roles.filter(role => role.group_id === item.id)
+                        .map(el => el.id.toString())
+                }
+            })
+            setRoleItems(items)
+        }
     }, [user])
 
-    useEffect(() => {
-        getRolesByGroupApi('', userGroupSelected).then(data => {
-            //@ts-ignore
-            const roleOptions = data.map(role => ({ ...role, role_id: role.id }))
-            setRoles(roleOptions);
-        })
-    },[userGroupSelected])
+    const handleChangeRoleItems = (index, groupId, roles) => {
+        setRoleItems(items => items.map((el, i) => {
+            return (index !== i) ? el : { groupId: groupId[0], roles }
+        }))
+    }
 
     const { message } = useToast()
     const handleSave = async () => {
-        if (!selected.length) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectRole') })
-        if (userGroupSelected.length === 0) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectGroup') })
-        captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, selected))
-        captureAndAlertRequestErrorHoc(updateUserGroups(user.user_id, userGroupSelected))
+        const map = {}
+        const items = roleItems.filter(item => {
+            if (map[item.groupId] || !item.groupId) return false
+            map[item.groupId] = true
+            return true
+        })
+        if (items.some(item => item.roles.length === 0)) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectRole') })
+        if (items.length === 0) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectGroup') })
+        // console.log('roleItems :>> ', roleItems);
+        // if (!selected.length) return message({ title: t('prompt'), variant: 'warning', description: '请选择角色' })
+        // if (userGroupSelected.length === 0) return message({ title: t('prompt'), variant: 'warning', description: '请选择用户组' })
+        captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, items.reduce((res, item) => [...res, ...item.roles], [])))
+        captureAndAlertRequestErrorHoc(updateUserGroups(user.user_id, items.map(item => item.groupId)))
         onChange()
     }
 
-    const groups = useMemo(() => userGroups.map((ug) => {
-        return {
-            label: ug.group_name,
-            value: ug.id.toString()
-        }
-    }), [userGroups])
-    const _roles = useMemo(() => roles.map((role:any) => {
-        return {
-            label: role.role_name,
-            value: role.role_id.toString()
-        }
-    }), [roles])
-
-    return <Dialog open={user} onOpenChange={onClose}>
+    return <Dialog open={user} onOpenChange={(b) => { !b && setRoleItems([]); onClose(b) }}>
         <DialogContent className="sm:max-w-[625px]">
-            <DialogHeader>
-                <DialogTitle>{t('system.userGroupsSel')}</DialogTitle>
-            </DialogHeader>
-            <div className="">
-                <MultiSelect
-                    multiple
-                    className="max-w-[600px]"
-                    value={userGroupSelected}
-                    options={groups}
-                    placeholder={t('system.userGroupsSel')}
-                    onChange={setUserGroupSelected}
-                >
-                </MultiSelect>
-            </div>
             <DialogHeader>
                 <DialogTitle>{t('system.roleSelect')}</DialogTitle>
             </DialogHeader>
-            <div className="">
-                <MultiSelect
-                    multiple
-                    className="max-w-[600px]"
-                    value={selected}
-                    options={_roles}
-                    placeholder={t('system.roleSelect')}
-                    onChange={setSelected}
-                >
-                </MultiSelect>
-            </div>
+            {
+                roleItems.map((item, i) => <UserRoleItem key={item.groupId + ''}
+                    groupId={item.groupId + ''}
+                    selectedRoles={item.roles}
+                    onChange={(g, r) => handleChangeRoleItems(i, g, r)}
+                    showDel={roleItems.length > 1}
+                    onDelete={() => setRoleItems(roleItems.filter((el, index) => index !== i))}
+                />)
+            }
+            <Button variant="outline" size="icon" onClick={() =>
+                setRoleItems(items => [...items, { groupId: '', roles: [] }])
+            }><PlusIcon></PlusIcon> </Button>
             <DialogFooter>
                 <Button variant="outline" className="h-10 w-[120px] px-16" onClick={onClose}>{t('cancel')}</Button>
                 <Button className="px-16 h-10 w-[120px]" onClick={handleSave}>{t('save')}</Button>

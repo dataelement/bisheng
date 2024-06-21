@@ -1,6 +1,6 @@
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { ArrowLeftIcon } from '@radix-ui/react-icons';
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from "../../components/bs-ui/button";
@@ -14,6 +14,14 @@ export const ResetPwdPage = () => {
     const { message } = useToast();
     const { state } = useLocation()
     const navigate = useNavigate()
+
+    useEffect(() => {
+        state?.noback && message({
+            title: `${t('prompt')}`,
+            variant: 'warning',
+            description: '您的密码已过期，请及时修改'
+        })
+    }, [])
 
     const currentPwdRef = useRef<HTMLInputElement>(null);
     const newPwdRef = useRef<HTMLInputElement>(null);
