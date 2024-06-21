@@ -795,7 +795,7 @@ async def change_password(*,
     password = decrypt_md5_password(password)
 
     # 已登录用户告知是密码错误
-    if user_info.password != md5_hash(password):
+    if user_info.password != password:
         return UserPasswordError.return_resp()
 
     user_info.password = decrypt_md5_password(new_password)
