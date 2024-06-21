@@ -165,7 +165,7 @@ export default function Users(params) {
                                 ></UsersFilter>
                             </div>
                         </TableHead>
-                        <TableHead>{t('createTime')}</TableHead>
+                        <TableHead>{t('system.changeTime')}</TableHead>
                         <TableHead className="text-right w-[164px]">{t('operations')}</TableHead>
                     </TableRow>
                 </TableHeader>
