@@ -19,4 +19,4 @@ class UserNotPasswordError(BaseErrorCode):
 
 class UserPasswordError(BaseErrorCode):
     Code: int = 10603
-    Msg: str = '密码错误'
+    Msg: str = '当前密码错误'
