@@ -477,7 +477,7 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
                 keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
         else:
             keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
-            logger.debug('jieba search keywords:', keywords)
+        logger.debug(f'finally search keywords: {keywords}')
         match_query = {'bool': {must_or_should: []}}
         for key in keywords:
             match_query['bool'][must_or_should].append({query_strategy: {'text': key}})
