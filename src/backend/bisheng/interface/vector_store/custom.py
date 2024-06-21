@@ -358,20 +358,22 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         finally_k = kwargs.pop("k", k)
 
         ret = []
+
         for index, one_col in enumerate(self.col):
+            search_expr = expr
             if self.col_partition_key[index]:
                 # add parttion
                 if expr:
-                    expr = f"{expr} and {self._partition_field}==\"{self.col_partition_key[index]}\""
+                    search_expr = f"{expr} and {self._partition_field}==\"{self.col_partition_key[index]}\""
                 else:
-                    expr = f"{self._partition_field}==\"{self.col_partition_key[index]}\""
+                    search_expr = f"{self._partition_field}==\"{self.col_partition_key[index]}\""
             # Perform the search.
             res = one_col.search(
                 data=[embedding],
                 anns_field=self._vector_field,
                 param=param,
                 limit=k,
-                expr=expr,
+                expr=search_expr,
                 output_fields=output_fields,
                 timeout=timeout,
                 **kwargs,
