@@ -6,12 +6,12 @@ from loguru import logger
 from bisheng.api.services.user_service import UserPayload
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.flow import FlowDao, Flow
 from bisheng.database.models.group import GroupDao, Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.v1.schemas import resp_200
-from bisheng.database.models.knowledge import KnowledgeDao
+from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.database.models.role import RoleDao, Role
 from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
@@ -127,12 +127,11 @@ class AuditLogService:
                        flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
 
     @classmethod
-    def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str):
+    def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
         """
         删除技能的审计日志
         """
-        logger.info(f"act=delete_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
-        flow_info = FlowDao.get_flow_by_id(flow_id)
+        logger.info(f"act=delete_build_flow user={user.user_name} ip={ip_address} flow={flow_info.id}")
         cls._build_log(user, ip_address, EventType.DELETE_BUILD.value, ObjectType.FLOW.value,
                        flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
 
@@ -203,14 +202,13 @@ class AuditLogService:
                            str(knowledge_id), knowledge_info.name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
 
     @classmethod
-    def delete_knowledge(cls, user: UserPayload, ip_address: str, knowledge_id: int):
+    def delete_knowledge(cls, user: UserPayload, ip_address: str, knowledge: Knowledge):
         """
         删除知识库的审计日志
         """
-        logger.info(f"act=delete_knowledge user={user.user_name} ip={ip_address} knowledge={knowledge_id}")
-        knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
+        logger.info(f"act=delete_knowledge user={user.user_name} ip={ip_address} knowledge={knowledge.id}")
         cls._knowledge_log(user, ip_address, EventType.DELETE_KNOWLEDGE.value, ObjectType.KNOWLEDGE.value,
-                           str(knowledge_id), knowledge_info.name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+                           str(knowledge.id), knowledge.name, ResourceTypeEnum.KNOWLEDGE, str(knowledge.id))
 
     @classmethod
     def upload_knowledge_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, file_name: str):

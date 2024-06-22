@@ -176,7 +176,7 @@ async def process_knowledge(*,
     file_name = ""
     for one in files:
         file_name += "\n\n" + one.file_name
-    AuditLogService.upload_knowledge_file(login_user, request.client.host, knowledge.id, file_name)
+    AuditLogService.upload_knowledge_file(login_user, request.client.host, knowledge_id, file_name)
     return resp_200(result)
 
 
@@ -411,10 +411,11 @@ def delete_knowledge(*,
 
 def delete_knowledge_hook(request: Request, knowledge: Knowledge, login_user: UserPayload):
     logger.info(f'delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}')
-    GroupResourceDao.delete_group_resource_by_third_id(str(knowledge.id), ResourceTypeEnum.KNOWLEDGE)
 
     # 删除知识库的审计日志
-    AuditLogService.delete_knowledge(login_user, request.client.host, knowledge.id)
+    AuditLogService.delete_knowledge(login_user, request.client.host, knowledge)
+
+    GroupResourceDao.delete_group_resource_by_third_id(str(knowledge.id), ResourceTypeEnum.KNOWLEDGE)
 
 
 @router.delete('/file/{file_id}', status_code=200)

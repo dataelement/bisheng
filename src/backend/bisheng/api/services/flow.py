@@ -143,7 +143,7 @@ class FlowService:
         return resp_200(data=flow_version)
 
     @classmethod
-    def update_version_info(cls, user: UserPayload, version_id: int, flow_version: FlowVersionCreate) \
+    def update_version_info(cls, request: Request, user: UserPayload, version_id: int, flow_version: FlowVersionCreate) \
             -> UnifiedResponseModel[FlowVersion]:
         """
         更新版本信息
@@ -178,6 +178,7 @@ class FlowService:
                 logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
         except:
             pass
+        cls.update_flow_hook(request, user, flow_info)
         return resp_200(data=flow_version)
 
     @classmethod
@@ -377,9 +378,10 @@ class FlowService:
     @classmethod
     def delete_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
         logger.info(f'delete_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
-        # 将用户组下关联的技能删除
-        GroupResourceDao.delete_group_resource_by_third_id(flow_info.id.hex, ResourceTypeEnum.FLOW)
 
         # 写入审计日志
-        AuditLogService.delete_build_flow(login_user, request.client.host, flow_info.id.hex)
+        AuditLogService.delete_build_flow(login_user, request.client.host, flow_info)
+
+        # 将用户组下关联的技能删除
+        GroupResourceDao.delete_group_resource_by_third_id(flow_info.id.hex, ResourceTypeEnum.FLOW)
         return True

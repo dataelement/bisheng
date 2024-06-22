@@ -45,7 +45,7 @@ class RoleGroupService():
             ]
         return groupReads
 
-    def create_group(self, login_user: UserPayload, group: GroupCreate) -> Group:
+    def create_group(self, request: Request, login_user: UserPayload, group: GroupCreate) -> Group:
         """新建用户组"""
         group_admin = group.group_admins
         group.create_user = login_user.user_id
@@ -53,7 +53,8 @@ class RoleGroupService():
         group = GroupDao.insert_group(group)
         if group_admin:
             logger.info('set_admin group_admins={} group_id={}', group_admin, group.id)
-            self.set_group_admin(login_user, group_admin, group.id)
+            self.set_group_admin(request, login_user, group_admin, group.id)
+        self.create_group_hook(request, login_user, group)
         return group
 
     def create_group_hook(self, request: Request, login_user: UserPayload, group: Group) -> bool:

@@ -78,16 +78,14 @@ def create_versions(*,
 
 @router.put('/versions/{version_id}', status_code=200)
 def update_versions(*,
+                    request: Request,
                     version_id: int,
                     flow_version: FlowVersionCreate,
-                    Authorize: AuthJWT = Depends()):
+                    login_user: UserPayload = Depends(get_login_user)):
     """
     更新版本
     """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
-    return FlowService.update_version_info(user, version_id, flow_version)
+    return FlowService.update_version_info(request, login_user, version_id, flow_version)
 
 
 @router.delete('/versions/{version_id}', status_code=200)
@@ -220,11 +218,6 @@ def delete_flow(*,
     FlowDao.delete_flow(db_flow)
     FlowService.delete_flow_hook(request, login_user, db_flow)
     return resp_200(message='删除成功')
-
-
-def delete_flow_hook(flow: Flow, user_payload: UserPayload):
-    logger.info(f'delete_flow_hook flow: {flow.id}, user_payload: {user_payload.user_id}')
-    GroupResourceDao.delete_group_resource_by_third_id(flow.id.hex, ResourceTypeEnum.FLOW)
 
 
 @router.get('/download/', response_model=UnifiedResponseModel[FlowListRead], status_code=200)

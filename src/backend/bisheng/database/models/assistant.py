@@ -83,6 +83,7 @@ class AssistantDao(Assistant):
             data.is_delete = 1
             session.add(data)
             session.commit()
+            session.refresh(data)
             return data
 
     @classmethod

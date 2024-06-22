@@ -98,8 +98,8 @@ class AuditLogDao(AuditLogBase):
             statement = statement.where(or_(*group_filters))
             count_statement = count_statement.where(or_(*group_filters))
         if operator_ids:
-            statement = statement.where(AuditLog.operator_id.in_(operator_id))
-            count_statement = count_statement.where(AuditLog.operator_id._in(operator_id))
+            statement = statement.where(AuditLog.operator_id.in_(operator_ids))
+            count_statement = count_statement.where(AuditLog.operator_id.in_(operator_ids))
         if start_time and end_time:
             statement = statement.where(AuditLog.create_time >= start_time).where(AuditLog.create_time <= end_time)
             count_statement = count_statement.where(AuditLog.create_time >= start_time).where(

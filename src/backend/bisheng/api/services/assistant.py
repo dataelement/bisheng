@@ -169,11 +169,11 @@ class AssistantService(AssistantUtils):
     def delete_assistant_hook(cls, request: Request, login_user: UserPayload, assistant: Assistant) -> bool:
         """ 清理关联的助手资源 """
         logger.info(f"delete_assistant_hook id: {assistant.id}, user: {login_user.user_id}")
-        # 清理和用户组的关联
-        GroupResourceDao.delete_group_resource_by_third_id(assistant.id.hex, ResourceTypeEnum.ASSISTANT)
-
         # 写入审计日志
         AuditLogService.delete_build_assistant(login_user, request.client.host, assistant.id.hex)
+
+        # 清理和用户组的关联
+        GroupResourceDao.delete_group_resource_by_third_id(assistant.id.hex, ResourceTypeEnum.ASSISTANT)
         return True
 
     @classmethod

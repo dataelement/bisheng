@@ -50,14 +50,14 @@ async def get_all_group(Authorize: AuthJWT = Depends()):
 
 
 @router.post('/create', response_model=UnifiedResponseModel[GroupRead], status_code=200)
-async def create_group(group: GroupCreate, Authorize: AuthJWT = Depends()):
+async def create_group(request: Request, group: GroupCreate, Authorize: AuthJWT = Depends()):
     """
     新建用户组
     """
     await check_permissions(Authorize, ['admin'])
     payload = json.loads(Authorize.get_jwt_subject())
     login_user = UserPayload(**payload)
-    return resp_200(RoleGroupService().create_group(login_user, group))
+    return resp_200(RoleGroupService().create_group(request, login_user, group))
 
 
 @router.put('/create', response_model=UnifiedResponseModel[GroupRead], status_code=200)
@@ -138,7 +138,7 @@ async def set_group_admin(
 
     if not login_user.is_admin():
         return UnAuthorizedError.return_resp()
-    return resp_200(RoleGroupService().set_group_admin(request,login_user, user_ids, group_id))
+    return resp_200(RoleGroupService().set_group_admin(request, login_user, user_ids, group_id))
 
 
 @router.post('/set_update_user', status_code=200)

@@ -358,16 +358,18 @@ async def update(*,
     with session_getter() as session:
         session.add(db_user)
         session.commit()
-
+        session.refresh(db_user)
+    update_user_delete_hook(request, login_user, db_user)
     return resp_200()
 
 
 def update_user_delete_hook(request: Request, login_user: UserPayload, user: User) -> bool:
     logger.info(f'update_user_delete_hook: {request}, user={user}')
     if user.delete == 0:  # 启用用户
-        AuditLogService.forbid_user(login_user, request.client.host, user)
-    elif user.delete == 1:  # 禁用用户
         AuditLogService.recover_user(login_user, request.client.host, user)
+    elif user.delete == 1:  # 禁用用户
+        AuditLogService.forbid_user(login_user, request.client.host, user)
+    return True
 
 
 @router.post('/role/add', status_code=201)
@@ -422,9 +424,10 @@ async def update_role(*,
             session.add(db_role)
             session.commit()
             session.refresh(db_role)
-        update_user_role_hook(request, login_user, db_role)
+        update_role_hook(request, login_user, db_role)
         return resp_200(db_role)
     except Exception:
+        logger.exception(f'update_role')
         raise HTTPException(status_code=500, detail='更新失败，服务端异常')
 
 
