@@ -167,7 +167,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             <Input placeholder={t('system.roleName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60}></Input>
         </div>
         {/* 菜单授权 */}
-        <div className="">
+        {/* <div className="">
             <div className="mt-20 flex justify-between items-center relative">
                 <p className="text-xl font-bold">菜单授权</p>
             </div>
@@ -201,7 +201,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                     </TableBody>
                 </Table>
             </div>
-        </div>
+        </div> */}
         {/* 助手 */}
         <div className="">
             <SearchPanne title={t('system.assistantAuthorization')}
@@ -298,7 +298,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             </SearchPanne>
         </div>
         {/* 工具 */}
-        <div className="">
+        {/* <div className="">
             <SearchPanne
                 title={'工具授权'}
                 groupId={groupId}
@@ -330,7 +330,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                     </Table>
                 )}
             </SearchPanne>
-        </div>
+        </div> */}
         <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-[white]">
             <Button variant="outline" className="px-16" onClick={() => onChange()}>{t('cancel')}</Button>
             <Button className="px-16" onClick={handleSave}>{t('save')}</Button>

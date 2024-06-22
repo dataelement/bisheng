@@ -495,7 +495,14 @@ def instantiate_vectorstore(node_type: str, class_object: Type[VectorStore], par
 
         # 没有任何知识库的话，提供假的embedding和空的collection_name
         if node_type == "MilvusWithPermissionCheck":
-            params[col_name] = [knowledge.collection_name for knowledge in knowledge_list]
+            params[col_name] = []
+            params["partition_keys"] = []
+            for knowledge in knowledge_list:
+                params[col_name].append(knowledge.collection_name)
+                if knowledge.collection_name.startswith("partition"):
+                    params["partition_keys"].append(knowledge.id)
+                else:
+                    params["partition_keys"].append(None)
             params["embedding"] = decide_embeddings(knowledge_list[0].model) if knowledge_list else FakeEmbedding()
         else:
             params[col_name] = [knowledge.index_name or knowledge.collection_name

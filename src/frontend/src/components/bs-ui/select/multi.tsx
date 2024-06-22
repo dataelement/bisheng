@@ -177,7 +177,7 @@ const MultiSelect = ({
     >
         <SelectTrigger className="h-auto">
             {
-                !multiple && (values.length ? <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0]).label}</span> : placeholder)
+                !multiple && (values.length ? <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
             }
             {
                 multiple && (values.length ? (

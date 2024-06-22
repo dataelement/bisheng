@@ -38,7 +38,8 @@ class MilvusWithPermissionCheck(MilvusLangchain):
                  primary_field: str = 'pk',
                  text_field: str = 'text',
                  vector_field: str = 'vector',
-                 partition_field: str = 'knowledge_id'):
+                 partition_field: str = 'knowledge_id',
+                 **kwargs: Any):
         """Initialize the Milvus vector store."""
         try:
             from pymilvus import Collection, utility
@@ -86,17 +87,19 @@ class MilvusWithPermissionCheck(MilvusLangchain):
 
         self.alias = self._create_connection_alias(connection_args)
         self.col: Optional[List[Collection]] = []
+        self.col_partition_key: Optional[List[str]] = []
         # not used
         self.drop_old = drop_old
 
         # Grab the existing collection if it exists
         try:
-            for one_collection_name in self.collection_name:
+            for index, one_collection_name in enumerate(self.collection_name):
                 if utility.has_collection(one_collection_name, using=self.alias):
                     self.col.append(Collection(
                         one_collection_name,
                         using=self.alias,
                     ))
+                    self.col_partition_key.append(kwargs.get('partition_keys')[index])
         except Exception as e:
             logger.error(f'milvus operating error={str(e)}')
             self.close_connection(self.alias)
@@ -351,24 +354,26 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         # Determine result metadata fields.
         output_fields = self.fields[:]
         output_fields.remove(self._vector_field)
-        # partition for multi-tenancy
-        if 'partition_key' in kwargs:
-            # add parttion
-            if expr:
-                expr = f"{expr} and {self._partition_field}==\"{kwargs['partition_key']}\""
-            else:
-                expr = f"{self._partition_field}==\"{kwargs['partition_key']}\""
+
         finally_k = kwargs.pop("k", k)
 
         ret = []
-        for one_col in self.col:
+
+        for index, one_col in enumerate(self.col):
+            search_expr = expr
+            if self.col_partition_key[index]:
+                # add parttion
+                if expr:
+                    search_expr = f"{expr} and {self._partition_field}==\"{self.col_partition_key[index]}\""
+                else:
+                    search_expr = f"{self._partition_field}==\"{self.col_partition_key[index]}\""
             # Perform the search.
             res = one_col.search(
                 data=[embedding],
                 anns_field=self._vector_field,
                 param=param,
                 limit=k,
-                expr=expr,
+                expr=search_expr,
                 output_fields=output_fields,
                 timeout=timeout,
                 **kwargs,
@@ -377,11 +382,12 @@ class MilvusWithPermissionCheck(MilvusLangchain):
             for result in res[0]:
                 meta = {x: result.entity.get(x) for x in output_fields}
                 doc = Document(page_content=meta.pop(self._text_field), metadata=meta)
-                pair = (doc, self._relevance_score_fn(result.score))
+                pair = (doc, result.score)
                 ret.append(pair)
             logger.debug(f'MilvusWithPermissionCheck Search {one_col.name} results: {res[0]}')
         ret.sort(key=lambda x: x[1])
         logger.debug(f'MilvusWithPermissionCheck Search all results: {len(ret)}')
+        # milvus是分数越小越好，所以直接取前几位就行
         ret = ret[:finally_k]
         logger.debug(f'MilvusWithPermissionCheck Search finally results: {len(ret)}')
         return ret
@@ -472,7 +478,7 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
                 keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
         else:
             keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
-            logger.debug('jieba search keywords:', keywords)
+        logger.debug(f'finally search keywords: {keywords}')
         match_query = {'bool': {must_or_should: []}}
         for key in keywords:
             match_query['bool'][must_or_should].append({query_strategy: {'text': key}})
@@ -489,7 +495,7 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
             logger.debug(f'ElasticsearchWithPermissionCheck Search {one_index_name} results: {hits}')
         logger.debug(f'ElasticsearchWithPermissionCheck Search all results: {len(ret)}')
         finally_k = kwargs.pop("finally_k", k)
-        ret.sort(key=lambda x: x[1])
+        ret.sort(key=lambda x: x[1], reverse=True)
         ret = ret[:finally_k]
         logger.debug(f'ElasticsearchWithPermissionCheck Search finally results: {len(ret)}')
         return ret

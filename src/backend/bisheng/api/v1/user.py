@@ -817,8 +817,6 @@ async def reset_password(
     """
     管理员重置用户密码
     """
-    if not login_user.is_admin():
-        raise HTTPException(status_code=403, detail='没有权限重置密码')
     # 获取要修改密码的用户信息
     user_info = UserDao.get_user(user_id)
     if not user_info:

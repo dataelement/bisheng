@@ -165,7 +165,7 @@ export default function Users(params) {
                                 ></UsersFilter>
                             </div>
                         </TableHead>
-                        <TableHead>{t('createTime')}</TableHead>
+                        <TableHead>{t('system.changeTime')}</TableHead>
                         <TableHead className="text-right w-[164px]">{t('operations')}</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -182,7 +182,8 @@ export default function Users(params) {
                                 {user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0">{t('edit')}</Button> :
                                     <Button variant="link" onClick={() => setCurrentUser(el)} className="px-0">{t('edit')}</Button>}
                                 {/* 重置密码 */}
-                                {user.role === 'admin' && <Button variant="link" className="px-0 pl-4" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>}
+                                {(user.role === 'admin' || user.role === 'group_admin') && 
+                                <Button variant="link" className="px-0 pl-4" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>}
                                 {/* 禁用 */}
                                 {
                                     el.delete === 1 ? <Button variant="link" onClick={() => handleEnableUser(el)} className="text-green-500 px-0 pl-4">{t('enable')}</Button> :

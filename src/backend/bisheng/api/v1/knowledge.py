@@ -19,7 +19,7 @@ from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, Knowl
                                                KnowledgeRead)
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
                                                     KnowledgeFileRead)
-from bisheng.database.models.role_access import AccessType, RoleAccess
+from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
 from bisheng.database.models.user import User
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
@@ -238,30 +238,28 @@ def get_knowledge(*,
                   name: str = None,
                   page_size: Optional[int],
                   page_num: Optional[str],
-                  Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
+                  login_user: UserPayload = Depends(get_login_user)):
     """ 读取所有知识库信息. """
 
     try:
         sql = select(Knowledge)
         count_sql = select(func.count(Knowledge.id))
-        if 'admin' != payload.get('role'):
+        if not login_user.is_admin():
             with session_getter() as session:
                 role_third_id = session.exec(
-                    select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')))).all()
+                    select(RoleAccess).where(RoleAccess.role_id.in_(login_user.user_role))).all()
             if role_third_id:
                 third_ids = [
                     acess.third_id for acess in role_third_id
                     if acess.type == AccessType.KNOWLEDGE.value
                 ]
                 sql = sql.where(
-                    or_(Knowledge.user_id == payload.get('user_id'), Knowledge.id.in_(third_ids)))
+                    or_(Knowledge.user_id == login_user.user_id, Knowledge.id.in_(third_ids)))
                 count_sql = count_sql.where(
-                    or_(Knowledge.user_id == payload.get('user_id'), Knowledge.id.in_(third_ids)))
+                    or_(Knowledge.user_id == login_user.user_id, Knowledge.id.in_(third_ids)))
             else:
-                sql = sql.where(Knowledge.user_id == payload.get('user_id'))
-                count_sql = count_sql.where(Knowledge.user_id == payload.get('user_id'))
+                sql = sql.where(Knowledge.user_id == login_user.user_id)
+                count_sql = count_sql.where(Knowledge.user_id == login_user.user_id)
         if name:
             name = name.strip()
             sql = sql.where(Knowledge.name.like(f'%{name}%'))

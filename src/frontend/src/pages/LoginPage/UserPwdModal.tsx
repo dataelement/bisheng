@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { resetPasswordApi } from "@/controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { handleEncrypt } from "./utils";
+import { handleEncrypt, PWD_RULE } from "./utils";
 
 interface UserPwdModalProps {
     // onSuccess: () => void;
@@ -37,17 +37,20 @@ const UserPwdModal = forwardRef<UserPwdModalRef, UserPwdModalProps>((props, ref)
         // if (!PWD_RULE.test(passwordRef.current.value)) {
         //     return setError(t('login.passwordError'))
         // }
-        if(!passwordRef.current.value) return message({title:t('prompt'),variant:'error',description:'新密码不能为空'})
+        const errors:string[] = []
+        if(!passwordRef.current.value) errors.push(t('resetPassword.notEmpty'))
+        if (!/.{8,}/.test(passwordRef.current.value)) errors.push(t('resetPassword.newPasswordTooShort'))
+        if (!PWD_RULE.test(passwordRef.current.value)) errors.push(t('login.passwordError'))
 
+        if(errors.length) return message({title: t('prompt'), variant: 'error', description: errors})
+            
         const cryptPwd = await handleEncrypt(passwordRef.current.value)
-        console.log(cryptPwd)
-        const res = await captureAndAlertRequestErrorHoc(resetPasswordApi(userIdRef.current, cryptPwd));
-        console.log(res)
-        if (!res) {
+        const res = await captureAndAlertRequestErrorHoc(resetPasswordApi(userIdRef.current, cryptPwd))
+        if (res === null) {
             message({
                 title: `${t('prompt')}`,
                 variant: 'success',
-                description: [t('resetPassword.passwordResetSuccess')]
+                description: [t('resetPassword.adminResetSuccess')]
             });
             setEditShow(false);
             // onSuccess();
