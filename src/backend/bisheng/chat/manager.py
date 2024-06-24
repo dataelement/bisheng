@@ -339,7 +339,7 @@ class ChatManager:
                             if context.get('status') == 'init':
                                 erro_resp.intermediate_steps = f'LLM 技能执行错误. error={str(e)}'
                             elif context.get('has_file'):
-                                erro_resp.intermediate_steps = f'文件解析失败. error={str(e)}'
+                                erro_resp.intermediate_steps = f'文档解析失败，点击输入框上传按钮重新上传\n\n{str(e)}'
                             else:
                                 erro_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
                             context['status'] = 'init'
