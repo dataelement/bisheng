@@ -26,3 +26,11 @@ def get_audit_logs(*,
     operator_ids = [one for one in operator_ids if one]
     return AuditLogService.get_audit_log(login_user, group_ids, operator_ids,
                                          start_time, end_time, system_id, event_type, page, limit)
+
+
+@router.get('/operators', response_model=UnifiedResponseModel)
+def get_all_operators(*, login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取操作过组下资源的所有用户
+    """
+    return AuditLogService.get_all_operators(login_user)

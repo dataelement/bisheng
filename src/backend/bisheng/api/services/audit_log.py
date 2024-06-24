@@ -38,6 +38,18 @@ class AuditLogService:
         return resp_200(data={'data': data, 'total': total})
 
     @classmethod
+    def get_all_operators(cls, login_user: UserPayload) -> Any:
+        groups = []
+        if not login_user.is_admin():
+            groups = [one.group_id for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+
+        data = AuditLogDao.get_all_operators(groups)
+        res = []
+        for one in data:
+            res.append({'user_id': one[0], 'user_name': one[1]})
+        return resp_200(data=res)
+
+    @classmethod
     def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
         """
         新建助手会话的审计日志
