@@ -120,3 +120,15 @@ class AuditLogDao(AuditLogBase):
         with session_getter() as session:
             session.add_all(audit_logs)
             session.commit()
+
+    @classmethod
+    def get_all_operators(cls, group_ids: List[int]):
+        statement = select(AuditLog.operator_id, AuditLog.operator_name).distinct()
+        if group_ids:
+            group_filters = []
+            for one in group_ids:
+                group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
+            statement = statement.where(or_(*group_filters))
+
+        with session_getter() as session:
+            return session.exec(statement).all()
