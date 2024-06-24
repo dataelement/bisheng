@@ -100,10 +100,12 @@ class AuditLogDao(AuditLogBase):
         if operator_ids:
             statement = statement.where(AuditLog.operator_id.in_(operator_ids))
             count_statement = count_statement.where(AuditLog.operator_id.in_(operator_ids))
-        if start_time and end_time:
-            statement = statement.where(AuditLog.create_time >= start_time).where(AuditLog.create_time <= end_time)
-            count_statement = count_statement.where(AuditLog.create_time >= start_time).where(
-                AuditLog.create_time <= end_time)
+        if start_time:
+            statement = statement.where(AuditLog.create_time >= start_time)
+            count_statement = count_statement.where(AuditLog.create_time >= start_time)
+        if end_time:
+            statement = statement.where(AuditLog.create_time <= end_time)
+            count_statement = count_statement.where(AuditLog.create_time <= end_time)
         if system_id:
             statement = statement.where(AuditLog.system_id == system_id)
             count_statement = count_statement.where(AuditLog.system_id == system_id)
