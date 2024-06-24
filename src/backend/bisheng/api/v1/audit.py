@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query, Depends
 from bisheng.api.JWT import get_login_user
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.api.services.audit_log import AuditLogService
 
 router = APIRouter(prefix='/audit', tags=['AuditLog'])
 
@@ -21,6 +22,7 @@ def get_audit_logs(*,
                    page: Optional[int] = Query(default=0, description='页码'),
                    limit: Optional[int] = Query(default=0, description='每页条数'),
                    login_user: UserPayload = Depends(get_login_user)):
+    return AuditLogService.get_audit_log(login_user, group_ids, operator_ids, start_time, end_time, system_id, event_type, page, limit)
     return resp_200(data={
         'data': [
             {

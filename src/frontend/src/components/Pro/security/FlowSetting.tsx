@@ -40,13 +40,13 @@ export default function FlowSetting({ id, type, isOnline }) {
         if (_form.wordsType.length === 0) errors.push(t('build.errors.selectAtLeastOneWordType'));
         if (_form.autoReply === '') errors.push(t('build.errors.autoReplyNotEmpty'));
         if (errors.length) {
-            return toast({ title: t('build.prompt'), variant: 'error', description: errors.join(', ') });
+            return toast({ title: t('prompt'), variant: 'error', description: errors.join(', ') });
         }
 
         setForm(_form);
         if (isOnline) return; // 在线状态不允许修改
         await sensitiveSaveApi({ ..._form, id, type });
-        message({ title: t('build.prompt'), variant: 'success', description: t('build.saveSuccess') });
+        message({ title: t('prompt'), variant: 'success', description: t('build.saveSuccess') });
     };
 
     const onOff = (bln) => {

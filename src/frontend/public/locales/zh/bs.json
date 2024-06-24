@@ -473,7 +473,6 @@
     "exampleOne": "你是 XX，具有 XX 经验，擅长 XX，…",
     "exampleTwo": "你的任务是 XX ，需要按照以下步骤执行：",
     "automaticallyConfigurations": "自动为您选择相关配置",
-    "prompt": "详细、具体地描述助手与用户的交互方式，例如助手的身份、完成任务的具体方法和步骤、回答问题时的语气以及应该注意什么问题等",
     "openingRemarks": "开场白",
     "guidingQuestions": "引导问题",
     "promptReplaced": "提示词已替换",

@@ -37,7 +37,7 @@ export default function Prompt() {
             <Textarea
                 className="border-none bg-transparent scrollbar-hide h-full focus-visible:ring-0 resize-none text-sm text-muted-foreground"
                 value={assistantState.prompt}
-                placeholder={t('build.prompt')}
+                placeholder={t('prompt')}
                 onInput={(e => dispatchAssistant('setPrompt', { prompt: e.target.value }))}
             ></Textarea>
         </div>
