@@ -100,6 +100,15 @@ class ChatInput(BaseModel):
     liked: int = 0
 
 
+class AddChatMessages(BaseModel):
+    """Add a pair of chat messages."""
+
+    flow_id: str  # 技能或助手ID
+    chat_id: str  # 会话ID
+    human_message: str = None  # 用户问题
+    answer_message: str = None  # 执行结果
+
+
 class ChatList(BaseModel):
     """Chat message list."""
 

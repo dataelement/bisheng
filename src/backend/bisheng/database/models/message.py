@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from uuid import UUID
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy import JSON, Column, DateTime, String, Text, func, text
+from sqlalchemy import JSON, Column, DateTime, String, Text, func, text, update
 from sqlmodel import Field, delete, select
 
 
@@ -130,3 +130,18 @@ class ChatMessageDao(MessageBase):
             session.commit()
             session.refresh(message)
         return message
+
+    @classmethod
+    def insert_batch(cls, messages: List[ChatMessage]):
+        with session_getter() as session:
+            session.add_all(messages)
+            session.commit()
+
+    @classmethod
+    def update_message(cls, message_id: int, user_id: int, message: str):
+        with session_getter() as session:
+            statement = update(ChatMessage).where(
+                ChatMessage.id == message_id).where(
+                ChatMessage.user_id == user_id).values(message=message)
+            session.exec(statement)
+            session.commit()
