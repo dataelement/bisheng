@@ -1,5 +1,10 @@
 import axios from "../request";
 
+// 获取操作过组下资源的所有用户
+export async function getOperatorsApi():Promise<[]> {
+    return await axios.get('/api/v1/audit/operators')
+}
+
 // 分页获取审计列表
 export async function getLogsApi({page, pageSize, userIds, groupId = '', start, end, moduleId = '', action = ''}:{
     page:number,
