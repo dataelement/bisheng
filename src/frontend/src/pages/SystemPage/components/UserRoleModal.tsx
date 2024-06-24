@@ -21,6 +21,7 @@ export default function UserRoleModal({ user, onClose, onChange }) {
             const items = groups.map(item => {
 
                 return {
+                    key: Date.now(),
                     groupId: item.id,
                     roles: roles.filter(role => role.group_id === item.id)
                         .map(el => el.id.toString())
@@ -59,17 +60,19 @@ export default function UserRoleModal({ user, onClose, onChange }) {
             <DialogHeader>
                 <DialogTitle>{t('system.roleSelect')}</DialogTitle>
             </DialogHeader>
-            {
-                roleItems.map((item, i) => <UserRoleItem key={item.groupId + ''}
-                    groupId={item.groupId + ''}
-                    selectedRoles={item.roles}
-                    onChange={(g, r) => handleChangeRoleItems(i, g, r)}
-                    showDel={roleItems.length > 1}
-                    onDelete={() => setRoleItems(roleItems.filter((el, index) => index !== i))}
-                />)
-            }
+            <div className="max-h-[520px] overflow-y-auto flex flex-col gap-2">
+                {
+                    roleItems.map((item, i) => <UserRoleItem key={item.key}
+                        groupId={item.groupId + ''}
+                        selectedRoles={item.roles}
+                        onChange={(g, r) => handleChangeRoleItems(i, g, r)}
+                        showDel={roleItems.length > 1}
+                        onDelete={() => setRoleItems(roleItems.filter((el, index) => index !== i))}
+                    />)
+                }
+            </div>
             <Button variant="outline" size="icon" onClick={() =>
-                setRoleItems(items => [...items, { groupId: '', roles: [] }])
+                setRoleItems(items => [...items, { key: Date.now(), groupId: '', roles: [] }])
             }><PlusIcon></PlusIcon> </Button>
             <DialogFooter>
                 <Button variant="outline" className="h-10 w-[120px] px-16" onClick={onClose}>{t('cancel')}</Button>
