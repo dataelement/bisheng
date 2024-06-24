@@ -94,7 +94,7 @@ class AuditLogDao(AuditLogBase):
         if group_ids:
             group_filters = []
             for one in group_ids:
-                group_filters.append(func.json_contains(AuditLog.group_ids, one))
+                group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
             statement = statement.where(or_(*group_filters))
             count_statement = count_statement.where(or_(*group_filters))
         if operator_ids:
