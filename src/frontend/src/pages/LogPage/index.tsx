@@ -6,7 +6,7 @@ import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOpe
 import { getUserGroupsApi, getUsersApi } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
 import { formatDate } from "@/util/utils";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import {
@@ -37,7 +37,7 @@ const useModules = () => {
 
 export default function index() {
     const { t } = useTranslation()
-    const { users, loadUsers, searchUser } = useUsers()
+    const { users, selectedRef, loadUsers, searchUser } = useUsers()
     const { groups, loadData } = useGroups()
     const { modules, loadModules } = useModules()
     const { page, pageSize, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
@@ -56,18 +56,20 @@ export default function index() {
     const [keys, setKeys] = useState({...init})
 
     const handleActionOpen = async () => {
-        setActions((keys.moduleId ? await getActionsByModuleApi(keys.moduleId) : await getActionsApi()).data)
+        setActions((keys.moduleId ? await getActionsByModuleApi(keys.moduleId) : await getActionsApi()))
     }
     const handleSearch = () => {
-        const uids = keys.userIds.map(u => u.value)
         const startTime = keys.start && formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss')
         const endTime = keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss')
-        filterData({...keys, userIds:uids, start:startTime, end:endTime})
+        filterData({...keys, start:startTime, end:endTime})
     }
     const handleReset = () => {
         setKeys({...init})
         filterData(init)
     }
+    useEffect(() => {
+        loadUsers()
+    },[])
 
     return <div className="relative">
         <div className="h-[calc(100vh-98px)] overflow-y-auto px-2 py-4 pb-10">
@@ -77,9 +79,9 @@ export default function index() {
                     options={users}
                     value={keys.userIds}
                     placeholder={t('log.selectUser')}
-                    onLoad={() => {loadUsers(); console.log('---------------')}}
-                    onSearch={searchUser}
-                    onChange={(values) => setKeys({...keys,userIds:values})}
+                    onLoad={loadUsers}
+                    onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds}}
+                    onChange={(values) => {setKeys({...keys,userIds:values}); console.log(values)}}
                 ></MultiSelect>
             </div>
             <div className="w-[200px] relative">
@@ -139,17 +141,17 @@ export default function index() {
                         <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
                         <TableHead className="w-[200px]">{t('log.username')}</TableHead>
                         <TableHead className="w-[200px]">{t('log.operationTime')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.systemModule')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.operationAction')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.objectType')}</TableHead>
+                        <TableHead className="w-[100px]">{t('log.systemModule')}</TableHead>
+                        <TableHead className="w-[150px]">{t('log.operationAction')}</TableHead>
+                        <TableHead className="w-[150px]">{t('log.objectType')}</TableHead>
                         <TableHead className="w-[200px]">{t('log.operationObject')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.ipAddress')}</TableHead>
+                        <TableHead className="w-[150px]">{t('log.ipAddress')}</TableHead>
                         <TableHead className="w-[200px]">{t('log.remark')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {logs.map((log:any) => (
-                    <TableRow key={log.id} className="max-h-[50px]">
+                    <TableRow key={log.id}>
                         <TableCell>{log.id}</TableCell>
                         <TableCell><div className="truncate-multiline">{log.operator_name}</div></TableCell>
                         <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
@@ -159,7 +161,7 @@ export default function index() {
                         <TableCell><div className="truncate-multiline">{log.object_name}</div></TableCell> {/* div是必要的 */}
                         <TableCell>{log.ip_address}</TableCell>
                         {/* whitespace-pre类保持原有的空格和换行符 */}
-                        <TableCell><div className="whitespace-pre">{log.note?.replace('编辑后', `\n编辑后`)}</div></TableCell>
+                        <TableCell><div className="whitespace-pre truncate-doubleline">{log.note?.replace('编辑后', `\n编辑后`)}</div></TableCell>
                     </TableRow>
                     ))}
                 </TableBody>
@@ -189,6 +191,7 @@ export default function index() {
 const useUsers = () => {
     const [users, setUsers] = useState<any[]>([]);
     const userRef = useRef([])
+    const selectedRef = useRef([])
 
     const loadUsers = () => {
         getOperatorsApi().then(res => {
@@ -198,12 +201,14 @@ const useUsers = () => {
         })
     }
     const search = (name) => {
-        const newUsers = userRef.current.filter(u => u.label.toLowerCase().includes(name.toLowerCase()))
+        const newUsers = userRef.current.filter(u => u.label.toLowerCase().includes(name.toLowerCase())
+                                                || selectedRef.current.includes(u.value))
         setUsers(newUsers)
     }
 
     return {
         users,
+        selectedRef,
         loadUsers,
         searchUser(name) {
             search(name)
