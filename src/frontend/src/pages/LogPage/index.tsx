@@ -139,11 +139,11 @@ export default function index() {
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.username')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.operationTime')}</TableHead>
-                        <TableHead className="w-[100px]">{t('log.systemModule')}</TableHead>
-                        <TableHead className="w-[150px]">{t('log.operationAction')}</TableHead>
-                        <TableHead className="w-[150px]">{t('log.objectType')}</TableHead>
+                        <TableHead className="w-[200px] min-w-[100px]">{t('log.username')}</TableHead>
+                        <TableHead className="w-[200px] min-w-[100px]">{t('log.operationTime')}</TableHead>
+                        <TableHead className="w-[100px] min-w-[100px]">{t('log.systemModule')}</TableHead>
+                        <TableHead className="w-[150px] min-w-[100px]">{t('log.operationAction')}</TableHead>
+                        <TableHead className="w-[150px] min-w-[100px]">{t('log.objectType')}</TableHead>
                         <TableHead className="w-[200px]">{t('log.operationObject')}</TableHead>
                         <TableHead className="w-[150px]">{t('log.ipAddress')}</TableHead>
                         <TableHead className="w-[200px] text-center">{t('log.remark')}</TableHead>
