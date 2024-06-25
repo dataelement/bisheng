@@ -7,4 +7,5 @@ export type AppConfig = {
     websocket_url: string;
     pro: boolean;
     sso: boolean;
+    application_usage_tips: boolean;
 };
