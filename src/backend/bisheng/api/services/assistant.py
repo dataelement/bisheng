@@ -12,6 +12,7 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500)
 from bisheng.cache import InMemoryCache
@@ -147,7 +148,7 @@ class AssistantService(AssistantUtils):
             GroupResourceDao.insert_group_batch(batch_resource)
 
         # 写入审计日志
-        AuditLogService.create_build_assistant(user_payload, request.client.host, assistant.id.hex)
+        AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id.hex)
         return True
 
     # 删除助手
@@ -170,7 +171,7 @@ class AssistantService(AssistantUtils):
         """ 清理关联的助手资源 """
         logger.info(f"delete_assistant_hook id: {assistant.id}, user: {login_user.user_id}")
         # 写入审计日志
-        AuditLogService.delete_build_assistant(login_user, request.client.host, assistant.id.hex)
+        AuditLogService.delete_build_assistant(login_user, get_request_ip(request), assistant.id.hex)
 
         # 清理和用户组的关联
         GroupResourceDao.delete_group_resource_by_third_id(assistant.id.hex, ResourceTypeEnum.ASSISTANT)
@@ -266,7 +267,7 @@ class AssistantService(AssistantUtils):
         logger.info(f"delete_assistant_hook id: {assistant.id}, user: {login_user.user_id}")
 
         # 写入审计日志
-        AuditLogService.update_build_assistant(login_user, request.client.host, assistant.id.hex)
+        AuditLogService.update_build_assistant(login_user, get_request_ip(request), assistant.id.hex)
         return True
 
     @classmethod

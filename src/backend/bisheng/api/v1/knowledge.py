@@ -6,6 +6,7 @@ from typing import List, Optional
 from uuid import uuid4
 
 from bisheng.api.JWT import get_login_user
+from bisheng.api.utils import get_request_ip
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
@@ -176,7 +177,7 @@ async def process_knowledge(*,
     file_name = ""
     for one in files:
         file_name += "\n\n" + one.file_name
-    AuditLogService.upload_knowledge_file(login_user, request.client.host, knowledge_id, file_name)
+    AuditLogService.upload_knowledge_file(login_user, get_request_ip(request), knowledge_id, file_name)
     return resp_200(result)
 
 
@@ -229,7 +230,7 @@ def create_knowledge_hook(request: Request, knowledge: Knowledge, login_user: Us
         GroupResourceDao.insert_group_batch(batch_resource)
 
     # 记录审计日志
-    AuditLogService.create_knowledge(login_user, request.client.host, knowledge.id)
+    AuditLogService.create_knowledge(login_user, get_request_ip(request), knowledge.id)
     return True
 
 
@@ -413,7 +414,7 @@ def delete_knowledge_hook(request: Request, knowledge: Knowledge, login_user: Us
     logger.info(f'delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}')
 
     # 删除知识库的审计日志
-    AuditLogService.delete_knowledge(login_user, request.client.host, knowledge)
+    AuditLogService.delete_knowledge(login_user, get_request_ip(request), knowledge)
 
     GroupResourceDao.delete_group_resource_by_third_id(str(knowledge.id), ResourceTypeEnum.KNOWLEDGE)
 
@@ -437,6 +438,6 @@ def delete_knowledge_file(*,
     KnowledgeFileDao.delete_batch([file_id])
 
     # 删除知识库文件的审计日志
-    AuditLogService.delete_knowledge_file(login_user, request.client.host, knowledge.id, knowledge_file.file_name)
+    AuditLogService.delete_knowledge_file(login_user, get_request_ip(request), knowledge.id, knowledge_file.file_name)
 
     return resp_200(message='删除成功')

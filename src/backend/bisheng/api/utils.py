@@ -4,16 +4,18 @@ from pathlib import Path
 from typing import Dict, List
 
 import aiohttp
+from fastapi import Request
+from fastapi_jwt_auth import AuthJWT
+from platformdirs import user_cache_dir
+from sqlalchemy import delete
+from sqlmodel import select
+
 from bisheng.api.v1.schemas import StreamData
 from bisheng.database.base import session_getter
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
-from fastapi_jwt_auth import AuthJWT
-from platformdirs import user_cache_dir
-from sqlalchemy import delete
-from sqlmodel import select
 
 API_WORDS = ['api', 'key', 'token']
 
@@ -416,3 +418,11 @@ async def get_url_content(url: str) -> str:
                 raise Exception(f'Failed to download content, HTTP status code: {response.status}')
             res = await response.read()
             return res.decode('utf-8')
+
+
+def get_request_ip(request: Request) -> str:
+    """ 获取客户端真实IP """
+    x_forwarded_for = request.headers.get('X-Forwarded-For')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0]
+    return request.client.host

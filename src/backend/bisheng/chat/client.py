@@ -19,6 +19,7 @@ from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.settings import settings
+from bisheng.api.utils import get_request_ip
 
 
 class ChatClient:
@@ -77,7 +78,7 @@ class ChatClient:
         ))
         # 记录审计日志, 是新建会话
         if len(self.chat_history) <= 1:
-            AuditLogService.create_chat_assistant(self.login_user, self.request.client.host, self.client_id)
+            AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
         return msg
 
     async def send_response(self, category: str, msg_type: str, message: str, intermediate_steps: str = '',
