@@ -144,9 +144,9 @@ export default function index() {
                         <TableHead className="w-[100px] min-w-[100px]">{t('log.systemModule')}</TableHead>
                         <TableHead className="w-[150px] min-w-[100px]">{t('log.operationAction')}</TableHead>
                         <TableHead className="w-[150px] min-w-[100px]">{t('log.objectType')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.operationObject')}</TableHead>
+                        <TableHead className="w-[200px] min-w-[100px]">{t('log.operationObject')}</TableHead>
                         <TableHead className="w-[150px]">{t('log.ipAddress')}</TableHead>
-                        <TableHead className="w-[250px] text-center">{t('log.remark')}</TableHead>
+                        <TableHead className="w-[250px] min-w-[250px] text-center">{t('log.remark')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
