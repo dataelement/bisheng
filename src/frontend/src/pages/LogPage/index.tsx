@@ -146,7 +146,7 @@ export default function index() {
                         <TableHead className="w-[150px] min-w-[100px]">{t('log.objectType')}</TableHead>
                         <TableHead className="w-[200px]">{t('log.operationObject')}</TableHead>
                         <TableHead className="w-[150px]">{t('log.ipAddress')}</TableHead>
-                        <TableHead className="w-[200px] text-center">{t('log.remark')}</TableHead>
+                        <TableHead className="w-[250px] text-center">{t('log.remark')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -161,7 +161,7 @@ export default function index() {
                         <TableCell><div className="truncate-multiline">{log.object_name}</div></TableCell> {/* div是必要的 */}
                         <TableCell>{log.ip_address}</TableCell>
                         {/* whitespace-pre类保持原有的空格和换行符 */}
-                        <TableCell className="max-w-[200px]"><div className="whitespace-pre truncate">{log.note?.replace('编辑后', `\n编辑后`)}</div></TableCell>
+                        <TableCell className="max-w-[250px]"><div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`)}</div></TableCell>
                     </TableRow>
                     ))}
                 </TableBody>
