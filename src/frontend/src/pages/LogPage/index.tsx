@@ -103,7 +103,7 @@ export default function index() {
                 <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({...keys,end:t})} />
             </div>
             <div className="w-[180px] relative">
-                <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({...keys,moduleId:value})}>
+                <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({...keys, action:'', moduleId:value})}>
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder={t('log.systemModule')} />
                     </SelectTrigger>
