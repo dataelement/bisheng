@@ -3,8 +3,6 @@ import copy
 import json
 import logging
 import os
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 import re
 import time
 from collections import defaultdict
@@ -155,15 +153,16 @@ class LlmExtract(object):
                         ),
                     }
                 ]
-                print(messages)
                 icl_examples = '\n\n'.join(examples_list)
+                print('\nsystem:\n', FEW_SHOT_SYSTEM_MESSAGE.format(examples=icl_examples))
+                print('\nuser:\n', messages)
                 response = self.chat_model.chat(
                     messages,
                     system=FEW_SHOT_SYSTEM_MESSAGE.format(examples=icl_examples),
                 )
-                print(f'ori llm predict: {response}')
+                print(f'\nori llm predict: \n{response}')
                 extract_res = self.json_output_parser.parse(response[0].response_text)
-                print(f'parser result: {extract_res}')
+                print(f'\nparser result: \n{extract_res}')
 
             else:
                 messages = [
@@ -175,11 +174,12 @@ class LlmExtract(object):
                         ),
                     }
                 ]
-                print(messages)
                 response = self.chat_model.chat(messages, system=BASE_SYSTEM_MESSAGE)
-                print(f'ori llm predict: {response}')
+                print('\nsystem:\n', BASE_SYSTEM_MESSAGE)
+                print('\nuser:\n ', messages)
+                print(f'\nori llm predict:\n {response}')
                 extract_res = self.json_output_parser.parse(response[0].response_text)
-                print(f'parser result: {extract_res}')
+                print(f'\nparser result:\n {extract_res}')
 
             if not extract_res:
                 extract_res = {}

@@ -3,11 +3,11 @@ import os
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import List, Tuple, Union
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 import gradio as gr
 from document_extract import DocumentExtract
-from prompt import EXAMPLE_FORMAT
 from pydantic import BaseModel
 
 tmpdir = './tmp/extract_files'
@@ -26,12 +26,13 @@ tmp2example = {}
 
 
 def validate_tar(tar_file) -> ValidateTarResponse:
-    if Path(tar_file).name in tmp2example:
-        _tempdir = tmp2example[Path(tar_file).name]
+    _tar_file = tar_file.name
+    if Path(_tar_file).name in tmp2example:
+        _tempdir = tmp2example[Path(_tar_file).name]
     else:
         _tempdir = Path(tempfile.mkdtemp(dir=tmpdir))
-        tmp2example[Path(tar_file).name] = _tempdir
-        with tarfile.open(tar_file.name, 'r') as tar:
+        tmp2example[Path(_tar_file).name] = _tempdir
+        with tarfile.open(_tar_file, 'r') as tar:
             tar.extractall(_tempdir)
     label_list = [i for i in _tempdir.glob('**/[!.]*.json')]
     all_files = [i for i in _tempdir.glob('**/[!.]*')]
@@ -69,14 +70,17 @@ def validate_tar(tar_file) -> ValidateTarResponse:
     return ValidateTarResponse(status=True, message='Success', pairs=pairs)
 
 
-def llm_run(pdf_path, schema, is_few_shot, example_path):
+def llm_run(pdf_path, schema, is_few_shot=False, example_path=None):
     if is_few_shot:
-        validate_response = validate_tar(example_path)
-        if not validate_response.status:
-            gr.Error(validate_response.message)
+        if not example_path:
+            raise gr.Error('Error: Few-shot mode requires example file')
         else:
-            llm_kv_results = llm_client.predict_one_pdf(pdf_path.name, schema, validate_response.pairs)
-            llm_kv_results = json.dumps(llm_kv_results, ensure_ascii=False, indent=2)
+            validate_response = validate_tar(example_path)
+            if not validate_response.status:
+                raise gr.Error(validate_response.message)
+            else:
+                llm_kv_results = llm_client.predict_one_pdf(pdf_path.name, schema, validate_response.pairs)
+                llm_kv_results = json.dumps(llm_kv_results, ensure_ascii=False, indent=2)
     else:
         pdf_path = pdf_path.name
         llm_kv_results = llm_client.predict_one_pdf(pdf_path, schema)
@@ -119,11 +123,13 @@ if __name__ == '__main__':
                     interactive=True,
                     lines=2,
                 )
+
             with gr.Row():
                 with gr.Column():
                     is_few_shot = gr.Checkbox(label='Few-shot')
                 with gr.Column():
                     btn1 = gr.Button('Run LLM')
+
             with gr.Row():
                 with gr.Column():
                     input_example = gr.components.File(label='示例文件tar包')
