@@ -3,7 +3,7 @@ import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi } from "@/controllers/API/log";
-import { getUserGroupsApi, getUsersApi } from "@/controllers/API/user";
+import { getUserGroupsApi } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
 import { formatDate } from "@/util/utils";
 import { useEffect, useRef, useState } from "react";
@@ -146,7 +146,7 @@ export default function index() {
                         <TableHead className="w-[150px]">{t('log.objectType')}</TableHead>
                         <TableHead className="w-[200px]">{t('log.operationObject')}</TableHead>
                         <TableHead className="w-[150px]">{t('log.ipAddress')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.remark')}</TableHead>
+                        <TableHead className="w-[200px] text-center">{t('log.remark')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -161,7 +161,7 @@ export default function index() {
                         <TableCell><div className="truncate-multiline">{log.object_name}</div></TableCell> {/* div是必要的 */}
                         <TableCell>{log.ip_address}</TableCell>
                         {/* whitespace-pre类保持原有的空格和换行符 */}
-                        <TableCell><div className="whitespace-pre truncate-doubleline">{log.note?.replace('编辑后', `\n编辑后`)}</div></TableCell>
+                        <TableCell className="max-w-[200px]"><div className="whitespace-pre truncate">{log.note?.replace('编辑后', `\n编辑后`)}</div></TableCell>
                     </TableRow>
                     ))}
                 </TableBody>
