@@ -13,7 +13,7 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { alertContext } from "../../../contexts/alertContext";
-import { createRole, getGroupResourcesApi, getRoleAssistApi, getRoleLibsApi, getRolePermissionsApi, getRoleSkillsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
+import { createRole, getGroupResourcesApi, getRolePermissionsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 
@@ -74,7 +74,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         useAssistant: [],
         manageLibs: [],
         useTools: [],
-        useMenu: []
+        useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE]
     })
     useEffect(() => {
         if (id !== -1) {
@@ -308,7 +308,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>{t('lib.libraryName')}</TableHead>
+                                <TableHead>{t('lib.toolName')}</TableHead>
                                 <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
                                 <TableHead className="text-right">{t('system.usePermission')}</TableHead>
                             </TableRow>
