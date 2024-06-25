@@ -8,7 +8,7 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import build_flow, build_input_keys_response
+from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
 from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList,
                                     FlowGptsOnlineList, InitResponse, StreamData,
                                     UnifiedResponseModel, resp_200, AddChatMessages)
@@ -75,11 +75,11 @@ def del_chat_id(*,
         # 判断下是助手还是技能, 写审计日志
         flow_info = FlowDao.get_flow_by_id(message.flow_id.hex)
         if flow_info:
-            AuditLogService.delete_chat_flow(login_user, request.client.host, flow_info)
+            AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
         else:
             assistant_info = AssistantDao.get_one_assistant(message.flow_id)
             if assistant_info:
-                AuditLogService.delete_chat_assistant(login_user, request.client.host, assistant_info)
+                AuditLogService.delete_chat_assistant(login_user, get_request_ip(request), assistant_info)
 
     return resp_200(message='删除成功')
 
@@ -109,11 +109,11 @@ def add_chat_messages(*,
         # 判断下是助手还是技能, 写审计日志
         flow_info = FlowDao.get_flow_by_id(flow_id.hex)
         if flow_info:
-            AuditLogService.create_chat_flow(login_user, request.client.host, flow_id.hex)
+            AuditLogService.create_chat_flow(login_user, get_request_ip(request), flow_id.hex)
         else:
             assistant_info = AssistantDao.get_one_assistant(flow_id)
             if assistant_info:
-                AuditLogService.create_chat_assistant(login_user, request.client.host, flow_id.hex)
+                AuditLogService.create_chat_assistant(login_user, get_request_ip(request), flow_id.hex)
 
     return resp_200(message='添加成功')
 

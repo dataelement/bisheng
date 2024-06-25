@@ -15,6 +15,7 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
                                       UserValidateError, UserPasswordError)
 from bisheng.api.JWT import get_login_user
+from bisheng.api.utils import get_request_ip
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role,
@@ -366,9 +367,9 @@ async def update(*,
 def update_user_delete_hook(request: Request, login_user: UserPayload, user: User) -> bool:
     logger.info(f'update_user_delete_hook: {request}, user={user}')
     if user.delete == 0:  # 启用用户
-        AuditLogService.recover_user(login_user, request.client.host, user)
+        AuditLogService.recover_user(login_user, get_request_ip(request), user)
     elif user.delete == 1:  # 禁用用户
-        AuditLogService.forbid_user(login_user, request.client.host, user)
+        AuditLogService.forbid_user(login_user, get_request_ip(request), user)
     return True
 
 
@@ -399,7 +400,7 @@ async def create_role(*,
 
 def create_role_hook(request: Request, login_user: UserPayload, db_role: Role) -> bool:
     logger.info(f'create_role_hook: {login_user.user_name}, role={db_role}')
-    AuditLogService.create_role(login_user, request.client.host, db_role)
+    AuditLogService.create_role(login_user, get_request_ip(request), db_role)
 
 
 @router.patch('/role/{role_id}', status_code=201)
@@ -433,7 +434,7 @@ async def update_role(*,
 
 def update_role_hook(request: Request, login_user: UserPayload, db_role: Role) -> bool:
     logger.info(f'update_role_hook: {login_user.user_name}, role={db_role}')
-    AuditLogService.update_role(login_user, request.client.host, db_role)
+    AuditLogService.update_role(login_user, get_request_ip(request), db_role)
 
 
 @router.get('/role/list', status_code=200)
@@ -490,7 +491,7 @@ async def delete_role(*,
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail='删除角色失败')
-    AuditLogService.delete_role(login_user, request.client.host, db_role)
+    AuditLogService.delete_role(login_user, get_request_ip(request), db_role)
     return resp_200()
 
 
@@ -556,7 +557,7 @@ def update_user_role_hook(request: Request, login_user: UserPayload, user_id: in
     for one in new_roles:
         note += role_dict[one] + "、"
     note = note.rstrip("、")
-    AuditLogService.update_user(login_user, request.client.host, user_id, note)
+    AuditLogService.update_user(login_user, get_request_ip(request), user_id, note)
 
 
 @router.get('/user/role', status_code=200)

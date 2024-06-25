@@ -13,7 +13,7 @@ from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, V
     FlowOnlineEditError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import get_L2_param_from_flow
+from bisheng.api.utils import get_L2_param_from_flow, get_request_ip
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
     StreamData
 from bisheng.chat.utils import process_node_data
@@ -366,13 +366,13 @@ class FlowService:
                                   type=ResourceTypeEnum.FLOW.value))
             GroupResourceDao.insert_group_batch(batch_resource)
         # 写入审计日志
-        AuditLogService.create_build_flow(login_user, request.client.host, flow_info.id.hex)
+        AuditLogService.create_build_flow(login_user, get_request_ip(request), flow_info.id.hex)
         return True
 
     @classmethod
     def update_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
         # 写入审计日志
-        AuditLogService.update_build_flow(login_user, request.client.host, flow_info.id.hex)
+        AuditLogService.update_build_flow(login_user, get_request_ip(request), flow_info.id.hex)
         return True
 
     @classmethod
@@ -380,7 +380,7 @@ class FlowService:
         logger.info(f'delete_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
 
         # 写入审计日志
-        AuditLogService.delete_build_flow(login_user, request.client.host, flow_info)
+        AuditLogService.delete_build_flow(login_user, get_request_ip(request), flow_info)
 
         # 将用户组下关联的技能删除
         GroupResourceDao.delete_group_resource_by_third_id(flow_info.id.hex, ResourceTypeEnum.FLOW)

@@ -8,6 +8,7 @@ from fastapi import Request
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.utils import get_request_ip
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.gpts_tools import GptsToolsDao
@@ -61,7 +62,7 @@ class RoleGroupService():
         """ 新建用户组后置操作 """
         logger.info(f'act=create_group_hook user={login_user.user_name} group_id={group.id}')
         # 记录审计日志
-        AuditLogService.create_user_group(login_user, request.client.host, group)
+        AuditLogService.create_user_group(login_user, get_request_ip(request), group)
         return True
 
     def update_group(self, request: Request, login_user: UserPayload, group: Group) -> Group:
@@ -81,7 +82,7 @@ class RoleGroupService():
     def update_group_hook(self, request: Request, login_user: UserPayload, group: Group):
         logger.info(f'act=update_group_hook user={login_user.user_name} group_id={group.id}')
         # 记录审计日志
-        AuditLogService.update_user_group(login_user, request.client.host, group)
+        AuditLogService.update_user_group(login_user, get_request_ip(request), group)
 
     def delete_group(self, request: Request, login_user: UserPayload, group_id: int):
         """删除用户组"""
@@ -90,7 +91,7 @@ class RoleGroupService():
             return None
         GroupDao.delete_group(group_id)
         # 记录审计日志
-        AuditLogService.delete_user_group(login_user, request.client.host, group_info)
+        AuditLogService.delete_user_group(login_user, get_request_ip(request), group_info)
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
         """获取全量的group列表"""
@@ -153,7 +154,7 @@ class RoleGroupService():
         for one in group_ids:
             note += group_dict.get(one, one) + "、"
         note = note.rstrip('、')
-        AuditLogService.update_user(login_user, request.client.host, user_id, note)
+        AuditLogService.update_user(login_user, get_request_ip(request), user_id, note)
         return None
 
     def get_user_groups_list(self, user_id: int) -> List[GroupRead]:
