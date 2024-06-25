@@ -2,22 +2,23 @@ import { Button } from "@/components/bs-ui/button";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi } from "@/controllers/API/log";
+import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi } from "@/controllers/API/log";
 import { getUserGroupsApi, getUsersApi } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
-import { useRef, useState } from "react";
+import { formatDate } from "@/util/utils";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import {
     Table,
     TableBody,
     TableCell,
+    TableFooter,
     TableHead,
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import { formatDate } from "@/util/utils";
-import Loading from "@/components/ui/loading";
+import { transformEvent, transformModule, transformObjectType } from "./utils";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -36,7 +37,7 @@ const useModules = () => {
 
 export default function index() {
     const { t } = useTranslation()
-    const { users, reload, loadMore, searchUser } = useUsers()
+    const { users, selectedRef, loadUsers, searchUser } = useUsers()
     const { groups, loadData } = useGroups()
     const { modules, loadModules } = useModules()
     const { page, pageSize, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
@@ -55,35 +56,37 @@ export default function index() {
     const [keys, setKeys] = useState({...init})
 
     const handleActionOpen = async () => {
-        setActions((keys.moduleId ? await getActionsByModuleApi(keys.moduleId) : await getActionsApi()).data)
+        setActions((keys.moduleId ? await getActionsByModuleApi(keys.moduleId) : await getActionsApi()))
     }
     const handleSearch = () => {
-        const uids = keys.userIds.map(u => u.value)
         const startTime = keys.start && formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss')
         const endTime = keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss')
-        filterData({...keys, userIds:uids, start:startTime, end:endTime})
+        filterData({...keys, start:startTime, end:endTime})
     }
     const handleReset = () => {
         setKeys({...init})
+        filterData(init)
     }
+    useEffect(() => {
+        loadUsers()
+    },[])
 
     return <div className="relative">
         <div className="h-[calc(100vh-98px)] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
-            <div className="w-[180px] relative">
-                <MultiSelect className=" w-full overflow-y-auto" multiple
+            <div className="w-[200px] relative">
+                <MultiSelect className="overflow-y-auto max-w-[200px]" multiple
                     options={users}
                     value={keys.userIds}
                     placeholder={t('log.selectUser')}
-                    onLoad={reload}
-                    onSearch={searchUser}
-                    onScrollLoad={loadMore}
-                    onChange={(values) => setKeys({...keys,userIds:values})}
+                    onLoad={loadUsers}
+                    onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds}}
+                    onChange={(values) => {setKeys({...keys,userIds:values}); console.log(values)}}
                 ></MultiSelect>
             </div>
-            <div className="w-[180px] relative">
+            <div className="w-[200px] relative">
                 <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({...keys,groupId:value})}>
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-[200px]">
                         <SelectValue placeholder={t('log.selectUserGroup')} />
                     </SelectTrigger>
                     <SelectContent>
@@ -133,37 +136,41 @@ export default function index() {
                 </div>
             </div>
             <Table className="mb-[50px]">
-                {/* <TableCaption>用户列表.</TableCaption> */}
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
                         <TableHead className="w-[200px]">{t('log.username')}</TableHead>
                         <TableHead className="w-[200px]">{t('log.operationTime')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.systemModule')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.operationAction')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.objectType')}</TableHead>
+                        <TableHead className="w-[100px]">{t('log.systemModule')}</TableHead>
+                        <TableHead className="w-[150px]">{t('log.operationAction')}</TableHead>
+                        <TableHead className="w-[150px]">{t('log.objectType')}</TableHead>
                         <TableHead className="w-[200px]">{t('log.operationObject')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.ipAddress')}</TableHead>
+                        <TableHead className="w-[150px]">{t('log.ipAddress')}</TableHead>
                         <TableHead className="w-[200px]">{t('log.remark')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {logs.map((log:any) => (
                     <TableRow key={log.id}>
-                        <TableCell className="font-medium max-w-md truncate">{log.id}</TableCell>
-                        <TableCell>{log.operator_name}</TableCell>
-                        <TableCell>{log.create_time}</TableCell>
-                        <TableCell>{log.system_ids}</TableCell>
-                        <TableCell>{log.event_type}</TableCell>
-                        <TableCell>{log.object_type}</TableCell>
-                        <TableCell>{log.object_name}</TableCell>
+                        <TableCell>{log.id}</TableCell>
+                        <TableCell><div className="truncate-multiline">{log.operator_name}</div></TableCell>
+                        <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
+                        <TableCell>{transformModule(log.system_id)}</TableCell>
+                        <TableCell>{transformEvent(log.event_type)}</TableCell>
+                        <TableCell>{transformObjectType(log.object_type)}</TableCell>
+                        <TableCell><div className="truncate-multiline">{log.object_name}</div></TableCell> {/* div是必要的 */}
                         <TableCell>{log.ip_address}</TableCell>
-                        <TableCell>{log.note}</TableCell>
+                        {/* whitespace-pre类保持原有的空格和换行符 */}
+                        <TableCell><div className="whitespace-pre truncate-doubleline">{log.note?.replace('编辑后', `\n编辑后`)}</div></TableCell>
                     </TableRow>
                     ))}
                 </TableBody>
+                <TableFooter>
+                    {!logs.length && <TableRow>
+                        <TableCell colSpan={9} className="text-center text-gray-400">{t('build.empty')}</TableCell>
+                    </TableRow>}
+                </TableFooter>
             </Table>
-            {!logs.length && <Loading className="absolute left-[50%] top-[50%] transform -translate-x-1/2 -translate-y-1/2"/>}
         </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
@@ -182,30 +189,29 @@ export default function index() {
 
 
 const useUsers = () => {
-    const pageRef = useRef(1)
     const [users, setUsers] = useState<any[]>([]);
+    const userRef = useRef([])
+    const selectedRef = useRef([])
 
-    const reload = (page, name) => {
-        getUsersApi({ name, page, pageSize: 60 }).then(res => {
-            pageRef.current = page
-            const opts = res.data.map(el => ({ label: el.user_name, value: el.user_id }))
-            setUsers(_ops => page > 1 ? [..._ops, ...opts] : opts)
+    const loadUsers = () => {
+        getOperatorsApi().then(res => {
+            const options = res.map((u:any) => ({label:u.user_name, value:u.user_id}))
+            userRef.current = options
+            setUsers(options)
         })
     }
-
-    // 加载更多
-    const loadMore = (name) => {
-        reload(pageRef.current + 1, name)
+    const search = (name) => {
+        const newUsers = userRef.current.filter(u => u.label.toLowerCase().includes(name.toLowerCase())
+                                                || selectedRef.current.includes(u.value))
+        setUsers(newUsers)
     }
 
     return {
         users,
-        loadMore,
-        reload() {
-            reload(1, '')
-        },
+        selectedRef,
+        loadUsers,
         searchUser(name) {
-            reload(1, name)
+            search(name)
         }
     }
 }

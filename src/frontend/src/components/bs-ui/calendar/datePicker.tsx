@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/popover"
 import { cname } from "../utils"
 import { useMemo } from "react"
+import { formatDate } from "@/util/utils"
 
 export function DatePicker({
     value,
@@ -20,7 +21,7 @@ export function DatePicker({
     const [date, setDate] = React.useState<Date>(value)
 
     const dateStr = useMemo(() => {
-        return date ? date.toISOString().replace('T',' ').split('.')[0] : ""
+        return date ? formatDate(date, 'yyyy-MM-dd') : ''
     }, [date])
 
     React.useEffect(() => {

@@ -30,6 +30,7 @@ export default function UsersSelect({ multiple = false, lockedValues = [], value
     }
 
     return <MultiSelect
+        className=" max-w-[630px]"
         multiple={multiple}
         value={value}
         lockedValues={lockedValues}

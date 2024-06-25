@@ -72,6 +72,7 @@ const ChatReportForm = forwardRef(({ type = 'chat', vid = 0, flow, onStart }, re
                 <span className="text-status-red">{item.required ? " *" : ""}</span>
                 <div className="mt-2">
                     {item.type === VariableType.Text ? <InputComponent
+                        type='textarea'
                         password={false}
                         value={item.value}
                         onChange={(val) => handleChange(i, val)}

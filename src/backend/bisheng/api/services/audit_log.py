@@ -5,7 +5,7 @@ from loguru import logger
 
 from bisheng.api.services.user_service import UserPayload
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
-from bisheng.database.models.assistant import AssistantDao
+from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.flow import FlowDao, Flow
 from bisheng.database.models.group import GroupDao, Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
@@ -24,7 +24,7 @@ class AuditLogService:
                       system_id, event_type, page, limit) -> Any:
         groups = group_ids
         if not login_user.is_admin():
-            groups = [one.group_id for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
             # 不是任何用戶组的管理员
             if not groups:
                 return UnAuthorizedError.return_resp()
@@ -50,27 +50,34 @@ class AuditLogService:
         return resp_200(data=res)
 
     @classmethod
-    def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
-        """
-        新建助手会话的审计日志
-        """
-        logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
-        # 获取助手所属的分组
-        assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
-        groups = GroupResourceDao.get_resource_group(ResourceTypeEnum.ASSISTANT, assistant_info.id.hex)
+    def _chat_log(cls, user: UserPayload, ip_address: str, event_type: str, object_type: str, object_id: str,
+                  object_name: str, resource_type: ResourceTypeEnum):
+        # 获取资源所属的分组
+        groups = GroupResourceDao.get_resource_group(resource_type, object_id)
         group_ids = [one.group_id for one in groups]
         audit_log = AuditLog(
             operator_id=user.user_id,
             operator_name=user.user_name,
             group_ids=group_ids,
             system_id=SystemId.CHAT.value,
-            event_type=EventType.CREATE_CHAT.value,
-            object_type=ObjectType.ASSISTANT.value,
-            object_id=assistant_info.id.hex,
-            object_name=assistant_info.name,
+            event_type=event_type,
+            object_type=object_type,
+            object_id=object_id,
+            object_name=object_name,
             ip_address=ip_address,
         )
         AuditLogDao.insert_audit_logs([audit_log])
+
+    @classmethod
+    def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
+        """
+        新建助手会话的审计日志
+        """
+        logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
+        # 获取助手详情
+        assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
+        cls._chat_log(user, ip_address, EventType.CREATE_CHAT.value, ObjectType.ASSISTANT.value,
+                      assistant_id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
     def create_chat_flow(cls, user: UserPayload, ip_address: str, flow_id: str):
@@ -79,20 +86,26 @@ class AuditLogService:
         """
         logger.info(f"act=create_chat_flow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = FlowDao.get_flow_by_id(flow_id)
-        groups = GroupResourceDao.get_resource_group(ResourceTypeEnum.FLOW, flow_info.id.hex)
-        group_ids = [one.group_id for one in groups]
-        audit_log = AuditLog(
-            operator_id=user.user_id,
-            operator_name=user.user_name,
-            group_ids=group_ids,
-            system_id=SystemId.CHAT.value,
-            event_type=EventType.CREATE_CHAT.value,
-            object_type=ObjectType.FLOW.value,
-            object_id=flow_info.id.hex,
-            object_name=flow_info.name,
-            ip_address=ip_address,
-        )
-        AuditLogDao.insert_audit_logs([audit_log])
+        cls._chat_log(user, ip_address, EventType.CREATE_CHAT.value, ObjectType.FLOW.value,
+                      flow_id, flow_info.name, ResourceTypeEnum.FLOW)
+
+    @classmethod
+    def delete_chat_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
+        """
+        删除技能会话的审计日志
+        """
+        logger.info(f"act=delete_chat_flow user={user.user_name} ip={ip_address} flow={flow_info.id}")
+        cls._chat_log(user, ip_address, EventType.DELETE_CHAT.value, ObjectType.FLOW.value,
+                      flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
+
+    @classmethod
+    def delete_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_info: Assistant):
+        """
+        删除助手会话的审计日志
+        """
+        logger.info(f"act=delete_assistant_flow user={user.user_name} ip={ip_address} assistant={assistant_info.id}")
+        cls._chat_log(user, ip_address, EventType.DELETE_CHAT.value, ObjectType.ASSISTANT.value,
+                      assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
     def _build_log(cls, user: UserPayload, ip_address: str, event_type: str, object_type: str, object_id: str,

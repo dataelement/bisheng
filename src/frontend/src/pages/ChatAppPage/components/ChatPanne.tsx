@@ -15,6 +15,7 @@ import { Variable, getFlowApi } from "../../../controllers/API/flow";
 import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
+import ForcePrompt from "./ForcePrompt";
 
 export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
@@ -192,6 +193,8 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     loadMore={() => loadMoreHistoryMsg(flow.id, appendHistory)}
                     inputForm={flowSate.isForm ? <ChatReportForm flow={flow} onStart={sendReport} /> : null}
                 />
+                {/* 强制提醒 */}
+                <ForcePrompt id={flow.id} />
             </div>
         }
         {/* 助手会话 */}
@@ -211,6 +214,8 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     loadMore={() => loadMoreHistoryMsg(assistant.id, appendHistory)}
                     inputForm={null}
                 />
+                {/* 强制提醒 */}
+                <ForcePrompt id={assistant.id} />
             </div>
         }
     </div>

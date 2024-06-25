@@ -27,17 +27,18 @@ export default function tabTools({ select = null, onSelect }) {
   }, [type]);
 
   const options = useMemo(() => {
-    return allData.filter((el) =>
-      el.name.toLowerCase().includes(keyword.toLowerCase())
-      || el.description.toLowerCase().includes(keyword.toLowerCase())
-    );
+    return allData.filter((el) => {
+      // 搜索范围：工具名称、工具描述、工具api名称、工具api描述
+      const targetStr = `${el.name}-${el.description}-${el.children?.map((el) => el.name + el.desc).join("-") || ''}`
+      return targetStr.toLowerCase().includes(keyword.toLowerCase());
+    });
   }, [keyword, allData]);
 
   return (
     <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
       <div className="w-full flex h-full overflow-y-scroll scrollbar-hide relative top-[-60px]">
         <div className="w-fit p-6">
-          <h1>{t("tools.addTool")}</h1>
+          {/* <h1>{t("tools.addTool")}</h1> */}
           <SearchInput
             placeholder={t("tools.search")}
             className="mt-6"

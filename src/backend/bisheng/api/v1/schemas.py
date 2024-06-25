@@ -103,7 +103,7 @@ class ChatInput(BaseModel):
 class AddChatMessages(BaseModel):
     """Add a pair of chat messages."""
 
-    flow_id: str  # 技能或助手ID
+    flow_id: UUID  # 技能或助手ID
     chat_id: str  # 会话ID
     human_message: str = None  # 用户问题
     answer_message: str = None  # 执行结果

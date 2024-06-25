@@ -235,7 +235,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
             {/* form */}
             {
                 formShow && <div className="relative">
-                    <div className="absolute left-0 border bottom-2 bg-[#fff] px-4 py-2 rounded-md w-[50%] min-w-80">
+                    <div className="absolute left-0 border bottom-2 bg-[#fff] px-4 py-2 rounded-md w-[50%] min-w-80 z-50">
                         {inputForm}
                     </div>
                 </div>
