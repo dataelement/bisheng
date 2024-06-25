@@ -110,6 +110,26 @@ class LlmExtract(object):
         )
 
     def predict(self, filepath, schema, examples=None):
+        if examples:
+            examples_list = []
+            logger.info('llm extract phase0: use examples')
+            for img_path, label_path in examples:
+                if img_path.suffix == '.pdf':
+                    split_docs, docs = self.parse_pdf(img_path)
+                else:
+                    split_docs, docs = self.parse_img(img_path)
+                # todo: example上下文长度
+                content = ''.join([doc.page_content for doc in docs])
+                with open(label_path, 'r') as f:
+                    gt = json.load(f)
+                examples_list.append(
+                    EXAMPLE_FORMAT.format(
+                        context=content,
+                        keywords=list(gt.keys()),
+                        gt=json.dumps(gt, ensure_ascii=False),
+                    )
+                )
+
         logger.info('llm extract phase1: split texts')
         keywords = schema.split('|')
         print(keywords)
@@ -126,7 +146,25 @@ class LlmExtract(object):
             pdf_content = each_doc.page_content
             start_time = time.time()
             if examples:
-                pass
+                messages = [
+                    {
+                        'role': 'user',
+                        'content': FEW_SHOT_USER_MESSAGE.format(
+                            context=pdf_content,
+                            keywords=keywords,
+                        ),
+                    }
+                ]
+                print(messages)
+                icl_examples = '\n\n'.join(examples_list)
+                response = self.chat_model.chat(
+                    messages,
+                    system=FEW_SHOT_SYSTEM_MESSAGE.format(examples=icl_examples),
+                )
+                print(f'ori llm predict: {response}')
+                extract_res = self.json_output_parser.parse(response[0].response_text)
+                print(f'parser result: {extract_res}')
+
             else:
                 messages = [
                     {
@@ -142,8 +180,9 @@ class LlmExtract(object):
                 print(f'ori llm predict: {response}')
                 extract_res = self.json_output_parser.parse(response[0].response_text)
                 print(f'parser result: {extract_res}')
-                if not extract_res:
-                    extract_res = {}
+
+            if not extract_res:
+                extract_res = {}
             avg_generate_num += time.time() - start_time
             split_docs_extract.append(extract_res)
             split_docs_content.append(pdf_content)
@@ -163,12 +202,12 @@ class LlmExtract(object):
     ):
         ocr_result = self.call_ocr(file_path)
         final_str = self.preprocess(ocr_result)
-        docs = Document(page_content=final_str)
+        docs = [Document(page_content=final_str)]
         text_splitter = RecursiveCharacterTextSplitter(
             **self.chunk_config,
             separators=separators,
         )
-        split_docs = text_splitter.split_documents([docs])
+        split_docs = text_splitter.split_documents(docs)
 
         return split_docs, docs
 

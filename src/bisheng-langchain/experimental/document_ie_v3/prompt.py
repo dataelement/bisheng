@@ -24,6 +24,9 @@ EXAMPLE_FORMAT = """原文：
 {keywords}
 
 抽取结果：
+```json
+{gt}
+```
 """
 
 FEW_SHOT_SYSTEM_MESSAGE = """你是一名专业的信息提取助手。你的目标是从提供的原文中，根据指定的“关键词”提取相关信息，并以JSON格式输出。\

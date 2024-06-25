@@ -4,6 +4,8 @@ import base64
 import json
 import os
 import tempfile
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
 from flask import Flask, Response, request
 from llm_extract import LlmExtract, init_logger
@@ -28,13 +30,17 @@ class DocumentExtract(object):
             idp_url=idp_url,
         )
 
-    def predict_one_pdf(self, pdf_path, schema, save_folder=''):
+    def predict_one_pdf(self, pdf_path, schema, examples: Tuple[Path, Path] = None, save_folder=''):
         pdf_name_prefix = os.path.splitext(os.path.basename(pdf_path))[0]
 
         if save_folder:
             save_llm_path = os.path.join(save_folder, pdf_name_prefix + '_llm.json')
             if self.replace_llm_cache or not os.path.exists(save_llm_path):
-                llm_kv_results = self.llm_client.predict(pdf_path, schema)
+                llm_kv_results = self.llm_client.predict(
+                    filepath=pdf_path,
+                    schema=schema,
+                    examples=examples,
+                )
                 with open(save_llm_path, 'w') as f:
                     json.dump(llm_kv_results, f, indent=2, ensure_ascii=False)
             else:
@@ -42,7 +48,11 @@ class DocumentExtract(object):
                 with open(save_llm_path, 'r') as f:
                     llm_kv_results = json.load(f)
         else:
-            llm_kv_results = self.llm_client.predict(pdf_path, schema)
+            llm_kv_results = self.llm_client.predict(
+                filepath=pdf_path,
+                schema=schema,
+                examples=examples,
+            )
 
         return llm_kv_results
 
