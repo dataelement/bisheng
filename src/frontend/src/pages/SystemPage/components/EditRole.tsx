@@ -87,7 +87,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                         case 1: useLibs.push(Number(item.third_id)); break;
                         case 2: useSkills.push(item.third_id); break;
                         case 3: manageLibs.push(Number(item.third_id)); break;
-                        case 4: useTools.push(Number(item.third_id)); break;
+                        case 7: useTools.push(Number(item.third_id)); break;
                         case 5: useAssistant.push(item.third_id); break;
                         case 99: useMenu.push(item.third_id); break;
                     }
@@ -149,7 +149,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useSkills, type: 2 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useLibs, type: 1 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.manageLibs, type: 3 }),
-            updateRolePermissionsApi({ role_id: roleId, access_id: form.useTools, type: 4 }),
+            updateRolePermissionsApi({ role_id: roleId, access_id: form.useTools, type: 7 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 5 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useMenu, type: 99 }),
         ])

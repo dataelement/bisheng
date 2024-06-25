@@ -55,6 +55,10 @@ export default function MainLayout() {
         return ['admin', 'group_admin'].includes(user.role)
     }, [user])
 
+    const isMenu = (menu) => {
+        return user.web_menu.includes(menu) || user.role === 'admin'
+    }
+
     return <div className="flex">
         <div className="bg-background-main w-full h-screen">
             <div className="flex justify-between h-[64px]">
@@ -113,16 +117,19 @@ export default function MainLayout() {
                             <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
                         </NavLink>
                         {
+                            isMenu('build') &&
                             <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
                                 <TechnologyIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.skills')}</span>
                             </NavLink>
                         }
                         {
+                            isMenu('knowledge') &&
                             <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <KnowledgeIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.knowledge')}</span>
                             </NavLink>
                         }
                         {
+                            isMenu('model') &&
                             <NavLink to='/model' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <ModelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.models')}</span>
                             </NavLink>
