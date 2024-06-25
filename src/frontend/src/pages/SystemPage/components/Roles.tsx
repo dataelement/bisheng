@@ -71,7 +71,7 @@ export default function Roles() {
             inputDom.value = '';
         }
         try {
-            const data = await getRolesByGroupApi('', [state.group]);
+            const data:any = await getRolesByGroupApi('', [state.group]);
             dispatch({ type: 'SET_ROLES', payload: data });
             allRolesRef.current = data;
         } catch (error) {
@@ -80,7 +80,7 @@ export default function Roles() {
     }, [state.group]);
 
     useEffect(() => {
-        getUserGroupsApi().then(res => {
+        getUserGroupsApi().then((res:any) => {
             const groups = res.records.map(ug => ({ label: ug.group_name, value: ug.id }))
             // 获取最近修改用户组
             dispatch({ type: 'SET_GROUP', payload: groups[0].value });
@@ -117,14 +117,10 @@ export default function Roles() {
         loadData()
     }, [state.group])
 
-
     const [keyWord, setKeyWord] = useState('');
     const options = useMemo(() => {
         if (!keyWord || !state.group) return state.groups
-        return state.groups.filter(group =>
-            group.label.toLowerCase().indexOf(keyWord.toLowerCase()) !== -1
-            || group.value === state.group
-        )
+        return state.groups.filter(group => group.label.toLowerCase().indexOf(keyWord.toLowerCase()) !== -1 || group.value === state.group)
     }, [keyWord, state.group])
 
     if (state.role) {
@@ -144,7 +140,7 @@ export default function Roles() {
         <div className="relative">
             <div className="h-[calc(100vh-136px)] overflow-y-auto pt-2 pb-10">
                 <div className="flex justify-between">
-                    <div>
+                    <div className="flex items-center">
                         <Label>{t('system.currentGroup')}</Label>
                         <Select value={state.group}
                             onOpenChange={(open) => {
@@ -157,7 +153,8 @@ export default function Roles() {
                                 <SelectValue placeholder={t('system.defaultGroup')} />
                             </SelectTrigger>
                             <SelectContent>
-                                {/* <SearchInput inputClassName="h-8" placeholder={t('log.selectUserGroup')} onChange={(e) => setKeyWord(e.target.value)} iconClassName="w-4 h-4" /> */}
+                                <SearchInput inputClassName="h-8 mb-2" placeholder={t('log.selectUserGroup')} 
+                                onChange={(e) => setKeyWord(e.target.value)} iconClassName="w-4 h-4" />
                                 <SelectGroup>
                                     {options.map(el => (
                                         <SelectItem key={el.value} value={el.value}>{el.label}</SelectItem>

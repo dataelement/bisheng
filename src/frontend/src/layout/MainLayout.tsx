@@ -1,6 +1,7 @@
 import {
     ApplicationIcon,
     BookOpenIcon,
+    DropDownIcon,
     EnIcon,
     GithubIcon,
     KnowledgeIcon,
@@ -8,10 +9,10 @@ import {
     ModelIcon,
     QuitIcon,
     SystemIcon,
-    TechnologyIcon,
-    DropDownIcon
+    TechnologyIcon
 } from "@/components/bs-icons";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
+import { locationContext } from "@/contexts/locationContext";
 import { LockClosedIcon } from "@radix-ui/react-icons";
 import i18next from "i18next";
 import { Globe } from "lucide-react";
@@ -30,6 +31,7 @@ import { User } from "../types/api/user";
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
+    const { appConfig } = useContext(locationContext)
     // 角色
     const { user, setUser } = useContext(userContext);
     const { language, options, changLanguage, t } = useLanguage(user)
@@ -132,16 +134,15 @@ export default function MainLayout() {
                                 </NavLink>
                             </>
                         }
-                        {/* {
+                        {
                             isAdmin && <>
                                 <NavLink to='/log' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.log')}</span>
                                 </NavLink>
                             </>
-                        } */}
+                        }
                     </nav>
-                    <div className="absolute left-0 bottom-0 w-[180px] p-2">
-                        {/* <Separator /> */}
+                    {!appConfig.isPro && <div className="absolute left-0 bottom-0 w-[180px] p-2">
                         <div className="help flex items-between my-3">
                             <TooltipProvider>
                                 <Tooltip>
@@ -167,15 +168,7 @@ export default function MainLayout() {
                                 </Tooltip>
                             </TooltipProvider>
                         </div>
-                        {/* <Separator className="mx-1" />
-                        <div className="flex h-[48px] w-[160px]">
-                            <div className="flex-1 py-1  flex justify-center bg-background-tip hover:bg-gray-400 dark:hover:text-[white] dark:hover:bg-background-tip-darkhover gap-2 items-center rounded-md cursor-pointer" >
-                                <QuitIcon className="side-bar-button-size dark:hidden" />
-                                <QuitIconDark className="side-bar-button-size hidden dark:block" />
-                                <span>{t('menu.logout')}</span>
-                            </div>
-                        </div> */}
-                    </div>
+                    </div>}
                 </div>
                 <div className="flex-1 bg-background-main-content rounded-lg w-[calc(100vw-184px)]">
                     <ErrorBoundary
@@ -189,17 +182,19 @@ export default function MainLayout() {
         </div>
 
         {/* // mobile */}
-        <div className="fixed w-full h-full top-0 left-0 bg-[rgba(0,0,0,0.4)] sm:hidden text-sm">
+        <div className="fixed w-full h-full top-0 left-0 bg-[rgba(0,0,0,0.4)] sm:hidden text-sm z-50">
             <div className="w-10/12 bg-gray-50 mx-auto mt-[30%] rounded-xl px-4 py-10">
                 <p className=" text-sm text-center">{t('menu.forBestExperience')}</p>
-                <div className="flex mt-8 justify-center gap-4">
-                    <a href={"https://github.com/dataelement/bisheng"} target="_blank">
-                        <GithubIcon className="side-bar-button-size mx-auto" />Github
-                    </a>
-                    <a href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
-                        <BookOpenIcon className="side-bar-button-size mx-auto" /> {t('menu.onlineDocumentation')}
-                    </a>
-                </div>
+                {
+                    !appConfig.isPro && <div className="flex mt-8 justify-center gap-4">
+                        <a href={"https://github.com/dataelement/bisheng"} target="_blank">
+                            <GithubIcon className="side-bar-button-size mx-auto" />Github
+                        </a>
+                        <a href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
+                            <BookOpenIcon className="side-bar-button-size mx-auto" /> {t('menu.onlineDocumentation')}
+                        </a>
+                    </div>
+                }
             </div>
         </div>
     </div >
