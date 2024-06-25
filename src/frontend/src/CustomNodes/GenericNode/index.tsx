@@ -143,10 +143,10 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
                 <div className="generic-node-tooltip-div text-[#111]">
                   {isGroup ? <EditLabel
                     rule={[
-                      {required: true}
+                      { required: true }
                     ]}
                     str={data.node.display_name}
-                    onChange={(val) => {(data.node.display_name = val);fouceUpdateNode(!_)}}>
+                    onChange={(val) => { (data.node.display_name = val); fouceUpdateNode(!_) }}>
                     {(val) => <div className="max-w-[300px] overflow-hidden text-ellipsis">{val}</div>}
                   </EditLabel> : data.node.display_name}
                 </div>
@@ -242,7 +242,10 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
               left={false}
             />
             {data.type === 'Report' && <div className="w-full bg-muted px-5 py-2">
-              <Link to={`/report/${flowId}`}><Button variant="outline" className="px-10">Edit</Button></Link>
+              <Link to={`/report/${flowId}`}><Button variant="outline" className="px-10" onClick={() => {
+                const dom = document.getElementById("flow-page") as HTMLElement;
+                if (dom) dom.className += ' report-hidden';
+              }}>Edit</Button></Link>
             </div>}
           </>
         </div>
