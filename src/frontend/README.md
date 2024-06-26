@@ -47,5 +47,5 @@ To learn React, check out the [React documentation](https://reactjs.org/).
 
 TODO
 
-advance false 是显示在组件中
+advance false 显示在组件中
 show 
