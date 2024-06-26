@@ -126,7 +126,7 @@ if __name__ == '__main__':
                 input_file = gr.components.File(label='FlowFile(仅支持图片和双层PDF)')
                 schema = gr.Textbox(
                     label='抽取字段',
-                    value='姓名|工作年限|职务|标题|收入|身份证号码|学历',
+                    value='性别|姓名|护照号|国家码|国籍|有效期至|签发地点|签发机关|类型|出生日期|签发日期|标题|身份证号码|出生地点',
                     interactive=True,
                     lines=2,
                 )

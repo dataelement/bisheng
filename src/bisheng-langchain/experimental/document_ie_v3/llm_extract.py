@@ -10,7 +10,6 @@ from typing import Any, Dict
 
 import colorlog
 import requests
-import yaml
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.output_parsers import JsonOutputParser

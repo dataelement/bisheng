@@ -1,0 +1,8 @@
+gradio
+colorlog
+flask
+pydantic
+pdfminer
+bisheng-langchain
+llmtuner==0.7.1
+loguru
