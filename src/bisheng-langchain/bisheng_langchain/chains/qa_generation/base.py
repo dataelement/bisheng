@@ -109,16 +109,18 @@ class QAGenerationChain(Chain):
             [{"text": d.page_content} for d in docs], run_manager=run_manager
         )
         qa = ''
+        qa_i = 0
         for res in results.generations:
             try:
                 # response = json.loads(parse_json(res[0].text))
                 qa += res[0].text
+                qa_i += 1
             except Exception as e:
                 logger.error(f"Failed to parse response: {res[0].text}. Error: {e}")
                 continue
             
             if self.k is not None:
-                if len(qa) >= self.k:
+                if qa_i >= self.k:
                     break
         return {self.output_key: qa}
 

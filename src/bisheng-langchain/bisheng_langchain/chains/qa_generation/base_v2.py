@@ -10,6 +10,7 @@ from collections import defaultdict, namedtuple
 from dataclasses import dataclass
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models import BaseLanguageModel
+
 try:
     from llama_index.node_parser import SimpleNodeParser
     from llama_index.readers.schema import Document as LlamaindexDocument
@@ -72,7 +73,6 @@ DEFAULT_TRAIN_DISTRIBUTION = {
     "conditional": 0.0,
 }
 
-
 DataRow = namedtuple(
     "DataRow",
     [
@@ -108,7 +108,6 @@ class TrainDataset:
 
 
 class TrainsetGenerator:
-
     """
     Ragas Train Set Generator
 
@@ -127,13 +126,13 @@ class TrainsetGenerator:
     """
 
     def __init__(
-        self,
-        generator_llm: BaseLanguageModel,
-        critic_llm: BaseLanguageModel,
-        trainset_distribution: t.Optional[t.Dict[str, float]] = None,
-        chunk_size: int = 1024,
-        seed: int = 42,
-        prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
+            self,
+            generator_llm: BaseLanguageModel,
+            critic_llm: BaseLanguageModel,
+            trainset_distribution: t.Optional[t.Dict[str, float]] = None,
+            chunk_size: int = 1024,
+            seed: int = 42,
+            prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
     ) -> None:
         self.generator_llm = generator_llm
         self.critic_llm = critic_llm
@@ -154,11 +153,11 @@ class TrainsetGenerator:
 
     @classmethod
     def from_default(
-        cls,
-        llm: BaseLanguageModel,
-        chunk_size: int = 512,
-        trainset_distribution: dict = DEFAULT_TRAIN_DISTRIBUTION,
-        prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
+            cls,
+            llm: BaseLanguageModel,
+            chunk_size: int = 512,
+            trainset_distribution: dict = DEFAULT_TRAIN_DISTRIBUTION,
+            prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
     ):
         generator_llm = llm
         critic_llm = llm
@@ -227,14 +226,14 @@ class TrainsetGenerator:
         ]
 
     def _remove_nodes(
-        self, available_indices: t.List[BaseNode], node_idx: t.List
+            self, available_indices: t.List[BaseNode], node_idx: t.List
     ) -> t.List[BaseNode]:
         for idx in node_idx:
             available_indices.remove(idx)
         return available_indices
 
     def _generate_doc_nodes_map(
-        self, document_nodes: t.List[BaseNode]
+            self, document_nodes: t.List[BaseNode]
     ) -> t.Dict[str, t.List[BaseNode]]:
         doc_nodes_map: t.Dict[str, t.List[BaseNode]] = defaultdict(list)
         for node in document_nodes:
@@ -244,7 +243,7 @@ class TrainsetGenerator:
         return doc_nodes_map  # type: ignore
 
     def _get_neighbour_node(
-        self, node: BaseNode, related_nodes: t.List[BaseNode]
+            self, node: BaseNode, related_nodes: t.List[BaseNode]
     ) -> t.List[BaseNode]:
         if len(related_nodes) < 2:
             warnings.warn("No neighbors exists")
@@ -254,9 +253,9 @@ class TrainsetGenerator:
         return [related_nodes[idx] for idx in ids]
 
     def generate(
-        self,
-        documents: t.List[LlamaindexDocument] | t.List[Document],
-        train_size: int,
+            self,
+            documents: t.List[LlamaindexDocument] | t.List[Document],
+            train_size: int,
     ) -> TrainDataset:
         if not isinstance(documents[0], (LlamaindexDocument, Document)):
             raise ValueError(
@@ -323,7 +322,7 @@ class TrainsetGenerator:
                 is_conv = len(context) > 1
                 answer = self._generate_answer(question, context)
                 for i, (qstn, ctx, ans) in enumerate(
-                    zip(question.split("\n"), context, answer)
+                        zip(question.split("\n"), context, answer)
                 ):
                     episode_done = False if is_conv and i == 0 else True
                     samples.append(
@@ -350,13 +349,13 @@ class QAGenerationChainV2(Chain):
 
     @classmethod
     def from_llm(
-        cls,
-        documents: List[Document],
-        llm: BaseLanguageModel,
-        k: Optional[int] = None,
-        chunk_size: int = 512,
-        prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
-        **kwargs: Any,
+            cls,
+            documents: List[Document],
+            llm: BaseLanguageModel,
+            k: Optional[int] = None,
+            chunk_size: int = 512,
+            prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
+            **kwargs: Any,
     ) -> QAGenerationChainV2:
         """
         Create a QAGenerationChain from a language model.
@@ -385,9 +384,9 @@ class QAGenerationChainV2(Chain):
         return [self.output_key]
 
     def _call(
-        self,
-        inputs: Dict[str, Any],
-        run_manager: Optional[CallbackManagerForChainRun] = None,
+            self,
+            inputs: Dict[str, Any],
+            run_manager: Optional[CallbackManagerForChainRun] = None,
     ) -> Dict[str, List]:
         for doc in self.documents:
             doc.metadata = {}
@@ -396,20 +395,19 @@ class QAGenerationChainV2(Chain):
         dataset = self.generator.generate(documents=self.documents, train_size=self.k)
         df = dataset.to_pandas()
         qa_pairs = df.to_dict("records")
-        qa = []
+        qa = ''
         for pair in qa_pairs:
-            qa.append(
+            qa += json.dumps(
                 {
                     "question": pair["question"],
                     "answer": pair["ground_truth"][0],
-                }
-            )
+                }, ensure_ascii=False)
         return {self.output_key: qa}
 
     async def _acall(
-        self,
-        inputs: Dict[str, Any],
-        run_manager: Optional[CallbackManagerForChainRun] = None,
+            self,
+            inputs: Dict[str, Any],
+            run_manager: Optional[CallbackManagerForChainRun] = None,
     ) -> Dict[str, List]:
         output = self._call(inputs, run_manager)
         return output
