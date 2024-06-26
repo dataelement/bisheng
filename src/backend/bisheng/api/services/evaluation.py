@@ -9,6 +9,7 @@ from fastapi import UploadFile, HTTPException
 import pandas as pd
 from bisheng.settings import settings
 from collections import defaultdict
+from copy import deepcopy
 
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200, StreamData, BuildStatus)
@@ -188,33 +189,13 @@ class EvaluationService:
     async def get_input_keys(cls, flow_id: int, version_id: int):
         artifacts = {}
         try:
-            flow_data_key = 'flow_data_' + flow_id
-            if version_id:
-                flow_data_key = flow_data_key + '_' + str(version_id)
-
-            if not flow_data_store.exists(flow_data_key):
-                error_message = 'Invalid session ID'
-                print(error_message)
-                return
-
-            if flow_data_store.hget(flow_data_key, 'status') == BuildStatus.IN_PROGRESS.value:
-                error_message = 'Already building'
-                print(error_message)
-                return
-
-            graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
-
-            if not graph_data:
-                error_message = 'No data provided'
-                print(error_message)
-                return
-
-            logger.debug('Building langchain object')
-            flow_data_store.hsetkey(flow_data_key, 'status', BuildStatus.IN_PROGRESS.value, expire)
+            version_info = FlowVersionDao.get_version_by_id(version_id)
+            if not version_info:
+                return {"input": ""}
 
             # L1 用户，采用build流程
             try:
-                async for message in build_flow(graph_data=graph_data,
+                async for message in build_flow(graph_data=version_info.data,
                                                 artifacts=artifacts,
                                                 process_file=False,
                                                 flow_id=uuid.UUID(flow_id).hex,
@@ -223,19 +204,13 @@ class EvaluationService:
                         graph = message
 
             except Exception as e:
-                logger.error(f'Build flow error: {e}')
-                flow_data_store.hsetkey(flow_data_key,
-                                        'status',
-                                        BuildStatus.FAILURE.value,
-                                        expiration=expire)
-                return
+                logger.error(f'evaluation task get_input_keys {e}')
+                return {"input": ""}
 
             await graph.abuild()
             # Now we  need to check the input_keys to send them to the client
             input_keys_response = {
-                'input_keys': [],
-                'memory_keys': [],
-                'handle_keys': [],
+                'input_keys': []
             }
             input_nodes = graph.get_input_nodes()
             for node in input_nodes:
@@ -243,17 +218,19 @@ class EvaluationService:
                     input_keys = build_input_keys_response(await node.get_result(), artifacts)
                     input_keys['input_keys'].update({'id': node.id})
                     input_keys_response['input_keys'].append(input_keys.get('input_keys'))
-                    input_keys_response['memory_keys'].extend(input_keys.get('memory_keys'))
-                    input_keys_response['handle_keys'].extend(input_keys.get('handle_keys'))
-                elif ('fileNode' in node.output):
+                elif 'fileNode' in node.output:
                     input_keys_response['input_keys'].append({
                         'file_path': '',
                         'type': 'file',
                         'id': node.id
                     })
-            print(input_keys_response)
+            if len(input_keys_response.get("input_keys")):
+                input_item = input_keys_response.get("input_keys")[0]
+                del input_item["id"]
+                return input_item
         finally:
             pass
+        return {"input": ""}
 
 
 def add_evaluation_task(evaluation_id: int):
@@ -273,12 +250,17 @@ def add_evaluation_task(evaluation_id: int):
             flow_version = FlowVersionDao.get_version_by_id(version_id=evaluation.version)
             if not flow_version:
                 raise Exception("Flow version not found")
+            input_keys = asyncio.run(EvaluationService.get_input_keys(flow_id=evaluation.unique_id,
+                                                                      version_id=evaluation.version))
+            first_key = list(input_keys.keys())[0]
 
-            # input_keys = asyncio.run(EvaluationService.get_input_keys(flow_id=evaluation.unique_id, version_id=evaluation.version))
+            logger.info(f'evaluation task run flow input_keys: {input_keys} first_key: {first_key}')
 
             for index, one in enumerate(csv_data):
+                input_dict = deepcopy(input_keys)
+                input_dict[first_key] = one.get('question')
                 flow_index, flow_result = asyncio.run(FlowService.exec_flow_node(
-                    inputs={"input": one.get('question')},
+                    inputs=input_dict,
                     tweaks={},
                     index=0,
                     versions=[flow_version]))
