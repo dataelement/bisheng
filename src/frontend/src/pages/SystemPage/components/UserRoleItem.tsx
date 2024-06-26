@@ -52,9 +52,9 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
         setSelected(values)
     }
 
-    return <div className="flex gap-4">
+    return <div className="grid grid-cols-2 gap-4">
         <MultiSelect
-            className="max-w-[600px]"
+            className="max-w-[285px] break-all"
             value={userGroupSelected}
             options={groups}
             placeholder={t('system.userGroupsSel')}
@@ -63,7 +63,7 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
         </MultiSelect>
         <MultiSelect
             multiple
-            className="max-w-[600px]"
+            className="max-w-[285px] break-all"
             value={selected}
             options={roles}
             placeholder={t('system.roleSelect')}

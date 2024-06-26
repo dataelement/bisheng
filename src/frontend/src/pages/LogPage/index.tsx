@@ -89,7 +89,7 @@ export default function index() {
                     <SelectTrigger className="w-[200px]">
                         <SelectValue placeholder={t('log.selectUserGroup')} />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-w-[200px] break-all">
                         <SelectGroup>
                             {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
                         </SelectGroup>
@@ -153,15 +153,16 @@ export default function index() {
                     {logs.map((log:any) => (
                     <TableRow key={log.id}>
                         <TableCell>{log.id}</TableCell>
-                        <TableCell><div className="truncate-multiline">{log.operator_name}</div></TableCell>
+                        <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.operator_name}</div></TableCell>
                         <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
                         <TableCell>{transformModule(log.system_id)}</TableCell>
                         <TableCell>{transformEvent(log.event_type)}</TableCell>
                         <TableCell>{transformObjectType(log.object_type)}</TableCell>
-                        <TableCell><div className="truncate-multiline">{log.object_name}</div></TableCell> {/* div是必要的 */}
+                        <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name}</div></TableCell>
                         <TableCell>{log.ip_address}</TableCell>
-                        {/* whitespace-pre类保持原有的空格和换行符 */}
-                        <TableCell className="max-w-[250px]"><div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`)}</div></TableCell>
+                        <TableCell className="max-w-[250px]">
+                            <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`)}</div>
+                        </TableCell>
                     </TableRow>
                     ))}
                 </TableBody>

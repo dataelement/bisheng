@@ -152,7 +152,7 @@ export default function Roles() {
                             <SelectTrigger className="w-[180px] inline-flex ml-2">
                                 <SelectValue placeholder={t('system.defaultGroup')} />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className="max-w-[180px] break-all">
                                 <SearchInput inputClassName="h-8 mb-2" placeholder={t('log.selectUserGroup')} 
                                 onChange={(e) => setKeyWord(e.target.value)} iconClassName="w-4 h-4" />
                                 <SelectGroup>
