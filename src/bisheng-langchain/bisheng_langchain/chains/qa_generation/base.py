@@ -104,24 +104,19 @@ class QAGenerationChain(Chain):
         docs = self.text_splitter.create_documents([contents])
         # len(qa) = min(len(docs), self.k)
         logger.info(f"Split {len(docs)} documents. Gen qa num: min({len(docs)}, {self.k}).")
-
-        results = self.llm_chain.generate(
-            [{"text": d.page_content} for d in docs], run_manager=run_manager
-        )
         qa = ''
         qa_i = 0
-        for res in results.generations:
+        for doc in docs:
             try:
-                # response = json.loads(parse_json(res[0].text))
+                results = self.llm_chain.generate([{"text": doc.page_content}], run_manager=run_manager)
+                res = results.generations[0]
                 qa += res[0].text
                 qa_i += 1
             except Exception as e:
-                logger.error(f"Failed to parse response: {res[0].text}. Error: {e}")
+                logger.error(f"Failed to parse response Error: {e}")
                 continue
-            
-            if self.k is not None:
-                if qa_i >= self.k:
-                    break
+            if self.k is not None and qa_i >= self.k:
+                break
         return {self.output_key: qa}
 
     async def _acall(
