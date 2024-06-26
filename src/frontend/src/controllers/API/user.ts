@@ -186,42 +186,12 @@ export function getUserGroupsApi() {
 }
 
 
-// 所有用户
-export async function getAllUsersApi() {
-  return {
-    data: [
-      { id: '1', name: "admin" },
-      { id: '2', name: "用户X" },
-      { id: '3', name: "用户Y" },
-      { id: '4', name: "用户Z" },
-      { id: '5', name: "用户W" },
-      { id: '10', name: '2' },
-      { id: '20', name: '3m4' },
-      { id: '30', name: '5' }
-    ],
-  };
-}
 // 删除用户组post
 export function delUserGroupApi(group_id) {
   return axios.delete(`/api/v1/group/create`, { params: { group_id } });
   // return axios.post(`/api/v1/group/del/${userGroupId}`);
 }
-// 获取用户组详情
-export async function getUserGroupDetail(userGroupId) {
-  //group/detail/组id 组详情 get 
-  return {
-    msg: "",
-    code: "200",
-    data: {
-      groupName: "lzsceshi",
-      adminUser: "2,3m4,5",
-      adminUserId: "10,20,30",
-      groupLimit: 10,
-      assistantList: "",
-      skillList: "",
-    },
-  };
-}
+
 // 保存用户组
 export function saveUserGroup(form, selected) {
   console.log('form :>> ', form);
@@ -231,6 +201,7 @@ export function saveUserGroup(form, selected) {
     group_admins: selected.map(item => item.value),
   });
 }
+
 // 修改用户组
 export function updateUserGroup(id, form, selected) {
   const { groupName: group_name } = form

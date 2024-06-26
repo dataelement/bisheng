@@ -305,7 +305,8 @@
     "modalTitle": "File Duplicate Prompt",
     "modalMessage": "The following files already exist in the knowledge base. Continuing the upload will overwrite the original files and processing strategy. Do you want to proceed with overwrite?",
     "keepOriginal": "Keep Original Files",
-    "override": "Override"
+    "override": "Override",
+    "toolName": "ToolName"
   },
   "code": {
     "editPythonCodeDescription": "Edit your Python code here. This code snippet accepts module imports and a function definition. Make sure your function returns a string.",

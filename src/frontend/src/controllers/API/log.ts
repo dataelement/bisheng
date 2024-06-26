@@ -39,6 +39,7 @@ const actions = [
     {name:'新建用户组',value:'create_user_group'},{name:'删除用户组',value:'delete_user_group'},{name:'编辑用户组',value:'update_user_group'},{name:'新建角色',value:'create_role'},
     {name:'删除角色',value:'delete_role'},{name:'编辑角色',value:'update_role'}
 ]
+
 // 全部操作行为
 export async function getActionsApi() {
     return actions

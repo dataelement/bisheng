@@ -3,7 +3,7 @@ import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi } from "@/controllers/API/log";
-import { getUserGroupsApi, getUsersApi } from "@/controllers/API/user";
+import { getUserGroupsApi } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
 import { formatDate } from "@/util/utils";
 import { useEffect, useRef, useState } from "react";
@@ -103,7 +103,7 @@ export default function index() {
                 <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({...keys,end:t})} />
             </div>
             <div className="w-[180px] relative">
-                <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({...keys,moduleId:value})}>
+                <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({...keys, action:'', moduleId:value})}>
                     <SelectTrigger className="w-[180px]">
                         <SelectValue placeholder={t('log.systemModule')} />
                     </SelectTrigger>
@@ -139,14 +139,14 @@ export default function index() {
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.username')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.operationTime')}</TableHead>
-                        <TableHead className="w-[100px]">{t('log.systemModule')}</TableHead>
-                        <TableHead className="w-[150px]">{t('log.operationAction')}</TableHead>
-                        <TableHead className="w-[150px]">{t('log.objectType')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.operationObject')}</TableHead>
+                        <TableHead className="w-[200px] min-w-[100px]">{t('log.username')}</TableHead>
+                        <TableHead className="w-[200px] min-w-[100px]">{t('log.operationTime')}</TableHead>
+                        <TableHead className="w-[100px] min-w-[100px]">{t('log.systemModule')}</TableHead>
+                        <TableHead className="w-[150px] min-w-[100px]">{t('log.operationAction')}</TableHead>
+                        <TableHead className="w-[150px] min-w-[100px]">{t('log.objectType')}</TableHead>
+                        <TableHead className="w-[200px] min-w-[100px]">{t('log.operationObject')}</TableHead>
                         <TableHead className="w-[150px]">{t('log.ipAddress')}</TableHead>
-                        <TableHead className="w-[200px]">{t('log.remark')}</TableHead>
+                        <TableHead className="w-[250px] min-w-[250px] text-center">{t('log.remark')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -161,7 +161,7 @@ export default function index() {
                         <TableCell><div className="truncate-multiline">{log.object_name}</div></TableCell> {/* div是必要的 */}
                         <TableCell>{log.ip_address}</TableCell>
                         {/* whitespace-pre类保持原有的空格和换行符 */}
-                        <TableCell><div className="whitespace-pre truncate-doubleline">{log.note?.replace('编辑后', `\n编辑后`)}</div></TableCell>
+                        <TableCell className="max-w-[250px]"><div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`)}</div></TableCell>
                     </TableRow>
                     ))}
                 </TableBody>

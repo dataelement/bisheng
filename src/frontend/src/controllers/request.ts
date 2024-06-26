@@ -13,7 +13,7 @@ customAxios.interceptors.response.use(function (response) {
         return response.data.data;
     }
     if (response.data.status_code === 403) {
-        location.href = '/pro/403'
+        location.href = '/403'
         return Promise.reject(response.data.status_message);
     }
     return Promise.reject(response.data.status_message);
