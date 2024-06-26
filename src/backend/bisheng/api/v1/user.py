@@ -548,6 +548,7 @@ def update_user_role_hook(request: Request, login_user: UserPayload, user_id: in
     logger.info(f'update_user_role_hook, user_id: {user_id}, old_roles: {old_roles}, new_roles: {new_roles}')
     # 写入审计日志
     role_info = RoleDao.get_role_by_ids(old_roles + new_roles)
+    group_ids = list(set([role.group_id for role in role_info]))
     role_dict = {one.id: one.role_name for one in role_info}
     note = "编辑前角色："
     for one in old_roles:
@@ -557,7 +558,7 @@ def update_user_role_hook(request: Request, login_user: UserPayload, user_id: in
     for one in new_roles:
         note += role_dict[one] + "、"
     note = note.rstrip("、")
-    AuditLogService.update_user(login_user, get_request_ip(request), user_id, note)
+    AuditLogService.update_user(login_user, get_request_ip(request), user_id, group_ids, note)
 
 
 @router.get('/user/role', status_code=200)

@@ -274,16 +274,13 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    def update_user(cls, user: UserPayload, ip_address: str, user_id: int, note: str):
+    def update_user(cls, user: UserPayload, ip_address: str, user_id: int, group_ids: List[int], note: str):
         """
         修改用户的用户组和角色
         """
         logger.info(f"act=update_system_user user={user.user_name} ip={ip_address} user_id={user_id} note={note}")
         user_info = UserDao.get_user(user_id)
-        # 获取用户所属的分组
-        user_group = UserGroupDao.get_user_group(user_id)
-        user_group = [one.group_id for one in user_group]
-        cls._system_log(user, ip_address, user_group, EventType.UPDATE_USER.value,
+        cls._system_log(user, ip_address, group_ids, EventType.UPDATE_USER.value,
                         ObjectType.USER_CONF.value, str(user_id), user_info.user_name, note)
 
     @classmethod
