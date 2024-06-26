@@ -166,12 +166,13 @@ export default function index() {
                     </TableRow>
                     ))}
                 </TableBody>
-                <TableFooter>
-                    {!logs.length && <TableRow>
+                {!logs.length && <TableFooter>
+                    <TableRow>
                         <TableCell colSpan={9} className="text-center text-gray-400">{t('build.empty')}</TableCell>
-                    </TableRow>}
-                </TableFooter>
+                    </TableRow>
+                </TableFooter>}
             </Table>
+            {!logs.length && <div className="h-[700px]"></div>}
         </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
