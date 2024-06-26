@@ -105,12 +105,19 @@ class QAGenerationChain(Chain):
         # len(qa) = min(len(docs), self.k)
         logger.info(f"Split {len(docs)} documents. Gen qa num: min({len(docs)}, {self.k}).")
 
+<<<<<<< feat/rag_optimize
+        qa = []
+        for doc in docs:
+            results = self.llm_chain.generate([{"text": doc.page_content}], run_manager=run_manager)
+            res = results.generations[0]
+=======
         results = self.llm_chain.generate(
             [{"text": d.page_content} for d in docs], run_manager=run_manager
         )
         qa = ''
         qa_i = 0
         for res in results.generations:
+>>>>>>> feat/0.3.1.5
             try:
                 # response = json.loads(parse_json(res[0].text))
                 qa += res[0].text
@@ -122,6 +129,22 @@ class QAGenerationChain(Chain):
             if self.k is not None:
                 if qa_i >= self.k:
                     break
+
+        # results = self.llm_chain.generate(
+        #     [{"text": d.page_content} for d in docs], run_manager=run_manager
+        # )
+        # qa = []
+        # for res in results.generations:
+        #     try:
+        #         response = json.loads(parse_json(res[0].text))
+        #         qa.append(response)
+        #     except Exception as e:
+        #         logger.error(f"Failed to parse response: {res[0].text}. Error: {e}")
+        #         continue
+            
+        #     if self.k is not None:
+        #         if len(qa) >= self.k:
+        #             break
         return {self.output_key: qa}
 
     async def _acall(
