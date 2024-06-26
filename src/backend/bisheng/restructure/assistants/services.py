@@ -22,10 +22,12 @@ def get_chat_history(chat_id: str, size: int = DEFAULT_SIZE):
     chat_history = []
     messages = ChatMessageDao.get_messages_by_chat_id(chat_id, ['question', 'answer'], size)
     for one in messages:
+        # bug fix When constructing multi-turn dialogues, the input and response of
+        # the user and the assistant were reversed, leading to incorrect question-and-answer sequences.
         if one.category == MsgCategory.Question:
-            chat_history.append(AIMessage(content=one.message))
-        elif one.category == MsgCategory.Answer:
             chat_history.append(HumanMessage(content=one.message))
+        elif one.category == MsgCategory.Answer:
+            chat_history.append(AIMessage(content=one.message))
     logger.info(f"loaded {len(chat_history)} chat history for chat_id {chat_id}")
     return chat_history
 
