@@ -179,6 +179,9 @@ class ChatClient:
         if not message:
             return
         logger.debug(f'receive client message, client_key: {self.client_key} message: {message}')
+        if message.get('action') == 'stop':
+            logger.info(f'need stop agent, client_key: {self.client_key}, message: {message}')
+            return
 
         inputs = message.get('inputs', {})
         input_msg = inputs.get('input')
