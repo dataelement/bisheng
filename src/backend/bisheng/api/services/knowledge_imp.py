@@ -3,7 +3,7 @@ import json
 import math
 import re
 import time
-from typing import Dict, List
+from typing import Dict, List, Any
 from uuid import uuid4
 
 import requests
@@ -13,14 +13,16 @@ from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, Knowle
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.interface.initialize.loading import instantiate_vectorstore, instantiate_llm
 from bisheng.settings import settings
 from bisheng.utils import minio_client
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import MinioClient
+from bisheng.interface.importing.utils import import_by_type
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
+from bisheng_langchain.rag.extract_info import extract_title
 from fastapi import HTTPException
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
@@ -212,7 +214,22 @@ def decide_vectorstores(collection_name: str, vector_store: str,
 
     param.update(vector_config)
     class_obj = import_vectorstore(vector_store)
-    return instantiate_vectorstore(class_object=class_obj, params=param)
+    return instantiate_vectorstore(vector_store, class_object=class_obj, params=param)
+
+
+def decide_knowledge_llm() -> Any:
+    """ 获取用来总结知识库chunk的 llm对象 """
+    # 获取llm配置
+    llm_params = settings.get_knowledge().get('llm')
+    if not llm_params:
+        # 无相关配置
+        return None
+
+    # 获取llm对象
+    node_type = llm_params.pop('type')
+    class_object = import_by_type(_type='llms', name=node_type)
+    llm = instantiate_llm(node_type, class_object, llm_params)
+    return llm
 
 
 def addEmbedding(collection_name,
@@ -226,6 +243,7 @@ def addEmbedding(collection_name,
                  knowledge_files: List[KnowledgeFile],
                  callback: str,
                  extra_meta: str = None):
+    logger.info("start init Milvus")
     error_msg = ''
     try:
         vectore_client, es_client = None, None
@@ -236,6 +254,7 @@ def addEmbedding(collection_name,
         error_msg = 'MilvusExcept:' + str(e)
         logger.exception(e)
 
+    logger.info("start init ElasticKeywordsSearch")
     try:
         es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
     except Exception as e:
@@ -315,7 +334,7 @@ def addEmbedding(collection_name,
                         time.time() - ts1)
 
         except Exception as e:
-            logger.error('add_vectordb {}', e)
+            logger.exception('add_vectordb {}', e)
             with session_getter() as session:
                 db_file = session.get(KnowledgeFile, knowledge_file.id)
                 setattr(db_file, 'status', 3)
@@ -356,8 +375,9 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
             'page': t.metadata.get('page') or 0,
             'source': file_name,
+            'chunk_index': t_index,
             'extra': ''
-        } for t in texts]
+        } for t_index, t in enumerate(texts)]
     else:
         # 如果文件不是pdf 需要内部转pdf
         if file_name.rsplit('.', 1)[-1].lower() != 'pdf':
@@ -367,30 +387,53 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
             if not resp or resp.status_code != 200:
                 logger.error(f'file_pdf=not_success resp={resp.text}')
                 raise Exception(f'当前文件无法解析， {resp.text}')
-            if len(resp.text) < 300:
-                logger.error(f'file_pdf=not_success resp={resp.text}')
-            b64_data = resp.json()['b64_pdf']
+            resp = resp.json()
+            if resp["status_code"] != 200:
+                logger.error(f'file_pdf=not_success resp={resp}')
+                raise Exception(f'当前文件无法解析， {resp}')
+            b64_data = resp['b64_pdf']
             # 替换历史文件
             with open(input_file, 'wb') as fout:
                 fout.write(base64.b64decode(b64_data))
             file_name = file_name.rsplit('.', 1)[0] + '.pdf'
-
+        logger.info(f'file_pdf=success')
         loader = ElemUnstructuredLoader(
             file_name,
             input_file,
             unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
         documents = loader.load()
+        logger.info(f'file_loader=success')
+
+        # 按照新的规则对每个分块做 标题提取
+        try:
+            llm = decide_knowledge_llm()
+        except Exception as e:
+            logger.exception('knowledge_llm_error:')
+            raise Exception(f'知识库总结所需模型配置有误，初始化失败， {str(e)}')
+        if llm:
+            logger.info(f'need_extract_title')
+            for one in documents:
+                # 配置了相关llm的话，就对文档做总结
+                title = extract_title(llm, one.page_content)
+                one.metadata['title'] = title
+        logger.info(f'file_extract_title=success')
+
         text_splitter = ElemCharacterTextSplitter(separators=separator,
                                                   chunk_size=size,
                                                   chunk_overlap=chunk_overlap)
         texts = text_splitter.split_documents(documents)
-        raw_texts = [t.page_content for t in texts]
+        logger.info(f'file_split=success')
+
+        raw_texts = [t.metadata.get("source", '') + '\n' + t.metadata.get('title', '') + '\n' + t.page_content
+                     for t in texts]
         metadatas = [{
             'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
             'page': t.metadata.get('chunk_bboxes')[0].get('page'),
             'source': t.metadata.get('source', ''),
+            'title': t.metadata.get('title', ''),
+            'chunk_index': t_index,
             'extra': '',
-        } for t in texts]
+        } for t_index,t in enumerate(texts)]
     return (raw_texts, metadatas)
 
 
@@ -406,8 +449,8 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
         logger.exception(e)
 
     separator = '\n\n'
-    chunk_size = 500
-    chunk_overlap = 50
+    chunk_size = 1000
+    chunk_overlap = 100
 
     text_splitter = CharacterTextSplitter(separator=separator,
                                           chunk_size=chunk_size,
@@ -468,9 +511,9 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             KnowledgeFileDao.update(file)
         return
 
-    separator = ['\n\n', '\n', ' ', '']
-    chunk_size = 500
-    chunk_overlap = 50
+    separator = ['\n\n']
+    chunk_size = 1000
+    chunk_overlap = 100
     if db_files:
         minio = MinioClient()
         for file in db_files:
@@ -482,7 +525,7 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             original_file = input_file.object_name
             file_url = minio.get_share_link(original_file,
                                             minio_client.tmp_bucket) if original_file.startswith(
-                                                'tmp') else minio.get_share_link(original_file)
+                'tmp') else minio.get_share_link(original_file)
             if file_url:
                 file_path, _ = file_download(file_url)
             else:

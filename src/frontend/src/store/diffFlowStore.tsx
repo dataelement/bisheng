@@ -3,6 +3,7 @@
  */
 import { generateUUID } from "@/components/bs-ui/utils"
 import { getVersionDetails, runTestCase } from "@/controllers/API/flow"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { create } from "zustand"
 
 const enum RunningType {
@@ -57,7 +58,7 @@ export const useDiffFlowStore = create<State & Actions>((set, get) => ({
     initFristVersionFlow(versionId) {
         getVersionDetails(versionId).then(version => {
             set({
-                mulitVersionFlow: [version],
+                mulitVersionFlow: [version, null],
                 questions: [],
                 readyVersions: {},
                 running: false,
@@ -112,6 +113,11 @@ export const useDiffFlowStore = create<State & Actions>((set, get) => ({
     addQuestion(q) {
         set((state) => ({
             questions: [...state.questions, { q, id: generateUUID(5), ready: get().running }]
+        }))
+    },
+    updateQuestion(q, index) {
+        set((state) => ({
+            questions: state.questions.map((el, i) => i === index ? { ...el, q, ready: get().running } : el)
         }))
     },
     removeQuestion(index) {
@@ -197,22 +203,65 @@ export const useDiffFlowStore = create<State & Actions>((set, get) => ({
  */
 const runTest = ({ questions, questionIndexs, nodeId, versionIds, inputs, refs }) => {
     // loading
+    // console.log(refs, 222);
+    const runIds = []
     questionIndexs.forEach(qIndex => {
         versionIds.forEach(versionId => {
             refs[`${qIndex}-${versionId}`].current.loading()
+            runIds.push(`${qIndex}-${versionId}`)
         })
     });
     // 运行
-    return runTestCase({
+    const data = JSON.stringify({
         question_list: questionIndexs.map(qIndex => questions[qIndex].q),
         version_list: versionIds,
         inputs,
         node_id: nodeId
-    }).then(data => {
-        data.forEach((row, rowIndex) => {
-            Object.keys(row).forEach(vId => {
-                refs[`${questionIndexs[rowIndex]}-${vId}`].current.setData(row[vId])
-            })
-        })
     })
+
+    return new Promise((resolve, reject) => {
+        const apiUrl = `/api/v1/flows/compare/stream?data=${encodeURIComponent(data)}`;
+        const eventSource = new EventSource(apiUrl);
+
+        eventSource.onmessage = (event) => {
+            if (!event.data) {
+                return;
+            }
+            const parsedData = JSON.parse(event.data);
+            const { type, question_index, version_id, answer } = parsedData;
+            if (!type) {
+                refs[`${questionIndexs[question_index]}-${version_id}`].current.setData(answer)
+            } else if (type === 'end') {
+                resolve('')
+            }
+        }
+
+        eventSource.onerror = (error: any) => {
+            console.error('event :>> ', error);
+            eventSource.close();
+            runIds.forEach(id => {
+                refs[id].current.loaded()
+            })
+
+            reject(error);
+        }
+    })
+    // runTestCaseStream()
+    // return captureAndAlertRequestErrorHoc(runTestCase({
+    //     question_list: questionIndexs.map(qIndex => questions[qIndex].q),
+    //     version_list: versionIds,
+    //     inputs,
+    //     node_id: nodeId
+    // }).then(data => {
+    //     data.forEach((row, rowIndex) => {
+    //         Object.keys(row).forEach(vId => {
+    //             refs[`${questionIndexs[rowIndex]}-${vId}`].current.setData(row[vId])
+    //         })
+    //     })
+    // }), () => {
+    //     // error callback
+    //     runIds.forEach(id => {
+    //         refs[id].current.loaded()
+    //     })
+    // })
 }

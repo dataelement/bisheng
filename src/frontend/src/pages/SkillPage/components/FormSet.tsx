@@ -14,7 +14,7 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
  * change 保存信息到独立接口
  */
 
-export default forwardRef(function FormSet({ id }: any, ref) {
+export default forwardRef(function FormSet({ id, vid }: any, ref) {
     const { t } = useTranslation()
 
     const showContent = (e) => {
@@ -27,7 +27,7 @@ export default forwardRef(function FormSet({ id }: any, ref) {
     // 从 api中获取
     const [items, setItems] = useState([])
     useEffect(() => {
-        getVariablesApi({ flow_id: id }).then(
+        getVariablesApi({ version_id: vid, flow_id: id }).then(
             res => setItems(res)
         )
     }, [])
@@ -55,7 +55,7 @@ export default forwardRef(function FormSet({ id }: any, ref) {
     const saveFucRef = useRef(() => { })
     const handleSave = (items) => {
         saveFucRef.current = () => {
-            captureAndAlertRequestErrorHoc(saveReportFormApi(id, items))
+            captureAndAlertRequestErrorHoc(saveReportFormApi(vid, id, items))
         }
     }
 

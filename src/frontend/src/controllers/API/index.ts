@@ -248,14 +248,14 @@ export async function postValidatePrompt(
 /**
  * 获取会话列表
  */
-export const getChatsApi = () => {
-  return (axios.get(`/api/v1/chat/list`) as Promise<any[]>).then(res =>
-    res?.filter(el => el.chat_id) || []
+export const getChatsApi = (page) => {
+  return (axios.get(`/api/v1/chat/list?page=${page}&limit=40`) as Promise<any[]>).then(res =>
+    res?.filter((el, i) => el.chat_id) || []
   )
 };
 
 /**
- * 获取会话列表
+ * 删除会话
  */
 export const deleteChatApi = (chatId) => {
   return axios.delete(`/api/v1/chat/${chatId}`)
@@ -332,9 +332,11 @@ export async function getVersion() {
  *
  */
 export async function getBuildStatus(
-  flowId: string
+  flowId: string,
+  versionId?: number
 ): Promise<BuildStatusTypeAPI> {
-  return await axios.get(`/api/v1/build/${flowId}/status`);
+  const qstr = versionId ? `?version_id=${versionId}` : "";
+  return await axios.get(`/api/v1/build/${flowId}/status${qstr}`);
 }
 
 //docs for postbuildinit
@@ -344,11 +346,14 @@ export async function getBuildStatus(
  * @returns {Promise<InitTypeAPI>} A promise that resolves to an AxiosResponse containing the build status.
  *
  */
-export async function postBuildInit(
-  flow: FlowType,
+export async function postBuildInit(data: {
+  flow: FlowType
   chatId?: string
-): Promise<any> {
-  return await axios.post(`/api/v1/build/init/${flow.id}`, chatId ? { chat_id: chatId } : flow);
+  versionId?: number
+}): Promise<any> {
+  const { flow, chatId, versionId } = data;
+  const qstr = versionId ? `?version_id=${versionId}` : ''
+  return await axios.post(`/api/v1/build/init/${flow.id}${qstr}`, chatId ? { chat_id: chatId } : flow);
 }
 
 // fetch(`/upload/${id}`, {
@@ -412,13 +417,17 @@ export async function GPUlistByFinetuneApi(): Promise<any> {
  */
 // 分词
 export async function splitWordApi(word: string, messageId: string): Promise<string[]> {
-  return await axios.get(`/api/v1/qa/keyword?answer=${encodeURIComponent(word)}&message_id=${messageId}`)
+  return await axios.get(`/api/v1/qa/keyword?message_id=${messageId}`)
 }
 
 // 获取 chunks
 export async function getSourceChunksApi(chatId: string, messageId: number, keys: string) {
   try {
-    let chunks: any[] = await axios.get(`/api/v1/qa/chunk?chat_id=${chatId}&message_id=${messageId}&keys=${keys}`)
+    let chunks: any[] = await axios.post(`/api/v1/qa/chunk`, {
+      chat_id: chatId,
+      message_id: messageId,
+      keys,
+    })
 
     const fileMap = {}
     chunks.forEach(chunk => {

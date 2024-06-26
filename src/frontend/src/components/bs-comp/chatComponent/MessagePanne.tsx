@@ -12,7 +12,7 @@ import { useMessageStore } from "./messageStore";
 
 export default function MessagePanne({ useName, guideWord, loadMore }) {
     const { t } = useTranslation()
-    const { chatId, messages } = useMessageStore()
+    const { chatId, messages, hisMessages } = useMessageStore()
 
     // 反馈
     const thumbRef = useRef(null)
@@ -61,7 +61,7 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
             key={9999}
             data={{ message: guideWord, isSend: false, chatKey: '', end: true, user_name: '' }} />}
         {
-            messages.map(msg => {
+            [...hisMessages, ...messages].map(msg => {
                 // 工厂
                 let type = 'llm'
                 if (msg.isSend) {
@@ -70,7 +70,8 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
                     type = 'separator'
                 } else if (msg.files?.length) {
                     type = 'file'
-                } else if (['tool', 'flow', 'knowledge'].includes(msg.category)) {
+                } else if (['tool', 'flow', 'knowledge'].includes(msg.category)
+                    || msg.category === 'processing') { // 项目演示？
                     type = 'runLog'
                 } else if (msg.thought) {
                     type = 'system'

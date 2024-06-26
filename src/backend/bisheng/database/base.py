@@ -1,15 +1,15 @@
 import hashlib
 import json
 import os
+import uuid
 from contextlib import contextmanager
 from typing import List
-
-from sqlalchemy import text
 
 from bisheng.database.init_config import init_config
 from bisheng.database.service import DatabaseService
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
+from sqlalchemy import text
 from sqlmodel import Session, select, update
 
 db_service: 'DatabaseService' = DatabaseService(settings.database_url)
@@ -21,11 +21,11 @@ def init_default_data():
     from bisheng.database.models.component import Component
     from bisheng.database.models.role import Role
     from bisheng.database.models.user import User
-    from bisheng.database.models.user_role import UserRole
     from bisheng.database.models.gpts_tools import GptsTools
     from bisheng.database.models.gpts_tools import GptsToolsType
     from bisheng.database.models.sft_model import SftModel
     from bisheng.database.models.flow_version import FlowVersion
+    from bisheng.database.models.user_role import UserRoleDao
 
     if redis_client.setNx('init_default_data', '1'):
         try:
@@ -52,9 +52,7 @@ def init_default_data():
                     session.add(user)
                     session.commit()
                     session.refresh(user)
-                    db_userrole = UserRole(user_id=user.user_id, role_id=db_role.id)
-                    session.add(db_userrole)
-                    session.commit()
+                    UserRoleDao.set_admin_user(user.user_id)
 
                 component_db = session.exec(select(Component).limit(1)).all()
                 if not component_db:
@@ -93,10 +91,12 @@ def init_default_data():
                         session.exec(update(GptsTools).where(GptsTools.id == i).values(type=i))
                     # 属于天眼查类别下的工具
                     tyc_types: List[int] = list(range(7, 18))
-                    session.exec(update(GptsTools).where(GptsTools.id.in_(tyc_types)).values(type=7))
+                    session.exec(
+                        update(GptsTools).where(GptsTools.id.in_(tyc_types)).values(type=7))
                     # 属于金融类别下的工具
                     jr_types: List[int] = list(range(18, 28))
-                    session.exec(update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
+                    session.exec(
+                        update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     session.commit()
                 # 初始化配置可用于微调的基准模型
                 preset_models = session.exec(select(SftModel).limit(1)).all()
@@ -112,8 +112,16 @@ def init_default_data():
                 # 初始化补充默认的技能版本表
                 flow_version = session.exec(select(FlowVersion).limit(1)).all()
                 if not flow_version:
-                    sql_query = text("INSERT INTO `flowversion` (`name`, `flow_id`, `data`, `user_id`, `is_current`, `is_delete`) \
+                    sql_query = text(
+                        "INSERT INTO `flowversion` (`name`, `flow_id`, `data`, `user_id`, `is_current`, `is_delete`) \
                      select 'v0', `id` as flow_id, `data`, `user_id`, 1, 0 from `flow`;")
+                    session.execute(sql_query)
+                    session.commit()
+                    # 修改表单数据表
+                    sql_query = text(
+                        'UPDATE `t_variable_value` a SET a.version_id=(SELECT `id` from `flowversion` WHERE flow_id=a.flow_id and is_current=1)'
+                        # noqa
+                    )
                     session.execute(sql_query)
                     session.commit()
             # 初始化数据库config
@@ -153,3 +161,10 @@ def read_from_conf(file_path: str) -> str:
         content = f.read()
 
     return content
+
+
+def generate_uuid() -> str:
+    """
+    生成uuid的字符串
+    """
+    return uuid.uuid4().hex

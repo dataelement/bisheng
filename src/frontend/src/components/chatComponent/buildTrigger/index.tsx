@@ -24,7 +24,7 @@ export default function BuildTrigger({
 }) {
   const { updateSSEData, isBuilding, setIsBuilding, sseData } = useSSE();
   const { reactFlowInstance } = useContext(typesContext);
-  const { setTabsState } = useContext(TabsContext);
+  const { version, setTabsState } = useContext(TabsContext);
   const { setErrorData, setSuccessData } = useContext(alertContext);
   // const [isIconTouched, setIsIconTouched] = useState(false);
   const eventClick = isBuilding ? "pointer-events-none" : "";
@@ -66,7 +66,7 @@ export default function BuildTrigger({
   }
   async function streamNodeData(flow: FlowType) {
     // Step 1: Make a POST request to send the flow data and receive a unique session ID
-    const { flowId } = await postBuildInit(flow);
+    const { flowId } = await postBuildInit({ flow });
     // Step 2: Use the session ID to establish an SSE connection using EventSource
     let validationResults = [];
     let finished = false;

@@ -3,12 +3,18 @@ import axios from "axios";
 import i18next from "i18next";
 axios.defaults.withCredentials = true;
 const customAxios = axios.create({
+    baseURL:''
+    // baseURL:'/proapi'
     // 配置
 });
 
 customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 200) {
         return response.data.data;
+    }
+    if (response.data.status_code === 403) {
+        location.href = '/403'
+        return Promise.reject(response.data.status_message);
     }
     return Promise.reject(response.data.status_message);
 }, function (error) {

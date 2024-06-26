@@ -5,4 +5,7 @@ export type AppConfig = {
     dialog_tips: string;
     dialog_quick_search: string;
     websocket_url: string;
+    pro: boolean;
+    sso: boolean;
+    application_usage_tips: boolean;
 };

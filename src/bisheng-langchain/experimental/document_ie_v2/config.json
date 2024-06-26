@@ -1,0 +1,9 @@
+{
+  "unstructured_api_url": "https://bisheng.dataelem.com/api/v1/etl4llm/predict",
+  "llm_model_name": "qwen1.5-72b-chat",
+  "llm_model_api_url": "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation",
+  "server_type": "qwen_api",
+  "web_host": "192.168.106.20",
+  "web_port": 8118,
+  "api_port": 6118
+}

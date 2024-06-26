@@ -3,6 +3,8 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from sqlalchemy import func
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 # if TYPE_CHECKING:
@@ -21,6 +23,7 @@ class FlowVersionBase(SQLModelSerializable):
     user_id: Optional[int] = Field(index=True, description="创建者")
     is_current: Optional[int] = Field(default=0, description="是否为正在使用版本")
     is_delete: Optional[int] = Field(default=0, description="是否删除")
+    original_version_id: Optional[int] = Field(default=None, description="来源版本的ID")
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(sa_column=Column(
@@ -92,12 +95,14 @@ class FlowVersionDao(FlowVersion):
             return session.exec(statement).first()
 
     @classmethod
-    def get_version_by_id(cls, version_id: int) -> Optional[FlowVersion]:
+    def get_version_by_id(cls, version_id: int, include_delete: bool = False) -> Optional[FlowVersion]:
         """
         根据版本ID获取技能版本的信息
         """
         with session_getter() as session:
-            statement = select(FlowVersion).where(FlowVersion.id == version_id, FlowVersion.is_delete == 0)
+            statement = select(FlowVersion).where(FlowVersion.id == version_id)
+            if not include_delete:
+                statement = statement.where(FlowVersion.is_delete == 0)
             return session.exec(statement).first()
 
     @classmethod
@@ -131,6 +136,17 @@ class FlowVersionDao(FlowVersion):
                 FlowVersion.flow_id == flow_id, FlowVersion.is_delete == 0).order_by(FlowVersion.id.desc())
             ret = session.exec(statement).mappings().all()
             return [FlowVersionRead.model_validate(f) for f in ret]
+
+    @classmethod
+    def count_list_by_flow(cls, flow_id: str, include_delete: bool = False) -> int:
+        """
+        根据技能ID 技能版本的数量
+        """
+        with session_getter() as session:
+            count_statement = session.query(func.count()).where(FlowVersion.flow_id == flow_id)
+            if not include_delete:
+                count_statement = count_statement.where(FlowVersion.is_delete == 0)
+            return count_statement.scalar()
 
     @classmethod
     def get_list_by_flow_ids(cls, flow_ids: List[str]) -> List[FlowVersionRead]:

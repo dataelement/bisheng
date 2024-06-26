@@ -286,8 +286,10 @@ vecstore_initializer: Dict[str, Callable[[Type[Any], dict], Any]] = {
     'Weaviate': initialize_weaviate,
     'FAISS': initialize_faiss,
     'Milvus': initial_milvus,
+    'MilvusWithPermissionCheck': initial_milvus,
     'ElasticsearchStore': initial_elastic_vector,
     'ElasticKeywordsSearch': initial_elastic,
+    'ElasticsearchWithPermissionCheck': initial_elastic,
     'SupabaseVectorStore': initialize_supabase,
     'MongoDBAtlasVectorSearch': initialize_mongodb,
 }

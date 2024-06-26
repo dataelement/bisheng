@@ -1,6 +1,14 @@
+import json
 import xml.dom.minidom
 from pathlib import Path
 from typing import Dict, List
+
+import aiohttp
+from fastapi import Request
+from fastapi_jwt_auth import AuthJWT
+from platformdirs import user_cache_dir
+from sqlalchemy import delete
+from sqlmodel import select
 
 from bisheng.api.v1.schemas import StreamData
 from bisheng.database.base import session_getter
@@ -8,9 +16,6 @@ from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
-from platformdirs import user_cache_dir
-from sqlalchemy import delete
-from sqlmodel import select
 
 API_WORDS = ['api', 'key', 'token']
 
@@ -187,21 +192,22 @@ async def build_flow_no_yield(graph_data: dict,
             if vertex.base_type == 'vectorstores':
                 # 注入user_name
                 vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
-                # 知识库通过参数传参
-                if 'collection_name' in kwargs and 'collection_name' in vertex.params:
-                    vertex.params['collection_name'] = kwargs['collection_name']
-                if 'collection_name' in kwargs and 'index_name' in vertex.params:
-                    vertex.params['index_name'] = kwargs['collection_name']
+                if vertex.vertex_type not in ["MilvusWithPermissionCheck", "ElasticsearchWithPermissionCheck"]:
+                    # 知识库通过参数传参
+                    if 'collection_name' in kwargs and 'collection_name' in vertex.params:
+                        vertex.params['collection_name'] = kwargs['collection_name']
+                    if 'collection_name' in kwargs and 'index_name' in vertex.params:
+                        vertex.params['index_name'] = kwargs['collection_name']
 
-                if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
-                    vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
-                    logger.info(f"rename_vector_col col={vertex.params['collection_name']}")
-                    if process_file:
-                        # L1 清除Milvus历史记录
-                        vertex.params['drop_old'] = True
-                elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
-                    # es
-                    vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
+                    if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
+                        vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
+                        logger.info(f"rename_vector_col col={vertex.params['collection_name']}")
+                        if process_file:
+                            # L1 清除Milvus历史记录
+                            vertex.params['drop_old'] = True
+                    elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
+                        # es
+                        vertex.params['index_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
 
             if vertex.base_type == 'chains' and 'retriever' in vertex.params:
                 vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
@@ -220,23 +226,18 @@ async def build_flow_no_yield(graph_data: dict,
     return graph
 
 
-def access_check(payload: dict, owner_user_id: int, target_id: int, type: AccessType) -> bool:
-    if payload.get('role') != 'admin':
-        # role_access
-        with session_getter() as session:
-            role_access = session.exec(
-                select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')),
-                                         RoleAccess.type == type.value)).all()
-        third_ids = [access.third_id for access in role_access]
-        if owner_user_id != payload.get('user_id') and str(target_id) not in third_ids:
-            return False
-    return True
+async def check_permissions(Authorize: AuthJWT, roles: List[str]):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    user_roles = [payload.get('role')] if isinstance(payload.get('role'),
+                                                     str) else payload.get('role')
+    if any(role in roles for role in user_roles):
+        return True
+    else:
+        raise ValueError('权限不够')
 
 
-def get_L2_param_from_flow(
-    flow_data: dict,
-    flow_id: str,
-):
+def get_L2_param_from_flow(flow_data: dict, flow_id: str, version_id: int = None):
     graph = Graph.from_payload(flow_data)
     node_id = []
     variable_ids = []
@@ -249,7 +250,9 @@ def get_L2_param_from_flow(
             variable_ids.append(node.id)
 
     with session_getter() as session:
-        db_variables = session.exec(select(Variable).where(Variable.flow_id == flow_id)).all()
+        db_variables = session.exec(
+            select(Variable).where(Variable.flow_id == flow_id,
+                                   Variable.version_id == version_id)).all()
 
         old_file_ids = {
             variable.node_id: variable
@@ -267,6 +270,7 @@ def get_L2_param_from_flow(
                 else:
                     # file type
                     db_new_var = Variable(flow_id=flow_id,
+                                          version_id=version_id,
                                           node_id=id,
                                           variable_name=file_name[index],
                                           value_type=3)
@@ -285,7 +289,9 @@ def get_L2_param_from_flow(
             if update:
                 [session.add(var) for var in update]
             if delete_node_ids:
-                session.exec(delete(Variable).where(Variable.node_id.in_(delete_node_ids)))
+                session.exec(
+                    delete(Variable).where(Variable.node_id.in_(delete_node_ids),
+                                           version_id == version_id, flow_id == flow_id))
             session.commit()
             return True
         except Exception as e:
@@ -391,14 +397,32 @@ def parse_gpus(gpu_str: str) -> List[Dict]:
             'gpu_util')[0]
         res.append({
             'gpu_uuid':
-            gpu_uuid_elem.firstChild.data,
+                gpu_uuid_elem.firstChild.data,
             'gpu_id':
-            gpu_id_elem.firstChild.data,
+                gpu_id_elem.firstChild.data,
             'gpu_total_mem':
-            '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
+                '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
             'gpu_used_mem':
-            '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
+                '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
             'gpu_utility':
-            round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
+                round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
         })
     return res
+
+
+async def get_url_content(url: str) -> str:
+    """ 获取接口的返回的body内容 """
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status != 200:
+                raise Exception(f'Failed to download content, HTTP status code: {response.status}')
+            res = await response.read()
+            return res.decode('utf-8')
+
+
+def get_request_ip(request: Request) -> str:
+    """ 获取客户端真实IP """
+    x_forwarded_for = request.headers.get('X-Forwarded-For')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0]
+    return request.client.host

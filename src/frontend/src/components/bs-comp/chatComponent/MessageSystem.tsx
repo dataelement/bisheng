@@ -14,7 +14,7 @@ export default function MessageSystem({ data }) {
 
         message({
             variant: 'success',
-            title: '提示',
+            title: t('prompt'),
             description: t('chat.copyTip')
         })
     }
@@ -24,7 +24,7 @@ export default function MessageSystem({ data }) {
         () => (
             data.thought && <ReactMarkdown
                 linkTarget="_blank"
-                className="bs-mkdown text-gray-600 inline-block break-all max-w-full text-sm [&>pre]:text-wrap"
+                className="bs-mkdown text-gray-600 dark:text-[white] inline-block break-all max-w-full text-sm [&>pre]:text-wrap"
             >
                 {data.thought.toString()}
             </ReactMarkdown>
@@ -33,6 +33,9 @@ export default function MessageSystem({ data }) {
     )
 
     const border = { system: 'border-slate-500', question: 'border-amber-500', processing: 'border-cyan-600', answer: 'border-lime-600', report: 'border-slate-500', guide: 'border-none' }
+
+    // 中英去掉最终的回答（report)
+    if(data.category === 'report') return null
 
     return <div className="py-1">
         <div className={`relative rounded-sm px-6 py-4 border text-sm ${data.category === 'guide' ? 'bg-[#EDEFF6]' : 'bg-slate-50'} ${border[data.category || 'system']}`}>

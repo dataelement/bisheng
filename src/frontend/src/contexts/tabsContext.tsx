@@ -292,6 +292,12 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  // 上线版本的版本 id
+  const [onlineVid, setOnlineVid] = useState(0);
+  const updateOnlineVid = (vid: number) => {
+    setOnlineVid(flow.status === 2 ? vid : 0);
+  }
+
   return (
     <TabsContext.Provider
       value={{
@@ -318,7 +324,9 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         setTabsState,
         paste,
         version,
-        setVersion
+        setVersion,
+        isOnlineVersion: () => version.id === onlineVid,
+        updateOnlineVid
       }}
     >
       {children}

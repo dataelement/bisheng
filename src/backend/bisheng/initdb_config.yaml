@@ -14,6 +14,11 @@ minio_conf: &minio_conf
   MINIO_SECRET_KEY: "minioadmin"
 
 knowledges:
+  # 知识库所需的大模型配置，用来对文档内容总结一个标题，然后将标题和chunk合并存储到向量库内, 不配置则不总结文档
+  llm:
+    type: "ChatOpenAi"
+    model: "gpt-3.5-turbo"
+    <<: *openai_conf
   unstructured_api_url: ""  # 毕昇非结构化数据解析服务地址，提供包括OCR文字识别、表格识别、版式分析等能力。非必填，溯源必填
   embeddings: # 配置知识库的embedding服务，以下示例填写了两类embedding服务的配置方法，第一个是openai的embedding模型服务的配置方法，第二个是本地部署的embedding模型服务的配置方法，如果有多个可以添加多个
     text-embedding-ada-002: # 知识库下拉框中显示的embedding模型的名称，可自定义
@@ -90,6 +95,12 @@ gpts:
   llms:
     - type: 'ChatOpenAI'
       model_name: 'gpt-4-0125-preview'
+      # 助手内 挂载的知识库检索参数，可按需配置。配置参数和模型有关
+      knowledge_retrive:
+        # 传给模型的最大字符数，超过会自动截断
+        max_content: 15000
+        # 是否将检索的chunk重新排序，必须是031版本之后创建的知识库才支持排序
+        sort_by_source_and_index: false
       temperature: 0.3
       <<: *openai_conf
     - type: 'CustomLLMChat'
@@ -113,3 +124,26 @@ gpts:
     # 天眼查工具所需的配置
     tianyancha:
       api_key: ""
+
+    password_valid_period: Optional[int] = Field(description='密码超过X天必须进行修改, 登录提示重新修改密码')
+    login_error_time_window: Optional[int] = Field(description='登录错误时间窗口,单位分钟')
+    max_error_times: Optional[int] = Field(description='最大错误次数，超过后会封禁用户')
+
+# 密码配置
+password_conf:
+  # 密码超过X天必须进行修改, 登录提示重新修改密码。大于0策略才生效
+  password_valid_period: 180
+  # 登录错误时间窗口,单位分钟。在错误时间窗口内超过最大错误次数会封禁用户。两个值都大于0才生效
+  login_error_time_window: 10
+  # 最大错误次数，超过后会封禁用户
+  max_error_times: 5
+
+system_login_method:
+    # SSO 登录
+    SSO_OAuth: true
+    # # LDAP 登录
+    # LDAP: true
+    # LDAP服务器地址配置: XX
+    
+    # 切换 SSO/LDAP 登录后管理员用户名
+    admin_username: admin

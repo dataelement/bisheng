@@ -56,7 +56,8 @@ export default function Skills() {
 
     const handleSetting = (data) => {
         // console.log('data :>> ', data);
-        navigate("/build/skill/" + data.id)
+        const vid = data.version_list.find(item => item.is_current === 1)?.id
+        navigate(`/build/skill/${data.id}/${vid}`)
     }
 
     // 选模板(创建技能)
@@ -68,7 +69,7 @@ export default function Skills() {
             res.user_name = user.user_name
             res.write = true
             setOpen(false)
-            navigate("/build/skill/" + res.id)
+            navigate(`/build/skill/${res.id}/${res.version_id}`)
         }))
     }
 
@@ -95,8 +96,8 @@ export default function Skills() {
                                 type='skill'
                                 title={t('skills.createNew')}
                                 description={(<>
-                                    <p>技能通过可视化的流程编排，明确任务执行步骤</p>
-                                    <p>我们提供场景模板供您使用和参考</p>
+                                    <p>{t('skills.executionSteps')}</p>
+                                    <p>{t('skills.sceneTemplates')}</p>
                                 </>)}
                             ></CardComponent>
                         </SkillTempSheet>
@@ -114,11 +115,11 @@ export default function Skills() {
                                     checked={item.status === 2}
                                     user={item.user_name}
                                     onClick={() => handleSetting(item)}
-                                    onSwitchClick={() => !item.write && item.status !== 2 && message({ title: '提示', description: '请联系管理员上线技能', variant: 'warning' })}
+                                    onSwitchClick={() => !item.write && item.status !== 2 && message({ title: t('prompt'), description: t('skills.contactAdmin'), variant: 'warning' })}
                                     onAddTemp={toggleTempModal}
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={handleDelete}
-                                    onSetting={handleSetting}
+                                    onSetting={(item) => handleSetting(item)}
                                     headSelecter={(
                                         <CardSelectVersion
                                             showPop={item.status !== 2}
@@ -134,7 +135,7 @@ export default function Skills() {
         {/* 添加模板 */}
         <CreateTemp flow={flowRef.current} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
         {/* footer */}
-        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-[#F4F5F8] h-16 items-center px-10">
+        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10">
             <p className="text-sm text-muted-foreground break-keep">{t('skills.manageProjects')}</p>
             <AutoPagination className="m-0 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage}></AutoPagination>
         </div>

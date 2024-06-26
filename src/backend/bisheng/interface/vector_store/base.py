@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, Type
 
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.importing.utils import import_class
+from bisheng.interface.vector_store.constants import CUSTOM_VECTORSTORE
 from bisheng.settings import settings
 from bisheng.template.frontend_node.vectorstores import VectorStoreFrontendNode
 from bisheng.utils.logger import logger
@@ -31,6 +32,7 @@ class VectorstoreCreator(LangChainTypeCreator):
                 import_class(f'bisheng_langchain.vectorstores.{vectorstore_name}')
                 for vectorstore_name in contribute_vectorstores.__all__
             })
+            self.type_dict.update(CUSTOM_VECTORSTORE)
         return self.type_dict
 
     def get_signature(self, name: str) -> Optional[Dict]:

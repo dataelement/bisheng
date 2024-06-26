@@ -95,7 +95,7 @@ class BishengRetrievalQA(Chain):
         keyword_store: ElasticKeywordsSearch,
         QA_PROMPT: ChatPromptTemplate = DEFAULT_QA_PROMPT,
         max_content: int = 15000,
-        sort_by_source_and_index: bool = True,
+        sort_by_source_and_index: bool = False,
         callbacks: Callbacks = None,
         **kwargs: Any,
     ) -> BishengRetrievalQA:

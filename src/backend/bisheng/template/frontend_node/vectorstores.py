@@ -317,6 +317,9 @@ class VectorStoreFrontendNode(FrontendNode):
             field.required = False
             field.show = True
             field.advanced = False
+            if name == 'MilvusWithPermissionCheck' or name == 'ElasticsearchWithPermissionCheck':
+                field.show = False
+                field.advanced = True
 
         elif 'embedding' in field.name:
             # for backwards compatibility
@@ -329,6 +332,29 @@ class VectorStoreFrontendNode(FrontendNode):
             if name == 'ElasticKeywordsSearch':
                 field.show = False
                 field.required = False
+            elif name in ['MilvusWithPermissionCheck', 'ElasticsearchWithPermissionCheck']:
+                field.advanced = True
+                field.show = False
+                field.required = False
+
+        elif field.name == 'collection_name':
+            field.show = True
+            field.advanced = False
+            field.value = ''
+            field.field_type = 'knowledge_one'  # 知识库单选类型，前端渲染单选列表
+            if name == 'MilvusWithPermissionCheck':
+                field.is_list = True
+                field.field_type = 'knowledge_list'  # 知识库多选类型，前端渲染多选列表
+                field.required = True
+        elif field.name == 'index_name':
+            field.show = True
+            field.advanced = False
+            field.value = ''
+            field.field_type = 'knowledge_one'
+            if name == 'ElasticsearchWithPermissionCheck':
+                field.is_list = True
+                field.field_type = 'knowledge_list'  # 知识库多选类型，前端渲染多选列表
+                field.required = True
 
         elif field.name in basic_fields:
             field.show = True
@@ -339,10 +365,6 @@ class VectorStoreFrontendNode(FrontendNode):
             elif field.name == 'location':
                 field.value = ':memory:'
                 field.placeholder = ':memory:'
-            elif field.name == 'collection_name' and name == 'Milvus':
-                field.value = ''
-            elif field.name == 'index_name':
-                field.value = ''
 
         elif field.name in advanced_fields:
             field.show = True
@@ -357,3 +379,6 @@ class VectorStoreFrontendNode(FrontendNode):
             field.show = True
             field.advanced = False
             field.value = ''
+            if name in ['MilvusWithPermissionCheck', 'ElasticsearchWithPermissionCheck']:
+                field.show = False
+                field.advanced = True

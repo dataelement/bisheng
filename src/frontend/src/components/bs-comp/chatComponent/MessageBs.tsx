@@ -38,7 +38,7 @@ export default function MessageBs({ data, onUnlike = () => { }, onSource }: { da
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeMathjax]}
                 linkTarget="_blank"
-                className="bs-mkdown inline-block break-all max-w-full text-sm text-[#111]"
+                className="bs-mkdown inline-block break-all max-w-full text-sm text-text-answer "
                 components={{
                     code: ({ node, inline, className, children, ...props }) => {
                         if (children.length) {
@@ -80,11 +80,11 @@ export default function MessageBs({ data, onUnlike = () => { }, onSource }: { da
     return <div className="flex w-full py-1">
         <div className="w-fit max-w-[90%]">
             {data.sender && <p className="text-gray-600 text-xs mb-2">{data.sender}</p>}
-            <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8]">
-                <div className="flex gap-2 ">
+            <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
+                <div className="flex gap-2">
                     <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} ><AvatarIcon /></div>
                     {data.message.toString() ?
-                        <div ref={messageRef} className="text-[#111] text-sm max-w-[calc(100%-24px)]">
+                        <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
                             {mkdown}
                             {/* @user */}
                             {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}

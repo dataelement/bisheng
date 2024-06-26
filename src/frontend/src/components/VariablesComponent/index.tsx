@@ -17,21 +17,22 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
  * 通过子组件VarDialog编辑每一项
  */
 
-export default function VariablesComponent({ nodeId, flowId, onChange }: {
+export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
+    vid: number
     nodeId: string
     flowId: string
     onChange: (val: any) => void
 }) {
-
     const [items, setItems] = useState<Variable[]>([])
 
     useEffect(() => {
         // api nodeId -> items
-        flowId && getVariablesApi({
+        flowId && vid && getVariablesApi({
+            version_id: vid,
             flow_id: flowId,
             node_id: nodeId
         }).then(arr => setItems(arr))
-    }, [flowId])
+    }, [flowId, vid])
 
     const { openPopUp, closePopUp } = useContext(PopUpContext);
     const { setErrorData } = useContext(alertContext);
@@ -60,6 +61,7 @@ export default function VariablesComponent({ nodeId, flowId, onChange }: {
         const param: any = {
             "flow_id": flowId,
             "node_id": nodeId,
+            version_id: vid,
             "variable_name": _item.name,
             "value_type": Number(_item.type === VariableType.Select) + 1,
             "value": _item.type === VariableType.Text ? _item.maxLength : _item.options.map(el => el.value).join(',')
@@ -90,7 +92,10 @@ export default function VariablesComponent({ nodeId, flowId, onChange }: {
     const scrollBodyRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         const scrollFun = (event) => {
-            event.stopPropagation();
+            // 双指缩放 event.ctrlKey为 true
+            if (!event.ctrlKey) {
+                event.stopPropagation();
+            }
         }
         scrollBodyRef.current.addEventListener('wheel', scrollFun);
         return () => scrollBodyRef.current?.removeEventListener('wheel', scrollFun);

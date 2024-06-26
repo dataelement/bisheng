@@ -16,13 +16,17 @@ import { useHasForm } from "../../util/hook";
 import FormSet from "./components/FormSet";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { SettingIcon } from "@/components/bs-icons/setting";
+import { Switch } from "@/components/bs-ui/switch";
+import FlowSetting from "@/components/Pro/security/FlowSetting";
+import { locationContext } from "@/contexts/locationContext";
 
 export default function l2Edit() {
     const { t } = useTranslation()
 
-    const { id } = useParams()
+    const { id, vid } = useParams()
+    const { appConfig } = useContext(locationContext)
     const { flow: nextFlow, setFlow, saveFlow } = useContext(TabsContext);
-    const { setErrorData, setSuccessData } = useContext(alertContext);
     const flow = useMemo(() => {
         return id ? nextFlow : null
     }, [nextFlow])
@@ -37,15 +41,15 @@ export default function l2Edit() {
         // 无id不再请求
         if (!id) return
         // 已有flow 数据时，不再请求
-        if (flow?.id === id) {
-            setIsL2(true)
-            nameRef.current.value = flow.name
-            descRef.current.value = flow.description
-            guideRef.current.value = flow.guide_word
-            return
-        }
+        // if (flow?.id === id) {
+        //     setIsL2(true)
+        //     nameRef.current.value = flow.name
+        //     descRef.current.value = flow.description
+        //     guideRef.current.value = flow.guide_word
+        //     return
+        // }
         // 无flow从db获取
-        getFlowApi(id).then(_flow => {
+        getFlowApi(id).then(_flow => { // 可以获取内容安全审查数据？
             // 回填flow
             setFlow('l2 flow init', _flow)
             setIsL2(true)
@@ -100,7 +104,6 @@ export default function l2Edit() {
         setLoading(false)
     }
 
-
     const formRef = useRef(null)
 
     // 编辑回填参数
@@ -129,10 +132,16 @@ export default function l2Edit() {
         setLoading(true)
         formRef.current?.save()
 
-        await saveFlow({ ...flow, name, description, guide_word: guideWords })
+        const res = await captureAndAlertRequestErrorHoc(saveFlow({ ...flow, name, description, guide_word: guideWords }))
         setLoading(false)
-        setSuccessData({ title: t('success') });
-        setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
+        if (res) {
+            message({
+                title: t('prompt'),
+                variant: 'success',
+                description: t('success')
+            });
+            setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
+        }
     }
 
     // 表单收缩
@@ -215,12 +224,23 @@ export default function l2Edit() {
                         </div>
                     }
                     {/* 表单设置 */}
-                    {isForm && <FormSet ref={formRef} id={id}></FormSet>}
+                    {isForm && <FormSet ref={formRef} id={id} vid={vid}></FormSet>}
+                    {/* 安全审查 */}
+                    {appConfig.isPro && <div>
+                        <p className="text-center text-gray-400 mt-8 cursor-pointer flex justify-center" onClick={showContent}>
+                            内容安全审查设置
+                            <ChevronUp />
+                        </p>
+                        {/* base form */}
+                        <div className="w-full overflow-hidden transition-all px-1">
+                            <FlowSetting id={id} type={2} isOnline={nextFlow?.status === 2} />
+                        </div>
+                    </div>}
                 </div>
             </div>
         </div>
         {/* footer */}
-        <div className="absolute flex bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-[#fff] border-t dark:bg-gray-900">
+        <div className="absolute flex z-50 bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-[#fff] border-t dark:bg-gray-900">
             {
                 isL2 ?
                     <div className="flex gap-4 w-[50%]">

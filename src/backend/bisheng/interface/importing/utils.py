@@ -182,6 +182,9 @@ def import_embedding(embedding: str) -> Any:
 def import_vectorstore(vectorstore: str) -> Any:
     """Import vectorstore from vectorstore name"""
     from bisheng_langchain import vectorstores
+    from bisheng.interface.vector_store.base import vectorstore_creator
+    if vectorstore_creator.type_to_loader_dict.get(vectorstore) is not None:
+        return vectorstore_creator.type_to_loader_dict[vectorstore]
     if vectorstore in vectorstores.__all__:
         return import_class(f'bisheng_langchain.vectorstores.{vectorstore}')
     return import_class(f'langchain_community.vectorstores.{vectorstore}')

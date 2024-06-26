@@ -98,6 +98,11 @@
     font-weight: 600;
 }
 
+/* 暗黑模式下<strong>标签字体颜色 */
+.dark .bs-mkdown :where(strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    color: white;
+}
+
 .bs-mkdown :where(a strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
     color: inherit;
 }

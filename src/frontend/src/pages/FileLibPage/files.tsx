@@ -3,33 +3,26 @@ import { Button } from "../../components/bs-ui/button";
 import {
     Table,
     TableBody,
-    TableCaption,
     TableCell,
     TableHead,
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-} from "../../components/bs-ui/tabs";
 
-import { ArrowLeft, Filter, RotateCw, Search, X } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { ArrowLeft, Filter, RotateCw, X } from "lucide-react";
+import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import PaginationComponent from "../../components/PaginationComponent";
-import AutoPagination from "../../components/bs-ui/pagination/autoPagination"
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import ShadTooltip from "../../components/ShadTooltipComponent";
-import { Input, SearchInput } from "../../components/bs-ui/input";
-import { Select, SelectContent, SelectGroup, SelectTrigger, SelectItem } from "../../components/bs-ui/select";
+import { SearchInput } from "../../components/bs-ui/input";
+import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "../../components/bs-ui/select";
 import { locationContext } from "../../contexts/locationContext";
 import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import UploadModal from "../../modals/UploadModal";
 import { useTable } from "../../util/hook";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function FilesPage() {
     const { t } = useTranslation()
@@ -127,14 +120,16 @@ export default function FilesPage() {
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <ShadTooltip content="back" side="top">
-            <button className="extra-side-bar-buttons w-[36px] absolute top-[16px]" onClick={() => { }} >
-                <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
-            </button>
-        </ShadTooltip>
         <div className="h-full overflow-y-auto pb-10 bg-[#fff]">
-            <div className="flex justify-between items-center">
-                <span className=" text-gray-700 text-sm font-black pl-14">{title}</span>
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center">
+                    <ShadTooltip content="back" side="top">
+                        <button className="extra-side-bar-buttons w-[36px]" onClick={() => { }} >
+                            <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
+                        </button>
+                    </ShadTooltip>
+                    <span className=" text-gray-700 text-sm font-black pl-4">{title}</span>
+                </div>
                 <div className="flex gap-4 items-center">
                     <SearchInput placeholder={t('lib.fileName')} onChange={(e) => search(e.target.value)}></SearchInput>
                     {hasPermission && <Button className="px-8" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
@@ -205,22 +200,23 @@ export default function FilesPage() {
         {/* 重复文件提醒 */}
         <dialog className={`modal ${repeatFiles.length && 'modal-open'}`}>
             <div className="modal-box w-[560px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg relative">文件重复提示
+                <h3 className="font-bold text-lg relative">{t('lib.modalTitle')}
                     <X className="absolute right-0 top-0 text-gray-400 cursor-pointer" size={20} onClick={() => setRepeatFiles([])}></X>
                 </h3>
-                <p className="py-4">以下文件在知识库中已存在，继续上传将会覆盖原有文件以及处理策略，是否覆盖？</p>
+                <p className="py-4">{t('lib.modalMessage')}</p>
                 <ul className="overflow-y-auto max-h-[400px]">
                     {repeatFiles.map(el => (
                         <li key={el.id} className="py-2 text-red-500">{el.remark}</li>
                     ))}
                 </ul>
                 <div className="modal-action">
-                    <Button className="h-8" variant="outline" onClick={() => setRepeatFiles([])}>不覆盖，保留原文件</Button>
+                    <Button className="h-8" variant="outline" onClick={() => setRepeatFiles([])}>{t('lib.keepOriginal')}</Button>
                     <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
-                        {retryLoad && <span className="loading loading-spinner loading-xs"></span>}覆盖
+                        {retryLoad && <span className="loading loading-spinner loading-xs"></span>}{t('lib.override')}
                     </Button>
                 </div>
             </div>
         </dialog>
+
     </div >
 };

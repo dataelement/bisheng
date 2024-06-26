@@ -169,10 +169,10 @@ def milvus_clean():
 
 
 def elastic_clean():
-    url = 'http://192.168.106.116:9200/_stats'
+    url = 'http://192.168.106.109:9200/_stats'
     user_name = 'elastic'
-    auth = 'oSGL-zVvZ5P3Tm7qkDLC'
-    del_url = 'http://192.168.106.116:9200/%s'
+    auth = 'MBDsrs5O_zHCE+12na3f'
+    del_url = 'http://192.168.106.109:9200/%s'
     col = requests.get(url, auth=(user_name, auth)).json()
     for c in col.get('indices').keys():
         if c.startswith('tmp'):

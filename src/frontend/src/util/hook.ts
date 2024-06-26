@@ -108,7 +108,7 @@ export function useTable<T extends object>(param, apiFun) {
         // 数据过滤
         filterData: (p) => {
             paramRef.current = { ...paramRef.current, ...p };
-            setPage({ ...page, page: 1 });
+            page.page === 1 ? loadData() : setPage({ ...page, page: 1 });
         },
         // 更新数据
         refreshData: (compareFn, data) => {

@@ -30,7 +30,10 @@ export default function InputListComponent({
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const scrollFun = (event) => {
-      event.stopPropagation();
+      // 双指缩放 event.ctrlKey为 true
+      if (!event.ctrlKey) {
+        event.stopPropagation();
+      }
     }
     scrollBodyRef.current.addEventListener('wheel', scrollFun);
     return () => scrollBodyRef.current?.removeEventListener('wheel', scrollFun);

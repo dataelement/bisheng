@@ -23,7 +23,6 @@ import ReactFlow, {
 } from "reactflow";
 import GenericNode from "../../../../CustomNodes/GenericNode";
 import Chat from "../../../../components/chatComponent";
-import { Button } from "../../../../components/ui/button";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
 import { undoRedoContext } from "../../../../contexts/undoRedoContext";
@@ -39,6 +38,9 @@ import { alertContext } from "../../../../contexts/alertContext";
 import Header from "../Header";
 import { Badge } from "@/components/bs-ui/badge";
 import { LayersIcon } from "@radix-ui/react-icons";
+import { Button } from "@/components/bs-ui/button";
+import { updateVersion } from "@/controllers/API/flow";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 const nodeTypes = {
   genericNode: GenericNode,
@@ -307,7 +309,9 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
 
   // 离开并保存
   const handleSaveAndClose = async () => {
-    await saveFlow(flow)
+    setFlow('leave and save', { ...flow })
+
+    await captureAndAlertRequestErrorHoc(updateVersion(version.id, { name: version.name, description: '', data: flow.data }))
     blocker.proceed?.()
   }
 
@@ -334,7 +338,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   }, [flow.data]); // 修改 id后, 需要监听 data这一层
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div id="flow-page" className="flex flex-col h-full overflow-hidden">
       <Header flow={flow}></Header>
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {Object.keys(data).length ? <ExtraSidebar flow={flow} /> : <></>}
@@ -440,7 +444,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
                   <Chat flow={flow} reactFlowInstance={reactFlowInstance} />
                   <div className="absolute top-20 left-[220px] text-xs mt-2 text-gray-500">
                     <p className="mb-2">{flow.name}</p>
-                    <Badge variant="outline"><LayersIcon className="mr-1" />当前版本：{version?.name}</Badge>
+                    <Badge variant="outline"><LayersIcon className="mr-1" />{t('skills.currentVersion')}{version?.name}</Badge>
                   </div>
                 </div>
               ) : (
@@ -456,9 +460,13 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
           <h3 className="font-bold text-lg">{t('prompt')}</h3>
           <p className="py-4">{t('flow.unsavedChangesConfirmation')}</p>
           <div className="modal-action">
-            <Button className="h-8 rounded-full" variant="outline" onClick={() => blocker.reset?.()}>{t('cancel')}</Button>
-            <Button className="h-8 rounded-full" variant="destructive" onClick={() => blocker.proceed?.()}>{t('flow.leave')}</Button>
-            <Button className="h-8 rounded-full" onClick={handleSaveAndClose}>{t('flow.leaveAndSave')}</Button>
+            <Button className="h-8" variant="outline" onClick={() => {
+              const dom = document.getElementById("flow-page") as HTMLElement;
+              blocker.reset?.()
+              if (dom) dom.className = dom.className.replace('report-hidden', '');
+            }}>{t('cancel')}</Button>
+            <Button className="leave h-8" variant="destructive" onClick={() => blocker.proceed?.()}>{t('flow.leave')}</Button>
+            <Button className="h-8" onClick={handleSaveAndClose}>{t('flow.leaveAndSave')}</Button>
           </div>
         </form>
       </dialog>

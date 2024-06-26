@@ -77,6 +77,20 @@ export function formatMilliseconds(ms: number, format: string): string {
     return formattedString;
 }
 
+// Date转换为目标格式
+export function formatDate(date: Date, format: string): string {
+    const addZero = (num) => num < 10 ? `0${num}` : `${num}`
+    const replacements = {
+        'yyyy': date.getFullYear(),
+        'MM': addZero(date.getMonth() + 1), 
+        'dd': addZero(date.getDate()),
+        'HH': addZero(date.getHours()),
+        'mm': addZero(date.getMinutes()),
+        'ss': addZero(date.getSeconds())
+    }
+    return format.replace(/yyyy|MM|dd|HH|mm|ss/g, (match) => replacements[match])
+} 
+
 export function toTitleCase(str: string | undefined): string {
     if (!str) return "";
     let result = str

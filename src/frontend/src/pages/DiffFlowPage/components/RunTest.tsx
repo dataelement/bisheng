@@ -11,12 +11,17 @@ import CellWarp from "./Cell";
 import RunForm from "./RunForm";
 import { DelIcon } from "@/components/bs-icons/del";
 import * as XLSX from 'xlsx';
+import { useTranslation } from "react-i18next";
+import { FlowStyleType, FlowType } from "@/types/flow";
+import { postBuildInit } from "@/controllers/API";
+import { generateUUID } from "@/components/bs-ui/utils";
 
 export default function RunTest({ nodeId }) {
 
+    const { t } = useTranslation()
     const [formShow, setFormShow] = useState(false)
-    const { runningType, mulitVersionFlow, readyVersions, questions, removeQuestion, cellRefs,
-        allRunStart, rowRunStart, colRunStart, overQuestions, addQuestion } = useDiffFlowStore()
+    const { running, runningType, mulitVersionFlow, readyVersions, questions, removeQuestion, cellRefs,
+        allRunStart, rowRunStart, colRunStart, overQuestions, addQuestion, updateQuestion } = useDiffFlowStore()
 
     // 是否展示表单
     const isForm = useMemo(() => {
@@ -24,6 +29,15 @@ export default function RunTest({ nodeId }) {
         if (!flowData) return false
 
         return flowData.nodes.some(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
+    }, [mulitVersionFlow])
+
+    // 选中的测试版本数
+    const versionColWidth = useMemo(() => {
+        const count = mulitVersionFlow.reduce((count, cur) => {
+            return cur ? count + 1 : count
+        }, 0) + 1 // +1 测试用例列 
+
+        return 100 / (count === 2 ? 2 : count + 1) // hack 两个 按 45% 分
     }, [mulitVersionFlow])
 
     const handleUploadTxt = () => {
@@ -46,13 +60,18 @@ export default function RunTest({ nodeId }) {
 
     const { message } = useToast()
     const inputsRef = useRef(null)
-    const handleRunTest = (inputs = null, query = '') => {
+    const build = useBuild()
+    const handleRunTest = async (inputs = null, query = '') => {
         setFormShow(false)
-        inputsRef.current = { id: nodeId, query, data: inputs }
+        const res = await build(mulitVersionFlow[0])
+        // console.log('res  :>> ', res);
+        const input = res.input_keys.find((el: any) => !el.type)
+        const inputKey = input ? Object.keys(input)[0] : '';
+        inputsRef.current = { ...input, id: nodeId, [inputKey]: query, data: inputs }
         //
         if (questions.length === 0) return message({
-            title: '提示',
-            description: '请先添加测试用例',
+            title: t('prompt'),
+            description: t('test.addTest'),
             variant: 'warning'
         })
         allRunStart(nodeId, inputsRef.current)
@@ -105,18 +124,20 @@ export default function RunTest({ nodeId }) {
         }, 0);
     }
 
+    const notDiffVersion = useMemo(() => !mulitVersionFlow.some((version) => version), [mulitVersionFlow])
+
     return <div className="mt-4 px-4">
         <div className="bg-[#fff] p-2">
             <div className="flex items-center justify-between ">
                 <div className="flex gap-2 items-center">
-                    <Button size="sm" onClick={handleUploadTxt}>上传测试用例</Button>
+                    <Button size="sm" disabled={['all', 'row', 'col'].includes(runningType)} onClick={handleUploadTxt}>{t('test.uploadTest')}</Button>
                     <TooltipProvider delayDuration={200}>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <QuestionMarkCircledIcon />
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>为测试用例是当前组件的输入，只支持 txt 文件，最多 20 行</p>
+                                <p>{t('test.explain')}</p>
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
@@ -124,36 +145,36 @@ export default function RunTest({ nodeId }) {
                 {
                     isForm ? <Dialog open={formShow} onOpenChange={setFormShow}>
                         <DialogTrigger asChild>
-                            <Button size="sm" disabled={runningType === 'all'}><PlayIcon />测试运行</Button>
+                            <Button size="sm" disabled={runningType === 'all' || notDiffVersion}><PlayIcon />{t('test.testRun')}</Button>
                         </DialogTrigger>
                         <RunForm show={formShow} flow={mulitVersionFlow[0]} onChangeShow={setFormShow} onSubmit={handleRunTest} />
                     </Dialog> :
-                        <Button size="sm" disabled={runningType === 'all'} onClick={() => handleRunTest()}><PlayIcon />测试运行</Button>
+                        <Button size="sm" disabled={runningType === 'all' || notDiffVersion} onClick={() => handleRunTest()}><PlayIcon />{t('test.testRun')}</Button>
                 }
             </div>
             {/* table */}
-            <Table>
+            <Table className="table-fixed">
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[100px]">测试用例</TableHead>
+                        <TableHead style={{ width: `${versionColWidth}%` }}>{t('test.testCase')}</TableHead>
                         {
                             mulitVersionFlow.map(version =>
-                                version && <TableHead key={version.id}>
+                                version && <TableHead key={version.id} style={{ width: `${versionColWidth + 10}%` }}>
                                     <div className="flex items-center gap-2">
                                         <span>{version.name}</span>
                                         {readyVersions[version.id] && <Button
-                                            disabled={['all', 'col'].includes(runningType)}
+                                            disabled={['all'].includes(runningType)}
                                             size='icon'
                                             className="w-6 h-6"
-                                            title="运行"
+                                            title={t('test.run')}
                                             onClick={() => handleColRunTest(version.id)}
                                         ><PlayIcon /></Button>}
                                     </div>
                                 </TableHead>
                             )
                         }
-                        <TableHead className="text-right">
-                            <Button variant="link" disabled={runningType !== ''} onClick={handleDownExcle}><DownloadIcon className="mr-1" />下载运行结果</Button>
+                        <TableHead className="text-right min-w-[135px]" style={{ width: 135 }}>
+                            <Button variant="link" disabled={runningType !== '' || !running} onClick={handleDownExcle}><DownloadIcon className="mr-1" />{t('test.downloadResults')}</Button>
                         </TableHead>
                     </TableRow>
                 </TableHeader>
@@ -163,11 +184,16 @@ export default function RunTest({ nodeId }) {
                             <TableRow>
                                 <TableCell>
                                     <div className="flex items-center gap-2 font-medium">
-                                        {question.q}
-                                        {question.ready && <Button
+                                        <Input
                                             disabled={['all', 'row'].includes(runningType)}
+                                            placeholder={t('test.testCases')}
+                                            value={question.q}
+                                            onChange={(e) => updateQuestion(e.target.value, index)}
+                                        ></Input>
+                                        {question.ready && <Button
+                                            disabled={['all'].includes(runningType) || notDiffVersion}
                                             size='icon'
-                                            className="w-6 h-6"
+                                            className="min-w-6 h-6"
                                             title="运行"
                                             onClick={() => handleRowRunTest(index)}
                                         ><PlayIcon /></Button>}
@@ -175,7 +201,7 @@ export default function RunTest({ nodeId }) {
                                 </TableCell>
                                 {/* 版本 */}
                                 {mulitVersionFlow.map(flow =>
-                                    flow && <TableCell key={flow.version + question.q}>
+                                    flow && <TableCell key={index + '-' + flow.id} className=''>
                                         <CellWarp qIndex={index} versionId={flow.id} />
                                     </TableCell>
                                 )}
@@ -195,7 +221,7 @@ export default function RunTest({ nodeId }) {
                         {questions.length < 20 && <TableCell>
                             <div className="flex items-center gap-2 font-medium min-w-52">
                                 <Input
-                                    placeholder="输入测试用例..."
+                                    placeholder={t('test.testCases')}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
                                             if (!e.target.value) return
@@ -211,10 +237,103 @@ export default function RunTest({ nodeId }) {
                             </div>
                         </TableCell>
                         }
-                        <TableCell colSpan={4} className="text-right"></TableCell>
+                        <TableCell colSpan={5} className="text-right"></TableCell>
                     </TableRow>
                 </TableFooter>
             </Table>
         </div>
     </div>
 };
+
+
+const useBuild = () => {
+    const { toast } = useToast()
+
+    // SSE 服务端推送
+    async function streamNodeData(flow: FlowType, chatId: string) {
+        let res = null
+        // Step 1: Make a POST request to send the flow data and receive a unique session ID
+        const _flow = { ...flow, id: flow.flow_id }
+        const { flowId } = await postBuildInit({ flow: _flow, versionId: flow.id });
+        // Step 2: Use the session ID to establish an SSE connection using EventSource
+        let validationResults = [];
+        let finished = false;
+        let buildEnd = false
+        const qstr = flow.id ? `?version_id=${flow.id}` : ''
+        const apiUrl = `/api/v1/build/stream/${flowId}${qstr}`;
+        const eventSource = new EventSource(apiUrl);
+
+        eventSource.onmessage = (event) => {
+            // If the event is parseable, return
+            if (!event.data) {
+                return;
+            }
+            const parsedData = JSON.parse(event.data);
+            // if the event is the end of the stream, close the connection
+            if (parsedData.end_of_stream) {
+                eventSource.close(); // 结束关闭链接
+                buildEnd = true
+                return;
+            } else if (parsedData.log) {
+                // If the event is a log, log it
+                // setSuccessData({ title: parsedData.log });
+            } else if (parsedData.input_keys) {
+                res = parsedData
+            } else {
+                // setProgress(parsedData.progress);
+                validationResults.push(parsedData.valid);
+            }
+        };
+
+        eventSource.onerror = (error: any) => {
+            console.error("EventSource failed:", error);
+            eventSource.close();
+            if (error.data) {
+                const parsedData = JSON.parse(error.data);
+                toast({
+                    title: parsedData.error,
+                    variant: 'error',
+                    description: ''
+                });
+            }
+        };
+        // Step 3: Wait for the stream to finish
+        while (!finished) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            finished = buildEnd // validationResults.length === flow.data.nodes.length;
+        }
+        // Step 4: Return true if all nodes are valid, false otherwise
+        if (validationResults.every((result) => result)) {
+            return res
+        }
+    }
+
+    // 延时器
+    async function enforceMinimumLoadingTime(
+        startTime: number,
+        minimumLoadingTime: number
+    ) {
+        const elapsedTime = Date.now() - startTime;
+        const remainingTime = minimumLoadingTime - elapsedTime;
+
+        if (remainingTime > 0) {
+            return new Promise((resolve) => setTimeout(resolve, remainingTime));
+        }
+    }
+
+    async function handleBuild(flow: FlowStyleType) {
+        try {
+            const minimumLoadingTime = 200; // in milliseconds
+            const startTime = Date.now();
+
+            const res = await streamNodeData(flow, generateUUID(32));
+            await enforceMinimumLoadingTime(startTime, minimumLoadingTime); // 至少等200ms, 再继续(强制最小load时间)
+            return res
+        } catch (error) {
+            console.error("Error:", error);
+        } finally {
+        }
+    }
+
+    return handleBuild
+}

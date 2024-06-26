@@ -31,6 +31,7 @@ except ImportError:
     def process_graph_cached_task(*args, **kwargs):
         raise NotImplementedError('Celery is not installed')
 
+
 # build router
 router = APIRouter(tags=['Base'])
 
@@ -62,6 +63,8 @@ def getn_env():
         env['office_url'] = settings.settings.get_from_db('office_url')
     # add tips from settings
     env['dialog_tips'] = settings.settings.get_from_db('dialog_tips')
+    # 判断是否SSO
+    env['sso'] = settings.settings.get_system_login_method().get('SSO_OAuth', False)
     # add env dict from settings
     env.update(settings.settings.get_from_db('env') or {})
     return resp_200(env)
@@ -74,9 +77,7 @@ def get_config(Authorize: AuthJWT = Depends()):
     if payload.get('role') != 'admin':
         raise HTTPException(status_code=500, detail='Unauthorized')
     with session_getter() as session:
-        config = session.exec(select(Config).where(
-            Config.key == 'initdb_config'
-        )).first()
+        config = session.exec(select(Config).where(Config.key == 'initdb_config')).first()
     if config:
         config_str = config.value
     else:
@@ -90,9 +91,7 @@ def save_config(data: dict):
         # 校验是否符合yaml格式
         _ = yaml.safe_load(data.get('data'))
         with session_getter() as session:
-            config = session.exec(select(Config).where(
-                Config.key == 'initdb_config'
-            )).first()
+            config = session.exec(select(Config).where(Config.key == 'initdb_config')).first()
             config.value = data.get('data')
             session.add(config)
             session.commit()
@@ -103,14 +102,29 @@ def save_config(data: dict):
     return resp_200('保存成功')
 
 
+@router.post('/process/{flow_id}')
+async def process_flow_old(
+    flow_id: UUID,
+    inputs: Optional[dict] = None,
+    tweaks: Optional[dict] = None,
+    history_count: Annotated[int, Body(embed=True)] = 10,
+    clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
+    session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
+    task_service: 'TaskService' = Depends(get_task_service),
+    sync: Annotated[bool, Body(embed=True)] = True,
+):
+    return await process_flow(flow_id, inputs, tweaks, history_count, clear_cache, session_id,
+                              task_service, sync)
+
+
 # For backwards compatibility we will keep the old endpoint
-@router.post('/predict/{flow_id}', response_model=UnifiedResponseModel[ProcessResponse])
-@router.post('/process/{flow_id}', response_model=UnifiedResponseModel[ProcessResponse])
+# @router.post('/predict/{flow_id}', response_model=UnifiedResponseModel[ProcessResponse])
+@router.post('/process', response_model=UnifiedResponseModel[ProcessResponse])
 async def process_flow(
-        flow_id: UUID,
+        flow_id: Annotated[UUID, Body(embed=True)],
         inputs: Optional[dict] = None,
         tweaks: Optional[dict] = None,
-        history_count: Optional[int] = 10,
+        history_count: Annotated[int, Body(embed=True)] = 10,
         clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
         session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
         task_service: 'TaskService' = Depends(get_task_service),
@@ -177,6 +191,8 @@ async def process_flow(
             else:
                 logger.error(f'task_id={task_id} exception task result={task}')
 
+        if isinstance(task_result, str):
+            task_result = {'answer': task_result}
         # 判断溯源
         source_documents = task_result.pop('source_documents', '')
         answer = list(task_result.values())[0]

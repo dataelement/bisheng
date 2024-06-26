@@ -49,7 +49,7 @@ class BishengRAGTool:
         self.collection_name = collection_name
         
         yaml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config/baseline_v2.yaml')
-        with open(yaml_path, 'r') as f:
+        with open(yaml_path, 'r', encoding='utf-8') as f:
             self.params = yaml.safe_load(f)
         
         # update params
@@ -245,8 +245,8 @@ class BishengRAGTool:
             input_documents = ans['input_documents']
             return rag_answer, input_documents
     
-    async def arun(self, query: str) -> str:
-        rag_answer = self.run(query)
+    async def arun(self, query: str, return_only_outputs=True) -> str:
+        rag_answer = self.run(query, return_only_outputs)
         return rag_answer
     
     @classmethod

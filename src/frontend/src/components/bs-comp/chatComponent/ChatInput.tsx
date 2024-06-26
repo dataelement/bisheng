@@ -18,7 +18,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
 
-    const { messages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
+    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
 
@@ -32,14 +32,14 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         if (changeChatedRef.current) {
             changeChatedRef.current = false
             // 新建的 form 技能,弹出窗口并锁定 input
-            if (form && messages.length === 0) {
+            if (form && messages.length === 0 && hisMessages.length === 0) {
                 setInputLock({ locked: true, reason: '' })
                 setFormShow(true)
                 setShowWhenLocked(true)
             }
         }
 
-    }, [messages])
+    }, [messages, hisMessages])
     useEffect(() => {
         if (!chatId) return
         setInputLock({ locked: false, reason: '' })
@@ -133,20 +133,20 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     if (currentChatIdRef.current && currentChatIdRef.current !== data.chat_id) return
                     handleWsMessage(data)
                     // 群聊@自己时，开启input
-                    if (data.type === 'end' && data.receiver?.is_self) {
+                    if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
                         setInputLock({ locked: true, reason: '' })
                     }
                 }
                 ws.onclose = (event) => {
                     wsRef.current = null
                     console.error('链接手动断开 event :>> ', event);
-                    if ([1005, 1008].includes(event.code)) {
+                    if ([1005, 1008, 1009].includes(event.code)) {
                         console.warn('即将废弃 :>> ');
                         setInputLock({ locked: true, reason: event.reason })
                     } else {
                         if (event.reason) {
                             toast({
-                                title: '提示',
+                                title: t('prompt'),
                                 variant: 'error',
                                 description: event.reason
                             });
@@ -186,7 +186,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 message: data.message,
                 thought: data.intermediate_steps
             })
-        } else if (data.type === 'end') {
+        } else if (['end', 'end_cover'].includes(data.type)) {
             updateCurrentMessage({
                 ...data,
                 end: true,
@@ -194,7 +194,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 messageId: data.message_id,
                 noAccess: false,
                 liked: 0
-            })
+            }, data.type === 'end_cover')
         } else if (data.type === "close") {
             setInputLock({ locked: false, reason: '' })
         }
@@ -230,12 +230,12 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         // setInputEmpty(textarea.value.trim() === '')
     }
 
-    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff]">
+    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className={`relative ${clear && 'pl-9'}`}>
             {/* form */}
             {
                 formShow && <div className="relative">
-                    <div className="absolute left-0 border bottom-2 bg-[#fff] px-4 py-2 rounded-md w-[50%] min-w-80">
+                    <div className="absolute left-0 border bottom-2 bg-[#fff] px-4 py-2 rounded-md w-[50%] min-w-80 z-50">
                         {inputForm}
                     </div>
                 </div>
@@ -281,8 +281,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 style={{ height: 56 }}
                 disabled={inputLock.locked}
                 onInput={handleTextAreaHeight}
-                placeholder={inputLock.locked ? inputLock.reason : '请输入问题'}
-                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide text-gray-800" + (form && ' pl-10')}
+                placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
+                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();

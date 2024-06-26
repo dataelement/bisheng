@@ -33,6 +33,7 @@ import {
   nodeColors,
   nodeIconsLucide
 } from "../../../../utils";
+import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 
 export default function ParameterComponent({
   left,
@@ -59,7 +60,7 @@ export default function ParameterComponent({
   const updateNodeInternals = useUpdateNodeInternals();
   const [position, setPosition] = useState(0);
   const { closePopUp } = useContext(PopUpContext);
-  const { setTabsState, flow } = useContext(TabsContext);
+  const { setTabsState, flow, version } = useContext(TabsContext);
 
   const groupedEdge = useRef(null); // 用yu过滤菜单的数据
 
@@ -89,7 +90,7 @@ export default function ParameterComponent({
   }, [id, data, reactFlowInstance])
   // milvus 组件，知识库不为空是 embbeding取消必填限制
   useEffect(() => {
-    const {embedding, index_name, collection_name, connection_args} = data.node.template
+    const { embedding, index_name, collection_name, connection_args } = data.node.template
     if ((index_name || collection_name) && embedding) {
       const hidden = disabled ? false : !!(collection_name || index_name).value
       data.node.template.embedding.required = !hidden
@@ -99,7 +100,7 @@ export default function ParameterComponent({
     }
   }, [data, disabled])
   const handleRemoveMilvusEmbeddingEdge = (nodeId) => {
-    const edges = reactFlowInstance.getEdges().filter(edge => edge.targetHandle.indexOf('Embeddings|embedding|'+nodeId) === -1)
+    const edges = reactFlowInstance.getEdges().filter(edge => edge.targetHandle.indexOf('Embeddings|embedding|' + nodeId) === -1)
     reactFlowInstance.setEdges(edges)
   }
   const [myData, setMyData] = useState(useContext(typesContext).data);
@@ -296,35 +297,36 @@ export default function ParameterComponent({
             type === "int" ||
             type === "variable" ||
             type === "button" ||
+            type === "knowledge_one" ||
+            type === "knowledge_list" ||
             type === "NestedDict" ||
             type === "dict") &&
-          !optionalHandle ? (
-          <></>
-        ) : (
-          <ShadTooltip
-            styleClasses={"tooltip-fixed-width custom-scroll nowheel"}
-            delayDuration={0}
-            content={refHtml.current}
-            side={left ? "left" : "right"}
-          >
-            <Handle
-              type={left ? "target" : "source"}
-              position={left ? Position.Left : Position.Right}
-              id={id}
-              isValidConnection={(connection) =>
-                isValidConnection(connection, reactFlowInstance)
-              }
-              className={classNames(
-                left ? "-ml-0.5 " : "-mr-0.5 ",
-                "h-3 w-3 rounded-full border-2 bg-background"
-              )}
-              style={{
-                borderColor: color,
-                top: position,
-              }}
-            ></Handle>
-          </ShadTooltip>
-        )}
+          !optionalHandle ? (<></>)
+          : (
+            <ShadTooltip
+              styleClasses={"tooltip-fixed-width custom-scroll nowheel"}
+              delayDuration={0}
+              content={refHtml.current}
+              side={left ? "left" : "right"}
+            >
+              <Handle
+                type={left ? "target" : "source"}
+                position={left ? Position.Left : Position.Right}
+                id={id}
+                isValidConnection={(connection) =>
+                  isValidConnection(connection, reactFlowInstance)
+                }
+                className={classNames(
+                  left ? "-ml-0.5 " : "-mr-0.5 ",
+                  "h-3 w-3 rounded-full border-2 bg-background"
+                )}
+                style={{
+                  borderColor: color,
+                  top: position,
+                }}
+              ></Handle>
+            </ShadTooltip>
+          )}
 
         {/* 左侧input输入项 */}
         {!data.node.template[name] ? null : left === true &&
@@ -354,10 +356,6 @@ export default function ParameterComponent({
             ) : ['index_name', 'collection_name'].includes(name) ? (
               // 知识库选择
               <CollectionNameComponent
-                setNodeClass={(nodeClass) => {
-                  data.node = nodeClass;
-                }}
-                nodeClass={data.node}
                 disabled={disabled}
                 id={data.node.template[name].collection_id ?? ""}
                 value={data.node.template[name].value ?? ""}
@@ -373,6 +371,35 @@ export default function ParameterComponent({
                 onChange={handleOnNewValue}
               />
             )}
+          </div>
+        ) : left === true && type === "knowledge_one" ? (
+          // 单选知识库
+          <div className="mt-2 w-full">
+            <CollectionNameComponent
+              disabled={disabled}
+              id={data.node.template[name].collection_id ?? ""}
+              value={data.node.template[name].value ?? ""}
+              onSelect={(val, id) => { handleOnNewLibValue(val, id); val && handleRemoveMilvusEmbeddingEdge(data.id) }}
+              onChange={() => { }}
+            />
+          </div>
+        ) : left === true && type === "knowledge_list" ? (
+          // 多选知识库
+          <div className="mt-2 w-full">
+            <KnowledgeSelect
+              multiple
+              disabled={disabled}
+              value={data.node.template[name].value?.map?.((item) => ({
+                label: item.value,
+                value: item.key,
+              })) || []}
+              onChange={(vals) => {
+                handleOnNewValue(vals.map(v => ({
+                  key: v.value,
+                  value: v.label
+                })))
+              }}
+            />
           </div>
         ) : left === true && type === "bool" ? (
           <div className="mt-2 w-full">
@@ -511,7 +538,7 @@ export default function ParameterComponent({
           </div>
         ) : left === true && type === "variable" ? (
           <div className="mt-2 w-full">
-            <VariablesComponent nodeId={data.id} flowId={flowId} onChange={(newValue) => {
+            <VariablesComponent vid={version?.id} nodeId={data.id} flowId={flowId} onChange={(newValue) => {
               data.node!.template[name].value = newValue;
               handleOnNewValue(newValue);
             }} />

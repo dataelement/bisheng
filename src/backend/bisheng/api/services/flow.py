@@ -1,21 +1,30 @@
 import asyncio
-from typing import List, Dict
+import copy
+from typing import List, Dict, AsyncGenerator
+from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
+from fastapi import Request
 from loguru import logger
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
     NotFoundFlowError, \
     FlowOnlineEditError
+from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq
+from bisheng.api.utils import get_L2_param_from_flow, get_request_ip
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
+    StreamData
 from bisheng.chat.utils import process_node_data
-from bisheng.database.models.flow import FlowDao, FlowStatus
+from bisheng.database.models.flow import FlowDao, FlowStatus, Flow
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
+from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import RoleAccessDao, AccessType
 from bisheng.database.models.user import UserDao
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.database.models.variable_value import VariableDao
 from bisheng.processing.process import process_graph_cached, process_tweaks
 
 
@@ -27,7 +36,12 @@ class FlowService:
         根据技能ID 获取技能的所有版本信息
         """
         data = FlowVersionDao.get_list_by_flow(flow_id)
-        return resp_200(data=data)
+        # 包含已删除版本
+        all_version_num = FlowVersionDao.count_list_by_flow(flow_id, include_delete=True)
+        return resp_200(data={
+            'data': data,
+            'total': all_version_num
+        })
 
     @classmethod
     def get_version_info(cls, user: UserPayload, version_id: int) -> UnifiedResponseModel[FlowVersion]:
@@ -61,7 +75,8 @@ class FlowService:
         return resp_200()
 
     @classmethod
-    def change_current_version(cls, user: UserPayload, flow_id: str, version_id: int) -> UnifiedResponseModel[None]:
+    def change_current_version(cls, request: Request, login_user: UserPayload, flow_id: str, version_id: int) \
+            -> UnifiedResponseModel[None]:
         """
         修改当前版本
         """
@@ -70,7 +85,7 @@ class FlowService:
             return NotFoundFlowError.return_resp()
 
         # 判断权限
-        if not user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+        if not login_user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
             return UnAuthorizedError.return_resp()
 
         # 技能上线状态不允许 切换版本
@@ -86,11 +101,13 @@ class FlowService:
 
         # 修改当前版本为用户选择的版本
         FlowVersionDao.change_current_version(flow_id, version_info)
+
+        cls.update_flow_hook(request, login_user, flow_info)
         return resp_200()
 
     @classmethod
-    def create_new_version(cls, user: UserPayload, flow_id: str, flow_version: FlowVersionCreate) -> \
-            UnifiedResponseModel[FlowVersion]:
+    def create_new_version(cls, user: UserPayload, flow_id: str, flow_version: FlowVersionCreate) \
+            -> UnifiedResponseModel[FlowVersion]:
         """
         创建新版本
         """
@@ -107,19 +124,32 @@ class FlowService:
             return VersionNameExistsError.return_resp()
 
         flow_version = FlowVersion(flow_id=flow_id, name=flow_version.name, description=flow_version.description,
-                                   user_id=user.user_id, data=flow_version.data)
+                                   user_id=user.user_id, data=flow_version.data,
+                                   original_version_id=flow_version.original_version_id)
 
+        # 创建新版本
         flow_version = FlowVersionDao.create_version(flow_version)
+
+        # 将原始版本的表单数据拷贝到新版本内
+        VariableDao.copy_variables(flow_version.flow_id, flow_version.original_version_id, flow_version.id)
+
+        try:
+            # 重新整理此版本的表单数据
+            if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
+                logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
+        except:
+            pass
+
         return resp_200(data=flow_version)
 
     @classmethod
-    def update_version_info(cls, user: UserPayload, version_id: int, flow_version: FlowVersionCreate) \
+    def update_version_info(cls, request: Request, user: UserPayload, version_id: int, flow_version: FlowVersionCreate) \
             -> UnifiedResponseModel[FlowVersion]:
         """
         更新版本信息
         """
-
-        version_info = FlowVersionDao.get_version_by_id(version_id)
+        # 包含已删除的版本，若版本已删除，则重新恢复此版本
+        version_info = FlowVersionDao.get_version_by_id(version_id, include_delete=True)
         if not version_info:
             return NotFoundVersionError.return_resp()
         flow_info = FlowDao.get_flow_by_id(version_info.flow_id)
@@ -137,8 +167,18 @@ class FlowService:
         version_info.name = flow_version.name if flow_version.name else version_info.name
         version_info.description = flow_version.description if flow_version.description else version_info.description
         version_info.data = flow_version.data if flow_version.data else version_info.data
+        # 恢复此技能版本
+        version_info.is_delete = 0
 
         flow_version = FlowVersionDao.update_version(version_info)
+
+        try:
+            # 重新整理此版本的表单数据
+            if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
+                logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
+        except:
+            pass
+        cls.update_flow_hook(request, user, flow_info)
         return resp_200(data=flow_version)
 
     @classmethod
@@ -196,64 +236,110 @@ class FlowService:
         })
 
     @classmethod
-    async def compare_flow_node(cls, user: UserPayload, req: FlowCompareReq) -> UnifiedResponseModel[Dict]:
+    async def get_compare_tasks(cls, user: UserPayload, req: FlowCompareReq) -> List:
         """
-        比较两个版本中某个节点的 输出结果
+        获取比较任务
         """
         if req.question_list is None or len(req.question_list) == 0:
-            return resp_200(data=[])
+            return []
         if req.version_list is None or len(req.version_list) == 0:
-            return resp_200(data=[])
+            return []
         if req.node_id is None:
-            return resp_200(data=[])
-
-        # 特殊处理下inputs, 保持和通过websocket会话的格式一致
-        if req.inputs.get('data', None):
-            for one in req.inputs['data']:
-                one['id'] = one['nodeId']
-                if 'InputFile' in one['id']:
-                    one['file_path'] = one['value']
+            return []
 
         # 获取版本数据
-        res = [{} for _ in range(len(req.question_list))]
         version_infos = FlowVersionDao.get_list_by_ids(req.version_list)
         # 启动一个新的事件循环
         tasks = []
         for index, question in enumerate(req.question_list):
             question_index = index
-            tmp_inputs = req.inputs.copy()
-            task = asyncio.create_task(cls.exec_flow_node(
-                tmp_inputs, res, question_index, question, version_infos))
-            tasks.append(task)
-        await asyncio.gather(*tasks)
+            tmp_inputs = copy.deepcopy(req.inputs)
+            tmp_inputs, tmp_tweaks = cls.parse_compare_inputs(tmp_inputs, question)
+            for version in version_infos:
+                task = asyncio.create_task(cls.exec_flow_node(
+                    copy.deepcopy(tmp_inputs), tmp_tweaks, question_index, [version]))
+                tasks.append(task)
+        return tasks
+
+    @classmethod
+    def parse_compare_inputs(cls, inputs: Dict, question) -> (Dict, Dict):
+        # 特殊处理下inputs, 保持和通过websocket会话的格式一致
+        if inputs.get('data', None):
+            for one in inputs['data']:
+                one['id'] = one['nodeId']
+                if 'InputFile' in one['id']:
+                    one['file_path'] = one['value']
+
+        # 填充question 和生成替换的tweaks
+        for key, val in inputs.items():
+            if key != 'data' and key != 'id':
+                # 默认输入key，替换第一个需要输入的key
+                logger.info(f"replace_inputs {key} replace to {question}")
+                inputs[key] = question
+                break
+        if 'id' in inputs:
+            inputs.pop('id')
+        # 替换节点的参数, 替换inputFileNode和VariableNode的参数
+        tweaks = {}
+        if 'data' in inputs:
+            node_data = inputs.pop('data')
+            if node_data:
+                tweaks = process_node_data(node_data)
+        return inputs, tweaks
+
+    @classmethod
+    async def compare_flow_node(cls, user: UserPayload, req: FlowCompareReq) -> UnifiedResponseModel[Dict]:
+        """
+        比较两个版本中某个节点的 输出结果
+        """
+        tasks = await cls.get_compare_tasks(user, req)
+        if len(tasks) == 0:
+            return resp_200(data=[])
+        res = [{} for _ in range(len(req.question_list))]
+        try:
+            for one in asyncio.as_completed(tasks):
+                index, answer = await one
+                if res[index]:
+                    res[index].update(answer)
+                else:
+                    res[index] = answer
+        except Exception as e:
+            return resp_500(message="技能对比错误：{}".format(str(e)))
         return resp_200(data=res)
 
     @classmethod
-    async def exec_flow_node(cls, inputs: Dict, res: List[Dict], index: int, question: str,
-                             versions: List[FlowVersion]):
+    async def compare_flow_stream(cls, user: UserPayload, req: FlowCompareReq) -> AsyncGenerator:
+        """
+        比较两个版本中某个节点的 输出结果
+        """
+        tasks = await cls.get_compare_tasks(user, req)
+        if len(tasks) == 0:
+            return
+        for one in asyncio.as_completed(tasks):
+            index, answer_dict = await one
+            for version_id, answer in answer_dict.items():
+                yield str(StreamData(event='message',
+                                     data={'question_index': index,
+                                           'version_id': version_id,
+                                           'answer': answer}))
+
+    @classmethod
+    async def exec_flow_node(cls, inputs: Dict, tweaks: Dict, index: int, versions: List[FlowVersion]):
         # 替换answer
         answer_result = {}
-        for key, val in inputs.items():
-            if key == 'data' or key == 'id':
-                continue
-            else:
-                # 其他默认输入key，替换第一个需要输入的key
-                inputs[key] = question
-                break
-        # 替换节点的参数, 替换inputFileNode和VariableNode的参数
-        tweaks = {}
-        if inputs.get('data') is not None:
-            node_data = inputs.pop('data')
-            tweaks = process_node_data(node_data)
-
         # 执行两个版本的节点
         for one in versions:
             graph_data = process_tweaks(one.data, tweaks)
-            result = await process_graph_cached(graph_data,
-                                                inputs,
-                                                session_id=None,
-                                                history_count=10,
-                                                flow_id=one.flow_id)
+            try:
+                result = await process_graph_cached(graph_data,
+                                                    inputs,
+                                                    session_id=None,
+                                                    history_count=10,
+                                                    flow_id=one.flow_id)
+            except Exception as e:
+                logger.exception(f"exec flow node error version_id: {one.name}")
+                answer_result[one.id] = f"{one.name}版本技能执行出错： {str(e)}"
+                continue
             if isinstance(result, dict) and 'result' in result:
                 task_result = result['result']
             elif hasattr(result, 'result') and hasattr(result, 'session_id'):
@@ -264,4 +350,38 @@ class FlowService:
 
             answer_result[one.id] = list(task_result.values())[0]
 
-        res[index] = answer_result
+        return index, answer_result
+
+    @classmethod
+    def create_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
+        logger.info(f'create_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
+        # 将技能关联到对应的用户组下
+        user_group = UserGroupDao.get_user_group(login_user.user_id)
+        if user_group:
+            batch_resource = []
+            for one in user_group:
+                batch_resource.append(
+                    GroupResource(group_id=one.group_id,
+                                  third_id=flow_info.id.hex,
+                                  type=ResourceTypeEnum.FLOW.value))
+            GroupResourceDao.insert_group_batch(batch_resource)
+        # 写入审计日志
+        AuditLogService.create_build_flow(login_user, get_request_ip(request), flow_info.id.hex)
+        return True
+
+    @classmethod
+    def update_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
+        # 写入审计日志
+        AuditLogService.update_build_flow(login_user, get_request_ip(request), flow_info.id.hex)
+        return True
+
+    @classmethod
+    def delete_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
+        logger.info(f'delete_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
+
+        # 写入审计日志
+        AuditLogService.delete_build_flow(login_user, get_request_ip(request), flow_info)
+
+        # 将用户组下关联的技能删除
+        GroupResourceDao.delete_group_resource_by_third_id(flow_info.id.hex, ResourceTypeEnum.FLOW)
+        return True

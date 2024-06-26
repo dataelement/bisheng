@@ -6,6 +6,8 @@ from bisheng.api.v1.schemas import ChatMessage
 from bisheng.database.base import session_getter
 from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk
+from bisheng.interface.importing import import_by_type
+from bisheng.interface.initialize.loading import instantiate_llm
 from bisheng.interface.utils import try_setting_streaming_options
 from bisheng.processing.base import get_result_and_steps
 from bisheng.utils.logger import logger
@@ -62,24 +64,19 @@ KeyWords: ['过去三年', '流动比率', '2021', '3.74', '2020', '2.82', '2019
 Question: {question}'''
 
 
-def extract_answer_keys(answer, extract_model, host_base_url):
+def extract_answer_keys(answer, llm):
     """
     提取answer中的关键词
     """
-    if extract_model:
-        llm = HostQwenChat(model_name=extract_model,
-                           host_base_url=host_base_url,
-                           max_tokens=8192,
-                           temperature=0,
-                           top_p=1,
-                           verbose=True)
+    llm_chain = None
+    if llm:
         llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
     try:
         keywords_str = llm_chain.run(answer)
         keywords = eval(keywords_str[9:])
     except Exception:
         import jieba.analyse
-        logger.warning(f'llm {extract_model} extract_not_support, change to jieba')
+        logger.warning(f'llm {llm} extract_not_support, change to jieba')
         keywords = jieba.analyse.extract_tags(answer, topK=100, withWeight=False)
 
     return keywords
@@ -104,11 +101,19 @@ async def judge_source(result, source_document, chat_id, extra: Dict):
                 doc.metadata.get('extra') and json.loads(doc.metadata.get('extra')).get('url')
                 for doc in source_document):
             source = 3
-            doc = [{
-                'title': doc.metadata.get('source'),
-                'url': json.loads(doc.metadata.get('extra', '{}')).get('url')
-            } for doc in source_document]
-            extra.update({'doc': [dict(s) for s in set(frozenset(d.items()) for d in doc)]})
+            repeat_doc = {}
+            doc = []
+            # 来源文档做去重，不能改变原有的顺序
+            for one in source_document:
+                title = one.metadata.get('source')
+                url = json.loads(one.metadata.get('extra', '{}')).get('url')
+                repeat_key = (title, url)
+                # 重复的丢掉，不返回
+                if repeat_doc.get(repeat_key):
+                    continue
+                doc.append({'title': title, 'url': url})
+                repeat_doc[repeat_key] = 1
+            extra.update({'doc': doc})
         else:
             source = 1
 
@@ -129,20 +134,13 @@ async def process_source_document(source_document: List[Document], chat_id, mess
     from bisheng.settings import settings
     # 使用大模型进行关键词抽取，模型配置临时方案
     keyword_conf = settings.get_default_llm() or {}
-    host_base_url = keyword_conf.get('host_base_url')
-    model = keyword_conf.get('model')
+    llm = None
+    if keyword_conf:
+        node_type = keyword_conf.pop('type', "HostQwenChat")  # 兼容旧配置
+        class_object = import_by_type(_type='llms', name=node_type)
+        llm = instantiate_llm(node_type, class_object, keyword_conf)
 
-    if model and not host_base_url:
-        with session_getter() as db_session:
-            model_deploy = db_session.exec(
-                select(ModelDeploy).where(ModelDeploy.model == model)).first()
-        if model_deploy:
-            model = model if model_deploy.status == '已上线' else None
-            host_base_url = model_deploy.endpoint
-        else:
-            logger.error('不能使用配置模型进行关键词抽取，配置不正确')
-
-    answer_keywords = extract_answer_keys(answer, model, host_base_url)
+    answer_keywords = extract_answer_keys(answer, llm)
 
     batch_insert = []
     for doc in source_document:

@@ -15,25 +15,32 @@ import { Variable, getFlowApi } from "../../../controllers/API/flow";
 import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
+import ForcePrompt from "./ForcePrompt";
 
-export default function ChatPanne({ customWsHost = '', data }) {
+export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
     const { t } = useTranslation()
 
     const [flow, setFlow] = useState<any>(null)
     const flowRef = useRef(null)
     const [assistant, setAssistant] = useState<any>(null)
-    const { assistantState, loadAssistantState } = useAssistantStore()
+    const { assistantState, loadAssistantState, destroy } = useAssistantStore()
     // console.log('data :>> ', flow);
     const build = useBuild()
-    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, destory } = useMessageStore()
+    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId } = useMessageStore()
+    useEffect(() => {
+        return destroy
+    }, [])
 
     const init = async () => {
         if (type === 'flow') {
             setAssistant(null)
-            const _flow = await getFlowApi(id)
+            const _flow = await getFlowApi(id, version)
             await build(_flow, chatId)
-            loadHistoryMsg(_flow.id, chatId)
+            version === 'v1' && loadHistoryMsg(_flow.id, chatId, {
+                appendHistory,
+                lastMsg: t('historicalMessages')
+            })
             flowRef.current = _flow
             setFlow(_flow)
             changeChatId(chatId) // ws
@@ -41,7 +48,10 @@ export default function ChatPanne({ customWsHost = '', data }) {
             flowRef.current = null
             setFlow(null)
             const _assistant = await loadAssistantState(id)
-            loadHistoryMsg(_assistant.id, chatId)
+            loadHistoryMsg(_assistant.id, chatId, {
+                appendHistory,
+                lastMsg: t('historicalMessages')
+            })
             setAssistant(_assistant)
             changeChatId(chatId) // ws
         }
@@ -86,7 +96,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
             const inputKey = 'input';
             const msgData = {
                 chatHistory: messages,
-                flow_id: '',
+                flow_id: data?.id || '',
                 chat_id: chatId,
                 name: assistant.name,
                 description: assistant.desc,
@@ -149,8 +159,8 @@ export default function ChatPanne({ customWsHost = '', data }) {
 
     if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg">
         <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src="/application-start-logo.png" alt="" />
-        <p className="text-center text-3xl w-[182px] whitespace-normal leading-[64px] text-[#111111] mx-auto mt-[20px] font-light">
-            选择一个<b className="text-[#111111] font-semibold">对话</b><br />开始<b className="text-[#111111] font-semibold">文擎睿见</b>
+        <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] text-[#111111] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
+            {t('chat.chooseOne')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
         </p>
         {
             !customWsHost && <div
@@ -170,7 +180,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
         {
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
-                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1">
+                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
                     <TitleIconBg className="" id={flow.id}></TitleIconBg>
                     <span className="text-sm">{flow.name}</span>
                 </div>
@@ -180,16 +190,18 @@ export default function ChatPanne({ customWsHost = '', data }) {
                     guideWord={flow.guide_word}
                     wsUrl={wsUrl}
                     onBeforSend={getWsParamData}
-                    loadMore={() => loadMoreHistoryMsg(flow.id)}
+                    loadMore={() => loadMoreHistoryMsg(flow.id, appendHistory)}
                     inputForm={flowSate.isForm ? <ChatReportForm flow={flow} onStart={sendReport} /> : null}
                 />
+                {/* 强制提醒 */}
+                <ForcePrompt id={flow.id} />
             </div>
         }
         {/* 助手会话 */}
         {
             assistant && <div className={`w-full chat-box h-full relative px-6 ${type !== 'flow' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
-                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1">
+                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
                     <TitleIconBg className="" id={assistant.id}><AssistantIcon /></TitleIconBg>
                     <span className="text-sm">{assistant.name}</span>
                 </div>
@@ -199,9 +211,11 @@ export default function ChatPanne({ customWsHost = '', data }) {
                     guideWord={assistantState.guide_word}
                     wsUrl={wsUrl}
                     onBeforSend={getWsParamData}
-                    loadMore={() => loadMoreHistoryMsg(assistant.id)}
+                    loadMore={() => loadMoreHistoryMsg(assistant.id, appendHistory)}
                     inputForm={null}
                 />
+                {/* 强制提醒 */}
+                <ForcePrompt id={assistant.id} />
             </div>
         }
     </div>
@@ -222,7 +236,7 @@ const useBuild = () => {
     // SSE 服务端推送
     async function streamNodeData(flow: FlowType, chatId: string) {
         // Step 1: Make a POST request to send the flow data and receive a unique session ID
-        const { flowId } = await postBuildInit(flow, chatId);
+        const { flowId } = await postBuildInit({ flow, chatId });
         // Step 2: Use the session ID to establish an SSE connection using EventSource
         let validationResults = [];
         let finished = false;

@@ -11,18 +11,20 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { alertContext } from "@/contexts/alertContext";
 import { PopUpContext } from "@/contexts/popUpContext";
 import { TabsContext } from "@/contexts/tabsContext";
-import TipPng from "../../../assets/tip.png";
+import { typesContext } from "@/contexts/typesContext";
 import { undoRedoContext } from "@/contexts/undoRedoContext";
+import { createFlowVersion, deleteVersion, getFlowVersions, getVersionDetails, updateVersion } from "@/controllers/API/flow";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import ApiModal from "@/modals/ApiModal";
 import L2ParamsModal from "@/modals/L2ParamsModal";
 import ExportModal from "@/modals/exportModal";
+import { FlowVersionItem } from "@/types/flow";
 import { ArrowDownIcon, ArrowUpIcon, BellIcon, CodeIcon, ExitIcon, LayersIcon, StackIcon } from "@radix-ui/react-icons";
-import { useContext, useEffect, useState } from "react";
+import { t } from "i18next";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { createFlowVersion, deleteVersion, getFlowVersions, getVersionDetails, updateVersion } from "@/controllers/API/flow";
-import { FlowVersionItem } from "@/types/flow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import TipPng from "../../../assets/tip.jpg";
 
 export default function Header({ flow }) {
     const navgate = useNavigate()
@@ -32,6 +34,8 @@ export default function Header({ flow }) {
     const AlertWidth = 384;
     const { notificationCenter, setNotificationCenter } = useContext(alertContext);
     const { uploadFlow, setFlow, tabsState, saveFlow } = useContext(TabsContext);
+    const { reactFlowInstance } = useContext(typesContext);
+
     const isPending = tabsState[flow.id]?.isPending;
     const { openPopUp } = useContext(PopUpContext);
     // 记录快照
@@ -39,45 +43,67 @@ export default function Header({ flow }) {
 
     const handleSaveNewVersion = async () => {
         // 累加版本 vx ++
-        let maxNo = 1
-        versions.forEach(v => {
-            const match = v.name.match(/[vV](\d+)/)
-            maxNo = match ? Math.max(Number(match[1]), maxNo) : maxNo
-        })
-        maxNo++
+        const maxNo = lastVersionIndexRef.current + 1
+        // versions.forEach(v => {
+        //     const match = v.name.match(/[vV](\d+)/)
+        //     maxNo = match ? Math.max(Number(match[1]), maxNo) : maxNo
+        // })
+        // maxNo++
         // save
         const res = await captureAndAlertRequestErrorHoc(
-            createFlowVersion(flow.id, { name: `v${maxNo}`, description: '', data: flow.data })
+            createFlowVersion(flow.id, { name: `v${maxNo}`, description: '', data: flow.data, original_version_id: version.id })
         )
         message({
             variant: "success",
-            title: `版本 v${maxNo} 保存成功`,
+            title: `${t('skills.version')} v${maxNo} ${t('skills.saveSuccessful')}`,
             description: ""
         })
         // 更新版本列表
-        refrenshVersions()
+        await refrenshVersions()
+        // 切换到最新版本
+        
+        setVersionId(res.id)
     }
+    // 
+    const [saveVersionId, setVersionId] = useState('')
+    useEffect(() => {
+        saveVersionId && handleChangeVersion(saveVersionId)
+    }, [saveVersionId])
 
     // 版本管理
     const [loading, setLoading] = useState(false)
-    const { versions, version, changeName, deleteVersion, refrenshVersions, setCurrentVersion } = useVersion(flow)
+    const { versions, version, lastVersionIndexRef, changeName, deleteVersion, refrenshVersions, setCurrentVersion } = useVersion(flow)
     // 切换版本
     const handleChangeVersion = async (versionId) => {
         setLoading(true)
+        reactFlowInstance.setNodes([]) // 便于重新渲染节点
         // 保存当前版本
-        await saveFlow(flow)
+        // updateVersion(version.id, { name: version.name, description: '', data: flow.data })
         // 切换版本UI
-        const currentVersion = setCurrentVersion(Number(versionId))
+        setCurrentVersion(Number(versionId))
         // 加载选中版本data
         const res = await getVersionDetails(versionId)
         // 自动触发 page的 clone flow
         setFlow('versionChange', { ...flow, data: res.data })
         message({
             variant: "success",
-            title: `切换到 ${currentVersion.name}`,
+            title: `切换到 ${res.name}`,
             description: ""
         })
         setLoading(false)
+    }
+    // 保存版本
+    const handleSaveVersion = async () => {
+        // 保存当前版本
+        captureAndAlertRequestErrorHoc(updateVersion(version.id, { name: version.name, description: '', data: flow.data }).then(_ => {
+            setFlow('versionChange', { ...flow }) // 更新clone flow，避免触发diff不同
+
+            _ && message({
+                variant: "success",
+                title: t('success'),
+                description: ""
+            })
+        }))
     }
 
     return <div className="flex justify-between items-center border-b px-4">
@@ -91,49 +117,47 @@ export default function Header({ flow }) {
             <Button
                 variant="outline"
                 size="icon"
-                onClick={() => navgate('/build/skill/' + flow.id, { replace: true })}
-            ><ExitIcon className="h-4 w-4" /></Button>
+                onClick={() => navgate('/build/skills', { replace: true })}
+            ><ExitIcon className="h-4 w-4 rotate-180" /></Button>
             <Button variant="outline" onClick={() => { takeSnapshot(); uploadFlow() }} >
-                <ArrowUpIcon className="h-4 w-4 mr-1" />导入
+                <ArrowUpIcon className="h-4 w-4 mr-1" />{t('skills.import')}
             </Button>
             <Button variant="outline" onClick={() => { openPopUp(<ExportModal />) }}>
-                <ArrowDownIcon className="h-4 w-4 mr-1" />导出
+                <ArrowDownIcon className="h-4 w-4 mr-1" />{t('skills.export')}
             </Button>
             <Button variant="outline" onClick={() => { openPopUp(<ApiModal flow={flow} />) }} >
-                <CodeIcon className="h-4 w-4 mr-1" />代码
+                <CodeIcon className="h-4 w-4 mr-1" />{t('skills.code')}
             </Button>
             <Button variant="outline" onClick={() => setOpen(true)} >
-                <StackIcon className="h-4 w-4 mr-1" />简化
+                <StackIcon className="h-4 w-4 mr-1" />{t('skills.simplify')}
             </Button>
         </div>
         {
             version && <div className="flex gap-4">
-                <Button className="px-6 flex gap-2" type="button" onClick={() =>
-                    updateVersion(version.id, { name: version.name, description: '', data: flow.data }).then(_ =>
-                        _ && message({
-                            variant: "success",
-                            title: t('success'),
-                            description: ""
-                        }))
-                }
-                    disabled={!isPending}><SaveIcon />保存</Button>
+                <Button className="px-6 flex gap-2" type="button" onClick={handleSaveVersion}
+                    disabled={!isPending}><SaveIcon />{t('skills.save')}</Button>
                 <ActionButton
                     className="px-6 flex gap-2"
                     align="end"
+                    variant="outline"
                     onClick={handleSaveNewVersion}
+                    delayDuration={200}
                     buttonTipContent={(
                         <div>
                             <img src={TipPng} alt="" className="w-80" />
-                            <p className="mt-4 text-sm">支持分成多个版本分支，分别进行开发以及版本间的比较。</p>
+                            <p className="mt-4 text-sm">{t('skills.supportVersions')}</p>
                         </div>
                     )}
                     dropDown={(
-                        <div>
-                            <RadioGroup value={version.id + ''} onValueChange={handleChangeVersion} className="gap-0">
+                        <div className=" overflow-y-auto max-h-96 max-h">
+                            <RadioGroup value={version.id + ''} onValueChange={(vid) => {
+                                updateVersion(version.id, { name: version.name, description: '', data: flow.data })
+                                handleChangeVersion(vid)
+                            }} className="gap-0">
                                 {versions.map((vers, index) => (
                                     <div key={vers.id} className="group flex items-center gap-4 px-4 py-2 cursor-pointer hover:bg-gray-100 border-b">
                                         <RadioGroupItem value={vers.id + ''} />
-                                        <div className="w-52">
+                                        <div className="w-[198px]">
                                             <TextInput
                                                 className="h-[30px]"
                                                 type="hover"
@@ -141,13 +165,13 @@ export default function Header({ flow }) {
                                                 maxLength={30}
                                                 onSave={val => changeName(vers.id, val)}
                                             ></TextInput>
-                                            <p className="text-sm text-muted-foreground mt-2">{vers.update_time.replace('T', ' ')}</p>
+                                            <p className="text-sm text-muted-foreground mt-2">{vers.update_time.replace('T', ' ').substring(0, 16)}</p>
                                         </div>
                                         {
                                             // 最后一个 V0 版本和当前选中版本不允许删除
-                                            !(version.id === vers.id || versions.length - 1 === index)
+                                            !(version.id === vers.id)
                                             && <Button
-                                                className="group-hover:block hidden"
+                                                className="group-hover:flex hidden"
                                                 type="button"
                                                 size="icon"
                                                 variant="outline"
@@ -160,7 +184,7 @@ export default function Header({ flow }) {
                             </RadioGroup>
                         </div>
                     )}
-                ><LayersIcon />保存版本</ActionButton>
+                ><LayersIcon />{t('skills.saveVersion')}</ActionButton>
                 <Button variant="outline" className="relative"
                     onClick={(event: React.MouseEvent<HTMLElement>) => {
                         setNotificationCenter(false);
@@ -180,27 +204,24 @@ export default function Header({ flow }) {
         }
 
         {/* 高级配置l2配置 */}
-        <L2ParamsModal data={flow} open={open} setOpen={setOpen} onSave={() => {
-            saveFlow(flow);
-            message({
-                variant: "success",
-                title: t('success'),
-                description: ""
-            });
-        }}></L2ParamsModal>
+        <L2ParamsModal data={flow} open={open} setOpen={setOpen} onSave={handleSaveVersion}></L2ParamsModal>
     </div>
 };
 
 // 技能版本管理
 const useVersion = (flow) => {
     const [versions, setVersions] = useState<FlowVersionItem[]>([])
-    const { version, setVersion } = useContext(TabsContext)
+    const { version, setVersion, updateOnlineVid } = useContext(TabsContext)
+    const lastVersionIndexRef = useRef(0)
 
     const refrenshVersions = () => {
-        getFlowVersions(flow.id).then(res => {
-            setVersions(res)
-            const currentV = res.find(el => el.is_current === 1)
+        return getFlowVersions(flow.id).then(({ data, total }) => {
+            setVersions(data)
+            lastVersionIndexRef.current = total - 1
+            const currentV = data.find(el => el.is_current === 1)
             setVersion(currentV)
+            // 记录上线的版本
+            updateOnlineVid(currentV?.id)
         })
     }
 
@@ -222,11 +243,11 @@ const useVersion = (flow) => {
 
     const handleDeleteVersion = (version, index) => {
         bsConfirm({
-            title: "提示",
-            desc: `是否删除 ${version.name} 版本？`,
+            title: t('prompt'),
+            desc: `${t('skills.deleteOrNot')} ${version.name} ${t('skills.version')}?`,
             onOk: (next) => {
                 captureAndAlertRequestErrorHoc(deleteVersion(version.id)).then(res => {
-                    if (res) {
+                    if (res === null) {
                         // 乐观更新
                         setVersions(versions.filter((_, i) => i !== index))
                     }
@@ -239,6 +260,7 @@ const useVersion = (flow) => {
     return {
         versions,
         version,
+        lastVersionIndexRef,
         setCurrentVersion(versionId) {
             const currentV = versions.find(el => el.id === versionId)
             setVersion(currentV)

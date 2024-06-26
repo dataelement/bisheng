@@ -221,5 +221,5 @@ CUSTOM_CHAINS: Dict[str, Type[Union[ConversationChain, CustomChain]]] = {
     'SeriesCharacterChain': SeriesCharacterChain,
     'MidJourneyPromptChain': MidJourneyPromptChain,
     'TimeTravelGuideChain': TimeTravelGuideChain,
-    'DalleGeneratorChain': DalleGeneratorChain
+    'DalleGeneratorChain': DalleGeneratorChain,
 }

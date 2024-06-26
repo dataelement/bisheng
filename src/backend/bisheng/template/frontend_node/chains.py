@@ -95,9 +95,12 @@ class ChainFrontendNode(FrontendNode):
             field.show = True
             field.required = False
             field.value = None
+        if name == 'BishengRetrievalQA' and field.name == 'max_content':
+            field.show = True
+            field.required = False
 
         field.advanced = False
-        if 'key' in field.name:
+        if 'key' in field.name and field.name != 'keyword_store':  # 特殊处理下bishengRetrievalQA组件
             field.password = False
             field.show = False
         if field.name in ['input_key', 'output_key']:
@@ -163,6 +166,8 @@ class ChainFrontendNode(FrontendNode):
             field.show = True
             field.field_type = 'function'
             field.name = 'atransform'
+        if name in ['QAGenerationChain', 'QAGenerationChainV2'] and field.name in ['k', 'chunk_size']:
+            field.show = True
 
 
 class SeriesCharacterChainNode(FrontendNode):
