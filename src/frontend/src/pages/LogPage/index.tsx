@@ -60,7 +60,7 @@ export default function index() {
     }
     const handleSearch = () => {
         const startTime = keys.start && formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss')
-        const endTime = keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss')
+        const endTime = keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss').replace('00:00:00','23:59:59')
         filterData({...keys, start:startTime, end:endTime})
     }
     const handleReset = () => {
