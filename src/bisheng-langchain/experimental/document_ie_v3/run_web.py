@@ -5,6 +5,8 @@ import tempfile
 from pathlib import Path
 from typing import List, Tuple, Union
 
+import yaml
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 import gradio as gr
 from document_extract import DocumentExtract
@@ -90,19 +92,24 @@ def llm_run(pdf_path, schema, is_few_shot=False, example_path=None):
 
 
 if __name__ == '__main__':
-    config = json.load(open('./config.json'))
+    # config = json.load(open('./config.json'))
+    with open('./config.yaml', 'r') as f:
+        config = yaml.safe_load(f)
 
-    unstructured_api_url = config['unstructured_api_url']
     model_path = config['model_path']
+    adaptor_path = config.get('adaptor_path', None)
     idp_url = config['idp_url']
-    server_type = config['server_type']
     web_host = config['web_host']
     web_port = config['web_port']
+    generation_config = config['generation_config']
+    spliter_config = config['spliter_config']
 
     llm_client = DocumentExtract(
-        unstructured_api_url=unstructured_api_url,
         model_path=model_path,
+        adaptor_path=adaptor_path,
         idp_url=idp_url,
+        generation_config=generation_config,
+        spliter_config=spliter_config,
     )
 
     with tempfile.TemporaryDirectory(dir='./tmp/extract_files') as tmpdir:
@@ -110,13 +117,13 @@ if __name__ == '__main__':
             css='#margin-top {margin-top: 15px} #center {text-align: center;} #description {text-align: center}'
         ) as demo:
             with gr.Row(elem_id='center'):
-                gr.Markdown('# Bisheng IE Demo')
+                gr.Markdown('# ELLM v2 Demo')
 
             with gr.Row(elem_id='description'):
                 gr.Markdown("""Information extraction for anything.""")
 
             with gr.Row():
-                input_file = gr.components.File(label='FlowFile')
+                input_file = gr.components.File(label='FlowFile(仅支持图片和双层PDF)')
                 schema = gr.Textbox(
                     label='抽取字段',
                     value='姓名|工作年限|职务|标题|收入|身份证号码|学历',
@@ -138,4 +145,4 @@ if __name__ == '__main__':
 
                 btn1.click(fn=llm_run, inputs=[input_file, schema, is_few_shot, input_example], outputs=llm_kv_results)
 
-            demo.launch(server_name=web_host, server_port=7777, share=True)
+            demo.launch(server_name=web_host, server_port=web_port, share=True)

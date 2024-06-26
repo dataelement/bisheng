@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+import yaml
 from flask import Flask, Response, request
 from llm_extract import LlmExtract, init_logger
 from tqdm import tqdm
@@ -19,15 +20,17 @@ class DocumentExtract(object):
     def __init__(
         self,
         model_path: str,
+        idp_url: str,
+        generation_config: Dict[str, Any],
+        spliter_config: Dict[str, Any],
         adaptor_path: str = None,
-        unstructured_api_url: str = 'https://bisheng.dataelem.com/api/v1/etl4llm/predict',
-        idp_url: str = 'http://192.168.106.20:7001/v2.1/models/{}/infer',
     ):
         self.llm_client = LlmExtract(
             model_path=model_path,
             adaptor_path=adaptor_path,
-            unstructured_api_url=unstructured_api_url,
             idp_url=idp_url,
+            generation_config=generation_config,
+            spliter_config=spliter_config,
         )
 
     def predict_one_pdf(self, pdf_path, schema, examples: Tuple[Path, Path] = None, save_folder=''):
@@ -90,26 +93,24 @@ def extract_document_kv():
 
 
 if __name__ == '__main__':
-    # llm_model_name = 'qwen1.5'
-    # llm_model_api_url = 'http://34.87.129.78:9300/v1'
-    # client = DocumentExtract(llm_model_name=llm_model_name, llm_model_api_url=llm_model_api_url)
-    # schema = '合同标题|借款合同编号|担保合同编号|借款人|贷款人|借款金额'
-    # pdf_folder = '/home/public/huatai/流动资金借款合同_pdf'
-    # save_folder = '/home/public/huatai/流动资金借款合同_pdf_qwen72B_res'
-    # client.predict_all_pdf(pdf_folder, schema, save_folder)
+    with open('./config.yaml', 'r') as f:
+        config = yaml.safe_load(f)
 
-    config = json.load(open('./config.json'))
     model_path = config['model_path']
-    idp_url = config['idp_url']
-    unstructured_api_url = config['unstructured_api_url']
-    api_port = config['api_port']
     adaptor_path = config['adaptor_path']
+
+    idp_url = config['idp_url']
+    spliter_config = config['spliter_config']
+    generation_config = config['generation_config']
+
+    api_port = config['api_port']
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_path', default=model_path, type=str, help='model name')
+    parser.add_argument('--adaptor_path', default=adaptor_path, type=str, help='adaptor path')
     parser.add_argument('--idp_url', default=idp_url, type=str, help='model api url')
-    parser.add_argument('--unstructured_api_url', default=unstructured_api_url, type=str, help='unstructur api url')
-    parser.add_argument('--adaptor_path', default=adaptor_path, type=str, help='unstructur api url')
+    parser.add_argument('--spliter_config', default=spliter_config, type=dict, help='text spliter config')
+    parser.add_argument('--generation_config', default=generation_config, type=dict, help='model generation config')
     args = parser.parse_args()
     global ie_client
     ie_client = DocumentExtract(

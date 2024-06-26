@@ -2,19 +2,15 @@ import base64
 import copy
 import json
 import logging
-import os
 import re
 import time
 from collections import defaultdict
 from pathlib import Path
+from typing import Any, Dict
 
 import colorlog
 import requests
-from bisheng_langchain.document_loaders import ElemUnstructuredLoader
-from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
-from half_json.core import JSONFixer
-from langchain.output_parsers import OutputFixingParser
-from langchain.prompts import PromptTemplate
+import yaml
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.output_parsers import JsonOutputParser
@@ -26,6 +22,7 @@ from prompt import (
     FEW_SHOT_SYSTEM_MESSAGE,
     FEW_SHOT_USER_MESSAGE,
 )
+from utils import extract_text_with_pdfminer_low_level
 
 
 def init_logger(name):
@@ -78,34 +75,24 @@ class LlmExtract(object):
     def __init__(
         self,
         model_path: str,
+        idp_url: str,
+        generation_config: Dict[str, Any],
+        spliter_config: Dict[str, Any],
         adaptor_path: str = None,
-        unstructured_api_url: str = "https://bisheng.dataelem.com/api/v1/etl4llm/predict",
-        idp_url: str = "http://192.168.106.134:8502",
     ):
         self.model_path = model_path
         self.idp_url = idp_url
-        self.adaptor_path = adaptor_path
-        self.unstructured_api_url = unstructured_api_url
-        self.json_output_parser = JsonOutputParser()
-        self.chunk_config = {
-            'chunk_size': 4096,
-            'chunk_overlap': 200,
-        }
-        self.generte_config = {
-            'do_sample': False,
-            'top_p': None,
-            'top_k': None,
-            'temperature': None,
-            'max_new_tokens': 2000,
-        }
+        self.spliter_config = spliter_config
+
         self.chat_model = ChatModel(
             dict(
                 model_name_or_path=self.model_path,
-                adapter_name_or_path=self.adaptor_path,
+                adapter_name_or_path=adaptor_path,
                 template='qwen',
-                **self.generte_config,
+                **generation_config,
             )
         )
+        self.json_output_parser = JsonOutputParser()
 
     def predict(self, filepath, schema, examples=None):
         if examples:
@@ -193,36 +180,21 @@ class LlmExtract(object):
 
         return kv_results
 
-    def parse_img(
-        self,
-        file_path,
-        chunk_size=8192,
-        chunk_overlap=200,
-        separators=['\n\n', '\n', ' ', ''],
-    ):
+    def parse_img(self, file_path):
         ocr_result = self.call_ocr(file_path)
         final_str = self.preprocess(ocr_result)
         docs = [Document(page_content=final_str)]
-        text_splitter = RecursiveCharacterTextSplitter(
-            **self.chunk_config,
-            separators=separators,
-        )
+        text_splitter = RecursiveCharacterTextSplitter(**self.spliter_config)
         split_docs = text_splitter.split_documents(docs)
 
         return split_docs, docs
 
-    def parse_pdf(self, file_path, chunk_size=8192, chunk_overlap=200, separators=['\n\n', '\n']):
-        file_name = os.path.basename(file_path)
-        loader = ElemUnstructuredLoader(
-            file_name=file_name, file_path=file_path, unstructured_api_url=self.unstructured_api_url
-        )
-        docs = loader.load()
-        pdf_content = ''.join([doc.page_content for doc in docs])
+    def parse_pdf(self, file_path):
+        """仅支持双层pdf"""
+        pdf_content = extract_text_with_pdfminer_low_level(file_path)
+        docs = [Document(page_content=pdf_content)]
 
-        text_splitter = ElemCharacterTextSplitter(
-            **self.chunk_config,
-            separators=separators,
-        )
+        text_splitter = RecursiveCharacterTextSplitter(**self.spliter_config)
         split_docs = text_splitter.split_documents(docs)
         logger.info(f'pdf content len: {len(pdf_content)}, docs num: {len(docs)}, split_docs num: {len(split_docs)}')
         return split_docs, docs
