@@ -154,7 +154,7 @@ class RoleGroupService():
         for one in group_ids:
             note += group_dict.get(one, one) + "、"
         note = note.rstrip('、')
-        AuditLogService.update_user(login_user, get_request_ip(request), user_id, note)
+        AuditLogService.update_user(login_user, get_request_ip(request), user_id, group_dict.keys(), note)
         return None
 
     def get_user_groups_list(self, user_id: int) -> List[GroupRead]:
