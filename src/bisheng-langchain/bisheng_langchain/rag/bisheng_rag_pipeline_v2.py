@@ -44,7 +44,9 @@ class BishengRagPipeline:
         if embedding_params['type'] == 'OpenAIEmbeddings' and embedding_params['openai_proxy']:
             embedding_params.pop('type')
             self.embeddings = embedding_object(
-                http_client=httpx.Client(proxies=embedding_params['openai_proxy']), **embedding_params
+                http_client=httpx.Client(proxies=embedding_params['openai_proxy']),
+                http_async_client=httpx.AsyncClient(proxies=embedding_params['openai_proxy']),
+                **embedding_params
             )
         else:
             embedding_params.pop('type')
@@ -55,7 +57,11 @@ class BishengRagPipeline:
         llm_object = import_by_type(_type='llms', name=llm_params['type'])
         if llm_params['type'] == 'ChatOpenAI' and llm_params['openai_proxy']:
             llm_params.pop('type')
-            self.llm = llm_object(http_client=httpx.Client(proxies=llm_params['openai_proxy']), **llm_params)
+            self.llm = llm_object(
+                http_client=httpx.Client(proxies=llm_params['openai_proxy']),
+                http_async_client=httpx.AsyncClient(proxies=llm_params['openai_proxy']),
+                **llm_params
+            )
         else:
             llm_params.pop('type')
             self.llm = llm_object(**llm_params)

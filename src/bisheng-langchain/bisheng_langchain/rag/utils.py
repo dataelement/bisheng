@@ -43,13 +43,17 @@ def import_by_type(_type: str, name: str) -> Any:
         'llms': {
             'llm': import_llm,
             'chat': import_chat_llm,
-            'contribute': import_chain_contribute_llm
+            'contribute': import_chain_contribute_llm,
+            'chatopenai': import_chat_openai,
         },
         'tools': import_tool,
         'chains': import_chain,
         'toolkits': import_toolkit,
         'memory': import_memory,
-        'embeddings': import_embedding,
+        'embeddings': {
+            'openaiembeddings': import_openai_embeddings,
+            'embeddings': import_embedding,
+        },
         'vectorstores': import_vectorstore,
         'documentloaders': import_documentloader,
         'textsplitters': import_textsplitter,
@@ -60,8 +64,17 @@ def import_by_type(_type: str, name: str) -> Any:
         'inputOutput': import_inputoutput,
     }
     if _type == 'llms':
-        key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(
-        ) else 'llm'
+        if name.lower() == 'chatopenai':
+            key = 'chatopenai'
+        else:
+            key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(
+            ) else 'llm'
+        loaded_func = func_dict[_type][key]  # type: ignore
+    elif _type == 'embeddings':
+        if name.lower() == 'openaiembeddings':
+            key = 'openaiembeddings'
+        else:
+            key = 'embeddings'
         loaded_func = func_dict[_type][key]  # type: ignore
     else:
         loaded_func = func_dict[_type]
@@ -129,6 +142,11 @@ def import_llm(llm: str) -> BaseLanguageModel:
     return import_class(f'langchain.llms.{llm}')
 
 
+def import_chat_openai(llm: str) -> BaseLanguageModel:
+    """Import llm from llm name"""
+    return import_class(f'langchain_openai.{llm}')
+
+
 def import_tool(tool: str) -> BaseTool:
     """Import tool from tool name"""
     return import_class(f'langchain.tools.{tool}')
@@ -148,6 +166,11 @@ def import_embedding(embedding: str) -> Any:
     if embedding in embeddings.__all__:
         return import_class(f'bisheng_langchain.embeddings.{embedding}')
     return import_class(f'langchain.embeddings.{embedding}')
+
+
+def import_openai_embeddings(embedding: str) -> Any:
+    """Import embedding from embedding name"""
+    return import_class(f'langchain_openai.{embedding}')
 
 
 def import_vectorstore(vectorstore: str) -> Any:

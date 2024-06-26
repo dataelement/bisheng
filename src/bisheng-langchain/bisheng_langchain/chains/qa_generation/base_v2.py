@@ -23,7 +23,8 @@ import numpy as np
 import numpy.testing as npt
 import pandas as pd
 from langchain.prompts import ChatPromptTemplate
-from langchain.schema.document import Document as LangchainDocument
+from langchain.docstore.document import Document
+# from langchain.schema.document import Document as LangchainDocument
 from langchain.chains.base import Chain
 from numpy.random import default_rng
 from tqdm import tqdm
@@ -132,6 +133,7 @@ class TrainsetGenerator:
         trainset_distribution: t.Optional[t.Dict[str, float]] = None,
         chunk_size: int = 1024,
         seed: int = 42,
+        prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
     ) -> None:
         self.generator_llm = generator_llm
         self.critic_llm = critic_llm
@@ -148,6 +150,7 @@ class TrainsetGenerator:
         self.chunk_size = chunk_size
         self.threshold = 5.0
         self.rng = default_rng(seed)
+        self.prompt = prompt
 
     @classmethod
     def from_default(
@@ -155,6 +158,7 @@ class TrainsetGenerator:
         llm: BaseLanguageModel,
         chunk_size: int = 512,
         trainset_distribution: dict = DEFAULT_TRAIN_DISTRIBUTION,
+        prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
     ):
         generator_llm = llm
         critic_llm = llm
@@ -163,6 +167,7 @@ class TrainsetGenerator:
             critic_llm=critic_llm,
             chunk_size=chunk_size,
             trainset_distribution=trainset_distribution,
+            prompt=prompt,
         )
 
     def _get_evolve_type(self) -> str:
@@ -194,7 +199,10 @@ class TrainsetGenerator:
         return score >= self.threshold
 
     def _seed_question(self, context: str) -> str:
-        prompt = SEED_QUESTION_CHAT_PROMPT.format_prompt(context=context)
+        if self.prompt is None:
+            prompt = SEED_QUESTION_CHAT_PROMPT.format_prompt(context=context)
+        else:
+            prompt = self.prompt.format_prompt(context=context)
         results = self.generator_llm(prompt.to_messages())
         return results.content
 
@@ -247,17 +255,17 @@ class TrainsetGenerator:
 
     def generate(
         self,
-        documents: t.List[LlamaindexDocument] | t.List[LangchainDocument],
+        documents: t.List[LlamaindexDocument] | t.List[Document],
         train_size: int,
     ) -> TrainDataset:
-        if not isinstance(documents[0], (LlamaindexDocument, LangchainDocument)):
+        if not isinstance(documents[0], (LlamaindexDocument, Document)):
             raise ValueError(
-                "Trainset Generatation only supports LlamaindexDocuments or LangchainDocuments"  # noqa
+                "Trainset Generatation only supports LlamaindexDocuments or Documents"  # noqa
             )
 
-        if isinstance(documents[0], LangchainDocument):
+        if isinstance(documents[0], Document):
             # cast to LangchainDocument since its the only case here
-            documents = t.cast(t.List[LangchainDocument], documents)
+            documents = t.cast(t.List[Document], documents)
             documents = [
                 LlamaindexDocument.from_langchain_format(doc) for doc in documents
             ]
@@ -330,7 +338,7 @@ class TrainsetGenerator:
 class QAGenerationChainV2(Chain):
     """Base class for question-answer generation chains."""
 
-    documents: List[LangchainDocument]
+    documents: List[Document]
     generator: TrainsetGenerator
     """LLM Chain that generates responses from user input and context."""
     k: Optional[int] = None
@@ -343,10 +351,11 @@ class QAGenerationChainV2(Chain):
     @classmethod
     def from_llm(
         cls,
-        documents: List[LangchainDocument],
+        documents: List[Document],
         llm: BaseLanguageModel,
         k: Optional[int] = None,
         chunk_size: int = 512,
+        prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
         **kwargs: Any,
     ) -> QAGenerationChainV2:
         """
@@ -360,7 +369,7 @@ class QAGenerationChainV2(Chain):
         Returns:
             a QAGenerationChain class
         """
-        generator = TrainsetGenerator.from_default(llm, chunk_size=chunk_size)
+        generator = TrainsetGenerator.from_default(llm, chunk_size=chunk_size, prompt=prompt)
         return cls(documents=documents, generator=generator, k=k, **kwargs)
 
     @property

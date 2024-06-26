@@ -2,6 +2,7 @@ import json
 import argparse
 import datetime
 import calendar
+import os
 from datetime import datetime, timedelta
 import re
 
@@ -95,17 +96,18 @@ def get_date_day_month_year_whataverday(input_str,currenttime):
 
     return formatted_date
 
+
 currenttime = parse_date(time_str)
 print(currenttime)
 # 读取 JSON 文件
-with open('/home/jingwangyuan/work/gt_1.json', 'r', encoding='utf-8') as f:
-    data = json.load(f)
+with open('/home/gulixin/GPTS/GT/gt_ignore_time.json', 'r', encoding='utf-8') as f:
+    gt_data = json.load(f)
 
 # 解析数据
 allgt = []
 slicelen = []
 countsingle = 0
-for item in data['data']:
+for item in gt_data['data']:
     dataset_id = item['id']
     # print(f"数据集标识符: {dataset_id}")
 
@@ -136,24 +138,23 @@ for item in data['data']:
             if "valid" in record:
                 temp['valid'] = record["valid"]
             allgt.append(temp)
-    # allgt.append(gt)
+
         countsingle += 1
     slicelen.append(countsingle)
 print(len(allgt))
 print(allgt)
 
-statementsingle = []
-import os
-dirname = "/home/jingwangyuan/work/gpt4"
 
-for file_name in os.listdir(dirname):
-    jsonname = dirname + "//" + file_name
+statementsingle = []
+dirname = "/home/gulixin/GPTS/GPT4-result"
+for item in gt_data['data']:
+    file_name = item['id']
+    jsonname = os.path.join(dirname, file_name)
     print("#####################",file_name,"#####################")
     with open(jsonname, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
     # 解析数据
-    # print(len(data['messages']))
     for message in data['messages']:
         if message.get('role') == 'assistant':
             # print(message)
@@ -169,10 +170,8 @@ for file_name in os.listdir(dirname):
             elif 'tool_calls' in message and message['content'] != None:
                 content = message['content']
                 tempstring += content
-                print("content:",content)
-                
+                print("content:",content) 
             statementsingle.append(tempstring)
-# print(statementsingle,len(statementsingle))
 
 
 tt = 0
@@ -180,8 +179,9 @@ allstatement = 0
 hitstatement = 0
 score = 0
 requestscore = []
-with open("/home/jingwangyuan/work/func_call_ageent_pred_local_command_r_plus_v2.jsonl") as json_file:
-    for line in statementsingle:
+with open("/home/gulixin/GPTS/test-data/func_call_ageent_pred_local_command_r_plus_v2.jsonl") as json_file:
+    for line in json_file.readlines():
+    # for line in statementsingle:
         # 解析JSON字符串为Python字典
         singleall = 0
         singlehit = 0
@@ -197,7 +197,6 @@ with open("/home/jingwangyuan/work/func_call_ageent_pred_local_command_r_plus_v2
             alllen = singlelen + 1
             allstatement += alllen
             singleall += alllen
-            # print(alllen)
             keywordunion = []
             
             for words in gtt['other']:
@@ -261,7 +260,6 @@ with open("/home/jingwangyuan/work/func_call_ageent_pred_local_command_r_plus_v2
                     else:
                         singlekeyword.append(keyword)
                     
-                    
                     allstatement += 1
                     singleall += 1
                 for keyword in singlekeyword:
@@ -293,7 +291,11 @@ with open("/home/jingwangyuan/work/func_call_ageent_pred_local_command_r_plus_v2
                 
                 allstatement += 1
                 singleall += 1
-                
+            
+        if singleall == 0:
+            singlehit = 1
+            singleall = 1
+        
         print("第",tt,"次分数",singlehit/singleall)
         print("keyword:",singlekeyword,"         ","message",allmessage)
         tt += 1
@@ -310,17 +312,3 @@ for i in requestscore:
        count += 1
 print(count) 
 print(count/33)
-# slicelen = [0] + slicelen
-# tempslice = 0
-# tempcount = 0
-# allcount = 0
-# for i in range(len(requestscore)):
-#     tempcount += 1
-#     if i+1 in slicelen:
-#         if tempcount == slicelen[tempslice+1] - slicelen[tempslice]:
-#             allcount += 1
-#             print(slicelen[tempslice],slicelen[tempslice+1])
-#         tempcount = 0
-#         tempslice += 1
-# print(allcount)
-        

@@ -8,13 +8,13 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.prompts import BasePromptTemplate
+from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
 from langchain_core.pydantic_v1 import Field
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TextSplitter
 
 from langchain.chains.base import Chain
 from langchain.chains.llm import LLMChain
-from langchain.chains.qa_generation.prompt import PROMPT_SELECTOR
+from langchain.chains.qa_generation.prompt import PROMPT_SELECTOR, CHAT_PROMPT, PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,7 @@ class QAGenerationChain(Chain):
         llm: BaseLanguageModel,
         k: Optional[int] = None,
         chunk_size: int = 512,
+        prompt: Optional[ChatPromptTemplate] = CHAT_PROMPT,
         **kwargs: Any,
     ) -> QAGenerationChain:
         """
@@ -72,7 +73,7 @@ class QAGenerationChain(Chain):
         Returns:
             a QAGenerationChain class
         """
-        _prompt = PROMPT_SELECTOR.get_prompt(llm)
+        _prompt = PROMPT_SELECTOR.get_prompt(llm) if prompt is None else prompt
         chain = LLMChain(llm=llm, prompt=_prompt)
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", " ", ""],

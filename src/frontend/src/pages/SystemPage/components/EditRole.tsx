@@ -13,7 +13,7 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { alertContext } from "../../../contexts/alertContext";
-import { createRole, getGroupResourcesApi, getRoleAssistApi, getRoleLibsApi, getRolePermissionsApi, getRoleSkillsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
+import { createRole, getGroupResourcesApi, getRolePermissionsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 
@@ -74,7 +74,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         useAssistant: [],
         manageLibs: [],
         useTools: [],
-        useMenu: []
+        useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE]
     })
     useEffect(() => {
         if (id !== -1) {
@@ -87,7 +87,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                         case 1: useLibs.push(Number(item.third_id)); break;
                         case 2: useSkills.push(item.third_id); break;
                         case 3: manageLibs.push(Number(item.third_id)); break;
-                        case 4: useTools.push(Number(item.third_id)); break;
+                        case 7: useTools.push(Number(item.third_id)); break;
                         case 5: useAssistant.push(item.third_id); break;
                         case 99: useMenu.push(item.third_id); break;
                     }
@@ -149,7 +149,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useSkills, type: 2 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useLibs, type: 1 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.manageLibs, type: 3 }),
-            updateRolePermissionsApi({ role_id: roleId, access_id: form.useTools, type: 4 }),
+            updateRolePermissionsApi({ role_id: roleId, access_id: form.useTools, type: 7 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 5 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useMenu, type: 99 }),
         ])
@@ -187,7 +187,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                             </TableCell>
                         </TableRow>
                         <TableRow>
-                            <TableCell className="font-medium">知识库</TableCell>
+                            <TableCell className="font-medium">知识</TableCell>
                             <TableCell className="text-right">
                                 <Switch checked={form.useMenu.includes(MenuType.KNOWLEDGE)} onCheckedChange={(bln) => switchDataChange(MenuType.KNOWLEDGE, 'useMenu', bln)} />
                             </TableCell>
@@ -308,7 +308,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>{t('lib.libraryName')}</TableHead>
+                                <TableHead>{t('lib.toolName')}</TableHead>
                                 <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
                                 <TableHead className="text-right">{t('system.usePermission')}</TableHead>
                             </TableRow>
