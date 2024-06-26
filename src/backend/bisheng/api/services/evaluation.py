@@ -10,9 +10,10 @@ from fastapi import UploadFile, HTTPException
 import pandas as pd
 from bisheng.settings import settings
 from collections import defaultdict
+from copy import deepcopy
 
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
+from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200, StreamData, BuildStatus)
 from bisheng.cache import InMemoryCache
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -30,6 +31,12 @@ from bisheng_ragas.metrics import AnswerCorrectnessBisheng
 from datasets import Dataset
 from bisheng_langchain.gpts.utils import import_by_type
 from bisheng.cache.redis import redis_client
+from bisheng.api.utils import build_flow, build_input_keys_response
+from bisheng.graph.graph.base import Graph
+
+flow_data_store = redis_client
+
+expire = 600
 
 
 class EvaluationService:
@@ -179,6 +186,53 @@ class EvaluationService:
     def get_redis_key(cls, evaluation_id: int):
         return f'evaluation_task_progress_{evaluation_id}'
 
+    @classmethod
+    async def get_input_keys(cls, flow_id: int, version_id: int):
+        artifacts = {}
+        try:
+            version_info = FlowVersionDao.get_version_by_id(version_id)
+            if not version_info:
+                return {"input": ""}
+
+            # L1 用户，采用build流程
+            try:
+                async for message in build_flow(graph_data=version_info.data,
+                                                artifacts=artifacts,
+                                                process_file=False,
+                                                flow_id=uuid.UUID(flow_id).hex,
+                                                chat_id=None):
+                    if isinstance(message, Graph):
+                        graph = message
+
+            except Exception as e:
+                logger.error(f'evaluation task get_input_keys {e}')
+                return {"input": ""}
+
+            await graph.abuild()
+            # Now we  need to check the input_keys to send them to the client
+            input_keys_response = {
+                'input_keys': []
+            }
+            input_nodes = graph.get_input_nodes()
+            for node in input_nodes:
+                if hasattr(await node.get_result(), 'input_keys'):
+                    input_keys = build_input_keys_response(await node.get_result(), artifacts)
+                    input_keys['input_keys'].update({'id': node.id})
+                    input_keys_response['input_keys'].append(input_keys.get('input_keys'))
+                elif 'fileNode' in node.output:
+                    input_keys_response['input_keys'].append({
+                        'file_path': '',
+                        'type': 'file',
+                        'id': node.id
+                    })
+            if len(input_keys_response.get("input_keys")):
+                input_item = input_keys_response.get("input_keys")[0]
+                del input_item["id"]
+                return input_item
+        finally:
+            pass
+        return {"input": ""}
+
 
 def add_evaluation_task(evaluation_id: int):
     evaluation = EvaluationDao.get_one_evaluation(evaluation_id=evaluation_id)
@@ -197,9 +251,17 @@ def add_evaluation_task(evaluation_id: int):
             flow_version = FlowVersionDao.get_version_by_id(version_id=evaluation.version)
             if not flow_version:
                 raise Exception("Flow version not found")
+            input_keys = asyncio.run(EvaluationService.get_input_keys(flow_id=evaluation.unique_id,
+                                                                      version_id=evaluation.version))
+            first_key = list(input_keys.keys())[0]
+
+            logger.info(f'evaluation task run flow input_keys: {input_keys} first_key: {first_key}')
+
             for index, one in enumerate(csv_data):
+                input_dict = deepcopy(input_keys)
+                input_dict[first_key] = one.get('question')
                 flow_index, flow_result = asyncio.run(FlowService.exec_flow_node(
-                    inputs={"input": one.get('question')},
+                    inputs=input_dict,
                     tweaks={},
                     index=0,
                     versions=[flow_version]))
