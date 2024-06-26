@@ -125,8 +125,16 @@ def update_chat_message(*,
                         login_user: UserPayload = Depends(get_login_user)):
     """ 更新一条消息的内容 安全检查使用"""
     logger.info(f"update_chat_message message_id={message_id} message={message} login_user={login_user.user_name}")
+    chat_message = ChatMessageDao.get_message_by_id(message_id)
+    if not chat_message:
+        return resp_200(message='消息不存在')
+    if chat_message.user_id != login_user.user_id:
+        return resp_200(message='用户不一致')
 
-    ChatMessageDao.update_message(message_id, login_user.user_id, message)
+    chat_message.message = message
+    chat_message.source = False
+
+    ChatMessageDao.update_message_model(chat_message)
 
     return resp_200(message='更新成功')
 

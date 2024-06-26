@@ -138,6 +138,12 @@ class ChatMessageDao(MessageBase):
             session.commit()
 
     @classmethod
+    def get_message_by_id(cls, message_id: int) -> Optional[ChatMessage]:
+        with session_getter() as session:
+            return session.exec(select(ChatMessage).where(ChatMessage.id == message_id)).first()
+
+
+    @classmethod
     def update_message(cls, message_id: int, user_id: int, message: str):
         with session_getter() as session:
             statement = update(ChatMessage).where(
@@ -145,3 +151,11 @@ class ChatMessageDao(MessageBase):
                 ChatMessage.user_id == user_id).values(message=message)
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    def update_message_model(cls, message: ChatMessage):
+        with session_getter() as session:
+            session.add(message)
+            session.commit()
+            session.refresh(message)
+        return message
