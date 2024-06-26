@@ -45,8 +45,6 @@ chains:
     documentation: ""
   TransformChain:
     documentation: ""
-  QAGenerationChain:
-    documentation: ""
   QAGenerationChainV2:
     documentation: ""
   SimpleSequentialChain:
