@@ -7,12 +7,17 @@ from bisheng.chat.manager import ChatManager
 from bisheng.chat.utils import judge_source, process_graph, process_source_document
 from bisheng.database.base import session_getter
 from bisheng.database.models.report import Report
+from bisheng.interface.importing.utils import import_by_type
+from bisheng.interface.initialize.loading import instantiate_llm
+from bisheng.settings import settings
 from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 from bisheng.utils.threadpool import thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.chains.autogen.auto_gen import AutoGenChain
+from langchain.chains.llm import LLMChain
+from langchain_core.prompts.prompt import PromptTemplate
 from sqlmodel import select
 
 
@@ -100,6 +105,30 @@ class Handler:
         close_resp = ChatResponse(type='close', category='system', user_id=user_id)
         await session.send_json(client_id, chat_id, close_resp)
 
+    def recommend_question(self, langchain_obj, chat_history: list):
+        prompt = """给定以下历史聊天消息:
+        {history}
+
+        总结提炼用户可能接下来会提问的3个问题，请直接输出问题，使用换行符分割问题，不要添加任何修饰文字或前后缀。
+        """
+        if hasattr(langchain_obj, 'llm'):
+            llm_chain = LLMChain(llm=langchain_obj.llm,
+                                 prompt=PromptTemplate.from_template(prompt))
+        else:
+            keyword_conf = settings.get_default_llm() or {}
+            if keyword_conf:
+                node_type = keyword_conf.pop('type', 'HostQwenChat')  # 兼容旧配置
+                class_object = import_by_type(_type='llms', name=node_type)
+                llm = instantiate_llm(node_type, class_object, keyword_conf)
+
+                llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt))
+        if llm_chain:
+            questions = llm_chain.predict(history=chat_history)
+            return questions.split('\n')
+        else:
+            logger.info('llm_chain is None recommend_over')
+            return []
+
     async def process_message(self,
                               session: ChatManager,
                               client_id: str,
@@ -142,6 +171,12 @@ class Handler:
                 flow_id=client_id,
                 chat_id=chat_id,
             )
+
+            questions = []
+            if is_begin and langchain_object.memory and langchain_object.memory.buffer:
+                questions = self.recommend_question(langchain_object,
+                                                    langchain_object.memory.buffer)
+
         except Exception as e:
             # Log stack trace
             logger.exception(e)
@@ -188,8 +223,19 @@ class Handler:
                                         user_id=user_id,
                                         source=int(source))
                 await session.send_json(client_id, chat_id, response)
+            if questions:
+                # 提示问题
+                for question in questions:
+                    question_resp = ChatResponse(type='start',
+                                                 message='',
+                                                 category='autoQuestion',
+                                                 user_id=user_id)
+                    await session.send_json(client_id, chat_id, question_resp, add=False)
+                    question_resp.type = 'end'
+                    question_resp.message = question
+                    await session.send_json(client_id, chat_id, question_resp, add=False)
 
-        # 循环结束
+    # 循环结束
         if is_begin:
             close_resp = ChatResponse(type='close', user_id=user_id)
             await session.send_json(client_id, chat_id, close_resp)

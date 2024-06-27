@@ -36,9 +36,9 @@ const enum LimitType {
     UNLIMITED = 'unlimited'
 }
 
-function FlowRadio({ limit = 0, onChange }) {
+function FlowRadio({ limit, onChange }) {
     const { t } = useTranslation()
-    const [status, setStatus] = useState(limit ? LimitType.LIMITED : LimitType.UNLIMITED)
+    const [status, setStatus] = useState(LimitType.UNLIMITED)
     const [limitState, setLimitState] = useState<any>(limit)
 
     const handleCommit = (type: LimitType, value: string = '0') => {
@@ -48,6 +48,9 @@ function FlowRadio({ limit = 0, onChange }) {
         setLimitState(value)
         onChange(Number(value))
     }
+    useEffect(() => {
+        setStatus(limit ? LimitType.LIMITED : LimitType.UNLIMITED)
+    },[limit])
 
     return <div>
         <RadioGroup className="flex space-x-2 h-[20px] items-center" value={status}
@@ -207,8 +210,8 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
     }
 
     useEffect(() => { // 初始化数据
+        setForm({ ...form, groupName: data.group_name, groupLimit: data.group_limit || 0 })
         async function init() {
-            setForm({ ...form, groupName: data.group_name, groupLimit: data.group_limit || 0 })
             const res = await getAdminsApi()
             const users = data.group_admins?.map(d => ({ label: d.user_name, value: d.user_id })) || []
             const defaultUsers = res.map(d => ({ label: d.user_name, value: d.user_id }))

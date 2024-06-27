@@ -188,13 +188,17 @@ export default function FileLibPage() {
                             </TableHeader>
 
                             <TableBody>
-                                {datalist.map((el) => (
+                                {datalist.map((el:any) => (
                                     <TableRow key={el.id}>
-                                        <TableCell className="font-medium">{el.name}</TableCell>
+                                        <TableCell className="font-medium max-w-[200px]">
+                                            <div className=" truncate-multiline">{el.name}</div>
+                                        </TableCell>
                                         <TableCell>{el.model || '--'}</TableCell>
                                         <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                         <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                                        <TableCell>{el.user_name || '--'}</TableCell>
+                                        <TableCell className="max-w-[300px] break-all">
+                                            <div className=" truncate-multiline">{el.user_name || '--'}</div>
+                                        </TableCell>
                                         <TableCell className="text-right" onClick={() => {
                                             // @ts-ignore
                                             window.libname = el.name;
