@@ -70,8 +70,8 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     image: plugins/docker
     privileged: true
     volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
-      # - name: apt-cache
-      #   path: /var/cache/apt/archives # 将应用打包好的Jar和执行脚本挂载出来
+      - name: apt-cache
+        path: /var/cache/apt/archives # 将应用打包好的Jar和执行脚本挂载出来
       - name: socket
         path: /var/run/docker.sock
     settings:
@@ -86,7 +86,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         from_secret: NEXUS_USER
       password:
         from_secret: NEXUS_PASSWORD
-
+        
   - name: build_docker_frontend
     pull: if-not-exists
     image: plugins/docker
