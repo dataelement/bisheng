@@ -47,6 +47,7 @@ def transpdf2png(pdf_file):
 class UniversalKVLoader(BaseLoader):
     """Extract key-value from pdf or image.
     """
+
     def __init__(self,
                  file_path: str,
                  ellm_model_url: str = None,
@@ -83,7 +84,7 @@ class UniversalKVLoader(BaseLoader):
 
             kv_results = defaultdict(list)
             for key, value in key_values.items():
-                kv_results[key] = value['text']
+                kv_results[key].extend([v['text'] for v in value])
 
             content = json.dumps(kv_results, indent=2, ensure_ascii=False)
             file_name = os.path.basename(self.file_path)
@@ -95,7 +96,7 @@ class UniversalKVLoader(BaseLoader):
             pdf_images = transpdf2png(self.file_path)
 
             kv_results = defaultdict(list)
-            for pdf_name in pdf_images:
+            for index, pdf_name in enumerate(pdf_images):
                 page = int(pdf_name.split('page_')[-1])
                 if page > self.max_pages:
                     continue
@@ -110,7 +111,7 @@ class UniversalKVLoader(BaseLoader):
                     raise ValueError(f'universal kv load failed: {resp}')
 
                 for key, value in key_values.items():
-                    kv_results[key].extend(value['text'])
+                    kv_results[key].extend([v['text'] for v in value])
 
             content = json.dumps(kv_results, indent=2, ensure_ascii=False)
             file_name = os.path.basename(self.file_path)

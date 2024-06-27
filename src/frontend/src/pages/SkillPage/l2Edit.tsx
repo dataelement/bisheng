@@ -85,6 +85,7 @@ export default function l2Edit() {
 
 
     const navigate = useNavigate()
+    const flowSettingSaveRef = useRef(null)
     // 创建新技能 
     const handleCreateNewSkill = async () => {
         const name = nameRef.current.value
@@ -100,6 +101,8 @@ export default function l2Edit() {
         }, user.user_name).then(newFlow => {
             setFlow('l2 create flow', newFlow)
             navigate("/flow/" + newFlow.id, { replace: true }); // l3
+            // 创建技能后在保存
+            flowSettingSaveRef.current?.(newFlow.id)
         }))
         setLoading(false)
     }
@@ -233,7 +236,7 @@ export default function l2Edit() {
                         </p>
                         {/* base form */}
                         <div className="w-full overflow-hidden transition-all px-1">
-                            <FlowSetting id={id} type={2} isOnline={nextFlow?.status === 2} />
+                            <FlowSetting id={id} type={2} isOnline={nextFlow?.status === 2} onSubTask={(fn) => flowSettingSaveRef.current = fn} />
                         </div>
                     </div>}
                 </div>

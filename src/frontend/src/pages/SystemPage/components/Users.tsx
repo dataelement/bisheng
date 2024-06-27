@@ -54,6 +54,7 @@ function UsersFilter({ options, nameKey, placeholder, onFilter }) {
 
     return <Popover open={open} onOpenChange={(bln) => { setOpen(bln); setSearchKey('') }}>
         <PopoverTrigger>
+            {/* @ts-ignore */}
             <FilterIcon onClick={() => setOpen(!open)} className={_value.length ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
         </PopoverTrigger>
         <PopoverContent>
@@ -115,13 +116,13 @@ export default function Users(params) {
     // 获取用户组类型数据
     const [userGroups, setUserGroups] = useState([])
     const getUserGoups = async () => {
-        const res = await getUserGroupsApi()
+        const res:any = await getUserGroupsApi()
         setUserGroups(res.records)
     }
     // 获取角色类型数据
     const [roles, setRoles] = useState([])
     const getRoles = async () => {
-        const res = await getRolesApi()
+        const res:any = await getRolesApi()
         setRoles(res)
     }
 
@@ -170,7 +171,7 @@ export default function Users(params) {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {users.map((el) => (
+                    {users.map((el:any) => (
                         <TableRow key={el.id}>
                             <TableCell className="font-medium max-w-md truncate">{el.user_name}</TableCell>
                             {/* <TableCell>{el.role}</TableCell> */}

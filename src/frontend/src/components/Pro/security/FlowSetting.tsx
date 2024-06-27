@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import FormSet from "./FormSet";
 import FormView from "./FormView";
 
-export default function FlowSetting({ id, type, isOnline }) {
+export default function FlowSetting({ id, type, isOnline, onSubTask }) {
     const { t } = useTranslation();
 
     const [open, setOpen] = useState(false);
@@ -45,21 +45,27 @@ export default function FlowSetting({ id, type, isOnline }) {
 
         setForm(_form);
         if (isOnline) return; // 在线状态不允许修改
-        await sensitiveSaveApi({ ..._form, id, type });
-        message({ title: t('prompt'), variant: 'success', description: t('build.saveSuccess') });
+        const callBack = async (id) => {
+            await sensitiveSaveApi({ ..._form, id, type });
+            message({ title: t('prompt'), variant: 'success', description: t('build.saveSuccess') });
+        }
+        id ? callBack(id) : onSubTask?.(callBack);
     };
 
     const onOff = (bln) => {
         setForm({ ...form, isCheck: bln });
         if (bln) setOpen(true);
         if (isOnline) return; // 在线状态不允许修改
-        sensitiveSaveApi({ ...form, isCheck: bln, id, type });
+        const callBack = async (id) => {
+            sensitiveSaveApi({ ...form, isCheck: bln, id, type });
+        }
+        id ? callBack(id) : onSubTask?.(callBack);
     };
 
     return (
         <div>
             <div className="mt-6 flex items-center h-[30px] mb-4 px-6">
-            {/* <span className="text-sm font-medium leading-none">开启内容安全审查</span> */}
+                {/* <span className="text-sm font-medium leading-none">开启内容安全审查</span> */}
                 <div className="flex items-center space-x-2">
                     <span>{t('build.enableContentSecurityReview')}</span>
                     <TooltipProvider delayDuration={0}>

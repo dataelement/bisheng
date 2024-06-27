@@ -1,11 +1,5 @@
 from typing import Any, ClassVar, Dict, List, Optional, Type
 
-from langchain import chains
-from langchain_experimental import sql
-
-from bisheng_langchain import chains as bisheng_chains
-from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
-
 from bisheng.custom.customs import get_custom_nodes
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.importing.utils import import_class
@@ -13,7 +7,11 @@ from bisheng.settings import settings
 from bisheng.template.frontend_node.chains import ChainFrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class, build_template_from_method
-
+from bisheng_langchain import chains as bisheng_chains
+from bisheng_langchain import sql as bisheng_sql
+from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
+from langchain import chains
+from langchain_experimental import sql
 
 # Assuming necessary imports for Field, Template, and FrontendNode classes
 
@@ -60,6 +58,13 @@ class ChainCreator(LangChainTypeCreator):
                 for chain_name in sql.__all__
             }
             self.type_dict.update(community)
+
+            # sql community
+            bisheng_sql_add = {
+                chain_name: import_class(f'bisheng_langchain.sql.{chain_name}')
+                for chain_name in bisheng_sql.__all__
+            }
+            self.type_dict.update(bisheng_sql_add)
 
             from bisheng.interface.chains.custom import CUSTOM_CHAINS
 

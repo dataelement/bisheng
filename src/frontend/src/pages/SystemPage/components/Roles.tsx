@@ -117,10 +117,10 @@ export default function Roles() {
         loadData()
     }, [state.group])
 
-    const [keyWord, setKeyWord] = useState('');
+    const [keyWord, setKeyWord] = useState('')
     const options = useMemo(() => {
         if (!keyWord || !state.group) return state.groups
-        return state.groups.filter(group => group.label.toLowerCase().indexOf(keyWord.toLowerCase()) !== -1 || group.value === state.group)
+        return state.groups.filter(group => group.label.toUpperCase().includes(keyWord.toUpperCase()) || group.value === state.group)
     }, [keyWord, state.group])
 
     if (state.role) {
@@ -152,9 +152,9 @@ export default function Roles() {
                             <SelectTrigger className="w-[180px] inline-flex ml-2">
                                 <SelectValue placeholder={t('system.defaultGroup')} />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className="max-w-[180px] break-all">
                                 <SearchInput inputClassName="h-8 mb-2" placeholder={t('log.selectUserGroup')} 
-                                onChange={(e) => setKeyWord(e.target.value)} iconClassName="w-4 h-4" />
+                                onChange={e => setKeyWord(e.target.value)} onKeyDown={e => e.stopPropagation()} iconClassName="w-4 h-4" />
                                 <SelectGroup>
                                     {options.map(el => (
                                         <SelectItem key={el.value} value={el.value}>{el.label}</SelectItem>

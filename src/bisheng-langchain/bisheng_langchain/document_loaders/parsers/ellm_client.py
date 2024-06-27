@@ -1,13 +1,13 @@
 # import base64
 import copy
-import base64
+from typing import Optional
+
 import requests
-from typing import Any, Iterator, List, Mapping, Optional, Union
 
 
 class ELLMClient(object):
-    def __init__(self,
-                 api_base_url: Optional[str] = None):
+
+    def __init__(self, api_base_url: Optional[str] = None):
         self.ep = api_base_url
         self.client = requests.Session()
         self.timeout = 10000
@@ -26,8 +26,8 @@ class ELLMClient(object):
                 'ellm': 'ELLM'
             },
             'form': {
-                'det': 'mrcnn-v5.1',
-                'recog': 'transformer-v2.8-gamma-faster',
+                'det': 'general_text_det_v2.0',
+                'recog': 'general_text_reg_nb_v1.0_faster',
                 'ellm': 'ELLM'
             },
             'hand': {
@@ -48,9 +48,7 @@ class ELLMClient(object):
         req_data = {'data': [b64_image], 'param': params}
 
         try:
-            r = self.client.post(url=self.ep,
-                                 json=req_data,
-                                 timeout=self.timeout)
+            r = self.client.post(url=self.ep, json=req_data, timeout=self.timeout)
             return r.json()
         except Exception as e:
             return {'status_code': 400, 'status_message': str(e)}
