@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install procps -y
 RUN apt install fonts-wqy-zenhei -y
 # opencv
 RUN apt-get install -y libglib2.0-0 libsm6 libxrender1 libxext6 libgl1
-RUN curl -sSL https://install.python-poetry.org | python3 - --version 1.8.2
+RUN curl -sSL https://install.python-poetry.org | python3 -
 # # Add Poetry to PATH
 ENV PATH="${PATH}:/root/.local/bin"
 # # Copy the pyproject.toml and poetry.lock files
