@@ -13,7 +13,7 @@ class OpenApiTools(APIToolBase):
         return self.url + self.params["path"]
 
     def get_request_method(self):
-        return self.params["method"]
+        return self.params["method"].lower()
 
     def get_params_json(self, **kwargs):
         params_define = {}
@@ -59,11 +59,11 @@ class OpenApiTools(APIToolBase):
         if method == "get":
             resp = self.client.get(path, params=params)
         elif method == 'post':
-            resp = self.client.post(path, params=params, json=self.params)
+            resp = self.client.post(path, params=params, json=json_data)
         elif method == 'put':
-            resp = self.client.put(path, params=params, json=self.params)
+            resp = self.client.put(path, params=params, json=json_data)
         elif method == 'delete':
-            resp = self.client.delete(path, params=params, json=self.params)
+            resp = self.client.delete(path, params=params, json=json_data)
         else:
             raise Exception(f"http method is not support: {method}")
         if resp.status_code != 200:
@@ -81,11 +81,11 @@ class OpenApiTools(APIToolBase):
         if method == "get":
             resp = await self.async_client.aget(path, params=params)
         elif method == 'post':
-            resp = await self.async_client.apost(path, params=params, json=self.params)
+            resp = await self.async_client.apost(path, params=params, json=json_data)
         elif method == 'put':
-            resp = await self.async_client.aput(path, params=params, json=self.params)
+            resp = await self.async_client.aput(path, params=params, json=json_data)
         elif method == 'delete':
-            resp = await self.async_client.adelete(path, params=params, json=self.params)
+            resp = await self.async_client.adelete(path, params=params, json=json_data)
         else:
             raise Exception(f"http method is not support: {method}")
         return resp

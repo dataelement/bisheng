@@ -8,7 +8,7 @@ from tqdm import tqdm
 from langchain.document_loaders import PyPDFLoader
 from langchain_core.prompts import PromptTemplate
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
-from ragas.trainset import TrainsetGenerator
+from bisheng_ragas.trainset import TrainsetGenerator
 
 
 prompt_template = """Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.

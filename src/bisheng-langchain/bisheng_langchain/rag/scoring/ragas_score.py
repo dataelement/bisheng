@@ -9,8 +9,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import pandas as pd
 from datasets import Dataset
 from loguru import logger
-from ragas import evaluate
-from ragas.metrics import AnswerCorrectness, AnswerCorrectnessBisheng, AnswerRecallBisheng
+from bisheng_ragas import evaluate
+from bisheng_ragas.metrics import AnswerCorrectness, AnswerCorrectnessBisheng, AnswerRecallBisheng
 
 
 @dataclass

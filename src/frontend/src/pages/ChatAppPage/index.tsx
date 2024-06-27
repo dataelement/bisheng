@@ -17,9 +17,27 @@ export default function SkillChatPage() {
     const [selectChat, setSelelctChat] = useState<any>({
         id: '', chatId: '', type: ''
     })
+    // scroll load
+    const footerRef = useRef<HTMLDivElement>(null)
+    useEffect(function () {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    onScrollLoad()
+                }
+            });
+        }, {
+            // root: null, // 视口
+            rootMargin: '0px', // 视口的边距
+            threshold: 0.1 // 目标元素超过视口的10%即触发回调
+        });
+
+        observer.observe(footerRef.current);
+        return () => footerRef.current && observer.unobserve(footerRef.current);
+    }, [])
 
     // 对话列表
-    const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat } = useChatList()
+    const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat, onScrollLoad } = useChatList()
 
     // select flow(新建会话)
     const handlerSelectFlow = async (card) => {
@@ -89,10 +107,11 @@ export default function SkillChatPage() {
                         </div>
                     ))
                 }
+                <div ref={footerRef} style={{ height: 20 }}></div>
             </div>
         </div>
         {/* chat */}
-        <ChatPanne data={selectChat}></ChatPanne>
+        <ChatPanne appendHistory data={selectChat}></ChatPanne>
     </div>
 };
 /**
@@ -103,9 +122,12 @@ const useChatList = () => {
     const [chatList, setChatList] = useState([])
     const chatsRef = useRef(null)
 
-    useEffect(() => {
-        getChatsApi().then(setChatList)
-    }, [])
+    const pageRef = useRef(0)
+    const onScrollLoad = async () => {
+        pageRef.current++
+        const res = await getChatsApi(pageRef.current)
+        setChatList((chats => [...chats, ...res]))
+    }
 
     return {
         chatList,
@@ -126,7 +148,8 @@ const useChatList = () => {
             captureAndAlertRequestErrorHoc(deleteChatApi(id).then(res => {
                 setChatList(oldList => oldList.filter(item => item.chat_id !== id))
             }))
-        }
+        },
+        onScrollLoad
     }
 }
 

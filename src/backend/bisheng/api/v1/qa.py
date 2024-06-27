@@ -1,13 +1,13 @@
 import asyncio
 import json
-from typing import List
+from typing import Annotated, List
 
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils.minio_client import MinioClient
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 from sqlmodel import select
 
 # build router
@@ -35,8 +35,9 @@ async def get_answer_keyword(message_id: int):
     raise HTTPException(status_code=500, detail='后台处理中，稍后再试')
 
 
-@router.get('/chunk', status_code=200)
-def get_original_file(*, message_id: int, keys: str):
+@router.post('/chunk', status_code=200)
+def get_original_file(*, message_id: Annotated[int, Body(embed=True)],
+                      keys: Annotated[str, Body(embed=True)]):
     # 获取命中的key
     with session_getter() as session:
         chunks = session.exec(

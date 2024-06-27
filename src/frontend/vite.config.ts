@@ -6,7 +6,7 @@ import svgr from "vite-plugin-svgr";
 const apiRoutes = ["^/api/", "/health"];
 import path from "path";
 // Use environment variable to determine the target.
- const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
+const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
 
 const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
   proxyObj[route] = {
@@ -28,7 +28,9 @@ const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
 
 export default defineConfig(() => {
   return {
+    // base: '/poo',
     build: {
+      // minify: 'esbuild', // 使用 esbuild 进行 Tree Shaking 和压缩
       outDir: "build",
       rollupOptions: {
         output: {

@@ -19,3 +19,13 @@ export type ROLE = {
     role_name: string
     update_time: string
 }
+
+export type UserGroup = {
+    id: number
+    group_name: string
+    adminUser: string
+    group_admins: any[]
+    createTime: string
+    updateTime: string
+    groupLimit?: number
+}

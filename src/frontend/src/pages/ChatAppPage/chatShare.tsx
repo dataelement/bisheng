@@ -15,7 +15,7 @@ export default function chatShare() {
         const params = [];
 
         if (libId) params.push(`knowledge_id=${libId}`);
-        if (tweak) params.push(`tweak=${tweak}`);
+        if (tweak) params.push(`tweak=${encodeURIComponent(tweak)}`);
 
         const paramStr = params.length > 0 ? `${params.join('&')}` : '';
 
@@ -26,5 +26,5 @@ export default function chatShare() {
 
     if (!flowId) return <div>请选择技能</div>
 
-    return <ChatPanne customWsHost={wsUrl} data={data} />
+    return <ChatPanne customWsHost={wsUrl} version="v2" data={data} />
 };

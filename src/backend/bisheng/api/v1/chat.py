@@ -2,14 +2,16 @@ import json
 from typing import List, Optional
 from uuid import UUID
 
+from bisheng.api.JWT import get_login_user
 from bisheng.api.services.assistant import AssistantService
+from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import build_flow, build_input_keys_response
+from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
 from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList,
                                     FlowGptsOnlineList, InitResponse, StreamData,
-                                    UnifiedResponseModel, resp_200)
+                                    UnifiedResponseModel, resp_200, AddChatMessages)
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import session_getter
@@ -20,7 +22,7 @@ from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMes
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketException, status
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketException, status, Body, Request
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
@@ -57,9 +59,10 @@ def get_chatmessage(*,
 
 
 @router.delete('/chat/{chat_id}', status_code=200)
-def del_chat_id(*, chat_id: str, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
+def del_chat_id(*,
+                request: Request,
+                chat_id: str,
+                login_user: UserPayload = Depends(get_login_user)):
     # 获取一条消息
     message = ChatMessageDao.get_latest_message_by_chatid(chat_id)
     if message:
@@ -68,7 +71,80 @@ def del_chat_id(*, chat_id: str, Authorize: AuthJWT = Depends()):
         logger.info('tmp_delete_milvus col={}', col_name)
         delete_vector(col_name, None)
         delete_es(col_name)
-        ChatMessageDao.delete_by_user_chat_id(payload.get('user_id'), chat_id)
+        ChatMessageDao.delete_by_user_chat_id(login_user.user_id, chat_id)
+        # 判断下是助手还是技能, 写审计日志
+        flow_info = FlowDao.get_flow_by_id(message.flow_id.hex)
+        if flow_info:
+            AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
+        else:
+            assistant_info = AssistantDao.get_one_assistant(message.flow_id)
+            if assistant_info:
+                AuditLogService.delete_chat_assistant(login_user, get_request_ip(request), assistant_info)
+
+    return resp_200(message='删除成功')
+
+
+@router.post('/chat/message', status_code=200)
+def add_chat_messages(*,
+                      request: Request,
+                      data: AddChatMessages,
+                      login_user: UserPayload = Depends(get_login_user)):
+    """
+    添加一条完整问答记录， 安全检查写入使用
+    """
+    flow_id = data.flow_id
+    chat_id = data.chat_id
+    if not chat_id or not flow_id:
+        raise HTTPException(status_code=500, detail='chat_id 和 flow_id 必传参数')
+    human_message = ChatMessage(flow_id=flow_id.hex, chat_id=chat_id, user_id=login_user.user_id, is_bot=False,
+                                message=data.human_message, type='human', category='question')
+    bot_message = ChatMessage(flow_id=flow_id.hex, chat_id=chat_id, user_id=login_user.user_id, is_bot=True,
+                              message=data.answer_message, type='bot', category='answer')
+    ChatMessageDao.insert_batch([human_message, bot_message])
+
+    # 写审计日志, 判断是否是新建会话
+    res = ChatMessageDao.get_messages_by_chat_id(chat_id=chat_id)
+    if len(res) <= 2:
+        # 新建会话
+        # 判断下是助手还是技能, 写审计日志
+        flow_info = FlowDao.get_flow_by_id(flow_id.hex)
+        if flow_info:
+            AuditLogService.create_chat_flow(login_user, get_request_ip(request), flow_id.hex)
+        else:
+            assistant_info = AssistantDao.get_one_assistant(flow_id)
+            if assistant_info:
+                AuditLogService.create_chat_assistant(login_user, get_request_ip(request), flow_id.hex)
+
+    return resp_200(message='添加成功')
+
+
+@router.put('/chat/message/{message_id}', status_code=200)
+def update_chat_message(*,
+                        message_id: int,
+                        message: str = Body(embed=True),
+                        login_user: UserPayload = Depends(get_login_user)):
+    """ 更新一条消息的内容 安全检查使用"""
+    logger.info(f"update_chat_message message_id={message_id} message={message} login_user={login_user.user_name}")
+    chat_message = ChatMessageDao.get_message_by_id(message_id)
+    if not chat_message:
+        return resp_200(message='消息不存在')
+    if chat_message.user_id != login_user.user_id:
+        return resp_200(message='用户不一致')
+
+    chat_message.message = message
+    chat_message.source = False
+
+    ChatMessageDao.update_message_model(chat_message)
+
+    return resp_200(message='更新成功')
+
+
+@router.delete('/chat/message/{message_id}', status_code=200)
+def del_message_id(*, message_id: str, Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    # 获取一条消息
+    ChatMessageDao.delete_by_message_id(payload.get('user_id'), message_id)
 
     return resp_200(message='删除成功')
 
@@ -99,16 +175,19 @@ def comment_resp(*, data: ChatInput, Authorize: AuthJWT = Depends()):
 
 
 @router.get('/chat/list', response_model=UnifiedResponseModel[List[ChatList]], status_code=200)
-def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
+def get_chatlist_list(*,
+                      page: Optional[int] = 1,
+                      limit: Optional[int] = 10,
+                      Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
 
     smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
                   func.max(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
-                      ChatMessage.user_id == payload.get('user_id')).group_by(
-                          ChatMessage.flow_id,
-                          ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
+        ChatMessage.user_id == payload.get('user_id')).group_by(
+        ChatMessage.flow_id,
+        ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
     with session_getter() as session:
         db_message = session.exec(smt).all()
     flow_ids = [message.flow_id for message in db_message]
@@ -142,14 +221,18 @@ def get_chatlist_list(*, Authorize: AuthJWT = Depends()):
         else:
             # 通过接口创建的会话记录，不关联技能或者助手
             logger.debug(f'unknown message.flow_id={message.flow_id}')
-    return resp_200(chat_list)
+    return resp_200(chat_list[(page - 1) * limit:page * limit])
 
 
 # 获取所有已上线的技能和助手
 @router.get('/chat/online',
             response_model=UnifiedResponseModel[List[FlowGptsOnlineList]],
             status_code=200)
-def get_online_chat(*, Authorize: AuthJWT = Depends()):
+def get_online_chat(*,
+                    keyword: Optional[str] = None,
+                    page: Optional[int] = 0,
+                    limit: Optional[int] = 0,
+                    Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
@@ -158,14 +241,15 @@ def get_online_chat(*, Authorize: AuthJWT = Depends()):
     # 获取所有已上线的助手
     if user.is_admin():
         all_assistant = AssistantDao.get_all_online_assistants()
-        flows = FlowDao.get_all_online_flows()
+        flows = FlowDao.get_all_online_flows(keyword)
     else:
-        assistants = AssistantService.get_assistant(user, None, AssistantStatus.ONLINE.value, 0, 0)
+        assistants = AssistantService.get_assistant(user, keyword, AssistantStatus.ONLINE.value, 0,
+                                                    0)
         all_assistant = assistants.data.get('data')
-        flows = FlowDao.get_user_access_online_flows(user_id)
+        flows = FlowDao.get_user_access_online_flows(user_id, keyword=keyword)
     for one in all_assistant:
         res.append(
-            FlowGptsOnlineList(id=one.id.hex,
+            FlowGptsOnlineList(id=str(one.id),
                                name=one.name,
                                desc=one.desc,
                                create_time=one.create_time,
@@ -175,13 +259,15 @@ def get_online_chat(*, Authorize: AuthJWT = Depends()):
     # 获取用户可见的所有已上线的技能
     for one in flows:
         res.append(
-            FlowGptsOnlineList(id=one.id.hex,
+            FlowGptsOnlineList(id=str(one.id),
                                name=one.name,
                                desc=one.description,
                                create_time=one.create_time,
                                update_time=one.update_time,
                                flow_type='flow'))
     res.sort(key=lambda x: x.update_time, reverse=True)
+    if page and limit:
+        res = res[(page - 1) * limit:page * limit]
     return resp_200(data=res)
 
 

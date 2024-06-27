@@ -1,4 +1,6 @@
+import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
+import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import SkillSheet from "@/components/bs-comp/sheets/SkillSheet";
 import ToolsSheet from "@/components/bs-comp/sheets/ToolsSheet";
 import { ToolIcon } from "@/components/bs-icons/tool";
@@ -26,14 +28,16 @@ import {
 } from "@radix-ui/react-icons";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import KnowledgeBaseMulti from "./KnowledgeBaseMulti";
 import ModelSelect from "./ModelSelect";
 import Temperature from "./Temperature";
+import { locationContext } from "@/contexts/locationContext";
+import { useContext } from "react";
 
 export default function Setting() {
   const { t } = useTranslation();
 
-  const { assistantState, dispatchAssistant } = useAssistantStore();
+  const { appConfig } = useContext(locationContext)
+  let { assistantState, dispatchAssistant } = useAssistantStore();
 
   return (
     <div
@@ -125,6 +129,8 @@ export default function Setting() {
             </div>
           </AccordionContent>
         </AccordionItem>
+        {/* 内容安全审查 */}
+        {appConfig.isPro && <AssistantSetting id={assistantState.id} type={3} />}
       </Accordion>
       <h1 className="border-b bg-gray-50 indent-4 text-sm leading-8 text-muted-foreground">
         {t("build.knowledge")}
@@ -154,10 +160,11 @@ export default function Setting() {
           <AccordionContent className="py-2">
             <div className="mb-4 px-6">
               <div className="flex gap-4">
-                <KnowledgeBaseMulti
-                  value={assistantState.knowledge_list}
+                <KnowledgeSelect
+                  multiple
+                  value={assistantState.knowledge_list.map(el => ({ label: el.name, value: el.id }))}
                   onChange={(vals) =>
-                    dispatchAssistant("setting", { knowledge_list: vals })
+                    dispatchAssistant("setting", { knowledge_list: vals.map(el => ({ name: el.label, id: el.value })) })
                   }
                 >
                   {(reload) => (
@@ -168,12 +175,12 @@ export default function Setting() {
                           {t("build.createNewKnowledge")}
                         </Button>
                       </Link>
-                      <Button variant="link" onClick={reload}>
+                      <Button variant="link" onClick={() => reload(1, '')}>
                         <ReloadIcon className="mr-1" /> {t("build.refresh")}
                       </Button>
                     </div>
                   )}
-                </KnowledgeBaseMulti>
+                </KnowledgeSelect>
               </div>
             </div>
           </AccordionContent>
@@ -244,7 +251,7 @@ export default function Setting() {
             <div className="flex flex-1 items-center justify-between">
               <span className="flex items-center gap-1">
                 <span>{t("build.skill")}</span>
-                <TooltipProvider delayDuration={200}>
+                <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <QuestionMarkCircledIcon />

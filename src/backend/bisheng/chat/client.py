@@ -7,9 +7,11 @@ from uuid import UUID, uuid4
 from loguru import logger
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain.tools.render import format_tool_to_openai_tool
-from fastapi import WebSocket, status
+from fastapi import WebSocket, status, Request
 
 from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import IgnoreException, WorkType
@@ -17,15 +19,18 @@ from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.settings import settings
+from bisheng.api.utils import get_request_ip
 
 
 class ChatClient:
-    def __init__(self, client_key: str, client_id: str, chat_id: str, user_id: int,
-                 work_type: WorkType, websocket: WebSocket, **kwargs):
+    def __init__(self, request: Request, client_key: str, client_id: str, chat_id: str, user_id: int,
+                 login_user: UserPayload, work_type: WorkType, websocket: WebSocket, **kwargs):
+        self.request = request
         self.client_key = client_key
         self.client_id = client_id
         self.chat_id = chat_id
         self.user_id = user_id
+        self.login_user = login_user
         self.work_type = work_type
         self.websocket = websocket
         self.kwargs = kwargs
@@ -60,7 +65,7 @@ class ChatClient:
             # debug模式无需保存历史
             return
         is_bot = 0 if msg_type == 'human' else 1
-        return ChatMessageDao.insert_one(ChatMessageModel(
+        msg = ChatMessageDao.insert_one(ChatMessageModel(
             is_bot=is_bot,
             source=0,
             message=message,
@@ -71,6 +76,10 @@ class ChatClient:
             chat_id=self.chat_id,
             user_id=self.user_id,
         ))
+        # 记录审计日志, 是新建会话
+        if len(self.chat_history) <= 1:
+            AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
+        return msg
 
     async def send_response(self, category: str, msg_type: str, message: str, intermediate_steps: str = '',
                             message_id: int = None):
@@ -170,6 +179,9 @@ class ChatClient:
         if not message:
             return
         logger.debug(f'receive client message, client_key: {self.client_key} message: {message}')
+        if message.get('action') == 'stop':
+            logger.info(f'need stop agent, client_key: {self.client_key}, message: {message}')
+            return
 
         inputs = message.get('inputs', {})
         input_msg = inputs.get('input')
@@ -203,15 +215,19 @@ class ChatClient:
                 if isinstance(one, AIMessage):
                     answer += one.content
 
-            # todo: 后续优化代码解释器的实现方案，保证输出的文件可以公开访问
+            # todo: 后续优化代码解释器的实现方案，保证输出的文件可以公开访问 ugly solve
             # 获取minio的share地址，把share域名去掉, 为毕昇的部署方案特殊处理下
             if gpts_tool_conf := self.gpts_conf.get('tools'):
                 if bisheng_code_conf := gpts_tool_conf.get("bisheng_code_interpreter"):
                     answer = answer.replace(f"http://{bisheng_code_conf['minio']['MINIO_SHAREPOIN']}", "")
+            answer_end_type = 'end'
+            # 如果是流式的llm则用end_cover结束, 覆盖之前流式的输出
+            if getattr(self.gpts_agent.llm, 'streaming', False):
+                answer_end_type = 'end_cover'
 
             res = await self.add_message('bot', answer, 'answer')
             await self.send_response('answer', 'start', '')
-            await self.send_response('answer', 'end_cover', answer, message_id=res.id if res else None)
+            await self.send_response('answer', answer_end_type, answer, message_id=res.id if res else None)
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')
         except Exception as e:
@@ -220,16 +236,3 @@ class ChatClient:
             await self.send_response('system', 'end', 'Error: ' + str(e))
         finally:
             await self.send_response('processing', 'close', '')
-
-        # 记录助手的聊天历史
-        if os.getenv("BISHENG_RECORD_HISTORY"):
-            try:
-                os.makedirs("/app/data/history", exist_ok=True)
-                with open(f"/app/data/history/{self.client_id}_{time.time()}.json", "w", encoding="utf-8") as f:
-                    json.dump({
-                        "system": self.gpts_agent.assistant.prompt,
-                        "message": self.chat_history,
-                        "tools": [format_tool_to_openai_tool(t) for t in self.gpts_agent.tools]
-                    }, f, ensure_ascii=False)
-            except Exception as e:
-                logger.error("record assistant history error: ", e)

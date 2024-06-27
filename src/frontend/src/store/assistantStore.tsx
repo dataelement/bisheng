@@ -18,7 +18,7 @@ type Actions = {
   destroy: () => void
 }
 
-type Action = 'setBaseInfo' | 'setting' | 'setPrompt' | 'setGuideword' | 'setTools' | 'setFlows' | 'setQuestion'
+type Action = 'setBaseInfo' | 'setting' | 'setPrompt' | 'setGuideword' | 'setTools' | 'setFlows' | 'setQuestion' | 'setContentSecurity'
 
 const assistantReducer = (state: State, action: Action, data: Partial<AssistantDetail>) => {
   console.log('action :>> ', action, data);

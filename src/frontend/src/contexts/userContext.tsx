@@ -92,7 +92,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // 链接ar参数存cookie（免登录接口）
         const cookie = location.search.match(/(?<=token=)[^&]+/g)?.[0]
         if (cookie) {
-            document.cookie = `access_token_cookie=${cookie}`;
+            document.cookie = `access_token_cookie=${cookie}; path=/`;
             localStorage.setItem('isLogin', '1')
             location.href = location.origin + location.pathname;
             return

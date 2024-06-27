@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import json
 import time
 import uuid
@@ -6,6 +7,11 @@ from collections import defaultdict
 from typing import Any, Dict, List
 from uuid import UUID
 
+from loguru import logger
+from fastapi import WebSocket, WebSocketDisconnect, status, Request
+
+from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
 from bisheng.cache import cache_manager
@@ -16,13 +22,12 @@ from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
-from bisheng.database.models.user import User
+from bisheng.database.models.message import ChatMessageDao
+from bisheng.database.models.user import User, UserDao
 from bisheng.processing.process import process_tweaks
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.input_output.output import Report
-from fastapi import WebSocket, WebSocketDisconnect, status
-from loguru import logger
 
 
 class ChatHistory(Subject):
@@ -32,10 +37,10 @@ class ChatHistory(Subject):
         self.history: Dict[str, List[ChatMessage]] = defaultdict(list)
 
     def add_message(
-        self,
-        client_id: str,
-        chat_id: str,
-        message: ChatMessage,
+            self,
+            client_id: str,
+            chat_id: str,
+            message: ChatMessage,
     ):
         """Add a message to the chat history."""
         t1 = time.time()
@@ -177,17 +182,20 @@ class ChatManager:
                     logger.error(exc)
 
     async def dispatch_client(self,
+                              request: Request,  # 原始请求体
                               client_id: str,
                               chat_id: str,
-                              user_id: int,
+                              login_user: UserPayload,
                               work_type: WorkType,
                               websocket: WebSocket,
                               graph_data: dict = None):
         client_key = uuid.uuid4().hex
-        chat_client = ChatClient(client_key,
+        chat_client = ChatClient(request,
+                                 client_key,
                                  client_id,
                                  chat_id,
-                                 user_id,
+                                 login_user.user_id,
+                                 login_user,
                                  work_type,
                                  websocket,
                                  graph_data=graph_data)
@@ -229,12 +237,12 @@ class ChatManager:
             self.clear_client(client_key)
 
     async def handle_websocket(
-        self,
-        flow_id: str,
-        chat_id: str,
-        websocket: WebSocket,
-        user_id: int,
-        gragh_data: dict = None,
+            self,
+            flow_id: str,
+            chat_id: str,
+            websocket: WebSocket,
+            user_id: int,
+            gragh_data: dict = None,
     ):
         # 建立连接，并存储映射，兼容不复用ws 场景
         key_list = set([get_cache_key(flow_id, chat_id)])
@@ -323,13 +331,15 @@ class ChatManager:
                             future.result()
                             logger.debug('task_complete key={}', future_key)
                         except Exception as e:
+                            if isinstance(e, concurrent.futures.CancelledError):
+                                continue
                             logger.exception('feature_key={} {}', future_key, e)
                             erro_resp = ChatResponse(**base_param)
                             context = context_dict.get(future_key)
                             if context.get('status') == 'init':
                                 erro_resp.intermediate_steps = f'LLM 技能执行错误. error={str(e)}'
                             elif context.get('has_file'):
-                                erro_resp.intermediate_steps = f'File is parsed fail. error={str(e)}'
+                                erro_resp.intermediate_steps = f'文档解析失败，点击输入框上传按钮重新上传\n\n{str(e)}'
                             else:
                                 erro_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
                             context['status'] = 'init'
@@ -386,6 +396,16 @@ class ChatManager:
         start_resp = ChatResponse(type='begin', category='system', **base_param)
         if is_begin:
             await self.send_json(flow_id, chat_id, start_resp)
+            # 判断下是否是首次创建会话
+            if chat_id:
+                res = ChatMessageDao.get_messages_by_chat_id(chat_id=chat_id)
+                if len(res) <= 1:  # 说明是新建会话
+                    websocket = self.active_connections[key]
+                    login_user = UserPayload(**{
+                        "user_id": user_id,
+                        "user_name": UserDao.get_user(user_id).user_name,
+                    })
+                    AuditLogService.create_chat_flow(login_user, websocket.client.host, flow_id)
         start_resp.type = 'start'
 
         # should input data
@@ -466,7 +486,7 @@ class ChatManager:
             self.set_cache(langchain_obj_key, None)  # rebuild object
             has_file = any(['InputFile' in nd.get('id', '') for nd in node_data])
         if has_file:
-            step_resp.intermediate_steps = 'File upload complete and begin to parse'
+            step_resp.intermediate_steps = '文件上传完成，开始解析'
             await self.send_json(client_id, chat_id, start_resp)
             await self.send_json(client_id, chat_id, step_resp, add=False)
             await self.send_json(client_id, chat_id, start_resp)
@@ -482,7 +502,7 @@ class ChatManager:
         over = False
         if isinstance(langchain_obj, Report):
             action = 'report'
-            step_resp.intermediate_steps = 'File parsing complete, generate begin'
+            step_resp.intermediate_steps = '文件解析完成，开始生成报告'
             await self.send_json(client_id, chat_id, step_resp)
         elif 'action' in payload:
             action = 'autogen'
@@ -507,13 +527,13 @@ class ChatManager:
                                    user_id=step_resp.user_id)
                 self.chat_history.add_message(client_id, chat_id, file)
                 step_resp.message = ''
-                step_resp.intermediate_steps = 'File parsing complete'
+                step_resp.intermediate_steps = '文件解析完成'
                 await self.send_json(client_id, chat_id, step_resp)
                 start_resp.type = 'close'
                 await self.send_json(client_id, chat_id, start_resp)
                 over = True
             else:
-                step_resp.intermediate_steps = 'File parsing complete. Analysis starting'
+                step_resp.intermediate_steps = '文件解析完成，开始执行'
                 await self.send_json(client_id, chat_id, step_resp, add=False)
         await asyncio.sleep(-1)  # 快速的跳过
         return action, over
