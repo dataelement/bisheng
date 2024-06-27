@@ -8,6 +8,9 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
 import { useTranslation } from "react-i18next";
+import { useToast } from '@/components/bs-ui/toast/use-toast';
+import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
+import { saveAssistanttApi } from '@/controllers/API/assistant';
 
 export default function Header({ onSave, onLine }) {
     const { t } = useTranslation()
@@ -18,18 +21,29 @@ export default function Header({ onSave, onLine }) {
     {/* 编辑助手 */ }
     const [editShow, setEditShow] = useState(false);
 
-    const needSaveRef = useRef(false)
-    useEffect(() => {
-        if (needSaveRef.current) {
-            needSaveRef.current = false
-            onSave()
-        }
-    }, [assistantState])
-    const handleEditSave = (form) => {
-        dispatchAssistant('setBaseInfo', form)
-        setEditShow(false)
-        needSaveRef.current = true
-    }
+    const { message } = useToast();
+
+    const handleEditSave = async (form) => {
+        await captureAndAlertRequestErrorHoc(
+          saveAssistanttApi({
+              ...assistantState,
+              flow_list: assistantState.flow_list.map((item) => item.id),
+              tool_list: assistantState.tool_list.map((item) => item.id),
+              knowledge_list: assistantState.knowledge_list.map((item) => item.id),
+              guide_question: assistantState.guide_question.filter((item) => item),
+              ...form
+          })
+        ).then((res) => {
+            if (!res) return;
+            message({
+                title: t('prompt'),
+                variant: 'success',
+                description: t('skills.saveSuccessful'),
+            });
+            dispatchAssistant('setBaseInfo', form);
+            setEditShow(false);
+        });
+    };
 
     return <div className="flex justify-between items-center border-b px-4">
         <div className="flex items-center gap-2 py-4">
