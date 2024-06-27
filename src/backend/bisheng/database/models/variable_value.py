@@ -41,9 +41,13 @@ class VariableBase(SQLModelSerializable):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v
-
-        v = ','.join(set(v.split(',')))
-        return v
+        # 去重保持原来的顺序
+        v_list = v.split(',')
+        res = []
+        for one in v_list:
+            if one not in res:
+                res.append(one)
+        return ','.join(res)
 
 
 class Variable(VariableBase, table=True):
