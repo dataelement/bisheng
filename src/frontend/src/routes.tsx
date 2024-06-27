@@ -24,6 +24,8 @@ import SkillsPage from "./pages/SkillPage/tabSkills";
 import SkillToolsPage from "./pages/SkillPage/tabTools";
 import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
+import EvaluatingPage from "./pages/EvaluationPage";
+import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -73,6 +75,9 @@ const privateRouter = [
       { path: "model", element: <ModelPage />, permission: 'model', },
       { path: "sys", element: <SystemPage /> },
       { path: "log", element: <LogPage /> },
+      { path: "evaluation", element: <EvaluatingPage /> },
+      { path: "evaluation/create", element: <EvaluatingCreate /> },
+
     ],
   },
   { path: "model/doc", element: <Doc /> },
