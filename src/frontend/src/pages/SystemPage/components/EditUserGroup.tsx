@@ -50,6 +50,7 @@ function FlowRadio({ limit, onChange }) {
     }
     useEffect(() => {
         setStatus(limit ? LimitType.LIMITED : LimitType.UNLIMITED)
+        setLimitState(limit)
     }, [limit])
 
     return <div>
