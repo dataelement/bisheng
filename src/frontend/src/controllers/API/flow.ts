@@ -115,7 +115,7 @@ export function getReportFormApi(flow_id): Promise<any> {
  * @throws Will throw an error if fetching fails.
  */
 export async function getFlowApi(flowId: string): Promise<FlowType> {
-    return axios.get(`/api/v1/flows/${flowId}`)
+    return await axios.get(`/api/v1/flows/${flowId}`)
 }
 
 /**
@@ -197,7 +197,7 @@ export const createCustomFlowApi = async (params: {
 export async function updateFlowApi(
     updatedFlow: FlowType
 ): Promise<FlowType> {
-    return axios.patch(`/api/v1/flows/${updatedFlow.id}`, {
+    return await axios.patch(`/api/v1/flows/${updatedFlow.id}`, {
         name: updatedFlow.name,
         data: updatedFlow.data,
         description: updatedFlow.description,
