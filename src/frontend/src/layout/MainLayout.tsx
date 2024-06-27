@@ -9,9 +9,9 @@ import {
     ModelIcon,
     QuitIcon,
     SystemIcon,
-    TechnologyIcon
+    TechnologyIcon,
+    EvaluatingIcon
 } from "@/components/bs-icons";
-import { EvaluatingIcon } from "@/components/bs-icons/evaluation";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
 import { LockClosedIcon } from "@radix-ui/react-icons";
@@ -135,9 +135,13 @@ export default function MainLayout() {
                                 <ModelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.models')}</span>
                             </NavLink>
                         }
-                        <NavLink to='/evaluation' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                            <EvaluatingIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.evaluation')}</span>
-                        </NavLink>
+                        {/* {
+                            中英
+                            isMenu('evaluation') &&
+                            <NavLink to='/evaluation' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                <EvaluatingIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.evaluation')}</span>
+                            </NavLink>
+                        } */}
                         {
                             isAdmin && <>
                                 <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>

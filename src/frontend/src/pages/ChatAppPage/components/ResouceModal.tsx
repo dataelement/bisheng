@@ -90,13 +90,13 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
         {/* left */}
         <div className="w-[300px] bg-gray-100 rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar">
             {/* label */}
-            <div className="mb-4 text-sm font-bold">
+            {/* 中英 */}
+            {/* <div className="mb-4 text-sm font-bold">
                 {t('chat.filterLabel')}
                 <div className="tooltip fixed" data-tip={t('chat.tooltipText')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
             </div>
             <div className="flex flex-wrap gap-2">
                 {words.map((str, i) => <div key={str} className="badge badge-info h-[auto] gap-2 text-gray-600 bg-[rgba(53,126,249,.15)]">{str}<span className="cursor-pointer" onClick={() => onClose(i)}>x</span></div>)}
-                {/* 自定义 */}
                 {
                     editCustomKey ? <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.15)]"><input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none bg-gray-50"
                         onKeyDown={(event) => {
@@ -109,7 +109,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                         }}></input></div> :
                         <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>{t('chat.addCustomLabel')}</span></div>
                 }
-            </div>
+            </div> */}
             {/* files */}
             <div className="mt-4">
                 <p className="mb-4 text-sm font-bold">{t('chat.sourceDocumentsLabel')}</p>

@@ -116,13 +116,13 @@ export default function Users(params) {
     // 获取用户组类型数据
     const [userGroups, setUserGroups] = useState([])
     const getUserGoups = async () => {
-        const res:any = await getUserGroupsApi()
+        const res: any = await getUserGroupsApi()
         setUserGroups(res.records)
     }
     // 获取角色类型数据
     const [roles, setRoles] = useState([])
     const getRoles = async () => {
-        const res:any = await getRolesApi()
+        const res: any = await getRolesApi()
         setRoles(res)
     }
 
@@ -131,6 +131,29 @@ export default function Users(params) {
         getRoles()
         return () => { setUserGroups([]); setRoles([]) }
     }, [])
+
+    const operations = (el) => {
+        const isSuperAdmin = el.roles.some(role => role.id === 1)
+        // 禁止编辑admin用户
+        if (isSuperAdmin) return <div>
+            <Button variant="link" disabled className="px-0">{t('edit')}</Button>
+            <Button variant="link" disabled className="px-0 pl-4">{t('system.resetPwd')}</Button>
+            <Button variant="link" disabled className="text-red-500 px-0 pl-4">{t('disable')}</Button>
+        </div>
+
+        return <div>
+            {/* 编辑 */}
+            <Button variant="link" disabled={user.user_id === el.user_id} onClick={() => setCurrentUser(el)} className="px-0">{t('edit')}</Button>
+            {/* 重置密码 */}
+            {(user.role === 'admin' || user.role === 'group_admin') &&
+                <Button variant="link" className="px-0 pl-4" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>}
+            {/* 禁用 */}
+            {
+                el.delete === 1 ? <Button variant="link" onClick={() => handleEnableUser(el)} className="text-green-500 px-0 pl-4">{t('enable')}</Button> :
+                    <Button variant="link" disabled={user.user_id === el.user_id} onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-4">{t('disable')}</Button>
+            }
+        </div>
+    }
 
     return <div className="relative">
         <div className="h-[calc(100vh-136px)] overflow-y-auto pb-10">
@@ -171,27 +194,14 @@ export default function Users(params) {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {users.map((el:any) => (
+                    {users.map((el: any) => (
                         <TableRow key={el.id}>
                             <TableCell className="font-medium max-w-md truncate">{el.user_name}</TableCell>
                             {/* <TableCell>{el.role}</TableCell> */}
                             <TableCell className="break-all">{(el.groups || []).map(el => el.name).join(',')}</TableCell>
                             <TableCell className="break-all">{(el.roles || []).map(el => el.name).join(',')}</TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                            <TableCell className="text-right">
-                                {/* 编辑 */}
-                                {user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0">{t('edit')}</Button> :
-                                    <Button variant="link" onClick={() => setCurrentUser(el)} className="px-0">{t('edit')}</Button>}
-                                {/* 重置密码 */}
-                                {(user.role === 'admin' || user.role === 'group_admin') && 
-                                <Button variant="link" className="px-0 pl-4" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>}
-                                {/* 禁用 */}
-                                {
-                                    el.delete === 1 ? <Button variant="link" onClick={() => handleEnableUser(el)} className="text-green-500 px-0 pl-4">{t('enable')}</Button> :
-                                        user.user_id === el.user_id ? <Button variant="link" className="text-gray-400 px-0 pl-4">{t('disable')}</Button> :
-                                            <Button variant="link" onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-4">{t('disable')}</Button>
-                                }
-                            </TableCell>
+                            <TableCell className="text-right">{operations(el)}</TableCell>
                         </TableRow>
                     ))}
                 </TableBody>

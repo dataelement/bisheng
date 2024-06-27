@@ -1,9 +1,9 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Knowledge } from "./Evaluation.svg";
+import { ReactComponent as Icon } from "./Evaluation.svg";
 
 export const EvaluatingIcon = forwardRef<
     SVGSVGElement & { className: any },
     React.PropsWithChildren<{ className?: string }>
->(({className,...props}, ref) => {
-    return <Knowledge ref={ref} {...props} className={className || ''}/>;
+>(({ className, ...props }, ref) => {
+    return <Icon ref={ref} {...props} className={className || ''} />;
 });

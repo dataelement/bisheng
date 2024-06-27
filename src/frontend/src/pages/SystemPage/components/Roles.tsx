@@ -71,7 +71,7 @@ export default function Roles() {
             inputDom.value = '';
         }
         try {
-            const data:any = await getRolesByGroupApi('', [state.group]);
+            const data: any = await getRolesByGroupApi('', [state.group]);
             dispatch({ type: 'SET_ROLES', payload: data });
             allRolesRef.current = data;
         } catch (error) {
@@ -80,7 +80,7 @@ export default function Roles() {
     }, [state.group]);
 
     useEffect(() => {
-        getUserGroupsApi().then((res:any) => {
+        getUserGroupsApi().then((res: any) => {
             const groups = res.records.map(ug => ({ label: ug.group_name, value: ug.id }))
             // 获取最近修改用户组
             dispatch({ type: 'SET_GROUP', payload: groups[0].value });
@@ -153,8 +153,8 @@ export default function Roles() {
                                 <SelectValue placeholder={t('system.defaultGroup')} />
                             </SelectTrigger>
                             <SelectContent className="max-w-[180px] break-all">
-                                <SearchInput inputClassName="h-8 mb-2" placeholder={t('log.selectUserGroup')} 
-                                onChange={e => setKeyWord(e.target.value)} onKeyDown={e => e.stopPropagation()} iconClassName="w-4 h-4" />
+                                <SearchInput inputClassName="h-8 mb-2" placeholder={t('log.selectUserGroup')}
+                                    onChange={e => setKeyWord(e.target.value)} onKeyDown={e => e.stopPropagation()} iconClassName="w-4 h-4" />
                                 <SelectGroup>
                                     {options.map(el => (
                                         <SelectItem key={el.value} value={el.value}>{el.label}</SelectItem>
@@ -187,7 +187,7 @@ export default function Roles() {
                                 <TableCell className="font-medium">{el.role_name}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell className="text-right">
-                                    <Button variant="link" onClick={() => dispatch({ type: 'SET_ROLE', payload: el })} className="px-0 pl-6">{t('edit')}</Button>
+                                    <Button variant="link" disabled={el.id === 1} onClick={() => dispatch({ type: 'SET_ROLE', payload: el })} className="px-0 pl-6">{t('edit')}</Button>
                                     <Button variant="link" disabled={[1, 2].includes(el.id)} onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
                                 </TableCell>
                             </TableRow>
