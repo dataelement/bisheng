@@ -123,6 +123,7 @@ class LLMFrontendNode(FrontendNode):
             'top_p',
             'top_k',
             'max_tokens',
+            'streaming'
         ]
         if field.name in show_fields:
             field.show = True
