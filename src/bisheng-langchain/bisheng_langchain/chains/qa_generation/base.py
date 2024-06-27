@@ -8,13 +8,13 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.prompts import BasePromptTemplate
+from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
 from langchain_core.pydantic_v1 import Field
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TextSplitter
 
 from langchain.chains.base import Chain
 from langchain.chains.llm import LLMChain
-from langchain.chains.qa_generation.prompt import PROMPT_SELECTOR
+from langchain.chains.qa_generation.prompt import PROMPT_SELECTOR, CHAT_PROMPT, PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,7 @@ class QAGenerationChain(Chain):
         llm: BaseLanguageModel,
         k: Optional[int] = None,
         chunk_size: int = 512,
+        prompt: Optional[ChatPromptTemplate] = CHAT_PROMPT,
         **kwargs: Any,
     ) -> QAGenerationChain:
         """
@@ -72,7 +73,7 @@ class QAGenerationChain(Chain):
         Returns:
             a QAGenerationChain class
         """
-        _prompt = PROMPT_SELECTOR.get_prompt(llm)
+        _prompt = PROMPT_SELECTOR.get_prompt(llm) if prompt is None else prompt
         chain = LLMChain(llm=llm, prompt=_prompt)
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", " ", ""],
@@ -103,22 +104,19 @@ class QAGenerationChain(Chain):
         docs = self.text_splitter.create_documents([contents])
         # len(qa) = min(len(docs), self.k)
         logger.info(f"Split {len(docs)} documents. Gen qa num: min({len(docs)}, {self.k}).")
-
-        results = self.llm_chain.generate(
-            [{"text": d.page_content} for d in docs], run_manager=run_manager
-        )
-        qa = []
-        for res in results.generations:
+        qa = ''
+        qa_i = 0
+        for doc in docs:
             try:
-                response = json.loads(parse_json(res[0].text))
-                qa.append(response)
+                results = self.llm_chain.generate([{"text": doc.page_content}], run_manager=run_manager)
+                res = results.generations[0]
+                qa += res[0].text
+                qa_i += 1
             except Exception as e:
-                logger.error(f"Failed to parse response: {res[0].text}. Error: {e}")
+                logger.error(f"Failed to parse response Error: {e}")
                 continue
-            
-            if self.k is not None:
-                if len(qa) >= self.k:
-                    break
+            if self.k is not None and qa_i >= self.k:
+                break
         return {self.output_key: qa}
 
     async def _acall(

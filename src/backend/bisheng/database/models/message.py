@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from uuid import UUID
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy import JSON, Column, DateTime, String, Text, text
+from sqlalchemy import JSON, Column, DateTime, String, Text, func, text, update
 from sqlmodel import Field, delete, select
 
 
@@ -56,6 +56,24 @@ class ChatMessageCreate(MessageBase):
     pass
 
 
+class MessageDao(MessageBase):
+
+    @classmethod
+    def static_msg_liked(cls, liked: int, flow_id: str, create_time_begin: datetime,
+                         create_time_end: datetime):
+        base_condition = select(func.count(ChatMessage.id)).where(ChatMessage.liked == liked)
+
+        if flow_id:
+            base_condition = base_condition.where(ChatMessage.flow_id == flow_id)
+
+        if create_time_begin and create_time_end:
+            base_condition = base_condition.where(ChatMessage.create_time > create_time_begin,
+                                                  ChatMessage.create_time < create_time_end)
+
+        with session_getter() as session:
+            return session.scalar(base_condition)
+
+
 class ChatMessageDao(MessageBase):
 
     @classmethod
@@ -74,9 +92,7 @@ class ChatMessageDao(MessageBase):
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
-            statement = statement.limit(limit).order_by(
-                ChatMessage.create_time.asc()
-            )
+            statement = statement.limit(limit).order_by(ChatMessage.create_time.asc())
             return session.exec(statement).all()
 
     @classmethod
@@ -94,7 +110,50 @@ class ChatMessageDao(MessageBase):
         return True
 
     @classmethod
+    def delete_by_message_id(cls, user_id: int, message_id: str):
+        if user_id is None or message_id is None:
+            logger.info('delete_param_error user_id={} chat_id={}', user_id, message_id)
+            return False
+
+        statement = delete(ChatMessage).where(ChatMessage.id == message_id,
+                                              ChatMessage.user_id == user_id)
+
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+        return True
+
+    @classmethod
     def insert_one(cls, message: ChatMessage) -> ChatMessage:
+        with session_getter() as session:
+            session.add(message)
+            session.commit()
+            session.refresh(message)
+        return message
+
+    @classmethod
+    def insert_batch(cls, messages: List[ChatMessage]):
+        with session_getter() as session:
+            session.add_all(messages)
+            session.commit()
+
+    @classmethod
+    def get_message_by_id(cls, message_id: int) -> Optional[ChatMessage]:
+        with session_getter() as session:
+            return session.exec(select(ChatMessage).where(ChatMessage.id == message_id)).first()
+
+
+    @classmethod
+    def update_message(cls, message_id: int, user_id: int, message: str):
+        with session_getter() as session:
+            statement = update(ChatMessage).where(
+                ChatMessage.id == message_id).where(
+                ChatMessage.user_id == user_id).values(message=message)
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def update_message_model(cls, message: ChatMessage):
         with session_getter() as session:
             session.add(message)
             session.commit()

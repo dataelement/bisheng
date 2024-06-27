@@ -8,8 +8,10 @@ import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
 import GuideQuestions from "./GuideQuestions";
 import { ClearIcon } from "@/components/bs-icons/clear";
+import { Button } from "@/components/bs-ui/button";
+import { PauseIcon, StopIcon } from "@radix-ui/react-icons";
 
-export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend }) {
+export default function ChatInput({ clear, form, stop, questions, inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -18,10 +20,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
 
-    const { messages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
+    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
-
+    // 停止状态
+    const [stoped, setStoped] = useState(true)
     /**
      * 记录会话切换状态，等待消息加载完成时，控制表单在新会话自动展开
      */
@@ -32,14 +35,14 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         if (changeChatedRef.current) {
             changeChatedRef.current = false
             // 新建的 form 技能,弹出窗口并锁定 input
-            if (form && messages.length === 0) {
+            if (form && messages.length === 0 && hisMessages.length === 0) {
                 setInputLock({ locked: true, reason: '' })
                 setFormShow(true)
                 setShowWhenLocked(true)
             }
         }
 
-    }, [messages])
+    }, [messages, hisMessages])
     useEffect(() => {
         if (!chatId) return
         setInputLock({ locked: false, reason: '' })
@@ -98,6 +101,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
     const sendWsMsg = async (msg) => {
         try {
+            console.log('WebSocket send: ' + Date.now() + ' 毫秒');
+
             wsRef.current.send(JSON.stringify(msg))
         } catch (error) {
             toast({
@@ -117,14 +122,23 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
         return new Promise((res, rej) => {
             try {
+                let startTime = Date.now();
                 const ws = new WebSocket(`${webSocketProtocol}://${wsUrl}&chat_id=${chatId}`)
                 wsRef.current = ws
                 // websocket linsen
                 ws.onopen = () => {
+                    // 记录连接成功的时间
+                    let endTime = Date.now();
+
+                    // 计算连接建立所需的时间
+                    let connectionTime = endTime - startTime;
+
+                    console.log('WebSocket 连接建立时间: ' + connectionTime + ' 毫秒');
                     console.log("WebSocket connection established!");
                     res('ok')
                 };
                 ws.onmessage = (event) => {
+                    console.log('WebSocket get: ' + Date.now() + ' 毫秒');
                     const data = JSON.parse(event.data);
                     const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
                     // 异常类型处理，提示
@@ -140,7 +154,9 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 ws.onclose = (event) => {
                     wsRef.current = null
                     console.error('链接手动断开 event :>> ', event);
-                    if ([1005, 1008].includes(event.code)) {
+                    setStoped(true)
+
+                    if ([1005, 1008, 1009].includes(event.code)) {
                         console.warn('即将废弃 :>> ');
                         setInputLock({ locked: true, reason: event.reason })
                     } else {
@@ -156,6 +172,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 };
                 ws.onerror = (ev) => {
                     wsRef.current = null
+                    setStoped(true)
                     console.error('链接异常error', ev);
                     toast({
                         title: `${t('chat.networkError')}:`,
@@ -196,12 +213,14 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 liked: 0
             }, data.type === 'end_cover')
         } else if (data.type === "close") {
+            setStoped(true)
             setInputLock({ locked: false, reason: '' })
+        } else if (data.type === 'begin') {
+            setStoped(false)
         }
-
     }
 
-    // 监听重发消息事件
+    // 触发发送消息事件（重试、表单）
     useEffect(() => {
         const handleCustomEvent = (e) => {
             if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
@@ -235,7 +254,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
             {/* form */}
             {
                 formShow && <div className="relative">
-                    <div className="absolute left-0 border bottom-2 bg-[#fff] px-4 py-2 rounded-md w-[50%] min-w-80">
+                    <div className="absolute left-0 border bottom-2 bg-[#fff] px-4 py-2 rounded-md w-[50%] min-w-80 z-50">
                         {inputForm}
                     </div>
                 </div>
@@ -256,7 +275,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     ><ClearIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-950'} ></ClearIcon></div>
                 }
             </div>
-            {/* form */}
+            {/* form switch */}
             <div className="flex absolute left-3 top-4 z-10">
                 {
                     form && <div
@@ -290,6 +309,19 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     }
                 }}
             ></Textarea>
+            {/* stop */}
+            {
+                stop && <div className=" absolute w-full flex justify-center bottom-32">
+                    <Button
+                        className="rounded-full"
+                        variant="outline"
+                        disabled={stoped}
+                        onClick={() => { setStoped(true); sendWsMsg({ "action": "stop" }); }}
+                    >
+                        <PauseIcon className="mr-2" />Stop
+                    </Button>
+                </div>
+            }
         </div>
         <p className="text-center text-sm pt-2 pb-4 text-gray-400">{appConfig.dialogTips}</p>
     </div>

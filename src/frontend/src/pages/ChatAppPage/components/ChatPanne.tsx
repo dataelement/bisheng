@@ -15,8 +15,9 @@ import { Variable, getFlowApi } from "../../../controllers/API/flow";
 import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
+import ForcePrompt from "./ForcePrompt";
 
-export default function ChatPanne({ customWsHost = '', data }) {
+export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
     const { t } = useTranslation()
 
@@ -34,9 +35,12 @@ export default function ChatPanne({ customWsHost = '', data }) {
     const init = async () => {
         if (type === 'flow') {
             setAssistant(null)
-            const _flow = await getFlowApi(id)
+            const _flow = await getFlowApi(id, version)
             await build(_flow, chatId)
-            loadHistoryMsg(_flow.id, chatId)
+            version === 'v1' && loadHistoryMsg(_flow.id, chatId, {
+                appendHistory,
+                lastMsg: t('historicalMessages')
+            })
             flowRef.current = _flow
             setFlow(_flow)
             changeChatId(chatId) // ws
@@ -44,7 +48,10 @@ export default function ChatPanne({ customWsHost = '', data }) {
             flowRef.current = null
             setFlow(null)
             const _assistant = await loadAssistantState(id)
-            loadHistoryMsg(_assistant.id, chatId)
+            loadHistoryMsg(_assistant.id, chatId, {
+                appendHistory,
+                lastMsg: t('historicalMessages')
+            })
             setAssistant(_assistant)
             changeChatId(chatId) // ws
         }
@@ -89,7 +96,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
             const inputKey = 'input';
             const msgData = {
                 chatHistory: messages,
-                flow_id: '',
+                flow_id: data?.id || '',
                 chat_id: chatId,
                 name: assistant.name,
                 description: assistant.desc,
@@ -179,13 +186,16 @@ export default function ChatPanne({ customWsHost = '', data }) {
                 </div>
                 <ChatComponent
                     form={flowSate.isForm}
+                    // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
                     guideWord={flow.guide_word}
                     wsUrl={wsUrl}
                     onBeforSend={getWsParamData}
-                    loadMore={() => loadMoreHistoryMsg(flow.id)}
+                    loadMore={() => loadMoreHistoryMsg(flow.id, appendHistory)}
                     inputForm={flowSate.isForm ? <ChatReportForm flow={flow} onStart={sendReport} /> : null}
                 />
+                {/* 强制提醒 */}
+                <ForcePrompt id={flow.id} />
             </div>
         }
         {/* 助手会话 */}
@@ -202,9 +212,11 @@ export default function ChatPanne({ customWsHost = '', data }) {
                     guideWord={assistantState.guide_word}
                     wsUrl={wsUrl}
                     onBeforSend={getWsParamData}
-                    loadMore={() => loadMoreHistoryMsg(assistant.id)}
+                    loadMore={() => loadMoreHistoryMsg(assistant.id, appendHistory)}
                     inputForm={null}
                 />
+                {/* 强制提醒 */}
+                <ForcePrompt id={assistant.id} />
             </div>
         }
     </div>

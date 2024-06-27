@@ -3,6 +3,8 @@ import os
 import yaml
 import httpx
 from typing import Any, Dict, Tuple, Type, Union, Optional
+
+from langchain_core.vectorstores import VectorStoreRetriever
 from loguru import logger
 from langchain_core.tools import BaseTool, Tool
 from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
@@ -73,7 +75,11 @@ class BishengRAGTool:
         
         # init milvus
         if vector_store:
-            self.vector_store = vector_store
+            # if vector_store is retriever, get vector_store instance
+            if isinstance(vector_store, VectorStoreRetriever):
+                self.vector_store = vector_store.vectorstore
+            else:
+                self.vector_store = vector_store
         else:
             # init embeddings
             embedding_params = self.params['embedding']
@@ -245,8 +251,8 @@ class BishengRAGTool:
             input_documents = ans['input_documents']
             return rag_answer, input_documents
     
-    async def arun(self, query: str) -> str:
-        rag_answer = self.run(query)
+    async def arun(self, query: str, return_only_outputs=True) -> str:
+        rag_answer = self.run(query, return_only_outputs)
         return rag_answer
     
     @classmethod

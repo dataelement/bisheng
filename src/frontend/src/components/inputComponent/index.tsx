@@ -8,6 +8,7 @@ export default function InputComponent({
   onChange,
   disabled,
   password,
+  type = 'input',
   maxLength = 100,
   editNode = false,
 }: InputComponentType) {
@@ -28,7 +29,7 @@ export default function InputComponent({
 
   return (
     <div className={disabled ? "input-component-div" : "relative"}>
-      <input
+      {type === 'textarea' ? <textarea
         value={myValue}
         // maxLength={maxLength}
         className={classNames(
@@ -46,6 +47,24 @@ export default function InputComponent({
           onChange(e.target.value);
         }}
       />
+        : <input value={myValue}
+          // maxLength={maxLength}
+          className={
+            classNames(
+              disabled ? " input-disable " : "",
+              password && !pwdVisible && myValue !== ""
+                ? " text-clip password "
+                : "",
+              editNode ? " input-edit-node " : " input-primary ",
+              password && editNode ? "pr-8" : "",
+              password && !editNode ? "pr-10" : ""
+            )}
+          placeholder={password && editNode ? "Key" : "input..."}
+          onChange={(e) => {
+            setMyValue(e.target.value);
+            onChange(e.target.value);
+          }}
+        />}
       {password && (
         <button
           className={classNames(

@@ -14,6 +14,7 @@ export default function PromptAreaComponent({
   onChange,
   disabled,
   editNode = false,
+  type = TypeModal.PROMPT
 }: TextAreaComponentType) {
   const [myValue, setMyValue] = useState(value);
   const { openPopUp } = useContext(PopUpContext);
@@ -48,13 +49,13 @@ export default function PromptAreaComponent({
   }
 
   return (
-    <div className={disabled ? "pointer-events-none w-full " : " w-full"}>
+    <div className={disabled ? "pointer-events-none w-full " : "w-full"}>
       <div className="flex w-full items-center">
         <span
           onClick={() => {
             openPopUp(
               <GenericModal
-                type={TypeModal.PROMPT}
+                type={type}
                 value={myValue}
                 buttonText="check & Save"
                 modalTitle="Edit Prompt"
@@ -71,7 +72,7 @@ export default function PromptAreaComponent({
             editNode
               ? "input-edit-node input-dialog"
               : (disabled ? " input-disable text-ring " : "") +
-              " input-primary text-muted-foreground "
+              " input-primary text-muted-foreground whitespace-wrap"
           }
         >
           {myValue !== "" ? myValue : "enter your prompt"}

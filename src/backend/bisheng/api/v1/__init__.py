@@ -10,8 +10,11 @@ from bisheng.api.v1.report import router as report_router
 from bisheng.api.v1.server import router as server_router
 from bisheng.api.v1.skillcenter import router as skillcenter_router
 from bisheng.api.v1.user import router as user_router
+from bisheng.api.v1.usergroup import router as group_router
 from bisheng.api.v1.validate import router as validate_router
 from bisheng.api.v1.variable import router as variable_router
+from bisheng.api.v1.audit import router as audit_router
+from bisheng.api.v1.evaluation import router as evaluation_router
 
 __all__ = [
     'chat_router',
@@ -28,4 +31,7 @@ __all__ = [
     'finetune_router',
     'component_router',
     'assistant_router',
+    'evaluation_router',
+    'group_router',
+    'audit_router'
 ]

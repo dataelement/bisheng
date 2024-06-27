@@ -4,6 +4,7 @@ import { APIClassType, APITemplateType, TemplateVariableType } from "../api";
 import { ChatMessageType } from "../chat";
 import { FlowStyleType, FlowType, NodeDataType, NodeType } from "../flow/index";
 import { sourceHandleType, targetHandleType } from "./../flow/index";
+import { TypeModal } from "@/utils";
 export type InputComponentType = {
   autoFocus?: boolean;
   onBlur?: (event: React.FocusEvent<HTMLInputElement>) => void;
@@ -20,6 +21,7 @@ export type InputComponentType = {
   className?: string;
   id?: string;
   blurOnEnter?: boolean;
+  type?: 'input' | 'textarea'
 };
 export type ToggleComponentType = {
   enabled: boolean;
@@ -89,6 +91,7 @@ export type TextAreaComponentType = {
   editNode?: boolean;
   id?: string;
   readonly?: boolean;
+  type?: TypeModal;
 };
 
 export type PromptAreaComponentType = {
