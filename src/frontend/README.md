@@ -45,7 +45,5 @@ You can learn more in the [Create React App documentation](https://facebook.gith
 
 To learn React, check out the [React documentation](https://reactjs.org/).
 
-TODO
-
 advance false 显示在组件中
 show 

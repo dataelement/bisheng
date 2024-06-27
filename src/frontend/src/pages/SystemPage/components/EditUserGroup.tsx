@@ -50,7 +50,7 @@ function FlowRadio({ limit, onChange }) {
     }
     useEffect(() => {
         setStatus(limit ? LimitType.LIMITED : LimitType.UNLIMITED)
-    },[limit])
+    }, [limit])
 
     return <div>
         <RadioGroup className="flex space-x-2 h-[20px] items-center" value={status}
@@ -194,7 +194,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         // 过滤系统管理员
         const users = selected.filter(item => !lockOptions.some(id => id === item.value))
 
-        const res:any = await (data.id ? updateUserGroup(data.id, form, users) : // 修改
+        const res: any = await (data.id ? updateUserGroup(data.id, form, users) : // 修改
             saveUserGroup(form, users)) // 保存
 
         if (appConfig.isPro) {
