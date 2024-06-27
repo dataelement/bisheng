@@ -20,3 +20,8 @@ class UserNotPasswordError(BaseErrorCode):
 class UserPasswordError(BaseErrorCode):
     Code: int = 10603
     Msg: str = '当前密码错误'
+
+
+class UserGroupNotDeleteError(BaseErrorCode):
+    Code: int = 10610
+    Msg: str = '用户组内还有用户，不能删除'

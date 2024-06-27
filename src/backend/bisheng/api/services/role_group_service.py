@@ -8,6 +8,7 @@ from fastapi import Request
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.errcode.user import UserGroupNotDeleteError
 from bisheng.api.utils import get_request_ip
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao
@@ -89,9 +90,33 @@ class RoleGroupService():
         group_info = GroupDao.get_user_group(group_id)
         if not group_info:
             return None
+
+        # 判断组下是否还有用户
+        user_group_list = UserGroupDao.get_group_user(group_id)
+        if user_group_list:
+            return UserGroupNotDeleteError.return_resp()
         GroupDao.delete_group(group_id)
+
+    def delete_group_hook(self, request: Request, login_user: UserPayload, group_info: int):
+        logger.info(f'act=delete_group_hook user={login_user.user_name} group_id={group_info.id}')
         # 记录审计日志
         AuditLogService.delete_user_group(login_user, get_request_ip(request), group_info)
+        # 将组下资源移到默认用户组
+        # 获取组下所有的资源
+        all_resource = GroupResourceDao.get_group_all_resource(group_info.id)
+        need_move_resource = []
+        for one in all_resource:
+            # 获取资源属于几个组,属于多个组则不用处理, 否则将资源转移到默认用户组
+            resourece_groups = GroupResourceDao.get_resource_group(ResourceTypeEnum(one.type), one.third_id)
+            if len(resourece_groups) > 1:
+                continue
+            else:
+                one.group_id = DefaultGroup
+                need_move_resource.append(one)
+        if need_move_resource:
+            GroupResourceDao.update_group_resource(need_move_resource)
+        GroupResourceDao.delete_group_resource_by_group_id(group_info.id)
+
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
         """获取全量的group列表"""
