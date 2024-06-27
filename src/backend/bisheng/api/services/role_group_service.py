@@ -115,6 +115,11 @@ class RoleGroupService():
 
     def replace_user_groups(self, request: Request, login_user: UserPayload, user_id: int, group_ids: List[int]):
         """ 覆盖用户的所在的用户组 """
+        # 判断下被操作用户是否是超级管理员
+        user_role_list = UserRoleDao.get_user_role(user_id)
+        if any(one.role_id == AdminRole for one in user_role_list):
+            raise HTTPException(status_code=500, detail='系统管理员不允许编辑')
+
         # 获取用户之前的所有分组
         old_group = UserGroupDao.get_user_group(user_id)
         old_group = [one.group_id for one in old_group]

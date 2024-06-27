@@ -54,7 +54,7 @@ class RoleDao(RoleBase):
             limit: 每页条数
         return: 角色列表
         """
-        statement = select(Role).where(Role.id > 1)
+        statement = select(Role)
         if group:
             statement = statement.where(Role.group_id.in_(group))
         if keyword:
@@ -69,7 +69,7 @@ class RoleDao(RoleBase):
         """
         统计用户组内的角色数量，参数如上
         """
-        statement = select(func.count(Role.id)).where(Role.id > 1)
+        statement = select(func.count(Role.id))
         if group:
             statement = statement.where(Role.group_id.in_(group))
         if keyword:
