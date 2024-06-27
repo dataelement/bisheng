@@ -29,7 +29,7 @@ export default function UserGroups() {
     const defaultAdminsRef = useRef([])
 
     const loadData = async () => {
-        const res:any = await (appConfig.isPro ? getUserGroupsProApi : getUserGroupsApi)()
+        const res: any = await (appConfig.isPro ? getUserGroupsProApi : getUserGroupsApi)()
         defaultAdminsRef.current = await getAdminsApi()
         res.records.map(g => g.group_admins = [...defaultAdminsRef.current, ...g.group_admins])
         setUserGroups(res.records)
@@ -91,16 +91,18 @@ export default function UserGroups() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {userGroups.map((ug:any) => (
+                    {userGroups.map((ug: any) => (
                         <TableRow key={ug.id}>
                             <TableCell className="font-medium">{ug.group_name}</TableCell>
                             <TableCell className="break-all">{(ug.admin_user || ug.group_admins).map(el => el.user_name).join(',')}</TableCell>
                             {appConfig.isPro && <TableCell>{ug.group_limit ? t('system.limit') : t('system.unlimited')}</TableCell>}
                             <TableCell>{ug.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
-                                <Button variant="link" onClick={() => setUserGroup({...ug, 
-                                group_admins:ug.group_admins.slice(defaultAdminsRef.current.length,ug.group_admins.length-1)})} 
-                                className="px-0 pl-6">{t('edit')}
+                                <Button variant="link" onClick={() => setUserGroup({
+                                    ...ug,
+                                    group_admins: ug.group_admins.slice(defaultAdminsRef.current.length)
+                                })}
+                                    className="px-0 pl-6">{t('edit')}
                                 </Button>
                                 <Button variant="link" disabled={ug.id === 2} onClick={() => handleDelete(ug)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
                             </TableCell>
