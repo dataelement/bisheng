@@ -491,6 +491,10 @@ class AssistantService(AssistantUtils):
             return resp_200()
         if exist_tool_type.is_preset:
             return ToolTypeIsPresetError.return_resp()
+        # 判断是否有更新权限
+        if not user.access_check(exist_tool_type.user_id, exist_tool_type.id, AccessType.GPTS_TOOL_WRITE):
+            return UnAuthorizedError.return_resp()
+
         GptsToolsDao.delete_tool_type(tool_type_id)
         cls.delete_gpts_tool_hook(user, exist_tool_type)
         return resp_200()

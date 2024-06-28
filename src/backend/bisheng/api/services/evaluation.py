@@ -348,7 +348,7 @@ def add_evaluation_task(evaluation_id: int):
         logger.info(f'evaluation task success id={evaluation_id}')
 
     except Exception as e:
-        logger.error(f'evaluation task failed id={evaluation_id} {e}')
+        logger.exception(f'evaluation task failed id={evaluation_id} {str(e)}')
         evaluation.status = EvaluationTaskStatus.failed.value
         EvaluationDao.update_evaluation(evaluation=evaluation)
         redis_client.delete(redis_key)
