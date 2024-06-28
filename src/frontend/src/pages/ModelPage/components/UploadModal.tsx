@@ -167,6 +167,8 @@ const useUpload = (open, maxSize, fileKey, uploadFunc) => {
             // Convert the FormData to binary using the FileReader API
             const data = await uploadFunc(formData, config);
 
+            data && callback(100);
+
             console.log('Upload complete:', data);
             return data
             // Handle the response data as needed

@@ -57,7 +57,7 @@ export function useCopyText() {
 
 // 表格通用逻辑（分页展示、表格数据、关键词检索）
 export function useTable<T extends object>(param, apiFun) {
-
+    const cancelLoadingWhenReload = param.cancelLoadingWhenReload || false;
     const [page, setPage] = useState({
         page: 1,
         pageSize: param.pageSize || 20,
@@ -71,7 +71,7 @@ export function useTable<T extends object>(param, apiFun) {
 
     const requestIdRef = useRef(0); // 控制请求响应顺序
     const loadData = () => {
-        setLoading(true);
+        !cancelLoadingWhenReload && setLoading(true);
         const requestId = ++requestIdRef.current
         apiFun({ ...page, ...paramRef.current }).then(res => {
             if (requestId !== requestIdRef.current) return

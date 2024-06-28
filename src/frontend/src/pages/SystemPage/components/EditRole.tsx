@@ -59,7 +59,8 @@ const SearchPanne = ({ groupId, title, type, children }) => {
 const enum MenuType {
     BUILD = 'build',
     KNOWLEDGE = 'knowledge',
-    MODEL = 'model'
+    MODEL = 'model',
+    EVALUATION = 'evaluation'
 }
 // -1 id表示新增
 export default function EditRole({ id, name, groupId, onChange, onBeforeChange }) {
@@ -198,6 +199,13 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                                 <Switch checked={form.useMenu.includes(MenuType.MODEL)} onCheckedChange={(bln) => switchDataChange(MenuType.MODEL, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
+                        {/* 中英 */}
+                        {/* <TableRow>
+                            <TableCell className="font-medium">评测</TableCell>
+                            <TableCell className="text-right">
+                                <Switch checked={form.useMenu.includes(MenuType.EVALUATION)} onCheckedChange={(bln) => switchDataChange(MenuType.EVALUATION, 'useMenu', bln)} />
+                            </TableCell>
+                        </TableRow> */}
                     </TableBody>
                 </Table>
             </div>

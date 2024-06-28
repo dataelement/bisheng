@@ -19,13 +19,14 @@ def init_default_data():
     """初始化数据库"""
     from bisheng.cache.redis import redis_client
     from bisheng.database.models.component import Component
-    from bisheng.database.models.role import Role
+    from bisheng.database.models.role import Role, AdminRole, DefaultRole
     from bisheng.database.models.user import User
     from bisheng.database.models.gpts_tools import GptsTools
     from bisheng.database.models.gpts_tools import GptsToolsType
     from bisheng.database.models.sft_model import SftModel
     from bisheng.database.models.flow_version import FlowVersion
     from bisheng.database.models.user_role import UserRoleDao
+    from bisheng.database.models.group import Group, DefaultGroup
 
     if redis_client.setNx('init_default_data', '1'):
         try:
@@ -34,11 +35,19 @@ def init_default_data():
                 db_role = session.exec(select(Role).limit(1)).all()
                 if not db_role:
                     # 初始化系统配置, 管理员拥有所有权限
-                    db_role = Role(id=1, role_name='系统管理员', remark='系统所有权限管理员')
+                    db_role = Role(id=AdminRole, role_name='系统管理员', remark='系统所有权限管理员', group_id=DefaultGroup)
                     session.add(db_role)
-                    db_role_normal = Role(id=2, role_name='普通用户', remark='一般权限管理员')
+                    db_role_normal = Role(id=DefaultRole, role_name='普通用户', remark='默认用户', group_id=DefaultGroup)
                     session.add(db_role_normal)
                     session.commit()
+
+                # 添加默认用户组
+                group = session.exec(select(Group).limit(1)).all()
+                if not group:
+                    group = Group(id=DefaultGroup, group_name='默认用户组', create_user=1, update_user=1)
+                    session.add(group)
+                    session.commit()
+                    session.refresh(group)
 
                 user = session.exec(select(User).limit(1)).all()
                 if not user and settings.admin:

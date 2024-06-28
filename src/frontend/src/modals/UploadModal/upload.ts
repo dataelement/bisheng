@@ -20,6 +20,8 @@ export const uploadFileWithProgress = async (file, callback): Promise<any> => {
     // Convert the FormData to binary using the FileReader API
     const data = await uploadLibFile(formData, config);
 
+    data && callback(100);
+
     console.log('Upload complete:', data);
     return data
     // Handle the response data as needed

@@ -172,11 +172,6 @@ class Handler:
                 chat_id=chat_id,
             )
 
-            questions = []
-            if is_begin and langchain_object.memory and langchain_object.memory.buffer:
-                questions = self.recommend_question(langchain_object,
-                                                    langchain_object.memory.buffer)
-
         except Exception as e:
             # Log stack trace
             logger.exception(e)
@@ -223,17 +218,7 @@ class Handler:
                                         user_id=user_id,
                                         source=int(source))
                 await session.send_json(client_id, chat_id, response)
-            if questions:
-                # 提示问题
-                for question in questions:
-                    question_resp = ChatResponse(type='start',
-                                                 message='',
-                                                 category='autoQuestion',
-                                                 user_id=user_id)
-                    await session.send_json(client_id, chat_id, question_resp, add=False)
-                    question_resp.type = 'end'
-                    question_resp.message = question
-                    await session.send_json(client_id, chat_id, question_resp, add=False)
+
 
     # 循环结束
         if is_begin:

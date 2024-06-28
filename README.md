@@ -49,7 +49,7 @@ Bisheng 基于 [Apache 2.0 License](https://github.com/dataelement/bisheng/blob/
 - 📃   合同审核报告生成
 - 🏦   信贷调查报告生成
 - 📈   招股书分析报告生成
-- 💼   智能投顾报告生成
+- 💼   智能投资顾问报告生成
 - 👀   文档摘要生成
 
 

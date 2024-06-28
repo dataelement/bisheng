@@ -506,6 +506,10 @@ async def user_addrole(*,
     # 获取用户的之前的角色列表
     old_roles = UserRoleDao.get_user_roles(user_role.user_id)
     old_roles = [one.role_id for one in old_roles]
+    # 判断下被编辑角色是否是超级管理员，超级管理员不允许编辑
+    user_role_list = UserRoleDao.get_user_roles(user_role.user_id)
+    if any(one.role_id == AdminRole for one in user_role_list):
+        raise HTTPException(status_code=500, detail='系统管理员不允许编辑')
 
     if not login_user.is_admin():
         # 判断拥有哪些用户组的管理权限
@@ -593,6 +597,8 @@ async def access_refresh(*, request: Request, data: RoleRefresh, login_user: Use
     db_role = RoleDao.get_role_by_id(data.role_id)
     if not db_role:
         raise HTTPException(status_code=500, detail='角色不存在')
+    if db_role.id == AdminRole:
+        raise HTTPException(status_code=500, detail='系统管理员不允许编辑')
 
     if not login_user.check_group_admin(db_role.group_id):
         return UnAuthorizedError.return_resp()
