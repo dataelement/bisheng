@@ -47,14 +47,14 @@ class RoleDao(RoleBase):
     @classmethod
     def get_role_by_groups(cls, group: List[int], keyword: str = None, page: int = 0, limit: int = 0) -> List[Role]:
         """
-        获取用户组内的角色列表
+        获取用户组内的角色列表, 不包含系统管理员角色
         params:
             group: 用户组ID列表
             page: 页数
             limit: 每页条数
         return: 角色列表
         """
-        statement = select(Role)
+        statement = select(Role).where(Role.id > AdminRole)
         if group:
             statement = statement.where(Role.group_id.in_(group))
         if keyword:
@@ -69,7 +69,7 @@ class RoleDao(RoleBase):
         """
         统计用户组内的角色数量，参数如上
         """
-        statement = select(func.count(Role.id))
+        statement = select(func.count(Role.id)).where(Role.id > AdminRole)
         if group:
             statement = statement.where(Role.group_id.in_(group))
         if keyword:

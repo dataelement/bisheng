@@ -3,7 +3,7 @@ from typing import List, Any
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
-from fastapi import Request
+from fastapi import Request, HTTPException
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
@@ -16,7 +16,9 @@ from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead, DefaultGroup
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao
+from bisheng.database.models.role import AdminRole
 from bisheng.database.models.user import User, UserDao
+from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from loguru import logger
 
@@ -141,7 +143,7 @@ class RoleGroupService():
     def replace_user_groups(self, request: Request, login_user: UserPayload, user_id: int, group_ids: List[int]):
         """ 覆盖用户的所在的用户组 """
         # 判断下被操作用户是否是超级管理员
-        user_role_list = UserRoleDao.get_user_role(user_id)
+        user_role_list = UserRoleDao.get_user_roles(user_id)
         if any(one.role_id == AdminRole for one in user_role_list):
             raise HTTPException(status_code=500, detail='系统管理员不允许编辑')
 

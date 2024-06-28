@@ -32,6 +32,7 @@ import ModelSelect from "./ModelSelect";
 import Temperature from "./Temperature";
 import { locationContext } from "@/contexts/locationContext";
 import { useContext } from "react";
+import TaggingSheet from "@/components/bs-comp/sheets/TaggingSheet";
 
 export default function Setting() {
   const { t } = useTranslation();
@@ -303,6 +304,12 @@ export default function Setting() {
             </div>
           </AccordionContent>
         </AccordionItem>
+        <TaggingSheet>
+          <PlusIcon
+            className="mr-2 text-primary hover:text-primary/80"
+            onClick={(e) => e.stopPropagation()}
+            ></PlusIcon>
+        </TaggingSheet>
       </Accordion>
     </div>
   );
