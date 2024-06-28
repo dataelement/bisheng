@@ -510,6 +510,8 @@ async def user_addrole(*,
     user_role_list = UserRoleDao.get_user_roles(user_role.user_id)
     if any(one.role_id == AdminRole for one in user_role_list):
         raise HTTPException(status_code=500, detail='系统管理员不允许编辑')
+    if any(one == AdminRole for one in user_role.role_id):
+        raise HTTPException(status_code=500, detail='不允许设置为系统管理员')
 
     if not login_user.is_admin():
         # 判断拥有哪些用户组的管理权限
