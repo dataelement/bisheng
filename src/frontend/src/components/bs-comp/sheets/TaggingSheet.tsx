@@ -17,7 +17,7 @@ export default function TaggingSheet({children}) {
 
     const handleDragEnd = (result) => {
         if(!result.destination) return
-        const newButtons = init
+        const newButtons = buttons
         const [moveItem] = newButtons.splice(result.source.index, 1)
         newButtons.splice(result.destination.index, 0, moveItem)
         setButtons(newButtons)
@@ -46,7 +46,7 @@ export default function TaggingSheet({children}) {
                                         )}
                                     </Draggable>
                                     ))}
-                                    {provided.placeholder}
+                                    {/* {provided.placeholder} */}
                                 </div>
                             )}
                         </Droppable>
