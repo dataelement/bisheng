@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Any
+from typing import List, Any, Dict
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
@@ -17,7 +17,7 @@ from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead, DefaultGroup
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao
-from bisheng.database.models.role import AdminRole
+from bisheng.database.models.role import AdminRole, RoleDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
@@ -90,6 +90,8 @@ class RoleGroupService():
 
     def delete_group(self, request: Request, login_user: UserPayload, group_id: int):
         """删除用户组"""
+        if group_id == DefaultGroup:
+            raise HTTPException(status_code=500, detail='默认组不能删除')
         group_info = GroupDao.get_user_group(group_id)
         if not group_info:
             return resp_200()
@@ -121,7 +123,8 @@ class RoleGroupService():
         if need_move_resource:
             GroupResourceDao.update_group_resource(need_move_resource)
         GroupResourceDao.delete_group_resource_by_group_id(group_info.id)
-
+        # 删除用户组下的角色列表
+        RoleDao.delete_role_by_group_id(group_info.id)
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
         """获取全量的group列表"""
@@ -178,16 +181,16 @@ class RoleGroupService():
 
         # 记录审计日志
         group_infos = GroupDao.get_group_by_ids(old_group + group_ids)
-        group_dict = {}
+        group_dict: Dict[int, str] = {}
         for one in group_infos:
             group_dict[one.id] = one.group_name
         note = "编辑前用户组："
         for one in old_group:
-            note += group_dict.get(one, one) + "、"
+            note += f'{group_dict.get(one, one)}、'
         note = note.rstrip('、')
         note += "编辑后用户组："
         for one in group_ids:
-            note += group_dict.get(one, one) + "、"
+            note += f'{group_dict.get(one, one)}、'
         note = note.rstrip('、')
         AuditLogService.update_user(login_user, get_request_ip(request), user_id, group_dict.keys(), note)
         return None

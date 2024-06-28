@@ -3,8 +3,10 @@ from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, text, func
+from sqlalchemy import Column, DateTime, text, func, delete, and_
 from sqlmodel import Field, select
+
+from bisheng.database.models.role_access import RoleAccess
 
 # 默认普通用户角色的ID
 DefaultRole = 2
@@ -94,3 +96,17 @@ class RoleDao(RoleBase):
     def get_role_by_id(cls, role_id: int) -> Role:
         with session_getter() as session:
             return session.query(Role).filter(Role.id == role_id).first()
+
+    @classmethod
+    def delete_role_by_group_id(cls, group_id: int):
+        """
+        删除分组下所有的角色
+        """
+        with session_getter() as session:
+            all_access = select(RoleAccess, Role).join(
+                Role, and_(RoleAccess.role_id == Role.id,
+                           Role.group_id == group_id)).group_by(RoleAccess.id)
+            all_access = session.exec(all_access)
+            session.exec(delete(RoleAccess).where(RoleAccess.id.in_([one.id for one in all_access])))
+            session.exec(delete(Role).where(Role.group_id == group_id))
+            session.commit()
