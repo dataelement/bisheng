@@ -1,12 +1,13 @@
 import react from "@vitejs/plugin-react-swc";
-import { visualizer } from "rollup-plugin-visualizer";
+import path from "path";
 import { defineConfig } from "vite";
+import { createHtmlPlugin } from 'vite-plugin-html';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
-const apiRoutes = ["^/api/", "/health"];
-import path from "path";
+
 // Use environment variable to determine the target.
 const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.120:3002";
+const apiRoutes = ["^/api/", "/health"];
 
 const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
   proxyObj[route] = {
@@ -16,19 +17,41 @@ const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
     secure: false,
     ws: true,
   };
-  // 文件服务地址
-  proxyObj['/bisheng'] = {
-    target: "http://127.0.0.1:50061",
-    changeOrigin: true,
-    withCredentials: true,
-    secure: false
-  }
   return proxyObj;
 }, {});
+// 文件服务地址
+proxyTargets['/bisheng'] = {
+  target: "http://127.0.0.1:50061",
+  changeOrigin: true,
+  withCredentials: true,
+  secure: false
+}
+proxyTargets['/custom_base/api'] = {
+  target,
+  changeOrigin: true,
+  withCredentials: true,
+  secure: false,
+  rewrite: (path) => {
+    return path.replace(/^\/custom_base\/api/, '/api');
+  },
+  configure: (proxy, options) => {
+    proxy.on('proxyReq', (proxyReq, req, res) => {
+      console.log('Proxying request to:', proxyReq.path);
+    });
+  }
+}
+
+/**
+ * 开启子路由访问
+ * 开启后一般外层网管匹配【custom】时直接透传转到内层网关
+ * 内层网关访问 api或者前端静态资源需要去掉【custom】前缀
+*/
+// const app_env = { BASE_URL: '/custom' }
+const app_env = { BASE_URL: '' }
 
 export default defineConfig(() => {
   return {
-    // base: '/poo',
+    base: app_env.BASE_URL || '/',
     build: {
       // minify: 'esbuild', // 使用 esbuild 进行 Tree Shaking 和压缩
       outDir: "build",
@@ -51,6 +74,14 @@ export default defineConfig(() => {
     plugins: [
       react(),
       svgr(),
+      createHtmlPlugin({
+        minify: true,
+        inject: {
+          data: {
+            aceScriptSrc: `<script src="${process.env.NODE_ENV === 'production' ? app_env.BASE_URL : ''}/node_modules/ace-builds/src-min-noconflict/ace.js" type="text/javascript"></script>`,
+          },
+        },
+      }),
       viteStaticCopy({
         targets: [
           {
@@ -74,6 +105,9 @@ export default defineConfig(() => {
       //   open: true,
       // })
     ],
+    define: {
+      __APP_ENV__: JSON.stringify(app_env)
+    },
     server: {
       host: '0.0.0.0',
       port: 3001,

@@ -91,7 +91,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
         <div className="w-[300px] bg-gray-100 rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar">
             {/* label */}
             {/* 中英 */}
-            {/* <div className="mb-4 text-sm font-bold">
+            <div className="mb-4 text-sm font-bold">
                 {t('chat.filterLabel')}
                 <div className="tooltip fixed" data-tip={t('chat.tooltipText')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
             </div>
@@ -109,7 +109,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                         }}></input></div> :
                         <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>{t('chat.addCustomLabel')}</span></div>
                 }
-            </div> */}
+            </div>
             {/* files */}
             <div className="mt-4">
                 <p className="mb-4 text-sm font-bold">{t('chat.sourceDocumentsLabel')}</p>
