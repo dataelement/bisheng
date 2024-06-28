@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
     Sheet,
     SheetContent,
@@ -7,11 +8,20 @@ import {
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 
 export default function TaggingSheet({children}) {
-    const buttons = [
+    const init = [
         {id:'01',name:'Button01'},
         {id:'02',name:'Button02'},
         {id:'03',name:'Button03'},
     ]
+    const [buttons, setButtons] = useState(init)
+
+    const handleDragEnd = (result) => {
+        if(!result.destination) return
+        const newButtons = init
+        const [moveItem] = newButtons.splice(result.source.index, 1)
+        newButtons.splice(result.destination.index, 0, moveItem)
+        setButtons(newButtons)
+    }
 
     return <Sheet>
         <SheetTrigger asChild>{children}</SheetTrigger>
@@ -22,7 +32,7 @@ export default function TaggingSheet({children}) {
 
                 </div>
                 <div className="bg-slate-300">
-                    <DragDropContext onDragEnd={() => console.log('-------------')}>
+                    <DragDropContext onDragEnd={handleDragEnd}>
                         <Droppable droppableId={'list'}>
                             {(provided) => (
                                 <div {...provided.droppableProps} ref={provided.innerRef}>
@@ -36,6 +46,7 @@ export default function TaggingSheet({children}) {
                                         )}
                                     </Draggable>
                                     ))}
+                                    {provided.placeholder}
                                 </div>
                             )}
                         </Droppable>
