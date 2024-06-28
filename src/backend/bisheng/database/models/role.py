@@ -62,6 +62,7 @@ class RoleDao(RoleBase):
             statement = statement.filter(Role.role_name.like(f'%{keyword}%'))
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(Role.create_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 
