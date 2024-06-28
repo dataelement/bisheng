@@ -24,7 +24,7 @@ import { useTable } from "../../../util/hook";
 import UserRoleModal from "./UserRoleModal";
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal";
 
-function UsersFilter({ options, nameKey, placeholder, onFilter }) {
+function UsersFilter({ options, onChecked, nameKey, placeholder, onFilter }) {
     const [open, setOpen] = useState(false)
     const [_value, setValue] = useState([])
     const [searchKey, setSearchKey] = useState('')
@@ -35,6 +35,10 @@ function UsersFilter({ options, nameKey, placeholder, onFilter }) {
             index === -1 ? val.push(id) : val.splice(index, 1)
             return [...val]
         })
+        // 已选项上浮
+        const checked = options.filter(o => _value.includes(o.id))
+        const uncheck = options.filter(o => !_value.includes(o.id))
+        onChecked([...checked, ...uncheck])
     }
 
     const filterData = () => {
@@ -125,6 +129,13 @@ export default function Users(params) {
         const res: any = await getRolesApi()
         setRoles(res)
     }
+    // 已选项上浮
+    const handleGroupChecked = (values) => {
+        setUserGroups(values)
+    }
+    const handleRoleChecked = (values) => {
+        setRoles(values)
+    }
 
     useEffect(() => {
         getUserGoups()
@@ -173,6 +184,7 @@ export default function Users(params) {
                                 <UsersFilter
                                     options={userGroups}
                                     nameKey='group_name'
+                                    onChecked={handleGroupChecked}
                                     placeholder={t('system.searchUserGroups')}
                                     onFilter={(ids) => filterData({ groupId: ids })}
                                 ></UsersFilter>
@@ -184,6 +196,7 @@ export default function Users(params) {
                                 <UsersFilter
                                     options={roles}
                                     nameKey='role_name'
+                                    onChecked={handleRoleChecked}
                                     placeholder={t('system.searchRoles')}
                                     onFilter={(ids) => filterData({ roleId: ids })}
                                 ></UsersFilter>

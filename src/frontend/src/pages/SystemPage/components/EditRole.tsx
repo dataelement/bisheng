@@ -200,12 +200,12 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                             </TableCell>
                         </TableRow>
                         {/* 中英 */}
-                        {/* <TableRow>
+                        <TableRow>
                             <TableCell className="font-medium">评测</TableCell>
                             <TableCell className="text-right">
                                 <Switch checked={form.useMenu.includes(MenuType.EVALUATION)} onCheckedChange={(bln) => switchDataChange(MenuType.EVALUATION, 'useMenu', bln)} />
                             </TableCell>
-                        </TableRow> */}
+                        </TableRow>
                     </TableBody>
                 </Table>
             </div>

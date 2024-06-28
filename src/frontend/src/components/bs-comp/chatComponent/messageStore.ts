@@ -189,9 +189,14 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             id: isRunLog ? wsdata.extra : wsdata.messageId, // 每条消息必唯一
             message: isRunLog ? JSON.parse(wsdata.message) : currentMessage.message + wsdata.message,
             thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
-            files: wsdata.files || null,
+            files: wsdata.files || [],
             category: wsdata.category || '',
             source: wsdata.source
+        }
+        // 无id补上（如文件解析完成消息，后端无返回messageid）
+        if (!newCurrentMessage.id) {
+            newCurrentMessage.id = Math.random() * 1000000
+            console.log('msg:', newCurrentMessage);
         }
 
         messages[currentMessageIndex] = newCurrentMessage

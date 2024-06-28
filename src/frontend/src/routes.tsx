@@ -46,7 +46,7 @@ const ErrorHoc = ({ Comp }) => {
 }
 
 const baseConfig = {
-  // basename: "/pro"
+  basename: __APP_ENV__.BASE_URL
 }
 
 

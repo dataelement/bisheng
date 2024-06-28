@@ -71,7 +71,7 @@ export default function BuildTrigger({
     let validationResults = [];
     let finished = false;
     let buildEnd = false
-    const apiUrl = `/api/v1/build/stream/${flowId}`;
+    const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/build/stream/${flowId}`;
     const eventSource = new EventSource(apiUrl);
 
     eventSource.onmessage = (event) => {

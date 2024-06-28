@@ -62,12 +62,12 @@ export default function EvaluatingCreate() {
     const errorlist = [];
 
     // 限制文件最大为 10M
-    if(size > 10 * 1024 * 1024){
+    if (size > 10 * 1024 * 1024) {
       errorlist.push(t("evaluation.fileSizeLimit"));
       fileRef.current = null
       return handleError(errorlist);
     }
-    
+
     const names = acceptedFiles[0].name;
     setFileName(names);
   };
@@ -131,7 +131,7 @@ export default function EvaluatingCreate() {
 
   const handleDownloadTemplate = () => {
     const link = document.createElement("a");
-    link.href = "/template.csv"; // 文件路径
+    link.href = __APP_ENV__.BASE_URL + "/template.csv"; // 文件路径
     link.download = "template.csv"; // 下载时的文件名
     document.body.appendChild(link);
     link.click();
@@ -140,15 +140,15 @@ export default function EvaluatingCreate() {
 
   const handleSearch = useCallback(debounce((value) => {
     if (selectedType === "flow") {
-        readFlowsFromDatabase(1, 100, value).then((_flow) => {
-          setDataSource(_flow.data);
-        });
-      } else if (selectedType === "assistant") {
-        getAssistantsApi(1, 100, value).then((data) => {
-          setDataSource((data as any).data as AssistantItemDB[]);
-        });
-      }
-  }, 300),[selectedType])
+      readFlowsFromDatabase(1, 100, value).then((_flow) => {
+        setDataSource(_flow.data);
+      });
+    } else if (selectedType === "assistant") {
+      getAssistantsApi(1, 100, value).then((data) => {
+        setDataSource((data as any).data as AssistantItemDB[]);
+      });
+    }
+  }, 300), [selectedType])
 
   const handleInputChange = (event) => {
     setQuery(event.target.value);
@@ -157,7 +157,7 @@ export default function EvaluatingCreate() {
 
   useEffect(() => {
     return () => {
-        handleSearch.cancel();
+      handleSearch.cancel();
     };
   }, [handleSearch]);
 

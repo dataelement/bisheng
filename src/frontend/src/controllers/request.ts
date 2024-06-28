@@ -3,8 +3,7 @@ import axios from "axios";
 import i18next from "i18next";
 axios.defaults.withCredentials = true;
 const customAxios = axios.create({
-    baseURL:''
-    // baseURL:'/proapi'
+    baseURL: import.meta.env.BASE_URL
     // 配置
 });
 
@@ -13,7 +12,7 @@ customAxios.interceptors.response.use(function (response) {
         return response.data.data;
     }
     if (response.data.status_code === 403) {
-        location.href = '/403'
+        location.href = __APP_ENV__.BASE_URL + '/403'
         return Promise.reject(response.data.status_message);
     }
     return Promise.reject(response.data.status_message);

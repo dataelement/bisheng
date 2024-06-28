@@ -70,7 +70,7 @@ export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
             param.id = _item.id
         }
         captureAndAlertRequestErrorHoc(saveVariableApi(param).then(res => {
-            const _items = items.map(item => item.id === _item.id ? { ..._item, id: res.id } : item)
+            const _items = items.map(item => item.id === _item.id ? { ..._item, id: res.id, update: true } : item)
             // const hasValue = _items.find(item => item.name)
             // 保存时 id传出去保存，用来校验必填项
             onChange(_items.map(el => el.name))

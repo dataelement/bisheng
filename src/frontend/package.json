@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "0.3.1.4",
+  "version": "0.3.2",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -136,6 +136,7 @@
     "tailwindcss": "^3.3.3",
     "typescript": "^5.2.2",
     "vite": "^4.5.2",
+    "vite-plugin-html": "^3.2.2",
     "vite-plugin-static-copy": "^0.17.0"
   },
   "engines": {

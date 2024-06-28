@@ -220,7 +220,7 @@ const runTest = ({ questions, questionIndexs, nodeId, versionIds, inputs, refs }
     })
 
     return new Promise((resolve, reject) => {
-        const apiUrl = `/api/v1/flows/compare/stream?data=${encodeURIComponent(data)}`;
+        const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/flows/compare/stream?data=${encodeURIComponent(data)}`;
         const eventSource = new EventSource(apiUrl);
 
         eventSource.onmessage = (event) => {

@@ -82,7 +82,7 @@ async def delete_group(request: Request,
 
     if not login_user.is_admin():
         return UnAuthorizedError.return_resp()
-    return resp_200(RoleGroupService().delete_group(request, login_user, group_id))
+    return RoleGroupService().delete_group(request, login_user, group_id)
 
 
 @router.post('/set_user_group',

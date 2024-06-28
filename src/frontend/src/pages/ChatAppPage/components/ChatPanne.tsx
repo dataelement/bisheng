@@ -112,11 +112,11 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     // 应用链接
     const { appConfig } = useContext(locationContext)
     const token = localStorage.getItem("ws_token") || '';
-    let wsUrl = type === 'flow' ? `${appConfig.websocketHost}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
-        `${location.host}/api/v1/assistant/chat/${assistant?.id}?t=${token}`
+    let wsUrl = type === 'flow' ? `${appConfig.websocketHost}${__APP_ENV__.BASE_URL}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
+        `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assistant?.id}?t=${token}`
 
     if (customWsHost) {
-        wsUrl = `${appConfig.websocketHost}${customWsHost}&t=${token}`
+        wsUrl = `${appConfig.websocketHost}${__APP_ENV__.BASE_URL}${customWsHost}&t=${token}`
     }
 
     // sendmsg user name
@@ -157,8 +157,8 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         document.dispatchEvent(myEvent);
     }
 
-    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg">
-        <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src="/application-start-logo.png" alt="" />
+    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+        <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
         <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] text-[#111111] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
             {t('chat.chooseOne')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
         </p>
@@ -175,7 +175,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     </div>
 
 
-    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg">
+    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
         {/* 技能会话 */}
         {
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>
@@ -242,7 +242,7 @@ const useBuild = () => {
         let validationResults = [];
         let finished = false;
         let buildEnd = false
-        const apiUrl = `/api/v1/build/stream/${flowId}?chat_id=${chatId}`;
+        const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/build/stream/${flowId}?chat_id=${chatId}`;
         const eventSource = new EventSource(apiUrl);
 
         eventSource.onmessage = (event) => {
