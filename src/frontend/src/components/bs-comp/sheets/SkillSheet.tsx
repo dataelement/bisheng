@@ -32,7 +32,7 @@ export default function SkillSheet({ select, children, onSelect }) {
   };
 
   const toCreateFlow = () => {
-    window.open("/build/skills");
+    window.open(__APP_ENV__.BASE_URL + "/build/skills");
   };
 
   const { t } = useTranslation()

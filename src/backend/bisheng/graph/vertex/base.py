@@ -409,6 +409,7 @@ class Vertex:
                                                      user_id=user_id)
             self._update_built_object_and_artifacts(result)
         except Exception as exc:
+            logger.exception("Error building node")
             raise ValueError(f'Error building node {self.vertex_type}: {str(exc)}') from exc
 
     def _update_built_object_and_artifacts(self, result):

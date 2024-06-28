@@ -14,12 +14,20 @@ const Anwser = ({ id, msg, onInit, onAdd }) => {
     // init
     useEffect(() => {
         onInit([])
-        msg && splitWordApi(msg, id).then((res) => {
-            // 匹配
-            const reg = new RegExp(`(${res.join('|')})`, 'g')
-            setHtml(msg.replace(reg, '<span>$1</span>'))
-            onInit(res)
-        })
+        const loadData = () => {
+            splitWordApi(msg, id).then((res) => {
+                // 匹配
+                const reg = new RegExp(`(${res.join('|')})`, 'g')
+                setHtml(msg.replace(reg, '<span>$1</span>'))
+                onInit(res)
+            }).catch(e => {
+                // 自动重试
+                e === '后台处理中，稍后再试' && setTimeout(() => {
+                    loadData()
+                }, 1800);
+            })
+        }
+        msg && loadData()
     }, [])
 
     // add 
@@ -82,13 +90,13 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
         {/* left */}
         <div className="w-[300px] bg-gray-100 rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar">
             {/* label */}
+            {/* 中英 */}
             <div className="mb-4 text-sm font-bold">
                 {t('chat.filterLabel')}
                 <div className="tooltip fixed" data-tip={t('chat.tooltipText')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
             </div>
             <div className="flex flex-wrap gap-2">
                 {words.map((str, i) => <div key={str} className="badge badge-info h-[auto] gap-2 text-gray-600 bg-[rgba(53,126,249,.15)]">{str}<span className="cursor-pointer" onClick={() => onClose(i)}>x</span></div>)}
-                {/* 自定义 */}
                 {
                     editCustomKey ? <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.15)]"><input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none bg-gray-50"
                         onKeyDown={(event) => {

@@ -8,6 +8,8 @@ from bisheng.template.frontend_node.chains import ChainFrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class, build_template_from_method
 from bisheng_langchain import chains as bisheng_chains
+from bisheng_langchain import sql as bisheng_sql
+from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
 from langchain import chains
 from langchain_experimental import sql
 
@@ -28,6 +30,9 @@ class ChainCreator(LangChainTypeCreator):
         'LLMCheckerChain': 'from_llm',
         'SQLDatabaseChain': 'from_llm',
         'LLMRouterChain': 'from_llm',
+        'BishengRetrievalQA': 'from_llm',
+        'QAGenerationChain': 'from_llm',
+        'QAGenerationChainV2': 'from_llm',
     }
 
     @property
@@ -43,6 +48,8 @@ class ChainCreator(LangChainTypeCreator):
                 chain_name: import_class(f'bisheng_langchain.chains.{chain_name}')
                 for chain_name in bisheng_chains.__all__
             }
+            # 若配置在custom_chains里，则不会从method初始化的方式，导致报错
+            self.type_dict['BishengRetrievalQA'] = BishengRetrievalQA
             self.type_dict.update(bisheng)
 
             # sql community
@@ -51,6 +58,13 @@ class ChainCreator(LangChainTypeCreator):
                 for chain_name in sql.__all__
             }
             self.type_dict.update(community)
+
+            # sql community
+            bisheng_sql_add = {
+                chain_name: import_class(f'bisheng_langchain.sql.{chain_name}')
+                for chain_name in bisheng_sql.__all__
+            }
+            self.type_dict.update(bisheng_sql_add)
 
             from bisheng.interface.chains.custom import CUSTOM_CHAINS
 

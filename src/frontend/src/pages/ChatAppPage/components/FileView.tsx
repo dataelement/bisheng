@@ -144,7 +144,7 @@ export default function FileView({ data }) {
 
         // sass环境使用sass地址
         const pdfUrl = checkSassUrl(data.fileUrl);  // '/doc.pdf';
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = __APP_ENV__.BASE_URL + '/pdf.worker.min.js';
         pdfjsLib.getDocument(pdfUrl).promise.then((pdfDocument) => {
             setLoading(false)
             setPdf(pdfDocument)

@@ -6,6 +6,7 @@ from uuid import UUID
 import yaml
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
+from bisheng.api.JWT import get_login_user
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.services.user_service import UserPayload
@@ -18,7 +19,7 @@ from bisheng.chat.types import WorkType
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.gpts_tools import GptsToolsTypeRead, GptsTools
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, UploadFile, File
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
@@ -42,49 +43,46 @@ def get_assistant(*,
 
 # 获取某个助手的详细信息
 @router.get('/info/{assistant_id}', response_model=UnifiedResponseModel[AssistantInfo])
-def get_assistant_info(*, assistant_id: UUID, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    return AssistantService.get_assistant_info(assistant_id, current_user.get('user_id'))
+def get_assistant_info(*, assistant_id: UUID, login_user: UserPayload = Depends(get_login_user)):
+    """获取助手信息"""
+    return AssistantService.get_assistant_info(assistant_id, login_user)
 
 
 @router.post('/delete', response_model=UnifiedResponseModel)
-def delete_assistant(*, assistant_id: UUID, Authorize: AuthJWT = Depends()):
+def delete_assistant(*,
+                     request: Request,
+                     assistant_id: UUID,
+                     login_user: UserPayload = Depends(get_login_user)):
     """删除助手"""
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-    return AssistantService.delete_assistant(assistant_id, user)
+    return AssistantService.delete_assistant(request, login_user, assistant_id)
 
 
 @router.post('', response_model=UnifiedResponseModel[AssistantInfo])
-async def create_assistant(*, req: AssistantCreateReq, Authorize: AuthJWT = Depends()):
+async def create_assistant(*,
+                           request: Request,
+                           req: AssistantCreateReq,
+                           login_user: UserPayload = Depends(get_login_user)):
     # get login user
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-
-    assistant = Assistant(**req.dict(), user_id=current_user.get('user_id'))
-    return await AssistantService.create_assistant(assistant)
+    assistant = Assistant(**req.dict(), user_id=login_user.user_id)
+    return await AssistantService.create_assistant(request, login_user, assistant)
 
 
 @router.put('', response_model=UnifiedResponseModel[AssistantInfo])
-async def update_assistant(*, req: AssistantUpdateReq, Authorize: AuthJWT = Depends()):
+async def update_assistant(*,
+                           request: Request,
+                           req: AssistantUpdateReq,
+                           login_user: UserPayload = Depends(get_login_user)):
     # get login user
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-    return await AssistantService.update_assistant(req, user)
+    return await AssistantService.update_assistant(request, login_user, req)
 
 
 @router.post('/status', response_model=UnifiedResponseModel)
 async def update_status(*,
+                        request: Request,
                         assistant_id: UUID = Body(description='助手唯一ID', alias='id'),
                         status: int = Body(description='是否上线，1:上线，0:下线'),
-                        Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-    return await AssistantService.update_status(assistant_id, status, user)
+                        login_user: UserPayload = Depends(get_login_user)):
+    return await AssistantService.update_status(request, login_user, assistant_id, status)
 
 
 # 自动优化prompt和工具选择
@@ -166,8 +164,9 @@ async def chat(*,
 
         payload = Authorize.get_jwt_subject()
         payload = json.loads(payload)
-        user_id = payload.get('user_id')
-        await chat_manager.dispatch_client(assistant_id, chat_id, user_id, WorkType.GPTS,
+        login_user = UserPayload(**payload)
+        request = websocket
+        await chat_manager.dispatch_client(request, assistant_id, chat_id, login_user, WorkType.GPTS,
                                            websocket)
     except WebSocketException as exc:
         logger.error(f'Websocket exception: {str(exc)}')
@@ -182,11 +181,9 @@ async def chat(*,
 
 
 @router.get('/tool_list', response_model=UnifiedResponseModel)
-def get_tool_list(*, is_preset: Optional[bool] = None, Authorize: AuthJWT = Depends()):
+def get_tool_list(*, is_preset: Optional[bool] = None, login_user: UserPayload = Depends(get_login_user)):
     """查询所有可见的tool 列表"""
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    return resp_200(AssistantService.get_gpts_tools(current_user.get('user_id'), is_preset))
+    return resp_200(AssistantService.get_gpts_tools(login_user, is_preset))
 
 
 @router.post('/tool_schema', response_model=UnifiedResponseModel)

@@ -114,8 +114,8 @@ export function getReportFormApi(flow_id): Promise<any> {
  * @returns {Promise<any>} The flow data.
  * @throws Will throw an error if fetching fails.
  */
-export async function getFlowApi(flowId: string): Promise<FlowType> {
-    return await axios.get(`/api/v1/flows/${flowId}`)
+export async function getFlowApi(flowId: string, version: string = 'v1'): Promise<FlowType> {
+    return await axios.get(`/api/${version}/flows/${flowId}`)
 }
 
 /**

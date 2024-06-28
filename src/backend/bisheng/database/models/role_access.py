@@ -44,6 +44,10 @@ class AccessType(Enum):
     FLOW_WRITE = 4
     ASSISTANT_READ = 5
     ASSISTANT_WRITE = 6
+    GPTS_TOOL_READ = 7
+    GPTS_TOOL_WRITE = 8
+
+    WEB_MENU = 99  # 前端菜单栏权限限制
 
 
 class RoleRefresh(BaseModel):
@@ -71,3 +75,13 @@ class RoleAccessDao(RoleAccessBase):
                 RoleAccess.type == access_type.value,
                 RoleAccess.third_id == third_id
             )).first()
+
+    @classmethod
+    def find_role_access(cls, role_ids: List[int], third_ids: List[str], access_type: AccessType) -> List[RoleAccess]:
+        with session_getter() as session:
+            if access_type:
+                return session.exec(
+                    select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
+                                             RoleAccess.third_id.in_(third_ids),
+                                             RoleAccess.type == access_type.value)).all()
+            return session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(role_ids))).all()

@@ -106,15 +106,19 @@ class ThreadPoolManager:
     #     self.async_task_result.append(future)
 
     def cancel_task(self, key_list: List[str]):
+        res = [False] * len(key_list)
         with self.lock:
-            for key in key_list:
+            for index, key in enumerate(key_list):
                 if self.async_task.get(key):
-                    logger.info('clean_pending_task key={}', key)
                     for task in self.async_task.get(key):
-                        task.result().cancel()
+                        cancel_res = task.result().cancel()
+                        logger.info('clean_pending_task key={} task={} res={}', key, task,
+                                    cancel_res)
+                        res[index] = cancel_res
                 if self.future_dict.get(key):
                     for task in self.future_dict.get(key):
-                        task.cancel()
+                        res.append(task.cancel())
+            return res
 
     def tear_down(self):
         key_list = list(self.async_task.keys())

@@ -1,19 +1,24 @@
-import { JSEncrypt } from 'jsencrypt';
+import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
+import { GithubIcon } from '@/components/bs-icons/github';
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
-import json from "../../package.json";
-import { Button } from "../components/bs-ui/button";
-import { Input } from "../components/bs-ui/input";
-import { GithubIcon } from '@/components/bs-icons/github';
-import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
+import json from "../../../package.json";
+import { Button } from "../../components/bs-ui/button";
+import { Input } from "../../components/bs-ui/input";
 // import { alertContext } from "../contexts/alertContext";
-import { getPublicKeyApi, loginApi, getCaptchaApi, registerApi } from "../controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { useNavigate } from 'react-router-dom';
+import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import LoginBridge from './loginBridge';
+import { PWD_RULE, handleEncrypt } from './utils';
+import { locationContext } from '@/contexts/locationContext';
 export const LoginPage = () => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t, i18n } = useTranslation();
     const { message, toast } = useToast()
+    const navigate = useNavigate()
+    const { appConfig } = useContext(locationContext)
 
     const isLoading = false
 
@@ -57,8 +62,13 @@ export const LoginPage = () => {
             // setUser(res.data)
             localStorage.setItem('ws_token', res.access_token)
             localStorage.setItem('isLogin', '1')
-            location.href = '/'
-        }))
+            location.href = __APP_ENV__.BASE_URL + '/'
+        }), (error) => {
+            if (error.indexOf('过期') !== -1) { // 有时间改为 code 判断
+                localStorage.setItem('account', mail)
+                navigate('/reset', { state: { noback: true } })
+            }
+        })
 
         fetchCaptchaData()
     }
@@ -75,7 +85,7 @@ export const LoginPage = () => {
         if (!/.{8,}/.test(pwd)) {
             error.push(t('login.passwordTooShort'))
         }
-        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(pwd)) {
+        if (!PWD_RULE.test(pwd)) {
             error.push(t('login.passwordError'))
         }
         if (pwd !== apwd) {
@@ -106,23 +116,16 @@ export const LoginPage = () => {
         fetchCaptchaData()
     }
 
-    const handleEncrypt = async (pwd) => {
-        const { public_key } = await getPublicKeyApi()
-        const encrypt = new JSEncrypt()
-        encrypt.setPublicKey(public_key)
-        return encrypt.encrypt(pwd) as string
-    }
-
     return <div className='w-full h-full bg-background-dark'>
         <div className='fixed z-10 sm:w-[1280px] w-full sm:h-[720px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden bg-background-login'>
             <div className='w-[420px] h-[704px] m-[8px] hidden sm:block'>
-                <img src="/login-logo-big.png" alt="logo_picture" className='w-full h-full dark:hidden' />
-                <img src="/login-logo-dark.png" alt="logo_picture" className='w-full h-full hidden dark:block' />
+                <img src={__APP_ENV__.BASE_URL + '/login-logo-big.png'} alt="logo_picture" className='w-full h-full dark:hidden' />
+                <img src={__APP_ENV__.BASE_URL + '/login-logo-dark.png'} alt="logo_picture" className='w-full h-full hidden dark:block' />
             </div>
             <div className='absolute w-full h-full z-10 flex justify-end top-0'>
                 <div className='w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-background-login relative'>
                     <div>
-                        <img src="/login-logo-small.png" alt="small_logo" className='block w-[114px] h-[36px] m-auto mt-[140px]' />
+                        <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} alt="small_logo" className='block w-[114px] h-[36px] m-auto mt-[140px]' />
                         <span className='block w-fit m-auto font-normal text-[14px] text-tx-color mt-[24px]'>{t('login.slogen')}</span>
                     </div>
                     <div className="grid gap-[12px] mt-[68px]">
@@ -174,6 +177,10 @@ export const LoginPage = () => {
                             </div>
                             )
                         }
+                        {/* 中英 */}
+                        {/* <Button
+                            className='h-[48px] mt-[32px] dark:bg-button'
+                            disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button> */}
                         {
                             showLogin ? <>
                                 <div className="text-center">
@@ -192,17 +199,18 @@ export const LoginPage = () => {
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
+                        {appConfig.hasSSO && <LoginBridge />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>
-                        <div className='help flex'>
+                        {!appConfig.isPro && <div className='help flex'>
                             <a href={"https://github.com/dataelement/bisheng"} target="_blank">
                                 <GithubIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px] mx-[8px] hover:bg-[#1b1f23] hover:text-[white] hover:cursor-pointer" />
                             </a>
                             <a href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
                                 <BookOpenIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px]  hover:bg-[#0055e3] hover:text-[white] hover:cursor-pointer" />
                             </a>
-                        </div>
+                        </div>}
                     </div>
                 </div>
             </div>

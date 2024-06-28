@@ -15,8 +15,9 @@ import { Variable, getFlowApi } from "../../../controllers/API/flow";
 import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
+import ForcePrompt from "./ForcePrompt";
 
-export default function ChatPanne({ customWsHost = '', data }) {
+export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
     const { t } = useTranslation()
 
@@ -34,9 +35,12 @@ export default function ChatPanne({ customWsHost = '', data }) {
     const init = async () => {
         if (type === 'flow') {
             setAssistant(null)
-            const _flow = await getFlowApi(id)
+            const _flow = await getFlowApi(id, version)
             await build(_flow, chatId)
-            loadHistoryMsg(_flow.id, chatId)
+            version === 'v1' && loadHistoryMsg(_flow.id, chatId, {
+                appendHistory,
+                lastMsg: t('historicalMessages')
+            })
             flowRef.current = _flow
             setFlow(_flow)
             changeChatId(chatId) // ws
@@ -44,7 +48,10 @@ export default function ChatPanne({ customWsHost = '', data }) {
             flowRef.current = null
             setFlow(null)
             const _assistant = await loadAssistantState(id)
-            loadHistoryMsg(_assistant.id, chatId)
+            loadHistoryMsg(_assistant.id, chatId, {
+                appendHistory,
+                lastMsg: t('historicalMessages')
+            })
             setAssistant(_assistant)
             changeChatId(chatId) // ws
         }
@@ -89,7 +96,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
             const inputKey = 'input';
             const msgData = {
                 chatHistory: messages,
-                flow_id: '',
+                flow_id: data?.id || '',
                 chat_id: chatId,
                 name: assistant.name,
                 description: assistant.desc,
@@ -105,11 +112,11 @@ export default function ChatPanne({ customWsHost = '', data }) {
     // 应用链接
     const { appConfig } = useContext(locationContext)
     const token = localStorage.getItem("ws_token") || '';
-    let wsUrl = type === 'flow' ? `${appConfig.websocketHost}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
-        `${location.host}/api/v1/assistant/chat/${assistant?.id}?t=${token}`
+    let wsUrl = type === 'flow' ? `${appConfig.websocketHost}${__APP_ENV__.BASE_URL}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
+        `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assistant?.id}?t=${token}`
 
     if (customWsHost) {
-        wsUrl = `${appConfig.websocketHost}${customWsHost}&t=${token}`
+        wsUrl = `${appConfig.websocketHost}${__APP_ENV__.BASE_URL}${customWsHost}&t=${token}`
     }
 
     // sendmsg user name
@@ -150,8 +157,8 @@ export default function ChatPanne({ customWsHost = '', data }) {
         document.dispatchEvent(myEvent);
     }
 
-    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg">
-        <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src="/application-start-logo.png" alt="" />
+    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+        <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
         <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] text-[#111111] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
             {t('chat.chooseOne')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
         </p>
@@ -168,7 +175,7 @@ export default function ChatPanne({ customWsHost = '', data }) {
     </div>
 
 
-    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg">
+    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
         {/* 技能会话 */}
         {
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>
@@ -179,13 +186,16 @@ export default function ChatPanne({ customWsHost = '', data }) {
                 </div>
                 <ChatComponent
                     form={flowSate.isForm}
+                    // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
                     guideWord={flow.guide_word}
                     wsUrl={wsUrl}
                     onBeforSend={getWsParamData}
-                    loadMore={() => loadMoreHistoryMsg(flow.id)}
+                    loadMore={() => loadMoreHistoryMsg(flow.id, appendHistory)}
                     inputForm={flowSate.isForm ? <ChatReportForm flow={flow} onStart={sendReport} /> : null}
                 />
+                {/* 强制提醒 */}
+                <ForcePrompt id={flow.id} />
             </div>
         }
         {/* 助手会话 */}
@@ -202,9 +212,11 @@ export default function ChatPanne({ customWsHost = '', data }) {
                     guideWord={assistantState.guide_word}
                     wsUrl={wsUrl}
                     onBeforSend={getWsParamData}
-                    loadMore={() => loadMoreHistoryMsg(assistant.id)}
+                    loadMore={() => loadMoreHistoryMsg(assistant.id, appendHistory)}
                     inputForm={null}
                 />
+                {/* 强制提醒 */}
+                <ForcePrompt id={assistant.id} />
             </div>
         }
     </div>
@@ -230,7 +242,7 @@ const useBuild = () => {
         let validationResults = [];
         let finished = false;
         let buildEnd = false
-        const apiUrl = `/api/v1/build/stream/${flowId}?chat_id=${chatId}`;
+        const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/build/stream/${flowId}?chat_id=${chatId}`;
         const eventSource = new EventSource(apiUrl);
 
         eventSource.onmessage = (event) => {

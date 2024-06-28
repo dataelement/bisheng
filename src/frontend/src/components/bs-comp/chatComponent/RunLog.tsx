@@ -34,6 +34,8 @@ export default function RunLog({ data }) {
             // if (!knowledge) throw new Error('调试日志无法匹配到使用的知识库详情，id:' + data.message.tool_key)
 
             title = knowledge ? `${data.end ? '已搜索' : '正在搜索'} ${knowledge.name}` : '知识库已被删除，无法获取知识库名'
+        } else {
+            title = data.end ? '完成' : '思考中'
         }
         return [title, lost]
     }, [assistantState, data])
@@ -51,7 +53,9 @@ export default function RunLog({ data }) {
                 <CaretDownIcon className={open && 'rotate-180'} />
             </div>
             <div className={cname('bg-gray-100 px-4 py-2 text-gray-500 overflow-hidden text-sm ', open ? 'h-auto' : 'h-0 p-0')}>
-                <p>{data.thought}</p>
+                {data.thought.split('\n').map((line, index) => (
+                    <p className="text-md mb-1 text-gray-600" key={index}>{line}</p>
+                ))}
             </div>
         </div>
     </div>

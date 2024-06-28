@@ -5,24 +5,30 @@ import time
 from typing import List, Optional
 from uuid import uuid4
 
+from bisheng.api.JWT import get_login_user
+from bisheng.api.utils import get_request_ip
+from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
                                                 delete_knowledge_file_vectors, retry_files)
-from bisheng.api.utils import access_check
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500
 from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import session_getter
+from bisheng.database.models.group_resource import GroupResource, ResourceTypeEnum, GroupResourceDao
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
                                                KnowledgeRead)
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
                                                     KnowledgeFileRead)
-from bisheng.database.models.role_access import AccessType, RoleAccess
+from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
 from bisheng.database.models.user import User
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
 from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
@@ -80,14 +86,13 @@ async def get_embedding():
              response_model=UnifiedResponseModel[List[KnowledgeFileRead]],
              status_code=201)
 async def process_knowledge(*,
+                            request: Request,
                             data: dict,
                             background_tasks: BackgroundTasks,
-                            Authorize: AuthJWT = Depends()):
+                            login_user: UserPayload = Depends(get_login_user)):
     """上传文件到知识库.
     使用flowchain来处理embeding的流程
         """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
 
     knowledge_id = data.get('knowledge_id')
     chunk_size = data.get('chunck_size')
@@ -103,11 +108,8 @@ async def process_knowledge(*,
         chunk_overlap = 100
 
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
-    if not access_check(payload=payload,
-                        owner_user_id=knowledge.user_id,
-                        target_id=knowledge.id,
-                        type=AccessType.KNOWLEDGE_WRITE):
-        raise HTTPException(status_code=500, detail='当前用户无此知识库操作权限')
+    if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE):
+        return UnAuthorizedError.return_resp()
 
     collection_name = knowledge.collection_name
     files = []
@@ -140,7 +142,7 @@ async def process_knowledge(*,
                                     status=status,
                                     md5=md5_,
                                     remark=remark,
-                                    user_id=payload.get('user_id'))
+                                    user_id=login_user.user_id)
             with session_getter() as session:
                 session.add(db_file)
                 session.commit()
@@ -170,15 +172,22 @@ async def process_knowledge(*,
     with session_getter() as session:
         session.add(knowledge)
         session.commit()
+
+    # 记录审计日志
+    file_name = ""
+    for one in files:
+        file_name += "\n\n" + one.file_name
+    AuditLogService.upload_knowledge_file(login_user, get_request_ip(request), knowledge_id, file_name)
     return resp_200(result)
 
 
 @router.post('/create', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
-def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends()):
+def create_knowledge(*,
+                     request: Request,
+                     knowledge: KnowledgeCreate,
+                     login_user: UserPayload = Depends(get_login_user)):
     """ 创建知识库. """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user_id = payload.get('user_id')
+    user_id = login_user.user_id
     knowledge.is_partition = knowledge.is_partition or settings.get_knowledge().get(
         'vectorstores', {}).get('Milvus', {}).get('is_partition', True)
     db_knowldge = Knowledge.model_validate(knowledge)
@@ -203,7 +212,26 @@ def create_knowledge(*, knowledge: KnowledgeCreate, Authorize: AuthJWT = Depends
         session.add(db_knowldge)
         session.commit()
         session.refresh(db_knowldge)
+    create_knowledge_hook(request, db_knowldge, login_user)
     return resp_200(db_knowldge.copy())
+
+
+def create_knowledge_hook(request: Request, knowledge: Knowledge, login_user: UserPayload):
+    # 查询下用户所在的用户组
+    user_group = UserGroupDao.get_user_group(login_user.user_id)
+    if user_group:
+        # 批量将助手资源插入到关联表里
+        batch_resource = []
+        for one in user_group:
+            batch_resource.append(GroupResource(
+                group_id=one.group_id,
+                third_id=knowledge.id,
+                type=ResourceTypeEnum.KNOWLEDGE.value))
+        GroupResourceDao.insert_group_batch(batch_resource)
+
+    # 记录审计日志
+    AuditLogService.create_knowledge(login_user, get_request_ip(request), knowledge.id)
+    return True
 
 
 @router.get('/', status_code=200)
@@ -211,30 +239,28 @@ def get_knowledge(*,
                   name: str = None,
                   page_size: Optional[int],
                   page_num: Optional[str],
-                  Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
+                  login_user: UserPayload = Depends(get_login_user)):
     """ 读取所有知识库信息. """
 
     try:
         sql = select(Knowledge)
         count_sql = select(func.count(Knowledge.id))
-        if 'admin' != payload.get('role'):
+        if not login_user.is_admin():
             with session_getter() as session:
                 role_third_id = session.exec(
-                    select(RoleAccess).where(RoleAccess.role_id.in_(payload.get('role')))).all()
+                    select(RoleAccess).where(RoleAccess.role_id.in_(login_user.user_role))).all()
             if role_third_id:
                 third_ids = [
                     acess.third_id for acess in role_third_id
                     if acess.type == AccessType.KNOWLEDGE.value
                 ]
                 sql = sql.where(
-                    or_(Knowledge.user_id == payload.get('user_id'), Knowledge.id.in_(third_ids)))
+                    or_(Knowledge.user_id == login_user.user_id, Knowledge.id.in_(third_ids)))
                 count_sql = count_sql.where(
-                    or_(Knowledge.user_id == payload.get('user_id'), Knowledge.id.in_(third_ids)))
+                    or_(Knowledge.user_id == login_user.user_id, Knowledge.id.in_(third_ids)))
             else:
-                sql = sql.where(Knowledge.user_id == payload.get('user_id'))
-                count_sql = count_sql.where(Knowledge.user_id == payload.get('user_id'))
+                sql = sql.where(Knowledge.user_id == login_user.user_id)
+                count_sql = count_sql.where(Knowledge.user_id == login_user.user_id)
         if name:
             name = name.strip()
             sql = sql.where(Knowledge.name.like(f'%{name}%'))
@@ -274,27 +300,16 @@ def get_filelist(*,
                  page_size: int = 10,
                  page_num: int = 1,
                  status: Optional[int] = None,
-                 Authorize: AuthJWT = Depends()):
+                 login_user: UserPayload = Depends(get_login_user)):
     """ 获取知识库文件信息. """
 
     # 查询当前知识库，是否有写入权限
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-
     with session_getter() as session:
         db_knowledge = session.get(Knowledge, knowledge_id)
     if not db_knowledge:
         raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
-    if not access_check(payload=payload,
-                        owner_user_id=db_knowledge.user_id,
-                        target_id=knowledge_id,
-                        type=AccessType.KNOWLEDGE):
-        raise HTTPException(status_code=500, detail='没有访问权限')
-
-    writable = access_check(payload=payload,
-                            owner_user_id=db_knowledge.user_id,
-                            target_id=knowledge_id,
-                            type=AccessType.KNOWLEDGE_WRITE)
+    if not login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
+        return UnAuthorizedError.return_resp()
 
     # 查找上传的文件信息
     count_sql = select(func.count(
@@ -318,7 +333,7 @@ def get_filelist(*,
     return resp_200({
         'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
         'total': total_count,
-        'writeable': writable
+        'writeable': login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE)
     })
 
 
@@ -346,16 +361,17 @@ def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = De
 
 
 @router.delete('/{knowledge_id}', status_code=200)
-def delete_knowledge(*, knowledge_id: int, Authorize: AuthJWT = Depends()):
+def delete_knowledge(*,
+                     request: Request,
+                     knowledge_id: int,
+                     login_user: UserPayload = Depends(get_login_user)):
     """ 删除知识库信息. """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
 
     with session_getter() as session:
         knowledge = session.get(Knowledge, knowledge_id)
     if not knowledge:
         raise HTTPException(status_code=404, detail='knowledge not found')
-    if not access_check(payload, knowledge.user_id, knowledge_id, AccessType.KNOWLEDGE_WRITE):
+    if not login_user.access_check(knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
 
     # 处理knowledgefile
@@ -390,24 +406,38 @@ def delete_knowledge(*, knowledge_id: int, Authorize: AuthJWT = Depends()):
     with session_getter() as session:
         session.delete(knowledge)
         session.commit()
+    delete_knowledge_hook(request, knowledge, login_user)
     return resp_200(message='删除成功')
 
 
+def delete_knowledge_hook(request: Request, knowledge: Knowledge, login_user: UserPayload):
+    logger.info(f'delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}')
+
+    # 删除知识库的审计日志
+    AuditLogService.delete_knowledge(login_user, get_request_ip(request), knowledge)
+
+    GroupResourceDao.delete_group_resource_by_third_id(str(knowledge.id), ResourceTypeEnum.KNOWLEDGE)
+
+
 @router.delete('/file/{file_id}', status_code=200)
-def delete_knowledge_file(*, file_id: int, Authorize: AuthJWT = Depends()):
+def delete_knowledge_file(*,
+                          request: Request,
+                          file_id: int,
+                          login_user: UserPayload = Depends(get_login_user)):
     """ 删除知识文件信息 """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
 
     knowledge_file = KnowledgeFileDao.select_list([file_id])
     if knowledge_file:
         knowledge_file = knowledge_file[0]
     knowledge = KnowledgeDao.query_by_id(knowledge_file.knowledge_id)
-    if not access_check(payload, knowledge.user_id, knowledge.id, AccessType.KNOWLEDGE_WRITE):
+    if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
 
     # 处理vectordb
     delete_knowledge_file_vectors([file_id])
     KnowledgeFileDao.delete_batch([file_id])
+
+    # 删除知识库文件的审计日志
+    AuditLogService.delete_knowledge_file(login_user, get_request_ip(request), knowledge.id, knowledge_file.file_name)
 
     return resp_200(message='删除成功')

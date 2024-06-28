@@ -23,10 +23,11 @@ export default function ToolsSheet({ select, onSelect, children }) {
     }, [type])
 
     const options = useMemo(() => {
-        return allData.filter(el => 
-            el.name.toLowerCase().includes(keyword.toLowerCase())
-            || el.description.toLowerCase().includes(keyword.toLowerCase())
-        )
+        return allData.filter((el) => {
+            // 搜索范围：工具名称、工具描述、工具api名称、工具api描述
+            const targetStr = `${el.name}-${el.description}-${el.children?.map((el) => el.name + el.desc).join("-") || ''}`
+            return targetStr.toLowerCase().includes(keyword.toLowerCase());
+          });
     }, [keyword, allData])
 
     return (
@@ -41,7 +42,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
                         <SearchInput placeholder={t('build.search')} className="mt-6" onChange={(e) => setKeyword(e.target.value)} />
                         <Button
                             className="mt-4 w-full"
-                            onClick={() => window.open("/build/tools")}
+                            onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools")}
                         >
                             {t('create')}{t("tools.createCustomTool")}
                         </Button>

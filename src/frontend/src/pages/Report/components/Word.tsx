@@ -6,7 +6,7 @@ export default function Word({ data }) {
     const { appConfig } = useContext(locationContext)
 
     const wordUrl = appConfig.officeUrl
-    const backUrl = location.origin + '/api/v1/report/callback' // 后端服务地址
+    const backUrl = `${location.origin}${__APP_ENV__.BASE_URL}/api/v1/report/callback` // 后端服务地址
 
     const editorConfig = {
         // 编辑器宽度
@@ -55,8 +55,8 @@ export default function Word({ data }) {
                 unit: "cm",
                 uiTheme: "theme-dark",
                 logo: {
-                    "image": location.origin + "/logo.jpeg",
-                    "imageDark": location.origin + "/logo.jpeg",
+                    "image": location.origin + __APP_ENV__.BASE_URL + "/logo.jpeg",
+                    "imageDark": location.origin + __APP_ENV__.BASE_URL + "/logo.jpeg",
                     "url": "https://example.com"
                 }
             },

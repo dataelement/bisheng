@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import JSON, Column, DateTime, String, text
+from sqlalchemy import JSON, Column, DateTime, String, text, func
 from sqlmodel import Field, or_, select, Text, update
 
 
@@ -161,21 +161,66 @@ class GptsToolsDao(GptsToolsBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_tool_type(cls, user_id: int, is_preset: Optional[bool] = None) -> List[GptsToolsType]:
+    def get_preset_tool_type(cls) -> List[GptsToolsType]:
         """
-        获得所有的工具类别，包含预置和用户自己的
+        获得所有的预置工具类别
         """
         with session_getter() as session:
-            statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
-            if is_preset is None:
-                statement = statement.where(
-                    or_(GptsToolsType.user_id == user_id, GptsToolsType.is_preset == 1)
-                )
-            elif is_preset:
-                statement = statement.where(GptsToolsType.is_preset == 1)
-            else:
-                statement = statement.where(GptsToolsType.user_id == user_id)
+            statement = select(GptsToolsType).where(GptsToolsType.is_preset == 1, GptsToolsType.is_delete == 0)
             return session.exec(statement).all()
+
+    @classmethod
+    def get_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int], include_preset: bool = True) \
+            -> List[GptsToolsType]:
+        """
+        获取用户可见的所有工具类别
+        """
+        statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
+        filters = []
+        if extra_tool_type_ids:
+            filters.append(or_(
+                GptsToolsType.id.in_(extra_tool_type_ids),
+                GptsToolsType.user_id == user_id
+            ))
+        else:
+            filters.append(GptsToolsType.user_id == user_id)
+        if include_preset:
+            filters.append(GptsToolsType.is_preset == 1)
+        statement = statement.where(or_(*filters))
+        with session_getter() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    def filter_tool_types_by_ids(cls, tool_type_ids: List[int], keyword: Optional[str] = None, page: int = 0,
+                                 limit: int = 0, include_preset: bool = False) -> (List[GptsToolsType], int):
+        """
+        根据工具类别id过滤工具类别
+        """
+        statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
+        count_statement = select(func.count(GptsToolsType.id)).where(GptsToolsType.is_delete == 0)
+        if not include_preset:
+            statement = statement.where(GptsToolsType.is_preset == 0)
+            count_statement = count_statement.where(GptsToolsType.is_preset == 0)
+
+        if tool_type_ids:
+            statement = statement.where(GptsToolsType.id.in_(tool_type_ids))
+            count_statement = count_statement.where(GptsToolsType.id.in_(tool_type_ids))
+        if keyword:
+            statement = statement.where(or_(
+                GptsToolsType.name.like(f'%{keyword}%'),
+                GptsToolsType.description.like(f'%{keyword}%')
+            ))
+            count_statement = count_statement.where(or_(
+                GptsToolsType.name.like(f'%{keyword}%'),
+                GptsToolsType.description.like(f'%{keyword}%')
+            ))
+
+        if limit and page:
+            statement = statement.offset(
+                (page - 1) * limit
+            ).limit(limit).order_by(GptsToolsType.update_time.desc())
+        with session_getter() as session:
+            return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
     def get_one_tool_type(cls, tool_type_id: int) -> GptsToolsType:

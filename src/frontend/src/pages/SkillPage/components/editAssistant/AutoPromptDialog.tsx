@@ -27,7 +27,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
 
     const init = () => {
         const prompt = areaRef.current.value
-        const apiUrl = `/api/v1/assistant/auto?assistant_id=${id}&prompt=${encodeURIComponent(prompt)}`;
+        const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/assistant/auto?assistant_id=${id}&prompt=${encodeURIComponent(prompt)}`;
         const eventSource = new EventSource(apiUrl);
         areaRef.current.value = ''
         let queue = LoadType.Prompt
@@ -176,7 +176,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                 </div>
                 <div className="group flex justify-end mt-2 h-[600px] relative">
                     <Textarea ref={areaRef} className="h-full" defaultValue={assistantState.prompt}
-                        placeholder={t('build.prompt')}
+                        placeholder={t('prompt')}
                     ></Textarea>
                     <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.Prompt <= loading} size="sm" onClick={handleUsePropmt}>{t('build.use')}</Button>
                 </div>

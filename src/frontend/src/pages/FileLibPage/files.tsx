@@ -3,33 +3,26 @@ import { Button } from "../../components/bs-ui/button";
 import {
     Table,
     TableBody,
-    TableCaption,
     TableCell,
     TableHead,
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-} from "../../components/bs-ui/tabs";
 
-import { ArrowLeft, Filter, RotateCw, Search, X } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { ArrowLeft, Filter, RotateCw, X } from "lucide-react";
+import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import PaginationComponent from "../../components/PaginationComponent";
-import AutoPagination from "../../components/bs-ui/pagination/autoPagination"
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import ShadTooltip from "../../components/ShadTooltipComponent";
-import { Input, SearchInput } from "../../components/bs-ui/input";
-import { Select, SelectContent, SelectGroup, SelectTrigger, SelectItem } from "../../components/bs-ui/select";
+import { SearchInput } from "../../components/bs-ui/input";
+import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "../../components/bs-ui/select";
 import { locationContext } from "../../contexts/locationContext";
 import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import UploadModal from "../../modals/UploadModal";
 import { useTable } from "../../util/hook";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function FilesPage() {
     const { t } = useTranslation()

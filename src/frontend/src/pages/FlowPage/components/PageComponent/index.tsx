@@ -310,7 +310,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   // 离开并保存
   const handleSaveAndClose = async () => {
     setFlow('leave and save', { ...flow })
-    
+
     await captureAndAlertRequestErrorHoc(updateVersion(version.id, { name: version.name, description: '', data: flow.data }))
     blocker.proceed?.()
   }
@@ -338,7 +338,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   }, [flow.data]); // 修改 id后, 需要监听 data这一层
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div id="flow-page" className="flex flex-col h-full overflow-hidden">
       <Header flow={flow}></Header>
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {Object.keys(data).length ? <ExtraSidebar flow={flow} /> : <></>}
@@ -460,8 +460,12 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
           <h3 className="font-bold text-lg">{t('prompt')}</h3>
           <p className="py-4">{t('flow.unsavedChangesConfirmation')}</p>
           <div className="modal-action">
-            <Button className="h-8" variant="outline" onClick={() => blocker.reset?.()}>{t('cancel')}</Button>
-            <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>{t('flow.leave')}</Button>
+            <Button className="h-8" variant="outline" onClick={() => {
+              const dom = document.getElementById("flow-page") as HTMLElement;
+              blocker.reset?.()
+              if (dom) dom.className = dom.className.replace('report-hidden', '');
+            }}>{t('cancel')}</Button>
+            <Button className="leave h-8" variant="destructive" onClick={() => blocker.proceed?.()}>{t('flow.leave')}</Button>
             <Button className="h-8" onClick={handleSaveAndClose}>{t('flow.leaveAndSave')}</Button>
           </div>
         </form>

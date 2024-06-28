@@ -215,6 +215,12 @@
 
 .bs-chat-bg {
 	width: 100%;
-	background: url(/points.png) 0 100% repeat-x;
+	background-position: 0 100%;
+	background-repeat: repeat-x;
 	background-size: 10px 432px;
+}
+
+/* report情况隐藏离开按钮 */
+.report-hidden .leave {
+	display: none !important;
 }

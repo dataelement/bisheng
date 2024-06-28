@@ -1,4 +1,6 @@
 import json
+import os
+import time
 import uuid
 from pathlib import Path
 from typing import Dict, List
@@ -6,6 +8,7 @@ from uuid import UUID
 
 import httpx
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+from langchain_core.utils.function_calling import format_tool_to_openai_tool
 
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.knowledge_imp import decide_vectorstores
@@ -343,9 +346,21 @@ class AssistantAgent(AssistantUtils):
                 run_id = uuid.uuid4()
                 await callback[0].on_tool_start({
                     'name': one,
-                }, input_str='', run_id=run_id)
-                await callback[0].on_tool_end(output='', name=one, run_id=run_id)
+                }, input_str='flow if offline', run_id=run_id)
+                await callback[0].on_tool_end(output='flow is offline', name=one, run_id=run_id)
         result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
         # 包含了history，将history排除, 默认取最后一个为最终结果
         res = [result[-1]]
+        # 记录助手的聊天历史
+        if os.getenv("BISHENG_RECORD_HISTORY"):
+            try:
+                os.makedirs("/app/data/history", exist_ok=True)
+                with open(f"/app/data/history/{self.assistant.id}_{time.time()}.json", "w", encoding="utf-8") as f:
+                    json.dump({
+                        "system": self.assistant.prompt,
+                        "message": [one.to_json() for one in result],
+                        "tools": [format_tool_to_openai_tool(t) for t in self.tools]
+                    }, f, ensure_ascii=False)
+            except Exception as e:
+                logger.error(f"record assistant history error: {str(e)}")
         return res

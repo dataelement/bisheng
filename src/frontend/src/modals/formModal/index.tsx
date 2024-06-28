@@ -190,7 +190,7 @@ export default function FormModal({
     const isSecureProtocol = window.location.protocol === "https:";
     const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
     const host = appConfig.websocketHost || window.location.host // isDevelopment ? "localhost:7860" : window.location.host;
-    const chatEndpoint = `/api/v1/chat/${chatId}`;
+    const chatEndpoint = `${__APP_ENV__.BASE_URL}/api/v1/chat/${chatId}`;
 
     const token = localStorage.getItem("ws_token") || '';
     return `${isDevelopment ? "ws" : webSocketProtocol
@@ -379,6 +379,7 @@ export default function FormModal({
       );
       sendAll({
         ...reactFlowInstance.toObject(),
+        flow_id: flow.id,
         inputs: inputs,
         chatHistory,
         name: flow.name,
