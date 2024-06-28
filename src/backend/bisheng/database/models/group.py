@@ -63,7 +63,7 @@ class GroupDao(GroupBase):
     @classmethod
     def get_all_group(cls) -> list[Group]:
         with session_getter() as session:
-            statement = select(Group).order_by(Group.id.desc())
+            statement = select(Group).order_by(Group.update_time.desc())
             return session.exec(statement).all()
 
     @classmethod
@@ -71,7 +71,7 @@ class GroupDao(GroupBase):
         if not ids:
             raise ValueError('ids is empty')
         with session_getter() as session:
-            statement = select(Group).where(Group.id.in_(ids)).order_by(Group.id.desc())
+            statement = select(Group).where(Group.id.in_(ids)).order_by(Group.update_time.desc())
             return session.exec(statement).all()
 
     @classmethod
