@@ -64,7 +64,7 @@ export default function MainLayout() {
         <div className="bg-background-main w-full h-screen">
             <div className="flex justify-between h-[64px]">
                 <div className="flex h-9 my-[14px]">
-                    <Link className="inline-block" to='/'><img src='/login-logo-small.png' className="w-[114px] h-9 ml-8 rounded" alt="" /></Link>
+                    <Link className="inline-block" to='/'><img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="w-[114px] h-9 ml-8 rounded" alt="" /></Link>
                 </div>
                 <div className="flex w-fit relative z-50">
                     <div className="flex">
@@ -98,7 +98,7 @@ export default function MainLayout() {
                         <Separator className="mx-[23px] h-6 border-l my-5 border-[#dddddd]" orientation="vertical" />
                     </div>
                     <div className="flex items-center h-7 my-4">
-                        <img className="h-7 w-7 rounded-2xl mr-4" src="/user.png" alt="" />
+                        <img className="h-7 w-7 rounded-2xl mr-4" src={__APP_ENV__.BASE_URL + '/user.png'} alt="" />
                         <SelectHover
                             triagger={
                                 <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">
