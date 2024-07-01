@@ -3,10 +3,8 @@ from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, text, func, delete, and_
+from sqlalchemy import Column, DateTime, text, func, delete, and_, UniqueConstraint
 from sqlmodel import Field, select
-
-from bisheng.database.models.role_access import RoleAccess
 
 # 默认普通用户角色的ID
 DefaultRole = 2
@@ -15,7 +13,7 @@ AdminRole = 1
 
 
 class RoleBase(SQLModelSerializable):
-    role_name: str = Field(index=False, description='前端展示名称', unique=True)
+    role_name: str = Field(index=False, description='前端展示名称')
     group_id: Optional[int] = Field(index=True)
     remark: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
@@ -28,6 +26,7 @@ class RoleBase(SQLModelSerializable):
 
 
 class Role(RoleBase, table=True):
+    __table_args__ = (UniqueConstraint('group_id', 'role_name', name='group_role_name_uniq'),)
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
@@ -63,6 +62,7 @@ class RoleDao(RoleBase):
             statement = statement.filter(Role.role_name.like(f'%{keyword}%'))
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(Role.create_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 
@@ -100,13 +100,15 @@ class RoleDao(RoleBase):
     @classmethod
     def delete_role_by_group_id(cls, group_id: int):
         """
-        删除分组下所有的角色
+        删除分组下所有的角色，清理用户对应的角色
         """
+        from bisheng.database.models.user_role import UserRole
         with session_getter() as session:
-            all_access = select(RoleAccess, Role).join(
-                Role, and_(RoleAccess.role_id == Role.id,
-                           Role.group_id == group_id)).group_by(RoleAccess.id)
-            all_access = session.exec(all_access)
-            session.exec(delete(RoleAccess).where(RoleAccess.id.in_([one.id for one in all_access])))
+            # 清理对应的用户
+            all_user = select(UserRole, Role).join(
+                Role, and_(UserRole.role_id == Role.id,
+                           Role.group_id == group_id)).group_by(UserRole.id)
+            all_user = session.exec(all_user).all()
+            session.exec(delete(UserRole).where(UserRole.id.in_([one.id for one in all_user])))
             session.exec(delete(Role).where(Role.group_id == group_id))
             session.commit()

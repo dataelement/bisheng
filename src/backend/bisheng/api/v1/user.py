@@ -395,6 +395,7 @@ async def create_role(*,
         create_role_hook(request, login_user, db_role)
         return resp_200(db_role)
     except Exception:
+        logger.exception('add role error')
         raise HTTPException(status_code=500, detail='添加失败，检查是否重复添加')
 
 
