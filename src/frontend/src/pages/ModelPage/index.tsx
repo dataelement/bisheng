@@ -93,7 +93,7 @@ function ConfigModal({ data, readonly, open, setOpen, onSave }) {
                         </div>
                     </div>
                     <div className="flex justify-start">
-                        <Button variant='link' onClick={() => window.open('/model/doc')} className="link col-span-8 pl-0">{t('model.modelConfigExplanationLink')}</Button>
+                        <Button variant='link' onClick={() => window.open(__APP_ENV__.BASE_URL + '/model/doc')} className="link col-span-8 pl-0">{t('model.modelConfigExplanationLink')}</Button>
                     </div>
                 </div>
             </div>

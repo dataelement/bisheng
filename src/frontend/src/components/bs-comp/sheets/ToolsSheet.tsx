@@ -42,7 +42,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
                         <SearchInput placeholder={t('build.search')} className="mt-6" onChange={(e) => setKeyword(e.target.value)} />
                         <Button
                             className="mt-4 w-full"
-                            onClick={() => window.open("/build/tools")}
+                            onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools")}
                         >
                             {t('create')}{t("tools.createCustomTool")}
                         </Button>

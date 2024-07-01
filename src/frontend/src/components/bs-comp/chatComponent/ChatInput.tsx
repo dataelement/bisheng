@@ -148,7 +148,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
                     handleWsMessage(data)
                     // 群聊@自己时，开启input
                     if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
-                        setInputLock({ locked: true, reason: '' })
+                        setInputLock({ locked: false, reason: '' })
                     }
                 }
                 ws.onclose = (event) => {
