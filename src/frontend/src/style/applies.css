@@ -8,6 +8,10 @@
     @apply border-border;
   }
 
+  #root {
+    @apply font-sans;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;

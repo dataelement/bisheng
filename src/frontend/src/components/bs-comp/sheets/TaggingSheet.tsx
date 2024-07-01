@@ -41,7 +41,7 @@ export default function TaggingSheet({children}) {
                                             {(provided) => (
                                                 <div ref={provided.innerRef} {...provided.draggableProps} 
                                                 {...provided.dragHandleProps}>
-                                                {b.name}
+                                                {index + 1} + {b.name}
                                                 </div>
                                         )}
                                     </Draggable>

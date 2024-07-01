@@ -121,9 +121,13 @@
 }
 
 @font-face {
-	font-family: text-security-disc;
+	font-family: AlibabaPuHuiTi-3-55-Regular;
 	/* src: url("assets/text-security-disc.woff") format("woff"); */
-	src: url("assets/AlibabaPuHuiTi-3-55-Regular.otf") format("otf");
+	src: url("assets/AlibabaPuHuiTi-3-55-Regular.otf") format("opentype");
+}
+
+:root {
+	--font-sans: 'AlibabaPuHuiTi-3-55-Regular'
 }
 
 /* pdf-text */
