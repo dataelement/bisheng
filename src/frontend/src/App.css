@@ -122,7 +122,8 @@
 
 @font-face {
 	font-family: text-security-disc;
-	src: url("assets/text-security-disc.woff") format("woff");
+	/* src: url("assets/text-security-disc.woff") format("woff"); */
+	src: url("assets/AlibabaPuHuiTi-3-55-Regular.otf") format("otf");
 }
 
 /* pdf-text */
