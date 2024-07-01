@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import List, Any, Dict
 from uuid import UUID
@@ -5,6 +6,7 @@ from uuid import UUID
 from fastapi.encoders import jsonable_encoder
 from fastapi import Request, HTTPException
 
+from bisheng.cache.redis import redis_client
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
@@ -125,6 +127,8 @@ class RoleGroupService():
         GroupResourceDao.delete_group_resource_by_group_id(group_info.id)
         # 删除用户组下的角色列表
         RoleDao.delete_role_by_group_id(group_info.id)
+        # 将删除事件发到redis队列中
+        redis_client.rpush('delete_group', json.dumps({"id": group_info.id}))
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
         """获取全量的group列表"""

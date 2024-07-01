@@ -131,6 +131,13 @@ class RedisClient:
         finally:
             self.close()
 
+    def rpush(self, key, value):
+        try:
+            self.cluster_nodes(key)
+            return self.connection.rpush(key, value)
+        finally:
+            self.close()
+
     def exists(self, key):
         try:
             self.cluster_nodes(key)
