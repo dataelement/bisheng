@@ -112,7 +112,7 @@ class GroupResourceDao(GroupResourceBase):
         """
         with session_getter() as session:
             return session.exec(
-                select(GroupResource).where(GroupResource.group_id == group_id))
+                select(GroupResource).where(GroupResource.group_id == group_id)).all()
 
     @classmethod
     def update_group_resource(cls, group_resources: List[GroupResource]) -> List[GroupResource]:
