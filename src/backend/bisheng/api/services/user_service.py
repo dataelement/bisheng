@@ -3,6 +3,8 @@ import json
 import functools
 from typing import List
 
+from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
+from bisheng.cache.redis import redis_client
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeRead
@@ -10,8 +12,11 @@ from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
 from fastapi_jwt_auth import AuthJWT
+
+from bisheng.settings import settings
+from bisheng.utils.constants import USER_CURRENT_SESSION
 
 
 class UserPayload:
@@ -117,7 +122,7 @@ def gen_user_jwt(db_user: User):
     # 生成JWT令牌
     payload = {'user_name': db_user.user_name, 'user_id': db_user.user_id, 'role': role}
     # Create the tokens and passing to set_access_cookies or set_refresh_cookies
-    access_token = AuthJWT().create_access_token(subject=json.dumps(payload), expires_time=86400)
+    access_token = AuthJWT().create_access_token(subject=json.dumps(payload), expires_time=ACCESS_TOKEN_EXPIRE_TIME)
 
     refresh_token = AuthJWT().create_refresh_token(subject=db_user.user_name)
 
@@ -202,3 +207,24 @@ def get_assistant_list_by_access(role_id: int, name: str, page_num: int, page_si
         'total':
             total_count
     }
+
+
+async def get_login_user(authorize: AuthJWT = Depends()) -> UserPayload:
+    """
+    获取当前登录的用户
+    """
+    # 校验是否过期，过期则直接返回http 状态码的 401
+    authorize.jwt_required()
+
+    current_user = json.loads(authorize.get_jwt_subject())
+    user = UserPayload(**current_user)
+
+    # 判断是否允许多点登录
+    if not settings.get_system_login_method().allow_multi_login:
+        # 获取access_token
+        current_token = redis_client.get(USER_CURRENT_SESSION.format(user.user_id))
+        # 登录被挤下线了，状态码是200， 内部的status_code是403
+        if current_token != authorize._token:
+            raise HTTPException(status_code=403,
+                                detail='您的账户已在另一设备上登录，此设备上的会话已被注销。\n如果这不是您本人的操作，请尽快修改您的账户密码。')
+    return user

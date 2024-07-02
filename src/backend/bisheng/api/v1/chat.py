@@ -2,12 +2,11 @@ import json
 from typing import List, Optional
 from uuid import UUID
 
-from bisheng.api.JWT import get_login_user
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
-from bisheng.api.services.user_service import UserPayload
+from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
 from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList,
                                     FlowGptsOnlineList, InitResponse, StreamData,
@@ -183,11 +182,11 @@ def get_chatlist_list(*,
     payload = json.loads(Authorize.get_jwt_subject())
 
     smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
-                  func.max(ChatMessage.create_time).label('create_time'),
+                  func.min(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
         ChatMessage.user_id == payload.get('user_id')).group_by(
         ChatMessage.flow_id,
-        ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
+        ChatMessage.chat_id).order_by(func.max(ChatMessage.update_time).desc()))
     with session_getter() as session:
         db_message = session.exec(smt).all()
     flow_ids = [message.flow_id for message in db_message]

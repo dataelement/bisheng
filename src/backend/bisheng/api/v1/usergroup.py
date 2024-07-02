@@ -3,11 +3,10 @@ from uuid import UUID
 import json
 from typing import Annotated, List, Optional
 
-from bisheng.api.JWT import get_login_user
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.role_group_service import RoleGroupService
-from bisheng.api.services.user_service import UserPayload
+from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import check_permissions
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, AssistantSimpleInfo
 from bisheng.database.models.assistant import AssistantDao

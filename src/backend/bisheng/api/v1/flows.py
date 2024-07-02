@@ -2,11 +2,9 @@ import json
 from typing import Any
 from uuid import UUID
 
-from bisheng.api.JWT import get_login_user
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.flow import FlowService
-from bisheng.api.services.user_service import UserPayload
+from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import build_flow_no_yield, get_L2_param_from_flow, remove_api_keys
 from bisheng.api.v1.schemas import (FlowCompareReq, FlowListRead, FlowVersionCreate, StreamData,
                                     UnifiedResponseModel, resp_200)
@@ -14,9 +12,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle,
                                           FlowUpdate)
 from bisheng.database.models.flow_version import FlowVersionDao
-from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
-from bisheng.database.models.user_group import UserGroupDao
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, HTTPException, Query, Request

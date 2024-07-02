@@ -40,9 +40,12 @@ class EventType(Enum):
     DELETE_ROLE = "delete_role"  # 删除角色
     UPDATE_ROLE = "update_role"  # 编辑角色
 
+    USER_LOGIN = "user_login" # 用户登录
+
 
 # 操作对象类型枚举
 class ObjectType(Enum):
+    NONE = "none"  # 无
     FLOW = "flow"  # 技能
     ASSISTANT = "assistant"  # 助手
     KNOWLEDGE = "knowledge"  # 知识库

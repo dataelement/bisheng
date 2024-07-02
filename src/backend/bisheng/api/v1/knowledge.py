@@ -1,17 +1,15 @@
-import json
 import os
 import re
 import time
 from typing import List, Optional
 from uuid import uuid4
 
-from bisheng.api.JWT import get_login_user
 from bisheng.api.utils import get_request_ip
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
                                                 delete_knowledge_file_vectors, retry_files)
-from bisheng.api.services.user_service import UserPayload
+from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500
 from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import session_getter
@@ -20,7 +18,7 @@ from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, Knowl
                                                KnowledgeRead)
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
                                                     KnowledgeFileRead)
-from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
+from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.interface.embeddings.custom import FakeEmbedding

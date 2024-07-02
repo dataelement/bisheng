@@ -64,7 +64,7 @@ def getn_env():
     # add tips from settings
     env['dialog_tips'] = settings.settings.get_from_db('dialog_tips')
     # 判断是否SSO
-    env['sso'] = settings.settings.get_system_login_method().get('SSO_OAuth', False)
+    env['sso'] = settings.settings.get_system_login_method().SSO_OAuth
     # add env dict from settings
     env.update(settings.settings.get_from_db('env') or {})
     return resp_200(env)
