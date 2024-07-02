@@ -191,3 +191,15 @@ class UserGroupDao(UserGroupBase):
                 UserGroup.is_group_admin == 1)
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    def delete_group_all_admin(cls, group_id: int) -> None:
+        """
+        删除用户组下所有的管理员
+        """
+        with session_getter() as session:
+            statement = delete(UserGroup).where(
+                UserGroup.group_id == group_id).where(
+                UserGroup.is_group_admin == 1)
+            session.exec(statement)
+            session.commit()

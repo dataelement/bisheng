@@ -127,8 +127,12 @@ class RoleGroupService():
         GroupResourceDao.delete_group_resource_by_group_id(group_info.id)
         # 删除用户组下的角色列表
         RoleDao.delete_role_by_group_id(group_info.id)
+        # 删除用户组的管理员
+        UserGroupDao.delete_group_all_admin(group_info.id)
         # 将删除事件发到redis队列中
-        redis_client.rpush('delete_group', json.dumps({"id": group_info.id}))
+        delete_message = json.dumps({"id": group_info.id})
+        redis_client.rpush('delete_group', delete_message)
+        redis_client.publish('delete_group', delete_message)
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
         """获取全量的group列表"""
