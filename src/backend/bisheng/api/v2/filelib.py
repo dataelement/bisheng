@@ -6,8 +6,6 @@ from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, 
                                                 delete_es, delete_knowledge_by,
                                                 delete_knowledge_file_vectors, delete_vector,
                                                 text_knowledge)
-from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.knowledge import delete_knowledge_hook, create_knowledge_hook
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
@@ -33,16 +31,12 @@ router = APIRouter(prefix='/filelib')
 
 
 @router.post('/', response_model=KnowledgeRead, status_code=201)
-def creat(knowledge: KnowledgeCreate):
+def create(knowledge: KnowledgeCreate):
     """创建知识库."""
     user_id = knowledge.user_id or settings.get_from_db('default_operator').get('user')
     if not user_id:
         raise HTTPException(status_code=500, detail='未配置default_operator中user配置')
-    user_payload = UserPayload(**{
-        "user_id": user_id
-    })
     db_knowledge = create_knowledge(knowledge, user_id)
-    create_knowledge_hook(db_knowledge, user_payload)
     return db_knowledge
 
 
@@ -129,9 +123,6 @@ def delete_knowledge_api(*, knowledge_id: int):
         raise HTTPException(status_code=404, detail='knowledge not found')
     try:
         delete_knowledge_by(knowledge)
-        delete_knowledge_hook(knowledge, UserPayload(**{
-            "user_id": knowledge.user_id
-        }))
         return {'message': 'knowledge deleted successfully'}
     except Exception as e:
         logger.exception(e)
