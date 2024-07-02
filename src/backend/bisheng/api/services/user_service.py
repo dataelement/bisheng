@@ -4,6 +4,7 @@ import functools
 from typing import List
 
 from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
+from bisheng.api.errcode.user import UserLoginOfflineError
 from bisheng.cache.redis import redis_client
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
@@ -225,6 +226,6 @@ async def get_login_user(authorize: AuthJWT = Depends()) -> UserPayload:
         current_token = redis_client.get(USER_CURRENT_SESSION.format(user.user_id))
         # 登录被挤下线了，状态码是200， 内部的status_code是403
         if current_token != authorize._token:
-            raise HTTPException(status_code=403,
-                                detail='您的账户已在另一设备上登录，此设备上的会话已被注销。\n如果这不是您本人的操作，请尽快修改您的账户密码。')
+            raise HTTPException(status_code=UserLoginOfflineError.Code,
+                                detail=UserLoginOfflineError.Msg)
     return user
