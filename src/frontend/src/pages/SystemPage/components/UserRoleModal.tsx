@@ -56,7 +56,7 @@ export default function UserRoleModal({ user, onClose, onChange }) {
             <DialogHeader>
                 <DialogTitle>{t('system.roleSelect')}</DialogTitle>
             </DialogHeader>
-            <div className="max-h-[520px] overflow-y-auto flex flex-col gap-2">
+            <div className="max-h-[520px] py-1 overflow-y-auto flex flex-col gap-2">
                 {
                     roleItems.map((item, i) => <UserRoleItem key={item.key}
                         groupId={item.groupId + ''}
