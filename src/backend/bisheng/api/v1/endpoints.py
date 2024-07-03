@@ -5,6 +5,7 @@ from uuid import UUID
 
 import yaml
 from bisheng import settings
+from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.v1 import knowledge
 from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, UploadFileResponse,
                                     resp_200)
@@ -31,19 +32,18 @@ except ImportError:
     def process_graph_cached_task(*args, **kwargs):
         raise NotImplementedError('Celery is not installed')
 
-
 # build router
 router = APIRouter(tags=['Base'])
 
 
 @router.get('/all')
-def get_all():
+def get_all(login_user: UserPayload = Depends(get_login_user)):
     """获取所有参数"""
     return resp_200(get_all_types_dict())
 
 
 @router.get('/env')
-def getn_env():
+def get_env(login_user: UserPayload = Depends(get_login_user)):
     """获取环境变量参数"""
     uns_support = [
         'png', 'jpg', 'jpeg', 'bmp', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md',
@@ -71,11 +71,7 @@ def getn_env():
 
 
 @router.get('/config')
-def get_config(Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    if payload.get('role') != 'admin':
-        raise HTTPException(status_code=500, detail='Unauthorized')
+def get_config(admin_user: UserPayload = Depends(get_admin_user)):
     with session_getter() as session:
         config = session.exec(select(Config).where(Config.key == 'initdb_config')).first()
     if config:
@@ -86,7 +82,7 @@ def get_config(Authorize: AuthJWT = Depends()):
 
 
 @router.post('/config/save')
-def save_config(data: dict):
+def save_config(data: dict, admin_user: UserPayload = Depends(get_admin_user)):
     try:
         # 校验是否符合yaml格式
         _ = yaml.safe_load(data.get('data'))
@@ -104,14 +100,14 @@ def save_config(data: dict):
 
 @router.post('/process/{flow_id}')
 async def process_flow_old(
-    flow_id: UUID,
-    inputs: Optional[dict] = None,
-    tweaks: Optional[dict] = None,
-    history_count: Annotated[int, Body(embed=True)] = 10,
-    clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
-    session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
-    task_service: 'TaskService' = Depends(get_task_service),
-    sync: Annotated[bool, Body(embed=True)] = True,
+        flow_id: UUID,
+        inputs: Optional[dict] = None,
+        tweaks: Optional[dict] = None,
+        history_count: Annotated[int, Body(embed=True)] = 10,
+        clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
+        session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
+        task_service: 'TaskService' = Depends(get_task_service),
+        sync: Annotated[bool, Body(embed=True)] = True,
 ):
     return await process_flow(flow_id, inputs, tweaks, history_count, clear_cache, session_id,
                               task_service, sync)

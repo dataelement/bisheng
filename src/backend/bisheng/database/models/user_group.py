@@ -12,7 +12,7 @@ from bisheng.database.models.group import DefaultGroup
 class UserGroupBase(SQLModelSerializable):
     user_id: int = Field(index=True, description='用户id')
     group_id: int = Field(index=True, description='组id')
-    is_group_admin: bool = Field(index=False, description='是否是组管理员')  # 管理员不属于此用户组
+    is_group_admin: bool = Field(default=False, index=False, description='是否是组管理员')  # 管理员不属于此用户组
     remark: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -188,6 +188,18 @@ class UserGroupDao(UserGroupBase):
             statement = delete(UserGroup).where(
                 UserGroup.group_id == group_id).where(
                 UserGroup.user_id.in_(admin_ids)).where(
+                UserGroup.is_group_admin == 1)
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def delete_group_all_admin(cls, group_id: int) -> None:
+        """
+        删除用户组下所有的管理员
+        """
+        with session_getter() as session:
+            statement = delete(UserGroup).where(
+                UserGroup.group_id == group_id).where(
                 UserGroup.is_group_admin == 1)
             session.exec(statement)
             session.commit()

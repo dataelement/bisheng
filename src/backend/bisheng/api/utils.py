@@ -1,3 +1,4 @@
+import hashlib
 import json
 import xml.dom.minidom
 from pathlib import Path
@@ -12,7 +13,6 @@ from sqlmodel import select
 
 from bisheng.api.v1.schemas import StreamData
 from bisheng.database.base import session_getter
-from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
@@ -426,3 +426,9 @@ def get_request_ip(request: Request) -> str:
     if x_forwarded_for:
         return x_forwarded_for.split(',')[0]
     return request.client.host
+
+
+def md5_hash(original_string: str):
+    md5 = hashlib.md5()
+    md5.update(original_string.encode('utf-8'))
+    return md5.hexdigest()
