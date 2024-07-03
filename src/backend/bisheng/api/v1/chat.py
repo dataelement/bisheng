@@ -2,6 +2,13 @@ import json
 from typing import List, Optional
 from uuid import UUID
 
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketException, status, Body, Request
+from fastapi.params import Depends
+from fastapi.responses import StreamingResponse
+from fastapi_jwt_auth import AuthJWT
+from sqlalchemy import func
+from sqlmodel import select
+
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.chat_imp import comment_answer
@@ -21,12 +28,6 @@ from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMes
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketException, status, Body, Request
-from fastapi.params import Depends
-from fastapi.responses import StreamingResponse
-from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import func
-from sqlmodel import select
 
 router = APIRouter(tags=['Chat'])
 chat_manager = ChatManager()
@@ -42,14 +43,12 @@ def get_chatmessage(*,
                     flow_id: str,
                     id: Optional[str] = None,
                     page_size: Optional[int] = 20,
-                    Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
+                    login_user: UserPayload = Depends(get_login_user)):
     if not chat_id or not flow_id:
         return {'code': 500, 'message': 'chat_id 和 flow_id 必传参数'}
     where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
                                       ChatMessage.chat_id == chat_id,
-                                      ChatMessage.user_id == payload.get('user_id'))
+                                      ChatMessage.user_id == login_user.user_id)
     if id:
         where = where.where(ChatMessage.id < int(id))
     with session_getter() as session:
@@ -139,25 +138,21 @@ def update_chat_message(*,
 
 
 @router.delete('/chat/message/{message_id}', status_code=200)
-def del_message_id(*, message_id: str, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
+def del_message_id(*, message_id: str, login_user: UserPayload = Depends(get_login_user)):
     # 获取一条消息
-    ChatMessageDao.delete_by_message_id(payload.get('user_id'), message_id)
+    ChatMessageDao.delete_by_message_id(login_user.user_id, message_id)
 
     return resp_200(message='删除成功')
 
 
 @router.post('/liked', status_code=200)
-def like_response(*, data: ChatInput, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
+def like_response(*, data: ChatInput, login_user: UserPayload = Depends(get_login_user)):
     message_id = data.message_id
     liked = data.liked
     with session_getter() as session:
         message = session.get(ChatMessage, message_id)
     if message:
-        logger.info('act=add_liked user_id={} liked={}', payload.get('user_id'), liked)
+        logger.info('act=add_liked user_id={} liked={}', login_user.user_id, liked)
         message.liked = liked
     with session_getter() as session:
         session.add(message)
@@ -167,8 +162,7 @@ def like_response(*, data: ChatInput, Authorize: AuthJWT = Depends()):
 
 
 @router.post('/chat/comment', status_code=200)
-def comment_resp(*, data: ChatInput, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
+def comment_resp(*, data: ChatInput, login_user: UserPayload = Depends(get_login_user)):
     comment_answer(data.message_id, data.comment)
     return resp_200(message='操作成功')
 
@@ -177,14 +171,12 @@ def comment_resp(*, data: ChatInput, Authorize: AuthJWT = Depends()):
 def get_chatlist_list(*,
                       page: Optional[int] = 1,
                       limit: Optional[int] = 10,
-                      Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
+                      login_user: UserPayload = Depends(get_login_user)):
 
     smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
                   func.min(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
-        ChatMessage.user_id == payload.get('user_id')).group_by(
+        ChatMessage.user_id == login_user.user_id).group_by(
         ChatMessage.flow_id,
         ChatMessage.chat_id).order_by(func.max(ChatMessage.update_time).desc()))
     with session_getter() as session:
@@ -231,10 +223,7 @@ def get_online_chat(*,
                     keyword: Optional[str] = None,
                     page: Optional[int] = 0,
                     limit: Optional[int] = 0,
-                    Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
+                    user: UserPayload = Depends(get_login_user)):
     user_id = user.user_id
     res = []
     # 获取所有已上线的助手
@@ -287,10 +276,8 @@ async def chat(
             Authorize._token = t
         else:
             Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-
-        payload = Authorize.get_jwt_subject()
-        payload = json.loads(payload)
-        user_id = payload.get('user_id')
+        login_user = await get_login_user(Authorize)
+        user_id = login_user.user_id
         if chat_id:
             with session_getter() as session:
                 db_flow = session.get(Flow, flow_id)

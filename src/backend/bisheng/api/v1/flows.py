@@ -21,7 +21,7 @@ from sqlmodel import select
 from starlette.responses import StreamingResponse
 
 # build router
-router = APIRouter(prefix='/flows', tags=['Flows'])
+router = APIRouter(prefix='/flows', tags=['Flows'], dependencies=[Depends(get_login_user)])
 
 
 @router.post('/', status_code=201)

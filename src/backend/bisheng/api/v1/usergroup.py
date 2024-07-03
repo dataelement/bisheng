@@ -1,26 +1,22 @@
 # build router
-from uuid import UUID
 import json
 from typing import Annotated, List, Optional
 
-from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.services.assistant import AssistantService
-from bisheng.api.services.role_group_service import RoleGroupService
-from bisheng.api.services.user_service import UserPayload, get_login_user
-from bisheng.api.utils import check_permissions
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, AssistantSimpleInfo
-from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.group_resource import ResourceTypeEnum, GroupResourceDao
-from bisheng.database.models.knowledge import KnowledgeDao
-from bisheng.database.models.role import RoleDao
-from bisheng.database.models.user import UserDao
-from bisheng.database.models.group import Group, GroupCreate, GroupRead
-from bisheng.database.models.user import User
-from bisheng.database.models.user_group import UserGroupDao, UserGroupRead
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi_jwt_auth import AuthJWT
 
-router = APIRouter(prefix='/group', tags=['User'])
+from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services.role_group_service import RoleGroupService
+from bisheng.api.services.user_service import UserPayload, get_login_user
+from bisheng.api.utils import check_permissions
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.role import RoleDao
+from bisheng.database.models.group import Group, GroupCreate, GroupRead
+from bisheng.database.models.user import User
+from bisheng.database.models.user_group import UserGroupDao, UserGroupRead
+
+router = APIRouter(prefix='/group', tags=['User'], dependencies=[Depends(get_login_user)])
 
 
 @router.get('/list', response_model=UnifiedResponseModel[List[GroupRead]])

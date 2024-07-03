@@ -66,7 +66,7 @@ async def upload_file(*, file: UploadFile = File(...)):
 
 
 @router.get('/embedding_param', status_code=201)
-async def get_embedding():
+async def get_embedding(login_user: UserPayload = Depends(get_login_user)):
     try:
         # 获取本地配置的名字
         model_list = settings.get_knowledge().get('embeddings')
@@ -342,9 +342,8 @@ def get_filelist(*,
 
 
 @router.post('/retry', status_code=200)
-def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = Depends()):
+def retry(data: dict, background_tasks: BackgroundTasks, login_user: UserPayload = Depends(get_login_user)):
     """失败重试"""
-    Authorize.jwt_required()
     db_file_retry = data.get('file_objs')
     if db_file_retry:
         id2input = {file.get('id'): KnowledgeFile.validate(file) for file in db_file_retry}
