@@ -160,7 +160,7 @@ async def login(*, request: Request, user: UserLogin, Authorize: AuthJWT = Depen
     Authorize.set_refresh_cookies(refresh_token)
 
     # 设置登录用户当前的cookie, 比jwt有效期多一个小时
-    redis_client.setNx(USER_CURRENT_SESSION.format(db_user.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
+    redis_client.set(USER_CURRENT_SESSION.format(db_user.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
 
     # 记录审计日志
     AuditLogService.user_login(UserPayload(**{
