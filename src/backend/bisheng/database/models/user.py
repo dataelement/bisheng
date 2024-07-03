@@ -166,8 +166,7 @@ class UserDao(UserBase):
     def add_user_with_groups_and_roles(cls, user: User, group_ids: List[int], role_ids: List[int]) -> User:
         with session_getter() as session:
             session.add(user)
-            session.commit()
-            session.refresh(user)
+            session.flush()
             for group_id in group_ids:
                 db_user_group = UserGroup(user_id=user.user_id, group_id=group_id)
                 session.add(db_user_group)
@@ -175,4 +174,5 @@ class UserDao(UserBase):
                 db_user_role = UserRole(user_id=user.user_id, role_id=role_id)
                 session.add(db_user_role)
             session.commit()
+            session.refresh(user)
             return user
