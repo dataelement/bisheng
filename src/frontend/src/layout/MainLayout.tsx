@@ -29,6 +29,7 @@ import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
@@ -38,9 +39,17 @@ export default function MainLayout() {
     const { language, options, changLanguage, t } = useLanguage(user)
 
     const handleLogout = () => {
-        captureAndAlertRequestErrorHoc(logoutApi()).then(_ => {
-            setUser(null)
-            localStorage.removeItem('isLogin')
+        bsConfirm({
+            title: `${t('prompt')}!`,
+            desc: `${t('menu.logoutDescription')}？`,
+            okTxt: t('system.confirm'),
+            onOk(next) {
+                captureAndAlertRequestErrorHoc(logoutApi()).then(_ => {
+                    setUser(null)
+                    localStorage.removeItem('isLogin')
+                })
+                next()
+            }
         })
     }
 
