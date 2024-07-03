@@ -306,3 +306,14 @@ class TestToolReq(BaseModel):
     api_key: Optional[str] = Field(default='', description="api key")
 
     request_params: Dict = Field(default=None, description="用户填写的请求参数")
+
+
+class GroupAndRoles(BaseModel):
+    group_id: int
+    role_ids: List[int]
+
+
+class CreateUserReq(BaseModel):
+    user_name: str = Field(max_length=30, description='用户名')
+    password: str = Field(description='密码')
+    group_roles: List[GroupAndRoles] = Field(description='要加入的用户组和角色列表')

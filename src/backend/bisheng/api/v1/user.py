@@ -3,13 +3,19 @@ import json
 import random
 import string
 import uuid
-from base64 import b64decode, b64encode
+from base64 import b64encode
 from datetime import datetime
 from io import BytesIO
 from typing import Annotated, Dict, List, Optional
 from uuid import UUID
 
 import rsa
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.security import OAuth2PasswordBearer
+from fastapi_jwt_auth import AuthJWT
+from sqlalchemy import and_, func
+from sqlmodel import delete, select
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
@@ -19,8 +25,8 @@ from bisheng.api.utils import get_request_ip
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role, get_login_user,
-                                               get_assistant_list_by_access)
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+                                               get_assistant_list_by_access, get_admin_user, UserService)
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, CreateUserReq
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
@@ -35,26 +41,11 @@ from bisheng.settings import settings
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
 from bisheng.utils.logger import logger
 from captcha.image import ImageCaptcha
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
-from fastapi.encoders import jsonable_encoder
-from fastapi.security import OAuth2PasswordBearer
-from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import and_, func
-from sqlmodel import delete, select
 
 # build router
 router = APIRouter(prefix='', tags=['User'])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
-
-
-def decrypt_md5_password(password: str):
-    if value := redis_client.get(RSA_KEY):
-        private_key = value[1]
-        password = md5_hash(rsa.decrypt(b64decode(password), private_key).decode('utf-8'))
-    else:
-        password = md5_hash(password)
-    return password
 
 
 @router.post('/user/regist', response_model=UnifiedResponseModel[UserRead], status_code=201)
@@ -71,7 +62,7 @@ async def regist(*, user: UserCreate):
     if user_exists:
         raise HTTPException(status_code=500, detail='账号已存在')
     try:
-        db_user.password = decrypt_md5_password(user.password)
+        db_user.password = UserService.decrypt_md5_password(user.password)
         # 判断下admin用户是否存在
         admin = UserDao.get_user(1)
         if admin:
@@ -128,7 +119,7 @@ async def login(*, request: Request, user: UserLogin, Authorize: AuthJWT = Depen
         if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
             raise HTTPException(status_code=500, detail='验证码错误')
 
-    password = decrypt_md5_password(user.password)
+    password = UserService.decrypt_md5_password(user.password)
 
     db_user = UserDao.get_user_by_username(user.user_name)
     # 检查密码
@@ -848,7 +839,7 @@ async def reset_password(
     if not login_user.check_groups_admin(user_group_ids):
         raise HTTPException(status_code=403, detail='没有权限重置密码')
 
-    user_info.password = decrypt_md5_password(password)
+    user_info.password = UserService.decrypt_md5_password(password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 
@@ -868,13 +859,13 @@ async def change_password(*,
     if not user_info.password:
         return UserNotPasswordError.return_resp()
 
-    password = decrypt_md5_password(password)
+    password = UserService.decrypt_md5_password(password)
 
     # 已登录用户告知是密码错误
     if user_info.password != password:
         return UserPasswordError.return_resp()
 
-    user_info.password = decrypt_md5_password(new_password)
+    user_info.password = UserService.decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 
@@ -895,15 +886,28 @@ async def change_password_public(*,
     if not user_info.password:
         return UserValidateError.return_resp()
 
-    if user_info.password != decrypt_md5_password(password):
+    if user_info.password != UserService.decrypt_md5_password(password):
         return UserValidateError.return_resp()
 
-    user_info.password = decrypt_md5_password(new_password)
+    user_info.password = UserService.decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 
     clear_error_password_key(username)
     return resp_200()
+
+
+@router.post('/user/create', status_code=200)
+async def create_user(*,
+                      request: Request,
+                      admin_user: UserPayload = Depends(get_admin_user),
+                      req: CreateUserReq):
+    """
+    超级管理员创建用户
+    """
+    logger.info(f'create_user username={admin_user.user_name}, username={req.user_name}')
+    data = UserService.create_user(request, admin_user, req)
+    return resp_200(data=data)
 
 
 def md5_hash(string):

@@ -1,13 +1,14 @@
 from datetime import datetime
 from typing import List, Optional
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 from pydantic import validator
 from sqlalchemy import Column, DateTime, text, func
 from sqlmodel import Field, select
 
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.role import DefaultRole, AdminRole
+from bisheng.database.models.user_group import UserGroup
 from bisheng.database.models.user_role import UserRole
 
 
@@ -159,4 +160,19 @@ class UserDao(UserBase):
             session.add(db_user_role)
             session.commit()
             session.refresh(user)
+            return user
+
+    @classmethod
+    def add_user_with_groups_and_roles(cls, user: User, group_ids: List[int], role_ids: List[int]) -> User:
+        with session_getter() as session:
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            for group_id in group_ids:
+                db_user_group = UserGroup(user_id=user.user_id, group_id=group_id)
+                session.add(db_user_group)
+            for role_id in role_ids:
+                db_user_role = UserRole(user_id=user.user_id, role_id=role_id)
+                session.add(db_user_role)
+            session.commit()
             return user
