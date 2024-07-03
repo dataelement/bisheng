@@ -71,7 +71,8 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
                 } else if (msg.files?.length) {
                     type = 'file'
                 } else if (['tool', 'flow', 'knowledge'].includes(msg.category)
-                    || msg.category === 'processing') { // 项目演示？
+                    // || msg.category === 'processing'
+                ) { // 项目演示？
                     type = 'runLog'
                 } else if (msg.thought) {
                     type = 'system'
