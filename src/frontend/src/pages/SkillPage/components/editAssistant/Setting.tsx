@@ -304,12 +304,12 @@ export default function Setting() {
             </div>
           </AccordionContent>
         </AccordionItem>
-        <TaggingSheet>
+        {/* <TaggingSheet>
           <PlusIcon
             className="mr-2 text-primary hover:text-primary/80"
             onClick={(e) => e.stopPropagation()}
             ></PlusIcon>
-        </TaggingSheet>
+        </TaggingSheet> */}
       </Accordion>
     </div>
   );

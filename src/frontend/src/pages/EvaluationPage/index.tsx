@@ -33,6 +33,7 @@ import {
   EvaluationType,
   EvaluationTypeLabelMap,
 } from "./types";
+import { checkSassUrl } from "../ChatAppPage/components/FileView";
 
 export default function EvaluationPage() {
   const navigate = useNavigate();
@@ -76,7 +77,7 @@ export default function EvaluationPage() {
 
   const handleDownload = async (el) => {
     const { url } = await getEvaluationUrlApi(el.result_file_path);
-    await downloadFile(url, el.file_name);
+    await downloadFile(checkSassUrl(url), el.file_name);
   };
 
   return (
@@ -162,17 +163,17 @@ export default function EvaluationPage() {
                       <div className="flex flex-wrap">
                         {el.result_score
                           ? map(el.result_score, (value, key) => {
-                              return (
-                                <span className="whitespace-nowrap">
-                                  {
-                                    EvaluationScoreLabelMap[
-                                      EvaluationScore[key]
-                                    ].label
-                                  }
-                                  :{value}&nbsp;
-                                </span>
-                              );
-                            })
+                            return (
+                              <span className="whitespace-nowrap">
+                                {
+                                  EvaluationScoreLabelMap[
+                                    EvaluationScore[key]
+                                  ].label
+                                }
+                                :{value}&nbsp;
+                              </span>
+                            );
+                          })
                           : "-"}
                       </div>
                     </TableCell>

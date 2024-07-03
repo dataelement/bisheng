@@ -27,6 +27,7 @@ def init_default_data():
     from bisheng.database.models.flow_version import FlowVersion
     from bisheng.database.models.user_role import UserRoleDao
     from bisheng.database.models.group import Group, DefaultGroup
+    from bisheng.database.models.role_access import RoleAccess, AccessType
 
     if redis_client.setNx('init_default_data', '1'):
         try:
@@ -35,12 +36,19 @@ def init_default_data():
                 db_role = session.exec(select(Role).limit(1)).all()
                 if not db_role:
                     # 初始化系统配置, 管理员拥有所有权限
-                    db_role = Role(id=AdminRole, role_name='系统管理员', remark='系统所有权限管理员', group_id=DefaultGroup)
+                    db_role = Role(id=AdminRole, role_name='系统管理员', remark='系统所有权限管理员',
+                                   group_id=DefaultGroup)
                     session.add(db_role)
-                    db_role_normal = Role(id=DefaultRole, role_name='普通用户', remark='默认用户', group_id=DefaultGroup)
+                    db_role_normal = Role(id=DefaultRole, role_name='普通用户', remark='默认用户',
+                                          group_id=DefaultGroup)
                     session.add(db_role_normal)
+                    # 给普通用户赋予 构建、知识、模型菜单栏的查看权限
+                    session.add_all([
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value, third_id='build'),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value, third_id='knowledge'),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value, third_id='model'),
+                    ])
                     session.commit()
-
                 # 添加默认用户组
                 group = session.exec(select(Group).limit(1)).all()
                 if not group:

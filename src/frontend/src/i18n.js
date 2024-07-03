@@ -15,7 +15,7 @@ i18n.use(Backend)
         ns: ['bs'],
         lng: 'zh', // userLanguage === 'zh' ? userLanguage : 'en', // 除中文即英文
         backend: {
-            loadPath: __APP_ENV__.BASE_URL + '/locales/{{lng}}/{{ns}}.json'
+            loadPath: __APP_ENV__.BASE_URL + '/locales/{{lng}}/{{ns}}.json?v=' + new Date().getTime()
         },
         interpolation: {
             escapeValue: false // react already safes from xss

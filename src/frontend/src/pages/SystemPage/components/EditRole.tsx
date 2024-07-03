@@ -199,7 +199,6 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                                 <Switch checked={form.useMenu.includes(MenuType.MODEL)} onCheckedChange={(bln) => switchDataChange(MenuType.MODEL, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
-                        {/* 中英 */}
                         <TableRow>
                             <TableCell className="font-medium">评测</TableCell>
                             <TableCell className="text-right">
