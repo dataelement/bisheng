@@ -162,7 +162,7 @@ export default function l2Edit() {
         <div className="p-6 pb-48 h-full overflow-y-auto">
             <div className="flex justify-between w-full">
                 <ShadTooltip content={t('back')} side="right">
-                    <button className="extra-side-bar-buttons w-[36px]" onClick={() => window.history.length < 3 ? navigate('/build/skills') : navigate(-1)}>
+                    <button className="extra-side-bar-buttons w-[36px] dark:bg-[#282828]" onClick={() => window.history.length < 3 ? navigate('/build/skills') : navigate(-1)}>
                         <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
                     </button>
                 </ShadTooltip>
@@ -231,7 +231,7 @@ export default function l2Edit() {
                     {/* 安全审查 */}
                     {appConfig.isPro && <div>
                         <p className="text-center text-gray-400 mt-8 cursor-pointer flex justify-center" onClick={showContent}>
-                            内容安全审查设置
+                            {t('build.contentSecuritySettings')}
                             <ChevronUp />
                         </p>
                         {/* base form */}
@@ -243,14 +243,14 @@ export default function l2Edit() {
             </div>
         </div>
         {/* footer */}
-        <div className="absolute flex z-50 bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-[#fff] border-t dark:bg-gray-900">
+        <div className="absolute flex z-50 bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-background-login">
             {
                 isL2 ?
                     <div className="flex gap-4 w-[50%]">
-                        <Button disabled={loading} className="extra-side-bar-save-disable w-[70%]" onClick={handleSave}>
+                        <Button disabled={loading} className="extra-side-bar-save-disable w-[70%] text-[white]" onClick={handleSave}>
                             {t('save')}
                         </Button>
-                        <Button disabled={loading} className="w-[30%]" variant="outline" onClick={() => handleJumpFlow()}>
+                        <Button disabled={loading} className="w-[30%] dark:bg-[#282828]" variant="outline" onClick={() => handleJumpFlow()}>
                             {t('skills.advancedConfiguration')}
                         </Button>
                     </div>

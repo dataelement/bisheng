@@ -33,14 +33,14 @@ export default function ForcePrompt({ id }) {
 
     return (
         <div className="absolute top-0 left-0 w-full h-full z-50 bg-[rgba(0,0,0,0.1)] flex items-center justify-center">
-            <div className="w-[600px] max-w-[80%] bg-[#fff] shadow-md text-center p-10 rounded-md">
+            <div className="w-[600px] max-w-[80%] bg-background-login shadow-md text-center p-10 rounded-md">
                 <div className="text-left break-all mb-10">
-                    <p className="text-gray-950 mb-5 text-center">{t('chatTipsTitle')}</p>
+                    <p className="text-gray-950 dark:text-slate-50 mb-5 text-center">{t('chatTipsTitle')}</p>
                     {t('chatTips').split('\n').map((line, index) => (
-                        <p className="text-md mb-1 text-gray-600" key={index}>{line}</p>
+                        <p className="text-md mb-1 text-gray-600 dark:text-slate-400" key={index}>{line}</p>
                     ))}
                 </div>
-                <Button onClick={handleOk}>我知道了</Button>
+                <Button className="text-slate-50" onClick={handleOk}>我知道了</Button>
             </div>
         </div>
     );

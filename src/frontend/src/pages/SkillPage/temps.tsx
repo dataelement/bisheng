@@ -69,7 +69,7 @@ export default function Templates() {
     return <div className="px-2 py-4 h-full relative">
         <div className="h-full w-full overflow-y-auto overflow-x-hidden scrollbar-hide">
             <div className="flex justify-end">
-                <Button className="h-10 px-8" size="sm" onClick={() => navigate('/build/skills')}>{t('skills.backToSkillList')}</Button>
+                <Button className="h-10 px-8 text-[white]" size="sm" onClick={() => navigate('/build/skills')}>{t('skills.backToSkillList')}</Button>
             </div>
             <Table className="mb-[50px]">
                 <TableHeader>
@@ -109,7 +109,7 @@ export default function Templates() {
             </Table>
         </div>
         {/* footer */}
-        <div className="flex justify-between items-center absolute bottom-0 right-0 w-full py-4 bg-[white] pl-[16px] h-[60px]">
+        <div className="flex justify-between items-center absolute bottom-0 right-0 w-full py-4 pl-[16px] h-[60px] bg-background-login">
             <p className="text-gray-500 text-sm">{t('skills.skillTemplateManagement')}</p>
             <span></span>
         </div>

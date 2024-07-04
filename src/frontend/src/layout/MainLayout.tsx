@@ -84,7 +84,7 @@ export default function MainLayout() {
                                 <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={() => setDark(!dark)}>
                                     <div className="">
                                         {dark ? (
-                                            <SunIcon className="side-bar-button-size mx-auto w-[13px] h-[13px]" />
+                                            <SunIcon className="side-bar-button-size dark:text-slate-50 mx-auto w-[13px] h-[13px]" />
                                         ) : (
                                             <MoonIcon className="side-bar-button-size mx-auto w-[17px] h-[17px]" />
                                         )}
@@ -99,8 +99,8 @@ export default function MainLayout() {
                                 <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={changLanguage}>
                                     <div className="">
                                         {language === 'en'
-                                            ? <EnIcon className="side-bar-button-size mx-auto w-[19px] h-[19px]" />
-                                            : <Globe className="side-bar-button-size mx-auto w-[17px] h-[17px]" />}
+                                            ? <EnIcon className="side-bar-button-size dark:text-slate-50 mx-auto w-[19px] h-[19px]" />
+                                            : <Globe className="side-bar-button-size dark:text-slate-50 mx-auto w-[17px] h-[17px]" />}
                                     </div>
                                 </TooltipTrigger>
                                 <TooltipContent><p>{options[language]}</p></TooltipContent>
@@ -109,11 +109,12 @@ export default function MainLayout() {
                         <Separator className="mx-[23px] h-6 border-l my-5 border-[#dddddd]" orientation="vertical" />
                     </div>
                     <div className="flex items-center h-7 my-4">
+                        {/* @ts-ignore */}
                         <img className="h-7 w-7 rounded-2xl mr-4" src={__APP_ENV__.BASE_URL + '/user.png'} alt="" />
                         <SelectHover
                             triagger={
                                 <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">
-                                    {user.user_name} <DropDownIcon className=" inline-block mt-[-2px]" />
+                                    {user.user_name} <DropDownIcon className="inline-block mt-[-2px] dark:text-slate-50" />
                                 </span>
                             }>
                             <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>

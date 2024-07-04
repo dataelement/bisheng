@@ -86,7 +86,7 @@ ${t('build.exampleTwo')}
         }
     };
 
-    return <DialogContent className="sm:max-w-[625px]">
+    return <DialogContent className="sm:max-w-[625px] bg-background-login">
         <DialogHeader>
             <DialogTitle>{t('build.establishAssistant')}</DialogTitle>
         </DialogHeader>
@@ -112,9 +112,9 @@ ${t('build.exampleTwo')}
         </div>
         <DialogFooter>
             <DialogClose>
-                <Button variant="outline" className="px-11" type="button" onClick={() => setFormData({ name: '', roleAndTasks: '' })}>{t('cancle')}</Button>
+                <Button variant="outline" className="px-11 dark:bg-[#282828]" type="button" onClick={() => setFormData({ name: '', roleAndTasks: '' })}>{t('cancle')}</Button>
             </DialogClose>
-            <Button disabled={loading} type="submit" className="px-11" onClick={handleSubmit}>
+            <Button disabled={loading} type="submit" className="px-11 text-slate-50" onClick={handleSubmit}>
                 {loading && <LoadIcon className="mr-2" />}
                 {t('build.create')}</Button>
         </DialogFooter>

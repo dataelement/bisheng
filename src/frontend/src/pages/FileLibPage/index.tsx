@@ -173,7 +173,7 @@ export default function FileLibPage() {
                     <TabsContent value="account">
                         <div className="flex justify-end gap-4 items-center">
                             <SearchInput placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)} />
-                            <Button className="px-8" onClick={() => setOpen(true)}>{t('create')}</Button>
+                            <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
                         </div>
                         <Table>
                             <TableHeader>
@@ -217,7 +217,7 @@ export default function FileLibPage() {
                     <TabsContent value="password"></TabsContent>
                 </Tabs>
             </div>
-            <div className="bisheng-table-footer px-6">
+            <div className="bisheng-table-footer px-6 bg-background-login">
                 <p className="desc">{t('lib.libraryCollection')}</p>
                 <div>
                     <AutoPagination

@@ -23,7 +23,7 @@ export default function Prompt() {
         }
     }, [assistantState.prompt])
 
-    return <div className="w-[50%] h-full bg-[#fff] shadow-sm p-4 overflow-y-auto scrollbar-hide">
+    return <div className="w-[50%] h-full bg-background-login shadow-sm p-4 overflow-y-auto scrollbar-hide">
         <div className="flex-between-center">
             <span className="text-sm font-medium leading-none">{t('build.assistantPortrait')}</span>
             <Dialog open={open} onOpenChange={setOpen}>

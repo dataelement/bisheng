@@ -305,7 +305,7 @@ const EditTool = forwardRef((props: any, ref) => {
 
     return <div>
         <Sheet open={editShow} onOpenChange={setEditShow}>
-            <SheetContent className="w-[800px] sm:max-w-[800px] p-4">
+            <SheetContent className="w-[800px] sm:max-w-[800px] p-4 bg-background-login">
                 <SheetHeader>
                     <SheetTitle>{delShow ? t('edit') : t('create')}{t('tools.createCustomTool')}</SheetTitle>
                 </SheetHeader>
@@ -328,7 +328,7 @@ const EditTool = forwardRef((props: any, ref) => {
                         <div className="flex gap-2">
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline"><PlusIcon /> {t('tools.importFromUrl')}</Button>
+                                    <Button variant="outline" className="dark:bg-[#282828]"><PlusIcon /> {t('tools.importFromUrl')}</Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-80" align="end">
                                     <div className="flex items-center gap-4">
@@ -509,15 +509,15 @@ const EditTool = forwardRef((props: any, ref) => {
                         </div>
                     )}
                 </div>
-                <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4 bg-[#fff]">
+                <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4 bg-background-login">
                     {delShow && <Button
                         size="sm"
                         variant="destructive"
                         className="absolute left-6"
                         onClick={handleDelete}
                     >{t('tools.delete')}</Button>}
-                    <Button size="sm" variant="outline" onClick={() => setEditShow(false)}>{t('tools.cancel')}</Button>
-                    <Button size="sm" onClick={handleSave}>{t('tools.save')}</Button>
+                    <Button size="sm" variant="outline" className="dark:bg-[#282828]" onClick={() => setEditShow(false)}>{t('tools.cancel')}</Button>
+                    <Button size="sm" className="text-[white]" onClick={handleSave}>{t('tools.save')}</Button>
                 </SheetFooter>
             </SheetContent>
         </Sheet >

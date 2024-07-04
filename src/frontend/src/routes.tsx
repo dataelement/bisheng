@@ -46,6 +46,7 @@ const ErrorHoc = ({ Comp }) => {
 }
 
 const baseConfig = {
+  //@ts-ignore
   basename: __APP_ENV__.BASE_URL
 }
 
@@ -65,6 +66,7 @@ const privateRouter = [
         children: [
           { path: "assist", element: <SkillAssisPage /> },
           { path: "skills", element: <SkillsPage /> },
+          // @ts-ignore
           { path: "tools", element: <SkillToolsPage /> },
           { path: "", element: <Navigate to="assist" replace /> },
         ]

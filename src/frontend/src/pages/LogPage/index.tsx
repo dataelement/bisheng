@@ -127,10 +127,10 @@ export default function index() {
                 </Select>
             </div>
                 <div>
-                    <Button className="mr-3 px-6" onClick={handleSearch}>
+                    <Button className="mr-3 px-6 dark:text-[#ECECEC]" onClick={handleSearch}>
                         {t('log.searchButton')}
                     </Button>
-                    <Button variant="outline" className="px-6" onClick={handleReset}>
+                    <Button variant="outline" className="px-6 dark:bg-[#282828]" onClick={handleReset}>
                         {t('log.resetButton')}
                     </Button>
                 </div>
@@ -176,7 +176,7 @@ export default function index() {
         </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="bisheng-table-footer">
+        <div className="bisheng-table-footer bg-background-login">
             <p className="desc pl-4">{t('log.auditManagement')}</p>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"

@@ -102,8 +102,8 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
             </div>
         </div>
         <div className="absolute bottom-10 right-4 sapce-x-10 flex space-x-8">
-            <Button onClick={onCancel} variant="outline">{t('cancel')}</Button>
-            <Button onClick={handleSave}>{t('save')}</Button>
+            <Button className="dark:bg-[#282828]" onClick={onCancel} variant="outline">{t('cancel')}</Button>
+            <Button className="text-slate-50" onClick={handleSave}>{t('save')}</Button>
         </div>
     </>
 };

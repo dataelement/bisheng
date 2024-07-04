@@ -35,13 +35,13 @@ export default function ToolsSheet({ select, onSelect, children }) {
             <SheetTrigger asChild>
                 {children}
             </SheetTrigger>
-            <SheetContent className="w-[1000px] sm:max-w-[1000px] bg-gray-100">
+            <SheetContent className="w-[1000px] sm:max-w-[1000px] bg-background-main">
                 <div className="flex h-full" onClick={e => e.stopPropagation()}>
                     <div className="w-fit p-6">
                         <SheetTitle>{t('build.addTool')}</SheetTitle>
                         <SearchInput placeholder={t('build.search')} className="mt-6" onChange={(e) => setKeyword(e.target.value)} />
                         <Button
-                            className="mt-4 w-full"
+                            className="mt-4 w-full text-slate-50"
                             onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools")}
                         >
                             {t('create')}{t("tools.createCustomTool")}
@@ -63,7 +63,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
                             </div>
                         </div>
                     </div>
-                    <div className="flex-1 bg-[#fff] p-5 pt-12 h-full overflow-auto scrollbar-hide">
+                    <div className="flex-1 bg-background-login p-5 pt-12 h-full overflow-auto scrollbar-hide">
                         <Accordion type="single" collapsible className="w-full">
                             {
                                 options.length ? options.map(el => (

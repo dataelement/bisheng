@@ -82,7 +82,7 @@ export default function SkillChatPage() {
 
     return <div className="flex h-full">
         <div className="h-full w-[220px] relative border-r">
-            <div className="absolute flex top-0 w-full bg-background-main-content z-10 p-2">
+            <div className="absolute flex top-0 w-full bs-chat-bg bg-background-main-content z-10 p-2">
                 <SkillChatSheet onSelect={handlerSelectFlow}>
                     <div id="newchat" className="flex justify-around items-center w-[200px] h-[48px] rounded-lg px-10 py-2 mx-auto text-center text-sm cursor-pointer bg-background-main-content hover:bg-gray-100 dark:hover:bg-gray-800 relative z-10">
                         <PlusBoxIcon className="dark:hidden"></PlusBoxIcon>
