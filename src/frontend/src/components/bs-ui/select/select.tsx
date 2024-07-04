@@ -30,7 +30,7 @@ const SelectSearch: React.FC<SelectSearchProps> = ({
             <SelectValue placeholder={selectPlaceholder}/>
         </SelectTrigger>
         <SelectContent className={contentClass}>
-            <SearchInput inputClassName="h-8 mb-2" placeholder={inputPlaceholder} 
+            <SearchInput inputClassName="h-8 mb-2 dark:border-gray-700" placeholder={inputPlaceholder} 
             onChange={(e) => onChange(e)} onKeyDown={e => e.stopPropagation()} iconClassName="w-4 h-4" />
             <SelectGroup>
                 {options.map(el => (

@@ -1,5 +1,4 @@
 
-import { Button } from "@/components/ui/button"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "."
 import ReactDOM from "react-dom"
 import i18next from "i18next"

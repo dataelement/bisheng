@@ -1002,10 +1002,14 @@
   }
 
   .bisheng-table-footer {
-    @apply flex justify-between items-center absolute bottom-0 right-0 h-16 w-full bg-[#fff] [&>.desc]:whitespace-nowrap [&>.desc]:text-sm [&>.desc]:text-muted-foreground [&>.desc]:break-keep
+    @apply flex justify-between items-center absolute bottom-0 right-0 h-16 w-full bg-[#fff] dark:bg-[#1b1b1b] [&>.desc]:whitespace-nowrap [&>.desc]:text-sm [&>.desc]:text-muted-foreground [&>.desc]:break-keep
+  }
+  .bisheng-bg {
+    @apply bg-[#f4f5f8] dark:bg-[#111]
   }
 
   .flex-between-center {
     @apply flex justify-between items-center
   }
+
 }

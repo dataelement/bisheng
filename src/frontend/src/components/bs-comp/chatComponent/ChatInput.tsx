@@ -99,9 +99,11 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
         }
     }
 
+    const diffRef = useRef(0)
     const sendWsMsg = async (msg) => {
         try {
-            // console.log('WebSocket send: ' + Date.now() + ' 毫秒');
+            diffRef.current = Date.now()
+            console.log('WebSocket send: ' + diffRef.current + ' 毫秒');
 
             wsRef.current.send(JSON.stringify(msg))
         } catch (error) {
@@ -138,7 +140,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
                     res('ok')
                 };
                 ws.onmessage = (event) => {
-                    // console.log('WebSocket get: ' + Date.now() + ' 毫秒');
+                    console.log(`WebSocket get: ${Date.now()} 毫秒；与send差值${Date.now() - diffRef.current}毫秒`);
                     const data = JSON.parse(event.data);
                     const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
                     // 异常类型处理，提示

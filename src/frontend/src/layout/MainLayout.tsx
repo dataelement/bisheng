@@ -1,20 +1,20 @@
 import {
     ApplicationIcon,
     BookOpenIcon,
-    DropDownIcon,
     EnIcon,
+    EvaluatingIcon,
     GithubIcon,
     KnowledgeIcon,
     LogIcon,
     ModelIcon,
     QuitIcon,
     SystemIcon,
-    TechnologyIcon,
-    EvaluatingIcon
+    TechnologyIcon
 } from "@/components/bs-icons";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
-import { LockClosedIcon, MoonIcon, SunIcon } from "@radix-ui/react-icons";
+import { CaretDownIcon, LockClosedIcon, MoonIcon, SunIcon } from "@radix-ui/react-icons";
 import i18next from "i18next";
 import { Globe } from "lucide-react";
 import { useContext, useEffect, useMemo, useState } from "react";
@@ -29,7 +29,6 @@ import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
@@ -75,7 +74,7 @@ export default function MainLayout() {
                 <div className="flex h-9 my-[14px]">
                     <Link className="inline-block" to='/'>
                         <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="w-[114px] h-9 ml-8 rounded dark:w-[124px] dark:pr-[10px] dark:bg-[#fff]" alt="" />
-                        </Link>
+                    </Link>
                 </div>
                 <div className="flex w-fit relative z-50">
                     <div className="flex">
@@ -114,7 +113,7 @@ export default function MainLayout() {
                         <SelectHover
                             triagger={
                                 <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">
-                                    {user.user_name} <DropDownIcon className="inline-block mt-[-2px] dark:text-slate-50" />
+                                    {user.user_name} <CaretDownIcon className="inline-block mt-[-2px]" />
                                 </span>
                             }>
                             <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
