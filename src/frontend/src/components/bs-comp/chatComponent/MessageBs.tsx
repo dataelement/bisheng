@@ -65,10 +65,10 @@ export default function MessageBs({ data, onUnlike = () => { }, onSource }: { da
                     },
                 }}
             >
-                {data.message.toString()}
+                {data.message[data.chatKey] || data.message}
             </ReactMarkdown>
         ),
-        [data.message, data.message.toString()]
+        [data.message]
     )
 
     const messageRef = useRef<HTMLDivElement>(null)

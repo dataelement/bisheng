@@ -14,7 +14,7 @@ import {
 } from "@/components/bs-icons";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
-import { LockClosedIcon } from "@radix-ui/react-icons";
+import { LockClosedIcon, MoonIcon, SunIcon } from "@radix-ui/react-icons";
 import i18next from "i18next";
 import { Globe } from "lucide-react";
 import { useContext, useEffect, useMemo, useState } from "react";
@@ -73,11 +73,13 @@ export default function MainLayout() {
         <div className="bg-background-main w-full h-screen">
             <div className="flex justify-between h-[64px]">
                 <div className="flex h-9 my-[14px]">
-                    <Link className="inline-block" to='/'><img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="w-[114px] h-9 ml-8 rounded" alt="" /></Link>
+                    <Link className="inline-block" to='/'>
+                        <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="w-[114px] h-9 ml-8 rounded dark:w-[124px] dark:pr-[10px] dark:bg-[#fff]" alt="" />
+                        </Link>
                 </div>
                 <div className="flex w-fit relative z-50">
                     <div className="flex">
-                        {/* <TooltipProvider>
+                        <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={() => setDark(!dark)}>
                                     <div className="">
@@ -90,7 +92,7 @@ export default function MainLayout() {
                                 </TooltipTrigger>
                                 <TooltipContent><p>{t('menu.themeSwitch')}</p></TooltipContent>
                             </Tooltip>
-                        </TooltipProvider> */}
+                        </TooltipProvider>
                         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
                         <TooltipProvider>
                             <Tooltip>

@@ -73,7 +73,7 @@ const privateRouter = [
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps", element: <Templates />, permission: 'build', },
       { path: "model", element: <ModelPage />, permission: 'model', },
-      { path: "sys", element: <SystemPage /> },
+      { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
