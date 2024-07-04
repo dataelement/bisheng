@@ -3,7 +3,7 @@ import { LoadIcon } from "@/components/bs-icons/loading";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "@/types/chat";
 import { copyText } from "@/utils";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
@@ -11,6 +11,7 @@ import remarkMath from "remark-math";
 import MessageButtons from "./MessageButtons";
 import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
+import { isSameDay } from "@/util/utils";
 
 // 颜色列表
 const colorList = [
@@ -76,11 +77,17 @@ export default function MessageBs({ data, onUnlike = () => { }, onSource }: { da
     }
 
     const chatId = useMessageStore(state => state.chatId)
+    const [show, setShow] = useState(false)
 
-    return <div className="flex w-full py-1">
+    return <div className="flex w-full">
         <div className="w-fit max-w-[90%]">
+            <div className={`text-right ${show ? 'opacity-100' : 'opacity-0'}`}>
+                <span className="text-slate-400 text-sm">{isSameDay(data.update_time, new Date())}</span>
+            </div>
             {data.sender && <p className="text-gray-600 text-xs mb-2">{data.sender}</p>}
-            <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
+            <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]"
+                onMouseEnter={(e) => setShow(true)}
+                onMouseLeave={(e) => setShow(false)}>
                 <div className="flex gap-2">
                     <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} ><AvatarIcon /></div>
                     {data.message.toString() ?

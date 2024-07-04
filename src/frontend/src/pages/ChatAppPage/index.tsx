@@ -1,4 +1,6 @@
 import SkillChatSheet from "@/components/bs-comp/sheets/SkillChatSheet";
+import { PlusBoxIcon, PlusBoxIconDark } from "@/components/bs-icons/plusBox";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,9 +9,8 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useDebounce } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import ChatPanne from "./components/ChatPanne";
-import { PlusBoxIcon, PlusBoxIconDark } from "@/components/bs-icons/plusBox";
-import { gradients } from "@/components/bs-comp/cardComponent";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { isSameDay } from "@/util/utils";
+import { SkillIcon, AssistantIcon } from "@/components/bs-icons";
 
 export default function SkillChatPage() {
 
@@ -66,7 +67,6 @@ export default function SkillChatPage() {
         setChatId(chat.chat_id)
     }, 100, false)
 
-
     // del
     const handleDeleteChat = (e, id) => {
         e.stopPropagation();
@@ -79,7 +79,6 @@ export default function SkillChatPage() {
             }
         })
     }
-
 
     return <div className="flex h-full">
         <div className="h-full w-[220px] relative border-r">
@@ -96,14 +95,19 @@ export default function SkillChatPage() {
                 {
                     chatList.map((chat, i) => (
                         <div key={chat.chat_id}
-                            className={` group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-[#34353A] ${chatId === chat.chat_id ? 'bg-[#EDEFF6] dark:bg-[#34353A]' : 'bg-[#f9f9fc] dark:bg-[#212122]'}`}
+                            className={`group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-[#34353A] ${chatId === chat.chat_id ? 'bg-[#EDEFF6] dark:bg-[#34353A]' : 'bg-[#f9f9fc] dark:bg-[#212122]'}`}
                             onClick={() => handleSelectChat(chat)}>
-                            <p className="break-words text-sm font-bold text-gray-950 dark:text-[#F2F2F2] leading-6">
-                                <span className={`relative top-[-1px] inline-block w-2 h-2 mr-2 ${chat.flow_type === 'flow' ? 'bg-[#111]' : 'bg-primary'}`}></span>
-                                {chat.flow_name}
-                            </p>
-                            <span className="block text-xs text-gray-600 dark:text-[#8D8D8E] mt-3 break-words truncate-multiline">{chat.flow_description}</span>
-                            <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
+                            <div className="flex place-items-center space-x-3">
+                                <div className=" inline-block bg-purple-500 rounded-md">
+                                    {chat.flow_type === 'assistant' ? <AssistantIcon/> : <SkillIcon/>}
+                                </div>
+                                <p className="truncate text-sm font-bold text-gray-950 dark:text-[#F2F2F2] leading-6">{chat.flow_name}</p>
+                            </div>
+                            <span className="block text-xs text-gray-600 dark:text-[#8D8D8E] mt-3 break-words truncate">{chat.flow_description}</span>
+                            <div className="mt-6">
+                                <span className="text-gray-400 text-xs absolute bottom-2 left-2">{isSameDay(chat.update_time, new Date())}</span>
+                                <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
+                            </div>
                         </div>
                     ))
                 }

@@ -22,4 +22,6 @@ export type ChatMessageType = {
   receiver?: any;
   liked?: boolean;
   extra?: string;
+  create_time: string;
+  update_time: string;
 };

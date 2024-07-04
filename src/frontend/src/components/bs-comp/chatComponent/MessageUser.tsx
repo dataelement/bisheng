@@ -1,8 +1,9 @@
 import { locationContext } from "@/contexts/locationContext";
 import { ChatMessageType } from "@/types/chat";
 import { MagnifyingGlassIcon, Pencil2Icon, ReloadIcon } from "@radix-ui/react-icons";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { useMessageStore } from "./messageStore";
+import { isSameDay } from "@/util/utils";
 
 export default function MessageUser({ useName, data }: { data: ChatMessageType }) {
     const msg = data.message[data.chatKey]
@@ -24,10 +25,17 @@ export default function MessageUser({ useName, data }: { data: ChatMessageType }
         document.dispatchEvent(myEvent);
     }
 
-    return <div className="flex justify-end w-full py-1">
+    const [show, setShow] = useState(false)
+
+    return <div className="flex justify-end w-full">
         <div className="w-fit min-h-8 max-w-[90%]">
+            <div className={`text-right ${show ? 'opacity-100' : 'opacity-0'}`}>
+                <span className="text-slate-400 text-sm">{isSameDay(data.update_time, new Date())}</span>
+            </div>
             {useName && <p className="text-gray-600 text-xs mb-2 text-right">{useName}</p>}
-            <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
+            <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]"
+                onMouseEnter={(e) => setShow(true)}
+                onMouseLeave={(e) => setShow(false)}>
                 <div className="flex gap-2 ">
                     <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{msg}</div>
                     <div className="w-6 h-6 min-w-6"><img src={__APP_ENV__.BASE_URL + '/user.png'} alt="" /></div>
