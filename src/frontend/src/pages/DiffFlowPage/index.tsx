@@ -35,9 +35,9 @@ export default function index(params) {
     console.log('mulitVersionFlow', mulitVersionFlow);
 
 
-    return <div className="bg-gray-100 h-full relative">
+    return <div className="bg-gray-100 dark:bg-[#111] h-full relative">
         {/* header */}
-        <div className="absolute top-0 w-full h-14 flex justify-between items-center border-b px-4 bg-[#fff]">
+        <div className="absolute top-0 w-full h-14 flex justify-between items-center border-b px-4 bg-[#fff] dark:bg-[#222]">
             <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ChevronLeftIcon className="h-4 w-4" /></Button>
             <span>版本评估</span>
             <Button type="button" onClick={handleAddVersion}>

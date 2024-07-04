@@ -73,7 +73,8 @@ export default function MainLayout() {
             <div className="flex justify-between h-[64px]">
                 <div className="flex h-9 my-[14px]">
                     <Link className="inline-block" to='/'>
-                        <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="w-[114px] h-9 ml-8 rounded dark:w-[124px] dark:pr-[10px] dark:bg-[#fff]" alt="" />
+                        <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="w-[114px] h-9 ml-8 rounded dark:w-[124px] dark:pr-[10px] dark:hidden" alt="" />
+                        <img src={__APP_ENV__.BASE_URL + '/logo-small-dark.png'} className="w-[114px] h-9 ml-8 rounded dark:w-[124px] dark:pr-[10px] dark:block hidden" alt="" />
                     </Link>
                 </div>
                 <div className="flex w-fit relative z-50">

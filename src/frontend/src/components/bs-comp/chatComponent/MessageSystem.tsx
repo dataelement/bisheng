@@ -38,7 +38,7 @@ export default function MessageSystem({ data }) {
     // if(data.category === 'report') return null
 
     return <div className="py-1">
-        <div className={`relative rounded-sm px-6 py-4 border text-sm ${data.category === 'guide' ? 'bg-[#EDEFF6]' : 'bg-slate-50'} ${border[data.category || 'system']}`}>
+        <div className={`relative rounded-sm px-6 py-4 border text-sm dark:bg-gray-900 ${data.category === 'guide' ? 'bg-[#EDEFF6]' : 'bg-slate-50'} ${border[data.category || 'system']}`}>
             {logMkdown}
             {/* 中英 */}
             {data.category === 'report' && <CopyIcon className=" absolute right-4 top-2 cursor-pointer" onClick={(e) => handleCopy(e.target.parentNode)}></CopyIcon>}

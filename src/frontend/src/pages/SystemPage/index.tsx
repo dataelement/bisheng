@@ -3,7 +3,7 @@ import {
     TabsContent,
     TabsList,
     TabsTrigger,
-} from "../../components/ui/tabs";
+} from "../../components/bs-ui/tabs";
 import Roles from "./components/Roles";
 import Config from "./components/Config";
 import Users from "./components/Users";

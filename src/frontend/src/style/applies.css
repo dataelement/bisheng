@@ -998,7 +998,7 @@
   }
 
   .bisheng-title {
-    @apply text-lg text-gray-950
+    @apply text-lg text-gray-950 dark:text-gray-50
   }
 
   .bisheng-table-footer {
