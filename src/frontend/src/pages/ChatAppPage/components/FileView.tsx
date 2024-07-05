@@ -190,8 +190,8 @@ export default function FileView({ data }) {
                     <span className="loading loading-infinity loading-lg"></span>
                 </div>
                 // {/* 中英 */}
-                // : <div id="warp-pdf" className="file-view absolute">
-                : <div id="warp-pdf" className="file-view absolute pointer-events-none">
+                : <div id="warp-pdf" className="file-view absolute">
+                {/* : <div id="warp-pdf" className="file-view absolute pointer-events-none"> */}
                     <List
                         ref={listRef}
                         itemCount={pdf?.numPages || 100}

@@ -91,7 +91,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
         <div className="w-[300px] bg-gray-100 rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar">
             {/* label */}
             {/* 中英 */}
-            {/* <div className="mb-4 text-sm font-bold">
+            <div className="mb-4 text-sm font-bold">
                 {t('chat.filterLabel')}
                 <div className="tooltip fixed" data-tip={t('chat.tooltipText')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
             </div>
@@ -109,7 +109,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                         }}></input></div> :
                         <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>{t('chat.addCustomLabel')}</span></div>
                 }
-            </div> */}
+            </div>
             {/* files */}
             <div className="mt-4">
                 <p className="mb-4 text-sm font-bold">{t('chat.sourceDocumentsLabel')}</p>
@@ -117,7 +117,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                     _file.right ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
                         <p className="text-sm break-all">{_file.fileName}</p>
                         {/* 中英 */}
-                        {/* <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
+                        <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
                             {
                                 _file.fileUrl && <div className="tooltip" data-tip={t('chat.downloadPDFTooltip')}>
                                     <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
@@ -132,7 +132,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
                                     </a>
                                 </div>
                             }
-                        </div> */}
+                        </div>
                         <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
                     </div> :
                         <div key={_file.id} className={`msk group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
