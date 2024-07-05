@@ -87,6 +87,15 @@ class ChatMessageDao(MessageBase):
                 return None
 
     @classmethod
+    def get_latest_message_by_chat_ids(cls, chat_ids: list[str], category: str = None):
+        statement = select(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids))
+        if category:
+            statement = statement.where(ChatMessage.category == category)
+        statement = statement.order_by(ChatMessage.create_time.desc()).limit(1)
+        with session_getter() as session:
+            return session.exec(statement).all()
+
+    @classmethod
     def get_messages_by_chat_id(cls, chat_id: str, category_list: list = None, limit: int = 10):
         with session_getter() as session:
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
@@ -141,7 +150,6 @@ class ChatMessageDao(MessageBase):
     def get_message_by_id(cls, message_id: int) -> Optional[ChatMessage]:
         with session_getter() as session:
             return session.exec(select(ChatMessage).where(ChatMessage.id == message_id)).first()
-
 
     @classmethod
     def update_message(cls, message_id: int, user_id: int, message: str):

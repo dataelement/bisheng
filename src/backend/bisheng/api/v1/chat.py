@@ -1,4 +1,5 @@
 import json
+import time
 from typing import List, Optional
 from uuid import UUID
 
@@ -172,7 +173,6 @@ def get_chatlist_list(*,
                       page: Optional[int] = 1,
                       limit: Optional[int] = 10,
                       login_user: UserPayload = Depends(get_login_user)):
-
     smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
                   func.min(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
@@ -181,6 +181,7 @@ def get_chatlist_list(*,
         ChatMessage.chat_id).order_by(func.max(ChatMessage.update_time).desc()))
     with session_getter() as session:
         db_message = session.exec(smt).all()
+
     flow_ids = [message.flow_id for message in db_message]
     with session_getter() as session:
         db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
@@ -212,6 +213,14 @@ def get_chatlist_list(*,
         else:
             # 通过接口创建的会话记录，不关联技能或者助手
             logger.debug(f'unknown message.flow_id={message.flow_id}')
+    res = chat_list[(page - 1) * limit:page * limit]
+    chat_ids = [one.chat_id for one in res]
+    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids, 'answer')
+    latest_messages = {one.chat_id: one for one in latest_messages}
+
+    for one in res:
+        # 获取每个会话的最后一条回复内容
+        one.latest_message = latest_messages.get(one.chat_id, None)
     return resp_200(chat_list[(page - 1) * limit:page * limit])
 
 

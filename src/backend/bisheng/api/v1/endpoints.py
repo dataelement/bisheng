@@ -37,13 +37,13 @@ router = APIRouter(tags=['Base'])
 
 
 @router.get('/all')
-def get_all(login_user: UserPayload = Depends(get_login_user)):
+def get_all():
     """获取所有参数"""
     return resp_200(get_all_types_dict())
 
 
 @router.get('/env')
-def get_env(login_user: UserPayload = Depends(get_login_user)):
+def get_env():
     """获取环境变量参数"""
     uns_support = [
         'png', 'jpg', 'jpeg', 'bmp', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md',

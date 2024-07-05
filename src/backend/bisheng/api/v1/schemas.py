@@ -3,14 +3,16 @@ from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from uuid import UUID
 
+from langchain.docstore.document import Document
+from orjson import orjson
+from pydantic import BaseModel, Field, validator
+
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import GptsToolsRead, AuthMethod, AuthType
 from bisheng.database.models.knowledge import KnowledgeRead
-from langchain.docstore.document import Document
-from orjson import orjson
-from pydantic import BaseModel, Field, validator
+from bisheng.database.models.message import ChatMessageRead
 
 
 class CaptchaInput(BaseModel):
@@ -119,6 +121,7 @@ class ChatList(BaseModel):
     create_time: datetime = None
     update_time: datetime = None
     flow_type: str = None  # flow: 技能 assistant：gpts助手
+    latest_message: ChatMessageRead = None
 
 
 class FlowGptsOnlineList(BaseModel):
