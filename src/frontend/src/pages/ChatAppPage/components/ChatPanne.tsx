@@ -186,7 +186,8 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                 </div>
                 <ChatComponent
                     form={flowSate.isForm}
-                    stop={flowSate.isReport || flowSate.isRoom}
+                    stop
+                    // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
                     guideWord={flow.guide_word}
                     wsUrl={wsUrl}
@@ -207,6 +208,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     <span className="text-sm">{assistant.name}</span>
                 </div>
                 <ChatComponent
+                    stop
                     useName={sendUserName}
                     questions={assistantState.guide_question.filter((item) => item)}
                     guideWord={assistantState.guide_word}
