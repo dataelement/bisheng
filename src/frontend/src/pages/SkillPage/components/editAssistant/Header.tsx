@@ -31,9 +31,9 @@ export default function Header({ onSave, onLine }) {
         needSaveRef.current = true
     }
 
-    return <div className="flex justify-between items-center border-b px-4">
+    return <div className="flex justify-between bg-background-login items-center border-b px-4">
         <div className="flex items-center gap-2 py-4">
-            <Button variant="outline" className="dark:bg-[#282828]" size="icon" onClick={() => navigate(-1)}><ChevronLeftIcon className="h-4 w-4" /></Button>
+            <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ChevronLeftIcon className="h-4 w-4" /></Button>
             <TitleIconBg id={assistantState.id} className="ml-4"><AssistantIcon /></TitleIconBg>
             <span className="bisheng-title">{assistantState.name}</span>
             {/* edit dialog */}
@@ -50,8 +50,8 @@ export default function Header({ onSave, onLine }) {
             </Dialog>
         </div>
         <div className="flex gap-4">
-            <Button variant="outline" className="px-10 dark:bg-[#282828]" type="button" onClick={onSave}>{t('build.save')}</Button>
-            <Button type="submit" className="px-10 text-slate-50" onClick={onLine}>{t('build.online')}</Button>
+            <Button variant="outline" className="px-10" type="button" onClick={onSave}>{t('build.save')}</Button>
+            <Button type="submit" className="px-10" onClick={onLine}>{t('build.online')}</Button>
         </div>
     </div>
 };

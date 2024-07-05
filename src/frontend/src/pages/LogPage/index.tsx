@@ -127,10 +127,10 @@ export default function index() {
                 </Select>
             </div>
                 <div>
-                    <Button className="mr-3 px-6 dark:text-[#ECECEC]" onClick={handleSearch}>
+                    <Button className="mr-3 px-6" onClick={handleSearch}>
                         {t('log.searchButton')}
                     </Button>
-                    <Button variant="outline" className="px-6 dark:bg-[#282828]" onClick={handleReset}>
+                    <Button variant="outline" className="px-6" onClick={handleReset}>
                         {t('log.resetButton')}
                     </Button>
                 </div>

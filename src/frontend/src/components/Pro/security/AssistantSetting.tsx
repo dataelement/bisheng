@@ -80,7 +80,7 @@ export default function AssistantSetting({ id, type }) {
                                 {/* @ts-ignore */}
                                 {form.isCheck && <SettingIcon onClick={(e) => { e.stopPropagation(); setOpen(!open) }} className="w-[32px] h-[32px]" />}
                             </SheetTrigger>
-                            <SheetContent className="w-[500px] bg-background-login" onClick={(e) => e.stopPropagation()}>
+                            <SheetContent className="w-[500px]" onClick={(e) => e.stopPropagation()}>
                                 <SheetTitle className="font-[500] pl-3 pt-2">{t('build.contentSecuritySettings')}</SheetTitle>
                                 <FormSet data={form} onChange={handleFormChange} onSave={() => setOpen(false)} onCancel={() => setOpen(false)} />
                             </SheetContent>

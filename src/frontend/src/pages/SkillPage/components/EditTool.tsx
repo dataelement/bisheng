@@ -509,14 +509,14 @@ const EditTool = forwardRef((props: any, ref) => {
                         </div>
                     )}
                 </div>
-                <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4 bg-background-login">
+                <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
                     {delShow && <Button
                         size="sm"
                         variant="destructive"
                         className="absolute left-6"
                         onClick={handleDelete}
                     >{t('tools.delete')}</Button>}
-                    <Button size="sm" variant="outline" className="dark:bg-[#282828]" onClick={() => setEditShow(false)}>{t('tools.cancel')}</Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditShow(false)}>{t('tools.cancel')}</Button>
                     <Button size="sm" className="text-[white]" onClick={handleSave}>{t('tools.save')}</Button>
                 </SheetFooter>
             </SheetContent>

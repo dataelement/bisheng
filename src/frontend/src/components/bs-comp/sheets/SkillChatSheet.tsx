@@ -43,7 +43,7 @@ export default function SkillChatSheet({ children, onSelect }) {
                     <SheetDescription>{t('chat.chooseSkillOrAssistant')}</SheetDescription>
                     <SearchInput value={keyword} placeholder={t('chat.search')} className="my-6" onChange={(e) => setKeyword(e.target.value)} />
                 </div>
-                <div className="flex-1 min-w-[696px] bg-[#fff] dark:bg-[#303134] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
+                <div className="flex-1 min-w-[696px] bg-[#fff] dark:bg-[#030712] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
                     {
                         options.length ? options.map((flow, i) => (
                             <CardComponent key={i}

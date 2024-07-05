@@ -94,9 +94,9 @@ export default function EditAssistantDialog({ name, desc, onSave }) {
         </div>
         <DialogFooter>
             <DialogClose>
-                <Button variant="outline" className="px-11 dark:bg-[#282828]" type="button">{t('build.cancel')}</Button>
+                <Button variant="outline" className="px-11" type="button">{t('build.cancel')}</Button>
             </DialogClose>
-            <Button type="submit" className="px-11 text-slate-50" onClick={handleSubmit}>{t('build.confirm')}</Button>
+            <Button type="submit" className="px-11" onClick={handleSubmit}>{t('build.confirm')}</Button>
         </DialogFooter>
     </DialogContent>
 };

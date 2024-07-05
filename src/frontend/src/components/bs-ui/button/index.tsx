@@ -91,7 +91,7 @@ const ButtonNumber = React.forwardRef<HTMLButtonElement, {
             setValue(updateValue)
             onChange?.(updateValue)
         }
-        return (<div className={cname("flex items-center border input-border bg-gray-50 rounded-md", className)}>
+        return (<div className={cname("flex items-center border input-border bg-gray-50 dark:bg-background-login rounded-md", className)}>
             <Button variant="ghost" size={size} disabled={value === min} onClick={valueReduce}>-</Button>
             <span className="min-w-10 block text-center">{value}</span>
             <Button variant="ghost" size={size} disabled={value === max} onClick={valueAdd}>+</Button>

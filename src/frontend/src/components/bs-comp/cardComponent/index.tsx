@@ -126,7 +126,7 @@ export default function CardComponent<T>({
 
 
   // 侧边弹窗列表（sheet）
-  if (type === 'sheet') return <Card className="group w-[320px] cursor-pointer bg-[#F7F9FC] dark:bg-[#282828] dark:hover:bg-[#414141] hover:bg-[#EDEFF6] hover:shadow-none relative" onClick={onClick}>
+  if (type === 'sheet') return <Card className="group w-[320px] cursor-pointer bg-[#F7F9FC] dark:bg-background-main dark:hover:bg-background-login hover:bg-[#EDEFF6] hover:shadow-none relative" onClick={onClick}>
     <CardHeader className="pb-2">
       <CardTitle className="truncate-doubleline">
         <div className="flex gap-2 pb-2 items-center">

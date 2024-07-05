@@ -87,6 +87,7 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
                         onChange={(e) => setForm({ ...form, words: e.target.value })}
                         placeholder={t('build.useNewlineToSeparate')}></Textarea>
                     <input type="file" accept=".txt" id="fileUpload" className="hidden" onChange={handleUploadFile} />
+                    {/* @ts-ignore */}
                     <div className="flex items-center absolute right-1 top-1 cursor-pointer" onClick={() => document.querySelector('#fileUpload').click()}>
                         <UploadIcon id="ul" color="blue" className="w-3 h-3" />
                         <Label htmlFor="ul"><span className="text-xs text-primary cursor-pointer">{t('build.txtFile')}</span></Label>
@@ -102,8 +103,8 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
             </div>
         </div>
         <div className="absolute bottom-10 right-4 sapce-x-10 flex space-x-8">
-            <Button className="dark:bg-[#282828]" onClick={onCancel} variant="outline">{t('cancel')}</Button>
-            <Button className="text-slate-50" onClick={handleSave}>{t('save')}</Button>
+            <Button onClick={onCancel} variant="outline">{t('cancel')}</Button>
+            <Button onClick={handleSave}>{t('save')}</Button>
         </div>
     </>
 };

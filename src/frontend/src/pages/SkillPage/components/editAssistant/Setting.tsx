@@ -211,7 +211,7 @@ export default function Setting() {
                 }
               >
                 <PlusIcon
-                  className="mr-2 text-primary hover:text-primary/80"
+                  className="mr-2 text-primary hover:text-primary/80 dark:text-slate-50"
                   onClick={(e) => e.stopPropagation()}
                 ></PlusIcon>
               </ToolsSheet>
@@ -271,7 +271,7 @@ export default function Setting() {
                 }
               >
                 <PlusIcon
-                  className="mr-2 text-primary hover:text-primary/80"
+                  className="mr-2 text-primary hover:text-primary/80 dark:text-slate-50"
                   onClick={(e) => e.stopPropagation()}
                 ></PlusIcon>
               </SkillSheet>

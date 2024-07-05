@@ -162,7 +162,7 @@ export default function l2Edit() {
         <div className="p-6 pb-48 h-full overflow-y-auto">
             <div className="flex justify-between w-full">
                 <ShadTooltip content={t('back')} side="right">
-                    <button className="extra-side-bar-buttons w-[36px] dark:bg-[#282828]" onClick={() => window.history.length < 3 ? navigate('/build/skills') : navigate(-1)}>
+                    <button className="extra-side-bar-buttons w-[36px]" onClick={() => window.history.length < 3 ? navigate('/build/skills') : navigate(-1)}>
                         <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
                     </button>
                 </ShadTooltip>
@@ -247,10 +247,10 @@ export default function l2Edit() {
             {
                 isL2 ?
                     <div className="flex gap-4 w-[50%]">
-                        <Button disabled={loading} className="extra-side-bar-save-disable w-[70%] text-[white]" onClick={handleSave}>
+                        <Button disabled={loading} className="extra-side-bar-save-disable w-[70%]" onClick={handleSave}>
                             {t('save')}
                         </Button>
-                        <Button disabled={loading} className="w-[30%] dark:bg-[#282828]" variant="outline" onClick={() => handleJumpFlow()}>
+                        <Button disabled={loading} className="w-[30%]" variant="outline" onClick={() => handleJumpFlow()}>
                             {t('skills.advancedConfiguration')}
                         </Button>
                     </div>

@@ -41,7 +41,7 @@ export default function SkillSheet({ select, children, onSelect }) {
   return (
     <Sheet>
       <SheetTrigger asChild>{children}</SheetTrigger>
-      <SheetContent className="bg-background-main sm:min-w-[966px]">
+      <SheetContent className="sm:min-w-[966px]">
         <div className="flex h-full" onClick={(e) => e.stopPropagation()}>
           <div className="w-fit p-6">
             <SheetTitle>{t("build.addSkill")}</SheetTitle>
@@ -55,7 +55,7 @@ export default function SkillSheet({ select, children, onSelect }) {
               {t("build.createSkill")}
             </Button>
           </div>
-          <div className="flex h-full min-w-[696px] flex-1 flex-wrap content-start gap-1.5 overflow-y-auto bg-background-login p-5 pt-12 scrollbar-hide">
+          <div className="flex h-full min-w-[696px] flex-1 flex-wrap content-start gap-1.5 overflow-y-auto p-5 pt-12 scrollbar-hide">
             {onlineFlows[0] ? (
               onlineFlows.map((flow, i) => (
                 <CardComponent
@@ -68,13 +68,13 @@ export default function SkillSheet({ select, children, onSelect }) {
                   footer={
                     <div className="flex justify-end">
                       {select.some((_) => _.id === flow.id) ? (
-                        <Button size="sm" className="h-6 text-slate-50" disabled>
+                        <Button size="sm" className="h-6" disabled>
                           {t("build.added")}
                         </Button>
                       ) : (
                         <Button
                           size="sm"
-                          className="h-6 text-slate-50"
+                          className="h-6"
                           onClick={() => onSelect(flow)}
                         >
                           {t("build.add")}
@@ -89,7 +89,7 @@ export default function SkillSheet({ select, children, onSelect }) {
                 <p className="mb-3 text-sm text-muted-foreground">
                   {t("build.empty")}
                 </p>
-                <Button className="w-[200px] text-slate-50" onClick={toCreateFlow}>
+                <Button className="w-[200px]" onClick={toCreateFlow}>
                   {t("build.createSkill")}
                 </Button>
               </div>
