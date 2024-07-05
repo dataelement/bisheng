@@ -30,7 +30,7 @@ export default function SkillTempSheet({ children, onSelect }) {
         <SheetTrigger asChild>
             {children}
         </SheetTrigger>
-        <SheetContent className="sm:min-w-[966px] bg-gray-100">
+        <SheetContent className="sm:min-w-[966px] ">
             <div className="flex h-full" onClick={e => e.stopPropagation()}>
                 <div className="w-fit p-6">
                     <SheetTitle>{t('skills.skillTemplate')}</SheetTitle>

@@ -3,9 +3,8 @@ from typing import Optional, List
 
 from fastapi import APIRouter, Query, Depends
 
-from bisheng.api.JWT import get_login_user
-from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.api.services.user_service import UserPayload, get_login_user
+from bisheng.api.v1.schemas import UnifiedResponseModel
 from bisheng.api.services.audit_log import AuditLogService
 
 router = APIRouter(prefix='/audit', tags=['AuditLog'])

@@ -44,6 +44,12 @@ class PasswordConf(BaseModel):
     max_error_times: Optional[int] = Field(default=0, description='最大错误次数，超过后会封禁用户')
 
 
+class SystemLoginMethod(BaseModel):
+    SSO_OAuth: bool = Field(default=False, description='是否开启SSO认证')
+    admin_username: Optional[str] = Field(default=None, description='通过sso注册的系统管理员用户名')
+    allow_multi_login: bool = Field(default=True, description='是否允许多点登录')
+
+
 class Settings(BaseSettings):
     chains: dict = {}
     agents: dict = {}
@@ -148,10 +154,10 @@ class Settings(BaseSettings):
         all_config = self.get_all_config()
         return PasswordConf(**all_config.get('password_conf', {}))
 
-    def get_system_login_method(self) -> dict:
+    def get_system_login_method(self) -> SystemLoginMethod:
         # 获取密码相关的配置项
         all_config = self.get_all_config()
-        return all_config.get('system_login_method', {})
+        return SystemLoginMethod(**all_config.get('system_login_method', {}))
 
     def get_from_db(self, key: str):
         # 先获取所有的key

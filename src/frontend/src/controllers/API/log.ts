@@ -37,7 +37,7 @@ const actions = [
     {name:'删除应用',value:'delete_build'},{name:'新建知识库',value:'create_knowledge'},{name:'删除知识库',value:'delete_knowledge'},{name:'知识库上传文件',value:'upload_file'},
     {name:'知识库删除文件',value:'delete_file'},{name:'用户编辑',value:'update_user'},{name:'停用用户',value:'forbid_user'},{name:'启用用户',value:'recover_user'},
     {name:'新建用户组',value:'create_user_group'},{name:'删除用户组',value:'delete_user_group'},{name:'编辑用户组',value:'update_user_group'},{name:'新建角色',value:'create_role'},
-    {name:'删除角色',value:'delete_role'},{name:'编辑角色',value:'update_role'}
+    {name:'删除角色',value:'delete_role'},{name:'编辑角色',value:'update_role'},{name:'用户登录',value:'user_login'}
 ]
 
 // 全部操作行为

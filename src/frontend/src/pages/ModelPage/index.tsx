@@ -223,9 +223,9 @@ export default function FileLibPage() {
                 <div className="relative">
                     <div className="h-[calc(100vh-136px)] overflow-y-auto pb-20">
                         <div className="flex justify-end gap-4">
-                            {user.role === 'admin' && <Button variant="black" onClick={() => setShowCpu({ type: 'model', show: true })}>{t('model.gpuResourceUsage')}</Button>}
-                            {user.role === 'admin' && appConfig.isDev && <Button variant="black" className="bg-[#111] hover:bg-[#48494d]" onClick={() => setRTOpen(true)}>{t('finetune.rtServiceManagement')}</Button>}
-                            <Button onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
+                            {user.role === 'admin' && <Button variant="black" className="dark:bg-[#34353A] dark:text-[#ECECEC]" onClick={() => setShowCpu({ type: 'model', show: true })}>{t('model.gpuResourceUsage')}</Button>}
+                            {user.role === 'admin' && appConfig.isDev && <Button variant="black" className="dark:bg-[#34353A] dark:text-[#ECECEC]" onClick={() => setRTOpen(true)}>{t('finetune.rtServiceManagement')}</Button>}
+                            <Button className="dark:text-[#ECECEC]" onClick={() => { setDataList([]); loadData() }}>{t('model.refreshButton')}</Button>
                         </div>
                         <Table>
                             <TableHeader>
@@ -259,7 +259,7 @@ export default function FileLibPage() {
                         </Table>
                     </div>
                     {/* 分页 */}
-                    <div className="bisheng-table-footer">
+                    <div className="bisheng-table-footer bg-background-login">
                         <p className="desc">{t('model.modelCollectionCaption')}.</p>
                     </div>
                 </div>

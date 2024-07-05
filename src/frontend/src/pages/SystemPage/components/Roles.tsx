@@ -191,7 +191,7 @@ export default function Roles() {
                     </TableFooter>
                 </Table>
             </div>
-            <div className="bisheng-table-footer">
+            <div className="bisheng-table-footer bg-background-login">
                 <p className="desc">{t('system.roleList')}.</p>
             </div>
         </div>

@@ -1,16 +1,18 @@
 from typing import Optional
 
+from fastapi import APIRouter, HTTPException, Depends
+from sqlmodel import select
+
+from bisheng.api.services.user_service import get_login_user
 from bisheng.api.utils import remove_api_keys
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.template import Template, TemplateCreate, TemplateRead, TemplateUpdate
 from bisheng.settings import settings
-from fastapi import APIRouter, HTTPException
-from sqlmodel import select
 
 # build router
-router = APIRouter(prefix='/skill', tags=['Skills'])
+router = APIRouter(prefix='/skill', tags=['Skills'], dependencies=[Depends(get_login_user)])
 ORDER_GAP = 65535
 
 

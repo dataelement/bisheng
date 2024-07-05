@@ -42,7 +42,7 @@ export default function CardSelectVersion(
                 <SelectComp {...props} value={value} onChange={setValue} />
             </TooltipTrigger>
             <TooltipContent>
-                <p>{t('skills.chooseOnline')}</p>
+                <p className="text-[white]">{t('skills.chooseOnline')}</p>
             </TooltipContent>
         </Tooltip>
     </TooltipProvider>

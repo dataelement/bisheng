@@ -26,7 +26,7 @@ export default function Component({ compId, options, disables, version, classNam
     }, [version, compId])
 
     // empty
-    if (!version) return <div className="bg-[#fff] rounded-md p-2 shadow-sm">
+    if (!version) return <div className="bg-[#fff] dark:bg-gray-950 rounded-md p-2 shadow-sm">
         <div className="group flex justify-center items-center pb-2 border-b relative">
             <Select onValueChange={onChangeVersion}>
                 <SelectTrigger className="w-[120px] h-6">
@@ -54,7 +54,7 @@ export default function Component({ compId, options, disables, version, classNam
     </div>
 
     // 版本信息
-    return <div className={'bg-[#fff] rounded-md p-2 shadow-sm ' + className}>
+    return <div className={'bg-[#fff] dark:bg-gray-950 rounded-md p-2 shadow-sm ' + className}>
         <div className="group flex justify-between items-center pb-2 border-b">
             <Select value={version.id} onValueChange={onChangeVersion}>
                 <SelectTrigger className="w-[120px] h-6">
@@ -90,7 +90,7 @@ export default function Component({ compId, options, disables, version, classNam
             </div>
             {
                 nodes.map(node => (
-                    <div className="flex odd:bg-gray-50 bg-[#f4f5f8] gap-1 mt-1 px-2 py-1 text-sm rounded-sm">
+                    <div className="flex odd:bg-gray-50 bg-[#f4f5f8] dark:bg-[#212121] gap-1 mt-1 px-2 py-1 text-sm rounded-sm">
                         <span className="min-w-12 w-28 break-all self-center">{node.data.type}</span>
                         <div className="flex-1 min-w-0 pointer-events-none opacity-60">
                             {

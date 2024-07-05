@@ -3,14 +3,16 @@ from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from uuid import UUID
 
+from langchain.docstore.document import Document
+from orjson import orjson
+from pydantic import BaseModel, Field, validator
+
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import GptsToolsRead, AuthMethod, AuthType
 from bisheng.database.models.knowledge import KnowledgeRead
-from langchain.docstore.document import Document
-from orjson import orjson
-from pydantic import BaseModel, Field, validator
+from bisheng.database.models.message import ChatMessageRead
 
 
 class CaptchaInput(BaseModel):
@@ -119,6 +121,7 @@ class ChatList(BaseModel):
     create_time: datetime = None
     update_time: datetime = None
     flow_type: str = None  # flow: 技能 assistant：gpts助手
+    latest_message: ChatMessageRead = None
 
 
 class FlowGptsOnlineList(BaseModel):
@@ -306,3 +309,14 @@ class TestToolReq(BaseModel):
     api_key: Optional[str] = Field(default='', description="api key")
 
     request_params: Dict = Field(default=None, description="用户填写的请求参数")
+
+
+class GroupAndRoles(BaseModel):
+    group_id: int
+    role_ids: List[int]
+
+
+class CreateUserReq(BaseModel):
+    user_name: str = Field(max_length=30, description='用户名')
+    password: str = Field(description='密码')
+    group_roles: List[GroupAndRoles] = Field(description='要加入的用户组和角色列表')

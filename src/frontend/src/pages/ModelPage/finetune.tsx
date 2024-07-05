@@ -76,7 +76,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                                 </TableBody>
                             </Table>
                         </div>
-                        <div className="bisheng-table-footer">
+                        <div className="bisheng-table-footer bg-background-login">
                             <p className="desc"></p>
                             <AutoPagination
                                 page={page}

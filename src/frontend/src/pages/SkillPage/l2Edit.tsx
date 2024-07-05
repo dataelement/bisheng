@@ -231,7 +231,7 @@ export default function l2Edit() {
                     {/* 安全审查 */}
                     {appConfig.isPro && <div>
                         <p className="text-center text-gray-400 mt-8 cursor-pointer flex justify-center" onClick={showContent}>
-                            内容安全审查设置
+                            {t('build.contentSecuritySettings')}
                             <ChevronUp />
                         </p>
                         {/* base form */}
@@ -243,7 +243,7 @@ export default function l2Edit() {
             </div>
         </div>
         {/* footer */}
-        <div className="absolute flex z-50 bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-[#fff] border-t dark:bg-gray-900">
+        <div className="absolute flex z-50 bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-background-login">
             {
                 isL2 ?
                     <div className="flex gap-4 w-[50%]">

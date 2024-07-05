@@ -26,16 +26,16 @@ const toastVariants = cva(
     {
         variants: {
             variant: {
-                info: "info border-[#024FE5] bg-[#F1F6FF] self-end",
-                success: "success border-[#0BA95D] bg-[#F2FFF9] self-end",
-                warning: "warning border-[#EA991F] bg-[#FFF7EC] self-end",
-                error: "error border-[#D8341E] bg-[#FFF2F0] self-end",
+                info: "info border-[#024FE5] bg-[#F1F6FF] dark:bg-[#1C2C24] self-end",
+                success: "success border-[#0BA95D] bg-[#F2FFF9] dark:bg-[#1A2335] self-end",
+                warning: "warning border-[#EA991F] bg-[#FFF7EC] dark:bg-[#2F2517] self-end",
+                error: "error border-[#D8341E] bg-[#FFF2F0] dark:bg-[#351F1C] self-end",
             },
             message: {
-                info: "shadow-xl bg-[#fff] self-center",
-                success: "shadow-xl bg-[#fff] self-center",
-                warning: "shadow-xl bg-[#fff] self-center",
-                error: "shadow-xl bg-[#fff] self-center",
+                info: "shadow-xl bg-[#fff] dark:bg-[#303134] self-center",
+                success: "shadow-xl bg-[#fff] dark:bg-[#303134] self-center",
+                warning: "shadow-xl bg-[#fff] dark:bg-[#303134] self-center",
+                error: "shadow-xl bg-[#fff] dark:bg-[#303134] self-center",
             }
         },
         defaultVariants: {},

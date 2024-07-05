@@ -79,6 +79,7 @@ ${t('build.exampleTwo')}
             setLoading(true)
             const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.roleAndTasks))
             if (res) {
+                //@ts-ignore
                 window.assistantCreate = true // 标记新建助手
                 navigate('/assistant/' + res.id)
             }
@@ -86,7 +87,7 @@ ${t('build.exampleTwo')}
         }
     };
 
-    return <DialogContent className="sm:max-w-[625px]">
+    return <DialogContent className="sm:max-w-[625px] bg-background-login">
         <DialogHeader>
             <DialogTitle>{t('build.establishAssistant')}</DialogTitle>
         </DialogHeader>

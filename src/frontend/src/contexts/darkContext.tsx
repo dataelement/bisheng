@@ -7,15 +7,14 @@ type darkContextType = {
 
 const initialValue = {
   dark: {},
-  setDark: () => {},
+  setDark: () => { },
 };
 
 export const darkContext = createContext<darkContextType>(initialValue);
 
 export function DarkProvider({ children }) {
   const [dark, setDark] = useState(
-    false
-    // JSON.parse(window.localStorage.getItem("isDark")) ?? false
+    JSON.parse(window.localStorage.getItem("isDark")) ?? false
   );
   useEffect(() => {
     if (dark) {

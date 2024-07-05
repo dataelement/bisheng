@@ -23,6 +23,8 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import UserRoleModal from "./UserRoleModal";
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal";
+import { PlusIcon } from "@/components/bs-icons";
+import CreateUser from "./CreateUser";
 
 function UsersFilter({ options, onChecked, nameKey, placeholder, onFilter }) {
     const [open, setOpen] = useState(false)
@@ -82,7 +84,7 @@ export default function Users(params) {
     const { user } = useContext(userContext);
     const { t } = useTranslation()
 
-    const { page, pageSize, data: users, total, loading, setPage, search, reload, filterData } = useTable({ pageSize: 20 }, (param) =>
+    const { page, pageSize, data: users, total, setPage, search, reload, filterData } = useTable({ pageSize: 20 }, (param) =>
         getUsersApi({
             ...param,
             name: param.keyword
@@ -137,6 +139,8 @@ export default function Users(params) {
         setRoles(values)
     }
 
+    const [openCreate, setOpenCreate] = useState(false)
+
     useEffect(() => {
         getUserGoups()
         getRoles()
@@ -168,10 +172,14 @@ export default function Users(params) {
 
     return <div className="relative">
         <div className="h-[calc(100vh-136px)] overflow-y-auto pb-10">
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-6">
                 <div className="w-[180px] relative">
                     <SearchInput placeholder={t('system.username')} onChange={(e) => search(e.target.value)}></SearchInput>
                 </div>
+                {user.role === 'admin' && <Button className="flex justify-around" onClick={() => setOpenCreate(true)}>
+                    <PlusIcon className="text-primary"/>
+                    <span className="text-[#fff] mx-4">{t('create')}</span>
+                </Button>}
             </div>
             <Table className="mb-[50px]">
                 {/* <TableCaption>用户列表.</TableCaption> */}
@@ -227,7 +235,7 @@ export default function Users(params) {
         </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="bisheng-table-footer">
+        <div className="bisheng-table-footer bg-background-login">
             <p className="desc">{t('system.userList')}</p>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"
@@ -238,6 +246,7 @@ export default function Users(params) {
             />
         </div>
 
+        <CreateUser open={openCreate} onClose={(bool) => {setOpenCreate(bool); reload()}} onSave={reload}/>
         <UserRoleModal user={currentUser} onClose={() => setCurrentUser(null)} onChange={handleRoleChange}></UserRoleModal>
         <UserPwdModal ref={userPwdModalRef} />
     </div>

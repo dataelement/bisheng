@@ -91,6 +91,18 @@ export function formatDate(date: Date, format: string): string {
     return format.replace(/yyyy|MM|dd|HH|mm|ss/g, (match) => replacements[match])
 } 
 
+// string类型和Date对比是否同一天
+export function isSameDay(time: string, date: Date): string {
+    if(!time) return '暂无时间'
+    const newTime = time.substring(0, time.indexOf('T')).split('-')
+    const arrayTime = newTime.map(t => Number(t))
+    const [year, month, day] = [date.getFullYear(), date.getMonth() + 1, date.getDay()]
+    if(year === arrayTime[0] && month === arrayTime[1] && day === arrayTime[2]) {
+        return time.substring(time.indexOf('T') + 1, time.length - 3)
+    }
+    return `${newTime[1]}月${newTime[2]}日`
+}
+
 export function toTitleCase(str: string | undefined): string {
     if (!str) return "";
     let result = str

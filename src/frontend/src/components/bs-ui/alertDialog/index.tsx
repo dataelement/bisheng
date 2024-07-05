@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
-import { buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/bs-ui/button"
 import { cname } from "../utils"
 
 const AlertDialog = AlertDialogPrimitive.Root
@@ -90,7 +90,7 @@ const AlertDialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
     <AlertDialogPrimitive.Description
         ref={ref}
-        className={cname("text-sm text-muted-foreground text-center text-prompt-description", className)}
+        className={cname("text-sm text-center text-prompt-description", className)}
         {...props}
     />
 ))

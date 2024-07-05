@@ -45,7 +45,7 @@ export default function tabTools({ select = null, onSelect }) {
             onChange={(e) => setKeyword(e.target.value)}
           />
           <Button
-            className="mt-4 w-full"
+            className="mt-4 w-full text-[white]"
             onClick={() => editRef.current.open()}
           >
             {t('create')}{t("tools.createCustomTool")}
@@ -69,7 +69,7 @@ export default function tabTools({ select = null, onSelect }) {
             </div>
           </div>
         </div>
-        <div className="h-full w-full flex-1 overflow-auto bg-[#fff] p-5 pt-12 scrollbar-hide">
+        <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pt-12 scrollbar-hide">
           <Accordion type="single" collapsible className="w-full">
             {options.length ? (
               options.map((el) => (
@@ -91,7 +91,7 @@ export default function tabTools({ select = null, onSelect }) {
         </div>
       </div>
       {/* footer */}
-      <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between bg-[#F4F5F8] px-10">
+      <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between bg-background-login px-10">
         <p className="break-keep text-sm text-muted-foreground">
           {t("tools.manageCustomTools")}
         </p>

@@ -102,7 +102,7 @@ export default function editAssistant() {
         return destroy
     }, [])
 
-    return <div className="bg-[#F4F5F8]">
+    return <div className="bg-background-main">
         <Header onSave={() => handleSave(true)} onLine={handleOnline}></Header>
         <div className="flex h-[calc(100vh-70px)]">
             <div className="w-[60%]">

@@ -1,7 +1,8 @@
+import { toast } from "@/components/bs-ui/toast/use-toast";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
 import { delComponentApi, getComponents, overridComponent, saveComponent } from "../controllers/API";
-import { getUserInfo } from "../controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "../controllers/request";
+import { getUserInfo, logoutApi } from "../controllers/API/user";
+import { captureAndAlertRequestErrorHoc, requestInterceptor } from "../controllers/request";
 import { User } from "../types/api/user";
 
 type userContextType = {
@@ -98,6 +99,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
             return
         }
 
+        // 异地登录强制退出
+        requestInterceptor.remoteLoginFuc = (msg) => {
+            logoutApi().then(_ => {
+                setUser(null)
+                localStorage.removeItem('isLogin')
+            })
+
+            toast({
+                title: '提示',
+                description: msg.split(`\n`),
+                variant: 'error'
+            })
+        }
+        // 获取用户信息
         getUserInfo().then(res => {
             setUser(res.user_id ? res : null)
             localStorage.setItem('UUR_INFO', res.user_id ? String(res.user_id) : '')

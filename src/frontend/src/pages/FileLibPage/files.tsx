@@ -120,7 +120,7 @@ export default function FilesPage() {
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <div className="h-full overflow-y-auto pb-10 bg-[#fff]">
+        <div className="h-full overflow-y-auto pb-10 bg-background-login">
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center">
                     <ShadTooltip content="back" side="top">

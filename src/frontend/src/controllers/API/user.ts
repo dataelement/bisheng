@@ -242,6 +242,14 @@ export async function updateUserGroups(userId, groupIds) {
   });
 }
 
+// 超管创建用户组
+export async function createUserApi(user_name:string, password:string, group_roles:any[]) {
+  return await axios.post('/api/v1/user/create', {
+    user_name,
+    password,
+    group_roles
+  })
+}
 
 /**
  * 获取所有管理员

@@ -338,7 +338,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                 )}
             </SearchPanne>
         </div>
-        <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-[white]">
+        <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-background-login">
             <Button variant="outline" className="px-16" onClick={() => onChange()}>{t('cancel')}</Button>
             <Button className="px-16" onClick={handleSave}>{t('save')}</Button>
         </div>

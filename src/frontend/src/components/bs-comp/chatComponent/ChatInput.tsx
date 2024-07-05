@@ -99,9 +99,11 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
         }
     }
 
+    const diffRef = useRef(0)
     const sendWsMsg = async (msg) => {
         try {
-            // console.log('WebSocket send: ' + Date.now() + ' 毫秒');
+            diffRef.current = Date.now()
+            console.log('WebSocket send: ' + diffRef.current + ' 毫秒');
 
             wsRef.current.send(JSON.stringify(msg))
         } catch (error) {
@@ -138,7 +140,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
                     res('ok')
                 };
                 ws.onmessage = (event) => {
-                    // console.log('WebSocket get: ' + Date.now() + ' 毫秒');
+                    console.log(`WebSocket get: ${Date.now()} 毫秒；与send差值${Date.now() - diffRef.current}毫秒`);
                     const data = JSON.parse(event.data);
                     const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
                     // 异常类型处理，提示
@@ -272,7 +274,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
                     clear && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => { !inputLock.locked && destory() }}
-                    ><ClearIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-950'} ></ClearIcon></div>
+                    ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-950'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></ClearIcon></div>
                 }
             </div>
             {/* form switch */}
@@ -281,7 +283,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
                     form && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
-                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-950'}></FormIcon></div>
+                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-500'}></FormIcon></div>
                 }
             </div>
             {/* send */}
@@ -290,7 +292,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
                     id="bs-send-btn"
                     className="w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center"
                     onClick={() => { !inputLock.locked && handleSendClick() }}
-                ><SendIcon className={inputLock.locked ? 'text-gray-400' : 'text-gray-950'}></SendIcon></div>
+                ><SendIcon className={`${inputLock.locked ? 'text-gray-400' : 'text-gray-950'} dark:text-slate-50 dark:hover:bg-gray-500`}></SendIcon></div>
             </div>
             {/* question */}
             <Textarea

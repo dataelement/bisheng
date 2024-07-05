@@ -34,7 +34,7 @@ export function DatePicker({
                 <Button
                     variant={"outline"}
                     className={cname(
-                        "w-full justify-start text-left font-normal",
+                        "w-full justify-start text-left font-normal bg-search-input",
                         !date && "text-muted-foreground"
                     )}
                 >

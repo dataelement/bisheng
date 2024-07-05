@@ -1,8 +1,12 @@
 import json
 from typing import List
 
+from fastapi import APIRouter, Body, Depends
+from fastapi_jwt_auth import AuthJWT
+
 from bisheng import __version__
 from bisheng.api.services.component import ComponentService
+from bisheng.api.services.user_service import get_login_user
 from bisheng.api.utils import update_frontend_node_with_template_values
 from bisheng.api.v1.schemas import (CreateComponentReq, CustomComponentCode, UnifiedResponseModel,
                                     resp_200, resp_500)
@@ -10,10 +14,8 @@ from bisheng.database.models.component import Component
 from bisheng.interface.custom import CustomComponent
 from bisheng.interface.custom.directory_reader import DirectoryReader
 from bisheng.interface.custom.utils import build_custom_component_template
-from fastapi import APIRouter, Body, Depends
-from fastapi_jwt_auth import AuthJWT
 
-router = APIRouter(prefix='/component', tags=['Component'])
+router = APIRouter(prefix='/component', tags=['Component'], dependencies=[Depends(get_login_user)])
 
 
 @router.get('', response_model=UnifiedResponseModel[List[Component]])

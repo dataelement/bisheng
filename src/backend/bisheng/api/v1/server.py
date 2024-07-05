@@ -5,6 +5,11 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 import requests
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy import delete
+from sqlmodel import select
+
+from bisheng.api.services.user_service import get_login_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import session_getter
 from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployDao, ModelDeployInfo,
@@ -13,12 +18,9 @@ from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployDao, M
 from bisheng.database.models.server import Server, ServerCreate, ServerRead
 from bisheng.database.models.sft_model import SftModelDao
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, HTTPException
-from sqlalchemy import delete
-from sqlmodel import select
 
 # build router
-router = APIRouter(prefix='/server', tags=['server'])
+router = APIRouter(prefix='/server', tags=['server'], dependencies=[Depends(get_login_user)])
 
 thread_pool = ThreadPoolExecutor(3)
 required_param = ['type', 'pymodel_type', 'gpu_memory', 'instance_groups']

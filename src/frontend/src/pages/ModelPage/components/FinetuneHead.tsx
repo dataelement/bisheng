@@ -80,8 +80,8 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
             <SearchInput ref={inputRef} placeholder={t('finetune.modelName')} onChange={useDebounce(handleSearch, 600, false)}></SearchInput>
         </div>
         <div className="flex gap-4">
-            <Button className="" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
-            <Button variant="black" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+            <Button className="dark:text-[#ECECEC]" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
+            <Button variant="black" className="dark:text-[#ECECEC] dark:bg-[#34353A]" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
         </div>
     </div>
 };

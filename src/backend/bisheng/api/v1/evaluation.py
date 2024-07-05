@@ -4,13 +4,13 @@ from typing import List, Optional
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.database.base import session_getter
 from bisheng.api.services.evaluation import EvaluationService, add_evaluation_task
-from bisheng.api.services.user_service import UserPayload
+from bisheng.api.services.user_service import UserPayload, get_login_user
 from fastapi_jwt_auth import AuthJWT
-from fastapi import APIRouter, Depends, Query, UploadFile, HTTPException, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, UploadFile, Form, BackgroundTasks
 from bisheng.database.models.evaluation import EvaluationRead, EvaluationCreate, Evaluation
 from bisheng.utils.minio_client import MinioClient
 
-router = APIRouter(prefix='/evaluation', tags=['Skills'])
+router = APIRouter(prefix='/evaluation', tags=['Skills'], dependencies=[Depends(get_login_user)])
 
 
 @router.get('', response_model=UnifiedResponseModel[List[Evaluation]])

@@ -176,7 +176,7 @@ export default function index() {
         </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="bisheng-table-footer">
+        <div className="bisheng-table-footer bg-background-login">
             <p className="desc pl-4">{t('log.auditManagement')}</p>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"
