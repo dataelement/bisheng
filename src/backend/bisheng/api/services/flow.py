@@ -353,8 +353,14 @@ class FlowService:
         return index, answer_result
 
     @classmethod
-    def create_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
+    def create_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow, version_id) -> bool:
         logger.info(f'create_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
+        # 将技能所需的表单写到数据库内
+        try:
+            if flow_info.data and not get_L2_param_from_flow(flow_info.data, flow_info.id.hex, version_id):
+                logger.error(f'flow_id={flow_info.id} extract file_node fail')
+        except Exception:
+            pass
         # 将技能关联到对应的用户组下
         user_group = UserGroupDao.get_user_group(login_user.user_id)
         if user_group:
