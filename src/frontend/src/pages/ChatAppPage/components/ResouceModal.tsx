@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
 import { downloadFile } from "../../../util/utils";
 import FileView, { checkSassUrl } from "./FileView";
+import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 
 // 顶部答案区
 const Anwser = ({ id, msg, onInit, onAdd }) => {
@@ -41,7 +43,7 @@ const Anwser = ({ id, msg, onInit, onAdd }) => {
         return () => pRef.current?.removeEventListener('click', handleclick)
     }, [])
 
-    return <div className="bg-gray-100 rounded-md py-4 px-2 max-h-24 overflow-y-auto">
+    return <div className="bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 max-h-24 overflow-y-auto">
         <p ref={pRef} className="anwser-souce" dangerouslySetInnerHTML={{ __html: html }}></p>
     </div>
 }
@@ -88,15 +90,24 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
 
     return <div className="flex gap-4 mt-4" style={{ height: 'calc(100vh - 10rem)' }}>
         {/* left */}
-        <div className="w-[300px] bg-gray-100 rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar">
+        <div className="w-[300px] bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar">
             {/* label */}
             {/* 中英 */}
-            <div className="mb-4 text-sm font-bold">
-                {t('chat.filterLabel')}
-                <div className="tooltip fixed" data-tip={t('chat.tooltipText')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
+            <div className="mb-4 text-sm font-bold flex place-items-center space-x-1">
+                <span>{t('chat.filterLabel')}</span>
+                <TooltipProvider delayDuration={100}>
+                    <Tooltip>
+                        <TooltipTrigger>
+                            <QuestionMarkCircledIcon />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p className="w-[170px] break-words">{t('chat.tooltipText')}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
             </div>
             <div className="flex flex-wrap gap-2">
-                {words.map((str, i) => <div key={str} className="badge badge-info h-[auto] gap-2 text-gray-600 bg-[rgba(53,126,249,.15)]">{str}<span className="cursor-pointer" onClick={() => onClose(i)}>x</span></div>)}
+                {words.map((str, i) => <div key={str} className="badge badge-info h-[auto] gap-2 text-gray-600 bg-[rgba(53,126,249,.15)] dark:text-slate-50">{str}<span className="cursor-pointer font-thin" onClick={() => onClose(i)}>x</span></div>)}
                 {
                     editCustomKey ? <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.15)]"><input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none bg-gray-50"
                         onKeyDown={(event) => {
@@ -114,7 +125,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
             <div className="mt-4">
                 <p className="mb-4 text-sm font-bold">{t('chat.sourceDocumentsLabel')}</p>
                 {files.map(_file =>
-                    _file.right ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
+                    _file.right ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] dark:bg-[#303134] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
                         <p className="text-sm break-all">{_file.fileName}</p>
                         <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
                             {
@@ -183,7 +194,7 @@ const ResouceModal = forwardRef((props, ref) => {
                     {
                         (file) => file.fileUrl ?
                             <MemoizedFileView data={file}></MemoizedFileView> :
-                            <div className="flex-1 bg-gray-100 rounded-md text-center">
+                            <div className="flex-1 bg-gray-100 dark:bg-[#3C4048] rounded-md text-center">
                                 <p className="text-gray-500 text-md mt-[40%]">{t('chat.fileStorageFailure')}</p>
                             </div>
                     }

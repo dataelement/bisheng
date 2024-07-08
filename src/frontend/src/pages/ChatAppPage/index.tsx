@@ -11,6 +11,7 @@ import { generateUUID } from "../../utils";
 import ChatPanne from "./components/ChatPanne";
 import { formatStrTime } from "@/util/utils";
 import { SkillIcon, AssistantIcon } from "@/components/bs-icons";
+import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 
 export default function SkillChatPage() {
 
@@ -61,7 +62,7 @@ export default function SkillChatPage() {
 
     // select chat
     const handleSelectChat = useDebounce(async (chat) => {
-        console.log('chat.id :>> ', chat);
+        // console.log('chat.id :>> ', chat);
         if (chat.chat_id === chatId) return
         setSelelctChat({ id: chat.flow_id, chatId: chat.chat_id, type: chat.flow_type })
         setChatId(chat.chat_id)
@@ -125,6 +126,22 @@ const useChatList = () => {
     const [id, setId] = useState('')
     const [chatList, setChatList] = useState([])
     const chatsRef = useRef(null)
+    const { chatId, messages } = useMessageStore()
+
+    useEffect(() => {
+        if (messages.length > 0) {
+            const latest:any = messages[messages.length - 1]
+            setChatList(chats => chats.map(chat => (chat.chat_id === chatId && chat.latest_message) 
+                ? {
+                     ...chat, latest_message: {
+                     ...chat.latest_message, 
+                     message: latest.message[latest.chatKey] || latest.message
+                     }
+                  }
+                : chat)
+            ) 
+        }
+    }, [messages, chatId])
 
     const pageRef = useRef(0)
     const onScrollLoad = async () => {
