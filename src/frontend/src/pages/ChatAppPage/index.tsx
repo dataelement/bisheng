@@ -9,7 +9,7 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useDebounce } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import ChatPanne from "./components/ChatPanne";
-import { isSameDay } from "@/util/utils";
+import { formatStrTime } from "@/util/utils";
 import { SkillIcon, AssistantIcon } from "@/components/bs-icons";
 
 export default function SkillChatPage() {
@@ -99,13 +99,13 @@ export default function SkillChatPage() {
                             onClick={() => handleSelectChat(chat)}>
                             <div className="flex place-items-center space-x-3">
                                 <div className=" inline-block bg-purple-500 rounded-md">
-                                    {chat.flow_type === 'assistant' ? <AssistantIcon/> : <SkillIcon/>}
+                                    {chat.flow_type === 'assistant' ? <AssistantIcon /> : <SkillIcon />}
                                 </div>
                                 <p className="truncate text-sm font-bold text-gray-950 dark:text-[#F2F2F2] leading-6">{chat.flow_name}</p>
                             </div>
-                            <span className="block text-xs text-gray-600 dark:text-[#8D8D8E] mt-3 break-words truncate">{chat.flow_description}</span>
+                            <span className="block text-xs text-gray-600 dark:text-[#8D8D8E] mt-3 break-words truncate">{chat.latest_message?.message || ''}</span>
                             <div className="mt-6">
-                                <span className="text-gray-400 text-xs absolute bottom-2 left-2">{isSameDay(chat.update_time, new Date())}</span>
+                                <span className="text-gray-400 text-xs absolute bottom-2 left-2">{formatStrTime(chat.update_time, 'MM 月 dd 日')}</span>
                                 <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
                             </div>
                         </div>

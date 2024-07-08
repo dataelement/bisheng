@@ -183,13 +183,15 @@ export default function FileView({ data }) {
         fileWidthRef.current = w
     }
 
-    return <div ref={paneRef} className="flex-1 bg-gray-100 rounded-md py-4 px-2 relative">
+    return <div ref={paneRef} className="flex-1 bg-gray-100 rounded-md py-4 px-2 relative" onContextMenu={(e) => e.preventDefault()}>
         {
             loading
                 ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                     <span className="loading loading-infinity loading-lg"></span>
                 </div>
+                // {/* 中英 */}
                 : <div id="warp-pdf" className="file-view absolute">
+                {/* : <div id="warp-pdf" className="file-view absolute pointer-events-none"> */}
                     <List
                         ref={listRef}
                         itemCount={pdf?.numPages || 100}

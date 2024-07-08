@@ -26,7 +26,7 @@ class MessageBase(SQLModelSerializable):
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
     intermediate_steps: Optional[str] = Field(sa_column=Column(Text), description='过程日志')
     files: Optional[str] = Field(sa_column=Column(String(length=4096)), description='上传的文件等')
-    remark: Optional[str] = Field(sa_column=Column(String(length=4096)), description='备注')
+    remark: Optional[str] = Field(sa_column=Column(String(length=4096)), description='备注。break_answer: 中断的回复不作为history传给模型')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
@@ -91,7 +91,7 @@ class ChatMessageDao(MessageBase):
         statement = select(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids))
         if category:
             statement = statement.where(ChatMessage.category == category)
-        statement = statement.order_by(ChatMessage.create_time.desc()).limit(1)
+        statement = statement.order_by(ChatMessage.create_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 
