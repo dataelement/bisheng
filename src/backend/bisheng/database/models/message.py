@@ -26,7 +26,8 @@ class MessageBase(SQLModelSerializable):
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
     intermediate_steps: Optional[str] = Field(sa_column=Column(Text), description='过程日志')
     files: Optional[str] = Field(sa_column=Column(String(length=4096)), description='上传的文件等')
-    remark: Optional[str] = Field(sa_column=Column(String(length=4096)), description='备注。break_answer: 中断的回复不作为history传给模型')
+    remark: Optional[str] = Field(sa_column=Column(String(length=4096)),
+                                  description='备注。break_answer: 中断的回复不作为history传给模型')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
@@ -88,11 +89,19 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def get_latest_message_by_chat_ids(cls, chat_ids: list[str], category: str = None):
-        statement = select(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids))
+        """
+        获取每个会话最近的一次消息内容
+        """
+        statement = select(ChatMessage.chat_id, func.max(ChatMessage.id)).where(ChatMessage.chat_id.in_(chat_ids))
         if category:
             statement = statement.where(ChatMessage.category == category)
-        statement = statement.order_by(ChatMessage.create_time.desc())
+        statement = statement.group_by(ChatMessage.chat_id)
         with session_getter() as session:
+            # 获取最新的id列表
+            res = session.exec(statement).all()
+            ids = [one[1] for one in res]
+            # 获取消息的具体内容
+            statement = select(ChatMessage).where(ChatMessage.id.in_(ids))
             return session.exec(statement).all()
 
     @classmethod
