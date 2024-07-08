@@ -91,7 +91,7 @@ class ChatMessageDao(MessageBase):
         statement = select(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids))
         if category:
             statement = statement.where(ChatMessage.category == category)
-        statement = statement.order_by(ChatMessage.create_time.desc()).limit(1)
+        statement = statement.order_by(ChatMessage.create_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 
