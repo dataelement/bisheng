@@ -90,7 +90,6 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children }: { chatId
         {/* left */}
         <div className="w-[300px] bg-gray-100 rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar">
             {/* label */}
-            {/* 中英 */}
             <div className="mb-4 text-sm font-bold">
                 {t('chat.filterLabel')}
                 <div className="tooltip fixed" data-tip={t('chat.tooltipText')}><span data-theme="light" className="badge cursor-pointer">?</span></div>
