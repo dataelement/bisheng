@@ -90,10 +90,9 @@ env:
 # 智能助手相关配置
 gpts:
   agent_executor:
-    # 默认agent的executor, 如果模型里有配置优先用模型的
-    type: 'get_openai_functions_agent_executor'
-    interrupt_before_action: False
-    recursion_limit: 50
+    # 默认agent的executor, 支持模型里单独配置对应的agent_executor_type; react/function call
+    type: 'function call'  # 支持function call的模型使用此agent配置
+    # type: 'ReAct'  # 不支持function call的模型使用此agent配置
   #  助手可选大模型列表，第一个为默认模型
   llms:
     - type: 'ChatOpenAI'
@@ -110,7 +109,7 @@ gpts:
       model_name: 'Qwen-1_8B-Chat'
       host_base_url: 'http://192.168.106.12:9001/v2.1/models/Qwen-1_8B-Chat/infer'
       temperature: 0.3
-      agent_executor_type: 'get_qwen_local_functions_agent_executor'
+      agent_executor_type: 'React'
   # 预置工具所需的配置
   tools:
     # 画图工具配置，引用公共的openai配置
