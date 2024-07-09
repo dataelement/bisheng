@@ -6,6 +6,7 @@ import uuid
 from collections import defaultdict
 from typing import Any, Dict, List
 from uuid import UUID
+from queue import Queue
 
 from loguru import logger
 from fastapi import WebSocket, WebSocketDisconnect, status, Request
@@ -81,6 +82,9 @@ class ChatManager:
         # 已连接的客户端
         self.active_clients: Dict[str, ChatClient] = {}
 
+        # 记录流式输出结果
+        self.stream_queue: Dict[str, Queue] = {}
+
     def update(self):
         if self.cache_manager.current_client_id in self.active_connections:
             self.last_cached_object_dict = self.cache_manager.get_last()
@@ -98,9 +102,11 @@ class ChatManager:
     async def connect(self, client_id: str, chat_id: str, websocket: WebSocket):
         await websocket.accept()
         self.active_connections[get_cache_key(client_id, chat_id)] = websocket
+        self.stream_queue[get_cache_key(client_id, chat_id)] = Queue()
 
     def reuse_connect(self, client_id: str, chat_id: str, websocket: WebSocket):
         self.active_connections[get_cache_key(client_id, chat_id)] = websocket
+        self.stream_queue[get_cache_key(client_id, chat_id)] = Queue()
 
     def disconnect(self, client_id: str, chat_id: str, key: str = None):
         if key:
@@ -305,7 +311,7 @@ class ChatManager:
 
                 # 判断当前是否是空循环
                 process_param = {
-                    'autogen_pool': autogen_pool,
+                    'autogen_pool': thread_pool,
                     'user_id': user_id,
                     'payload': payload,
                     'graph_data': gragh_data,
@@ -321,8 +327,7 @@ class ChatManager:
 
                 # 处理任务状态
                 complete_normal = await thread_pool.as_completed(key_list)
-                autoComplete = await autogen_pool.as_completed(key_list)
-                complete = complete_normal + autoComplete
+                complete = complete_normal
                 # if async_task and async_task.done():
                 #     logger.debug(f'async_task_complete result={async_task.result}')
                 if complete:
@@ -456,9 +461,9 @@ class ChatManager:
                 if isinstance(self.in_memory_cache.get(langchain_obj_key), AutoGenChain):
                     # autogen chain
                     logger.info(f'autogen_submit {langchain_obj_key}')
-                    autogen_pool.submit(key, Handler().dispatch_task, **params)
+                    autogen_pool.submit(key, Handler(stream_queue=self.stream_queue[key]).dispatch_task, **params)
                 else:
-                    thread_pool.submit(key, Handler().dispatch_task, **params)
+                    thread_pool.submit(key, Handler(stream_queue=self.stream_queue[key]).dispatch_task, **params)
             status_ = 'init'
             context.update({'status': status_})
             context.update({'payload': {}})  # clean message
@@ -504,6 +509,8 @@ class ChatManager:
             action = 'report'
             step_resp.intermediate_steps = '文件解析完成，开始生成报告'
             await self.send_json(client_id, chat_id, step_resp)
+        elif payload.get('action') == 'stop':
+            action = 'stop'
         elif 'action' in payload:
             action = 'autogen'
         elif 'clear_history' in payload and payload['clear_history']:

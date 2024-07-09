@@ -63,6 +63,11 @@ class AssistantAgent(AssistantUtils):
         self.tools: List[BaseTool] = []
         self.offline_flows = []
         self.agent: ConfigurableAssistant | None = None
+        self.agent_executor_dict = {
+            'ReAct': 'get_react_agent_executor',
+            'function call': 'get_openai_functions_agent_executor',
+        }
+        self.current_agent_executor = None
         self.llm: BaseLanguageModel | None = None
         self.llm_agent_executor = None
         self.knowledge_skill_path = str(Path(__file__).parent / 'knowledge_skill.json')
@@ -281,6 +286,9 @@ class AssistantAgent(AssistantUtils):
         # 引入agent执行参数
         agent_executor_params = self.get_agent_executor()
         agent_executor_type = self.llm_agent_executor or agent_executor_params.pop('type')
+        self.current_agent_executor = agent_executor_type
+        # 做转换
+        agent_executor_type = self.agent_executor_dict.get(agent_executor_type, agent_executor_type)
 
         prompt = self.assistant.prompt
         if self.assistant.model_name.startswith("command-r"):
@@ -334,12 +342,6 @@ class AssistantAgent(AssistantUtils):
         """
         运行智能体对话
         """
-        if chat_history:
-            chat_history.append(HumanMessage(content=query))
-            inputs = chat_history
-        else:
-            inputs = [HumanMessage(content=query)]
-
         # 假回调，将已下线的技能回调给前端
         for one in self.offline_flows:
             if callback is not None:
@@ -348,6 +350,14 @@ class AssistantAgent(AssistantUtils):
                     'name': one,
                 }, input_str='flow if offline', run_id=run_id)
                 await callback[0].on_tool_end(output='flow is offline', name=one, run_id=run_id)
+        if self.current_agent_executor == 'ReAct':
+            return await self.react_run(query, chat_history, callback)
+
+        if chat_history:
+            chat_history.append(HumanMessage(content=query))
+            inputs = chat_history
+        else:
+            inputs = [HumanMessage(content=query)]
         result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
         # 包含了history，将history排除, 默认取最后一个为最终结果
         res = [result[-1]]
@@ -364,3 +374,15 @@ class AssistantAgent(AssistantUtils):
             except Exception as e:
                 logger.error(f"record assistant history error: {str(e)}")
         return res
+
+    async def react_run(self, query: str, chat_history: List = None, callback: Callbacks = None):
+        """ react 模式的输入和执行 """
+        result = await self.agent.ainvoke({
+            'input': query,
+            'chat_history': chat_history
+        }, config=RunnableConfig(callbacks=callback))
+        print(result)
+        output = result['agent_outcome'].return_values['output']
+        if isinstance(output, dict):
+            output = output['text']
+        return [AIMessage(content=output)]

@@ -40,7 +40,7 @@ export default function MainLayout() {
     const handleLogout = () => {
         bsConfirm({
             title: `${t('prompt')}!`,
-            desc: `${t('menu.logoutDescription')}？`,
+            desc: `${t('menu.logoutContent')}？`,
             okTxt: t('system.confirm'),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(logoutApi()).then(_ => {

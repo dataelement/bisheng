@@ -1,17 +1,23 @@
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { Button } from "@/components/bs-ui/button"
-import { useTranslation } from "react-i18next"
-import { Label } from "@/components/bs-ui/label"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
-import UserRoleItem from "./UserRoleItem"
-import { PlusIcon } from "@radix-ui/react-icons"
-import { useState } from "react"
-import { generateUUID } from "@/components/bs-ui/utils"
+import { Label } from "@/components/bs-ui/label"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { handleEncrypt, PWD_RULE } from "@/pages/LoginPage/utils"
-import { copyText } from "@/utils"
+import { generateUUID } from "@/components/bs-ui/utils"
 import { createUserApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { handleEncrypt, PWD_RULE } from "@/pages/LoginPage/utils"
+import { copyText } from "@/utils"
+import { EyeNoneIcon, EyeOpenIcon, PlusIcon } from "@radix-ui/react-icons"
+import { useState } from "react"
+import { useTranslation } from "react-i18next"
+import UserRoleItem from "./UserRoleItem"
+
+enum inputType {
+    PASSWORD = 'password',
+    TEXT = 'text'
+}
+const EyeIconStyle = 'absolute right-7 cursor-pointer'
 
 export default function CreateUser({open, onClose, onSave}) {
     const { t } = useTranslation()
@@ -59,6 +65,11 @@ export default function CreateUser({open, onClose, onSave}) {
         }))
     }
 
+    const [type, setType] = useState(inputType.PASSWORD)
+    const handleShowPwd = () => {
+        type === inputType.PASSWORD ? setType(inputType.TEXT) : setType(inputType.PASSWORD)
+    }
+
     return <Dialog open={open} onOpenChange={b => onClose(b)}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
@@ -68,16 +79,20 @@ export default function CreateUser({open, onClose, onSave}) {
                 <div>
                     <Label htmlFor="user" className="bisheng-label">{t('log.username')}</Label>
                     <Input id="user" value={form.user_name} onChange={(e) => setForm({...form, user_name:e.target.value})}
-                    placeholder="后续使用此用户名进行登录，用户名不可修改"/>
+                    placeholder="后续使用此用户名进行登录，用户名不可修改" className="h-[50px]"/>
                 </div>
                 <div>
                     <Label htmlFor="password" className="bisheng-label">初始密码</Label>
-                    <Input id="password" value={form.password} placeholder="至少 8 个字符，必须包含大写字母、小写字母、数字和符号的组合"
-                    onChange={(e) => setForm({...form, password:e.target.value})}/>
+                    <div className="flex place-items-center">
+                        <Input type={type} id="password" value={form.password} placeholder="至少 8 个字符，必须包含大写字母、小写字母、数字和符号的组合"
+                        onChange={(e) => setForm({...form, password:e.target.value})} className="h-[50px]"/>
+                        {type === inputType.PASSWORD ? <EyeNoneIcon onClick={handleShowPwd} className={EyeIconStyle}/>
+                        : <EyeOpenIcon onClick={handleShowPwd} className={EyeIconStyle}/>}
+                    </div>
                 </div>
                 <div className="flex flex-col gap-2">
                     <Label className="bisheng-label">用户组/角色选择</Label>
-                    <div className="max-h-[520px] py-1 overflow-y-auto flex flex-col gap-2">
+                    <div className="max-h-[520px] overflow-y-auto flex flex-col gap-2">
                         {items.map((item, index) => <UserRoleItem key={item.key}
                             groupId={item.groupId + ''}
                             showDel={items.length > 1}

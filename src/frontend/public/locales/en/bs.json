@@ -37,6 +37,7 @@
     "document": "Documentation",
     "logout": "Logout",
     "logoutDescription": "Log out",
+    "logoutContent": "Are you sure to log out",
     "forBestExperience": "For the best experience, please access this website on a PC",
     "onlineDocumentation": "Online Documentation",
     "changePwd": "Password"

@@ -2,12 +2,15 @@ import { useContext, useEffect, useRef, useState } from "react";
 import AceEditor from "react-ace";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
-import { alertContext } from "../../../contexts/alertContext";
 import { getSysConfigApi, setSysConfigApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { locationContext } from "@/contexts/locationContext";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 
 export default function Config() {
-    const { setErrorData, setSuccessData } = useContext(alertContext);
+    const { toast, message } = useToast()
+    const { reloadConfig } = useContext(locationContext)
+
     const [config, setConfig] = useState('')
 
     const { t } = useTranslation()
@@ -21,15 +24,23 @@ export default function Config() {
 
     const handleSave = () => {
         if (validataRef.current.length) {
-            return setErrorData({
+            return toast({
+                variant: 'error',
                 title: `yaml${t('formatError')}`,
-                list: validataRef.current.map(el => el.text),
-            });
+                description: validataRef.current.map(el => el.text)
+            })
         }
 
         captureAndAlertRequestErrorHoc(setSysConfigApi({ data: codeRef.current }).then(res => {
-            setSuccessData({ title: t('success') })
+            message({
+                variant: 'success',
+                title: t('prompt'),
+                description: t('success')
+            })
             setConfig(codeRef.current)
+
+            // 更新配置信息
+            reloadConfig()
         }))
     }
 

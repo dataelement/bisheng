@@ -38,6 +38,7 @@
     "document": "文档",
     "logout": "退出",
     "logoutDescription": "退出登录",
+    "logoutContent": "确认退出登录吗",
     "forBestExperience": "为了您的良好体验，请在 PC 端访问该网站",
     "onlineDocumentation": "在线文档",
     "changePwd": "修改密码"

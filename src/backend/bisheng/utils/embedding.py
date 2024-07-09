@@ -13,6 +13,8 @@ def decide_embeddings(model: str) -> Embeddings:
     """embed method"""
     model_list = settings.get_knowledge().get('embeddings')
     params = model_list.get(model)
+    if not params:
+        raise Exception(f'not found embedding {model} in system settings')
     component = params.pop('component', '')
     if model == 'text-embedding-ada-002' or component == 'openai':
         if is_openai_v1() and params.get('openai_proxy'):

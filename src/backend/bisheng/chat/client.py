@@ -43,7 +43,7 @@ class ChatClient:
         self.gpts_conf = settings.get_from_db('gpts')
         # 异步任务列表
         self.task_ids = []
-        # 流式输出的队列，用来接受流式输出的内容
+        # 流式输出的队列，用来接受流式输出的内容，每次处理新的question时都清空
         self.stream_queue = Queue()
 
     async def send_message(self, message: str):
@@ -217,8 +217,12 @@ class ChatClient:
         # 有流式输出内容的话，记录流式输出内容到数据库
         if answer.strip():
             res = await self.add_message('bot', answer, 'answer', 'break_answer')
-            await self.send_response('answer', 'end', answer, message_id=res.id if res else None)
+            await self.send_response('answer', 'end', '', message_id=res.id if res else None)
         await self.send_response('processing', 'close', '')
+
+    async def clear_stream_queue(self):
+        while not self.stream_queue.empty():
+            self.stream_queue.get()
 
     async def handle_gpts_message(self, message: Dict[any, any]):
         if not message:
@@ -228,6 +232,8 @@ class ChatClient:
             await self.stop_handle_message(message)
             return
 
+        # 清空流式队列，防止把上一次的回答，污染本次回答
+        await self.clear_stream_queue()
         inputs = message.get('inputs', {})
         input_msg = inputs.get('input')
         if not input_msg:
