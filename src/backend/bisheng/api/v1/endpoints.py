@@ -83,6 +83,8 @@ def get_config(admin_user: UserPayload = Depends(get_admin_user)):
 
 @router.post('/config/save')
 def save_config(data: dict, admin_user: UserPayload = Depends(get_admin_user)):
+    if not data.get('data', '').strip():
+        raise HTTPException(status_code=500, detail='配置不能为空')
     try:
         # 校验是否符合yaml格式
         _ = yaml.safe_load(data.get('data'))
