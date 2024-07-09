@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
     # set_debug(True)
     # chat_history = []
-    # query = "600519、300750股价多少？"
+    # query = "分析当日市场行情"
     chat_history = ['你好', '你好，有什么可以帮助你吗？', '福蓉科技股价多少?', '福蓉科技（股票代码：300049）的当前股价为48.67元。']
     query = '今天是什么时候？去年这个时候的股价是多少？'
     bisheng_assistant = BishengAssistant("config/base_scene.yaml")
