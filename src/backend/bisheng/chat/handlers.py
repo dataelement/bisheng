@@ -44,6 +44,10 @@ class Handler:
                 action = 'default'
             if action not in self.handler_dict:
                 raise Exception(f'unknown action {action}')
+            if action != 'stop':
+                # 清空流式输出队列，防止上次的回答污染本次回答
+                while not self.stream_queue.empty():
+                    self.stream_queue.get()
 
             await self.handler_dict[action](session, client_id, chat_id, payload, user_id)
             logger.info(f'dispatch_task done timecost={time.time() - start_time}')
