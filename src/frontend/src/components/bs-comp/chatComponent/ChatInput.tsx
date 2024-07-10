@@ -200,6 +200,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
         if (data.type === 'start') {
             createWsMsg(data)
         } else if (data.type === 'stream') {
+            //@ts-ignore
             updateCurrentMessage({
                 chat_id: data.chat_id,
                 message: data.message,
@@ -256,7 +257,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
             {/* form */}
             {
                 formShow && <div className="relative">
-                    <div className="absolute left-0 border bottom-2 bg-[#fff] px-4 py-2 rounded-md w-[50%] min-w-80 z-50">
+                    <div className="absolute left-0 border bottom-2 bg-background-login px-4 py-2 rounded-md w-[50%] min-w-80 z-50">
                         {inputForm}
                     </div>
                 </div>

@@ -1,6 +1,6 @@
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input } from "@/components/bs-ui/input";
+import { PasswordInput } from "@/components/bs-ui/input";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import { resetUserPasswordApi } from "../controllers/API/user"; // 假设这是重置密码的API函数
@@ -66,11 +66,10 @@ const UserPwdModal = forwardRef<UserPwdModalRef, UserPwdModalProps>((props, ref)
                 <div className="flex flex-col gap-8 py-6">
                     <div>
                         <label htmlFor="password" className="bisheng-label">{t('resetPassword.newPassword')}<span className="bisheng-tip">*</span></label>
-                        <Input
+                        <PasswordInput
                             ref={passwordRef}
                             id="password"
                             name="password"
-                            type="password"
                             placeholder={t('resetPassword.newPassword')}
                             className="mt-2"
                             onChange={(e) => passwordRef.current.value = e.target.value}

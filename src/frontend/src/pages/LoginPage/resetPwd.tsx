@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from "../../components/bs-ui/button";
-import { Input } from "../../components/bs-ui/input";
+import { PasswordInput } from "../../components/bs-ui/input";
 import { loggedChangePasswordApi, changePasswordApi } from "../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { PWD_RULE, handleEncrypt } from './utils';
@@ -89,30 +89,27 @@ export const ResetPwdPage = () => {
                     </div>
                     <div className="grid gap-[12px] mt-[68px]">
                         <div className="grid">
-                            <Input
+                            <PasswordInput
                                 id="currentPassword"
-                                className='h-[48px] dark:bg-login-input'
+                                inputClassName='h-[48px] dark:bg-login-input'
                                 ref={currentPwdRef}
                                 placeholder={t('resetPassword.currentPassword')}
-                                type="password"
                             />
                         </div>
                         <div className="grid">
-                            <Input
+                            <PasswordInput
                                 id="newPassword"
-                                className='h-[48px] dark:bg-login-input'
+                                inputClassName='h-[48px] dark:bg-login-input'
                                 ref={newPwdRef}
                                 placeholder={t('resetPassword.newPassword')}
-                                type="password"
                             />
                         </div>
                         <div className="grid">
-                            <Input
+                            <PasswordInput
                                 id="confirmNewPassword"
-                                className='h-[48px] dark:bg-login-input'
+                                inputClassName='h-[48px] dark:bg-login-input'
                                 ref={confirmPwdRef}
                                 placeholder={t('resetPassword.confirmNewPassword')}
-                                type="password"
                             />
                         </div>
                         <Button

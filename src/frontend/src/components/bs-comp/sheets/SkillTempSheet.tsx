@@ -37,7 +37,7 @@ export default function SkillTempSheet({ children, onSelect }) {
                     <SheetDescription>{t('skills.skillTemplateChoose')}</SheetDescription>
                     <SearchInput value={keyword} placeholder={t('build.search')} className="my-6" onChange={(e) => setKeyword(e.target.value)} />
                 </div>
-                <div className="flex-1 min-w-[696px] bg-[#fff] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
+                <div className="flex-1 min-w-[696px] bg-[#fff] dark:bg-[#030712] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
                     <CardComponent
                         id={0}
                         type="sheet"

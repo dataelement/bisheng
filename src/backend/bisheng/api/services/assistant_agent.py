@@ -381,8 +381,8 @@ class AssistantAgent(AssistantUtils):
             'input': query,
             'chat_history': chat_history
         }, config=RunnableConfig(callbacks=callback))
-        print(result)
+        logger.debug(f"react_run result: {result}")
         output = result['agent_outcome'].return_values['output']
         if isinstance(output, dict):
-            output = output['text']
+            output = list(output.values())[0]
         return [AIMessage(content=output)]
