@@ -1,3 +1,6 @@
+import FlowSetting from "@/components/Pro/security/FlowSetting";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { locationContext } from "@/contexts/locationContext";
 import { ArrowLeft, ChevronUp } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -5,21 +8,14 @@ import { useNavigate, useParams } from "react-router-dom";
 import L2ParameterComponent from "../../CustomNodes/GenericNode/components/parameterComponent/l2Index";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { Button } from "../../components/bs-ui/button";
-import { Input } from "../../components/bs-ui/input";
+import { Input, Textarea } from "../../components/bs-ui/input";
 import { Label } from "../../components/bs-ui/label";
-import { Textarea } from "../../components/bs-ui/input";
-import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { userContext } from "../../contexts/userContext";
 import { createCustomFlowApi, getFlowApi } from "../../controllers/API/flow";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useHasForm } from "../../util/hook";
 import FormSet from "./components/FormSet";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { SettingIcon } from "@/components/bs-icons/setting";
-import { Switch } from "@/components/bs-ui/switch";
-import FlowSetting from "@/components/Pro/security/FlowSetting";
-import { locationContext } from "@/contexts/locationContext";
 
 export default function l2Edit() {
     const { t } = useTranslation()
