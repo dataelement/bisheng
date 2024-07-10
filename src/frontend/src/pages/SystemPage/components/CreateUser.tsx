@@ -1,6 +1,6 @@
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
+import { Input, PasswordInput } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { generateUUID } from "@/components/bs-ui/utils"
@@ -8,16 +8,10 @@ import { createUserApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { handleEncrypt, PWD_RULE } from "@/pages/LoginPage/utils"
 import { copyText } from "@/utils"
-import { EyeNoneIcon, EyeOpenIcon, PlusIcon } from "@radix-ui/react-icons"
+import { PlusIcon } from "@radix-ui/react-icons"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import UserRoleItem from "./UserRoleItem"
-
-enum inputType {
-    PASSWORD = 'password',
-    TEXT = 'text'
-}
-const EyeIconStyle = 'absolute right-7 cursor-pointer'
 
 export default function CreateUser({open, onClose, onSave}) {
     const { t } = useTranslation()
@@ -65,11 +59,6 @@ export default function CreateUser({open, onClose, onSave}) {
         }))
     }
 
-    const [type, setType] = useState(inputType.PASSWORD)
-    const handleShowPwd = () => {
-        type === inputType.PASSWORD ? setType(inputType.TEXT) : setType(inputType.PASSWORD)
-    }
-
     return <Dialog open={open} onOpenChange={b => onClose(b)}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
@@ -79,16 +68,12 @@ export default function CreateUser({open, onClose, onSave}) {
                 <div>
                     <Label htmlFor="user" className="bisheng-label">{t('log.username')}</Label>
                     <Input id="user" value={form.user_name} onChange={(e) => setForm({...form, user_name:e.target.value})}
-                    placeholder="后续使用此用户名进行登录，用户名不可修改" className="h-[50px]"/>
+                    placeholder="后续使用此用户名进行登录，用户名不可修改" className="h-[48px]"/>
                 </div>
                 <div>
                     <Label htmlFor="password" className="bisheng-label">初始密码</Label>
-                    <div className="flex place-items-center">
-                        <Input type={type} id="password" value={form.password} placeholder="至少 8 个字符，必须包含大写字母、小写字母、数字和符号的组合"
-                        onChange={(e) => setForm({...form, password:e.target.value})} className="h-[50px]"/>
-                        {type === inputType.PASSWORD ? <EyeNoneIcon onClick={handleShowPwd} className={EyeIconStyle}/>
-                        : <EyeOpenIcon onClick={handleShowPwd} className={EyeIconStyle}/>}
-                    </div>
+                    <PasswordInput id="password" value={form.password} placeholder="至少 8 个字符，必须包含大写字母、小写字母、数字和符号的组合"
+                    onChange={(e) => setForm({...form, password:e.target.value})} inputClassName="h-[48px]"/>
                 </div>
                 <div className="flex flex-col gap-2">
                     <Label className="bisheng-label">用户组/角色选择</Label>

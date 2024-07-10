@@ -3,6 +3,9 @@ import { cname } from "../utils"
 import { SearchIcon } from "../../bs-icons/search"
 import { generateUUID } from "../utils"
 import { MinusCircledIcon } from "@radix-ui/react-icons"
+import { EyeOpenIcon, EyeNoneIcon } from "@radix-ui/react-icons"
+import { useState } from "react"
+
 export interface InputProps
     extends React.InputHTMLAttributes<HTMLInputElement> { }
 
@@ -35,6 +38,25 @@ const SearchInput = React.forwardRef<HTMLInputElement, InputProps & { inputClass
 
 SearchInput.displayName = "SearchInput"
 
+
+const PasswordInput = React.forwardRef<HTMLInputElement, InputProps & { inputClassName?: string, iconClassName?: string }>(
+    ({ className, inputClassName, iconClassName, ...props }, ref) => {
+        const [type, setType] = useState('password')
+        const handleShowPwd = () => {
+            type === 'password' ? setType('text') : setType('password')
+        }
+        return <div className={cname("relative flex place-items-center", className)}>
+            <Input type={type} ref={ref} className={cname("pr-8 bg-search-input", inputClassName)} {...props}></Input>
+            {
+                type === 'password'
+                ? <EyeNoneIcon onClick={handleShowPwd} className={cname("absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)}/>
+                : <EyeOpenIcon onClick={handleShowPwd} className={cname("absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)}/>
+            }
+        </div>
+    }
+)
+
+PasswordInput.displayName = 'PasswordInput'
 
 
 /**
@@ -144,4 +166,4 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
     }
 )
 
-export { Input, SearchInput, Textarea, InputList }
+export { Input, SearchInput, PasswordInput, Textarea, InputList }
