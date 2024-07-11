@@ -9,7 +9,7 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useDebounce } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import ChatPanne from "./components/ChatPanne";
-import { formatStrTime } from "@/util/utils";
+import { formatStrTime, formatDate } from "@/util/utils";
 import { SkillIcon, AssistantIcon } from "@/components/bs-icons";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 
@@ -106,7 +106,7 @@ export default function SkillChatPage() {
                             </div>
                             <span className="block text-xs text-gray-600 dark:text-[#8D8D8E] mt-3 break-words truncate">{chat.latest_message?.message || ''}</span>
                             <div className="mt-6">
-                                <span className="text-gray-400 text-xs absolute bottom-2 left-2">{formatStrTime(chat.update_time, 'MM 月 dd 日')}</span>
+                                <span className="text-gray-400 text-xs absolute bottom-2 left-4">{formatStrTime(chat.update_time, 'MM 月 dd 日')}</span>
                                 <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
                             </div>
                         </div>
@@ -133,9 +133,11 @@ const useChatList = () => {
             const latest:any = messages[messages.length - 1]
             setChatList(chats => chats.map(chat => (chat.chat_id === chatId && chat.latest_message) 
                 ? {
-                     ...chat, latest_message: {
-                     ...chat.latest_message, 
-                     message: latest.message[latest.chatKey] || latest.message
+                     ...chat, 
+                     update_time: latest.update_time || formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
+                     latest_message: {
+                        ...chat.latest_message, 
+                        message: latest.message[latest.chatKey] || latest.message
                      }
                   }
                 : chat)

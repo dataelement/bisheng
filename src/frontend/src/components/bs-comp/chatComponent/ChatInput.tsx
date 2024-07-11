@@ -1,15 +1,16 @@
+import { ClearIcon } from "@/components/bs-icons/clear";
 import { FormIcon } from "@/components/bs-icons/form";
 import { SendIcon } from "@/components/bs-icons/send";
+import { Button } from "@/components/bs-ui/button";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
+import { PauseIcon } from "@radix-ui/react-icons";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMessageStore } from "./messageStore";
 import GuideQuestions from "./GuideQuestions";
-import { ClearIcon } from "@/components/bs-icons/clear";
-import { Button } from "@/components/bs-ui/button";
-import { PauseIcon, StopIcon } from "@radix-ui/react-icons";
+import { useMessageStore } from "./messageStore";
+import { formatDate } from "@/util/utils";
 
 export default function ChatInput({ clear, form, stop, questions, inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
@@ -198,6 +199,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
     const handleWsMessage = (data) => {
         if (Array.isArray(data) && data.length) return
         if (data.type === 'start') {
+            setStoped(false)
             createWsMsg(data)
         } else if (data.type === 'stream') {
             //@ts-ignore
@@ -213,13 +215,12 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
                 thought: data.intermediate_steps || '',
                 messageId: data.message_id,
                 noAccess: false,
-                liked: 0
+                liked: 0,
+                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
             }, data.type === 'end_cover')
         } else if (data.type === "close") {
             setStoped(true)
             setInputLock({ locked: false, reason: '' })
-        } else if (data.type === 'begin') {
-            setStoped(false)
         }
     }
 
