@@ -97,6 +97,7 @@ class BishengRetrievalQA(Chain):
         max_content: int = 15000,
         sort_by_source_and_index: bool = False,
         callbacks: Callbacks = None,
+        return_source_documents: bool = False,
         **kwargs: Any,
     ) -> BishengRetrievalQA:
         bisheng_rag_tool = BishengRAGTool(
@@ -111,6 +112,7 @@ class BishengRetrievalQA(Chain):
         return cls(
             bisheng_rag_tool=bisheng_rag_tool,
             callbacks=callbacks,
+            return_source_documents=return_source_documents,
             **kwargs,
         )
 
