@@ -1,12 +1,11 @@
 import hashlib
 import json
-import time
 import xml.dom.minidom
 from pathlib import Path
 from typing import Dict, List
 
 import aiohttp
-from fastapi import Request
+from fastapi import Request, WebSocket
 from fastapi_jwt_auth import AuthJWT
 from platformdirs import user_cache_dir
 from sqlalchemy import delete
@@ -421,7 +420,7 @@ async def get_url_content(url: str) -> str:
             return res.decode('utf-8')
 
 
-def get_request_ip(request: Request) -> str:
+def get_request_ip(request: Request | WebSocket) -> str:
     """ 获取客户端真实IP """
     x_forwarded_for = request.headers.get('X-Forwarded-For')
     if x_forwarded_for:
