@@ -1,5 +1,6 @@
 import hashlib
 import json
+import time
 import xml.dom.minidom
 from pathlib import Path
 from typing import Dict, List

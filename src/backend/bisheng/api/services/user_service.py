@@ -16,6 +16,7 @@ from bisheng.cache.redis import redis_client
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeRead
+from bisheng.database.models.role import AdminRole
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -35,7 +36,13 @@ class UserPayload:
         self.user_name = kwargs.get('user_name')
 
     def is_admin(self):
-        return self.user_role == 'admin'
+        if self.user_role == 'admin':
+            return True
+        if isinstance(self.user_role, list):
+            for one in self.user_role:
+                if one == AdminRole:
+                    return True
+        return False
 
     @staticmethod
     def wrapper_access_check(func):
