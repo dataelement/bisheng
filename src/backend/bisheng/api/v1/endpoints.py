@@ -5,7 +5,8 @@ from uuid import UUID
 
 import yaml
 from bisheng import settings
-from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
+from bisheng.api.services.user_service import UserPayload, get_admin_user
+from bisheng.api.utils import get_request_ip
 from bisheng.api.v1 import knowledge
 from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, UploadFileResponse,
                                     resp_200)
@@ -13,7 +14,7 @@ from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.chat.utils import judge_source, process_source_document
 from bisheng.database.base import session_getter
-from bisheng.database.models.config import Config
+from bisheng.database.models.config import Config, ConfigDao
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage
 from bisheng.interface.types import get_all_types_dict
@@ -21,8 +22,7 @@ from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile
-from fastapi_jwt_auth import AuthJWT
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, Request
 from sqlmodel import select
 
 try:
@@ -98,6 +98,34 @@ def save_config(data: dict, admin_user: UserPayload = Depends(get_admin_user)):
         raise HTTPException(status_code=500, detail=f'格式不正确, {str(e)}')
 
     return resp_200('保存成功')
+
+
+@router.get('/web/config')
+async def get_web_config():
+    """ 获取一些前端所需要的配置项，内容由前端决定 """
+    web_conf = ConfigDao.get_config('web_config')
+    if not web_conf:
+        return resp_200(data='')
+    return resp_200(data={
+        "value": web_conf.value
+    })
+
+
+@router.post('/web/config')
+async def update_web_config(request: Request,
+                            admin_user: UserPayload = Depends(get_admin_user),
+                            value: str = Body(embed=True)):
+    """ 更新一些前端所需要的配置项，内容由前端决定 """
+    logger.info(f'update_web_config user_name={admin_user.user_name}, ip={get_request_ip(request)}')
+    web_conf = ConfigDao.get_config('web_config')
+    if not web_conf:
+        web_conf = Config(key='web_config', value=value)
+    else:
+        web_conf.value = value
+    ConfigDao.insert_config(web_conf)
+    return resp_200(data={
+        "value": web_conf.value
+    })
 
 
 @router.post('/process/{flow_id}')

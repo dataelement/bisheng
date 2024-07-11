@@ -3,7 +3,6 @@ import re
 from typing import Dict, List, Optional, Union
 
 import yaml
-from bisheng.database.models.config import Config
 from cryptography.fernet import Fernet
 from langchain.pydantic_v1 import BaseSettings, root_validator, validator
 from loguru import logger
@@ -167,6 +166,8 @@ class Settings(BaseSettings):
     def get_all_config(self):
         from bisheng.database.base import session_getter
         from bisheng.cache.redis import redis_client
+        from bisheng.database.models.config import Config
+
         redis_key = 'config:initdb_config'
         cache = redis_client.get(redis_key)
         if cache:
