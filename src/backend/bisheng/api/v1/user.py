@@ -60,7 +60,9 @@ async def regist(*, user: UserCreate):
     # check if user already exist
     user_exists = UserDao.get_user_by_username(db_user.user_name)
     if user_exists:
-        raise HTTPException(status_code=500, detail='账号已存在')
+        raise HTTPException(status_code=500, detail='用户名已存在')
+    if len(db_user.user_name)>30:
+        raise HTTPException(status_code=500, detail='用户名最长 30 个字符')
     try:
         db_user.password = UserService.decrypt_md5_password(user.password)
         # 判断下admin用户是否存在

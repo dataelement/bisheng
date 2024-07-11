@@ -3,7 +3,7 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Any
 from uuid import UUID
 
 import httpx
@@ -338,51 +338,79 @@ class AssistantAgent(AssistantUtils):
         tool_selector = ToolSelector(llm=self.llm, tools=tool_list)
         return tool_selector.select(self.assistant.name, prompt)
 
-    async def run(self, query: str, chat_history: List = None, callback: Callbacks = None):
-        """
-        运行智能体对话
-        """
+    async def fake_callback(self, callback: Callbacks):
+        if not callback:
+            return
         # 假回调，将已下线的技能回调给前端
         for one in self.offline_flows:
-            if callback is not None:
-                run_id = uuid.uuid4()
-                await callback[0].on_tool_start({
-                    'name': one,
-                }, input_str='flow if offline', run_id=run_id)
-                await callback[0].on_tool_end(output='flow is offline', name=one, run_id=run_id)
-        if self.current_agent_executor == 'ReAct':
-            return await self.react_run(query, chat_history, callback)
+            run_id = uuid.uuid4()
+            await callback[0].on_tool_start({
+                'name': one,
+            }, input_str='flow if offline', run_id=run_id)
+            await callback[0].on_tool_end(output='flow is offline', name=one, run_id=run_id)
+
+    async def record_chat_history(self, message: List[Any]):
+        # 记录助手的聊天历史
+        if not os.getenv("BISHENG_RECORD_HISTORY"):
+            return
+        try:
+            os.makedirs("/app/data/history", exist_ok=True)
+            with open(f"/app/data/history/{self.assistant.id}_{time.time()}.json", "w", encoding="utf-8") as f:
+                json.dump({
+                    "system": self.assistant.prompt,
+                    "message": message,
+                    "tools": [format_tool_to_openai_tool(t) for t in self.tools]
+                }, f, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"record assistant history error: {str(e)}")
+
+    async def arun(self, query: str, chat_history: List = None, callback: Callbacks = None):
+        await self.fake_callback(callback)
 
         if chat_history:
             chat_history.append(HumanMessage(content=query))
             inputs = chat_history
         else:
             inputs = [HumanMessage(content=query)]
-        result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
+
+        async for one in self.agent.astream(inputs, config=RunnableConfig(callbacks=callback)):
+            yield one
+
+    async def run(self, query: str, chat_history: List = None, callback: Callbacks = None):
+        """
+        运行智能体对话
+        """
+        await self.fake_callback(callback)
+
+        if chat_history:
+            chat_history.append(HumanMessage(content=query))
+            inputs = chat_history
+        else:
+            inputs = [HumanMessage(content=query)]
+
+        if self.current_agent_executor == 'ReAct':
+            result = await self.react_run(inputs, callback)
+        else:
+            result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
         # 包含了history，将history排除, 默认取最后一个为最终结果
         res = [result[-1]]
-        # 记录助手的聊天历史
-        if os.getenv("BISHENG_RECORD_HISTORY"):
-            try:
-                os.makedirs("/app/data/history", exist_ok=True)
-                with open(f"/app/data/history/{self.assistant.id}_{time.time()}.json", "w", encoding="utf-8") as f:
-                    json.dump({
-                        "system": self.assistant.prompt,
-                        "message": [one.to_json() for one in result],
-                        "tools": [format_tool_to_openai_tool(t) for t in self.tools]
-                    }, f, ensure_ascii=False)
-            except Exception as e:
-                logger.error(f"record assistant history error: {str(e)}")
+
+        # 记录聊天历史
+        await self.record_chat_history([one.to_json() for one in result])
+
         return res
 
-    async def react_run(self, query: str, chat_history: List = None, callback: Callbacks = None):
+    async def react_run(self, inputs: List, callback: Callbacks = None):
         """ react 模式的输入和执行 """
         result = await self.agent.ainvoke({
-            'input': query,
-            'chat_history': chat_history
+            'input': inputs[-1].content,
+            'chat_history': inputs[:-1],
         }, config=RunnableConfig(callbacks=callback))
         logger.debug(f"react_run result: {result}")
         output = result['agent_outcome'].return_values['output']
         if isinstance(output, dict):
             output = list(output.values())[0]
-        return [AIMessage(content=output)]
+        for one in result['intermediate_steps']:
+            inputs.append(one[0])
+        inputs.append(AIMessage(content=output))
+        return inputs

@@ -11,8 +11,10 @@ import { useNavigate } from 'react-router-dom';
 import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import LoginBridge from './loginBridge';
-import { PWD_RULE, handleEncrypt } from './utils';
+import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from './utils';
 import { locationContext } from '@/contexts/locationContext';
+import { ldapLoginApi } from '@/controllers/API/pro';
+
 export const LoginPage = () => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t, i18n } = useTranslation();
@@ -41,6 +43,7 @@ export const LoginPage = () => {
         getCaptchaApi().then(setCaptchaData)
     };
 
+    const ldapRef = useRef(false)
     const handleLogin = async () => {
         const error = []
         const [mail, pwd] = [mailRef.current.value, pwdRef.current.value]
@@ -58,6 +61,12 @@ export const LoginPage = () => {
         // });
 
         const encryptPwd = await handleEncrypt(pwd)
+        if(ldapRef.current) {
+            const encryptLdapPwd = await handleLdapEncrypt(pwd)
+            captureAndAlertRequestErrorHoc(ldapLoginApi(mail, encryptLdapPwd).then(res => console.log(res)))
+            fetchCaptchaData()
+            return
+        }
         captureAndAlertRequestErrorHoc(loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then((res: any) => {
             // setUser(res.data)
             localStorage.setItem('ws_token', res.access_token)
@@ -196,7 +205,7 @@ export const LoginPage = () => {
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
-                        {appConfig.hasSSO && <LoginBridge />}
+                        {appConfig.hasSSO && <LoginBridge onHasLdap={(bool) => ldapRef.current = bool} />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>

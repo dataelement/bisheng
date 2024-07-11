@@ -6,13 +6,16 @@ import { useEffect, useRef } from "react";
 import { ReactComponent as Wxpro } from "./icons/wxpro.svg";
 import { useTranslation } from "react-i18next";
 
-export default function LoginBridge() {
+export default function LoginBridge({onHasLdap}) {
 
     const { t } = useTranslation()
 
     const urlRef = useRef<string>('')
     useEffect(() => {
-        getSSOurlApi().then(url => urlRef.current = url)
+        getSSOurlApi().then((urls:any) => {
+            urlRef.current = urls.wx
+            urls.ldap && onHasLdap(true)
+        })
     }, [])
 
     const clickQwLogin = () => {
