@@ -981,16 +981,12 @@
   }
 
   .navlink.active{
-    @apply bg-[#fff] text-[#0055e3] shadow-sm
-  }
-
-  .navlink.active{
-    @apply dark:bg-[#34353A] dark:text-[#FFFFFF] dark:shadow-sm
+    @apply bg-[#fff] text-primary shadow-sm dark:bg-[#34353A] dark:text-[#FFFFFF] dark:shadow-sm
   }
 
   /* new ui */
   .bisheng-label {
-    @apply text-sm text-[#67728F] font-medium leading-none
+    @apply text-sm text-muted-foreground font-medium leading-none
   }
 
   .bisheng-tip {

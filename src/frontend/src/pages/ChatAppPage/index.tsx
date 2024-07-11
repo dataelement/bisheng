@@ -102,7 +102,7 @@ export default function SkillChatPage() {
                                 <div className=" inline-block bg-purple-500 rounded-md">
                                     {chat.flow_type === 'assistant' ? <AssistantIcon /> : <SkillIcon />}
                                 </div>
-                                <p className="truncate text-sm font-bold text-gray-950 dark:text-[#F2F2F2] leading-6">{chat.flow_name}</p>
+                                <p className="truncate text-sm font-bold leading-6">{chat.flow_name}</p>
                             </div>
                             <span className="block text-xs text-gray-600 dark:text-[#8D8D8E] mt-3 break-words truncate">{chat.latest_message?.message || ''}</span>
                             <div className="mt-6">

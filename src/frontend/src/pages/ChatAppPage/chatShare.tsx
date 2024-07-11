@@ -24,7 +24,7 @@ export default function chatShare() {
 
     const [data] = useState<any>({ id: flowId, chatId: generateUUID(32), type: 'flow' })
 
-    if (!flowId) return <div>请选择技能</div>
+    if (!flowId) return <div>请选择会话</div>
 
     return <ChatPanne customWsHost={wsUrl} version="v2" data={data} />
 };

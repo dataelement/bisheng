@@ -5,6 +5,7 @@ import BuildLayout from "./layout/BuildLayout";
 import MainLayout from "./layout/MainLayout";
 import SkillChatPage from "./pages/ChatAppPage";
 import ChatShare from "./pages/ChatAppPage/chatShare";
+import ChatAssitantShare from "./pages/ChatAppPage/chatAssitantShare";
 import ChatPro from "./pages/ChatAppPage/chatWebview";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import FileLibPage from "./pages/FileLibPage";
@@ -98,6 +99,7 @@ const privateRouter = [
   // 独立会话页
   { path: "/chat", element: <SkillChatPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
+  { path: "/chat/assitant/:id/", element: <ChatAssitantShare /> },
   { path: "/chatpro/:id", element: <ChatPro /> },
   { path: "/report/:id/", element: <Report /> },
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
@@ -139,6 +141,7 @@ export const publicRouter = createBrowserRouter([
   { path: "/", element: <LoginPage /> },
   { path: "/reset", element: <ResetPwdPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
+  { path: "/chat/assitant/:id/", element: <ChatAssitantShare /> },
   { path: "*", element: <LoginPage /> }
 ],
   baseConfig)

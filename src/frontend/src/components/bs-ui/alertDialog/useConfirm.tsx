@@ -55,7 +55,7 @@ function ConfirmWrapper() {
                     <div><TipIcon /></div>
                     {showClose && <Cross2Icon onClick={close} className="absolute right-0 top-[-0.5rem] cursor-pointer text-gray-400 hover:text-gray-600"></Cross2Icon>}
                     <AlertDialogTitle>{title}</AlertDialogTitle>
-                    <AlertDialogDescription>
+                    <AlertDialogDescription className="text-popover-foreground">
                         {desc}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
