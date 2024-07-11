@@ -60,24 +60,22 @@ export const LoginPage = () => {
         //     list: error,
         // });
 
-        const encryptPwd = await handleEncrypt(pwd)
-        if(ldapRef.current) {
-            const encryptLdapPwd = await handleLdapEncrypt(pwd)
-            captureAndAlertRequestErrorHoc(ldapLoginApi(mail, encryptLdapPwd).then(res => console.log(res)))
-            fetchCaptchaData()
-            return
-        }
-        captureAndAlertRequestErrorHoc(loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then((res: any) => {
-            // setUser(res.data)
-            localStorage.setItem('ws_token', res.access_token)
-            localStorage.setItem('isLogin', '1')
-            location.href = __APP_ENV__.BASE_URL + '/'
-        }), (error) => {
+        const encryptPwd = ldapRef.current ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
+        captureAndAlertRequestErrorHoc(
+            (ldapRef.current 
+                ? ldapLoginApi(mail, encryptPwd) 
+                : loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
+            ).then((res:any) => {
+                localStorage.setItem('ws_token', res.access_token)
+                localStorage.setItem('isLogin', '1')
+                location.href = __APP_ENV__.BASE_URL + '/'
+            })
+        ), (error) => {
             if (error.indexOf('过期') !== -1) { // 有时间改为 code 判断
                 localStorage.setItem('account', mail)
                 navigate('/reset', { state: { noback: true } })
             }
-        })
+        }
 
         fetchCaptchaData()
     }

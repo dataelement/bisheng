@@ -2,6 +2,7 @@ from typing import Dict, List
 
 import yaml
 from bisheng.database.models.config import Config
+from bisheng.database.base import session_getter
 from bisheng.settings import parse_key, read_from_conf
 from bisheng.utils.logger import logger
 from sqlmodel import select
@@ -9,7 +10,6 @@ from sqlmodel import select
 
 def init_config():
     # 初始化config
-    from bisheng.database.base import session_getter
 
     # 首先通过yaml 获取配置文件所有的key
     config_content = read_from_conf('initdb_config.yaml')
