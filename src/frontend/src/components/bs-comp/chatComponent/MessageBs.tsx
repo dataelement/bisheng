@@ -80,10 +80,12 @@ export default function MessageBs({ data, onUnlike = () => { }, onSource }: { da
 
     return <div className="flex w-full">
         <div className="w-fit group max-w-[90%]">
-            <div className={`text-right group-hover:opacity-100 opacity-0`}>
-                <span className="text-slate-400 text-sm">{formatStrTime(data.update_time, 'MM 月 dd 日 HH:mm')}</span>
+            <div className="flex justify-between items-center mb-1">
+                {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
+                <div className={`text-right group-hover:opacity-100 opacity-0`}>
+                    <span className="text-slate-400 text-sm">{formatStrTime(data.update_time, 'MM 月 dd 日 HH:mm')}</span>
+                </div>
             </div>
-            {data.sender && <p className="text-gray-600 text-xs mb-2">{data.sender}</p>}
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
                     <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} ><AvatarIcon /></div>

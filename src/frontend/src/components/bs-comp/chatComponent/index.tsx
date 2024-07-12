@@ -16,6 +16,6 @@ export default function ChatComponent({
 
     return <div className="relative h-full">
         <MessagePanne useName={useName} guideWord={guideWord} loadMore={loadMore}></MessagePanne>
-        <ChatInput stop={stop} clear={clear} questions={questions} form={form} wsUrl={wsUrl} inputForm={inputForm} onBeforSend={onBeforSend} ></ChatInput>
+        <ChatInput clear={clear} questions={questions} form={form} wsUrl={wsUrl} inputForm={inputForm} onBeforSend={onBeforSend} ></ChatInput>
     </div>
 };

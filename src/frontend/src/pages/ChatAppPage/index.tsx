@@ -12,6 +12,7 @@ import ChatPanne from "./components/ChatPanne";
 import { formatStrTime, formatDate } from "@/util/utils";
 import { SkillIcon, AssistantIcon } from "@/components/bs-icons";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
+import { TitleIconBg } from "@/components/bs-comp/cardComponent";
 
 export default function SkillChatPage() {
 
@@ -52,7 +53,7 @@ export default function SkillChatPage() {
             "flow_id": card.id,
             "chat_id": _chatId,
             "create_time": "-",
-            "update_time": "-",
+            "update_time": Date.now(),
             "flow_type": card.flow_type
         })
 
@@ -100,7 +101,9 @@ export default function SkillChatPage() {
                             onClick={() => handleSelectChat(chat)}>
                             <div className="flex place-items-center space-x-3">
                                 <div className=" inline-block bg-purple-500 rounded-md">
-                                    {chat.flow_type === 'assistant' ? <AssistantIcon /> : <SkillIcon />}
+                                    <TitleIconBg className="" id={chat.flow_id}>
+                                        {chat.flow_type === 'assistant' ? <AssistantIcon /> : <SkillIcon />}
+                                    </TitleIconBg>
                                 </div>
                                 <p className="truncate text-sm font-bold leading-6">{chat.flow_name}</p>
                             </div>
@@ -130,18 +133,20 @@ const useChatList = () => {
 
     useEffect(() => {
         if (messages.length > 0) {
-            const latest:any = messages[messages.length - 1]
-            setChatList(chats => chats.map(chat => (chat.chat_id === chatId && chat.latest_message) 
+            let latest: any = messages[messages.length - 1]
+            // 有分割线取上一条
+            if (latest.category === 'divider') latest = messages[messages.length - 2] || {}
+            setChatList(chats => chats.map(chat => (chat.chat_id === chatId)
                 ? {
-                     ...chat, 
-                     update_time: latest.update_time || formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
-                     latest_message: {
-                        ...chat.latest_message, 
-                        message: latest.message[latest.chatKey] || latest.message
-                     }
-                  }
+                    ...chat,
+                    update_time: latest.update_time || formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
+                    latest_message: {
+                        ...chat.latest_message,
+                        message: (latest.thought || latest.message[latest.chatKey] || latest.message).substring(0, 40)
+                    }
+                }
                 : chat)
-            ) 
+            )
         }
     }, [messages, chatId])
 

@@ -106,9 +106,9 @@ export default function Header({ flow }) {
         }))
     }
 
-    return <div className="flex justify-between items-center border-b px-4 dark:bg-[#222]">
+    return <div className="flex justify-between items-center border-b px-4 bg-background-main">
         {
-            loading && <div className=" fixed left-0 top-0 w-full h-screen bg-gray-50/60 z-50 flex items-center justify-center">
+            loading && <div className=" fixed left-0 top-0 w-full h-screen bg-background/60 z-50 flex items-center justify-center">
                 <LoadIcon className="mr-2 text-gray-600" />
                 <span>切换到 {version.name}</span>
             </div>
