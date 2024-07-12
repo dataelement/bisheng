@@ -27,8 +27,8 @@ export const createAssistantsApi = async (name, prompt) => {
 };
 
 // 获取助手详情
-export const getAssistantDetailApi = async (id): Promise<AssistantDetail> => {
-    return await axios.get(`/api/v1/assistant/info/${id}`)
+export const getAssistantDetailApi = async (id, version): Promise<AssistantDetail> => {
+    return await axios.get(`/api/${version}/assistant/info/${id}`)
 };
 
 // 获取助手系统模型

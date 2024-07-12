@@ -79,8 +79,8 @@ export default function MessageBs({ data, onUnlike = () => { }, onSource }: { da
     const chatId = useMessageStore(state => state.chatId)
 
     return <div className="flex w-full">
-        <div className="w-fit max-w-[90%]">
-            <div className={`text-right hover:opacity-100 opacity-0`}>
+        <div className="w-fit group max-w-[90%]">
+            <div className={`text-right group-hover:opacity-100 opacity-0`}>
                 <span className="text-slate-400 text-sm">{formatStrTime(data.update_time, 'MM 月 dd 日 HH:mm')}</span>
             </div>
             {data.sender && <p className="text-gray-600 text-xs mb-2">{data.sender}</p>}

@@ -13,7 +13,7 @@ from fastapi import WebSocket, WebSocketDisconnect, status, Request
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import build_flow_no_yield
+from bisheng.api.utils import build_flow_no_yield, get_request_ip
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
 from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
@@ -410,7 +410,7 @@ class ChatManager:
                         "user_id": user_id,
                         "user_name": UserDao.get_user(user_id).user_name,
                     })
-                    AuditLogService.create_chat_flow(login_user, websocket.client.host, flow_id)
+                    AuditLogService.create_chat_flow(login_user, get_request_ip(websocket), flow_id)
         start_resp.type = 'start'
 
         # should input data

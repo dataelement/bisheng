@@ -203,7 +203,7 @@ export default function FileLibPage() {
                                             // @ts-ignore
                                             window.libname = el.name;
                                         }}>
-                                            <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-[#0455e1]" onClick={handleCachePage}>{t('lib.details')}</Link>
+                                            <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
                                             {user.role === 'admin' || user.user_id === el.user_id ?
                                                 <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500 px-0">{t('delete')}</Button> :
                                                 <Button variant="link" className="ml-4 text-gray-400 px-0">{t('delete')}</Button>

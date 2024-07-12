@@ -13,7 +13,7 @@ type State = {
 
 type Actions = {
   dispatchAssistant: (action: Action, assistantState: Partial<AssistantDetail>) => void,
-  loadAssistantState: (id: string) => Promise<any>
+  loadAssistantState: (id: string, version: string) => Promise<any>
   saveAfter: () => void
   destroy: () => void
 }
@@ -56,8 +56,8 @@ export const useAssistantStore = create<State & Actions>((set) => ({
   assistantState: { ...assistantTemp },
   dispatchAssistant: (action: Action, data: Partial<AssistantDetail>) => set((state) => assistantReducer(state, action, data)),
   // 加载助手状态
-  loadAssistantState: (id) => {
-    return getAssistantDetailApi(id).then(data => {
+  loadAssistantState: (id, version) => {
+    return getAssistantDetailApi(id, version).then(data => {
       set({
         assistantState: {
           ...data,

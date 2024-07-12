@@ -1,9 +1,8 @@
-import { message } from '@/components/bs-ui/toast/use-toast';
-import { generateUUID } from '@/components/bs-ui/utils'
-import { MessageDB, getChatHistory } from '@/controllers/API'
-import { ChatMessageType } from '@/types/chat'
-import { cloneDeep } from 'lodash'
-import { create } from 'zustand'
+import { getChatHistory } from '@/controllers/API';
+import { ChatMessageType } from '@/types/chat';
+import { cloneDeep } from 'lodash';
+import { create } from 'zustand';
+import { formatDate } from '@/util/utils';
 
 /**
  * 会话消息管理
@@ -138,7 +137,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                     category: '',
                     files: [],
                     end: false,
-                    user_name: ""
+                    user_name: "",
+                    update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
                 }]
         }))
     },

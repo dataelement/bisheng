@@ -30,8 +30,6 @@ module.exports = {
     extend: {
       colors: {
         "search-input": "var(--search-input)",
-        "background-Assistant": "var(--background-Assistant)",
-        "background-hoverAssistant": "var(--background-hoverAssistant)",
         "background-new": "var(--background-new)",
         "prompt-description": "var(--text-prompt)",
         "background-prompt": "var(--background-prompt)",
@@ -95,7 +93,7 @@ module.exports = {
         "beta-foreground": "var(--beta-foreground)",
         "chat-bot-icon": "var(--chat-bot-icon)",
         "chat-user-icon": "var(--chat-user-icon)",
-
+        "black-button": "hsl(var(--black-button))",
         white: "var(--white)",
         border: "hsl(var(--border))",
         input: "hsl(var(--input)/0.15)",

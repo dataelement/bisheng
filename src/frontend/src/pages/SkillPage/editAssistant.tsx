@@ -21,7 +21,7 @@ export default function editAssistant() {
     const { startNewRound, insetSystemMsg, insetBsMsg, setShowGuideQuestion } = useMessageStore()
 
     useEffect(() => {
-        loadAssistantState(assisId).then((res) => {
+        loadAssistantState(assisId, 'v1').then((res) => {
             setShowGuideQuestion(true)
             setGuideQuestion(res.guide_question?.filter((item) => item) || [])
             res.guide_word && insetBsMsg(res.guide_word)
