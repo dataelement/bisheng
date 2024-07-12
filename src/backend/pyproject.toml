@@ -19,7 +19,7 @@ bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
 bisheng_langchain = "0.3.3"
-bisheng_pyautogen = "0.3.1"
+bisheng_pyautogen = "0.3.2"
 langchain = "0.1.12"
 langchain_experimental = "*"
 langchain_openai = "0.1.0"
