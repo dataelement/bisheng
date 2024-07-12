@@ -146,7 +146,7 @@ export default function index() {
                         <TableHead className="w-[150px] min-w-[100px]">{t('log.objectType')}</TableHead>
                         <TableHead className="w-[200px] min-w-[100px]">{t('log.operationObject')}</TableHead>
                         <TableHead className="w-[150px]">{t('log.ipAddress')}</TableHead>
-                        <TableHead className="w-[250px] min-w-[250px] text-center">{t('log.remark')}</TableHead>
+                        <TableHead className="w-[250px] min-w-[250px]">{t('log.remark')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -158,10 +158,10 @@ export default function index() {
                         <TableCell>{transformModule(log.system_id)}</TableCell>
                         <TableCell>{transformEvent(log.event_type)}</TableCell>
                         <TableCell>{transformObjectType(log.object_type)}</TableCell>
-                        <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name}</div></TableCell>
+                        <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name || '无'}</div></TableCell>
                         <TableCell>{log.ip_address}</TableCell>
                         <TableCell className="max-w-[250px]">
-                            <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`)}</div>
+                            <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || '无'}</div>
                         </TableCell>
                     </TableRow>
                     ))}
@@ -176,7 +176,7 @@ export default function index() {
         </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="bisheng-table-footer">
+        <div className="bisheng-table-footer bg-background-login">
             <p className="desc pl-4">{t('log.auditManagement')}</p>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"

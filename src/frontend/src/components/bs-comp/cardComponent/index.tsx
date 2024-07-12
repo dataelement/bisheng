@@ -120,13 +120,13 @@ export default function CardComponent<T>({
       <CardDescription>{description}</CardDescription>
     </CardContent>
     <CardFooter className="flex justify-end h-10">
-      <div className="rounded cursor-pointer"><GoIcon className="group-hover:text-primary transition-none" /></div>
+      <div className="rounded cursor-pointer"><GoIcon className="group-hover:text-primary transition-none dark:text-slate-50" /></div>
     </CardFooter>
   </Card>
 
 
   // 侧边弹窗列表（sheet）
-  if (type === 'sheet') return <Card className="group w-[320px] cursor-pointer bg-[#F7F9FC] hover:bg-[#EDEFF6] hover:shadow-none relative" onClick={onClick}>
+  if (type === 'sheet') return <Card className="group w-[320px] cursor-pointer bg-[#F7F9FC] dark:bg-background-main dark:hover:bg-background-login hover:bg-[#EDEFF6] hover:shadow-none relative" onClick={onClick}>
     <CardHeader className="pb-2">
       <CardTitle className="truncate-doubleline">
         <div className="flex gap-2 pb-2 items-center">
@@ -148,7 +148,7 @@ export default function CardComponent<T>({
 
 
   // 技能组件
-  return <Card className="group w-[320px] cursor-pointer bg-background-Assistant hover:bg-background-hoverAssistant" onClick={() => edit && onClick()}>
+  return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer" onClick={() => edit && onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
         <TitleIconBg id={id} >
@@ -159,6 +159,7 @@ export default function CardComponent<T>({
           <Switch
             checked={_checked}
             className="w-12"
+            // @ts-ignore
             texts={[t('skills.online'), t('skills.offline')]}
             onCheckedChange={(b) => edit && handleCheckedChange(b)}
             onClick={e => { e.stopPropagation(); onSwitchClick?.() }}

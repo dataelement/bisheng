@@ -47,7 +47,7 @@ export default function Label({ onInset }) {
             </SelectContent>
         </Select>
         {/* 搜索框 */}
-        <Input placeholder="Search..." onChange={onSearch}></Input>
+        <Input placeholder="Search..." className="dark:border-gray-500" onChange={onSearch}></Input>
         {/* 变量 */}
         <div className="h-full">
             {labels.map(label =>

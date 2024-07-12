@@ -168,40 +168,40 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             <Input placeholder={t('system.roleName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60}></Input>
         </div>
         {/* 菜单授权 */}
-        <div className="">
+        <div>
             <div className="mt-20 flex justify-between items-center relative">
                 <p className="text-xl font-bold">菜单授权</p>
             </div>
-            <div className="mt-4">
+            <div className="mt-4 w-full">
                 <Table>
                     <TableHeader>
                         <TableRow>
                             <TableHead>一级菜单</TableHead>
-                            <TableHead className="text-right">查看权限</TableHead>
+                            <TableHead className="text-right w-[75px]">查看权限</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         <TableRow>
                             <TableCell className="font-medium">构建</TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-center">
                                 <Switch checked={form.useMenu.includes(MenuType.BUILD)} onCheckedChange={(bln) => switchDataChange(MenuType.BUILD, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
                         <TableRow>
                             <TableCell className="font-medium">知识</TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-center">
                                 <Switch checked={form.useMenu.includes(MenuType.KNOWLEDGE)} onCheckedChange={(bln) => switchDataChange(MenuType.KNOWLEDGE, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
                         <TableRow>
                             <TableCell className="font-medium">模型</TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-center">
                                 <Switch checked={form.useMenu.includes(MenuType.MODEL)} onCheckedChange={(bln) => switchDataChange(MenuType.MODEL, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
                         <TableRow>
                             <TableCell className="font-medium">评测</TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-center">
                                 <Switch checked={form.useMenu.includes(MenuType.EVALUATION)} onCheckedChange={(bln) => switchDataChange(MenuType.EVALUATION, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
@@ -220,8 +220,8 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                         <TableHeader>
                             <TableRow>
                                 <TableHead>{t('system.assistantName')}</TableHead>
-                                <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
-                                <TableHead className="text-right">{t('system.usePermission')}</TableHead>
+                                <TableHead>{t('system.creator')}</TableHead>
+                                <TableHead className="text-right w-[75px]">{t('system.usePermission')}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -229,7 +229,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                                 <TableRow key={el.id}>
                                     <TableCell className="font-medium">{el.name}</TableCell>
                                     <TableCell>{el.user_name}</TableCell>
-                                    <TableCell className="text-right">
+                                    <TableCell className="text-center">
                                         <Switch checked={form.useAssistant.includes(el.id)} onCheckedChange={(bln) => switchDataChange(el.id, 'useAssistant', bln)} />
                                     </TableCell>
                                 </TableRow>
@@ -251,8 +251,8 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                         <TableHeader>
                             <TableRow>
                                 <TableHead>{t('system.skillName')}</TableHead>
-                                <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
-                                <TableHead className="text-right">{t('system.usePermission')}</TableHead>
+                                <TableHead>{t('system.creator')}</TableHead>
+                                <TableHead className="text-right w-[75px]">{t('system.usePermission')}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -260,7 +260,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                                 <TableRow key={el.id}>
                                     <TableCell className="font-medium">{el.name}</TableCell>
                                     <TableCell>{el.user_name}</TableCell>
-                                    <TableCell className="text-right">
+                                    <TableCell className="text-center">
                                         <Switch checked={form.useSkills.includes(el.id)} onCheckedChange={(bln) => switchDataChange(el.id, 'useSkills', bln)} />
                                     </TableCell>
                                 </TableRow>
@@ -281,9 +281,9 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                         <TableHeader>
                             <TableRow>
                                 <TableHead>{t('lib.libraryName')}</TableHead>
-                                <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
-                                <TableHead className="text-right">{t('system.usePermission')}</TableHead>
-                                <TableHead className="text-right">{t('system.managePermission')}</TableHead>
+                                <TableHead>{t('system.creator')}</TableHead>
+                                <TableHead>{t('system.usePermission')}</TableHead>
+                                <TableHead className="text-right w-[75px]">{t('system.managePermission')}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -291,10 +291,10 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                                 <TableRow key={el.id}>
                                     <TableCell className="font-medium">{el.name}</TableCell>
                                     <TableCell>{el.user_name}</TableCell>
-                                    <TableCell className="text-right">
+                                    <TableCell className="text-left">
                                         <Switch checked={form.useLibs.includes(el.id)} onCheckedChange={(bln) => switchUseLib(el.id, bln)} />
                                     </TableCell>
-                                    <TableCell className="text-right">
+                                    <TableCell className="text-center">
                                         <Switch checked={form.manageLibs.includes(el.id)} onCheckedChange={(bln) => switchLibManage(el.id, bln)} />
                                     </TableCell>
                                 </TableRow>
@@ -316,8 +316,8 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                         <TableHeader>
                             <TableRow>
                                 <TableHead>{t('lib.toolName')}</TableHead>
-                                <TableHead className="w-[100px]">{t('system.creator')}</TableHead>
-                                <TableHead className="text-right">{t('system.usePermission')}</TableHead>
+                                <TableHead>{t('system.creator')}</TableHead>
+                                <TableHead className="text-right w-[75px]">{t('system.usePermission')}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -325,7 +325,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                                 <TableRow key={el.id}>
                                     <TableCell className="font-medium">{el.name}</TableCell>
                                     <TableCell>{el.user_name}</TableCell>
-                                    <TableCell className="text-right">
+                                    <TableCell className="text-center">
                                         <Switch
                                             checked={form.useTools.includes(el.id)}
                                             onCheckedChange={(bln) => switchDataChange(el.id, 'useTools', bln)}
@@ -338,7 +338,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                 )}
             </SearchPanne>
         </div>
-        <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-[white]">
+        <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-background-login">
             <Button variant="outline" className="px-16" onClick={() => onChange()}>{t('cancel')}</Button>
             <Button className="px-16" onClick={handleSave}>{t('save')}</Button>
         </div>

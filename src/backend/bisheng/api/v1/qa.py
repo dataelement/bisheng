@@ -2,16 +2,18 @@ import asyncio
 import json
 from typing import Annotated, List
 
+from fastapi import APIRouter, Body, HTTPException, Depends
+from sqlmodel import select
+
+from bisheng.api.services.user_service import get_login_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils.minio_client import MinioClient
-from fastapi import APIRouter, Body, HTTPException
-from sqlmodel import select
 
 # build router
-router = APIRouter(prefix='/qa', tags=['QA'])
+router = APIRouter(prefix='/qa', tags=['QA'], dependencies=[Depends(get_login_user)])
 
 
 @router.get('/keyword', response_model=UnifiedResponseModel[List[str]], status_code=200)

@@ -3,24 +3,30 @@ import json
 import random
 import string
 import uuid
-from base64 import b64decode, b64encode
+from base64 import b64encode
 from datetime import datetime
 from io import BytesIO
 from typing import Annotated, Dict, List, Optional
 from uuid import UUID
 
 import rsa
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.security import OAuth2PasswordBearer
+from fastapi_jwt_auth import AuthJWT
+from sqlalchemy import and_, func
+from sqlmodel import delete, select
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
                                       UserValidateError, UserPasswordError)
-from bisheng.api.JWT import get_login_user
+from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
 from bisheng.api.utils import get_request_ip
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.captcha import verify_captcha
-from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role,
-                                               get_assistant_list_by_access)
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role, get_login_user,
+                                               get_assistant_list_by_access, get_admin_user, UserService)
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, CreateUserReq
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
@@ -32,29 +38,14 @@ from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, U
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao
 from bisheng.settings import settings
-from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR
+from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
 from bisheng.utils.logger import logger
 from captcha.image import ImageCaptcha
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
-from fastapi.encoders import jsonable_encoder
-from fastapi.security import OAuth2PasswordBearer
-from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import and_, func
-from sqlmodel import delete, select
 
 # build router
 router = APIRouter(prefix='', tags=['User'])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
-
-
-def decrypt_md5_password(password: str):
-    if value := redis_client.get(RSA_KEY):
-        private_key = value[1]
-        password = md5_hash(rsa.decrypt(b64decode(password), private_key).decode('utf-8'))
-    else:
-        password = md5_hash(password)
-    return password
 
 
 @router.post('/user/regist', response_model=UnifiedResponseModel[UserRead], status_code=201)
@@ -69,9 +60,11 @@ async def regist(*, user: UserCreate):
     # check if user already exist
     user_exists = UserDao.get_user_by_username(db_user.user_name)
     if user_exists:
-        raise HTTPException(status_code=500, detail='账号已存在')
+        raise HTTPException(status_code=500, detail='用户名已存在')
+    if len(db_user.user_name)>30:
+        raise HTTPException(status_code=500, detail='用户名最长 30 个字符')
     try:
-        db_user.password = decrypt_md5_password(user.password)
+        db_user.password = UserService.decrypt_md5_password(user.password)
         # 判断下admin用户是否存在
         admin = UserDao.get_user(1)
         if admin:
@@ -89,14 +82,14 @@ async def regist(*, user: UserCreate):
 @router.post('/user/sso', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def sso(*, user: UserCreate):
     '''给sso提供的接口'''
-    if settings.get_system_login_method().get('SSO_OAuth', False):  # 判断sso 是否打开
+    if settings.get_system_login_method().SSO_OAuth:  # 判断sso 是否打开
         account_name = user.user_name
         user_exist = UserDao.get_unique_user_by_name(account_name)
         if not user_exist:
             # 自动创建用户
             user_exist = User.model_validate(user)
             logger.info('act=create_user account={}', account_name)
-            default_admin = settings.get_system_login_method().get('admin_username', None)
+            default_admin = settings.get_system_login_method().admin_username
             if default_admin and default_admin == account_name:
                 # 创建为超级管理员
                 user_exist = UserDao.add_user_and_admin_role(user_exist)
@@ -112,7 +105,7 @@ async def sso(*, user: UserCreate):
 
 
 def get_error_password_key(username: str):
-    return USER_PASSWORD_ERROR + username
+    return USER_PASSWORD_ERROR.format(username)
 
 
 def clear_error_password_key(username: str):
@@ -122,13 +115,13 @@ def clear_error_password_key(username: str):
 
 
 @router.post('/user/login', response_model=UnifiedResponseModel[UserRead], status_code=201)
-async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
+async def login(*, request: Request, user: UserLogin, Authorize: AuthJWT = Depends()):
     # 验证码校验
     if settings.get_from_db('use_captcha'):
         if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
             raise HTTPException(status_code=500, detail='验证码错误')
 
-    password = decrypt_md5_password(user.password)
+    password = UserService.decrypt_md5_password(user.password)
 
     db_user = UserDao.get_user_by_username(user.user_name)
     # 检查密码
@@ -168,18 +161,24 @@ async def login(*, user: UserLogin, Authorize: AuthJWT = Depends()):
     Authorize.set_access_cookies(access_token)
     Authorize.set_refresh_cookies(refresh_token)
 
+    # 设置登录用户当前的cookie, 比jwt有效期多一个小时
+    redis_client.set(USER_CURRENT_SESSION.format(db_user.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
+
+    # 记录审计日志
+    AuditLogService.user_login(UserPayload(**{
+        'user_name': db_user.user_name,
+        'user_id': db_user.user_id,
+        'role': role
+    }), get_request_ip(request))
     return resp_200(UserRead(role=str(role), web_menu=web_menu, access_token=access_token, **db_user.__dict__))
 
 
 @router.get('/user/admin', response_model=UnifiedResponseModel[UserRead], status_code=200)
-async def get_admins(Authorize: AuthJWT = Depends()):
+async def get_admins(login_user: UserPayload = Depends(get_login_user)):
     """
     获取所有的超级管理员账号
     """
     # check if user already exist
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    login_user = UserPayload(**payload)
     if not login_user.is_admin():
         raise HTTPException(status_code=500, detail='无查看权限')
     try:
@@ -194,12 +193,10 @@ async def get_admins(Authorize: AuthJWT = Depends()):
 
 
 @router.get('/user/info', response_model=UnifiedResponseModel[UserRead], status_code=201)
-async def get_info(Authorize: AuthJWT = Depends()):
+async def get_info(login_user: UserPayload = Depends(get_login_user)):
     # check if user already exist
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
     try:
-        user_id = payload.get('user_id')
+        user_id = login_user.user_id
         db_user = UserDao.get_user(user_id)
         role, web_menu = gen_user_role(db_user)
         return resp_200(UserRead(role=str(role), web_menu=web_menu, **db_user.__dict__))
@@ -844,7 +841,7 @@ async def reset_password(
     if not login_user.check_groups_admin(user_group_ids):
         raise HTTPException(status_code=403, detail='没有权限重置密码')
 
-    user_info.password = decrypt_md5_password(password)
+    user_info.password = UserService.decrypt_md5_password(password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 
@@ -864,13 +861,13 @@ async def change_password(*,
     if not user_info.password:
         return UserNotPasswordError.return_resp()
 
-    password = decrypt_md5_password(password)
+    password = UserService.decrypt_md5_password(password)
 
     # 已登录用户告知是密码错误
     if user_info.password != password:
         return UserPasswordError.return_resp()
 
-    user_info.password = decrypt_md5_password(new_password)
+    user_info.password = UserService.decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 
@@ -891,15 +888,28 @@ async def change_password_public(*,
     if not user_info.password:
         return UserValidateError.return_resp()
 
-    if user_info.password != decrypt_md5_password(password):
+    if user_info.password != UserService.decrypt_md5_password(password):
         return UserValidateError.return_resp()
 
-    user_info.password = decrypt_md5_password(new_password)
+    user_info.password = UserService.decrypt_md5_password(new_password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 
     clear_error_password_key(username)
     return resp_200()
+
+
+@router.post('/user/create', status_code=200)
+async def create_user(*,
+                      request: Request,
+                      admin_user: UserPayload = Depends(get_admin_user),
+                      req: CreateUserReq):
+    """
+    超级管理员创建用户
+    """
+    logger.info(f'create_user username={admin_user.user_name}, username={req.user_name}')
+    data = UserService.create_user(request, admin_user, req)
+    return resp_200(data=data)
 
 
 def md5_hash(string):

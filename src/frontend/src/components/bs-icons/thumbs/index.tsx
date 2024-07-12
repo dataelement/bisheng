@@ -1,11 +1,8 @@
 import React, { forwardRef } from "react";
 import { ReactComponent as copy } from "./copy.svg";
-import { ReactComponent as copyDark } from "./copyDark.svg";
 import { ReactComponent as like } from "./like.svg";
-import { ReactComponent as likeDark } from "./likeDark.svg";
 import { ReactComponent as unLike } from "./unLike.svg";
-import { ReactComponent as unLikeDark } from "./unLikeDark.svg";
-
+import { cname } from "@/components/bs-ui/utils";
 
 type ThunmbIconType = 'copy' | 'like' | 'unLike' | 'copyDark' | 'likeDark' | 'unLikeDark';
 
@@ -15,13 +12,10 @@ export const ThunmbIcon = forwardRef<
 >((props, ref) => {
     const comps = {
         'copy': copy,
-        'copyDark': copyDark,
         'like': like,
-        'likeDark': likeDark,
         'unLike': unLike,
-        'unLikeDark': unLikeDark,
     }
     const Comp = comps[props.type];
-    const _className = 'transition text-gray-400 ' + (props.className || '')
+    const _className = cname('transition text-gray-400 hover:text-gray-500', props.className)
     return <Comp ref={ref} {...props} className={_className} />;
 });

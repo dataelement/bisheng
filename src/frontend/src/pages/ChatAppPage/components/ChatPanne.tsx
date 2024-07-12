@@ -47,7 +47,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         } else {
             flowRef.current = null
             setFlow(null)
-            const _assistant = await loadAssistantState(id)
+            const _assistant = await loadAssistantState(id, version)
             loadHistoryMsg(_assistant.id, chatId, {
                 appendHistory,
                 lastMsg: t('historicalMessages')
@@ -159,12 +159,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
 
     if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
         <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
-        <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] text-[#111111] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
-            {t('chat.chooseOne')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
+        <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
+            {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
         </p>
         {
             !customWsHost && <div
-                className="relative z-50 w-[162px] h-[38px] bg-[#0055e3] rounded-lg text-[white] leading-[38px] flex cursor-pointer hover:bg-[#0165e6] justify-around mx-auto mt-[120px] text-[13px]"
+                className="relative z-50 w-[162px] h-[38px] bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg leading-[38px] flex cursor-pointer  justify-around mx-auto mt-[120px] text-[13px]"
                 onClick={() => {
                     document.getElementById('newchat')?.click()
                 }}>
@@ -186,7 +186,8 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                 </div>
                 <ChatComponent
                     form={flowSate.isForm}
-                    stop={flowSate.isReport || flowSate.isRoom}
+                    stop
+                    // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
                     guideWord={flow.guide_word}
                     wsUrl={wsUrl}
@@ -207,6 +208,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     <span className="text-sm">{assistant.name}</span>
                 </div>
                 <ChatComponent
+                    stop
                     useName={sendUserName}
                     questions={assistantState.guide_question.filter((item) => item)}
                     guideWord={assistantState.guide_word}

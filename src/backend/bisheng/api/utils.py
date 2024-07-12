@@ -1,10 +1,11 @@
+import hashlib
 import json
 import xml.dom.minidom
 from pathlib import Path
 from typing import Dict, List
 
 import aiohttp
-from fastapi import Request
+from fastapi import Request, WebSocket
 from fastapi_jwt_auth import AuthJWT
 from platformdirs import user_cache_dir
 from sqlalchemy import delete
@@ -12,7 +13,6 @@ from sqlmodel import select
 
 from bisheng.api.v1.schemas import StreamData
 from bisheng.database.base import session_getter
-from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
@@ -420,9 +420,15 @@ async def get_url_content(url: str) -> str:
             return res.decode('utf-8')
 
 
-def get_request_ip(request: Request) -> str:
+def get_request_ip(request: Request | WebSocket) -> str:
     """ 获取客户端真实IP """
     x_forwarded_for = request.headers.get('X-Forwarded-For')
     if x_forwarded_for:
         return x_forwarded_for.split(',')[0]
     return request.client.host
+
+
+def md5_hash(original_string: str):
+    md5 = hashlib.md5()
+    md5.update(original_string.encode('utf-8'))
+    return md5.hexdigest()

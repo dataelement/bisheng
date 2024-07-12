@@ -127,7 +127,7 @@ export default function RunTest({ nodeId }) {
     const notDiffVersion = useMemo(() => !mulitVersionFlow.some((version) => version), [mulitVersionFlow])
 
     return <div className="mt-4 px-4">
-        <div className="bg-[#fff] p-2">
+        <div className="bg-[#fff] dark:bg-gray-950 p-2">
             <div className="flex items-center justify-between ">
                 <div className="flex gap-2 items-center">
                     <Button size="sm" disabled={['all', 'row', 'col'].includes(runningType)} onClick={handleUploadTxt}>{t('test.uploadTest')}</Button>

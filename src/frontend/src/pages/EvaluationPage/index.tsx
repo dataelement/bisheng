@@ -92,7 +92,7 @@ export default function EvaluationPage() {
           <TabsContent value="account">
             <div className="flex items-center justify-end gap-4">
               <Button
-                className="px-8"
+                className="px-8 text-[#fff]"
                 onClick={() => navigate("/evaluation/create")}
               >
                 {t("create")}
@@ -206,7 +206,7 @@ export default function EvaluationPage() {
           <TabsContent value="password"></TabsContent>
         </Tabs>
       </div>
-      <div className="bisheng-table-footer px-6">
+      <div className="bisheng-table-footer px-6 bg-background-login">
         <p className="desc">{t("evaluation.evaluationCollection")}</p>
         <div>
           <AutoPagination

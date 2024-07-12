@@ -83,6 +83,6 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
             onChange={handleSelectRole}
         >
         </MultiSelect>
-        {showDel && <Button variant="ghost" size="icon" onClick={onDelete}><DelIcon /></Button>}
+        {showDel && <Button variant="ghost" size="icon" className="mt-2" onClick={onDelete}><DelIcon /></Button>}
     </div>
 };

@@ -153,6 +153,8 @@ def import_agent(agent: str) -> Agent:
 
 def import_llm(llm: str) -> BaseLanguageModel:
     """Import llm from llm name"""
+    if llm == 'OpenAI':
+        return import_class('langchain_openai.OpenAI')
     return import_class(f'langchain.llms.{llm}')
 
 

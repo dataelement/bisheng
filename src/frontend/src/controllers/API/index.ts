@@ -62,7 +62,12 @@ export async function delComponentApi(name): Promise<any> {
 export async function getAppConfig(): Promise<AppConfig> {
   return await axios.get(`/api/v1/env`);
 }
-
+/**
+ * 获取平台配置
+ */
+export async function saveThemeApi(data: string): Promise<any> {
+  return await axios.post(`/api/v1/web/config`, { value: data });
+}
 /**
  * Reads all templates from the database.
  *

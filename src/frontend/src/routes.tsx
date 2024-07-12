@@ -5,6 +5,7 @@ import BuildLayout from "./layout/BuildLayout";
 import MainLayout from "./layout/MainLayout";
 import SkillChatPage from "./pages/ChatAppPage";
 import ChatShare from "./pages/ChatAppPage/chatShare";
+import ChatAssitantShare from "./pages/ChatAppPage/chatAssitantShare";
 import ChatPro from "./pages/ChatAppPage/chatWebview";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import FileLibPage from "./pages/FileLibPage";
@@ -46,6 +47,7 @@ const ErrorHoc = ({ Comp }) => {
 }
 
 const baseConfig = {
+  //@ts-ignore
   basename: __APP_ENV__.BASE_URL
 }
 
@@ -65,6 +67,7 @@ const privateRouter = [
         children: [
           { path: "assist", element: <SkillAssisPage /> },
           { path: "skills", element: <SkillsPage /> },
+          // @ts-ignore
           { path: "tools", element: <SkillToolsPage /> },
           { path: "", element: <Navigate to="assist" replace /> },
         ]
@@ -73,7 +76,7 @@ const privateRouter = [
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps", element: <Templates />, permission: 'build', },
       { path: "model", element: <ModelPage />, permission: 'model', },
-      { path: "sys", element: <SystemPage /> },
+      { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
@@ -96,6 +99,7 @@ const privateRouter = [
   // 独立会话页
   { path: "/chat", element: <SkillChatPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
+  { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
   { path: "/chatpro/:id", element: <ChatPro /> },
   { path: "/report/:id/", element: <Report /> },
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
@@ -137,6 +141,7 @@ export const publicRouter = createBrowserRouter([
   { path: "/", element: <LoginPage /> },
   { path: "/reset", element: <ResetPwdPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
+  { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
   { path: "*", element: <LoginPage /> }
 ],
   baseConfig)

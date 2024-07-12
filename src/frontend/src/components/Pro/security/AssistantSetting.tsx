@@ -69,7 +69,7 @@ export default function AssistantSetting({ id, type }) {
                                     <QuestionMarkCircledIcon />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p>{t('build.contentSecurityDesc')}</p>
+                                    <p className="text-slate-50">{t('build.contentSecurityDesc')}</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
@@ -77,6 +77,7 @@ export default function AssistantSetting({ id, type }) {
                     <div className="h-[20px] flex items-center">
                         <Sheet open={open} onOpenChange={(bln) => setOpen(bln)}>
                             <SheetTrigger>
+                                {/* @ts-ignore */}
                                 {form.isCheck && <SettingIcon onClick={(e) => { e.stopPropagation(); setOpen(!open) }} className="w-[32px] h-[32px]" />}
                             </SheetTrigger>
                             <SheetContent className="w-[500px]" onClick={(e) => e.stopPropagation()}>

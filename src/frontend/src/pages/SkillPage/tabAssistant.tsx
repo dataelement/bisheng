@@ -1,17 +1,16 @@
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import DialogForceUpdate from "@/components/bs-ui/dialog/DialogForceUpdate";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import CardComponent from "../../components/bs-comp/cardComponent";
-import { Dialog, DialogTrigger } from "../../components/bs-ui/dialog";
 import { SearchInput } from "../../components/bs-ui/input";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
-import { AssistantItemDB, changeAssistantStatusApi, deleteAssistantApi, getAssistantsApi, saveAssistanttApi } from "../../controllers/API/assistant";
+import { AssistantItemDB, changeAssistantStatusApi, deleteAssistantApi, getAssistantsApi } from "../../controllers/API/assistant";
 import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import CreateAssistant from "./components/CreateAssistant";
-import { useNavigate } from "react-router-dom";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import DialogForceUpdate from "@/components/bs-ui/dialog/DialogForceUpdate";
 
 export default function Assistants() {
     const { t } = useTranslation()
@@ -71,7 +70,7 @@ export default function Assistants() {
                             <CreateAssistant ></CreateAssistant>
                         </DialogForceUpdate>
                         {
-                            dataSource.map((item, i) => (
+                            dataSource.map((item:any, i) => (
                                 <CardComponent<AssistantItemDB>
                                     data={item}
                                     id={item.id}

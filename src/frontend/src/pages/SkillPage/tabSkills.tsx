@@ -79,9 +79,9 @@ export default function Skills() {
                 <SearchInput className="w-64" placeholder={t('skills.skillSearch')} onChange={(e) => search(e.target.value)}></SearchInput>
                 {user.role === 'admin' && <Button
                     variant="ghost"
-                    className="hover:bg-gray-50 flex gap-2"
+                    className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A]"
                     onClick={() => navigate('/build/temps')}
-                ><MoveOneIcon />{t('skills.manageTemplate')}</Button>}
+                ><MoveOneIcon className="dark:text-slate-50" />{t('skills.manageTemplate')}</Button>}
             </div>
             {/* list */}
             {

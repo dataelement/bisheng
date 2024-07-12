@@ -25,7 +25,7 @@ export default function TaggingSheet({children}) {
 
     return <Sheet>
         <SheetTrigger asChild>{children}</SheetTrigger>
-        <SheetContent className="bg-gray-100 sm:min-w-[800px]">
+        <SheetContent className="sm:min-w-[800px]">
             <SheetTitle>给助手打标签</SheetTitle>
             <div className="w-full h-full grid grid-cols-[80%,20%]">
                 <div className="bg-slate-500">
@@ -41,7 +41,7 @@ export default function TaggingSheet({children}) {
                                             {(provided) => (
                                                 <div ref={provided.innerRef} {...provided.draggableProps} 
                                                 {...provided.dragHandleProps}>
-                                                {b.name}
+                                                {index + 1} + {b.name}
                                                 </div>
                                         )}
                                     </Draggable>

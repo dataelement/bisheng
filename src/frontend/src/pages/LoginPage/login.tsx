@@ -11,8 +11,10 @@ import { useNavigate } from 'react-router-dom';
 import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import LoginBridge from './loginBridge';
-import { PWD_RULE, handleEncrypt } from './utils';
+import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from './utils';
 import { locationContext } from '@/contexts/locationContext';
+import { ldapLoginApi } from '@/controllers/API/pro';
+
 export const LoginPage = () => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t, i18n } = useTranslation();
@@ -41,6 +43,7 @@ export const LoginPage = () => {
         getCaptchaApi().then(setCaptchaData)
     };
 
+    const ldapRef = useRef(false)
     const handleLogin = async () => {
         const error = []
         const [mail, pwd] = [mailRef.current.value, pwdRef.current.value]
@@ -57,18 +60,22 @@ export const LoginPage = () => {
         //     list: error,
         // });
 
-        const encryptPwd = await handleEncrypt(pwd)
-        captureAndAlertRequestErrorHoc(loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then((res: any) => {
-            // setUser(res.data)
-            localStorage.setItem('ws_token', res.access_token)
-            localStorage.setItem('isLogin', '1')
-            location.href = __APP_ENV__.BASE_URL + '/'
-        }), (error) => {
+        const encryptPwd = ldapRef.current ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
+        captureAndAlertRequestErrorHoc(
+            (ldapRef.current 
+                ? ldapLoginApi(mail, encryptPwd) 
+                : loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
+            ).then((res:any) => {
+                localStorage.setItem('ws_token', res.access_token)
+                localStorage.setItem('isLogin', '1')
+                location.href = __APP_ENV__.BASE_URL + '/'
+            })
+        ), (error) => {
             if (error.indexOf('过期') !== -1) { // 有时间改为 code 判断
                 localStorage.setItem('account', mail)
                 navigate('/reset', { state: { noback: true } })
             }
-        })
+        }
 
         fetchCaptchaData()
     }
@@ -125,7 +132,8 @@ export const LoginPage = () => {
             <div className='absolute w-full h-full z-10 flex justify-end top-0'>
                 <div className='w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-background-login relative'>
                     <div>
-                        <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} alt="small_logo" className='block w-[114px] h-[36px] m-auto mt-[140px]' />
+                        <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="block w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:hidden" alt="" />
+                        <img src={__APP_ENV__.BASE_URL + '/logo-small-dark.png'} className="w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:block hidden" alt="" />
                         <span className='block w-fit m-auto font-normal text-[14px] text-tx-color mt-[24px]'>{t('login.slogen')}</span>
                     </div>
                     <div className="grid gap-[12px] mt-[68px]">
@@ -177,10 +185,6 @@ export const LoginPage = () => {
                             </div>
                             )
                         }
-                        {/* 中英 */}
-                        {/* <Button
-                            className='h-[48px] mt-[32px] dark:bg-button'
-                            disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button> */}
                         {
                             showLogin ? <>
                                 <div className="text-center">
@@ -199,7 +203,7 @@ export const LoginPage = () => {
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
-                        {appConfig.hasSSO && <LoginBridge />}
+                        {appConfig.hasSSO && <LoginBridge onHasLdap={(bool) => ldapRef.current = bool} />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>

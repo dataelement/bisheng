@@ -76,7 +76,7 @@ export default function EditAssistantDialog({ name, desc, onSave }) {
 
     };
 
-    return <DialogContent className="sm:max-w-[625px]">
+    return <DialogContent className="sm:max-w-[625px] bg-background-login">
         <DialogHeader>
             <DialogTitle>{t('build.editAssistant')}</DialogTitle>
         </DialogHeader>

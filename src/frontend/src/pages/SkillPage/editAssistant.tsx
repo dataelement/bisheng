@@ -21,7 +21,7 @@ export default function editAssistant() {
     const { startNewRound, insetSystemMsg, insetBsMsg, setShowGuideQuestion } = useMessageStore()
 
     useEffect(() => {
-        loadAssistantState(assisId).then((res) => {
+        loadAssistantState(assisId, 'v1').then((res) => {
             setShowGuideQuestion(true)
             setGuideQuestion(res.guide_question?.filter((item) => item) || [])
             res.guide_word && insetBsMsg(res.guide_word)
@@ -102,7 +102,7 @@ export default function editAssistant() {
         return destroy
     }, [])
 
-    return <div className="bg-[#F4F5F8]">
+    return <div className="bg-background-main">
         <Header onSave={() => handleSave(true)} onLine={handleOnline}></Header>
         <div className="flex h-[calc(100vh-70px)]">
             <div className="w-[60%]">

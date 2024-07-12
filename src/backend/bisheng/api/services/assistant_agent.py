@@ -3,13 +3,25 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Any
 from uuid import UUID
 
-import httpx
-from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+from langchain_core.callbacks import Callbacks
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool, Tool
 from langchain_core.utils.function_calling import format_tool_to_openai_tool
+from loguru import logger
 
+from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
+                                                      generate_opening_dialog,
+                                                      optimize_assistant_prompt)
+from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
+from bisheng_langchain.gpts.load_tools import load_tools
+from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.api.services.openapi import OpenApiSchema
@@ -19,22 +31,7 @@ from bisheng.database.models.assistant import Assistant, AssistantLink, Assistan
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType, AuthMethod
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
-from bisheng_langchain.gpts.assistant import ConfigurableAssistant
-from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
-                                                      generate_opening_dialog,
-                                                      optimize_assistant_prompt)
-from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
-from bisheng_langchain.gpts.load_tools import load_tools
-from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
-from bisheng_langchain.gpts.utils import import_by_type, import_class
-from langchain_core.callbacks import Callbacks
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool, Tool
-from loguru import logger
-
-from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.interface.initialize.loading import instantiate_llm, import_by_type
 from bisheng.utils.embedding import decide_embeddings
 
 
@@ -63,6 +60,11 @@ class AssistantAgent(AssistantUtils):
         self.tools: List[BaseTool] = []
         self.offline_flows = []
         self.agent: ConfigurableAssistant | None = None
+        self.agent_executor_dict = {
+            'ReAct': 'get_react_agent_executor',
+            'function call': 'get_openai_functions_agent_executor',
+        }
+        self.current_agent_executor = None
         self.llm: BaseLanguageModel | None = None
         self.llm_agent_executor = None
         self.knowledge_skill_path = str(Path(__file__).parent / 'knowledge_skill.json')
@@ -96,19 +98,9 @@ class AssistantAgent(AssistantUtils):
         if llm_params.get('knowledge_retrive'):
             self.knowledge_retrive = llm_params.pop('knowledge_retrive')
 
-        if llm_params['type'] == 'ChatOpenAI':
-            llm_object = import_class('langchain_openai.ChatOpenAI')
-            llm_params.pop('type')
-            llm_params['model'] = llm_params.pop('model_name')
-            if 'openai_proxy' in llm_params:
-                openai_proxy = llm_params.pop('openai_proxy')
-                llm_params['http_client'] = httpx.Client(proxies=openai_proxy)
-                llm_params['http_async_client'] = httpx.AsyncClient(proxies=openai_proxy)
-            self.llm = llm_object(**llm_params)
-        else:
-            llm_object = import_by_type(_type='llms', name=llm_params['type'])
-            llm_params.pop('type')
-            self.llm = llm_object(**llm_params)
+        node_type = llm_params.pop('type')
+        class_object = import_by_type(_type='llms', name=node_type)
+        self.llm = instantiate_llm(node_type, class_object, llm_params)
 
     async def get_knowledge_skill_data(self):
         if self.knowledge_skill_data:
@@ -281,6 +273,9 @@ class AssistantAgent(AssistantUtils):
         # 引入agent执行参数
         agent_executor_params = self.get_agent_executor()
         agent_executor_type = self.llm_agent_executor or agent_executor_params.pop('type')
+        self.current_agent_executor = agent_executor_type
+        # 做转换
+        agent_executor_type = self.agent_executor_dict.get(agent_executor_type, agent_executor_type)
 
         prompt = self.assistant.prompt
         if self.assistant.model_name.startswith("command-r"):
@@ -330,37 +325,79 @@ class AssistantAgent(AssistantUtils):
         tool_selector = ToolSelector(llm=self.llm, tools=tool_list)
         return tool_selector.select(self.assistant.name, prompt)
 
-    async def run(self, query: str, chat_history: List = None, callback: Callbacks = None):
-        """
-        运行智能体对话
-        """
+    async def fake_callback(self, callback: Callbacks):
+        if not callback:
+            return
+        # 假回调，将已下线的技能回调给前端
+        for one in self.offline_flows:
+            run_id = uuid.uuid4()
+            await callback[0].on_tool_start({
+                'name': one,
+            }, input_str='flow if offline', run_id=run_id)
+            await callback[0].on_tool_end(output='flow is offline', name=one, run_id=run_id)
+
+    async def record_chat_history(self, message: List[Any]):
+        # 记录助手的聊天历史
+        if not os.getenv("BISHENG_RECORD_HISTORY"):
+            return
+        try:
+            os.makedirs("/app/data/history", exist_ok=True)
+            with open(f"/app/data/history/{self.assistant.id}_{time.time()}.json", "w", encoding="utf-8") as f:
+                json.dump({
+                    "system": self.assistant.prompt,
+                    "message": message,
+                    "tools": [format_tool_to_openai_tool(t) for t in self.tools]
+                }, f, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"record assistant history error: {str(e)}")
+
+    async def arun(self, query: str, chat_history: List = None, callback: Callbacks = None):
+        await self.fake_callback(callback)
+
         if chat_history:
             chat_history.append(HumanMessage(content=query))
             inputs = chat_history
         else:
             inputs = [HumanMessage(content=query)]
 
-        # 假回调，将已下线的技能回调给前端
-        for one in self.offline_flows:
-            if callback is not None:
-                run_id = uuid.uuid4()
-                await callback[0].on_tool_start({
-                    'name': one,
-                }, input_str='flow if offline', run_id=run_id)
-                await callback[0].on_tool_end(output='flow is offline', name=one, run_id=run_id)
-        result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
+        async for one in self.agent.astream(inputs, config=RunnableConfig(callbacks=callback)):
+            yield one
+
+    async def run(self, query: str, chat_history: List = None, callback: Callbacks = None):
+        """
+        运行智能体对话
+        """
+        await self.fake_callback(callback)
+
+        if chat_history:
+            chat_history.append(HumanMessage(content=query))
+            inputs = chat_history
+        else:
+            inputs = [HumanMessage(content=query)]
+
+        if self.current_agent_executor == 'ReAct':
+            result = await self.react_run(inputs, callback)
+        else:
+            result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
         # 包含了history，将history排除, 默认取最后一个为最终结果
         res = [result[-1]]
-        # 记录助手的聊天历史
-        if os.getenv("BISHENG_RECORD_HISTORY"):
-            try:
-                os.makedirs("/app/data/history", exist_ok=True)
-                with open(f"/app/data/history/{self.assistant.id}_{time.time()}.json", "w", encoding="utf-8") as f:
-                    json.dump({
-                        "system": self.assistant.prompt,
-                        "message": [one.to_json() for one in result],
-                        "tools": [format_tool_to_openai_tool(t) for t in self.tools]
-                    }, f, ensure_ascii=False)
-            except Exception as e:
-                logger.error(f"record assistant history error: {str(e)}")
+
+        # 记录聊天历史
+        await self.record_chat_history([one.to_json() for one in result])
+
         return res
+
+    async def react_run(self, inputs: List, callback: Callbacks = None):
+        """ react 模式的输入和执行 """
+        result = await self.agent.ainvoke({
+            'input': inputs[-1].content,
+            'chat_history': inputs[:-1],
+        }, config=RunnableConfig(callbacks=callback))
+        logger.debug(f"react_run result: {result}")
+        output = result['agent_outcome'].return_values['output']
+        if isinstance(output, dict):
+            output = list(output.values())[0]
+        for one in result['intermediate_steps']:
+            inputs.append(one[0])
+        inputs.append(AIMessage(content=output))
+        return inputs

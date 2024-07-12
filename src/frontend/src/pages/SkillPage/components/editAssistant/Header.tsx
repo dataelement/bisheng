@@ -31,7 +31,7 @@ export default function Header({ onSave, onLine }) {
         needSaveRef.current = true
     }
 
-    return <div className="flex justify-between items-center border-b px-4">
+    return <div className="flex justify-between bg-background-login items-center border-b px-4">
         <div className="flex items-center gap-2 py-4">
             <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ChevronLeftIcon className="h-4 w-4" /></Button>
             <TitleIconBg id={assistantState.id} className="ml-4"><AssistantIcon /></TitleIconBg>

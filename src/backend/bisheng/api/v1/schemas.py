@@ -3,14 +3,16 @@ from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 from uuid import UUID
 
+from langchain.docstore.document import Document
+from orjson import orjson
+from pydantic import BaseModel, Field, validator
+
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import GptsToolsRead, AuthMethod, AuthType
 from bisheng.database.models.knowledge import KnowledgeRead
-from langchain.docstore.document import Document
-from orjson import orjson
-from pydantic import BaseModel, Field, validator
+from bisheng.database.models.message import ChatMessageRead
 
 
 class CaptchaInput(BaseModel):
@@ -119,6 +121,7 @@ class ChatList(BaseModel):
     create_time: datetime = None
     update_time: datetime = None
     flow_type: str = None  # flow: 技能 assistant：gpts助手
+    latest_message: ChatMessageRead = None
 
 
 class FlowGptsOnlineList(BaseModel):
@@ -209,10 +212,12 @@ class UploadFileResponse(BaseModel):
 
 class StreamData(BaseModel):
     event: str
-    data: dict
+    data: dict | str
 
     def __str__(self) -> str:
-        return f'event: {self.event}\ndata: {orjson.dumps(self.data).decode()}\n\n'
+        if isinstance(self.data, dict):
+            return f'event: {self.event}\ndata: {orjson.dumps(self.data).decode()}\n\n'
+        return f'event: {self.event}\ndata: {self.data}\n\n'
 
 
 class FinetuneCreateReq(BaseModel):
@@ -306,3 +311,40 @@ class TestToolReq(BaseModel):
     api_key: Optional[str] = Field(default='', description="api key")
 
     request_params: Dict = Field(default=None, description="用户填写的请求参数")
+
+
+class GroupAndRoles(BaseModel):
+    group_id: int
+    role_ids: List[int]
+
+
+class CreateUserReq(BaseModel):
+    user_name: str = Field(max_length=30, description='用户名')
+    password: str = Field(description='密码')
+    group_roles: List[GroupAndRoles] = Field(description='要加入的用户组和角色列表')
+
+
+class OpenAIChatCompletionReq(BaseModel):
+    messages: List[dict] = Field(..., description="聊天消息列表，只支持user、assistant。system用数据库内的数据")
+    model: str = Field(..., description="助手的唯一ID")
+    n: int = Field(default=1, description="返回的答案个数, 助手侧默认为1，暂不支持多个回答")
+    stream: bool = Field(default=False, description="是否开启流式回复")
+    temperature: float = Field(default=0.0, description="模型温度, 传入0或者不传表示不覆盖")
+    tools: List[dict] = Field(default=[], description="工具列表, 助手暂不支持，使用助手的配置")
+
+
+class OpenAIChoice(BaseModel):
+    index: int = Field(..., description="选项的索引")
+    message: dict = Field(default=None, description="对应的消息内容，和输入的格式一致")
+    finish_reason: str = Field(default='stop', description="结束原因, 助手只有stop")
+    delta: dict = Field(default=None, description="对应的openai流式返回消息内容")
+
+
+class OpenAIChatCompletionResp(BaseModel):
+    id: str = Field(..., description="请求的唯一ID")
+    object: str = Field(default='chat.completion', description="返回的类型")
+    created: int = Field(default=..., description="返回的创建时间戳")
+    model: str = Field(..., description="返回的模型，对应助手的id")
+    choices: List[OpenAIChoice] = Field(..., description="返回的答案列表")
+    usage: dict = Field(default=None, description="返回的token用量, 助手此值为空")
+    system_fingerprint: Optional[str] = Field(default=None, description="系统指纹")
