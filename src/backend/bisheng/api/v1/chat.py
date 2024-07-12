@@ -211,8 +211,8 @@ def get_chatlist_list(*,
                          create_time=message.create_time,
                          update_time=message.update_time))
         else:
-            # 通过接口创建的会话记录，不关联技能或者助手
-            logger.debug(f'unknown message.flow_id={message.flow_id}')
+            # 通过接口创建的会话记录，不关联技能或者助手, 或者技能和助手已被删除
+            pass
     res = chat_list[(page - 1) * limit:page * limit]
     chat_ids = [one.chat_id for one in res]
     latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids, 'answer')
