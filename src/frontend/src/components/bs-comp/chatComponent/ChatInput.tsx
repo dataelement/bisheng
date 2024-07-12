@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
 import { formatDate } from "@/util/utils";
+import { StopIcon } from "@radix-ui/react-icons";
 
 export default function ChatInput({ clear, form, stop, questions, inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
@@ -290,11 +291,14 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
             </div>
             {/* send */}
             <div className="flex gap-2 absolute right-3 top-4 z-10">
-                <div
+                {stoped && <div
                     id="bs-send-btn"
                     className="w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center"
-                    onClick={() => { !inputLock.locked && handleSendClick() }}
-                ><SendIcon className={`${inputLock.locked ? 'text-gray-400' : 'text-gray-950'} dark:text-slate-50 dark:hover:bg-gray-500`}></SendIcon></div>
+                    onClick={() => { !inputLock.locked && handleSendClick() }}>
+                    <SendIcon className={`${inputLock.locked ? 'text-gray-400' : 'text-gray-950'} dark:text-slate-50 dark:hover:bg-gray-500`}/>
+                </div>}
+                {!stoped && <StopIcon className="mt-1 rounded-sm bg-gray-950 text-gray-950 dark:bg-slate-50 dark:text-gray-50 cursor-pointer" 
+                onClick={() => { setStoped(true); sendWsMsg({ "action": "stop" }); }}/>}
             </div>
             {/* question */}
             <Textarea
@@ -313,19 +317,6 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
                     }
                 }}
             ></Textarea>
-            {/* stop */}
-            {
-                stop && <div className=" absolute w-full flex justify-center bottom-32">
-                    <Button
-                        className="rounded-full"
-                        variant="outline"
-                        disabled={stoped}
-                        onClick={() => { setStoped(true); sendWsMsg({ "action": "stop" }); }}
-                    >
-                        <PauseIcon className="mr-2" />Stop
-                    </Button>
-                </div>
-            }
         </div>
         <p className="text-center text-sm pt-2 pb-4 text-gray-400">{appConfig.dialogTips}</p>
     </div>
