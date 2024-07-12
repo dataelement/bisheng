@@ -6,10 +6,22 @@ from pathlib import Path
 from typing import Dict, List, Any
 from uuid import UUID
 
-import httpx
-from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+from langchain_core.callbacks import Callbacks
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool, Tool
 from langchain_core.utils.function_calling import format_tool_to_openai_tool
+from loguru import logger
 
+from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
+                                                      generate_opening_dialog,
+                                                      optimize_assistant_prompt)
+from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
+from bisheng_langchain.gpts.load_tools import load_tools
+from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.api.services.openapi import OpenApiSchema
@@ -19,22 +31,7 @@ from bisheng.database.models.assistant import Assistant, AssistantLink, Assistan
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType, AuthMethod
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
-from bisheng_langchain.gpts.assistant import ConfigurableAssistant
-from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
-                                                      generate_opening_dialog,
-                                                      optimize_assistant_prompt)
-from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
-from bisheng_langchain.gpts.load_tools import load_tools
-from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
-from bisheng_langchain.gpts.utils import import_by_type, import_class
-from langchain_core.callbacks import Callbacks
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool, Tool
-from loguru import logger
-
-from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.interface.initialize.loading import instantiate_llm, import_by_type
 from bisheng.utils.embedding import decide_embeddings
 
 
@@ -101,19 +98,9 @@ class AssistantAgent(AssistantUtils):
         if llm_params.get('knowledge_retrive'):
             self.knowledge_retrive = llm_params.pop('knowledge_retrive')
 
-        if llm_params['type'] == 'ChatOpenAI':
-            llm_object = import_class('langchain_openai.ChatOpenAI')
-            llm_params.pop('type')
-            llm_params['model'] = llm_params.pop('model_name')
-            if 'openai_proxy' in llm_params:
-                openai_proxy = llm_params.pop('openai_proxy')
-                llm_params['http_client'] = httpx.Client(proxies=openai_proxy)
-                llm_params['http_async_client'] = httpx.AsyncClient(proxies=openai_proxy)
-            self.llm = llm_object(**llm_params)
-        else:
-            llm_object = import_by_type(_type='llms', name=llm_params['type'])
-            llm_params.pop('type')
-            self.llm = llm_object(**llm_params)
+        node_type = llm_params.pop('type')
+        class_object = import_by_type(_type='llms', name=node_type)
+        self.llm = instantiate_llm(node_type, class_object, llm_params)
 
     async def get_knowledge_skill_data(self):
         if self.knowledge_skill_data:

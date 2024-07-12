@@ -138,8 +138,8 @@ class ChatClient:
                 if not assistant:
                     raise IgnoreException('该助手已被删除')
         except IgnoreException as e:
-            await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
-            raise IgnoreException('get assistant info error')
+            logger.exception("get assistant info error")
+            raise IgnoreException(f'get assistant info error: {str(e)}')
         try:
             if self.chat_id and self.gpts_agent is None:
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
@@ -150,8 +150,8 @@ class ChatClient:
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
         except Exception as e:
-            await self.websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=f'agent init error {str(e)}')
-            raise Exception('agent init error')
+            logger.exception("agent init error")
+            raise Exception(f'agent init error: {str(e)}')
 
     async def init_chat_history(self):
         # 初始化历史记录，不为空则不用重新初始化
@@ -232,27 +232,26 @@ class ChatClient:
             await self.stop_handle_message(message)
             return
 
-        # 清空流式队列，防止把上一次的回答，污染本次回答
-        await self.clear_stream_queue()
-        inputs = message.get('inputs', {})
-        input_msg = inputs.get('input')
-        if not input_msg:
-            # 需要切换会话
-            logger.debug(f'need switch agent, client_key: {self.client_key} inputs: {inputs}')
-            self.client_id = inputs.get('data').get('id')
-            self.chat_id = inputs.get('data').get('chatId')
-            self.gpts_agent = None
-            self.gpts_async_callback = None
-            self.chat_history = []
-            await self.init_gpts_agent()
-            return
-
-        # 初始化agent
-        await self.init_gpts_agent()
-
-        await self.send_response('processing', 'begin', '')
-
         try:
+            await self.send_response('processing', 'begin', '')
+            # 清空流式队列，防止把上一次的回答，污染本次回答
+            await self.clear_stream_queue()
+            inputs = message.get('inputs', {})
+            input_msg = inputs.get('input')
+            if not input_msg:
+                # 需要切换会话
+                logger.debug(f'need switch agent, client_key: {self.client_key} inputs: {inputs}')
+                self.client_id = inputs.get('data').get('id')
+                self.chat_id = inputs.get('data').get('chatId')
+                self.gpts_agent = None
+                self.gpts_async_callback = None
+                self.chat_history = []
+                await self.init_gpts_agent()
+                return
+
+            # 初始化agent
+            await self.init_gpts_agent()
+
             # 将用户问题写入到数据库
             await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
 
