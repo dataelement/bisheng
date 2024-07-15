@@ -86,11 +86,14 @@ async def sso(*, user: UserCreate):
         account_name = user.user_name
         user_exist = UserDao.get_unique_user_by_name(account_name)
         if not user_exist:
+            # 判断下平台是否存在用户
+            user_all = UserDao.get_all_users(page=1, limit=1)
             # 自动创建用户
             user_exist = User.model_validate(user)
             logger.info('act=create_user account={}', account_name)
             default_admin = settings.get_system_login_method().admin_username
-            if default_admin and default_admin == account_name:
+            # 如果平台没有用户或者用户名和配置的管理员用户名一致，则插入为超级管理员
+            if len(user_all) == 0 or (default_admin and default_admin == account_name):
                 # 创建为超级管理员
                 user_exist = UserDao.add_user_and_admin_role(user_exist)
             else:
