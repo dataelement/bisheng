@@ -4,6 +4,7 @@ import { CopyIcon } from "@radix-ui/react-icons"
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm";
 
 export default function MessageSystem({ data }) {
     const { message } = useToast()
@@ -23,6 +24,7 @@ export default function MessageSystem({ data }) {
     const logMkdown = useMemo(
         () => (
             data.thought && <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
                 linkTarget="_blank"
                 className="bs-mkdown text-gray-600 dark:text-[white] inline-block break-all max-w-full text-sm [&>pre]:text-wrap"
             >

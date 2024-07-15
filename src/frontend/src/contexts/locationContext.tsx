@@ -77,7 +77,6 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         dialogQuickSearch: res.dialog_quick_search,
         websocketHost: res.websocket_url || window.location.host,
         isPro: !!res.pro,
-        hasSSO: !!res.sso,
         chatPrompt: !!res.application_usage_tips
       })
     })
