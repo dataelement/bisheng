@@ -185,10 +185,6 @@ export const LoginPage = () => {
                             </div>
                             )
                         }
-                        {/* 中英 */}
-                        {/* <Button
-                            className='h-[48px] mt-[32px] dark:bg-button'
-                            disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button> */}
                         {
                             showLogin ? <>
                                 <div className="text-center">
