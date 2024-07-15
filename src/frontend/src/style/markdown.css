@@ -55,6 +55,10 @@
     --tw-prose-td-borders: hsl(var(--mk-bc) / 0.2);
 }
 
+.dark .bs-mkdown {
+    --mk-bc: 0 0% 100%;
+}
+
 .bs-mkdown :where(code):not(:where([class~="not-prose"] *)) {
     padding: 2px 8px;
     border-radius: var(--rounded-badge);

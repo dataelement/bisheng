@@ -44,8 +44,8 @@ class PasswordConf(BaseModel):
 
 
 class SystemLoginMethod(BaseModel):
-    SSO_OAuth: bool = Field(default=False, description='是否开启SSO认证')
-    admin_username: Optional[str] = Field(default=None, description='通过sso注册的系统管理员用户名')
+    gateway_login: bool = Field(default=False, description='是否支持网关登录')
+    admin_username: Optional[str] = Field(default=None, description='通过网关注册的系统管理员用户名')
     allow_multi_login: bool = Field(default=True, description='是否允许多点登录')
 
 

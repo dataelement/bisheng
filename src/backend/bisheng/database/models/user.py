@@ -176,3 +176,14 @@ class UserDao(UserBase):
             session.commit()
             session.refresh(user)
             return user
+
+    @classmethod
+    def get_all_users(cls, page: int = 0, limit: int = 0) -> List[User]:
+        """
+        分页获取所有用户
+        """
+        statement = select(User)
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        with session_getter() as session:
+            return session.exec(statement).all()

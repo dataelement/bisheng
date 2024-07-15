@@ -13,7 +13,7 @@ import { useMessageStore } from "./messageStore";
 import { formatDate } from "@/util/utils";
 import { StopIcon } from "@radix-ui/react-icons";
 
-export default function ChatInput({ clear, form, stop, questions, inputForm, wsUrl, onBeforSend }) {
+export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -25,8 +25,12 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
     const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
+    const continueRef = useRef(false)
     // 停止状态
-    const [stoped, setStoped] = useState(true)
+    const [stop, setStop] = useState({
+        show: false,
+        disable: false
+    })
     /**
      * 记录会话切换状态，等待消息加载完成时，控制表单在新会话自动展开
      */
@@ -47,6 +51,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
     }, [messages, hisMessages])
     useEffect(() => {
         if (!chatId) return
+        continueRef.current = false
         setInputLock({ locked: false, reason: '' })
         // console.log('message chatid', messages, form, chatId);
         setShowWhenLocked(false)
@@ -86,7 +91,9 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
         const event = new Event('input', { bubbles: true, cancelable: true });
         inputRef.current.value = ''
         inputRef.current.dispatchEvent(event); // 触发调节input高度
-        const [wsMsg, inputKey] = onBeforSend('', value)
+        const contunue = continueRef.current ? 'continue' : ''
+        continueRef.current = false
+        const [wsMsg, inputKey] = onBeforSend(contunue, value)
         // msg to store
         createSendMsg(wsMsg.inputs, inputKey)
         // 锁定 input
@@ -153,12 +160,14 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
                     // 群聊@自己时，开启input
                     if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
                         setInputLock({ locked: false, reason: '' })
+                        setStop({ show: false, disable: false })
+                        continueRef.current = true
                     }
                 }
                 ws.onclose = (event) => {
                     wsRef.current = null
                     console.error('链接手动断开 event :>> ', event);
-                    setStoped(true)
+                    setStop({ show: false, disable: false })
 
                     if ([1005, 1008, 1009].includes(event.code)) {
                         console.warn('即将废弃 :>> ');
@@ -176,7 +185,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
                 };
                 ws.onerror = (ev) => {
                     wsRef.current = null
-                    setStoped(true)
+                    setStop({ show: false, disable: false })
                     console.error('链接异常error', ev);
                     toast({
                         title: `${t('chat.networkError')}:`,
@@ -200,7 +209,8 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
     const handleWsMessage = (data) => {
         if (Array.isArray(data) && data.length) return
         if (data.type === 'start') {
-            setStoped(false)
+            // 非continue时，展示stop按钮
+            !continueRef.current && setStop({ show: true, disable: false })
             createWsMsg(data)
         } else if (data.type === 'stream') {
             //@ts-ignore
@@ -220,7 +230,7 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
                 update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
             }, data.type === 'end_cover')
         } else if (data.type === "close") {
-            setStoped(true)
+            setStop({ show: false, disable: false })
             setInputLock({ locked: false, reason: '' })
         }
     }
@@ -291,14 +301,20 @@ export default function ChatInput({ clear, form, stop, questions, inputForm, wsU
             </div>
             {/* send */}
             <div className="flex gap-2 absolute right-3 top-4 z-10">
-                {stoped && <div
-                    id="bs-send-btn"
-                    className="w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center"
-                    onClick={() => { !inputLock.locked && handleSendClick() }}>
-                    <SendIcon className={`${inputLock.locked ? 'text-gray-400' : 'text-gray-950'} dark:text-slate-50 dark:hover:bg-gray-500`}/>
-                </div>}
-                {!stoped && <StopIcon className="mt-1 rounded-sm bg-gray-950 text-gray-950 dark:bg-slate-50 dark:text-gray-50 cursor-pointer" 
-                onClick={() => { setStoped(true); sendWsMsg({ "action": "stop" }); }}/>}
+                {stop.show ?
+                    <StopIcon className={`mt-1 rounded-sm bg-foreground cursor-pointer ${stop.disable && 'bg-muted-foreground text-muted-foreground'}`}
+                        onClick={() => {
+                            if (stop.disable) return
+                            setStop({ show: true, disable: true });
+                            sendWsMsg({ "action": "stop" });
+                        }} />
+                    : <div
+                        id="bs-send-btn"
+                        className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
+                        onClick={() => { !inputLock.locked && handleSendClick() }}>
+                        <SendIcon className={`${inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}`} />
+                    </div>
+                }
             </div>
             {/* question */}
             <Textarea

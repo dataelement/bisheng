@@ -1,8 +1,8 @@
 export default function CrashErrorComponent({ error, resetErrorBoundary }) {
 
   return (
-    <div className="fixed left-0 top-0 z-50 flex h-full w-full items-center justify-center bg-foreground bg-opacity-50">
-      <div className="flex h-1/4 min-h-fit max-w-2xl flex-col justify-evenly rounded-lg bg-background p-8 text-start shadow-lg">
+    <div className="fixed left-0 top-0 z-50 flex h-full w-full items-center justify-center bg-background-main">
+      <div className="flex min-h-fit max-w-2xl flex-col justify-evenly rounded-lg bg-card p-8 text-start shadow-lg">
         <h1 className="mb-4 text-2xl text-status-red">
           {error.toString()}
         </h1>
@@ -14,13 +14,13 @@ export default function CrashErrorComponent({ error, resetErrorBoundary }) {
             href="https://github.com/dataelement/bisheng/issues/new"
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded bg-status-red px-4 py-2 font-bold text-background hover:bg-error-foreground"
+            className="rounded bg-status-red px-4 py-2 font-bold text-primary-foreground hover:bg-status-red/80"
           >
             Create Issue
           </a>
           <button
             onClick={resetErrorBoundary}
-            className="mr-4 rounded bg-primary px-4 py-2 font-bold text-sm text-background hover:bg-ring"
+            className="mr-4 rounded bg-primary px-4 py-2 font-bold text-sm text-primary-foreground hover:bg-primary/80"
           >
             Reset Application
           </button>
