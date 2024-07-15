@@ -86,6 +86,8 @@ env:
   # websocket_url: 192.168.106.120:3003
   office_url: http://IP:8701 # office 组件访问地址，需要浏览器能直接访问
   pro: false  # 是否开启闭源网关
+  # 是否展示前端界面上的github和帮助链接
+  show_github_and_help: true
 
 # 智能助手相关配置
 gpts:
@@ -141,13 +143,10 @@ password_conf:
   max_error_times: 5
 
 system_login_method:
-  # SSO 登录
-  SSO_OAuth: true
-  # # LDAP 登录
-  # LDAP: true
-  # LDAP服务器地址配置: XX
-
-  # 切换 SSO/LDAP 登录后管理员用户名
+  # 是否支持闭源网关的登录
+  gateway_login: false
+  # 从闭源网关注册的管理员用户名
   admin_username: admin
-  allow_multi_login: true  # 是否允许多点登录
+  # 是否允许多点登录
+  allow_multi_login: true
 

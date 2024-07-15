@@ -61,7 +61,7 @@ async def regist(*, user: UserCreate):
     user_exists = UserDao.get_user_by_username(db_user.user_name)
     if user_exists:
         raise HTTPException(status_code=500, detail='用户名已存在')
-    if len(db_user.user_name)>30:
+    if len(db_user.user_name) > 30:
         raise HTTPException(status_code=500, detail='用户名最长 30 个字符')
     try:
         db_user.password = UserService.decrypt_md5_password(user.password)
@@ -81,8 +81,8 @@ async def regist(*, user: UserCreate):
 
 @router.post('/user/sso', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def sso(*, user: UserCreate):
-    '''给sso提供的接口'''
-    if settings.get_system_login_method().SSO_OAuth:  # 判断sso 是否打开
+    """ 给闭源网关提供的登录接口 """
+    if settings.get_system_login_method().gateway_login:  # 判断sso 是否打开
         account_name = user.user_name
         user_exist = UserDao.get_unique_user_by_name(account_name)
         if not user_exist:
