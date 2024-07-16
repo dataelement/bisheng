@@ -203,7 +203,7 @@ export const LoginPage = () => {
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
-                        {appConfig.isPro && <LoginBridge onHasLdap={(bool) => ldapRef.current = bool} />}
+                        {appConfig.isPro && <LoginBridge onHasLdap={(bool) => { ldapRef.current = bool; setCaptchaData((state) => ({ ...state, user_capthca: !bool })) }} />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>
