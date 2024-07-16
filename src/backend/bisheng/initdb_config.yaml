@@ -73,7 +73,7 @@ default_operator:
 
 # 是否需要验证码
 use_captcha:
-  True
+  False
 
 # 聊天对话框配置
 dialog_tips:
@@ -85,7 +85,6 @@ env:
   # 可配置与http不一致的websocket地址
   # websocket_url: 192.168.106.120:3003
   office_url: http://IP:8701 # office 组件访问地址，需要浏览器能直接访问
-  pro: false  # 是否开启闭源网关
   # 是否展示前端界面上的github和帮助链接
   show_github_and_help: true
 

@@ -65,6 +65,7 @@ def get_env():
     env['dialog_tips'] = settings.settings.get_from_db('dialog_tips')
     # add env dict from settings
     env.update(settings.settings.get_from_db('env') or {})
+    env['pro'] = settings.settings.get_system_login_method().bisheng_pro
     return resp_200(env)
 
 

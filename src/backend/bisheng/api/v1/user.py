@@ -82,7 +82,7 @@ async def regist(*, user: UserCreate):
 @router.post('/user/sso', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def sso(*, user: UserCreate):
     """ 给闭源网关提供的登录接口 """
-    if settings.get_system_login_method().gateway_login:  # 判断sso 是否打开
+    if settings.get_system_login_method().bisheng_pro:  # 判断sso 是否打开
         account_name = user.user_name
         user_exist = UserDao.get_unique_user_by_name(account_name)
         if not user_exist:

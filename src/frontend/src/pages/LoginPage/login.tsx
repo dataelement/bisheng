@@ -62,10 +62,10 @@ export const LoginPage = () => {
 
         const encryptPwd = ldapRef.current ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
         captureAndAlertRequestErrorHoc(
-            (ldapRef.current 
-                ? ldapLoginApi(mail, encryptPwd) 
+            (ldapRef.current
+                ? ldapLoginApi(mail, encryptPwd)
                 : loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
-            ).then((res:any) => {
+            ).then((res: any) => {
                 localStorage.setItem('ws_token', res.access_token)
                 localStorage.setItem('isLogin', '1')
                 location.href = __APP_ENV__.BASE_URL + '/'
@@ -203,7 +203,7 @@ export const LoginPage = () => {
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
-                        {appConfig.hasSSO && <LoginBridge onHasLdap={(bool) => ldapRef.current = bool} />}
+                        {appConfig.isPro && <LoginBridge onHasLdap={(bool) => { ldapRef.current = bool; setCaptchaData((state) => ({ ...state, user_capthca: !bool })) }} />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>

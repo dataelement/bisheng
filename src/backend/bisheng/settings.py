@@ -44,7 +44,7 @@ class PasswordConf(BaseModel):
 
 
 class SystemLoginMethod(BaseModel):
-    gateway_login: bool = Field(default=False, description='是否支持网关登录')
+    bisheng_pro: bool = Field(default=False, description='是否是商业版, 从环境变量获取')
     admin_username: Optional[str] = Field(default=None, description='通过网关注册的系统管理员用户名')
     allow_multi_login: bool = Field(default=True, description='是否允许多点登录')
 
@@ -156,7 +156,9 @@ class Settings(BaseSettings):
     def get_system_login_method(self) -> SystemLoginMethod:
         # 获取密码相关的配置项
         all_config = self.get_all_config()
-        return SystemLoginMethod(**all_config.get('system_login_method', {}))
+        tmp = SystemLoginMethod(**all_config.get('system_login_method', {}))
+        tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
+        return tmp
 
     def get_from_db(self, key: str):
         # 先获取所有的key

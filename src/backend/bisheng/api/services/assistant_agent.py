@@ -100,7 +100,7 @@ class AssistantAgent(AssistantUtils):
 
         node_type = llm_params.pop('type')
         class_object = import_by_type(_type='llms', name=node_type)
-        self.llm = instantiate_llm(node_type, class_object, llm_params)
+        self.llm = instantiate_llm(node_type, class_object, llm_params, user_llm_request=False)
 
     async def get_knowledge_skill_data(self):
         if self.knowledge_skill_data:

@@ -244,7 +244,7 @@ def instantiate_output_parser(node_type, class_object, params):
     return class_object(**params)
 
 
-def instantiate_llm(node_type, class_object, params: Dict):
+def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: bool = True):
     # This is a workaround so JinaChat works until streaming is implemented
     # if "openai_api_base" in params and "jina" in params["openai_api_base"]:
     # False if condition is True
@@ -267,7 +267,7 @@ def instantiate_llm(node_type, class_object, params: Dict):
     # 支持stream
     llm = class_object(**params)
     llm_config = settings.get_from_db('llm_request')
-    if isinstance(llm, BaseLanguageModel):
+    if user_llm_request and isinstance(llm, BaseLanguageModel):
         if hasattr(llm, 'streaming') and isinstance(llm.streaming, bool):
             llm.streaming = llm_config.get(
                 'stream') if 'stream' in llm_config else ChatConfig.streaming
@@ -506,7 +506,7 @@ def instantiate_vectorstore(node_type: str, class_object: Type[VectorStore], par
             params["embedding"] = decide_embeddings(knowledge_list[0].model) if knowledge_list else FakeEmbedding()
         else:
             params[col_name] = [knowledge.index_name or knowledge.collection_name
-                                         for knowledge in knowledge_list]
+                                for knowledge in knowledge_list]
 
     if initializer := vecstore_initializer.get(class_object.__name__):
         vecstore = initializer(class_object, params, search_kwargs)
