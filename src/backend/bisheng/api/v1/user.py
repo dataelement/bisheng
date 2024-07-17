@@ -82,7 +82,7 @@ async def regist(*, user: UserCreate):
 @router.post('/user/sso', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def sso(*, user: UserCreate):
     """ 给闭源网关提供的登录接口 """
-    if settings.get_system_login_method().gateway_login:  # 判断sso 是否打开
+    if settings.get_system_login_method().bisheng_pro:  # 判断sso 是否打开
         account_name = user.user_name
         user_exist = UserDao.get_unique_user_by_name(account_name)
         if not user_exist:
@@ -835,6 +835,14 @@ async def reset_password(
     user_info = UserDao.get_user(user_id)
     if not user_info:
         raise HTTPException(status_code=404, detail='用户不存在')
+    user_payload = UserPayload(**{
+        'user_id': user_info.user_id,
+        'user_name': user_info.user_name,
+        'role': ''
+    })
+    # 如果被修改的用户是系统管理员， 需要判断是否是本人
+    if user_payload.is_admin() and login_user.user_id != user_id:
+        raise HTTPException(status_code=500, detail='系统管理员只能本人重置密码')
 
     # 查询用户所在的用户组
     user_groups = UserGroupDao.get_user_group(user_info.user_id)
