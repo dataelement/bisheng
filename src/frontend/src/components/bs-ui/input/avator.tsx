@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Button } from "../button";
 import { useToast } from "../toast/use-toast";
 import { cname } from "../utils";
@@ -8,11 +9,13 @@ export default function Avator({
     accept = "image/jpeg,image/png",
     value,
     className,
-    buttonName = '上传头像',
+    buttonName,
     onChange,
     children
 }) {
     const { message } = useToast();
+    const { t } = useTranslation()
+    const defaultButtonName = t('build.uploadAvator');
 
     const handleFileChange = (event) => {
         const file = event.target.files[0];
@@ -21,8 +24,8 @@ export default function Avator({
             const isValidType = accept.split(',').some(type => file.type === type);
 
             const errormgs = []
-            if (!isValidSize) errormgs.push(`文件大小不能超过 ${size / 1024 / 1024}MB`)
-            if (!isValidType) errormgs.push(`文件类型不符合要求：${accept}`)
+            if (!isValidSize) errormgs.push(`${t('build.fileSizeLimit')} ${size / 1024 / 1024}MB`)
+            if (!isValidType) errormgs.push(`${t('build.fileTypeLimit')} ${accept}`)
 
             errormgs.length ? message({
                 variant: 'error',
@@ -34,7 +37,7 @@ export default function Avator({
     return <div className={cname("flex w-full rounded-md gap-4", className)}>
         {value ? <img src={value} className="max-w-24 max-h-24 rounded-md object-cover" alt="" /> : children}
         <Button variant="outline" className="relative">
-            {buttonName}
+            {buttonName || defaultButtonName}
             <input
                 className=" absolute top-0 left-0 inset-0 w-full h-full opacity-0 cursor-pointer"
                 type="file"

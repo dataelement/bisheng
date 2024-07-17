@@ -190,10 +190,10 @@ export default function l2Edit() {
                     </p>
                     {/* base form */}
                     <div className="w-full overflow-hidden transition-all px-1">
-                        {/* <div className="mt-4">
+                        <div className="mt-4">
                             <Label htmlFor="name">技能头像</Label>
                             <Avator value={logo} className="mt-2" onChange={uploadAvator}><SkillIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
-                        </div> */}
+                        </div>
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.skillName')}</Label>
                             <Input ref={nameRef} placeholder={t('skills.skillName')} className={`mt-2 ${error.name && 'border-red-400'}`} />

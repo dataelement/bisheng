@@ -75,6 +75,7 @@
     "userGroup": "userGroup",
     "role": "Role",
     "searchUserGroups": "Search user groups",
+    "searchUser": "Search user",
     "searchRoles": "Search roles",
     "reset": "Reset",
     "confirm": "Confirm",
@@ -96,8 +97,13 @@
     "currentGroup": "Current UserGroup",
     "defaultGroup": "DefaultGroup",
     "resetPwd": "ResetPassword",
+    "selectUser": "Please select a user",
     "selectGroup": "Please select a user group",
-    "selectRole": "Please select a role"
+    "selectRole": "Please select a role",
+    "menuAuthorization": "Menu authorization",
+    "primaryMenu": "Primary menu",
+    "viewPermission": "View permission",
+    "themeColor": "Theme color"
   },
   "skills": {
     "manageTemplate": "Manage Skill Templates",
@@ -204,7 +210,8 @@
     "chooseSkillOrAssistant": "Choose an online skill or assistant you want to use",
     "search": "Search",
     "recommendationQuestions": "Recommendation questions",
-    "historicalMessages": "Historical Messages"
+    "historicalMessages": "Historical Messages",
+    "clickDownload": "Click to download"
   },
   "model": {
     "modelConfiguration": "Model Configuration",
@@ -389,7 +396,6 @@
     "1008": "The current assistant or skill is not online, and direct conversation is not possible.",
     "1005": ""
   },
-  "all": "All",
   "finetune": {
     "modelName": "Model Name",
     "rtService": "RT Services",
@@ -456,29 +462,6 @@
     "description": "Description",
     "gpuResourceUsage": "GPU resource usage"
   },
-  "confirmButton": "Confirm",
-  "add": "Add",
-  "back": "Back",
-  "create": "Create",
-  "delete": "Delete",
-  "createTime": "Creation Time",
-  "updateTime": "Update Time",
-  "success": "Saved",
-  "edit": "Edit",
-  "enable": "Enable",
-  "disable": "Disable",
-  "close": "Close",
-  "cancel": "Cancel",
-  "save": "Save",
-  "submit": "Submit",
-  "operations": "Operations",
-  "previousPage": "Previous Page",
-  "nextPage": "Next Page",
-  "formatError": "Format Error",
-  "port": "PORT",
-  "cancle": "Cancle",
-  "tip": "Prompt",
-  "deleteAssistant": "Are you sure to delete this assistant?",
   "build": {
     "create": "Create",
     "assistant": "Assistant",
@@ -581,7 +564,10 @@
     "useNewlineToSeparate": "Use newline to separate, each line one item",
     "txtFile": "txt file",
     "sensitiveWordMatch": "Sensitive Word Match",
-    "defaultAutoReply": "Enter the auto-reply content for when the safety review is triggered, e.g., 'The current conversation content violates relevant regulations, please modify and re-enter.'"
+    "defaultAutoReply": "Enter the auto-reply content for when the safety review is triggered, e.g., 'The current conversation content violates relevant regulations, please modify and re-enter.'",
+    "uploadAvator": "upload avator",
+    "fileSizeLimit": "The file size cannot exceed",
+    "fileTypeLimit": "File type does not meet requirements:"
   },
   "tools": {
     "addTool": "Add Tool",
@@ -664,6 +650,30 @@
     "endDate": "End Date",
     "actionBehavior": "Action Behavior"
   },
+  "all": "All",
+  "confirmButton": "Confirm",
+  "add": "Add",
+  "back": "Back",
+  "create": "Create",
+  "delete": "Delete",
+  "createTime": "Creation Time",
+  "updateTime": "Update Time",
+  "success": "Saved",
+  "edit": "Edit",
+  "enable": "Enable",
+  "disable": "Disable",
+  "close": "Close",
+  "cancel": "Cancel",
+  "save": "Save",
+  "submit": "Submit",
+  "operations": "Operations",
+  "previousPage": "Previous Page",
+  "nextPage": "Next Page",
+  "formatError": "Format Error",
+  "port": "PORT",
+  "cancle": "Cancle",
+  "tip": "Prompt",
+  "deleteAssistant": "Are you sure to delete this assistant?",
   "chatTipsTitle": "Chat Tips",
   "chatTips": "1. Please comply with the Cybersecurity Law of the People's Republic of China, the Data Security Law of the People's Republic of China, the Personal Information Protection Law of the People's Republic of China, and the Basic Requirements for the Security of Generative Artificial Intelligence Services;\n2. It is forbidden to upload confidential data that falls within the scope of the company's confidentiality management regulations;\n3. It is forbidden to upload data containing personal privacy information;\n4. It is forbidden to upload files containing malicious programs or viruses;\n5. It is forbidden to use AI to generate offensive code;\n6. It is forbidden to ask AI questions involving but not limited to explosives, terrorism, pornography, and information that endangers national and public security;\n7. AI-generated content is subject to the company's confidentiality management regulations. Users should judge the reasonableness of the generated content based on the actual situation to avoid risks caused by AI hallucinations."
 }

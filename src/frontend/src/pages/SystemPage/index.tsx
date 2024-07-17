@@ -25,7 +25,7 @@ export default function FileLibPage() {
                 {user.role === 'admin' && <TabsTrigger value="userGroup">{t('system.userGroupsM')}</TabsTrigger>}
                 <TabsTrigger value="role">{t('system.roleManagement')}</TabsTrigger>
                 {user.role === 'admin' && <TabsTrigger value="system">{t('system.systemConfiguration')}</TabsTrigger>}
-                {user.role === 'admin' && <TabsTrigger value="theme">主题配色</TabsTrigger>}
+                {user.role === 'admin' && <TabsTrigger value="theme">{t('system.themeColor')}</TabsTrigger>}
             </TabsList>
             <TabsContent value="user">
                 <Users></Users>

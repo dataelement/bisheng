@@ -55,8 +55,13 @@ export const deleteAssistantApi = async (id) => {
 
 
 // 获取会话选择列表
-export const getChatOnlineApi = async () => {
-    return await axios.get(`/api/v1/chat/online`)
+export const getChatOnlineApi = async (page, keyword) => {
+    return await axios.get(`/api/v1/chat/online`, {
+        params: {
+            page, keyword,
+            limit: 40
+        }
+    })
 };
 
 

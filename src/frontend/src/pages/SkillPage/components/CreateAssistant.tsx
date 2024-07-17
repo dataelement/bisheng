@@ -102,11 +102,11 @@ ${t('build.exampleTwo')}
             <DialogTitle>{t('build.establishAssistant')}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-8 py-6">
-            {/* <div className="">
+            <div className="">
                 <label htmlFor="name" className="bisheng-label">助手头像<span className="bisheng-tip">*</span></label>
                 <Avator value={formData.url} className="mt-2" onChange={uploadAvator}><AssistantIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
-            </div> */}
+            </div>
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantName')}<span className="bisheng-tip">*</span></label>
                 <Input id="name" name="name" placeholder={t('build.giveAssistantName')} className="mt-2" value={formData.name} onChange={handleChange} />

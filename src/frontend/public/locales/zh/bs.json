@@ -76,6 +76,7 @@
     "userGroup": "用户组",
     "role": "角色",
     "searchUserGroups": "搜索用户组",
+    "searchUser": "搜索用户",
     "searchRoles": "搜索角色",
     "reset": "重置",
     "confirm": "确认",
@@ -97,8 +98,13 @@
     "currentGroup": "当前用户组",
     "defaultGroup": "默认用户组",
     "resetPwd": "重置密码",
+    "selectUser": "请选择用户",
     "selectGroup": "请选择用户组",
-    "selectRole": "请选择角色"
+    "selectRole": "请选择角色",
+    "menuAuthorization": "菜单授权",
+    "primaryMenu": "一级菜单",
+    "viewPermission": "查看权限",
+    "themeColor": "主题配色"
   },
   "skills": {
     "manageTemplate": "管理技能模板",
@@ -200,7 +206,8 @@
     "chooseSkillOrAssistant": "选择一个您想使用的线上技能或助手",
     "search": "搜索",
     "recommendationQuestions": "推荐问题",
-    "historicalMessages": "以上为历史消息"
+    "historicalMessages": "以上为历史消息",
+    "clickDownload": "点击下载"
   },
   "model": {
     "modelConfiguration": "模型配置",
@@ -386,7 +393,6 @@
     "1008": "当前助手或者技能未上线，无法直接对话",
     "1005": ""
   },
-  "all": "全部",
   "finetune": {
     "modelName": "模型名称",
     "rtService": "RT服务",
@@ -453,30 +459,6 @@
     "description": "说明",
     "gpuResourceUsage": "GPU资源使用情况"
   },
-  "confirmButton": "确定",
-  "add": "添加",
-  "back": "返回",
-  "create": "创建",
-  "delete": "删除",
-  "deleteSuccess": "删除成功",
-  "createTime": "创建时间",
-  "updateTime": "更新时间",
-  "success": "保存成功",
-  "edit": "编辑",
-  "enable": "启用",
-  "disable": "禁用",
-  "close": "关闭",
-  "cancel": "取消",
-  "save": "保存",
-  "submit": "提交",
-  "operations": "操作",
-  "previousPage": "上一页",
-  "nextPage": "下一页",
-  "formatError": "格式错误",
-  "port": "服务端口",
-  "cancle": "取消",
-  "tip": "提示",
-  "deleteAssistant": "确认删除该助手？",
   "build": {
     "create": "创建",
     "assistant": "助手",
@@ -578,7 +560,10 @@
     "useNewlineToSeparate": "使用换行符进行分隔，每行一个",
     "txtFile": "txt文件",
     "sensitiveWordMatch": "敏感词匹配",
-    "defaultAutoReply": "填写命中安全审查时的自动回复内容，例如“当前对话内容违反相关规范，请修改后重新输入。"
+    "defaultAutoReply": "填写命中安全审查时的自动回复内容，例如“当前对话内容违反相关规范，请修改后重新输入。",
+    "uploadAvator": "上传头像",
+    "fileSizeLimit": "文件大小不能超过",
+    "fileTypeLimit": "文件类型不符合要求："
   },
   "tools": {
     "addTool": "添加工具",
@@ -661,6 +646,31 @@
     "endDate": "结束日期",
     "actionBehavior": "操作行为"
   },
+  "all": "全部",
+  "confirmButton": "确定",
+  "add": "添加",
+  "back": "返回",
+  "create": "创建",
+  "delete": "删除",
+  "deleteSuccess": "删除成功",
+  "createTime": "创建时间",
+  "updateTime": "更新时间",
+  "success": "保存成功",
+  "edit": "编辑",
+  "enable": "启用",
+  "disable": "禁用",
+  "close": "关闭",
+  "cancel": "取消",
+  "save": "保存",
+  "submit": "提交",
+  "operations": "操作",
+  "previousPage": "上一页",
+  "nextPage": "下一页",
+  "formatError": "格式错误",
+  "port": "服务端口",
+  "cancle": "取消",
+  "tip": "提示",
+  "deleteAssistant": "确认删除该助手？",
   "chatTipsTitle": "使用提示",
   "chatTips": "1. 请遵守《中华人民共和国网络安全法》《中华人民共和国数据安全法》《中华人民共和国个人信息保护法》及《生成式人工智能服务安全基本要求》；\n2. 禁止上传涉及公司保密管理规定范围内的保密数据；\n3. 禁止上传包含个人隐私信息的数据；\n4. 禁止上传包含恶意程序或病毒的文件；\n5. 禁止使用 AI 生成攻击性代码；\n6. 禁止向 AI 提问包括但不限于涉爆涉恐涉黄及危害国家安全及公共安全的违法不良信息；\n7. AI 生成内容受到公司保密管理规定约束。用户应根据实际情况判断生成内容的合理性，避免 AI 幻觉造成的风险。"
 }

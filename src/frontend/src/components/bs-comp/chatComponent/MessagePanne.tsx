@@ -97,7 +97,7 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
                     case 'runLog':
                         return <RunLog key={msg.id} data={msg} />;
                     default:
-                        return <div className="text-sm mt-2 border rounded-md p-2" key={msg.id}>未知消息类型</div>;
+                        return <div className="text-sm mt-2 border rounded-md p-2" key={msg.id}>Unknown message type</div>;
                 }
             })
         }
