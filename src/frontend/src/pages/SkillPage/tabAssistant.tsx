@@ -11,11 +11,15 @@ import { AssistantItemDB, changeAssistantStatusApi, deleteAssistantApi, getAssis
 import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import CreateAssistant from "./components/CreateAssistant";
+import { userContext } from "@/contexts/userContext";
+import { useContext } from "react";
+import SelectSearch from "@/components/bs-ui/select/select"
 
 export default function Assistants() {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const { message } = useToast()
+    const { user } = useContext(userContext)
 
     const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData } = useTable<AssistantItemDB>({ pageSize: 15 }, (param) =>
         getAssistantsApi(param.page, param.pageSize, param.keyword)
@@ -43,8 +47,14 @@ export default function Assistants() {
 
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative top-[-60px]">
-            <div className="flex">
+            <div className="flex space-x-4">
                 <SearchInput className="w-64" placeholder={t('build.searchAssistant')} onChange={(e) => search(e.target.value)}></SearchInput>
+                <SelectSearch value="" options={[]} 
+                selectPlaceholder="全部标签"
+                inputPlaceholder="搜索标签"
+                selectClass="w-64"
+                onChange={() => {}} 
+                onValueChange={() => {}}/>
             </div>
             {/* list */}
             {
@@ -80,6 +90,7 @@ export default function Assistants() {
                                     title={item.name}
                                     description={item.desc}
                                     user={item.user_name}
+                                    currentUser={user}
                                     onClick={() => item.status !== 1 && navigate('/assistant/' + item.id)}
                                     onSwitchClick={() => !item.write && item.status !== 1 && message({ title: t('prompt'), description: t('skills.contactAdmin'), variant: 'warning' })}
                                     onDelete={handleDelete}

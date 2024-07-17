@@ -4,7 +4,7 @@ import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { AssistantIcon } from "@/components/bs-icons/assistant";
 import { NewApplicationIcon } from "@/components/bs-icons/newApplication";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { message, useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { useAssistantStore } from "@/store/assistantStore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -16,6 +16,7 @@ import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
+import HomePage from "./ChatHome";
 
 export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
@@ -173,7 +174,6 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             </div>
         }
     </div>
-
 
     return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
         {/* 技能会话 */}

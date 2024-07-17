@@ -68,6 +68,7 @@ export const LoginPage = () => {
             ).then((res:any) => {
                 localStorage.setItem('ws_token', res.access_token)
                 localStorage.setItem('isLogin', '1')
+                sessionStorage.setItem('location', 'HomePage')
                 location.href = __APP_ENV__.BASE_URL + '/'
             })
         ), (error) => {

@@ -1,6 +1,6 @@
 import { AssistantIcon } from "@/components/bs-icons/assistant";
 import { cname } from "@/components/bs-ui/utils";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AddToIcon } from "../../bs-icons/addTo";
 import { DelIcon } from "../../bs-icons/del";
 import { GoIcon } from "../../bs-icons/go";
@@ -11,6 +11,8 @@ import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { Switch } from "../../bs-ui/switch";
 import { useTranslation } from "react-i18next";
+import { LabelIcon } from "@/components/bs-icons/label";
+import LabelSelect from "../selectComponent/LabelSelect";
 
 interface IProps<T> {
   data: T,
@@ -22,6 +24,7 @@ interface IProps<T> {
   description: React.ReactNode | string,
   checked?: boolean,
   user?: string,
+  currentUser?: any,
   isAdmin?: boolean,
   headSelecter?: React.ReactNode,
   footer?: React.ReactNode,
@@ -71,6 +74,7 @@ export default function CardComponent<T>({
   icon: Icon = SkillIcon,
   edit = false,
   user,
+  currentUser,
   title,
   checked,
   isAdmin,
@@ -94,6 +98,17 @@ export default function CardComponent<T>({
     if (res === false) return
     setChecked(bln)
   }
+
+  const show = true
+  const isOperator = useMemo(() => {
+    return currentUser ? ['admin', 'group_admin'].includes(currentUser.role) || currentUser.user_name === user : false
+  },[currentUser])
+  const labels = [
+    {label:'标签一', value:'01', selected:false, edit:false},
+    {label:'标签二', value:'02', selected:true, edit:false},
+    {label:'标签三', value:'03', selected:false, edit:false},
+    {label:'标签四', value:'04', selected:true, edit:false},
+  ]
 
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
@@ -171,19 +186,44 @@ export default function CardComponent<T>({
     <CardContent className="h-[140px] overflow-auto scrollbar-hide">
       <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
-    <CardFooter className="flex justify-between h-10">
-      <div className="flex gap-1 items-center">
-        <UserIcon />
-        <span className="text-sm text-muted-foreground">{t('skills.createdBy')}</span>
-        <span className="text-sm font-medium leading-none overflow-hidden text-ellipsis max-w-32 ">{user}</span>
-      </div>
-      {edit
-        && <div className="hidden group-hover:flex">
-          {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>}
-          {isAdmin && type === 'skill' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
-          <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>
+    <CardFooter className="h-20 grid grid-rows-2">
+    {show ? (isOperator 
+        ? <LabelSelect labels={labels}>
+          <div onClick={(e) => e.stopPropagation()} className="mb-[10px] flex place-items-center rounded-sm pt-1 pb-1 group-hover:bg-[#F5F5F5]">
+            <LabelIcon className="text-muted-foreground mr-2"/>
+            <div className="text-sm text-muted-foreground truncate">
+              <span>办公工具，</span><span>效率工具</span>
+            </div>
+          </div>
+        </LabelSelect>
+        : <div className="mb-[10px] flex place-items-center rounded-sm pt-1 pb-1">
+          <LabelIcon className="text-muted-foreground mr-2"/>
+          <div className="text-sm text-muted-foreground truncate">
+            <span>办公工具，</span><span>效率工具</span>
+          </div>
         </div>
-      }
+      ) : <LabelSelect labels={labels}>
+          <div onClick={(e) => e.stopPropagation()} className="mb-[10px] opacity-0 group-hover:opacity-100 flex place-items-center rounded-sm pt-1 pb-1 group-hover:bg-[#F5F5F5]">
+            <LabelIcon className="text-muted-foreground mr-2"/>
+            <div className="text-sm text-muted-foreground">
+              <span>添加标签</span>
+            </div>
+        </div>
+        </LabelSelect>}
+      <div className="flex justify-between items-center h-10">
+        <div className="flex gap-1 items-center">
+          <UserIcon />
+          <span className="text-sm text-muted-foreground">{t('skills.createdBy')}</span>
+          <span className="text-sm font-medium leading-none overflow-hidden text-ellipsis max-w-32 ">{user}</span>
+        </div>
+        {edit
+          && <div className="hidden group-hover:flex">
+            {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>}
+            {isAdmin && type === 'skill' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
+            <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>
+          </div>
+        }
+      </div>
     </CardFooter>
   </Card>
 };
