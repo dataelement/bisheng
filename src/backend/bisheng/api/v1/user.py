@@ -61,7 +61,7 @@ async def regist(*, user: UserCreate):
     user_exists = UserDao.get_user_by_username(db_user.user_name)
     if user_exists:
         raise HTTPException(status_code=500, detail='用户名已存在')
-    if len(db_user.user_name)>30:
+    if len(db_user.user_name) > 30:
         raise HTTPException(status_code=500, detail='用户名最长 30 个字符')
     try:
         db_user.password = UserService.decrypt_md5_password(user.password)
@@ -81,16 +81,19 @@ async def regist(*, user: UserCreate):
 
 @router.post('/user/sso', response_model=UnifiedResponseModel[UserRead], status_code=201)
 async def sso(*, user: UserCreate):
-    '''给sso提供的接口'''
-    if settings.get_system_login_method().SSO_OAuth:  # 判断sso 是否打开
+    """ 给闭源网关提供的登录接口 """
+    if settings.get_system_login_method().bisheng_pro:  # 判断sso 是否打开
         account_name = user.user_name
         user_exist = UserDao.get_unique_user_by_name(account_name)
         if not user_exist:
+            # 判断下平台是否存在用户
+            user_all = UserDao.get_all_users(page=1, limit=1)
             # 自动创建用户
             user_exist = User.model_validate(user)
             logger.info('act=create_user account={}', account_name)
             default_admin = settings.get_system_login_method().admin_username
-            if default_admin and default_admin == account_name:
+            # 如果平台没有用户或者用户名和配置的管理员用户名一致，则插入为超级管理员
+            if len(user_all) == 0 or (default_admin and default_admin == account_name):
                 # 创建为超级管理员
                 user_exist = UserDao.add_user_and_admin_role(user_exist)
             else:
@@ -832,6 +835,14 @@ async def reset_password(
     user_info = UserDao.get_user(user_id)
     if not user_info:
         raise HTTPException(status_code=404, detail='用户不存在')
+    user_payload = UserPayload(**{
+        'user_id': user_info.user_id,
+        'user_name': user_info.user_name,
+        'role': ''
+    })
+    # 如果被修改的用户是系统管理员， 需要判断是否是本人
+    if user_payload.is_admin() and login_user.user_id != user_id:
+        raise HTTPException(status_code=500, detail='系统管理员只能本人重置密码')
 
     # 查询用户所在的用户组
     user_groups = UserGroupDao.get_user_group(user_info.user_id)

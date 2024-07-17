@@ -12,7 +12,7 @@ from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.variable_value import Variable, VariableCreate, VariableRead, VariableDao
 
 # build router
-router = APIRouter(prefix='/variable', tags=['variable'], dependencies=[Depends(get_login_user)])
+router = APIRouter(prefix='/variable', tags=['variable'])
 
 
 @router.post('/', status_code=200, response_model=UnifiedResponseModel[VariableRead])

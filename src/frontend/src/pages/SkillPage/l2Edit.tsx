@@ -16,6 +16,9 @@ import { createCustomFlowApi, getFlowApi } from "../../controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useHasForm } from "../../util/hook";
 import FormSet from "./components/FormSet";
+import Avator from "@/components/bs-ui/input/avator";
+import { SkillIcon } from "@/components/bs-icons";
+import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 
 export default function l2Edit() {
     const { t } = useTranslation()
@@ -91,6 +94,7 @@ export default function l2Edit() {
         setLoading(true)
 
         await captureAndAlertRequestErrorHoc(createCustomFlowApi({
+            logo,
             name,
             description,
             guide_word: guideWords
@@ -118,7 +122,7 @@ export default function l2Edit() {
         setLoading(true)
         formRef.current?.save()
 
-        await saveFlow({ ...flow, name, description, guide_word: guideWords })
+        await saveFlow({ ...flow, name, description, guide_word: guideWords, logo })
         setLoading(false)
         navigate('/flow/' + id, { replace: true })
     }
@@ -131,7 +135,7 @@ export default function l2Edit() {
         setLoading(true)
         formRef.current?.save()
 
-        const res = await captureAndAlertRequestErrorHoc(saveFlow({ ...flow, name, description, guide_word: guideWords }))
+        const res = await captureAndAlertRequestErrorHoc(saveFlow({ ...flow, name, description, guide_word: guideWords, logo }))
         setLoading(false)
         if (res) {
             message({
@@ -153,6 +157,14 @@ export default function l2Edit() {
 
     // isForm
     const isForm = useHasForm(flow)
+
+    // 头像
+    const [logo, setLogo] = useState('')
+    const uploadAvator = (file) => {
+        uploadFileWithProgress(file, (progress) => { }).then(res => {
+            setLogo(res.file_path);
+        })
+    }
 
     return <div className="relative box-border h-full overflow-auto">
         <div className="p-6 pb-48 h-full overflow-y-auto">
@@ -178,6 +190,10 @@ export default function l2Edit() {
                     </p>
                     {/* base form */}
                     <div className="w-full overflow-hidden transition-all px-1">
+                        {/* <div className="mt-4">
+                            <Label htmlFor="name">技能头像</Label>
+                            <Avator value={logo} className="mt-2" onChange={uploadAvator}><SkillIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
+                        </div> */}
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.skillName')}</Label>
                             <Input ref={nameRef} placeholder={t('skills.skillName')} className={`mt-2 ${error.name && 'border-red-400'}`} />

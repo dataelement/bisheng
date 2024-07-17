@@ -16,6 +16,7 @@ interface IProps<T> {
   data: T,
   /** id为''时，表示新建 */
   id?: number | string,
+  logo?: string,
   type: "skill" | "sheet" | "assist" | "setting", // 技能列表｜侧边弹窗列表
   title: string,
   edit?: boolean,
@@ -64,8 +65,13 @@ export function TitleIconBg({ id, className = '', children = <SkillIcon /> }) {
   return <div className={cname(`rounded-sm flex justify-center items-center ${gradients[parseInt(id + '', 16) % gradients.length]}`, className)}>{children}</div>
 }
 
+export function TitleLogo({ id = 0, url, className = '', children = <SkillIcon /> }) {
+  return url ? <img src={url} className={cname(`w-6 h-6 rounded-sm object-cover`, className)} /> : <TitleIconBg id={id} className={className}>{children}</TitleIconBg>
+}
+
 export default function CardComponent<T>({
   id = '',
+  logo = '',
   data,
   type,
   icon: Icon = SkillIcon,
@@ -130,9 +136,12 @@ export default function CardComponent<T>({
     <CardHeader className="pb-2">
       <CardTitle className="truncate-doubleline">
         <div className="flex gap-2 pb-2 items-center">
-          <TitleIconBg id={id}>
+          <TitleLogo
+            url={logo}
+            id={id}
+          >
             <Icon />
-          </TitleIconBg>
+          </TitleLogo>
           <p className=" align-middle">{title}</p>
         </div>
         {/* <span></span> */}
@@ -151,9 +160,12 @@ export default function CardComponent<T>({
   return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer" onClick={() => edit && onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
-        <TitleIconBg id={id} >
+        <TitleLogo
+          url={logo}
+          id={id}
+        >
           {type === 'skill' ? <SkillIcon /> : <AssistantIcon />}
-        </TitleIconBg>
+        </TitleLogo>
         <div className="flex gap-1 items-center">
           {headSelecter}
           <Switch

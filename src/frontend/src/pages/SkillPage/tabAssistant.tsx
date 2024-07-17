@@ -74,6 +74,7 @@ export default function Assistants() {
                                 <CardComponent<AssistantItemDB>
                                     data={item}
                                     id={item.id}
+                                    logo={item.logo}
                                     edit={item.write}
                                     checked={item.status === 1}
                                     type='assist'

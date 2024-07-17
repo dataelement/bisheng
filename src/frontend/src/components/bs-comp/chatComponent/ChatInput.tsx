@@ -296,7 +296,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     form && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
-                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-500'}></FormIcon></div>
+                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-800'}></FormIcon></div>
                 }
             </div>
             {/* send */}

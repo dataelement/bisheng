@@ -64,7 +64,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [extraNavigation, setExtraNavigation] = useState({ title: "" });
   const [extraComponent, setExtraComponent] = useState(<></>);
   const [appConfig, setAppConfig] = useState<any>({
-    libAccepts: []
+    libAccepts: [],
+    noFace: true
   })
 
   const loadConfig = () => {
@@ -77,8 +78,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         dialogQuickSearch: res.dialog_quick_search,
         websocketHost: res.websocket_url || window.location.host,
         isPro: !!res.pro,
-        hasSSO: !!res.sso,
-        chatPrompt: !!res.application_usage_tips
+        chatPrompt: !!res.application_usage_tips,
+        noFace: !res.show_github_and_help
       })
     })
   }

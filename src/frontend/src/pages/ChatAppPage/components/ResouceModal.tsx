@@ -129,7 +129,6 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, closeDialo
         {
             (!isMobile || !collapse) && <div className="sm:w-[300px] bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar w-[200px] max-h-[100%] sm:max-h-full absolute sm:static z-20 sm:z-auto">
                 {/* label */}
-                {/* 中英 */}
                 <div className="mb-4 text-sm font-bold  place-items-center space-x-1 hidden sm:block">
                     <div className="flex">
                         <span>{t('chat.filterLabel')}</span>

@@ -43,7 +43,7 @@ export const LoginPage = () => {
         getCaptchaApi().then(setCaptchaData)
     };
 
-    const ldapRef = useRef(false)
+    const [isLDAP, setIsLDAP] = useState(false)
     const handleLogin = async () => {
         const error = []
         const [mail, pwd] = [mailRef.current.value, pwdRef.current.value]
@@ -60,12 +60,12 @@ export const LoginPage = () => {
         //     list: error,
         // });
 
-        const encryptPwd = ldapRef.current ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
+        const encryptPwd = isLDAP ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
         captureAndAlertRequestErrorHoc(
-            (ldapRef.current 
-                ? ldapLoginApi(mail, encryptPwd) 
+            (isLDAP
+                ? ldapLoginApi(mail, encryptPwd)
                 : loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
-            ).then((res:any) => {
+            ).then((res: any) => {
                 localStorage.setItem('ws_token', res.access_token)
                 localStorage.setItem('isLogin', '1')
                 location.href = __APP_ENV__.BASE_URL + '/'
@@ -188,7 +188,7 @@ export const LoginPage = () => {
                         {
                             showLogin ? <>
                                 <div className="text-center">
-                                    <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a>
+                                    {!isLDAP && <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a>}
                                 </div>
                                 <Button
                                     className='h-[48px] mt-[32px] dark:bg-button'
@@ -203,11 +203,11 @@ export const LoginPage = () => {
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
-                        {appConfig.hasSSO && <LoginBridge onHasLdap={(bool) => ldapRef.current = bool} />}
+                        {appConfig.isPro && <LoginBridge onHasLdap={setIsLDAP} />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>
-                        {!appConfig.isPro && <div className='help flex'>
+                        {!appConfig.noFace && <div className='help flex'>
                             <a href={"https://github.com/dataelement/bisheng"} target="_blank">
                                 <GithubIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px] mx-[8px] hover:bg-[#1b1f23] hover:text-[white] hover:cursor-pointer" />
                             </a>

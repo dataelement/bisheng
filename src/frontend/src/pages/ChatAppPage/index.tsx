@@ -12,7 +12,7 @@ import ChatPanne from "./components/ChatPanne";
 import { formatStrTime, formatDate } from "@/util/utils";
 import { SkillIcon, AssistantIcon } from "@/components/bs-icons";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { TitleIconBg } from "@/components/bs-comp/cardComponent";
+import { TitleIconBg, TitleLogo } from "@/components/bs-comp/cardComponent";
 
 export default function SkillChatPage() {
 
@@ -101,9 +101,12 @@ export default function SkillChatPage() {
                             onClick={() => handleSelectChat(chat)}>
                             <div className="flex place-items-center space-x-3">
                                 <div className=" inline-block bg-purple-500 rounded-md">
-                                    <TitleIconBg className="" id={chat.flow_id}>
+                                    <TitleLogo
+                                        url={chat.logo}
+                                        id={chat.flow_id}
+                                    >
                                         {chat.flow_type === 'assistant' ? <AssistantIcon /> : <SkillIcon />}
-                                    </TitleIconBg>
+                                    </TitleLogo>
                                 </div>
                                 <p className="truncate text-sm font-bold leading-6">{chat.flow_name}</p>
                             </div>
