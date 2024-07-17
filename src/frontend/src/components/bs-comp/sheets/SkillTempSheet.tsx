@@ -51,6 +51,7 @@ export default function SkillTempSheet({ children, onSelect }) {
                             <CardComponent key={i}
                                 id={i + 1}
                                 data={flow}
+                                logo={flow.logo}
                                 title={flow.name}
                                 description={flow.description}
                                 type="sheet"

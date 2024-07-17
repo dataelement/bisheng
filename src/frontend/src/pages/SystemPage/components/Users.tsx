@@ -152,7 +152,8 @@ export default function Users(params) {
         // 禁止编辑admin用户
         if (isSuperAdmin) return <div>
             <Button variant="link" disabled className="px-0">{t('edit')}</Button>
-            <Button variant="link" disabled className="px-0 pl-4">{t('system.resetPwd')}</Button>
+            {/* <Button variant="link" disabled className="px-0 pl-4">{t('system.resetPwd')}</Button> */}
+            <Button variant="link" className="px-0 pl-4" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>
             <Button variant="link" disabled className="text-red-500 px-0 pl-4">{t('disable')}</Button>
         </div>
 
@@ -177,7 +178,7 @@ export default function Users(params) {
                     <SearchInput placeholder={t('system.username')} onChange={(e) => search(e.target.value)}></SearchInput>
                 </div>
                 {user.role === 'admin' && <Button className="flex justify-around" onClick={() => setOpenCreate(true)}>
-                    <PlusIcon className="text-primary"/>
+                    <PlusIcon className="text-primary" />
                     <span className="text-[#fff] mx-4">{t('create')}</span>
                 </Button>}
             </div>
@@ -246,7 +247,7 @@ export default function Users(params) {
             />
         </div>
 
-        <CreateUser open={openCreate} onClose={(bool) => {setOpenCreate(bool); reload()}} onSave={reload}/>
+        <CreateUser open={openCreate} onClose={(bool) => { setOpenCreate(bool); reload() }} onSave={reload} />
         <UserRoleModal user={currentUser} onClose={() => setCurrentUser(null)} onChange={handleRoleChange}></UserRoleModal>
         <UserPwdModal ref={userPwdModalRef} />
     </div>

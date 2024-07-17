@@ -22,8 +22,8 @@ export const getAssistantsApi = async (page, limit, name): Promise<AssistantItem
 };
 
 // 创建助手
-export const createAssistantsApi = async (name, prompt) => {
-    return await axios.post(`/api/v1/assistant`, { name, prompt, logo: '' })
+export const createAssistantsApi = async (name, prompt, url) => {
+    return await axios.post(`/api/v1/assistant`, { name, prompt, logo: url })
 };
 
 // 获取助手详情
