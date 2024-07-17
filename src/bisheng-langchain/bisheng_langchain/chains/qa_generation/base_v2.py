@@ -401,6 +401,7 @@ class QAGenerationChainV2(Chain):
                 {
                     "question": pair["question"],
                     "answer": pair["ground_truth"][0],
+                    "context": pair["ground_truth_context"][0],
                 }, ensure_ascii=False)
         return {self.output_key: qa}
 

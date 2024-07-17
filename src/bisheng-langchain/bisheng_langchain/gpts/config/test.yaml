@@ -1,0 +1,35 @@
+assistant:
+  # prompt_type: 'ASSISTANT_PROMPT_DEFAULT'
+  # llm:
+  #   type: 'ChatOpenAI'
+  #   model: 'gpt-4-0125-preview'
+  #   openai_api_key: ''
+  #   openai_proxy: 'http://118.195.232.223:39995'
+  #   temperature: 0.0
+
+  # prompt_type: 'ASSISTANT_PROMPT_COHERE'
+  # llm:
+  #   type: 'ChatOpenAI'
+  #   model: 'command-r-plus-104b'
+  #   openai_api_base: 'http://34.87.129.78:9100/v1'
+  #   openai_api_key: ''
+  #   openai_proxy: ''
+  #   temperature: 0.3
+
+  prompt_type: 'ASSISTANT_PROMPT_DEFAULT'
+  llm:
+    type: 'ChatQWen'
+    model_name: 'qwen-max'
+    api_key: ''
+    temperature: 0.3
+
+  tools:
+    - type: "get_current_time"
+
+  agent_executor:
+    # type: 'get_openai_functions_agent_executor'
+    # type: 'get_qwen_local_functions_agent_executor'
+    type: 'get_react_agent_executor'
+    interrupt_before_action: False
+    recursion_limit: 50
+
