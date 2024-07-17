@@ -103,6 +103,10 @@ export default function EvaluatingCreate() {
         file: fileRef.current,
       });
       navigate(-1);
+    }catch(error){
+      const errorlist = []
+      errorlist.push(error);
+      handleError(errorlist);
     } finally {
       setLoading(false);
     }
