@@ -835,6 +835,14 @@ async def reset_password(
     user_info = UserDao.get_user(user_id)
     if not user_info:
         raise HTTPException(status_code=404, detail='用户不存在')
+    user_payload = UserPayload(**{
+        'user_id': user_info.user_id,
+        'user_name': user_info.user_name,
+        'role': ''
+    })
+    # 如果被修改的用户是系统管理员， 需要判断是否是本人
+    if user_payload.is_admin() and login_user.user_id != user_id:
+        raise HTTPException(status_code=500, detail='系统管理员只能本人重置密码')
 
     # 查询用户所在的用户组
     user_groups = UserGroupDao.get_user_group(user_info.user_id)
