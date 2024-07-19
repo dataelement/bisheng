@@ -170,10 +170,15 @@ export async function deleteFlowFromDatabase(flowId: string) {
  * @param 创建人
  */
 export const createCustomFlowApi = async (params: {
+    logo: string,
     name: string,
     description: string,
     guide_word: string
 }, userName: string) => {
+    if (params.logo) {
+        // logo保存相对路径
+        params.logo = params.logo.match(/(icon.*)\?/)?.[1]
+    }
     const response: FlowType = await axios.post("/api/v1/flows/", {
         ...params,
         data: null
@@ -197,7 +202,12 @@ export const createCustomFlowApi = async (params: {
 export async function updateFlowApi(
     updatedFlow: FlowType
 ): Promise<FlowType> {
+    if (updatedFlow.logo) {
+        // logo保存相对路径
+        updatedFlow.logo = updatedFlow.logo.match(/(icon.*)\?/)?.[1]
+    }
     return await axios.patch(`/api/v1/flows/${updatedFlow.id}`, {
+        logo: updatedFlow.logo || '',
         name: updatedFlow.name,
         data: updatedFlow.data,
         description: updatedFlow.description,

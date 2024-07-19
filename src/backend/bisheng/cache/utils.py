@@ -216,7 +216,8 @@ def save_uploaded_file(file, folder_name, file_name, bucket_name: str = tmp_buck
 
     output_file = file
     # convert no utf-8 file to utf-8
-    if file_name.endswith('.txt') or file_name.endswith('.md'):
+    file_ext = file_name.split('.')[-1].lower()
+    if file_ext in ('txt', 'md', 'csv'):
         output_file = BytesIO()
         output_file = convert_encoding_cchardet(file, output_file)
 

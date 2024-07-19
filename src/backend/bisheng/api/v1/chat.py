@@ -12,6 +12,7 @@ from sqlmodel import select
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.base import BaseService
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.services.user_service import UserPayload, get_login_user
@@ -249,6 +250,7 @@ def get_online_chat(*,
             FlowGptsOnlineList(id=str(one.id),
                                name=one.name,
                                desc=one.desc,
+                               logo=one.logo,
                                create_time=one.create_time,
                                update_time=one.update_time,
                                flow_type='assistant'))
@@ -259,12 +261,15 @@ def get_online_chat(*,
             FlowGptsOnlineList(id=str(one.id),
                                name=one.name,
                                desc=one.description,
+                               logo=one.logo,
                                create_time=one.create_time,
                                update_time=one.update_time,
                                flow_type='flow'))
     res.sort(key=lambda x: x.update_time, reverse=True)
     if page and limit:
         res = res[(page - 1) * limit:page * limit]
+    for one in res:
+        one.logo = BaseService.get_logo_share_link(one.logo)
     return resp_200(data=res)
 
 

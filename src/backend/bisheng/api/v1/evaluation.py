@@ -9,6 +9,7 @@ from fastapi_jwt_auth import AuthJWT
 from fastapi import APIRouter, Depends, Query, UploadFile, Form, BackgroundTasks
 from bisheng.database.models.evaluation import EvaluationRead, EvaluationCreate, Evaluation
 from bisheng.utils.minio_client import MinioClient
+from bisheng.cache.utils import convert_encoding_cchardet
 
 router = APIRouter(prefix='/evaluation', tags=['Skills'], dependencies=[Depends(get_login_user)])
 
@@ -40,6 +41,9 @@ def create_evaluation(*,
     user_id = payload.get('user_id')
 
     try:
+        # 尝试做下转码操作
+        output_file = io.BytesIO()
+        file.file = convert_encoding_cchardet(file.file, output_file)
         EvaluationService.parse_csv(file_data=io.BytesIO(file.file.read()))
     except ValueError:
         return resp_500(code=400, message='文件格式不符合要求，请参考模板文件')

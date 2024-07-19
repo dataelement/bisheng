@@ -170,8 +170,7 @@ class FlowDao(FlowBase):
         with session_getter() as session:
             # data 数据量太大，对mysql 有影响
             statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
-                               Flow.update_time, Flow.description,
-                               Flow.guide_word)
+                               Flow.logo, Flow.update_time, Flow.description, Flow.guide_word)
             if extra_ids and isinstance(extra_ids, List):
                 statement = statement.where(or_(Flow.id.in_(extra_ids), Flow.user_id == user_id))
             elif not extra_ids:
@@ -211,16 +210,16 @@ class FlowDao(FlowBase):
     def get_all_online_flows(cls, keyword: str = None):
         with session_getter() as session:
             statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
-                               Flow.update_time, Flow.description,
-                               Flow.guide_word).where(Flow.status == FlowStatus.ONLINE.value)
+                               Flow.logo, Flow.update_time, Flow.description, Flow.guide_word).where(
+                Flow.status == FlowStatus.ONLINE.value)
             if keyword:
                 statement = statement.where(or_(Flow.name.like(f'%{keyword}%'), Flow.description.like(f'%{keyword}%')))
             result = session.exec(statement).mappings().all()
             return [Flow.model_validate(f) for f in result]
 
     @classmethod
-    def get_user_access_online_flows(cls, user_id: int, page: int = 0, limit: int = 0, keyword: str = None) -> List[
-        Flow]:
+    def get_user_access_online_flows(cls, user_id: int, page: int = 0, limit: int = 0, keyword: str = None) \
+            -> List[Flow]:
         user_role = UserRoleDao.get_user_roles(user_id)
         flow_id_extra = []
         if user_role:

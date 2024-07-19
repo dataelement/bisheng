@@ -26,10 +26,10 @@ export default function AutoPromptDialog({ onOpenChange }) {
     const { assistantState, dispatchAssistant } = useAssistantStore()
 
     const init = () => {
-        const prompt = areaRef.current.value
+        const prompt = areaRef.current?.value || assistantState.prompt
         const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/assistant/auto?assistant_id=${id}&prompt=${encodeURIComponent(prompt)}`;
         const eventSource = new EventSource(apiUrl);
-        areaRef.current.value = ''
+        if (areaRef.current) areaRef.current.value = ''
         let queue = LoadType.Prompt
         setLoading(queue)
 
