@@ -3,6 +3,7 @@ from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import Request
+from loguru import logger
 
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                            AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
@@ -11,6 +12,7 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
@@ -27,10 +29,9 @@ from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
-from loguru import logger
 
 
-class AssistantService(AssistantUtils):
+class AssistantService(BaseService, AssistantUtils):
     UserCache: InMemoryCache = InMemoryCache()
 
     @classmethod
@@ -77,6 +78,7 @@ class AssistantService(AssistantUtils):
         flow_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.FLOW, assistant_ids)
 
         for one in res:
+            one.logo = cls.get_logo_share_link(one.logo)
             simple_assistant = cls.return_simple_assistant_info(one)
             if one.user_id == user.user_id or user.is_admin():
                 simple_assistant.write = True
@@ -121,6 +123,7 @@ class AssistantService(AssistantUtils):
                 logger.error(f'not expect link info: {one.dict()}')
         tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list,
                                                                  knowledge_list)
+        assistant.logo = cls.get_logo_share_link(assistant.logo)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
                                            flow_list=flow_list,

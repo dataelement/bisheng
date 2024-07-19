@@ -137,7 +137,7 @@ class EvaluationService:
 
         file_ext = os.path.basename(file.filename).split('.')[-1]
         file_path = f'evaluation/dataset/{file_id}.{file_ext}'
-        minio_client.upload_minio_file(file_path, file.file, file.size, content_type=file.content_type)
+        minio_client.upload_minio_file(file_path, file.file, length=file.size, content_type=file.content_type)
         return file_name, file_path
 
     @classmethod

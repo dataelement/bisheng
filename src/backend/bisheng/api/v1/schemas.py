@@ -209,6 +209,7 @@ class UploadFileResponse(BaseModel):
 
     flowId: Optional[str]
     file_path: str
+    relative_path: str  # minio的相对路径，即object_name
 
 
 class StreamData(BaseModel):
