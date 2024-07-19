@@ -79,7 +79,7 @@ export default function EditAssistantDialog({ name, desc, onSave }) {
     };
 
     const uploadAvator = (file) => {
-        uploadFileWithProgress(file, (progress) => { }).then(res => {
+        uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
             setFormData(prev => ({ ...prev, logo: res.file_path }));
         })
     }

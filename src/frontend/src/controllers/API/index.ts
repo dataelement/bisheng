@@ -144,8 +144,12 @@ export async function retryKnowledgeFileApi(objs) {
 /**
  * 上传文件
  */
-export async function uploadLibFile(data, config) {
-  return await axios.post(`/api/v1/knowledge/upload`, data, config);
+export async function uploadLibFile(data, config, type: 'knowledge' | 'icon') {
+  const urls = {
+    knowledge: '/api/v1/knowledge/upload',
+    icon: '/api/v1/upload/icon',
+  }
+  return await axios.post(urls[type], data, config);
 }
 
 /**

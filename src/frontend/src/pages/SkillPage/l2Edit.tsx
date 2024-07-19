@@ -55,6 +55,7 @@ export default function l2Edit() {
             nameRef.current.value = _flow.name
             descRef.current.value = _flow.description
             guideRef.current.value = _flow.guide_word
+            setLogo(_flow.logo)
         })
     }, [id])
 
@@ -161,7 +162,7 @@ export default function l2Edit() {
     // 头像
     const [logo, setLogo] = useState('')
     const uploadAvator = (file) => {
-        uploadFileWithProgress(file, (progress) => { }).then(res => {
+        uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
             setLogo(res.file_path);
         })
     }
