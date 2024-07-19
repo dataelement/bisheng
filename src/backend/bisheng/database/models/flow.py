@@ -164,7 +164,8 @@ class FlowDao(FlowBase):
 
     @classmethod
     def get_flows(cls, user_id: Optional[int], extra_ids: Union[List[str], str], name: str,
-                  status: Optional[int] = None, page: int = 0, limit: int = 0) -> List[Flow]:
+                  status: Optional[int] = None, flow_ids: List[str] = None, page: int = 0, limit: int = 0) \
+            -> List[Flow]:
         with session_getter() as session:
             # data 数据量太大，对mysql 有影响
             statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
@@ -178,6 +179,8 @@ class FlowDao(FlowBase):
                 statement = statement.where(or_(Flow.name.like(f'%{name}%'), Flow.description.like(f'%{name}%')))
             if status is not None:
                 statement = statement.where(Flow.status == status)
+            if flow_ids:
+                statement = statement.where(Flow.id.in_(flow_ids))
             statement = statement.order_by(Flow.update_time.desc())
             if page > 0 and limit > 0:
                 statement = statement.offset((page - 1) * limit).limit(limit)
@@ -187,7 +190,7 @@ class FlowDao(FlowBase):
 
     @classmethod
     def count_flows(cls, user_id: Optional[int], extra_ids: Union[List[str], str], name: str,
-                    status: Optional[int] = None) -> int:
+                    status: Optional[int] = None, flow_ids: List[str] = None) -> int:
         with session_getter() as session:
             count_statement = session.query(func.count(Flow.id))
             if extra_ids and isinstance(extra_ids, List):
@@ -197,6 +200,8 @@ class FlowDao(FlowBase):
             if name:
                 count_statement = count_statement.filter(or_(Flow.name.like(f'%{name}%'),
                                                              Flow.description.like(f'%{name}%')))
+            if flow_ids:
+                count_statement = count_statement.filter(Flow.id.in_(flow_ids))
             if status is not None:
                 count_statement = count_statement.filter(Flow.status == status)
             return count_statement.scalar()

@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 
 from sqlalchemy import Column, DateTime, text, Text
@@ -6,6 +7,10 @@ from sqlmodel import Field, select
 
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.base import session_getter
+
+
+class ConfigKeyEnum(Enum):
+    HOME_TAGS = 'home_tags'  # 首页标签ID列表
 
 
 class ConfigBase(SQLModelSerializable):

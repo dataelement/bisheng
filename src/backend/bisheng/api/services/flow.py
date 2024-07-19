@@ -21,6 +21,7 @@ from bisheng.database.models.flow import FlowDao, FlowStatus, Flow
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import RoleAccessDao, AccessType
+from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
@@ -182,15 +183,19 @@ class FlowService:
         return resp_200(data=flow_version)
 
     @classmethod
-    def get_all_flows(cls, user: UserPayload, name: str, status: int, page: int = 1, page_size: int = 10) -> \
-            UnifiedResponseModel[List[Dict]]:
+    def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: int = 0, page: int = 1,
+                      page_size: int = 10) -> UnifiedResponseModel[List[Dict]]:
         """
         获取所有技能
         """
+        flow_ids = []
+        if tag_id:
+            ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.FLOW)
+            flow_ids = [UUID(one.resource_id) for one in ret]
         # 获取用户可见的技能列表
         if user.is_admin():
-            data = FlowDao.get_flows(user.user_id, "admin", name, status, page, page_size)
-            total = FlowDao.count_flows(user.user_id, "admin", name, status)
+            data = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, page_size)
+            total = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids)
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
@@ -198,8 +203,8 @@ class FlowService:
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
-            data = FlowDao.get_flows(user.user_id, flow_id_extra, name, status, page, page_size)
-            total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status)
+            data = FlowDao.get_flows(user.user_id, flow_id_extra, name, status, flow_ids, page, page_size)
+            total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids)
 
         # 获取技能列表对应的用户信息和版本信息
         # 技能ID列表
@@ -221,6 +226,17 @@ class FlowService:
                 flow_versions[one.flow_id] = []
             flow_versions[one.flow_id].append(jsonable_encoder(one))
 
+        # 获取技能所属的分组
+        flow_groups = GroupResourceDao.get_resources_group(ResourceTypeEnum.FLOW, flow_ids)
+        flow_group_dict = {}
+        for one in flow_groups:
+            if one.third_id not in flow_group_dict:
+                flow_group_dict[one.third_id] = []
+            flow_group_dict[one.third_id].append(one.group_id)
+
+        # 获取技能关联的tag
+        flow_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.FLOW, flow_ids)
+
         # 重新拼接技能列表list信息
         res = []
         for one in data:
@@ -228,6 +244,9 @@ class FlowService:
             flow_info['user_name'] = user_dict.get(one.user_id, one.user_id)
             flow_info['write'] = True if user.is_admin() or user.user_id == one.user_id else False
             flow_info['version_list'] = flow_versions.get(one.id.hex, [])
+            flow_info['group_ids'] = flow_group_dict.get(one.id.hex, [])
+            flow_info['tags'] = flow_tags.get(one.id.hex, [])
+
             res.append(flow_info)
 
         return resp_200(data={

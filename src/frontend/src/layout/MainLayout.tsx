@@ -170,7 +170,7 @@ export default function MainLayout() {
                             </>
                         }
                     </nav>
-                    {!appConfig.isPro && <div className="absolute left-0 bottom-0 w-[180px] p-2">
+                    {!appConfig.noFace && <div className="absolute left-0 bottom-0 w-[180px] p-2">
                         <div className="help flex items-between my-3">
                             <TooltipProvider>
                                 <Tooltip>

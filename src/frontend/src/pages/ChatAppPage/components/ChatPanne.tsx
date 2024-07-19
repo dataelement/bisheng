@@ -27,7 +27,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const { assistantState, loadAssistantState, destroy } = useAssistantStore()
     // console.log('data :>> ', flow);
     const build = useBuild()
-    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId } = useMessageStore()
+    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs} = useMessageStore()
     useEffect(() => {
         return destroy
     }, [])
@@ -37,10 +37,10 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             setAssistant(null)
             const _flow = await getFlowApi(id, version)
             await build(_flow, chatId)
-            version === 'v1' && loadHistoryMsg(_flow.id, chatId, {
+            version === 'v1' ? loadHistoryMsg(_flow.id, chatId, {
                 appendHistory,
                 lastMsg: t('historicalMessages')
-            })
+            }) : clearMsgs()
             flowRef.current = _flow
             setFlow(_flow)
             changeChatId(chatId) // ws
@@ -48,10 +48,10 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             flowRef.current = null
             setFlow(null)
             const _assistant = await loadAssistantState(id, version)
-            loadHistoryMsg(_assistant.id, chatId, {
+            version === 'v1' ? loadHistoryMsg(_assistant.id, chatId, {
                 appendHistory,
                 lastMsg: t('historicalMessages')
-            })
+            }) : clearMsgs()
             setAssistant(_assistant)
             changeChatId(chatId) // ws
         }
@@ -173,7 +173,6 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             </div>
         }
     </div>
-
 
     return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
         {/* 技能会话 */}

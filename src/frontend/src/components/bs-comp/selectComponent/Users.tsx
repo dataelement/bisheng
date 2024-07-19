@@ -36,8 +36,8 @@ export default function UsersSelect({ multiple = false, lockedValues = [], value
         lockedValues={lockedValues}
         disabled={disabled}
         options={options}
-        placeholder={'请选择用户'}
-        searchPlaceholder={'搜索用户名称'}
+        placeholder={t('system.selectUser')}
+        searchPlaceholder={t('system.searchUser')}
         onChange={onChange}
         onLoad={() => reload(1, '')}
         onSearch={(val) => reload(1, val)}

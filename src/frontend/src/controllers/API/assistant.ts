@@ -22,8 +22,8 @@ export const getAssistantsApi = async (page, limit, name): Promise<AssistantItem
 };
 
 // 创建助手
-export const createAssistantsApi = async (name, prompt) => {
-    return await axios.post(`/api/v1/assistant`, { name, prompt, logo: '' })
+export const createAssistantsApi = async (name, prompt, url) => {
+    return await axios.post(`/api/v1/assistant`, { name, prompt, logo: url })
 };
 
 // 获取助手详情
@@ -55,8 +55,13 @@ export const deleteAssistantApi = async (id) => {
 
 
 // 获取会话选择列表
-export const getChatOnlineApi = async () => {
-    return await axios.get(`/api/v1/chat/online`)
+export const getChatOnlineApi = async (page, keyword) => {
+    return await axios.get(`/api/v1/chat/online`, {
+        params: {
+            page, keyword,
+            limit: 40
+        }
+    })
 };
 
 

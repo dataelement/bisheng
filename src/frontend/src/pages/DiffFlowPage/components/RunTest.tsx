@@ -37,7 +37,7 @@ export default function RunTest({ nodeId }) {
             return cur ? count + 1 : count
         }, 0) + 1 // +1 测试用例列 
 
-        return 100 / (count === 2 ? 2 : count + 1) // hack 两个 按 45% 分
+        return 100 / (count === 2 ? count : count + 1) // hack 两个 按 45% 分
     }, [mulitVersionFlow])
 
     const handleUploadTxt = () => {

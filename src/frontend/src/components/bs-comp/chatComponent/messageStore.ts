@@ -39,6 +39,7 @@ type Actions = {
     insetSystemMsg: (text: string) => void;
     insetBsMsg: (text: string) => void;
     setShowGuideQuestion: (text: boolean) => void;
+    clearMsgs: () => void;
 }
 
 
@@ -120,6 +121,11 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         } else {
             set({ historyEnd: true })
         }
+    },
+    clearMsgs() {
+        setTimeout(() => {
+            set({ hisMessages: [], messages: [], historyEnd: true })
+        }, 0);
     },
     destory() {
         set({ chatId: '', messages: [] })

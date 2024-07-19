@@ -12,7 +12,8 @@ import ChatPanne from "./components/ChatPanne";
 import { formatStrTime, formatDate } from "@/util/utils";
 import { SkillIcon, AssistantIcon } from "@/components/bs-icons";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { TitleIconBg } from "@/components/bs-comp/cardComponent";
+import { TitleIconBg, TitleLogo } from "@/components/bs-comp/cardComponent";
+import LoadMore from "@/components/bs-comp/loadMore";
 
 export default function SkillChatPage() {
 
@@ -20,24 +21,6 @@ export default function SkillChatPage() {
     const [selectChat, setSelelctChat] = useState<any>({
         id: '', chatId: '', type: ''
     })
-    // scroll load
-    const footerRef = useRef<HTMLDivElement>(null)
-    useEffect(function () {
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    onScrollLoad()
-                }
-            });
-        }, {
-            // root: null, // 视口
-            rootMargin: '0px', // 视口的边距
-            threshold: 0.1 // 目标元素超过视口的10%即触发回调
-        });
-
-        observer.observe(footerRef.current);
-        return () => footerRef.current && observer.unobserve(footerRef.current);
-    }, [])
 
     // 对话列表
     const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat, onScrollLoad } = useChatList()
@@ -101,9 +84,12 @@ export default function SkillChatPage() {
                             onClick={() => handleSelectChat(chat)}>
                             <div className="flex place-items-center space-x-3">
                                 <div className=" inline-block bg-purple-500 rounded-md">
-                                    <TitleIconBg className="" id={chat.flow_id}>
+                                    <TitleLogo
+                                        url={chat.logo}
+                                        id={chat.flow_id}
+                                    >
                                         {chat.flow_type === 'assistant' ? <AssistantIcon /> : <SkillIcon />}
-                                    </TitleIconBg>
+                                    </TitleLogo>
                                 </div>
                                 <p className="truncate text-sm font-bold leading-6">{chat.flow_name}</p>
                             </div>
@@ -115,7 +101,7 @@ export default function SkillChatPage() {
                         </div>
                     ))
                 }
-                <div ref={footerRef} style={{ height: 20 }}></div>
+                <LoadMore onScrollLoad={onScrollLoad} />
             </div>
         </div>
         {/* chat */}

@@ -140,7 +140,7 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
             </div>
             <div className="generic-node-tooltip-div">
               <ShadTooltip content={data.node.display_name}>
-                <div className="generic-node-tooltip-div text-[#111]">
+                <div className="generic-node-tooltip-div ">
                   {isGroup ? <EditLabel
                     rule={[
                       { required: true }

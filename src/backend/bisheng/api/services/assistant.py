@@ -23,6 +23,7 @@ from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead, Gpts
 from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
@@ -37,14 +38,20 @@ class AssistantService(AssistantUtils):
                       user: UserPayload,
                       name: str = None,
                       status: int | None = None,
+                      tag_id: int | None = None,
                       page: int = 1,
                       limit: int = 20) -> UnifiedResponseModel[List[AssistantSimpleInfo]]:
         """
         获取助手列表
         """
+        assistant_ids = []
+        if tag_id:
+            ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.ASSISTANT)
+            assistant_ids = [UUID(one.resource_id) for one in ret]
+
         data = []
         if user.is_admin():
-            res, total = AssistantDao.get_all_assistants(name, page, limit)
+            res, total = AssistantDao.get_all_assistants(name, page, limit, assistant_ids)
         else:
             # 权限管理可见的助手信息
             assistant_ids_extra = []
@@ -54,12 +61,27 @@ class AssistantService(AssistantUtils):
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
                 if role_access:
                     assistant_ids_extra = [UUID(access.third_id).hex for access in role_access]
-            res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit)
+            res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit,
+                                                     assistant_ids)
+
+        assistant_ids = [one.id.hex for one in res]
+        # 查询助手所属的分组
+        assistant_groups = GroupResourceDao.get_resources_group(ResourceTypeEnum.ASSISTANT, assistant_ids)
+        assistant_group_dict = {}
+        for one in assistant_groups:
+            if one.third_id not in assistant_group_dict:
+                assistant_group_dict[one.third_id] = []
+            assistant_group_dict[one.third_id].append(one.group_id)
+
+        # 获取助手关联的tag
+        flow_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.FLOW, assistant_ids)
 
         for one in res:
             simple_assistant = cls.return_simple_assistant_info(one)
             if one.user_id == user.user_id or user.is_admin():
                 simple_assistant.write = True
+            simple_assistant.group_ids = assistant_group_dict.get(one.id.hex, [])
+            simple_assistant.tags = flow_tags.get(one.id.hex, [])
             data.append(simple_assistant)
         return resp_200(data={'data': data, 'total': total})
 

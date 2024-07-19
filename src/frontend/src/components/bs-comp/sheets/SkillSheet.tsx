@@ -62,6 +62,7 @@ export default function SkillSheet({ select, children, onSelect }) {
                   key={i}
                   id={i + 1}
                   data={flow}
+                  logo={flow.logo}
                   title={flow.name}
                   description={flow.description}
                   type="sheet"
