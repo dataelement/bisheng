@@ -107,21 +107,25 @@ class AssistantDao(Assistant):
             return session.exec(statement).first()
 
     @classmethod
-    def get_assistants(cls, user_id: int, name: str, assistant_ids: List[UUID],
-                       status: Optional[int], page: int, limit: int) -> (List[Assistant], int):
+    def get_assistants(cls, user_id: int, name: str, assistant_ids_extra: List[UUID],
+                       status: Optional[int], page: int, limit: int, assistant_ids: List[UUID]=None) -> (List[Assistant], int):
         with session_getter() as session:
             count_statement = session.query(func.count(
                 Assistant.id)).where(Assistant.is_delete == 0)
             statement = select(Assistant).where(Assistant.is_delete == 0)
-            if assistant_ids:
+            if assistant_ids_extra:
                 # 需要or 加入的条件
                 statement = statement.where(
-                    or_(Assistant.id.in_(assistant_ids), Assistant.user_id == user_id))
+                    or_(Assistant.id.in_(assistant_ids_extra), Assistant.user_id == user_id))
                 count_statement = count_statement.where(
-                    or_(Assistant.id.in_(assistant_ids), Assistant.user_id == user_id))
+                    or_(Assistant.id.in_(assistant_ids_extra), Assistant.user_id == user_id))
             else:
                 statement = statement.where(Assistant.user_id == user_id)
                 count_statement = count_statement.where(Assistant.user_id == user_id)
+
+            if assistant_ids:
+                statement = statement.where(Assistant.id.in_(assistant_ids))
+                count_statement = count_statement.where(Assistant.id.in_(assistant_ids))
 
             if name:
                 statement = statement.where(or_(
@@ -152,7 +156,8 @@ class AssistantDao(Assistant):
             return session.exec(statement).all()
 
     @classmethod
-    def get_all_assistants(cls, name: str, page: int, limit: int) -> (List[Assistant], int):
+    def get_all_assistants(cls, name: str, page: int, limit: int, assistant_ids: List[UUID] = None) \
+            -> (List[Assistant], int):
         with session_getter() as session:
             statement = select(Assistant).where(Assistant.is_delete == 0)
             count_statement = session.query(func.count(
@@ -166,6 +171,9 @@ class AssistantDao(Assistant):
                     Assistant.name.like(f'%{name}%'),
                     Assistant.desc.like(f'%{name}%')
                 ))
+            if assistant_ids:
+                statement = statement.where(Assistant.id.in_(assistant_ids))
+                count_statement = count_statement.where(Assistant.id.in_(assistant_ids))
             statement = statement.offset(
                 (page - 1) * limit
             ).limit(limit).order_by(

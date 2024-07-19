@@ -13,6 +13,7 @@ from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import GptsToolsRead, AuthMethod, AuthType
 from bisheng.database.models.knowledge import KnowledgeRead
 from bisheng.database.models.message import ChatMessageRead
+from bisheng.database.models.tag import Tag
 
 
 class CaptchaInput(BaseModel):
@@ -274,6 +275,8 @@ class AssistantSimpleInfo(BaseModel):
     user_name: str
     status: int
     write: Optional[bool] = Field(default=False)
+    group_ids: Optional[List[int]]
+    tags: Optional[List[Tag]]
     create_time: datetime
     update_time: datetime
 

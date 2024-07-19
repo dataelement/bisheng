@@ -90,6 +90,16 @@ class GroupResourceDao(GroupResourceBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_resources_group(cls, resource_type: ResourceTypeEnum, third_ids: List[str]) -> list[GroupResource]:
+        """
+        获取批量资源所属的分组
+        """
+        with session_getter() as session:
+            statement = select(GroupResource).where(GroupResource.third_id.in_(third_ids),
+                                                    GroupResource.type == resource_type.value)
+            return session.exec(statement).all()
+
+    @classmethod
     def delete_group_resource_by_third_id(cls, third_id: str, resource_type: ResourceTypeEnum) -> None:
         with (session_getter() as session):
             statement = delete(GroupResource).where(

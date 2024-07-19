@@ -240,8 +240,8 @@ def get_online_chat(*,
         all_assistant = AssistantDao.get_all_online_assistants()
         flows = FlowDao.get_all_online_flows(keyword)
     else:
-        assistants = AssistantService.get_assistant(user, keyword, AssistantStatus.ONLINE.value, 0,
-                                                    0)
+        assistants = AssistantService.get_assistant(user, keyword, AssistantStatus.ONLINE.value,
+                                                    None, 0, 0)
         all_assistant = assistants.data.get('data')
         flows = FlowDao.get_user_access_online_flows(user_id, keyword=keyword)
     for one in all_assistant:
