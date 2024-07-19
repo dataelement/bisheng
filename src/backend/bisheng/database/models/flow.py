@@ -80,6 +80,7 @@ class FlowReadWithStyle(FlowRead):
 
 class FlowUpdate(SQLModelSerializable):
     name: Optional[str] = None
+    logo: Optional[str] = None
     description: Optional[str] = None
     data: Optional[Dict] = None
     status: Optional[int] = None

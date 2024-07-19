@@ -7,11 +7,12 @@ from fastapi.encoders import jsonable_encoder
 from fastapi import Request
 from loguru import logger
 
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
 from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
     NotFoundFlowError, \
     FlowOnlineEditError
 from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_L2_param_from_flow, get_request_ip
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
@@ -29,7 +30,7 @@ from bisheng.database.models.variable_value import VariableDao
 from bisheng.processing.process import process_graph_cached, process_tweaks
 
 
-class FlowService:
+class FlowService(BaseService):
 
     @classmethod
     def get_version_list_by_flow(cls, user: UserPayload, flow_id: str) -> UnifiedResponseModel[List[FlowVersionRead]]:
@@ -183,6 +184,20 @@ class FlowService:
         return resp_200(data=flow_version)
 
     @classmethod
+    def get_one_flow(cls, login_user: UserPayload, flow_id: str) -> UnifiedResponseModel[Flow]:
+        """
+        获取单个技能的详情
+        """
+        flow_info = FlowDao.get_flow_by_id(flow_id)
+        if not flow_info:
+            raise NotFoundFlowError.http_exception()
+        if not login_user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW):
+            raise UnAuthorizedError.return_resp()
+        flow_info.logo = cls.get_logo_share_link(flow_info.logo)
+
+        return resp_200(data=flow_info)
+
+    @classmethod
     def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: int = 0, page: int = 1,
                       page_size: int = 10) -> UnifiedResponseModel[List[Dict]]:
         """
@@ -240,6 +255,7 @@ class FlowService:
         # 重新拼接技能列表list信息
         res = []
         for one in data:
+            one.logo = cls.get_logo_share_link(one.logo)
             flow_info = jsonable_encoder(one)
             flow_info['user_name'] = user_dict.get(one.user_id, one.user_id)
             flow_info['write'] = True if user.is_admin() or user.user_id == one.user_id else False

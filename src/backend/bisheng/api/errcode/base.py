@@ -20,3 +20,8 @@ class BaseErrorCode:
 class UnAuthorizedError(BaseErrorCode):
     Code: int = 403
     Msg: str = '暂无操作权限'
+
+
+class NotFoundError(BaseErrorCode):
+    Code: int = 404
+    Msg: str = '资源不存在'

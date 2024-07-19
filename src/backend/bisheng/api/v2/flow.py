@@ -3,7 +3,10 @@ from loguru import logger
 
 from fastapi import APIRouter, Request, HTTPException
 
+from bisheng.api.services.flow import FlowService
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import resp_200
+from bisheng.api.v2.assistant import get_default_operator
 from bisheng.database.models.flow import FlowDao
 from bisheng.settings import settings
 router = APIRouter(prefix='/flows', tags=['FlowV2'])
@@ -18,8 +21,11 @@ def get_flow(request: Request, flow_id: UUID):
     # 判断下配置是否打开
     if settings.get_from_db("default_operator").get("api_need_login"):
         raise HTTPException(status_code=403, detail="无权限访问")
+    default_user = get_default_operator()
+    login_user = UserPayload(**{
+        'user_id': default_user.user_id,
+        'user_name': default_user.user_name,
+        'role': ''
+    })
 
-    db_flow = FlowDao.get_flow_by_id(flow_id.hex)
-    if not db_flow:
-        raise HTTPException(status_code=404, detail='Flow not found')
-    return resp_200(db_flow)
+    return FlowService.get_one_flow(login_user, flow_id.hex)

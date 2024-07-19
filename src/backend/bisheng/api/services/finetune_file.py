@@ -45,7 +45,7 @@ class FinetuneFileService(BaseModel):
             file_info = PresetTrain(id=file_id, name=file.filename,
                                     url=f'{file_root}/{file_id}.{file_ext}',
                                     user_id=user.get('user_id'), user_name=user.get('user_name'))
-            minio_client.upload_minio_file(file_info.url, file.file, file.size, content_type=file.content_type)
+            minio_client.upload_minio_file(file_info.url, file.file, length=file.size, content_type=file.content_type)
             ret.append(file_info)
         return ret
 
