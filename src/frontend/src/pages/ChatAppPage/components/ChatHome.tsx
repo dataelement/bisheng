@@ -16,7 +16,7 @@ import { getHomeLabelApi } from "@/controllers/API/label";
 import LoadMore from "@/components/bs-comp/loadMore";
 import { useDebounce } from "@/util/hook";
 
-export default function HomePage({onSelect}) {
+export default function HomePage({ onSelect }) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const chatListRef = useRef([])
@@ -29,17 +29,17 @@ export default function HomePage({onSelect}) {
     const searchRef = useRef('')
 
     const loadData = (more = false) => {
-        getChatOnlineApi(pageRef.current, searchRef.current, -1).then((res:any) => {
+        getChatOnlineApi(pageRef.current, searchRef.current, -1).then((res: any) => {
             chatListRef.current = res
-            setOptions(res)
+            setOptions(more ? [...options, ...res] : res)
         })
     }
     useEffect(() => {
-        loadData()
-        getHomeLabelApi().then((res:any) => {
-            setLabels(res.map(d => ({label:d.name, value:d.id, selected:true})))
+        debounceLoad()
+        getHomeLabelApi().then((res: any) => {
+            setLabels(res.map(d => ({ label: d.name, value: d.id, selected: true })))
         })
-    },[])
+    }, [])
 
     const debounceLoad = useDebounce(loadData, 600, false)
 
@@ -52,25 +52,24 @@ export default function HomePage({onSelect}) {
     const handleClose = async (bool) => {
         const newHome = await getHomeLabelApi()
         // @ts-ignore
-        setLabels(newHome.map(d => ({label:d.name, value:d.id, selected:true})))
+        setLabels(newHome.map(d => ({ label: d.name, value: d.id, selected: true })))
         setOpen(bool)
     }
 
     const handleTagSearch = (id) => {
         pageRef.current = 1
-        // getChatOnlineApi(pageRef.current, '', id).then((res:any) => {
-        //     setOptions(res)
-        // })
-        setOptions([])
+        getChatOnlineApi(pageRef.current, '', id).then((res:any) => {
+            setOptions(res)
+        })
     }
 
     const handleLoadMore = () => {
         pageRef.current++
-        loadData(true)
+        debounceLoad(true)
     }
 
-            {/* @ts-ignore */}
-    return <div className="h-full overflow-hidden bs-chat-bg pl-[100px]" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+    {/* @ts-ignore */ }
+    return <div className="h-full overflow-hidden bs-chat-bg px-[40px]" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
         <div className="flex flex-col place-items-center">
             <div className="flex flex-row place-items-center">
                 {/* @ts-ignore */}
@@ -79,29 +78,29 @@ export default function HomePage({onSelect}) {
                     {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
                 </p>
             </div>
-            <SearchInput onChange={handleSearch} placeholder="搜索助手或者技能" className="w-[600px] mt-[20px]"/>
+            <SearchInput onChange={handleSearch} placeholder="搜索助手或者技能" className="w-[600px] mt-[20px]" />
         </div>
         <div className="mt-[20px] flex items-center">
             <div>
                 <Button>全部</Button>
                 {
-                    labels.map((l,index) => index <= 11 && <Button 
+                    labels.map((l, index) => index <= 11 && <Button
                         onClick={() => handleTagSearch(l.value)}
                         className="ml-5" variant="outline">{l.label}</Button>)
                 }
             </div>
             {labels.length > 10 && <div className="ml-5">
                 <SelectHover triagger={
-                    <CaretDownIcon className="h-[35px] w-[35px] text-gray-500"/>
+                    <CaretDownIcon className="h-[35px] w-[35px] text-gray-500" />
                 }>
                     <SelectHoverItem><span>折叠标签1</span></SelectHoverItem>
                     <SelectHoverItem><span>折叠标签1</span></SelectHoverItem>
                 </SelectHover>
             </div>}
             {/* @ts-ignore */}
-            {user.role === 'admin' && <SettingIcon onClick={() => setOpen(true)} className="h-[50px] w-[50px] cursor-pointer ml-5"/>}
+            {user.role === 'admin' && <SettingIcon onClick={() => setOpen(true)} className="h-[30px] w-[30px] cursor-pointer ml-5" />}
         </div>
-        <div className="flex-1 min-w-[696px] mt-8 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
+        <div className="flex-1 min-w-[696px] mt-8 pb-24 h-[calc(100vh-348px)] flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
             {
                 options.length ? options.map((flow, i) => (
                     <CardComponent key={i}

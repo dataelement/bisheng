@@ -138,6 +138,7 @@ export default function Skills() {
                                     key={item.id}
                                     data={item}
                                     id={item.id}
+                                    logo={item.logo}
                                     type='skill'
                                     edit={item.write}
                                     title={item.name}
