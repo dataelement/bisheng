@@ -108,7 +108,8 @@ class AssistantDao(Assistant):
 
     @classmethod
     def get_assistants(cls, user_id: int, name: str, assistant_ids_extra: List[UUID],
-                       status: Optional[int], page: int, limit: int, assistant_ids: List[UUID]=None) -> (List[Assistant], int):
+                       status: Optional[int], page: int, limit: int, assistant_ids: List[UUID] = None) -> (
+            List[Assistant], int):
         with session_getter() as session:
             count_statement = session.query(func.count(
                 Assistant.id)).where(Assistant.is_delete == 0)
@@ -148,11 +149,14 @@ class AssistantDao(Assistant):
             return session.exec(statement).all(), session.exec(count_statement).scalar()
 
     @classmethod
-    def get_all_online_assistants(cls) -> List[Assistant]:
+    def get_all_online_assistants(cls, flow_ids: List[UUID]) -> List[Assistant]:
         """ 获取所有已上线的助手 """
+        statement = select(Assistant).filter(Assistant.status == AssistantStatus.ONLINE.value,
+                                             Assistant.is_delete == 0)
+        if flow_ids:
+            statement = statement.where(Assistant.flow_id.in_(flow_ids))
+        statement = statement.order_by(Assistant.update_time.desc())
         with session_getter() as session:
-            statement = select(Assistant).filter(Assistant.status == AssistantStatus.ONLINE.value,
-                                                 Assistant.is_delete == 0)
             return session.exec(statement).all()
 
     @classmethod
@@ -174,11 +178,11 @@ class AssistantDao(Assistant):
             if assistant_ids:
                 statement = statement.where(Assistant.id.in_(assistant_ids))
                 count_statement = count_statement.where(Assistant.id.in_(assistant_ids))
-            statement = statement.offset(
-                (page - 1) * limit
-            ).limit(limit).order_by(
-                Assistant.update_time.desc()
-            )
+            if page and limit:
+                statement = statement.offset(
+                    (page - 1) * limit
+                ).limit(limit)
+            statement = statement.order_by(Assistant.update_time.desc())
             return session.exec(statement).all(), session.exec(count_statement).scalar()
 
     @classmethod
