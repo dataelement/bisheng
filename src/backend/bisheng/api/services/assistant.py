@@ -49,6 +49,11 @@ class AssistantService(BaseService, AssistantUtils):
         if tag_id:
             ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.ASSISTANT)
             assistant_ids = [UUID(one.resource_id) for one in ret]
+            if not assistant_ids:
+                return resp_200(data={
+                    'data': [],
+                    'total': 0
+                })
 
         data = []
         if user.is_admin():

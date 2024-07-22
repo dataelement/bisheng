@@ -207,6 +207,12 @@ class FlowService(BaseService):
         if tag_id:
             ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.FLOW)
             flow_ids = [UUID(one.resource_id) for one in ret]
+            assistant_ids = [UUID(one.resource_id) for one in ret]
+            if not assistant_ids:
+                return resp_200(data={
+                    'data': [],
+                    'total': 0
+                })
         # 获取用户可见的技能列表
         if user.is_admin():
             data = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, page_size)
