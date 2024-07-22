@@ -1,12 +1,10 @@
 import httpx
-
-from langchain_openai import AzureOpenAIEmbeddings
-from langchain.embeddings.base import Embeddings
-from langchain_community.utils.openai import is_openai_v1
-from langchain_openai.embeddings import OpenAIEmbeddings
-
 from bisheng.settings import settings
 from bisheng_langchain.embeddings import CustomHostEmbedding, HostEmbeddings
+from langchain.embeddings.base import Embeddings
+from langchain_community.utils.openai import is_openai_v1
+from langchain_openai import AzureOpenAIEmbeddings
+from langchain_openai.embeddings import OpenAIEmbeddings
 
 
 def decide_embeddings(model: str) -> Embeddings:
@@ -20,7 +18,7 @@ def decide_embeddings(model: str) -> Embeddings:
         if is_openai_v1() and params.get('openai_proxy'):
             params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
             params['http_async_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
-        if params.get('openai_api_type') in ("azure", "azure_ad", "azuread"):
+        if params.get('openai_api_type') in ('azure', 'azure_ad', 'azuread'):
             return AzureOpenAIEmbeddings(**params)
         else:
             return OpenAIEmbeddings(**params)

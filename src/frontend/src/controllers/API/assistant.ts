@@ -13,10 +13,10 @@ export interface AssistantItemDB {
     status: number;
 }
 // 获取助手列表
-export const getAssistantsApi = async (page, limit, name): Promise<AssistantItemDB[]> => {
+export const getAssistantsApi = async (page, limit, name, tag_id): Promise<AssistantItemDB[]> => {
     return await axios.get(`/api/v1/assistant`, {
         params: {
-            page, limit, name
+            page, limit, name, tag_id
         }
     });
 };
@@ -63,14 +63,20 @@ export const deleteAssistantApi = async (id) => {
 
 
 // 获取会话选择列表
-export const getChatOnlineApi = async (page, keyword) => {
+export const getChatOnlineApi = async (page, keyword, tag_id) => {
+    const tagStr = tag_id === -1 ? '' : `?tag_id=${tag_id}`
     return await axios.get(`/api/v1/chat/online`, {
         params: {
             page, keyword,
-            limit: 40
+            limit: 40,
+            tag_id: tag_id === -1 ? null : tag_id
         }
     })
-};
+}
+// export const getChatOnlineApi = async (tag_id:-1) => {
+//     const tagStr = tag_id === -1 ? '' : `tag_id=${tag_id}`
+//     return await axios.get(`/api/v1/chat/online?${tagStr}`)
+// };
 
 
 // 获取工具集合

@@ -4,9 +4,9 @@ from bisheng.interface.base import LangChainTypeCreator
 from bisheng.template.frontend_node.wrappers import WrappersFrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class, build_template_from_method
-from langchain import requests, sql_database
 # from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
-from langchain.utilities.dalle_image_generator import DallEAPIWrapper
+from bisheng_langchain.utils.azure_dalle_image_generator import AzureDallEWrapper as DallEAPIWrapper
+from langchain import requests, sql_database
 from sqlmodel import true
 
 

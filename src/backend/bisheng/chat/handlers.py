@@ -53,7 +53,8 @@ class Handler:
             logger.info(f'dispatch_task done timecost={time.time() - start_time}')
         return client_id, chat_id
 
-    async def process_stop(self, session: ChatManager, client_id: str, chat_id: str, payload: Dict, user_id):
+    async def process_stop(self, session: ChatManager, client_id: str, chat_id: str, payload: Dict,
+                           user_id):
         key = get_cache_key(client_id, chat_id)
         langchain_object = session.in_memory_cache.get(key)
         action = payload.get('action')
@@ -67,7 +68,7 @@ class Handler:
             # 普通技能的stop
             res = thread_pool.cancel_task([key])  # 将进行中的任务进行cancel
             if res[0]:
-                message = payload.get('inputs') or '手动停止'
+                # message = payload.get('inputs') or '手动停止'
                 res = ChatResponse(type='end', user_id=user_id, message='')
                 close = ChatResponse(type='close')
                 await session.send_json(client_id, chat_id, res, add=False)
@@ -84,7 +85,7 @@ class Handler:
                                        remark='break_answer',
                                        is_bot=True)
             session.chat_history.add_message(client_id, chat_id, chat_message)
-        logger.info(f'process_stop done')
+        logger.info('process_stop done')
 
     async def process_report(self,
                              session: ChatManager,
@@ -214,6 +215,11 @@ class Handler:
                 chat_id=chat_id,
                 stream_queue=self.stream_queue,
             )
+
+            # questions = []
+            # if is_begin and langchain_object.memory and langchain_object.memory.buffer:
+            #     questions = self.recommend_question(langchain_object,
+            #                                         langchain_object.memory.buffer)
 
         except Exception as e:
             # Log stack trace
