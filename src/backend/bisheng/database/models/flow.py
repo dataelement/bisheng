@@ -207,19 +207,21 @@ class FlowDao(FlowBase):
             return count_statement.scalar()
 
     @classmethod
-    def get_all_online_flows(cls, keyword: str = None):
+    def get_all_online_flows(cls, keyword: str = None, flow_ids: List[str] = None) -> List[Flow]:
         with session_getter() as session:
             statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
                                Flow.logo, Flow.update_time, Flow.description, Flow.guide_word).where(
                 Flow.status == FlowStatus.ONLINE.value)
+            if flow_ids:
+                statement = statement.where(Flow.id.in_(flow_ids))
             if keyword:
                 statement = statement.where(or_(Flow.name.like(f'%{keyword}%'), Flow.description.like(f'%{keyword}%')))
             result = session.exec(statement).mappings().all()
             return [Flow.model_validate(f) for f in result]
 
     @classmethod
-    def get_user_access_online_flows(cls, user_id: int, page: int = 0, limit: int = 0, keyword: str = None) \
-            -> List[Flow]:
+    def get_user_access_online_flows(cls, user_id: int, page: int = 0, limit: int = 0, keyword: str = None,
+                                     flow_ids: List[str] = None) -> List[Flow]:
         user_role = UserRoleDao.get_user_roles(user_id)
         flow_id_extra = []
         if user_role:
@@ -231,7 +233,8 @@ class FlowDao(FlowBase):
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.FLOW)
                 if role_access:
                     flow_id_extra = [access.third_id for access in role_access]
-        return FlowDao.get_flows(user_id, flow_id_extra, keyword, FlowStatus.ONLINE.value, page=page, limit=limit)
+        return FlowDao.get_flows(user_id, flow_id_extra, keyword, FlowStatus.ONLINE.value, flow_ids=flow_ids, page=page,
+                                 limit=limit)
 
     @classmethod
     def filter_flows_by_ids(cls, flow_ids: List[UUID], keyword: str = None, page: int = 0, limit: int = 0) \
