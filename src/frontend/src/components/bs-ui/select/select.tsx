@@ -3,7 +3,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { SearchInput } from "../input";
 
 interface SelectSearchProps {
-    value: string,
+    value: any,
     options: {label: string, value: string}[],
     selectPlaceholder?:string,
     inputPlaceholder?:string,

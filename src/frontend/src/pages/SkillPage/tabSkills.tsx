@@ -1,7 +1,7 @@
 import SkillTempSheet from "@/components/bs-comp/sheets/SkillTempSheet";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { useContext, useRef, useState } from "react";
+import { useContext, useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import CardComponent from "../../components/bs-comp/cardComponent";
@@ -18,6 +18,8 @@ import { useTable } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import CardSelectVersion from "./components/CardSelectVersion";
 import CreateTemp from "./components/CreateTemp";
+import { getAllLabelsApi } from "@/controllers/API/label";
+import SelectSearch from "@/components/bs-ui/select/select"
 
 export default function Skills() {
     const { t } = useTranslation()
@@ -25,8 +27,8 @@ export default function Skills() {
     const { message } = useToast()
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData } = useTable<FlowType>({ pageSize: 14 }, (param) =>
-        readFlowsFromDatabase(param.page, param.pageSize, param.keyword)
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14 }, (param) =>
+        readFlowsFromDatabase(param.page, param.pageSize, param.keyword, param.tag_id)
     )
     const [open, setOpen] = useState(false)
 
@@ -73,10 +75,39 @@ export default function Skills() {
         }))
     }
 
+    const [labels, setLabels] = useState<any[]>([])
+    const [selectLabel, setSelectLabel] = useState({label:'', value:-1})
+    const labelsRef = useRef([])
+
+    const handleLabelSearch = (id) => {
+        setSelectLabel(labels.find(l => l.value === id))
+        filterData({tag_id: id})
+    }
+    const handleSelectSearch = (e) => {
+        const key = e.target.value
+        const newData = labelsRef.current.filter(l => l.label.toUpperCase().includes(key.toUpperCase()) || l.value === selectLabel.value)
+        setLabels(newData)
+    }
+
+    useEffect(() => {
+        getAllLabelsApi().then(res => {
+            const newData = res.data.map(d => ({ label:d.name, value:d.id, edit:false, selected:false }))
+            labelsRef.current = newData
+            setLabels(newData)
+        })
+    }, [])
+
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide  relative top-[-60px]">
-            <div className="flex gap-2">
+            <div className="flex space-x-4">
                 <SearchInput className="w-64" placeholder={t('skills.skillSearch')} onChange={(e) => search(e.target.value)}></SearchInput>
+                <SelectSearch value={selectLabel.value === -1 ? '' : selectLabel.value} options={labels} 
+                    selectPlaceholder="全部标签"
+                    inputPlaceholder="搜索标签"
+                    selectClass="w-64"
+                    onOpenChange={() => setLabels(labelsRef.current)}
+                    onChange={handleSelectSearch} 
+                    onValueChange={handleLabelSearch}/>
                 {user.role === 'admin' && <Button
                     variant="ghost"
                     className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A]"
@@ -114,6 +145,8 @@ export default function Skills() {
                                     description={item.description}
                                     checked={item.status === 2}
                                     user={item.user_name}
+                                    currentUser={user}
+                                    allLabels={labels}
                                     onClick={() => handleSetting(item)}
                                     onSwitchClick={() => !item.write && item.status !== 2 && message({ title: t('prompt'), description: t('skills.contactAdmin'), variant: 'warning' })}
                                     onAddTemp={toggleTempModal}

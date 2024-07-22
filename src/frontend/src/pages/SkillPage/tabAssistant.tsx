@@ -12,17 +12,28 @@ import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import CreateAssistant from "./components/CreateAssistant";
 import { userContext } from "@/contexts/userContext";
-import { useContext } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import SelectSearch from "@/components/bs-ui/select/select"
+import { getAllLabelsApi } from "@/controllers/API/label";
 
 export default function Assistants() {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const { message } = useToast()
     const { user } = useContext(userContext)
+    const [labels, setLabels] = useState<any[]>([])
+    const labelsRef = useRef([])
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData } = useTable<AssistantItemDB>({ pageSize: 15 }, (param) =>
-        getAssistantsApi(param.page, param.pageSize, param.keyword)
+    useEffect(() => {
+        getAllLabelsApi().then(res => {
+            const newData = res.data.map(d => ({ label:d.name, value:d.id, edit:false, selected:false }))
+            labelsRef.current = newData
+            setLabels(newData)
+        })
+    }, [])
+
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<AssistantItemDB>({ pageSize: 15 }, (param) =>
+        getAssistantsApi(param.page, param.pageSize, param.keyword, param.tag_id)
     )
 
     const handleDelete = (data) => {
@@ -35,7 +46,7 @@ export default function Assistants() {
             }
         })
     }
-
+    
     const handleCheckedChange = (checked, data) => {
         return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 1 : 0)).then(res => {
             if (res === null) {
@@ -45,16 +56,28 @@ export default function Assistants() {
         })
     }
 
+    const [selectLabel, setSelectLabel] = useState({label:'', value:-1})
+    const handleLabelSearch = (id) => {
+        setSelectLabel(labels.find(l => l.value === id))
+        filterData({tag_id: id})
+    }
+    const handleSelectSearch = (e) => {
+        const key = e.target.value
+        const newData = labelsRef.current.filter(l => l.label.toUpperCase().includes(key.toUpperCase()) || l.value === selectLabel.value)
+        setLabels(newData)
+    }
+
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative top-[-60px]">
             <div className="flex space-x-4">
                 <SearchInput className="w-64" placeholder={t('build.searchAssistant')} onChange={(e) => search(e.target.value)}></SearchInput>
-                <SelectSearch value="" options={[]} 
-                selectPlaceholder="全部标签"
-                inputPlaceholder="搜索标签"
-                selectClass="w-64"
-                onChange={() => {}} 
-                onValueChange={() => {}}/>
+                <SelectSearch value={selectLabel.value === -1 ? '' : selectLabel.value} options={labels} 
+                    selectPlaceholder="全部标签"
+                    inputPlaceholder="搜索标签"
+                    selectClass="w-64"
+                    onOpenChange={() => setLabels(labelsRef.current)}
+                    onChange={handleSelectSearch} 
+                    onValueChange={handleLabelSearch}/>
             </div>
             {/* list */}
             {
@@ -91,6 +114,7 @@ export default function Assistants() {
                                     description={item.desc}
                                     user={item.user_name}
                                     currentUser={user}
+                                    allLabels={labels}
                                     onClick={() => item.status !== 1 && navigate('/assistant/' + item.id)}
                                     onSwitchClick={() => !item.write && item.status !== 1 && message({ title: t('prompt'), description: t('skills.contactAdmin'), variant: 'warning' })}
                                     onDelete={handleDelete}

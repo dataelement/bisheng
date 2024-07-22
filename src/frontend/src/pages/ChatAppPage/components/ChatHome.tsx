@@ -12,43 +12,48 @@ import { SkillIcon, AssistantIcon } from "@/components/bs-icons";
 import { Badge } from "@/components/bs-ui/badge";
 import { useNavigate } from "react-router-dom";
 import MarkLabel from "./MarkLabel";
+import { getHomeLabelApi } from "@/controllers/API/label";
 
 export default function HomePage({onSelect}) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const chatListRef = useRef([])
-    const [keyword, setKeyword] = useState(' ')
     const navigate = useNavigate()
 
-    const labels = [
-        {label:'标签一', value:'01', selected:false, edit:false},
-        {label:'标签二', value:'02', selected:true, edit:false},
-        {label:'标签三', value:'03', selected:false, edit:false},
-        {label:'标签三', value:'03', selected:false, edit:false},
-        {label:'标签三', value:'03', selected:false, edit:false},
-        {label:'标签三', value:'03', selected:false, edit:false},
-        {label:'标签三', value:'03', selected:false, edit:false},
-        {label:'标签三', value:'03', selected:false, edit:false},
-        {label:'标签三', value:'03', selected:false, edit:false},
-        {label:'标签三', value:'03', selected:false, edit:false},
-        {label:'标签三', value:'03', selected:false, edit:false},
-        {label:'标签三', value:'03', selected:false, edit:false},
-        {label:'标签四', value:'04', selected:true, edit:false}
-      ]
+    const [labels, setLabels] = useState([])
+    const [open, setOpen] = useState(false)
+    const [options, setOptions] = useState([])
 
     useEffect(() => {
-        getChatOnlineApi().then(res => {
+        getChatOnlineApi(-1).then((res:any) => {
             // @ts-ignore
             chatListRef.current = res
-            setKeyword('')
+            setOptions(res)
+        })
+        getHomeLabelApi().then(res => {
+            // @ts-ignore
+            setLabels(res.map(d => ({label:d.name, value:d.id, selected:true})))
         })
     },[])
 
-    const options = useMemo(() => {
-        return chatListRef.current.filter(c => c.name.toUpperCase().includes(keyword.toUpperCase()))
-    }, [keyword])
+    const handleSearch = (e) => {
+        const key = e.target.value
+        const newData = chatListRef.current.filter(c => c.name.toUpperCase().includes(key.toUpperCase()))
+        setOptions(newData)
+    }
 
-    const [open, setOpen] = useState(false)
+    const handleClose = async (bool) => {
+        const newHome = await getHomeLabelApi()
+        // @ts-ignore
+        setLabels(newHome.map(d => ({label:d.name, value:d.id, selected:true})))
+        setOpen(bool)
+    }
+
+    const handleTagSearch = (id) => {
+        getChatOnlineApi(id).then((res:any) => {
+            setOptions(res)
+        })
+    }
 
             {/* @ts-ignore */}
     return <div className="h-full overflow-hidden bs-chat-bg pl-[100px]" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
@@ -60,12 +65,16 @@ export default function HomePage({onSelect}) {
                     {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
                 </p>
             </div>
-            <SearchInput value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="搜索助手或者技能" className="w-[600px] mt-[20px]"/>
+            <SearchInput onChange={handleSearch} placeholder="搜索助手或者技能" className="w-[600px] mt-[20px]"/>
         </div>
         <div className="mt-[20px] flex items-center">
             <div>
                 <Button>全部</Button>
-                {labels.map((l,index) => index <= 11 && <Button className="ml-5" variant="outline">{l.label}</Button>)}
+                {
+                    labels.map((l,index) => index <= 11 && <Button 
+                        onClick={() => handleTagSearch(l.value)}
+                        className="ml-5" variant="outline">{l.label}</Button>)
+                }
             </div>
             {labels.length > 10 && <div className="ml-5">
                 <SelectHover triagger={
@@ -101,6 +110,6 @@ export default function HomePage({onSelect}) {
                 </div>
             }
         </div>
-        <MarkLabel open={open} onClose={(b) => setOpen(b)}></MarkLabel>
+        <MarkLabel open={open} home={labels} onClose={handleClose}></MarkLabel>
     </div>
 }

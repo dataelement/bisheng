@@ -11,8 +11,7 @@ import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { Switch } from "../../bs-ui/switch";
 import { useTranslation } from "react-i18next";
-import { LabelIcon } from "@/components/bs-icons/label";
-import LabelSelect from "../selectComponent/LabelSelect";
+import LabelShow from "./LabelShow";
 
 interface IProps<T> {
   data: T,
@@ -25,6 +24,7 @@ interface IProps<T> {
   checked?: boolean,
   user?: string,
   currentUser?: any,
+  allLabels?:any[],
   isAdmin?: boolean,
   headSelecter?: React.ReactNode,
   footer?: React.ReactNode,
@@ -75,6 +75,7 @@ export default function CardComponent<T>({
   edit = false,
   user,
   currentUser,
+  allLabels,
   title,
   checked,
   isAdmin,
@@ -99,16 +100,16 @@ export default function CardComponent<T>({
     setChecked(bln)
   }
 
-  const show = true
   const isOperator = useMemo(() => {
-    return currentUser ? ['admin', 'group_admin'].includes(currentUser.role) || currentUser.user_name === user : false
-  },[currentUser])
-  const labels = [
-    {label:'标签一', value:'01', selected:false, edit:false},
-    {label:'标签二', value:'02', selected:true, edit:false},
-    {label:'标签三', value:'03', selected:false, edit:false},
-    {label:'标签四', value:'04', selected:true, edit:false},
-  ]
+    if(data && currentUser) {
+      if(currentUser.role === 'admin') return true
+      data.group_ids.forEach(element => {
+        if(currentUser.admin_groups.includes(element)) return true
+      })
+      if(data.user_id === currentUser.user_id) return true
+    }
+    return false
+  },[data, currentUser])
 
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
@@ -161,7 +162,6 @@ export default function CardComponent<T>({
     </CardFooter>
   </Card>
 
-
   // 技能组件
   return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer" onClick={() => edit && onClick()}>
     <CardHeader>
@@ -187,29 +187,11 @@ export default function CardComponent<T>({
       <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className="h-20 grid grid-rows-2">
-    {show ? (isOperator 
-        ? <LabelSelect labels={labels}>
-          <div onClick={(e) => e.stopPropagation()} className="mb-[10px] flex place-items-center rounded-sm pt-1 pb-1 group-hover:bg-[#F5F5F5]">
-            <LabelIcon className="text-muted-foreground mr-2"/>
-            <div className="text-sm text-muted-foreground truncate">
-              <span>办公工具，</span><span>效率工具</span>
-            </div>
-          </div>
-        </LabelSelect>
-        : <div className="mb-[10px] flex place-items-center rounded-sm pt-1 pb-1">
-          <LabelIcon className="text-muted-foreground mr-2"/>
-          <div className="text-sm text-muted-foreground truncate">
-            <span>办公工具，</span><span>效率工具</span>
-          </div>
-        </div>
-      ) : <LabelSelect labels={labels}>
-          <div onClick={(e) => e.stopPropagation()} className="mb-[10px] opacity-0 group-hover:opacity-100 flex place-items-center rounded-sm pt-1 pb-1 group-hover:bg-[#F5F5F5]">
-            <LabelIcon className="text-muted-foreground mr-2"/>
-            <div className="text-sm text-muted-foreground">
-              <span>添加标签</span>
-            </div>
-        </div>
-        </LabelSelect>}
+      <LabelShow show={data.tags.length > 0} isOperator={isOperator} 
+        resource={{id:data.id, type:type}}
+        labels={data.tags.map(d => ({label:d.name, value:d.id, selected:true, edit:false}))}
+        all={allLabels}
+        ></LabelShow>
       <div className="flex justify-between items-center h-10">
         <div className="flex gap-1 items-center">
           <UserIcon />

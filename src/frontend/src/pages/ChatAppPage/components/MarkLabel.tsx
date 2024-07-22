@@ -4,8 +4,11 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { useTranslation } from 'react-i18next';
 import { CrossCircledIcon } from '@radix-ui/react-icons';
 import { cname } from '@/components/bs-ui/utils';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { updateHomeLabelApi, getAllLabelsApi } from "@/controllers/API/label";
+import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
+import { useToast } from '@/components/bs-ui/toast/use-toast';
 
 function DragItem({className = '', data, children, onCancel}) {
     return <div className={cname('h-7 w-32 relative rounded-xl border flex place-items-center', className)}>
@@ -20,34 +23,49 @@ function DragItem({className = '', data, children, onCancel}) {
     </div>
 }
 
-export default function MarkLabel({open, onClose}) {
+export default function MarkLabel({open, home, onClose}) {
     const { t } = useTranslation()
-    const init = [
-        {label:'标签一', value:'01', selected:false, edit:false},
-        {label:'标签二', value:'02', selected:true, edit:false},
-        {label:'标签三', value:'03', selected:false, edit:false},
-        {label:'标签四', value:'04', selected:true, edit:false}
-      ]
-    const [labels, setLabels] = useState(init)
-    const [selected, setSelected] = useState(init.filter(l => l.selected))
+    const [labels, setLabels] = useState([])
+    const [selected, setSelected] = useState([])
+    const { message } = useToast()
+
+    useEffect(() => {
+        async function init() {
+            const all = await getAllLabelsApi()
+            const newData = all.data.map(d => {
+                // @ts-ignore
+                const res = home.find(h => h.value === d.id)
+                return res ? {label:d.name, value:d.id, selected:true} : {label:d.name, value:d.id, selected:false}
+            })
+            setLabels(newData)
+            setSelected(newData.filter(d => d.selected))
+        }
+        init()
+    }, [home])
 
     const handleCancel = () => {
         onClose(false)
     }
-    const handleConfirm = () => {
+    const handleConfirm = async () => {
+        await captureAndAlertRequestErrorHoc(updateHomeLabelApi(selected.map(s => s.value)))
         onClose(false)
     }
     const handleSelect = (id) => {
         setLabels(pre => {
             const newData = pre.map(l => l.value === id ? {...l, selected:!l.selected} : l)
+            if(newData.filter(d => d.selected).length > 10) {
+                message({
+                    title: t('prompt'),
+                    variant: 'warning',
+                    description: '最多选择10个标签'
+                })
+                return pre
+            }
             const select = newData.find(d => d.value === id && d.selected)
             setSelected(select ? [...selected, select] : pre => pre.filter(d => d.value !== id))
             return newData
         })
     }
-    // useEffect(() => {
-    //     setSelected(labels.filter(l => l.selected))
-    // }, [labels])
     const handleDelete = (id) => {
         setSelected(pre => pre.filter(d => d.value !== id))
         setLabels(pre => pre.map(d => d.value === id ? {...d, selected:!d.selected} : d))
@@ -80,7 +98,7 @@ export default function MarkLabel({open, onClose}) {
                 </div>
                 <div className='border-l text-gray-500'>
                     <div className='ml-4'>
-                        <span className='text-xl font-bold'>已选：10/20</span>
+                        <span className='text-xl font-bold'>已选：{selected.length}/10</span>
                         <DragDropContext onDragEnd={handleDragEnd} onDragStart={() => setFlag(true)} onDragUpdate={() => setFlag(true)}>
                             <Droppable droppableId={'list'}>
                                 {(provided) => (

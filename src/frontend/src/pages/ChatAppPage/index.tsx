@@ -49,26 +49,26 @@ export default function SkillChatPage() {
         console.log(card)
         if(!location) {
             setLocation('HomePage')
+            return
+        }
+        if(card) {
+            // 会话ID
+            const _chatId = generateUUID(32)
+            // add list
+            addChat({
+                "flow_name": card.name,
+                "flow_description": card.desc,
+                "flow_id": card.id,
+                "chat_id": _chatId,
+                "create_time": "-",
+                "update_time": Date.now(),
+                "flow_type": card.flow_type
+            })
+            setSelelctChat({ id: card.id, chatId: _chatId, type: card.flow_type })
+            setChatId(_chatId)
+            setLocation('')
         } else {
-            if(card) {
-                // 会话ID
-                const _chatId = generateUUID(32)
-                // add list
-                addChat({
-                    "flow_name": card.name,
-                    "flow_description": card.desc,
-                    "flow_id": card.id,
-                    "chat_id": _chatId,
-                    "create_time": "-",
-                    "update_time": Date.now(),
-                    "flow_type": card.flow_type
-                })
-                setSelelctChat({ id: card.id, chatId: _chatId, type: card.flow_type })
-                setChatId(_chatId)
-                setLocation('')
-            } else {
-                return message({title:t('prompt'), variant:'warning', description:'请选择一个应用'})
-            }
+            return message({title:t('prompt'), variant:'warning', description:'请选择一个应用'})
         }
     }
 
