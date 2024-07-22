@@ -75,7 +75,7 @@ class AssistantService(BaseService, AssistantUtils):
             assistant_group_dict[one.third_id].append(one.group_id)
 
         # 获取助手关联的tag
-        flow_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.FLOW, assistant_ids)
+        flow_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.ASSISTANT, assistant_ids)
 
         for one in res:
             one.logo = cls.get_logo_share_link(one.logo)
