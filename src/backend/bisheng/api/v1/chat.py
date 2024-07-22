@@ -200,6 +200,7 @@ def get_chatlist_list(*,
                          flow_id=message.flow_id,
                          flow_type='flow',
                          chat_id=message.chat_id,
+                         logo=flow_dict[message.flow_id].logo,
                          create_time=message.create_time,
                          update_time=message.update_time))
         elif message.flow_id in assistant_dict:
@@ -209,6 +210,7 @@ def get_chatlist_list(*,
                          flow_id=message.flow_id,
                          chat_id=message.chat_id,
                          flow_type='assistant',
+                         logo=assistant_dict[message.flow_id].logo,
                          create_time=message.create_time,
                          update_time=message.update_time))
         else:
@@ -222,6 +224,7 @@ def get_chatlist_list(*,
     for one in res:
         # 获取每个会话的最后一条回复内容
         one.latest_message = latest_messages.get(one.chat_id, None)
+        one.logo = BaseService.get_logo_share_link(one.logo)
     return resp_200(chat_list[(page - 1) * limit:page * limit])
 
 
