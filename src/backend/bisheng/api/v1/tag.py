@@ -72,7 +72,7 @@ def delete_tag_link(
 
 @router.get('/home', response_model=UnifiedResponseModel[List[Tag]])
 def get_home_tag(request: Request,
-                 login_user: UserPayload = Depends(get_admin_user)):
+                 login_user: UserPayload = Depends(get_login_user)):
     """
     获取首页展示的标签列表
     """
