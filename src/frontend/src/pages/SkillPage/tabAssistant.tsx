@@ -27,8 +27,9 @@ export default function Assistants() {
     useEffect(() => {
         getAllLabelsApi().then(res => {
             const newData = res.data.map(d => ({ label:d.name, value:d.id, edit:false, selected:false }))
-            labelsRef.current = newData
-            setLabels(newData)
+            const topData = { label:'全部', value:-1, edit:false, selected:false }
+            labelsRef.current = [topData, ...newData]
+            setLabels(labelsRef.current)
         })
     }, [])
 
@@ -56,7 +57,7 @@ export default function Assistants() {
         })
     }
 
-    const [selectLabel, setSelectLabel] = useState({label:'', value:-1})
+    const [selectLabel, setSelectLabel] = useState({label:'', value:null})
     const handleLabelSearch = (id) => {
         setSelectLabel(labels.find(l => l.value === id))
         filterData({tag_id: id})
@@ -68,25 +69,25 @@ export default function Assistants() {
         setLabels(newData)
     }
 
-    const handleClear = () => {
-        setSelectLabel(pre => ({...pre, value:-1}))
-        filterData({tag_id: -1})
-    }
+    // const handleClear = () => {
+    //     setSelectLabel(pre => ({...pre, value:-1}))
+    //     filterData({tag_id: -1})
+    // }
 
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative top-[-60px]">
             <div className="flex space-x-4">
                 <SearchInput className="w-64" placeholder={t('build.searchAssistant')} onChange={(e) => search(e.target.value)}></SearchInput>
-                <SelectSearch value={selectLabel.value === -1 ? '' : selectLabel.value} options={labels} 
+                <SelectSearch value={!selectLabel.value ? '' : selectLabel.value} options={labels} 
                     selectPlaceholder="全部标签"
                     inputPlaceholder="搜索标签"
                     selectClass="w-64"
                     onOpenChange={() => setLabels(labelsRef.current)}
                     onChange={handleSelectSearch} 
                     onValueChange={handleLabelSearch}>
-                    <div onClick={handleClear} className="bg-[#F5F5F5] rounded-sm mb-2 item-center h-[30px]">
+                    {/* <div onClick={handleClear} className="bg-[#F5F5F5] rounded-sm mb-2 item-center h-[30px]">
                         <span className="ml-2 text-[#727C8F] cursor-default">清除已选项</span>
-                    </div>
+                    </div> */}
                 </SelectSearch>
             </div>
             {/* list */}

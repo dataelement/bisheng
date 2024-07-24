@@ -9,7 +9,7 @@ export default function LabelShow({ show, isOperator, labels, all, resource }) {
   const [allData, setAllData] = useState(all)
   const [isShow, setIsShow] = useState(show)
 
-  const handleUpdate = (obj:{ type:string, data:any, newData?:any }) => {
+  const handleUpdate = (obj:{ type:string, data:any }) => {
     switch(obj.type) {
       case UPDATETYPE.DELETELINK: {
         setFreshData(pre => pre.filter(l => l.value !== obj.data.value))
@@ -28,7 +28,6 @@ export default function LabelShow({ show, isOperator, labels, all, resource }) {
         break
       }
       case UPDATETYPE.DELETELABEL: {
-        console.log(allData)
         setFreshData(pre => pre.filter(d => d.value !== obj.data.value))
         setAllData(pre => pre.filter(a => a.value !== obj.data.value))
         break
@@ -48,7 +47,7 @@ export default function LabelShow({ show, isOperator, labels, all, resource }) {
           <LabelSelect onUpdate={handleUpdate} labels={labels} resource={resource} all={allData}>
             <div onClick={(e) => e.stopPropagation()} className="mb-[10px] max-w-[100%] flex place-items-center rounded-sm pb-1 pt-1 group-hover:bg-[#F5F5F5]">
               <LabelIcon className="mr-2 text-muted-foreground" />
-              <div className="text-sm text-muted-foreground max-w-[258.67px] truncate">
+              <div className="text-sm text-muted-foreground max-w-[250px] truncate">
                 {freshData.map((l, index) => <span>{l.label}{index !== labels.length - 1 && '，'}</span>)}
               </div>
             </div>
@@ -56,7 +55,7 @@ export default function LabelShow({ show, isOperator, labels, all, resource }) {
         ) : (
           <div className="mb-[10px] flex place-items-center max-w-[100%] rounded-sm pb-1 pt-1">
             <LabelIcon className="mr-2 text-muted-foreground" />
-            <div className="text-sm text-muted-foreground max-w-[258.67px] truncate">
+            <div className="text-sm text-muted-foreground max-w-[250px] truncate">
               {freshData.map((l, index) => <span>{l.label}{index !== labels.length - 1 && '，'}</span>)}
             </div>
           </div>

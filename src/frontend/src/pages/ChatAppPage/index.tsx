@@ -96,7 +96,11 @@ export default function SkillChatPage() {
                 {
                     chatList.map((chat, i) => (
                         <div key={chat.chat_id}
-                            className={`group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-[#34353A] ${chatId === chat.chat_id ? 'bg-[#EDEFF6] dark:bg-[#34353A]' : 'bg-[#f9f9fc] dark:bg-[#212122]'}`}
+                            className={`group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-[#34353A] ${location 
+                                ? 'bg-[#f9f9fc] dark:bg-[#212122]' 
+                                : (chatId === chat.chat_id 
+                                    ? 'bg-[#EDEFF6] dark:bg-[#34353A]' 
+                                    : 'bg-[#f9f9fc] dark:bg-[#212122]')}`}
                             onClick={() => handleSelectChat(chat)}>
                             <div className="flex place-items-center space-x-3">
                                 <div className=" inline-block bg-purple-500 rounded-md">

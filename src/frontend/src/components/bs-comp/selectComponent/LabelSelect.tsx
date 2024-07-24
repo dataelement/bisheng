@@ -111,8 +111,7 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
                 captureAndAlertRequestErrorHoc(deleteLabelApi(label.value).then(() => {
                     onUpdate({
                         type: UPDATETYPE.DELETELABEL,
-                        data: label,
-                        newData: data.filter(l => l.value !== label.value)
+                        data: label
                     })
                     message({title: t('prompt'), variant: 'success', description: '删除成功'})
                 }))
@@ -144,7 +143,7 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
         <PopoverTrigger asChild>
             {children}
         </PopoverTrigger>
-        <PopoverContent className="" onClick={(e) => e.stopPropagation()}>
+        <PopoverContent onClick={(e) => e.stopPropagation()}>
             <div>
                 <SearchInput placeholder="搜索标签" value={keyword} onChange={handleSearch} className="w-[240px]"
                     onKeyDown={(e) => {
