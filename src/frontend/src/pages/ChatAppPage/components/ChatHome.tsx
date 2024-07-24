@@ -85,7 +85,7 @@ export default function HomePage({ onSelect }) {
         <div className="mt-[20px] w-full">
             <div className="flex items-center justify-center flex-wrap">
                 <Button variant={chooseId ? "outline" : "default"} className="mb-2 mr-5"
-                onClick={() => { setFlag(true); setChooseId(null); loadData(true) }}>全部</Button>
+                onClick={() => { setChooseId(null); loadData(false) }}>全部</Button>
                 {
                     labels.map((l, index) => index <= 11 && <Button
                         onClick={() => handleTagSearch(l.value)}
