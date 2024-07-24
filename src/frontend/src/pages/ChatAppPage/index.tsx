@@ -26,12 +26,12 @@ export default function SkillChatPage() {
     // 对话列表
     const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat, onScrollLoad } = useChatList()
 
-    const [location, setLocation] = useState(sessionStorage.getItem('location'))
+    const [location, setLocation] = useState(true)
     // select flow(新建会话)
     const handlerSelectFlow = async (card) => {
         console.log(card)
         if(!location) {
-            setLocation('HomePage')
+            setLocation(true)
             return
         }
         if(card) {
@@ -49,7 +49,7 @@ export default function SkillChatPage() {
             })
             setSelelctChat({ id: card.id, chatId: _chatId, type: card.flow_type })
             setChatId(_chatId)
-            setLocation('')
+            setLocation(false)
         } else {
             return message({title:t('prompt'), variant:'warning', description:'请选择一个应用'})
         }
@@ -57,7 +57,7 @@ export default function SkillChatPage() {
 
     // select chat
     const handleSelectChat = useDebounce(async (chat) => {
-        setLocation('')
+        setLocation(false)
         if (chat.chat_id === chatId) return
         setSelelctChat({ id: chat.flow_id, chatId: chat.chat_id, type: chat.flow_type })
         setChatId(chat.chat_id)

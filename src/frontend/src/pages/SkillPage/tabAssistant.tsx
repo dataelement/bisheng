@@ -61,10 +61,16 @@ export default function Assistants() {
         setSelectLabel(labels.find(l => l.value === id))
         filterData({tag_id: id})
     }
+
     const handleSelectSearch = (e) => {
         const key = e.target.value
         const newData = labelsRef.current.filter(l => l.label.toUpperCase().includes(key.toUpperCase()) || l.value === selectLabel.value)
         setLabels(newData)
+    }
+
+    const handleClear = () => {
+        setSelectLabel(pre => ({...pre, value:-1}))
+        filterData({tag_id: -1})
     }
 
     return <div className="h-full relative">
@@ -77,7 +83,11 @@ export default function Assistants() {
                     selectClass="w-64"
                     onOpenChange={() => setLabels(labelsRef.current)}
                     onChange={handleSelectSearch} 
-                    onValueChange={handleLabelSearch}/>
+                    onValueChange={handleLabelSearch}>
+                    <div onClick={handleClear} className="bg-[#F5F5F5] rounded-sm mb-2 item-center h-[30px]">
+                        <span className="ml-2 text-[#727C8F] cursor-default">清除已选项</span>
+                    </div>
+                </SelectSearch>
             </div>
             {/* list */}
             {

@@ -41,11 +41,12 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
         })
         dataRef.current = newData
         setData(newData)
-    }, [])
+    }, [all])
 
     const handleEdit = (id) => {
         setData(pre => pre.map(d =>  ({...d, edit: d.value === id}) ))
     }
+
     const handleChecked = (id) => {
         const type = resource.type === 'assist' ? 3 : 2
         setData(pre => {
@@ -62,30 +63,45 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
             return newData
         })
     }
+
     const nameRef = useRef('')
     const handleChange = (e, id) => {
-        nameRef.current = dataRef.current.find(d => d.value === id).label || ''
+        nameRef.current = id ? dataRef.current.find(d => d.value === id).label : ''
         setData(pre => pre.map(d => d.value === id ? {...d, label:e.target.value} : d))
     }
+
+    const errorRestName = (preName, id) => { //错误发生回退初值
+        preName 
+        ? setData(pre => pre.map(d => d.value === id ? {...d, label:nameRef.current} : d))
+        : setData(pre => pre.filter(d => d.value))
+    }
+
     const handleSave = async (e, id) => {
         if(e.key === 'Enter') {
             setData(pre => pre.map(d => d.value === id ? {...d, edit:false} : d))
             const label = data.find(d => d.value === id)
+            if(label.label.length > 10) {
+                errorRestName(nameRef.current, id)
+                return message({ title: t('prompt'), variant: 'warning', description: '标签名不能超过10个字符' })
+            }
             const err = await captureAndAlertRequestErrorHoc((id ? updateLabelApi(id, label.label) : createLabelApi(label.label)).then((res:any) => {
-                setData(pre => pre.map(d => d.value ? d : {...d, label:res.name, value:res.id}))
+                setData(pre => {
+                    const newData = pre.map(d => d.value ? d : {...d, label:res.name, value:res.id})
+                    dataRef.current = newData
+                    return newData
+                })
                 onUpdate({
                     type: id ? UPDATETYPE.UPDATENAME : UPDATETYPE.CREATELABEL,
                     data: label
                 })
-                return message({ title: t('prompt'), variant: 'success', description: id ? '修改成功' : '新建成功' })
+                return message({ title: t('prompt'), variant: 'success', description: id ? '修改成功' : '创建成功' })
             }))
             if(!err) {
-                nameRef.current 
-                ? setData(pre => pre.map(d => d.value === id ? {...d, label:nameRef.current} : d))
-                : setData(pre => pre.filter(d => d.value))
+                errorRestName(nameRef.current, id)
             }
         }
     }
+
     const handleDelete = (label) => {
         bsConfirm({
             title: t('prompt'),
@@ -95,18 +111,21 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
                 captureAndAlertRequestErrorHoc(deleteLabelApi(label.value).then(() => {
                     onUpdate({
                         type: UPDATETYPE.DELETELABEL,
-                        data: label
+                        data: label,
+                        newData: data.filter(l => l.value !== label.value)
                     })
                     message({title: t('prompt'), variant: 'success', description: '删除成功'})
                 }))
                 next()
-            },
+            }
         })
     }
+
     const handleOpenChange = (b) => { // 可用于整体保存
         setOpen(b)
         setData(pre => pre.map(d => ({...d, edit:false}) ))
     }
+
     const [keyword, setKeyword] = useState('')
     const handleSearch = (e) => {
         const key = e.target.value
@@ -114,8 +133,9 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
         const newData = dataRef.current.filter(d => d.label.toUpperCase().includes(key.toUpperCase()))
         setData(newData)
     }
+
     const handleAdd = () => {
-        const addItem = { laebl:'', value:null, edit:true, selected:false }
+        const addItem = { label:'', value:null, edit:true, selected:false }
         setData([addItem, ...dataRef.current])
         setKeyword('')
     }
@@ -124,9 +144,14 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
         <PopoverTrigger asChild>
             {children}
         </PopoverTrigger>
-        <PopoverContent onClick={(e) => e.stopPropagation()}>
+        <PopoverContent className="" onClick={(e) => e.stopPropagation()}>
             <div>
-                <SearchInput placeholder="搜索标签" value={keyword} onChange={handleSearch} className="w-[240px]"/>
+                <SearchInput placeholder="搜索标签" value={keyword} onChange={handleSearch} className="w-[240px]"
+                    onKeyDown={(e) => {
+                        if(e.key === 'Enter') {
+                            (!data.length && user.role === 'admin') ? handleAdd() : null
+                        }
+                    }}/>
             </div>
             <div className="mt-4 h-[200px] overflow-y-auto">
                 {data.map(d => <div className="flex group justify-between h-8 rounded-sm hover:bg-[#F5F5F5]">
@@ -134,9 +159,9 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
                         <Checkbox id={d.value} checked={d.selected} onCheckedChange={() => handleChecked(d.value)}/>
                         {
                             d.edit 
-                            ? <Input autoFocus className="h-6" type="text" value={d.label} 
-                            onChange={(e) => handleChange(e, d.value)}
-                            onKeyDown={(e) => handleSave(e, d.value)} />
+                            ? <Input autoFocus className="h-6" type="text" value={d.label || ''} 
+                                onChange={(e) => handleChange(e, d.value)}
+                                onKeyDown={(e) => handleSave(e, d.value)} />
                             : <Label htmlFor={d.value} className="cursor-pointer">{d.label}</Label>
                         }
                     </div>

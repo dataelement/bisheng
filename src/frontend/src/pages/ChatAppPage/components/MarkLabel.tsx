@@ -9,7 +9,6 @@ import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { updateHomeLabelApi, getAllLabelsApi } from "@/controllers/API/label";
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useToast } from '@/components/bs-ui/toast/use-toast';
-import LoadMore from '@/components/bs-comp/loadMore';
 
 function DragItem({className = '', data, children, onCancel}) {
     return <div className={cname('h-7 w-32 relative rounded-xl border flex place-items-center', className)}>
@@ -18,7 +17,7 @@ function DragItem({className = '', data, children, onCancel}) {
         <div className='bg-gray-500 rounded-full w-[26px] h-full text-center'>
             <span className='text-slate-50 font-bold'>{data.index}</span>
         </div>
-        <div className='ml-2'>
+        <div className='ml-2 truncate'>
             {children}
         </div>
     </div>
@@ -34,12 +33,11 @@ export default function MarkLabel({open, home, onClose}) {
         async function init() {
             const all = await getAllLabelsApi()
             const newData = all.data.map(d => {
-                // @ts-ignore
                 const res = home.find(h => h.value === d.id)
                 return res ? {label:d.name, value:d.id, selected:true} : {label:d.name, value:d.id, selected:false}
             })
             setLabels(newData)
-            setSelected(newData.filter(d => d.selected))
+            setSelected(home)
         }
         init()
     }, [home])
@@ -47,10 +45,12 @@ export default function MarkLabel({open, home, onClose}) {
     const handleCancel = () => {
         onClose(false)
     }
+
     const handleConfirm = async () => {
         await captureAndAlertRequestErrorHoc(updateHomeLabelApi(selected.map(s => s.value)))
         onClose(false)
     }
+    
     const handleSelect = (id) => {
         setLabels(pre => {
             const newData = pre.map(l => l.value === id ? {...l, selected:!l.selected} : l)
@@ -67,10 +67,12 @@ export default function MarkLabel({open, home, onClose}) {
             return newData
         })
     }
+
     const handleDelete = (id) => {
         setSelected(pre => pre.filter(d => d.value !== id))
         setLabels(pre => pre.map(d => d.value === id ? {...d, selected:!d.selected} : d))
     }
+
     const handleDragEnd = (result) => {
         if(!result.destination) return
         const newData = selected
@@ -93,8 +95,13 @@ export default function MarkLabel({open, home, onClose}) {
             <div className='h-[650px] w-full grid grid-cols-[70%_30%]'>
                 <div className='ml-10'>
                     <div className='w-full relative top-[50%] transform -translate-y-[50%]'>
-                        {labels.map(l => <Button onClick={() => handleSelect(l.value)} 
-                        className={`ml-4 mt-4 ${l.selected && 'bg-blue-300 hover:bg-blue-300'} w-[100px]`}>{l.label}</Button>)}
+                        {
+                            labels.map(l => 
+                            <Button onClick={() => handleSelect(l.value)} 
+                            className={`ml-4 mt-4 p-1 ${!l.selected && 'bg-blue-300 hover:bg-blue-300'} w-[120px]`}>
+                                <span className='truncate'>{l.label}</span>
+                            </Button>)
+                        }
                     </div>
                 </div>
                 <div className='border-l text-gray-500'>
@@ -109,7 +116,7 @@ export default function MarkLabel({open, home, onClose}) {
                                                 {(provided) => (
                                                     <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} 
                                                         style={flag ? { ...provided.draggableProps.style, position:'relative', left:0, top:0 } : {...provided.draggableProps.style}}>
-                                                        <DragItem  onCancel={handleDelete} data={{index:index + 1, id:b.value}} className='mt-4'>
+                                                        <DragItem  onCancel={handleDelete} data={{index:index + 1, id:b.value}} className='mt-4 w-[170px]'>
                                                             <span className='font-bold'>{b.label}</span>
                                                         </DragItem>
                                                     </div>

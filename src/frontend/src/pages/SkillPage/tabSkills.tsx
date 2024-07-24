@@ -67,7 +67,8 @@ export default function Skills() {
         const [flow] = await readTempsDatabase(tempId)
 
         flow.name = `${flow.name}-${generateUUID(5)}`
-        captureAndAlertRequestErrorHoc(saveFlowToDatabase({ ...flow, id: flow.flow_id }).then(res => {
+        // @ts-ignore
+        captureAndAlertRequestErrorHoc(saveFlowToDatabase({ ...flow, id: flow.flow_id }).then((res:any) => {
             res.user_name = user.user_name
             res.write = true
             setOpen(false)
@@ -83,10 +84,16 @@ export default function Skills() {
         setSelectLabel(labels.find(l => l.value === id))
         filterData({tag_id: id})
     }
+
     const handleSelectSearch = (e) => {
         const key = e.target.value
         const newData = labelsRef.current.filter(l => l.label.toUpperCase().includes(key.toUpperCase()) || l.value === selectLabel.value)
         setLabels(newData)
+    }
+
+    const handleClear = () => {
+        setSelectLabel(pre => ({...pre, value:-1}))
+        filterData({tag_id: -1})
     }
 
     useEffect(() => {
@@ -107,7 +114,11 @@ export default function Skills() {
                     selectClass="w-64"
                     onOpenChange={() => setLabels(labelsRef.current)}
                     onChange={handleSelectSearch} 
-                    onValueChange={handleLabelSearch}/>
+                    onValueChange={handleLabelSearch}>
+                    <div onClick={handleClear} className="bg-[#F5F5F5] rounded-sm mb-2 item-center h-[30px]">
+                        <span className="ml-2 text-[#727C8F] cursor-default">清除已选项</span>
+                    </div>
+                </SelectSearch>
                 {user.role === 'admin' && <Button
                     variant="ghost"
                     className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A]"
@@ -133,7 +144,7 @@ export default function Skills() {
                             ></CardComponent>
                         </SkillTempSheet>
                         {
-                            dataSource.map((item, i) => (
+                            dataSource.map((item:any, i) => (
                                 <CardComponent<FlowType>
                                     key={item.id}
                                     data={item}
