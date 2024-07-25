@@ -17,6 +17,7 @@ export default function ToolItem({
     data,
     onEdit = (id) => { },
     onSelect,
+    onSetClick = null
 }) {
     const { t } = useTranslation();
 
@@ -30,6 +31,12 @@ export default function ToolItem({
                             type === 'edit' && <div
                                 className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
                                 onClick={(e) => onEdit(data.id)}
+                            ><SettingIcon /></div>
+                        }
+                        {
+                            onSetClick && <div
+                                className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
+                                onClick={onSetClick}
                             ><SettingIcon /></div>
                         }
                     </div>
