@@ -150,8 +150,7 @@ export async function saveFlowToDatabase(newFlow: {
 */
 export async function readFlowsFromDatabase(page: number = 1, pageSize: number = 20, search: string, tag_id = -1) {
     const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
-    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?
-        page_num=${page}&page_size=${pageSize}&name=${search}${tagIdStr}`);
+    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${pageSize}&name=${search}${tagIdStr}`);
     return { data, total };
 }
 

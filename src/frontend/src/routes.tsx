@@ -7,6 +7,8 @@ import SkillChatPage from "./pages/ChatAppPage";
 import ChatShare from "./pages/ChatAppPage/chatShare";
 import ChatAssitantShare from "./pages/ChatAppPage/chatAssitantShare";
 import ChatPro from "./pages/ChatAppPage/chatWebview";
+import SkillChat from "./pages/ChatAppPage/chatPage/SkillChatPage";
+import AssistantChat from "./pages/ChatAppPage/chatPage/AssistantChatPage";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import FileLibPage from "./pages/FileLibPage";
 import FilesPage from "./pages/FileLibPage/files";
@@ -97,6 +99,8 @@ const privateRouter = [
     ]
   },
   // 独立会话页
+  { path: "/chat/assistant/auth/:id/", element: <AssistantChat /> },
+  { path: "/chat/skill/auth/:id/", element: <SkillChat /> },
   { path: "/chat", element: <SkillChatPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
