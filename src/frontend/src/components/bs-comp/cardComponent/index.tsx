@@ -202,7 +202,7 @@ export default function CardComponent<T>({
       <LabelShow show={data.tags.length > 0} isOperator={isOperator} 
         resource={{id:data.id, type:type}}
         labels={data.tags.map(d => ({label:d.name, value:d.id, selected:true, edit:false}))}
-        all={allLabels}>
+        all={allLabels.filter(a => a.value !== -1)}>
       </LabelShow>
       <div className="flex justify-between items-center h-10">
         <div className="flex gap-1 items-center">
