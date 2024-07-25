@@ -7,7 +7,7 @@ export default function BuildLayout(params) {
     const { t } = useTranslation()
 
     return <div className="bg-background-main">
-        <div className="build-tab flex justify-center h-[60px] items-center border-b relative top-[-60px]">
+        <div className="build-tab flex justify-center h-[65px] items-center border-b relative top-[-65px] bg-background-main z-[100]">
             <div className="px-4">
                 <NavLink to={'assist'} className="group flex gap-2 items-center px-8 py-2 rounded-md navlink">
                     <TabIcon className="text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]"></TabIcon>

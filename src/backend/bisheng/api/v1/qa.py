@@ -13,7 +13,7 @@ from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils.minio_client import MinioClient
 
 # build router
-router = APIRouter(prefix='/qa', tags=['QA'], dependencies=[Depends(get_login_user)])
+router = APIRouter(prefix='/qa', tags=['QA'])
 
 
 @router.get('/keyword', response_model=UnifiedResponseModel[List[str]], status_code=200)
