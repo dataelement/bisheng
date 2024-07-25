@@ -28,6 +28,9 @@ module.exports = {
       },
     },
     extend: {
+      screens: {
+        'my-size': '1800px'
+      },
       colors: {
         "search-input": "var(--search-input)",
         "background-new": "var(--background-new)",

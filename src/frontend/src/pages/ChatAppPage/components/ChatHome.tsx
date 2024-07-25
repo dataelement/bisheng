@@ -96,29 +96,31 @@ export default function HomePage({ onSelect }) {
                 {user.role === 'admin' && <SettingIcon onClick={() => setOpen(true)} className="h-[30px] w-[30px] cursor-pointer" />}
             </div>
         </div>
-        <div className="flex-1 justify-evenly min-w-[696px] mt-6 pb-24 h-[calc(100vh-348px)] flex flex-wrap gap-3 overflow-y-auto scrollbar-hide content-start">
-            {
-                options.length ? options.map((flow, i) => (
-                    <CardComponent key={i}
-                        id={i + 1}
-                        data={flow}
-                        title={flow.name}
-                        description={flow.desc}
-                        type="sheet"
-                        icon={flow.flow_type === 'flow' ? SkillIcon : AssistantIcon}
-                        footer={
-                            <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${flow.flow_type === 'flow' && 'bg-gray-950'}`}>
-                                {flow.flow_type === 'flow' ? '技能' : '助手'}
-                            </Badge>
-                        }
-                        onClick={() => { onSelect(flow) }}
-                    />
-                )) : <div className="flex flex-col items-center justify-center pt-40 w-full">
-                    <p className="text-sm text-muted-foreground mb-3">{t('build.empty')}</p>
-                    <Button className="w-[200px]" onClick={() => navigate('/build/assist')}>{t('build.onlineSA')}</Button>
-                </div>
-            }
-            {flag && <LoadMore onScrollLoad={handleLoadMore} />}
+        <div className="container m-auto relative">
+            <div className="min-w-[696px] grid md:grid-cols-2 xl:grid-cols-3 my-size:grid-cols-4 h-[calc(100vh-348px)] gap-3 mt-6 pb-24 overflow-y-auto scrollbar-hide">
+                {
+                    options.length ? options.map((flow, i) => (
+                        <CardComponent key={i}
+                            id={i + 1}
+                            data={flow}
+                            title={flow.name}
+                            description={flow.desc}
+                            type="sheet"
+                            icon={flow.flow_type === 'flow' ? SkillIcon : AssistantIcon}
+                            footer={
+                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${flow.flow_type === 'flow' && 'bg-gray-950'}`}>
+                                    {flow.flow_type === 'flow' ? '技能' : '助手'}
+                                </Badge>
+                            }
+                            onClick={() => { onSelect(flow) }}
+                        />
+                    )) : <div className="absolute top-1/2 left-1/2 transform text-center -translate-x-1/2 -translate-y-1/2">
+                        <p className="text-sm text-muted-foreground mb-3">{t('build.empty')}</p>
+                        <Button className="w-[200px]" onClick={() => navigate('/build/assist')}>{t('build.onlineSA')}</Button>
+                    </div>
+                }
+                { flag && <LoadMore onScrollLoad={handleLoadMore} /> }
+            </div>
         </div>
         <MarkLabel open={open} home={labels} onClose={handleClose}></MarkLabel>
     </div>
