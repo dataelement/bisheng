@@ -179,6 +179,9 @@ class AssistantService(BaseService, AssistantUtils):
 
         # 写入审计日志
         AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id.hex)
+
+        # 写入logo缓存
+        cls.get_logo_share_link(assistant.logo)
         return True
 
     # 删除助手
@@ -298,6 +301,9 @@ class AssistantService(BaseService, AssistantUtils):
 
         # 写入审计日志
         AuditLogService.update_build_assistant(login_user, get_request_ip(request), assistant.id.hex)
+
+        # 写入缓存
+        cls.get_logo_share_link(assistant.logo)
         return True
 
     @classmethod

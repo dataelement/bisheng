@@ -1,5 +1,6 @@
 import json
 import time
+import math
 from typing import List, Optional
 from uuid import UUID
 
@@ -239,12 +240,15 @@ def get_online_chat(*,
                     page: Optional[int] = 0,
                     limit: Optional[int] = 0,
                     user: UserPayload = Depends(get_login_user)):
+    # 由于是获取助手和技能两个表，需要将page修改下
+    if page and limit:
+        search_page = math.ceil(page / 2)
     res = []
     all_assistant = AssistantService.get_assistant(user, keyword, AssistantStatus.ONLINE.value,
-                                                   tag_id, page=0, limit=0)
+                                                   tag_id, page=search_page, limit=limit)
     all_assistant = all_assistant.data.get('data')
     flows = FlowService.get_all_flows(user, keyword, FlowStatus.ONLINE.value,
-                                      tag_id=tag_id, page=0, page_size=0)
+                                      tag_id=tag_id, page=search_page, page_size=limit)
     flows = flows.data.get('data')
     for one in all_assistant:
         res.append(
@@ -269,8 +273,6 @@ def get_online_chat(*,
     res.sort(key=lambda x: x.update_time, reverse=True)
     if page and limit:
         res = res[(page - 1) * limit:page * limit]
-    for one in res:
-        one.logo = BaseService.get_logo_share_link(one.logo)
     return resp_200(data=res)
 
 
