@@ -58,7 +58,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - name: bisheng-cache
         path: /app/build/
     commands:
-    - ls /app/build/
+    - cp -r /app/build/taggers ./src/backend/
     - cd ./src/backend/
     - echo $REPO
     - REPO2=$(echo $REPO | sed 's/http:\\/\\///g')
