@@ -8,15 +8,15 @@ import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function EditAssistantDialog({ name, desc, onSave }) {
+export default function EditAssistantDialog({ logo, name, desc, onSave }) {
 
     const { t } = useTranslation()
     // State for form fields
     const [formData, setFormData] = useState({ logo: '', name: '', desc: '' });
 
     useEffect(() => {
-        setFormData({ logo: '', name, desc })
-    }, [name, desc])
+        setFormData({ logo, name, desc })
+    }, [logo, name, desc])
     // console.log(formData, name, desc);
 
     // State for errors

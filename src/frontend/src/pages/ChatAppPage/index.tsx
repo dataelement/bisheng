@@ -30,15 +30,16 @@ export default function SkillChatPage() {
     // select flow(新建会话)
     const handlerSelectFlow = async (card) => {
         console.log(card)
-        if(!location) {
+        if (!location) {
             setLocation(true)
             return
         }
-        if(card) {
+        if (card) {
             // 会话ID
             const _chatId = generateUUID(32)
             // add list
             addChat({
+                "logo": card.logo || '',
                 "flow_name": card.name,
                 "flow_description": card.desc,
                 "flow_id": card.id,
@@ -51,7 +52,7 @@ export default function SkillChatPage() {
             setChatId(_chatId)
             setLocation(false)
         } else {
-            return message({title:t('prompt'), variant:'warning', description:'请选择一个应用'})
+            return message({ title: t('prompt'), variant: 'warning', description: '请选择一个应用' })
         }
     }
 
@@ -96,10 +97,10 @@ export default function SkillChatPage() {
                 {
                     chatList.map((chat, i) => (
                         <div key={chat.chat_id}
-                            className={`group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-[#34353A] ${location 
-                                ? 'bg-[#f9f9fc] dark:bg-[#212122]' 
-                                : (chatId === chat.chat_id 
-                                    ? 'bg-[#EDEFF6] dark:bg-[#34353A]' 
+                            className={`group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-[#34353A] ${location
+                                ? 'bg-[#f9f9fc] dark:bg-[#212122]'
+                                : (chatId === chat.chat_id
+                                    ? 'bg-[#EDEFF6] dark:bg-[#34353A]'
                                     : 'bg-[#f9f9fc] dark:bg-[#212122]')}`}
                             onClick={() => handleSelectChat(chat)}>
                             <div className="flex place-items-center space-x-3">
@@ -126,9 +127,9 @@ export default function SkillChatPage() {
         </div>
         {/* chat */}
         {
-            location 
-            ? <HomePage onSelect={handlerSelectFlow}></HomePage> 
-            : <ChatPanne appendHistory data={selectChat}></ChatPanne>
+            location
+                ? <HomePage onSelect={handlerSelectFlow}></HomePage>
+                : <ChatPanne appendHistory data={selectChat}></ChatPanne>
         }
     </div>
 };
