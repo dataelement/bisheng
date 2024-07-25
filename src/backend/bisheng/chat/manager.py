@@ -484,18 +484,24 @@ class ChatManager:
     async def preper_payload(self, payload, graph_data, langchain_obj_key, client_id, chat_id,
                              start_resp: ChatResponse, step_resp: ChatResponse):
         has_file = False
+        has_variable = False
         if 'inputs' in payload and ('data' in payload['inputs']
                                     or 'file_path' in payload['inputs']):
             node_data = payload['inputs'].get('data', '') or [payload['inputs']]
             graph_data = self.refresh_graph_data(graph_data, node_data)
             self.set_cache(langchain_obj_key, None)  # rebuild object
             has_file = any(['InputFile' in nd.get('id', '') for nd in node_data])
+            has_variable = any(['VariableNode' in nd.get('id', '') for nd in node_data])
         if has_file:
             step_resp.intermediate_steps = '文件上传完成，开始解析'
             await self.send_json(client_id, chat_id, start_resp)
             await self.send_json(client_id, chat_id, step_resp, add=False)
             await self.send_json(client_id, chat_id, start_resp)
             logger.info('input_file start_log')
+            await asyncio.sleep(-1)  # 快速的跳过
+        elif has_variable:
+            await self.send_json(client_id, chat_id, start_resp)
+            logger.info('input_variable start_log')
             await asyncio.sleep(-1)  # 快速的跳过
         return has_file, graph_data
 

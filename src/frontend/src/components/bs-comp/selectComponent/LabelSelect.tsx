@@ -84,14 +84,14 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
                 errorRestName(nameRef.current, id)
                 return message({ title: t('prompt'), variant: 'warning', description: '标签名不能超过10个字符' })
             }
-            const err = await captureAndAlertRequestErrorHoc((id ? updateLabelApi(id, label.label) : createLabelApi(label.label)).then((res:any) => {
+            const err = await captureAndAlertRequestErrorHoc(updateLabelApi(id, label.label).then((res:any) => {
                 setData(pre => {
                     const newData = pre.map(d => d.value ? d : {...d, label:res.name, value:res.id})
                     dataRef.current = newData
                     return newData
                 })
                 onUpdate({
-                    type: id ? UPDATETYPE.UPDATENAME : UPDATETYPE.CREATELABEL,
+                    type: UPDATETYPE.UPDATENAME,
                     data: label
                 })
                 return message({ title: t('prompt'), variant: 'success', description: id ? '修改成功' : '创建成功' })
@@ -134,9 +134,18 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
     }
 
     const handleAdd = () => {
-        const addItem = { label:'', value:null, edit:true, selected:false }
-        setData([addItem, ...dataRef.current])
-        setKeyword('')
+        if(keyword.length > 10) {
+            return message({ title: t('prompt'), variant: 'warning', description: '标签名不能超过10个字符' })
+        }
+        createLabelApi(keyword).then((res:any) => {
+            const addItem = { label:res.name, value:res.id, edit:false, selected:false }
+            dataRef.current = [addItem, ...dataRef.current]
+            setData([addItem])
+            onUpdate({
+                type: UPDATETYPE.CREATELABEL,
+                data: res.name
+            })
+        })
     }
 
     return <Popover open={open} onOpenChange={handleOpenChange}>

@@ -17,11 +17,12 @@ ENV PATH="${PATH}:/root/.local/bin"
 # Copy the rest of the application codes
 COPY ./ ./
 
+# Install NLTK data
+COPY /app/build/taggers /root/nltk_data/
+
 RUN python -m pip install --upgrade pip && \
     pip install shapely==2.0.1 
-# Install NLTK data
-RUN pip install nltk
-RUN python -c "import nltk; nltk.download('punkt'); nltk.download('averaged_perceptron_tagger')"
+
 # Install dependencies
 RUN poetry config virtualenvs.create false
 RUN poetry install --no-interaction --no-ansi --without dev
