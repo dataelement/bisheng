@@ -54,7 +54,11 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         from_secret: PY_NEXUS
       PROXY:
         from_secret: APT-GET
+    volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
+      - name: bisheng-cache
+        path: /app/build/
     commands:
+    - ls /app/build/
     - cd ./src/backend/
     - echo $REPO
     - REPO2=$(echo $REPO | sed 's/http:\\/\\///g')
@@ -160,6 +164,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
 trigger:
   branch:
   - release
+  - feat/*
   event:
   - push
    
