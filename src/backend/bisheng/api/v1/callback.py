@@ -40,6 +40,9 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
 
     async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         logger.debug(f'on_llm_new_token token={token} kwargs={kwargs}')
+        # azure偶尔会返回一个None
+        if token is None:
+            return
         resp = ChatResponse(message=token,
                             type='stream',
                             flow_id=self.flow_id,
@@ -248,6 +251,9 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
         self.stream_queue: Queue = kwargs.get('stream_queue')
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        # azure偶尔会返回一个None
+        if token is None:
+            return
         resp = ChatResponse(message=token,
                             type='stream',
                             flow_id=self.flow_id,
