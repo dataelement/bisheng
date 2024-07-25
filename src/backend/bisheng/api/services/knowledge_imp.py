@@ -40,9 +40,7 @@ filetype_load_map = {
     'pdf': PyPDFLoader,
     'html': BSHTMLLoader,
     'md': UnstructuredMarkdownLoader,
-    'doc': UnstructuredWordDocumentLoader,
     'docx': UnstructuredWordDocumentLoader,
-    'ppt': UnstructuredPowerPointLoader,
     'pptx': UnstructuredPowerPointLoader,
 }
 
@@ -359,7 +357,7 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
     if not settings.get_knowledge().get('unstructured_api_url'):
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
-            raise Exception('Unsupport file type')
+            raise Exception('类型不支持')
         loader = filetype_load_map[file_type](file_path=input_file)
         separator = separator[0] if separator and isinstance(separator, list) else separator
         text_splitter = CharacterTextSplitter(separator=separator,
