@@ -414,12 +414,18 @@ class FlowService(BaseService):
             GroupResourceDao.insert_group_batch(batch_resource)
         # 写入审计日志
         AuditLogService.create_build_flow(login_user, get_request_ip(request), flow_info.id.hex)
+
+        # 写入logo缓存
+        cls.get_logo_share_link(flow_info.logo)
         return True
 
     @classmethod
     def update_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
         # 写入审计日志
         AuditLogService.update_build_flow(login_user, get_request_ip(request), flow_info.id.hex)
+
+        # 写入logo缓存
+        cls.get_logo_share_link(flow_info.logo)
         return True
 
     @classmethod

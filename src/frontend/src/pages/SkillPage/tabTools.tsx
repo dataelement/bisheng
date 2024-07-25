@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import EditTool from "./components/EditTool";
 import ToolItem from "./components/ToolItem";
+import ToolSet from "./components/ToolSet";
 
 export default function tabTools({ select = null, onSelect }) {
   const [keyword, setKeyword] = useState(" ");
@@ -33,6 +34,15 @@ export default function tabTools({ select = null, onSelect }) {
       return targetStr.toLowerCase().includes(keyword.toLowerCase());
     });
   }, [keyword, allData]);
+
+  const hasSet = (name) => {
+    return ['Dalle3绘画', 'Bing web搜索', '天眼查'].includes(name)
+  }
+
+  const [toolName, setToolName] = useState('')
+  const handleSetTool = (name) => {
+    setToolName(name)
+  }
 
   return (
     <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
@@ -79,6 +89,7 @@ export default function tabTools({ select = null, onSelect }) {
                   select={select}
                   data={el}
                   onSelect={onSelect}
+                  onSetClick={hasSet(el.name) ? () => handleSetTool(el.name) : null}
                   onEdit={(id) => editRef.current.edit(el)}
                 ></ToolItem>
               ))
@@ -103,6 +114,7 @@ export default function tabTools({ select = null, onSelect }) {
         type === 'edit' && loadData();
       }}
         ref={editRef} />
+      <ToolSet open={toolName} name={toolName} onOpenChange={(o) => !o && setToolName('')} />
     </div>
   );
 }

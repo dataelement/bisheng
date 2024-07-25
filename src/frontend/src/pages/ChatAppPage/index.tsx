@@ -26,12 +26,12 @@ export default function SkillChatPage() {
     // 对话列表
     const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat, onScrollLoad } = useChatList()
 
-    const [location, setLocation] = useState(sessionStorage.getItem('location'))
+    const [location, setLocation] = useState(true)
     // select flow(新建会话)
     const handlerSelectFlow = async (card) => {
         console.log(card)
         if(!location) {
-            setLocation('HomePage')
+            setLocation(true)
             return
         }
         if(card) {
@@ -49,7 +49,7 @@ export default function SkillChatPage() {
             })
             setSelelctChat({ id: card.id, chatId: _chatId, type: card.flow_type })
             setChatId(_chatId)
-            setLocation('')
+            setLocation(false)
         } else {
             return message({title:t('prompt'), variant:'warning', description:'请选择一个应用'})
         }
@@ -57,7 +57,7 @@ export default function SkillChatPage() {
 
     // select chat
     const handleSelectChat = useDebounce(async (chat) => {
-        setLocation('')
+        setLocation(false)
         if (chat.chat_id === chatId) return
         setSelelctChat({ id: chat.flow_id, chatId: chat.chat_id, type: chat.flow_type })
         setChatId(chat.chat_id)
@@ -96,7 +96,11 @@ export default function SkillChatPage() {
                 {
                     chatList.map((chat, i) => (
                         <div key={chat.chat_id}
-                            className={`group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-[#34353A] ${chatId === chat.chat_id ? 'bg-[#EDEFF6] dark:bg-[#34353A]' : 'bg-[#f9f9fc] dark:bg-[#212122]'}`}
+                            className={`group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-[#34353A] ${location 
+                                ? 'bg-[#f9f9fc] dark:bg-[#212122]' 
+                                : (chatId === chat.chat_id 
+                                    ? 'bg-[#EDEFF6] dark:bg-[#34353A]' 
+                                    : 'bg-[#f9f9fc] dark:bg-[#212122]')}`}
                             onClick={() => handleSelectChat(chat)}>
                             <div className="flex place-items-center space-x-3">
                                 <div className=" inline-block bg-purple-500 rounded-md">

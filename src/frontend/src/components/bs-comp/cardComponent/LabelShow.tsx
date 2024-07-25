@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 export default function LabelShow({ show, isOperator, labels, all, resource }) {
 
   const [freshData, setFreshData] = useState(labels)
+  const [allData, setAllData] = useState(all)
   const [isShow, setIsShow] = useState(show)
 
   const handleUpdate = (obj:{ type:string, data:any }) => {
@@ -28,6 +29,7 @@ export default function LabelShow({ show, isOperator, labels, all, resource }) {
       }
       case UPDATETYPE.DELETELABEL: {
         setFreshData(pre => pre.filter(d => d.value !== obj.data.value))
+        setAllData(pre => pre.filter(a => a.value !== obj.data.value))
         break
       }
       default: console.log('error：>>事件类型错误！！！')
@@ -42,25 +44,25 @@ export default function LabelShow({ show, isOperator, labels, all, resource }) {
     <div className="w-full">
       {isShow ? (
         isOperator ? (
-          <LabelSelect onUpdate={handleUpdate} labels={labels} resource={resource} all={all}>
-            <div onClick={(e) => e.stopPropagation()} className="mb-[10px] flex place-items-center rounded-sm pb-1 pt-1 group-hover:bg-[#F5F5F5]">
+          <LabelSelect onUpdate={handleUpdate} labels={labels} resource={resource} all={allData}>
+            <div onClick={(e) => e.stopPropagation()} className="mb-[10px] max-w-[100%] flex place-items-center rounded-sm pb-1 pt-1 group-hover:bg-[#F5F5F5]">
               <LabelIcon className="mr-2 text-muted-foreground" />
-              <div className="truncate text-sm text-muted-foreground w-full">
+              <div className="text-sm text-muted-foreground max-w-[250px] truncate">
                 {freshData.map((l, index) => <span>{l.label}{index !== labels.length - 1 && '，'}</span>)}
               </div>
             </div>
           </LabelSelect>
         ) : (
-          <div className="mb-[10px] flex place-items-center rounded-sm pb-1 pt-1">
+          <div className="mb-[10px] flex place-items-center max-w-[100%] rounded-sm pb-1 pt-1">
             <LabelIcon className="mr-2 text-muted-foreground" />
-            <div className="truncate text-sm text-muted-foreground">
+            <div className="text-sm text-muted-foreground max-w-[250px] truncate">
               {freshData.map((l, index) => <span>{l.label}{index !== labels.length - 1 && '，'}</span>)}
             </div>
           </div>
         )
       ) : (
         isOperator ? (
-        <LabelSelect onUpdate={handleUpdate} labels={labels} resource={resource} all={all}>
+        <LabelSelect onUpdate={handleUpdate} labels={labels} resource={resource} all={allData}>
             <div onClick={(e) => e.stopPropagation()} className="mb-[10px] flex place-items-center rounded-sm pb-1 pt-1 opacity-0 group-hover:bg-[#F5F5F5] group-hover:opacity-100">
                 <LabelIcon className="mr-2 text-muted-foreground" />
                 <div className="text-sm text-muted-foreground">
