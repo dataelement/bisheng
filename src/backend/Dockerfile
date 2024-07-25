@@ -18,7 +18,7 @@ ENV PATH="${PATH}:/root/.local/bin"
 COPY ./ ./
 
 # Install NLTK data
-RUN mv -rf ./taggers /root/nltk_data/
+RUN mv -f ./taggers /root/nltk_data/
 
 RUN python -m pip install --upgrade pip && \
     pip install shapely==2.0.1 
