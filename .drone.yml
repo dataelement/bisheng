@@ -74,6 +74,8 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         path: /var/cache/apt/archives # 将应用打包好的Jar和执行脚本挂载出来
       - name: socket
         path: /var/run/docker.sock
+      - name: bisheng-cache
+        path: /app/build/
     settings:
       registry: http://192.168.106.8:6082
       insecure: true
@@ -86,6 +88,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         from_secret: NEXUS_USER
       password:
         from_secret: NEXUS_PASSWORD
+
   - name: build_docker_frontend
     pull: if-not-exists
     image: plugins/docker

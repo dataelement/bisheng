@@ -87,7 +87,8 @@ class ElemUnstructuredLoader(BasePDFLoader):
 
         resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload)
         if resp.status_code != 200:
-            raise Exception(f'file partition {os.path.basename(self.file_name)} failed resp={resp.text}')
+            raise Exception(
+                f'file partition {os.path.basename(self.file_name)} failed resp={resp.text}')
 
         resp = resp.json()
         if 200 != resp.get('status_code'):
@@ -96,6 +97,10 @@ class ElemUnstructuredLoader(BasePDFLoader):
         if not partitions:
             logger.info(f'partition_error resp={resp}')
         logger.info(f'unstruct_return code={resp.get("status_code")}')
+
+        if resp.get('b64_pdf'):
+            with open(self.file_path, 'wb') as f:
+                f.write(base64.b64decode(resp['b64_pdf']))
 
         content, metadata = merge_partitions(partitions)
         metadata['source'] = self.file_name
@@ -144,27 +149,33 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
             return res['text'], {'source': self.file_name}
         # 说明文件解析失败，pdf文件直接返回报错
         if self.file_name.endswith('.pdf'):
-            raise Exception(f'file text {os.path.basename(self.file_name)} failed resp={resp.text}')
+            raise Exception(
+                f'file text {os.path.basename(self.file_name)} failed resp={resp.text}')
         # 非pdf文件，先将文件转为pdf格式，让后再执行partition模式解析文档
         # 把文件转为pdf
-        resp = requests.post(self.unstructured_api_url, headers=self.headers, json={
-            'filename': os.path.basename(self.file_name),
-            'b64_data': [b64_data],
-            'mode': 'topdf',
-        })
+        resp = requests.post(self.unstructured_api_url,
+                             headers=self.headers,
+                             json={
+                                 'filename': os.path.basename(self.file_name),
+                                 'b64_data': [b64_data],
+                                 'mode': 'topdf',
+                             })
         if resp.status_code != 200 or resp.json().get('status_code') != 200:
-            raise Exception(f'file topdf {os.path.basename(self.file_name)} failed resp={resp.text}')
+            raise Exception(
+                f'file topdf {os.path.basename(self.file_name)} failed resp={resp.text}')
         # 解析pdf文件
         payload['mode'] = 'partition'
         payload['b64_data'] = [resp.json()['b64_pdf']]
         payload['filename'] = os.path.basename(self.file_name) + '.pdf'
         resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload)
         if resp.status_code != 200 or resp.json().get('status_code') != 200:
-            raise Exception(f'file partition {os.path.basename(self.file_name)} failed resp={resp.text}')
+            raise Exception(
+                f'file partition {os.path.basename(self.file_name)} failed resp={resp.text}')
         res = resp.json()
         partitions = res['partitions']
         if not partitions:
-            raise Exception(f'file partition empty {os.path.basename(self.file_name)} resp={resp.text}')
+            raise Exception(
+                f'file partition empty {os.path.basename(self.file_name)} resp={resp.text}')
         # 拼接结果为文本
         content, _ = merge_partitions(partitions)
         return content, {'source': self.file_name}
