@@ -4,7 +4,7 @@ import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { AssistantIcon } from "@/components/bs-icons/assistant";
 import { NewApplicationIcon } from "@/components/bs-icons/newApplication";
-import { message, useToast } from "@/components/bs-ui/toast/use-toast";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { useAssistantStore } from "@/store/assistantStore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +16,6 @@ import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
-import HomePage from "./ChatHome";
 
 export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
@@ -186,6 +185,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                 </div>
                 <ChatComponent
                     form={flowSate.isForm}
+                    logo={flow.logo}
                     stop
                     // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
@@ -209,6 +209,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                 </div>
                 <ChatComponent
                     stop
+                    logo={assistant.logo}
                     useName={sendUserName}
                     questions={assistantState.guide_question.filter((item) => item)}
                     guideWord={assistantState.guide_word}

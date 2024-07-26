@@ -3,6 +3,7 @@ import MessagePanne from "./MessagePanne";
 
 export default function ChatComponent({
     stop = false,
+    logo = '',
     clear = false,
     questions = [],
     form = false,
@@ -15,7 +16,7 @@ export default function ChatComponent({
 }) {
 
     return <div className="relative h-full">
-        <MessagePanne useName={useName} guideWord={guideWord} loadMore={loadMore}></MessagePanne>
+        <MessagePanne logo={logo} useName={useName} guideWord={guideWord} loadMore={loadMore}></MessagePanne>
         <ChatInput clear={clear} questions={questions} form={form} wsUrl={wsUrl} inputForm={inputForm} onBeforSend={onBeforSend} ></ChatInput>
     </div>
 };

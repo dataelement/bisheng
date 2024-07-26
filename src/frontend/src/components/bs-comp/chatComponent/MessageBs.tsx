@@ -28,7 +28,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBs({ data, onUnlike = () => { }, onSource }: { data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -88,7 +88,12 @@ export default function MessageBs({ data, onUnlike = () => { }, onSource }: { da
             </div>
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
-                    <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} ><AvatarIcon /></div>
+                    {logo ? <div className="max-w-6 max-h-6 rounded-full overflow-hidden">
+                        <img width={24} height={24} src={logo} />
+                    </div>
+                        : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
+                            <AvatarIcon />
+                        </div>}
                     {data.message.toString() ?
                         <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
                             {mkdown}

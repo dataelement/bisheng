@@ -220,7 +220,7 @@ def get_chatlist_list(*,
             pass
     res = chat_list[(page - 1) * limit:page * limit]
     chat_ids = [one.chat_id for one in res]
-    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids, 'answer')
+    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids)
     latest_messages = {one.chat_id: one for one in latest_messages}
 
     for one in res:

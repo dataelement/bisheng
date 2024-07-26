@@ -48,7 +48,7 @@ export default function LabelShow({ show, isOperator, labels, all, resource }) {
             <div onClick={(e) => e.stopPropagation()} className="mb-[10px] max-w-[100%] flex place-items-center rounded-sm pb-1 pt-1 group-hover:bg-[#F5F5F5]">
               <LabelIcon className="mr-2 text-muted-foreground" />
               <div className="text-sm text-muted-foreground max-w-[250px] truncate">
-                {freshData.map((l, index) => <span>{l.label}{index !== labels.length - 1 && '，'}</span>)}
+                {freshData.map((l, index) => <span>{l.label}{index !== freshData.length - 1 && '，'}</span>)}
               </div>
             </div>
           </LabelSelect>
@@ -56,7 +56,7 @@ export default function LabelShow({ show, isOperator, labels, all, resource }) {
           <div className="mb-[10px] flex place-items-center max-w-[100%] rounded-sm pb-1 pt-1">
             <LabelIcon className="mr-2 text-muted-foreground" />
             <div className="text-sm text-muted-foreground max-w-[250px] truncate">
-              {freshData.map((l, index) => <span>{l.label}{index !== labels.length - 1 && '，'}</span>)}
+              {freshData.map((l, index) => <span>{l.label}{index !== freshData.length - 1 && '，'}</span>)}
             </div>
           </div>
         )

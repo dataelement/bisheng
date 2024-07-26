@@ -47,6 +47,7 @@ export default function Header({ onSave, onLine }) {
                 </DialogTrigger>
                 {
                     editShow && <EditAssistantDialog
+                        logo={assistantState.logo || ''}
                         name={assistantState.name}
                         desc={assistantState.desc}
                         onSave={handleEditSave}></EditAssistantDialog>

@@ -85,7 +85,7 @@ export default function MarkLabel({open, home, onClose}) {
     const [flag, setFlag] = useState(false) // 解决拖拽映射位置错位
 
     return <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className='h-[800px] max-w-[1200px]'>
+        <DialogContent className='h-[80%] max-w-[70%]'>
             <DialogHeader>
                 <DialogTitle className='flex items-center space-x-2'>
                     <PromptIcon/>

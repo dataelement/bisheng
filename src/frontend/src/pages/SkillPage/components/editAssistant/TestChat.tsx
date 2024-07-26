@@ -48,6 +48,7 @@ export default function TestChat({ assisId, guideQuestion }) {
         </div>
         <ChatComponent
             clear
+            logo={assistantState.logo}
             questions={guideQuestion}
             useName=''
             guideWord=''
