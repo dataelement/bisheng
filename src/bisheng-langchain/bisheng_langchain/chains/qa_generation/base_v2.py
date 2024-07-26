@@ -10,6 +10,7 @@ from collections import defaultdict, namedtuple
 from dataclasses import dataclass
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models import BaseLanguageModel
+from langchain_core.prompts import HumanMessagePromptTemplate, PromptTemplate
 
 try:
     from llama_index.node_parser import SimpleNodeParser
@@ -133,6 +134,7 @@ class TrainsetGenerator:
             chunk_size: int = 1024,
             seed: int = 42,
             prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
+            answer_prompt: Optional[HumanMessagePromptTemplate] = ANSWER_FORMULATE,
     ) -> None:
         self.generator_llm = generator_llm
         self.critic_llm = critic_llm
@@ -150,6 +152,9 @@ class TrainsetGenerator:
         self.threshold = 5.0
         self.rng = default_rng(seed)
         self.prompt = prompt
+        if answer_prompt is None:
+            answer_prompt = ANSWER_FORMULATE
+        self.answer_prompt = answer_prompt
 
     @classmethod
     def from_default(
@@ -158,6 +163,7 @@ class TrainsetGenerator:
             chunk_size: int = 512,
             trainset_distribution: dict = DEFAULT_TRAIN_DISTRIBUTION,
             prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
+            answer_prompt: Optional[PromptTemplate] = ANSWER_FORMULATE,
     ):
         generator_llm = llm
         critic_llm = llm
@@ -167,6 +173,7 @@ class TrainsetGenerator:
             chunk_size=chunk_size,
             trainset_distribution=trainset_distribution,
             prompt=prompt,
+            answer_prompt=answer_prompt,
         )
 
     def _get_evolve_type(self) -> str:
@@ -221,7 +228,7 @@ class TrainsetGenerator:
 
     def _generate_answer(self, question: str, context: t.List[str]) -> t.List[str]:
         return [
-            self._qc_template(ANSWER_FORMULATE, qstn, context[i])
+            self._qc_template(self.answer_prompt, qstn, context[i])
             for i, qstn in enumerate(question.split("\n"))
         ]
 
@@ -354,7 +361,8 @@ class QAGenerationChainV2(Chain):
             llm: BaseLanguageModel,
             k: Optional[int] = None,
             chunk_size: int = 512,
-            prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
+            question_prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
+            answer_prompt: Optional[HumanMessagePromptTemplate] = ANSWER_FORMULATE,
             **kwargs: Any,
     ) -> QAGenerationChainV2:
         """
@@ -362,13 +370,15 @@ class QAGenerationChainV2(Chain):
 
         Args:
             llm: a language model
-            prompt: a prompt template
+            question_prompt: a prompt template for generate question
+            answer_prompt: a prompt template for generate answer
             **kwargs: additional arguments
 
         Returns:
             a QAGenerationChain class
         """
-        generator = TrainsetGenerator.from_default(llm, chunk_size=chunk_size, prompt=prompt)
+        generator = TrainsetGenerator.from_default(llm, chunk_size=chunk_size, prompt=question_prompt,
+                                                   answer_prompt=answer_prompt)
         return cls(documents=documents, generator=generator, k=k, **kwargs)
 
     @property
