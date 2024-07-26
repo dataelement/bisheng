@@ -12,6 +12,7 @@ from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import GptsToolsRead, AuthMethod, AuthType
 from bisheng.database.models.knowledge import KnowledgeRead
+from bisheng.database.models.llm_server import LLMServerBase, LLMModelBase
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 
@@ -354,3 +355,7 @@ class OpenAIChatCompletionResp(BaseModel):
     choices: List[OpenAIChoice] = Field(..., description="返回的答案列表")
     usage: dict = Field(default=None, description="返回的token用量, 助手此值为空")
     system_fingerprint: Optional[str] = Field(default=None, description="系统指纹")
+
+
+class LLMServerInfo(LLMServerBase):
+    models: List[LLMModelBase] = Field(default=[], description="模型列表")
