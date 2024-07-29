@@ -354,6 +354,12 @@ def addEmbedding(collection_name,
 
 
 def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
+    # 按照新的规则对文档做标题提取
+    try:
+        llm = decide_knowledge_llm()
+    except Exception as e:
+        logger.exception('knowledge_llm_error:')
+        raise Exception(f'知识库总结所需模型配置有误，初始化失败， {str(e)}')
     if not settings.get_knowledge().get('unstructured_api_url'):
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
@@ -365,12 +371,20 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
                                               chunk_overlap=chunk_overlap,
                                               add_start_index=True)
         documents = loader.load()
+        if llm:
+            t = time.time()
+            for one in documents:
+                # 配置了相关llm的话，就对文档做总结
+                title = extract_title(llm, one.page_content)
+                one.metadata['title'] = title
+            logger.info('file_extract_title=success timecost={}', time.time() - t)
         texts = text_splitter.split_documents(documents)
         raw_texts = [t.page_content for t in texts]
         metadatas = [{
             'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
             'page': t.metadata.get('page') or 0,
             'source': file_name,
+            'title': t.metadata.get('title', ''),
             'chunk_index': t_index,
             'extra': ''
         } for t_index, t in enumerate(texts)]
@@ -383,19 +397,13 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         documents = loader.load()
         logger.info('file_loader=success timecost={}', time.time() - t)
 
-        # 按照新的规则对每个分块做 标题提取
-        try:
-            llm = decide_knowledge_llm()
-        except Exception as e:
-            logger.exception('knowledge_llm_error:')
-            raise Exception(f'知识库总结所需模型配置有误，初始化失败， {str(e)}')
         if llm:
             t = time.time()
             for one in documents:
                 # 配置了相关llm的话，就对文档做总结
                 title = extract_title(llm, one.page_content)
                 one.metadata['title'] = title
-            logger.info('file_extract_title=success timecost={}', time.time()-t)
+            logger.info('file_extract_title=success timecost={}', time.time() - t)
 
         text_splitter = ElemCharacterTextSplitter(separators=separator,
                                                   chunk_size=size,
@@ -506,7 +514,7 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             original_file = input_file.object_name
             file_url = minio.get_share_link(original_file,
                                             minio_client.tmp_bucket) if original_file.startswith(
-                                                'tmp') else minio.get_share_link(original_file)
+                'tmp') else minio.get_share_link(original_file)
 
             if file_url:
                 file_path, _ = file_download(file_url)
