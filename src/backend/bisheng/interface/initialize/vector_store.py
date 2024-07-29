@@ -232,6 +232,7 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
         params['embedding'] = decide_embeddings(knowledge.model)
         if knowledge.collection_name.startswith('partition'):
             search_kwargs.update({'partition_key': knowledge.id})
+            params['partition_key'] = knowledge.id
     logger.info('init_milvus collection_name={} partition={}', params['collection_name'],
                 search_kwargs)
     return class_object.from_documents(**params)
