@@ -357,5 +357,10 @@ class OpenAIChatCompletionResp(BaseModel):
     system_fingerprint: Optional[str] = Field(default=None, description="系统指纹")
 
 
+class LLMModelInfo(LLMModelBase):
+    id: [int]
+
+
 class LLMServerInfo(LLMServerBase):
-    models: List[LLMModelBase] = Field(default=[], description="模型列表")
+    id: Optional[int]
+    models: List[LLMModelInfo] = Field(default=[], description="模型列表")

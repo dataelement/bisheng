@@ -53,6 +53,7 @@ class LLMModelBase(SQLModelSerializable):
     name: str = Field(default='', description='模型展示名')
     model_name: str = Field(default='', description='模型名称，实例化组件时用的参数')
     model_type: LLMModelType = Field(description='模型类型')
+    config: Optional[Dict] = Field(sa_column=Column(JSON), description='服务提供方公共配置')
     desc: str = Field(default='', sa_column=Column(Text), description='模型描述')
     status: int = Field(default=0, description='模型状态')
     online: bool = Field(default=False, description='是否在线')
@@ -83,7 +84,7 @@ class LLMDao:
     @classmethod
     def get_all_server(cls) -> List[LLMServer]:
         """ 获取所有的服务提供方 """
-        statement = select(LLMServer)
+        statement = select(LLMServer).order_by(LLMServer.update_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 
@@ -123,6 +124,6 @@ class LLMDao:
     @classmethod
     def get_model_by_server_ids(cls, server_ids: List[int]) -> List[LLMModel]:
         """ 根据服务ID获取模型 """
-        statement = select(LLMModel).where(LLMModel.server_id.in_(server_ids))
+        statement = select(LLMModel).where(LLMModel.server_id.in_(server_ids)).order_by(LLMModel.update_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
