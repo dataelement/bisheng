@@ -133,6 +133,8 @@ class TrainsetGenerator:
             chunk_size: int = 1024,
             seed: int = 42,
             prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
+            filter_lowquality_context: bool = False,
+            filter_lowquality_question: bool = False
     ) -> None:
         self.generator_llm = generator_llm
         self.critic_llm = critic_llm
@@ -150,6 +152,8 @@ class TrainsetGenerator:
         self.threshold = 5.0
         self.rng = default_rng(seed)
         self.prompt = prompt
+        self.filter_lowquality_context = filter_lowquality_context
+        self.filter_lowquality_question = filter_lowquality_question
 
     @classmethod
     def from_default(
@@ -158,6 +162,8 @@ class TrainsetGenerator:
             chunk_size: int = 512,
             trainset_distribution: dict = DEFAULT_TRAIN_DISTRIBUTION,
             prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
+            filter_lowquality_context: bool = False, 
+            filter_lowquality_question: bool = False
     ):
         generator_llm = llm
         critic_llm = llm
@@ -167,6 +173,8 @@ class TrainsetGenerator:
             chunk_size=chunk_size,
             trainset_distribution=trainset_distribution,
             prompt=prompt,
+            filter_lowquality_context=filter_lowquality_context,
+            filter_lowquality_question=filter_lowquality_question
         )
 
     def _get_evolve_type(self) -> str:
@@ -309,14 +317,17 @@ class TrainsetGenerator:
             )
 
             text_chunk = " ".join([node.get_content() for node in nodes])
-            score = self._filter_context(text_chunk)
-            if not score:
-                continue
+            if self.filter_lowquality_context:
+                score = self._filter_context(text_chunk)
+                if not score:
+                    continue
             seed_question = self._seed_question(text_chunk)
 
             question = seed_question
-            # is_valid_question = self._filter_question(question)
-            is_valid_question = True
+            if self.filter_lowquality_question:
+                is_valid_question = self._filter_question(question)
+            else:
+                is_valid_question = True
             if is_valid_question:
                 context = [text_chunk] * len(question.split("\n"))
                 is_conv = len(context) > 1
@@ -355,6 +366,8 @@ class QAGenerationChainV2(Chain):
             k: Optional[int] = None,
             chunk_size: int = 512,
             prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
+            filter_lowquality_context: bool = False,
+            filter_lowquality_question: bool = False,
             **kwargs: Any,
     ) -> QAGenerationChainV2:
         """
@@ -368,7 +381,13 @@ class QAGenerationChainV2(Chain):
         Returns:
             a QAGenerationChain class
         """
-        generator = TrainsetGenerator.from_default(llm, chunk_size=chunk_size, prompt=prompt)
+        generator = TrainsetGenerator.from_default(
+            llm, 
+            chunk_size=chunk_size, 
+            prompt=prompt, 
+            filter_lowquality_context=filter_lowquality_context, 
+            filter_lowquality_question=filter_lowquality_question
+        )
         return cls(documents=documents, generator=generator, k=k, **kwargs)
 
     @property
