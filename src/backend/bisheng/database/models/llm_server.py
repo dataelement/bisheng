@@ -132,6 +132,13 @@ class LLMDao:
             return session.exec(statement).first()
 
     @classmethod
+    def get_model_by_type(cls, model_type: LLMModelType) -> Optional[LLMModel]:
+        """ 根据模型类型获取第一个创建的模型 """
+        statement = select(LLMModel).where(LLMModel.model_type == model_type).order_by(LLMModel.id.asc())
+        with session_getter() as session:
+            return session.exec(statement).first()
+
+    @classmethod
     def get_model_by_server_ids(cls, server_ids: List[int]) -> List[LLMModel]:
         """ 根据服务ID获取模型 """
         statement = select(LLMModel).where(LLMModel.server_id.in_(server_ids)).order_by(LLMModel.update_time.desc())

@@ -127,7 +127,7 @@ class TagService:
                      request: Request,
                      login_user: UserPayload) -> List[Tag]:
         """ 获取首页展示的标签列表 """
-        home_tags = ConfigDao.get_config(ConfigKeyEnum.HOME_TAGS.value)
+        home_tags = ConfigDao.get_config(ConfigKeyEnum.HOME_TAGS)
         if not home_tags:
             return []
         home_tags = json.loads(home_tags.value)
@@ -142,7 +142,7 @@ class TagService:
                         login_user: UserPayload,
                         tag_ids: List[int]) -> bool:
         """ 更新首页展示的标签列表 """
-        home_tags = ConfigDao.get_config(ConfigKeyEnum.HOME_TAGS.value)
+        home_tags = ConfigDao.get_config(ConfigKeyEnum.HOME_TAGS)
         if not home_tags:
             home_tags = Config(key=ConfigKeyEnum.HOME_TAGS.value, value=json.dumps(tag_ids))
         else:
