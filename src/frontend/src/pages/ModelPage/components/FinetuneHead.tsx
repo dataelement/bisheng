@@ -79,7 +79,7 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
         </div>
         <div className="flex gap-4 mr-2">
             <Button className="dark:text-[#ECECEC]" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
-            {/* <Button variant="black" className="dark:text-[#ECECEC] dark:bg-[#34353A]" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button> */}
+            <Button variant="black" className="dark:text-[#ECECEC] dark:bg-[#34353A]" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
         </div>
     </div>
 };

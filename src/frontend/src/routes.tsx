@@ -80,17 +80,17 @@ const privateRouter = [
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps", element: <Templates />, permission: 'build', },
-      // { path: "model", element: <ModelPage />, permission: 'model', },
-      {
-        path: "model",
-        element: <ModelLayout />,
-        permission: "model",
-        children: [
-          { path: "", element: <Navigate to="management" replace/> },
-          { path: "management", element: <Management/>, permission: 'management' },
-          { path: "finetune", element: <Finetune rtClick={() => {}} gpuClick={() => {}} />, permission: 'finetune' }
-        ]
-      },
+      { path: "model", element: <ModelPage />, permission: 'model', },
+      // {
+      //   path: "model",
+      //   element: <ModelLayout />,
+      //   permission: "model",
+      //   children: [
+      //     { path: "", element: <Navigate to="management" replace/> },
+      //     { path: "management", element: <Management/>, permission: 'management' },
+      //     { path: "finetune", element: <Finetune rtClick={() => {}} gpuClick={() => {}} />, permission: 'finetune' }
+      //   ]
+      // },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
       { path: "evaluation", element: <EvaluatingPage /> },
