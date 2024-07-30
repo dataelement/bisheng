@@ -23,7 +23,8 @@ async def process_graph(langchain_object,
                         chat_inputs: ChatMessage,
                         websocket: WebSocket,
                         flow_id: str = None,
-                        chat_id: str = None):
+                        chat_id: str = None,
+                        **kwargs):
     langchain_object = try_setting_streaming_options(langchain_object, websocket)
     logger.debug('Loaded langchain object')
 
@@ -45,7 +46,8 @@ async def process_graph(langchain_object,
             chat_inputs.message,
             websocket=websocket,
             flow_id=flow_id,
-            chat_id=chat_id)
+            chat_id=chat_id,
+            **kwargs)
         logger.debug('Generated result and intermediate_steps')
         return result, intermediate_steps, source_document
     except Exception as e:

@@ -4,6 +4,7 @@ import { CopyIcon } from "@radix-ui/react-icons"
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm";
 
 export default function MessageSystem({ data }) {
     const { message } = useToast()
@@ -23,6 +24,7 @@ export default function MessageSystem({ data }) {
     const logMkdown = useMemo(
         () => (
             data.thought && <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
                 linkTarget="_blank"
                 className="bs-mkdown text-gray-600 dark:text-[white] inline-block break-all max-w-full text-sm [&>pre]:text-wrap"
             >
@@ -34,11 +36,8 @@ export default function MessageSystem({ data }) {
 
     const border = { system: 'border-slate-500', question: 'border-amber-500', processing: 'border-cyan-600', answer: 'border-lime-600', report: 'border-slate-500', guide: 'border-none' }
 
-    // 中英去掉最终的回答（report)
-    if(data.category === 'report') return null
-
     return <div className="py-1">
-        <div className={`relative rounded-sm px-6 py-4 border text-sm ${data.category === 'guide' ? 'bg-[#EDEFF6]' : 'bg-slate-50'} ${border[data.category || 'system']}`}>
+        <div className={`relative rounded-sm px-6 py-4 border text-sm dark:bg-gray-900 ${data.category === 'guide' ? 'bg-[#EDEFF6]' : 'bg-slate-50'} ${border[data.category || 'system']}`}>
             {logMkdown}
             {data.category === 'report' && <CopyIcon className=" absolute right-4 top-2 cursor-pointer" onClick={(e) => handleCopy(e.target.parentNode)}></CopyIcon>}
         </div>

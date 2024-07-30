@@ -115,7 +115,7 @@ export function getReportFormApi(flow_id): Promise<any> {
  * @throws Will throw an error if fetching fails.
  */
 export async function getFlowApi(flowId: string, version: string = 'v1'): Promise<FlowType> {
-    return axios.get(`/api/${version}/flows/${flowId}`)
+    return await axios.get(`/api/${version}/flows/${flowId}`)
 }
 
 /**
@@ -148,8 +148,9 @@ export async function saveFlowToDatabase(newFlow: {
 * @returns {Promise<any>} The flows data.
 * @throws Will throw an error if reading fails.
 */
-export async function readFlowsFromDatabase(page: number = 1, pageSize: number = 20, search: string) {
-    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${pageSize}&name=${search}`);
+export async function readFlowsFromDatabase(page: number = 1, pageSize: number = 20, search: string, tag_id = -1) {
+    const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
+    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${pageSize}&name=${search}${tagIdStr}`);
     return { data, total };
 }
 
@@ -170,10 +171,15 @@ export async function deleteFlowFromDatabase(flowId: string) {
  * @param 创建人
  */
 export const createCustomFlowApi = async (params: {
+    logo: string,
     name: string,
     description: string,
     guide_word: string
 }, userName: string) => {
+    if (params.logo) {
+        // logo保存相对路径
+        params.logo = params.logo.match(/(icon.*)\?/)?.[1]
+    }
     const response: FlowType = await axios.post("/api/v1/flows/", {
         ...params,
         data: null
@@ -197,7 +203,12 @@ export const createCustomFlowApi = async (params: {
 export async function updateFlowApi(
     updatedFlow: FlowType
 ): Promise<FlowType> {
-    return axios.patch(`/api/v1/flows/${updatedFlow.id}`, {
+    if (updatedFlow.logo) {
+        // logo保存相对路径
+        updatedFlow.logo = updatedFlow.logo.match(/(icon.*)\?/)?.[1]
+    }
+    return await axios.patch(`/api/v1/flows/${updatedFlow.id}`, {
+        logo: updatedFlow.logo || '',
         name: updatedFlow.name,
         data: updatedFlow.data,
         description: updatedFlow.description,

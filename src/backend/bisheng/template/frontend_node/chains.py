@@ -166,8 +166,12 @@ class ChainFrontendNode(FrontendNode):
             field.show = True
             field.field_type = 'function'
             field.name = 'atransform'
-        if name in ['QAGenerationChain', 'QAGenerationChainV2'] and field.name in ['k', 'chunk_size']:
-            field.show = True
+        if name in ['QAGenerationChain', 'QAGenerationChainV2']:
+            if field.name in ['k', 'chunk_size', 'question_prompt', 'answer_prompt']:
+                field.show = True
+            elif field.name =='input_node':
+                field.show = False
+
 
 
 class SeriesCharacterChainNode(FrontendNode):

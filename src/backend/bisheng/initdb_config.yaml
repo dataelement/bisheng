@@ -16,7 +16,7 @@ minio_conf: &minio_conf
 knowledges:
   # 知识库所需的大模型配置，用来对文档内容总结一个标题，然后将标题和chunk合并存储到向量库内, 不配置则不总结文档
   llm:
-    type: "ChatOpenAi"
+    type: "ChatOpenAI"
     model: "gpt-3.5-turbo"
     <<: *openai_conf
   unstructured_api_url: ""  # 毕昇非结构化数据解析服务地址，提供包括OCR文字识别、表格识别、版式分析等能力。非必填，溯源必填
@@ -68,10 +68,12 @@ llm_request:
 default_operator:
   user: 3
   url: https://bisheng.dataelem.com
+  # 免登录接口是否校验权限
+  api_need_login: false
 
 # 是否需要验证码
 use_captcha:
-  True
+  False
 
 # 聊天对话框配置
 dialog_tips:
@@ -83,14 +85,15 @@ env:
   # 可配置与http不一致的websocket地址
   # websocket_url: 192.168.106.120:3003
   office_url: http://IP:8701 # office 组件访问地址，需要浏览器能直接访问
+  # 是否展示前端界面上的github和帮助链接
+  show_github_and_help: true
 
 # 智能助手相关配置
 gpts:
   agent_executor:
-    # 默认agent的executor, 如果模型里有配置优先用模型的
-    type: 'get_openai_functions_agent_executor'
-    interrupt_before_action: False
-    recursion_limit: 50
+    # 默认agent的executor, 支持模型里单独配置对应的agent_executor_type; react/function call
+    type: 'function call'  # 支持function call的模型使用此agent配置
+    # type: 'ReAct'  # 不支持function call的模型使用此agent配置
   #  助手可选大模型列表，第一个为默认模型
   llms:
     - type: 'ChatOpenAI'
@@ -107,7 +110,7 @@ gpts:
       model_name: 'Qwen-1_8B-Chat'
       host_base_url: 'http://192.168.106.12:9001/v2.1/models/Qwen-1_8B-Chat/infer'
       temperature: 0.3
-      agent_executor_type: 'get_qwen_local_functions_agent_executor'
+      agent_executor_type: 'React'
   # 预置工具所需的配置
   tools:
     # 画图工具配置，引用公共的openai配置
@@ -139,11 +142,10 @@ password_conf:
   max_error_times: 5
 
 system_login_method:
-    # SSO 登录
-    SSO_OAuth: true
-    # # LDAP 登录
-    # LDAP: true
-    # LDAP服务器地址配置: XX
-    
-    # 切换 SSO/LDAP 登录后管理员用户名
-    admin_username: admin
+  # 是否支持闭源网关的登录
+  gateway_login: false
+  # 从闭源网关注册的管理员用户名
+  admin_username: admin
+  # 是否允许多点登录
+  allow_multi_login: true
+

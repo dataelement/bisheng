@@ -2,8 +2,9 @@ import { DelIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { getRolesByGroupApi, getUserGroupsApi } from "@/controllers/API/user";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import SelectSearch from "@/components/bs-ui/select/select"
 
 export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete, onChange }:
     { showDel: boolean, groupId: null | string, selectedRoles: any[], onDelete: any, onChange: any }) {
@@ -11,23 +12,35 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
 
     // 用户组
     const [groups, setGroups] = useState([])
+    const groupsRef = useRef([])
     const [userGroupSelected, setUserGroupSelected] = useState(groupId ? [groupId] : [])
-    useEffect(() => {
-        // 用户组option列表
+    const loadGroups = () => {
         getUserGroupsApi().then((res: any) => {
-            setGroups(res.records.map((ug) => {
+            const groups = res.records.map((ug) => {
                 return {
                     label: ug.group_name,
                     value: ug.id.toString()
                 }
-            }))
+            })
+            setGroups(groups)
+            groupsRef.current = groups
         })
+    }
+    useEffect(() => {
+        // 用户组option列表
+        loadGroups()
     }, [])
 
-    const handleSelectGroup = (values) => {
-        onChange(values, [])
-        setUserGroupSelected(values);
+    const handleSelectGroup = (value) => { //单选之后value要改成数组传出去
+        onChange([value], [])
+        setUserGroupSelected([value]);
         setSelected([])
+    }
+    const handleSearch = (e) => {
+        const keyword = e.target.value
+        const newGroups = groupsRef.current.filter(g => g.label.toUpperCase().includes(keyword.toUpperCase()) 
+        || g.value === userGroupSelected[0])
+        setGroups(newGroups)
     }
 
     // 角色
@@ -52,24 +65,24 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
         setSelected(values)
     }
 
-    return <div className="flex gap-4">
-        <MultiSelect
-            className="max-w-[600px]"
-            value={userGroupSelected}
+    return <div className="grid grid-cols-[44%,44%,5%] gap-4">
+        <SelectSearch contentClass="max-w-[260px] break-all" selectPlaceholder={t('system.userGroupsSel')}
+            selectClass="h-[50px]"
+            value={userGroupSelected[0]}
             options={groups}
-            placeholder={t('system.userGroupsSel')}
-            onChange={handleSelectGroup}
-        >
-        </MultiSelect>
+            onOpenChange={() => setGroups(groupsRef.current)}
+            onValueChange={handleSelectGroup}
+            onChange={handleSearch}
+        />
         <MultiSelect
             multiple
-            className="max-w-[600px]"
+            className="max-w-[260px] break-all"
             value={selected}
             options={roles}
             placeholder={t('system.roleSelect')}
             onChange={handleSelectRole}
         >
         </MultiSelect>
-        {showDel && <Button variant="ghost" size="icon" onClick={onDelete}><DelIcon /></Button>}
+        {showDel && <Button variant="ghost" size="icon" className="mt-2" onClick={onDelete}><DelIcon /></Button>}
     </div>
 };

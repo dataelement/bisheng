@@ -26,10 +26,10 @@ export default function AutoPromptDialog({ onOpenChange }) {
     const { assistantState, dispatchAssistant } = useAssistantStore()
 
     const init = () => {
-        const prompt = areaRef.current.value
-        const apiUrl = `/api/v1/assistant/auto?assistant_id=${id}&prompt=${encodeURIComponent(prompt)}`;
+        const prompt = areaRef.current?.value || assistantState.prompt
+        const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/assistant/auto?assistant_id=${id}&prompt=${encodeURIComponent(prompt)}`;
         const eventSource = new EventSource(apiUrl);
-        areaRef.current.value = ''
+        if (areaRef.current) areaRef.current.value = ''
         let queue = LoadType.Prompt
         setLoading(queue)
 
@@ -166,7 +166,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
     }
 
 
-    return <DialogContent className="sm:max-w-[925px]">
+    return <DialogContent className="sm:max-w-[925px] bg-background-login">
         <div className="flex">
             {/* 提示词 */}
             <div className="w-[50%] relative pr-6">
@@ -188,23 +188,23 @@ export default function AutoPromptDialog({ onOpenChange }) {
                 </div>
                 <div className="max-h-[660px] overflow-y-auto">
                     {/* 开场白 */}
-                    <div className="group relative pb-12 bg-gray-100 mt-4 px-4 py-2 rounded-md">
+                    <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                         <div className="text-md mb-2 font-medium leading-none flex">{t('build.openingRemarks')}{LoadType.GuideWord === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
-                        <Textarea ref={guideAreaRef} className="bg-transparent border-none bg-gray-50"></Textarea>
+                        <Textarea ref={guideAreaRef} className="bg-transparent border-none bg-gray-50 dark:bg-[#171717]"></Textarea>
                         <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideWord <= loading} size="sm" onClick={handleUseGuide}>{t('build.use')}</Button>
                     </div>
                     {/* 引导词 */}
-                    <div className="group relative pb-12 bg-gray-100 mt-4 px-4 py-2 rounded-md">
+                    <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                         <div className="text-md mb-2 font-medium leading-none flex">{t('build.guidingQuestions')}{LoadType.GuideQuestion === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         {
                             question.map(qs => (
-                                <p key={qs} className="text-sm text-muted-foreground bg-gray-50 px-2 py-1 rounded-xl mb-2">{qs}</p>
+                                <p key={qs} className="text-sm text-muted-foreground bg-gray-50 dark:bg-[#171717] px-2 py-1 rounded-xl mb-2">{qs}</p>
                             ))
                         }
                         <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideQuestion <= loading} size="sm" onClick={handleUserQuestion}>{t('build.use')}</Button>
                     </div>
                     {/* 工具 */}
-                    <div className="group relative pb-10 bg-gray-100 mt-4 px-4 py-2 rounded-md">
+                    <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                         <div className="text-md mb-2 font-medium leading-none flex">{t('build.tools')}{LoadType.Tool === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         <div className="pt-1">
                             {
@@ -217,13 +217,13 @@ export default function AutoPromptDialog({ onOpenChange }) {
                             }
                         </div>
                         <Button
-                            className="group-hover:flex hidden h-6 absolute bottom-4 right-4"
+                            className="group-hover:flex text-slate-50 hidden h-6 absolute bottom-4 right-4"
                             disabled={LoadType.Tool <= loading || !tools.length} size="sm"
                             onClick={handleUseTools}
                         >{t('build.use')}</Button>
                     </div>
                     {/* 技能 */}
-                    <div className="group relative pb-10 bg-gray-100 mt-4 px-4 py-2 rounded-md">
+                    <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                         <div className="text-md mb-2 font-medium leading-none flex">{t('build.skill')}{LoadType.Flow === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         <div className="pt-1">
                             {
@@ -236,7 +236,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                             }
                         </div>
                         <Button
-                            className="group-hover:flex hidden h-6 absolute bottom-4 right-4"
+                            className="group-hover:flex text-slate-50 hidden h-6 absolute bottom-4 right-4"
                             disabled={LoadType.Flow <= loading || !flows.length}
                             size="sm"
                             onClick={handleUseFlows}

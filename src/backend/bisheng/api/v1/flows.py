@@ -2,11 +2,9 @@ import json
 from typing import Any
 from uuid import UUID
 
-from bisheng.api.JWT import get_login_user
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.flow import FlowService
-from bisheng.api.services.user_service import UserPayload
+from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import build_flow_no_yield, get_L2_param_from_flow, remove_api_keys
 from bisheng.api.v1.schemas import (FlowCompareReq, FlowListRead, FlowVersionCreate, StreamData,
                                     UnifiedResponseModel, resp_200)
@@ -14,9 +12,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle,
                                           FlowUpdate)
 from bisheng.database.models.flow_version import FlowVersionDao
-from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
-from bisheng.database.models.user_group import UserGroupDao
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -25,7 +21,7 @@ from sqlmodel import select
 from starlette.responses import StreamingResponse
 
 # build router
-router = APIRouter(prefix='/flows', tags=['Flows'])
+router = APIRouter(prefix='/flows', tags=['Flows'], dependencies=[Depends(get_login_user)])
 
 
 @router.post('/', status_code=201)
@@ -45,7 +41,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id.hex)
     ret = FlowRead.model_validate(db_flow)
     ret.version_id = current_version.id
-    FlowService.create_flow_hook(request, login_user, db_flow)
+    FlowService.create_flow_hook(request, login_user, db_flow, ret.version_id)
     return resp_200(data=ret)
 
 
@@ -126,6 +122,7 @@ def change_version(*,
 @router.get('/', status_code=200)
 def read_flows(*,
                name: str = Query(default=None, description='根据name查找数据库，包含描述的模糊搜索'),
+               tag_id: int = Query(default=None, description='标签ID'),
                page_size: int = Query(default=10, description='每页数量'),
                page_num: int = Query(default=1, description='页数'),
                status: int = None,
@@ -135,7 +132,7 @@ def read_flows(*,
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
     try:
-        return FlowService.get_all_flows(user, name, status, page_num, page_size)
+        return FlowService.get_all_flows(user, name, status, tag_id, page_num, page_size)
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -144,13 +141,7 @@ def read_flows(*,
 @router.get('/{flow_id}', response_model=UnifiedResponseModel[FlowReadWithStyle], status_code=200)
 def read_flow(*, flow_id: UUID, login_user: UserPayload = Depends(get_login_user)):
     """Read a flow."""
-    db_flow = FlowDao.get_flow_by_id(flow_id.hex)
-    if not db_flow:
-        raise HTTPException(status_code=404, detail='Flow not found')
-    # 判断授权
-    if not login_user.access_check(db_flow.user_id, flow_id.hex, AccessType.FLOW):
-        return UnAuthorizedError.return_resp()
-    return resp_200(db_flow)
+    return FlowService.get_one_flow(login_user, flow_id.hex)
 
 
 @router.patch('/{flow_id}', response_model=UnifiedResponseModel[FlowRead], status_code=200)

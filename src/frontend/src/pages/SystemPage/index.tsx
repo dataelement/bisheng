@@ -1,16 +1,17 @@
+import { userContext } from "@/contexts/userContext";
+import { useContext } from "react";
+import { useTranslation } from "react-i18next";
 import {
     Tabs,
     TabsContent,
     TabsList,
     TabsTrigger,
-} from "../../components/ui/tabs";
-import Roles from "./components/Roles";
+} from "../../components/bs-ui/tabs";
 import Config from "./components/Config";
-import Users from "./components/Users";
-import { useTranslation } from "react-i18next";
+import Roles from "./components/Roles";
+import Theme from "./theme";
 import UserGroups from "./components/UserGroup";
-import { userContext } from "@/contexts/userContext";
-import { useContext } from "react";
+import Users from "./components/Users";
 
 export default function FileLibPage() {
     const { user } = useContext(userContext);
@@ -24,9 +25,9 @@ export default function FileLibPage() {
                 {user.role === 'admin' && <TabsTrigger value="userGroup">{t('system.userGroupsM')}</TabsTrigger>}
                 <TabsTrigger value="role">{t('system.roleManagement')}</TabsTrigger>
                 {user.role === 'admin' && <TabsTrigger value="system">{t('system.systemConfiguration')}</TabsTrigger>}
+                {user.role === 'admin' && <TabsTrigger value="theme">{t('system.themeColor')}</TabsTrigger>}
             </TabsList>
             <TabsContent value="user">
-
                 <Users></Users>
             </TabsContent>
             <TabsContent value="userGroup">
@@ -37,6 +38,9 @@ export default function FileLibPage() {
             </TabsContent>
             <TabsContent value="system">
                 <Config></Config>
+            </TabsContent>
+            <TabsContent value="theme">
+                <Theme></Theme>
             </TabsContent>
         </Tabs>
     </div>

@@ -1,3 +1,5 @@
+from fastapi.exceptions import HTTPException
+
 from bisheng.api.v1.schemas import UnifiedResponseModel
 
 
@@ -10,7 +12,16 @@ class BaseErrorCode:
     def return_resp(cls, msg: str = None, data: any = None) -> UnifiedResponseModel:
         return UnifiedResponseModel(status_code=cls.Code, status_message=msg or cls.Msg, data=data)
 
+    @classmethod
+    def http_exception(cls, msg: str = None) -> Exception:
+        return HTTPException(status_code=cls.Code, detail=msg or cls.Msg)
+
 
 class UnAuthorizedError(BaseErrorCode):
     Code: int = 403
     Msg: str = '暂无操作权限'
+
+
+class NotFoundError(BaseErrorCode):
+    Code: int = 404
+    Msg: str = '资源不存在'

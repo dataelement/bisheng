@@ -82,14 +82,24 @@ export function formatDate(date: Date, format: string): string {
     const addZero = (num) => num < 10 ? `0${num}` : `${num}`
     const replacements = {
         'yyyy': date.getFullYear(),
-        'MM': addZero(date.getMonth() + 1), 
+        'MM': addZero(date.getMonth() + 1),
         'dd': addZero(date.getDate()),
         'HH': addZero(date.getHours()),
         'mm': addZero(date.getMinutes()),
         'ss': addZero(date.getSeconds())
     }
     return format.replace(/yyyy|MM|dd|HH|mm|ss/g, (match) => replacements[match])
-} 
+}
+
+// param time: yyyy-mm-ddTxxxx
+export function formatStrTime(time: string, notSameDayFormat: string): string {
+    if (!time) return ''
+    const date1 = new Date(time)
+    const date2 = new Date()
+    return date1.getFullYear() === date2.getFullYear() &&
+        date1.getMonth() === date2.getMonth() &&
+        date1.getDate() === date2.getDate() ? formatDate(date1, 'HH:mm') : formatDate(date1, notSameDayFormat)
+}
 
 export function toTitleCase(str: string | undefined): string {
     if (!str) return "";

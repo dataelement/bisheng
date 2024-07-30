@@ -1,5 +1,6 @@
 import json
 import time
+from queue import Queue
 from typing import Dict
 
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
@@ -7,23 +8,32 @@ from bisheng.chat.manager import ChatManager
 from bisheng.chat.utils import judge_source, process_graph, process_source_document
 from bisheng.database.base import session_getter
 from bisheng.database.models.report import Report
+from bisheng.interface.importing.utils import import_by_type
+from bisheng.interface.initialize.loading import instantiate_llm
+from bisheng.settings import settings
 from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 from bisheng.utils.threadpool import thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.chains.autogen.auto_gen import AutoGenChain
+from langchain.chains.llm import LLMChain
+from langchain_core.prompts.prompt import PromptTemplate
 from sqlmodel import select
 
 
 class Handler:
 
-    def __init__(self) -> None:
-        self.handler_dict = {}
-        self.handler_dict['default'] = self.process_message
-        self.handler_dict['autogen'] = self.process_autogen
-        self.handler_dict['auto_file'] = self.process_file
-        self.handler_dict['report'] = self.process_report
+    def __init__(self, stream_queue: Queue) -> None:
+        self.handler_dict = {
+            'default': self.process_message,
+            'autogen': self.process_autogen,
+            'auto_file': self.process_file,
+            'report': self.process_report,
+            'stop': self.process_stop
+        }
+        # 记录流式输出的内容
+        self.stream_queue = stream_queue
 
     async def dispatch_task(self, session: ChatManager, client_id: str, chat_id: str, action: str,
                             payload: dict, user_id):
@@ -34,10 +44,48 @@ class Handler:
                 action = 'default'
             if action not in self.handler_dict:
                 raise Exception(f'unknown action {action}')
+            if action != 'stop':
+                # 清空流式输出队列，防止上次的回答污染本次回答
+                while not self.stream_queue.empty():
+                    self.stream_queue.get()
 
             await self.handler_dict[action](session, client_id, chat_id, payload, user_id)
             logger.info(f'dispatch_task done timecost={time.time() - start_time}')
         return client_id, chat_id
+
+    async def process_stop(self, session: ChatManager, client_id: str, chat_id: str, payload: Dict,
+                           user_id):
+        key = get_cache_key(client_id, chat_id)
+        langchain_object = session.in_memory_cache.get(key)
+        action = payload.get('action')
+        if isinstance(langchain_object, AutoGenChain):
+            if hasattr(langchain_object, 'stop'):
+                logger.info('reciever_human_interactive langchain_objct')
+                await langchain_object.stop()
+            else:
+                logger.error(f'act=auto_gen act={action}')
+        else:
+            # 普通技能的stop
+            res = thread_pool.cancel_task([key])  # 将进行中的任务进行cancel
+            if res[0]:
+                # message = payload.get('inputs') or '手动停止'
+                res = ChatResponse(type='end', user_id=user_id, message='')
+                close = ChatResponse(type='close')
+                await session.send_json(client_id, chat_id, res, add=False)
+                await session.send_json(client_id, chat_id, close, add=False)
+        answer = ''
+        # 记录中止后产生的流式输出内容
+        while not self.stream_queue.empty():
+            answer += self.stream_queue.get()
+        if answer.strip():
+            chat_message = ChatMessage(message=answer,
+                                       category='answer',
+                                       type='end',
+                                       user_id=user_id,
+                                       remark='break_answer',
+                                       is_bot=True)
+            session.chat_history.add_message(client_id, chat_id, chat_message)
+        logger.info('process_stop done')
 
     async def process_report(self,
                              session: ChatManager,
@@ -100,6 +148,30 @@ class Handler:
         close_resp = ChatResponse(type='close', category='system', user_id=user_id)
         await session.send_json(client_id, chat_id, close_resp)
 
+    def recommend_question(self, langchain_obj, chat_history: list):
+        prompt = """给定以下历史聊天消息:
+        {history}
+
+        总结提炼用户可能接下来会提问的3个问题，请直接输出问题，使用换行符分割问题，不要添加任何修饰文字或前后缀。
+        """
+        if hasattr(langchain_obj, 'llm'):
+            llm_chain = LLMChain(llm=langchain_obj.llm,
+                                 prompt=PromptTemplate.from_template(prompt))
+        else:
+            keyword_conf = settings.get_default_llm() or {}
+            if keyword_conf:
+                node_type = keyword_conf.pop('type', 'HostQwenChat')  # 兼容旧配置
+                class_object = import_by_type(_type='llms', name=node_type)
+                llm = instantiate_llm(node_type, class_object, keyword_conf)
+
+                llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt))
+        if llm_chain:
+            questions = llm_chain.predict(history=chat_history)
+            return questions.split('\n')
+        else:
+            logger.info('llm_chain is None recommend_over')
+            return []
+
     async def process_message(self,
                               session: ChatManager,
                               client_id: str,
@@ -141,7 +213,14 @@ class Handler:
                 websocket=session.active_connections[get_cache_key(client_id, chat_id)],
                 flow_id=client_id,
                 chat_id=chat_id,
+                stream_queue=self.stream_queue,
             )
+
+            # questions = []
+            # if is_begin and langchain_object.memory and langchain_object.memory.buffer:
+            #     questions = self.recommend_question(langchain_object,
+            #                                         langchain_object.memory.buffer)
+
         except Exception as e:
             # Log stack trace
             logger.exception(e)
@@ -269,24 +348,7 @@ class Handler:
         langchain_object = session.in_memory_cache.get(key)
         logger.info(f'reciever_human_interactive langchain={langchain_object}')
         action = payload.get('action')
-        if action.lower() == 'stop':
-            if isinstance(langchain_object, AutoGenChain):
-                if hasattr(langchain_object, 'stop'):
-                    logger.info('reciever_human_interactive langchain_objct')
-                    await langchain_object.stop()
-                else:
-                    logger.error(f'act=auto_gen act={action}')
-            else:
-                # 普通技能的stop
-                res = thread_pool.cancel_task([key])  # 将进行中的任务进行cancel
-                if res[0]:
-                    message = payload.get('inputs') or '手动停止'
-                    res = ChatResponse(type='end', user_id=user_id, message=message)
-                    close = ChatResponse(type='close')
-                    await session.send_json(client_id, chat_id, res)
-                    await session.send_json(client_id, chat_id, close)
-
-        elif action.lower() == 'continue':
+        if action.lower() == 'continue':
             # autgen_user 对话的时候，进程 wait() 需要换新
             if hasattr(langchain_object, 'input'):
                 await langchain_object.input(payload.get('inputs'))

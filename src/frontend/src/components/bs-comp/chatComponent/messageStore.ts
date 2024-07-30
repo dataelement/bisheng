@@ -1,9 +1,8 @@
-import { message } from '@/components/bs-ui/toast/use-toast';
-import { generateUUID } from '@/components/bs-ui/utils'
-import { MessageDB, getChatHistory } from '@/controllers/API'
-import { ChatMessageType } from '@/types/chat'
-import { cloneDeep } from 'lodash'
-import { create } from 'zustand'
+import { getChatHistory } from '@/controllers/API';
+import { ChatMessageType } from '@/types/chat';
+import { cloneDeep } from 'lodash';
+import { create } from 'zustand';
+import { formatDate } from '@/util/utils';
 
 /**
  * 会话消息管理
@@ -40,6 +39,7 @@ type Actions = {
     insetSystemMsg: (text: string) => void;
     insetBsMsg: (text: string) => void;
     setShowGuideQuestion: (text: boolean) => void;
+    clearMsgs: () => void;
 }
 
 
@@ -122,6 +122,11 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             set({ historyEnd: true })
         }
     },
+    clearMsgs() {
+        setTimeout(() => {
+            set({ hisMessages: [], messages: [], historyEnd: true })
+        }, 0);
+    },
     destory() {
         set({ chatId: '', messages: [] })
     },
@@ -138,7 +143,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                     category: '',
                     files: [],
                     end: false,
-                    user_name: ""
+                    user_name: "",
+                    update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
                 }]
         }))
     },
@@ -189,9 +195,14 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             id: isRunLog ? wsdata.extra : wsdata.messageId, // 每条消息必唯一
             message: isRunLog ? JSON.parse(wsdata.message) : currentMessage.message + wsdata.message,
             thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
-            files: wsdata.files || null,
+            files: wsdata.files || [],
             category: wsdata.category || '',
             source: wsdata.source
+        }
+        // 无id补上（如文件解析完成消息，后端无返回messageid）
+        if (!newCurrentMessage.id) {
+            newCurrentMessage.id = Math.random() * 1000000
+            console.log('msg:', newCurrentMessage);
         }
 
         messages[currentMessageIndex] = newCurrentMessage

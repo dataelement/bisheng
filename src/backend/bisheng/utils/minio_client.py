@@ -34,15 +34,23 @@ class MinioClient():
             cert_check=settings.get_knowledge().get('minio').get('CERT_CHECK'))
         self.mkdir(bucket=bucket)
 
-    def upload_minio(self, object_name: str, file_path, content_type='application/text'):
+    def upload_minio(self, object_name: str, file_path, content_type='application/text', bucket_name=bucket):
         # 初始化minio
         if self.minio_client:
             logger.debug('upload_file obj={} bucket={} file_paht={}', object_name, bucket,
                          file_path)
-            return self.minio_client.fput_object(bucket_name=bucket,
+            return self.minio_client.fput_object(bucket_name=bucket_name,
                                                  object_name=object_name,
                                                  file_path=file_path,
                                                  content_type=content_type)
+
+    def upload_minio_file_io(self, object_name: str, file: BinaryIO, bucket_name=bucket, **kwargs):
+        # 初始化minio
+        logger.debug('upload_file obj={} bucket={}', object_name, bucket)
+        return self.minio_client.put_object(bucket_name=bucket_name,
+                                            object_name=object_name,
+                                            data=file,
+                                            **kwargs)
 
     def upload_minio_data(self, object_name: str, data, length, content_type):
         # 初始化minio
@@ -99,10 +107,10 @@ class MinioClient():
             if not self.minio_client.bucket_exists(bucket):
                 self.minio_client.make_bucket(bucket)
 
-    def upload_minio_file(self, object_name: str, file: BinaryIO, length: int, **kwargs):
+    def upload_minio_file(self, object_name: str, file: BinaryIO, bucket_name=bucket, length: int = 0, **kwargs):
         # 初始化minio
         if self.minio_client:
-            self.minio_client.put_object(bucket_name=bucket,
+            self.minio_client.put_object(bucket_name=bucket_name,
                                          object_name=object_name,
                                          data=file,
                                          length=length, **kwargs)

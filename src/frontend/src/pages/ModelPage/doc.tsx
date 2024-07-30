@@ -201,7 +201,7 @@ export default function Doc() {
     // const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        var link = '/doc.pdf'
+        var link = __APP_ENV__.BASE_URL + '/doc.pdf'
 
         var iframe: any = document.getElementById('iframe')
 

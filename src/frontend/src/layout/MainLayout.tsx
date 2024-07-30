@@ -1,8 +1,8 @@
 import {
     ApplicationIcon,
     BookOpenIcon,
-    DropDownIcon,
     EnIcon,
+    EvaluatingIcon,
     GithubIcon,
     KnowledgeIcon,
     LogIcon,
@@ -11,9 +11,10 @@ import {
     SystemIcon,
     TechnologyIcon
 } from "@/components/bs-icons";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
-import { LockClosedIcon } from "@radix-ui/react-icons";
+import { CaretDownIcon, LockClosedIcon, MoonIcon, SunIcon } from "@radix-ui/react-icons";
 import i18next from "i18next";
 import { Globe } from "lucide-react";
 import { useContext, useEffect, useMemo, useState } from "react";
@@ -37,9 +38,17 @@ export default function MainLayout() {
     const { language, options, changLanguage, t } = useLanguage(user)
 
     const handleLogout = () => {
-        captureAndAlertRequestErrorHoc(logoutApi()).then(_ => {
-            setUser(null)
-            localStorage.removeItem('isLogin')
+        bsConfirm({
+            title: `${t('prompt')}!`,
+            desc: `${t('menu.logoutContent')}？`,
+            okTxt: t('system.confirm'),
+            onOk(next) {
+                captureAndAlertRequestErrorHoc(logoutApi()).then(_ => {
+                    setUser(null)
+                    localStorage.removeItem('isLogin')
+                })
+                next()
+            }
         })
     }
 
@@ -63,16 +72,21 @@ export default function MainLayout() {
         <div className="bg-background-main w-full h-screen">
             <div className="flex justify-between h-[64px]">
                 <div className="flex h-9 my-[14px]">
-                    <Link className="inline-block" to='/'><img src='/login-logo-small.png' className="w-[114px] h-9 ml-8 rounded" alt="" /></Link>
+                    <Link className="inline-block" to='/'>
+                        {/* @ts-ignore */}
+                        <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="w-[114px] h-9 ml-8 rounded dark:w-[124px] dark:pr-[10px] dark:hidden" alt="" />
+                        {/* @ts-ignore */}
+                        <img src={__APP_ENV__.BASE_URL + '/logo-small-dark.png'} className="w-[114px] h-9 ml-8 rounded dark:w-[124px] dark:pr-[10px] dark:block hidden" alt="" />
+                    </Link>
                 </div>
                 <div className="flex w-fit relative z-50">
                     <div className="flex">
-                        {/* <TooltipProvider>
+                        <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={() => setDark(!dark)}>
                                     <div className="">
                                         {dark ? (
-                                            <SunIcon className="side-bar-button-size mx-auto w-[13px] h-[13px]" />
+                                            <SunIcon className="side-bar-button-size dark:text-slate-50 mx-auto w-[13px] h-[13px]" />
                                         ) : (
                                             <MoonIcon className="side-bar-button-size mx-auto w-[17px] h-[17px]" />
                                         )}
@@ -80,15 +94,15 @@ export default function MainLayout() {
                                 </TooltipTrigger>
                                 <TooltipContent><p>{t('menu.themeSwitch')}</p></TooltipContent>
                             </Tooltip>
-                        </TooltipProvider> */}
+                        </TooltipProvider>
                         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={changLanguage}>
                                     <div className="">
                                         {language === 'en'
-                                            ? <EnIcon className="side-bar-button-size mx-auto w-[19px] h-[19px]" />
-                                            : <Globe className="side-bar-button-size mx-auto w-[17px] h-[17px]" />}
+                                            ? <EnIcon className="side-bar-button-size dark:text-slate-50 mx-auto w-[19px] h-[19px]" />
+                                            : <Globe className="side-bar-button-size dark:text-slate-50 mx-auto w-[17px] h-[17px]" />}
                                     </div>
                                 </TooltipTrigger>
                                 <TooltipContent><p>{options[language]}</p></TooltipContent>
@@ -97,11 +111,12 @@ export default function MainLayout() {
                         <Separator className="mx-[23px] h-6 border-l my-5 border-[#dddddd]" orientation="vertical" />
                     </div>
                     <div className="flex items-center h-7 my-4">
-                        <img className="h-7 w-7 rounded-2xl mr-4" src="/user.png" alt="" />
+                        {/* @ts-ignore */}
+                        <img className="h-7 w-7 rounded-2xl mr-4" src={__APP_ENV__.BASE_URL + '/user.png'} alt="" />
                         <SelectHover
                             triagger={
                                 <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">
-                                    {user.user_name} <DropDownIcon className=" inline-block mt-[-2px]" />
+                                    {user.user_name} <CaretDownIcon className="inline-block mt-[-2px]" />
                                 </span>
                             }>
                             <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
@@ -135,6 +150,12 @@ export default function MainLayout() {
                             </NavLink>
                         }
                         {
+                            isMenu('evaluation') &&
+                            <NavLink to='/evaluation' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                <EvaluatingIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.evaluation')}</span>
+                            </NavLink>
+                        }
+                        {
                             isAdmin && <>
                                 <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.system')}</span>
@@ -149,7 +170,7 @@ export default function MainLayout() {
                             </>
                         }
                     </nav>
-                    {!appConfig.isPro && <div className="absolute left-0 bottom-0 w-[180px] p-2">
+                    {!appConfig.noFace && <div className="absolute left-0 bottom-0 w-[180px] p-2">
                         <div className="help flex items-between my-3">
                             <TooltipProvider>
                                 <Tooltip>

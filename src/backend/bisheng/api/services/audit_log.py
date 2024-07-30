@@ -50,8 +50,8 @@ class AuditLogService:
         return resp_200(data=res)
 
     @classmethod
-    def _chat_log(cls, user: UserPayload, ip_address: str, event_type: str, object_type: str, object_id: str,
-                  object_name: str, resource_type: ResourceTypeEnum):
+    def _chat_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
+                  object_id: str, object_name: str, resource_type: ResourceTypeEnum):
         # 获取资源所属的分组
         groups = GroupResourceDao.get_resource_group(resource_type, object_id)
         group_ids = [one.group_id for one in groups]
@@ -60,8 +60,8 @@ class AuditLogService:
             operator_name=user.user_name,
             group_ids=group_ids,
             system_id=SystemId.CHAT.value,
-            event_type=event_type,
-            object_type=object_type,
+            event_type=event_type.value,
+            object_type=object_type.value,
             object_id=object_id,
             object_name=object_name,
             ip_address=ip_address,
@@ -76,7 +76,7 @@ class AuditLogService:
         logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         # 获取助手详情
         assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
-        cls._chat_log(user, ip_address, EventType.CREATE_CHAT.value, ObjectType.ASSISTANT.value,
+        cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.ASSISTANT,
                       assistant_id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
@@ -86,7 +86,7 @@ class AuditLogService:
         """
         logger.info(f"act=create_chat_flow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = FlowDao.get_flow_by_id(flow_id)
-        cls._chat_log(user, ip_address, EventType.CREATE_CHAT.value, ObjectType.FLOW.value,
+        cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.FLOW,
                       flow_id, flow_info.name, ResourceTypeEnum.FLOW)
 
     @classmethod
@@ -95,7 +95,7 @@ class AuditLogService:
         删除技能会话的审计日志
         """
         logger.info(f"act=delete_chat_flow user={user.user_name} ip={ip_address} flow={flow_info.id}")
-        cls._chat_log(user, ip_address, EventType.DELETE_CHAT.value, ObjectType.FLOW.value,
+        cls._chat_log(user, ip_address, EventType.DELETE_CHAT, ObjectType.FLOW,
                       flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
 
     @classmethod
@@ -104,11 +104,12 @@ class AuditLogService:
         删除助手会话的审计日志
         """
         logger.info(f"act=delete_assistant_flow user={user.user_name} ip={ip_address} assistant={assistant_info.id}")
-        cls._chat_log(user, ip_address, EventType.DELETE_CHAT.value, ObjectType.ASSISTANT.value,
+        cls._chat_log(user, ip_address, EventType.DELETE_CHAT, ObjectType.ASSISTANT,
                       assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
-    def _build_log(cls, user: UserPayload, ip_address: str, event_type: str, object_type: str, object_id: str,
+    def _build_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
+                   object_id: str,
                    object_name: str, resource_type: ResourceTypeEnum):
         """
         构建模块的审计日志
@@ -123,8 +124,8 @@ class AuditLogService:
             operator_name=user.user_name,
             group_ids=group_ids,
             system_id=SystemId.BUILD.value,
-            event_type=event_type,
-            object_type=object_type,
+            event_type=event_type.value,
+            object_type=object_type.value,
             object_id=object_id,
             object_name=object_name,
             ip_address=ip_address,
@@ -138,7 +139,7 @@ class AuditLogService:
         """
         logger.info(f"act=create_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = FlowDao.get_flow_by_id(flow_id)
-        cls._build_log(user, ip_address, EventType.CREATE_BUILD.value, ObjectType.FLOW.value,
+        cls._build_log(user, ip_address, EventType.CREATE_BUILD, ObjectType.FLOW,
                        flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
 
     @classmethod
@@ -148,7 +149,7 @@ class AuditLogService:
         """
         logger.info(f"act=update_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = FlowDao.get_flow_by_id(flow_id)
-        cls._build_log(user, ip_address, EventType.UPDATE_BUILD.value, ObjectType.FLOW.value,
+        cls._build_log(user, ip_address, EventType.UPDATE_BUILD, ObjectType.FLOW,
                        flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
 
     @classmethod
@@ -157,7 +158,7 @@ class AuditLogService:
         删除技能的审计日志
         """
         logger.info(f"act=delete_build_flow user={user.user_name} ip={ip_address} flow={flow_info.id}")
-        cls._build_log(user, ip_address, EventType.DELETE_BUILD.value, ObjectType.FLOW.value,
+        cls._build_log(user, ip_address, EventType.DELETE_BUILD, ObjectType.FLOW,
                        flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
 
     @classmethod
@@ -167,7 +168,7 @@ class AuditLogService:
         """
         logger.info(f"act=create_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
-        cls._build_log(user, ip_address, EventType.CREATE_BUILD.value, ObjectType.ASSISTANT.value,
+        cls._build_log(user, ip_address, EventType.CREATE_BUILD, ObjectType.ASSISTANT,
                        assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
@@ -178,7 +179,7 @@ class AuditLogService:
         logger.info(f"act=update_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
 
-        cls._build_log(user, ip_address, EventType.UPDATE_BUILD.value, ObjectType.ASSISTANT.value,
+        cls._build_log(user, ip_address, EventType.UPDATE_BUILD, ObjectType.ASSISTANT,
                        assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
@@ -189,11 +190,11 @@ class AuditLogService:
         logger.info(f"act=delete_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
 
-        cls._build_log(user, ip_address, EventType.DELETE_BUILD.value, ObjectType.ASSISTANT.value,
+        cls._build_log(user, ip_address, EventType.DELETE_BUILD, ObjectType.ASSISTANT,
                        assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
-    def _knowledge_log(cls, user: UserPayload, ip_address: str, event_type: str, object_type: str,
+    def _knowledge_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
                        object_id: str, object_name: str, resource_type: ResourceTypeEnum, resource_id: str):
         """
         知识库模块的日志
@@ -208,8 +209,8 @@ class AuditLogService:
             operator_name=user.user_name,
             group_ids=group_ids,
             system_id=SystemId.KNOWLEDGE.value,
-            event_type=event_type,
-            object_type=object_type,
+            event_type=event_type.value,
+            object_type=object_type.value,
             object_id=object_id,
             object_name=object_name,
             ip_address=ip_address,
@@ -223,7 +224,7 @@ class AuditLogService:
         """
         logger.info(f"act=create_knowledge user={user.user_name} ip={ip_address} knowledge={knowledge_id}")
         knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
-        cls._knowledge_log(user, ip_address, EventType.CREATE_KNOWLEDGE.value, ObjectType.KNOWLEDGE.value,
+        cls._knowledge_log(user, ip_address, EventType.CREATE_KNOWLEDGE, ObjectType.KNOWLEDGE,
                            str(knowledge_id), knowledge_info.name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
 
     @classmethod
@@ -232,7 +233,7 @@ class AuditLogService:
         删除知识库的审计日志
         """
         logger.info(f"act=delete_knowledge user={user.user_name} ip={ip_address} knowledge={knowledge.id}")
-        cls._knowledge_log(user, ip_address, EventType.DELETE_KNOWLEDGE.value, ObjectType.KNOWLEDGE.value,
+        cls._knowledge_log(user, ip_address, EventType.DELETE_KNOWLEDGE, ObjectType.KNOWLEDGE,
                            str(knowledge.id), knowledge.name, ResourceTypeEnum.KNOWLEDGE, str(knowledge.id))
 
     @classmethod
@@ -242,7 +243,7 @@ class AuditLogService:
         """
         logger.info(f"act=upload_knowledge_file user={user.user_name} ip={ip_address}"
                     f" knowledge={knowledge_id} file={file_name}")
-        cls._knowledge_log(user, ip_address, EventType.UPLOAD_FILE.value, ObjectType.FILE.value,
+        cls._knowledge_log(user, ip_address, EventType.UPLOAD_FILE, ObjectType.FILE,
                            str(knowledge_id), file_name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
 
     @classmethod
@@ -252,20 +253,20 @@ class AuditLogService:
         """
         logger.info(f"act=delete_knowledge_file user={user.user_name} ip={ip_address}"
                     f" knowledge={knowledge_id} file={file_name}")
-        cls._knowledge_log(user, ip_address, EventType.DELETE_FILE.value, ObjectType.FILE.value,
+        cls._knowledge_log(user, ip_address, EventType.DELETE_FILE, ObjectType.FILE,
                            str(knowledge_id), file_name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
 
     @classmethod
-    def _system_log(cls, user: UserPayload, ip_address: str, group_ids: List[int], event_type: str,
-                    object_type: str, object_id: str, object_name: str, note: str = ''):
+    def _system_log(cls, user: UserPayload, ip_address: str, group_ids: List[int], event_type: EventType,
+                    object_type: ObjectType, object_id: str, object_name: str, note: str = ''):
 
         audit_log = AuditLog(
             operator_id=user.user_id,
             operator_name=user.user_name,
             group_ids=group_ids,
             system_id=SystemId.SYSTEM.value,
-            event_type=event_type,
-            object_type=object_type,
+            event_type=event_type.value,
+            object_type=object_type.value,
             object_id=object_id,
             object_name=object_name,
             ip_address=ip_address,
@@ -274,17 +275,14 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    def update_user(cls, user: UserPayload, ip_address: str, user_id: int, note: str):
+    def update_user(cls, user: UserPayload, ip_address: str, user_id: int, group_ids: List[int], note: str):
         """
         修改用户的用户组和角色
         """
         logger.info(f"act=update_system_user user={user.user_name} ip={ip_address} user_id={user_id} note={note}")
         user_info = UserDao.get_user(user_id)
-        # 获取用户所属的分组
-        user_group = UserGroupDao.get_user_group(user_id)
-        user_group = [one.group_id for one in user_group]
-        cls._system_log(user, ip_address, user_group, EventType.UPDATE_USER.value,
-                        ObjectType.USER_CONF.value, str(user_id), user_info.user_name, note)
+        cls._system_log(user, ip_address, group_ids, EventType.UPDATE_USER,
+                        ObjectType.USER_CONF, str(user_id), user_info.user_name, note)
 
     @classmethod
     def forbid_user(cls, user: UserPayload, ip_address: str, user_info: User):
@@ -296,8 +294,8 @@ class AuditLogService:
         # 获取用户所属的分组
         user_group = UserGroupDao.get_user_group(user_info.user_id)
         user_group = [one.group_id for one in user_group]
-        cls._system_log(user, ip_address, user_group, EventType.FORBID_USER.value,
-                        ObjectType.USER_CONF.value, str(user_info.user_id), user_info.user_name)
+        cls._system_log(user, ip_address, user_group, EventType.FORBID_USER,
+                        ObjectType.USER_CONF, str(user_info.user_id), user_info.user_name)
 
     @classmethod
     def recover_user(cls, user: UserPayload, ip_address: str, user_info: User):
@@ -305,46 +303,55 @@ class AuditLogService:
         # 获取用户所属的分组
         user_group = UserGroupDao.get_user_group(user_info.user_id)
         user_group = [one.group_id for one in user_group]
-        cls._system_log(user, ip_address, user_group, EventType.RECOVER_USER.value,
-                        ObjectType.USER_CONF.value, str(user_info.user_id), user_info.user_name)
+        cls._system_log(user, ip_address, user_group, EventType.RECOVER_USER,
+                        ObjectType.USER_CONF, str(user_info.user_id), user_info.user_name)
 
     @classmethod
     def create_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
         logger.info(f"act=create_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
-        cls._system_log(user, ip_address, [group_info.id], EventType.CREATE_USER_GROUP.value,
-                        ObjectType.USER_GROUP_CONF.value, str(group_info.id), group_info.group_name)
+        cls._system_log(user, ip_address, [group_info.id], EventType.CREATE_USER_GROUP,
+                        ObjectType.USER_GROUP_CONF, str(group_info.id), group_info.group_name)
 
     @classmethod
     def update_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
         logger.info(f"act=update_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
         # 获取用户组信息
-        cls._system_log(user, ip_address, [group_info.id], EventType.UPDATE_USER_GROUP.value,
-                        ObjectType.USER_GROUP_CONF.value, str(group_info.id), group_info.group_name)
+        cls._system_log(user, ip_address, [group_info.id], EventType.UPDATE_USER_GROUP,
+                        ObjectType.USER_GROUP_CONF, str(group_info.id), group_info.group_name)
 
     @classmethod
     def delete_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
         logger.info(f"act=delete_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
         # 获取用户组信息
-        cls._system_log(user, ip_address, [group_info.id], EventType.DELETE_USER_GROUP.value,
-                        ObjectType.USER_GROUP_CONF.value, str(group_info.id), group_info.group_name)
+        cls._system_log(user, ip_address, [group_info.id], EventType.DELETE_USER_GROUP,
+                        ObjectType.USER_GROUP_CONF, str(group_info.id), group_info.group_name)
 
     @classmethod
     def create_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=create_role user={user.user_name} ip={ip_address} role_id={role.id}")
 
-        cls._system_log(user, ip_address, [role.group_id], EventType.CREATE_ROLE.value,
-                        ObjectType.ROLE_CONF.value, str(role.id), role.role_name)
+        cls._system_log(user, ip_address, [role.group_id], EventType.CREATE_ROLE,
+                        ObjectType.ROLE_CONF, str(role.id), role.role_name)
 
     @classmethod
     def update_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=update_role user={user.user_name} ip={ip_address} role_id={role.id}")
 
-        cls._system_log(user, ip_address, [role.group_id], EventType.UPDATE_ROLE.value,
-                        ObjectType.ROLE_CONF.value, str(role.id), role.role_name)
+        cls._system_log(user, ip_address, [role.group_id], EventType.UPDATE_ROLE,
+                        ObjectType.ROLE_CONF, str(role.id), role.role_name)
 
     @classmethod
     def delete_role(cls, user: UserPayload, ip_address: str, role: Role):
         logger.info(f"act=delete_role user={user.user_name} ip={ip_address} role_id={role.id}")
 
-        cls._system_log(user, ip_address, [role.group_id], EventType.DELETE_ROLE.value,
-                        ObjectType.ROLE_CONF.value, str(role.id), role.role_name)
+        cls._system_log(user, ip_address, [role.group_id], EventType.DELETE_ROLE,
+                        ObjectType.ROLE_CONF, str(role.id), role.role_name)
+
+    @classmethod
+    def user_login(cls, user: UserPayload, ip_address: str):
+        logger.info(f"act=user_login user={user.user_name} ip={ip_address} user_id={user.user_id}")
+        # 获取用户所属的分组
+        user_group = UserGroupDao.get_user_group(user.user_id)
+        user_group = [one.group_id for one in user_group]
+        cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN,
+                        ObjectType.NONE, '', '')

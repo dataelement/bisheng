@@ -1,5 +1,5 @@
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
-import { TitleIconBg } from "@/components/bs-comp/cardComponent";
+import { TitleIconBg, TitleLogo } from "@/components/bs-comp/cardComponent";
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import SkillSheet from "@/components/bs-comp/sheets/SkillSheet";
 import ToolsSheet from "@/components/bs-comp/sheets/ToolsSheet";
@@ -18,6 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/bs-ui/tooltip";
+import { locationContext } from "@/contexts/locationContext";
 import { useAssistantStore } from "@/store/assistantStore";
 import {
   MinusCircledIcon,
@@ -26,12 +27,11 @@ import {
   QuestionMarkCircledIcon,
   ReloadIcon,
 } from "@radix-ui/react-icons";
+import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import ModelSelect from "./ModelSelect";
 import Temperature from "./Temperature";
-import { locationContext } from "@/contexts/locationContext";
-import { useContext } from "react";
 
 export default function Setting() {
   const { t } = useTranslation();
@@ -44,7 +44,7 @@ export default function Setting() {
       id="skill-scroll"
       className="h-full w-[50%] overflow-y-auto scrollbar-hide"
     >
-      <h1 className="border bg-gray-50 indent-4 text-sm leading-8 text-muted-foreground">
+      <h1 className="border bg-background-login indent-4 text-sm leading-8 text-muted-foreground">
         {t("build.basicConfiguration")}
       </h1>
       <Accordion type="multiple" className="w-full">
@@ -132,7 +132,7 @@ export default function Setting() {
         {/* 内容安全审查 */}
         {appConfig.isPro && <AssistantSetting id={assistantState.id} type={3} />}
       </Accordion>
-      <h1 className="border-b bg-gray-50 indent-4 text-sm leading-8 text-muted-foreground">
+      <h1 className="border-b bg-background-login indent-4 text-sm leading-8 text-muted-foreground">
         {t("build.knowledge")}
       </h1>
       <Accordion type="multiple" className="w-full">
@@ -186,7 +186,7 @@ export default function Setting() {
           </AccordionContent>
         </AccordionItem>
       </Accordion>
-      <h1 className="border-b bg-gray-50 indent-4 text-sm leading-8 text-muted-foreground">
+      <h1 className="border-b bg-background-login indent-4 text-sm leading-8 text-muted-foreground">
         {t("build.abilities")}
       </h1>
       <Accordion
@@ -211,7 +211,7 @@ export default function Setting() {
                 }
               >
                 <PlusIcon
-                  className="mr-2 text-primary hover:text-primary/80"
+                  className="mr-2 text-primary hover:text-primary/80 dark:text-slate-50"
                   onClick={(e) => e.stopPropagation()}
                 ></PlusIcon>
               </ToolsSheet>
@@ -257,7 +257,7 @@ export default function Setting() {
                       <QuestionMarkCircledIcon />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>{t("build.skillDescription")}</p>
+                      <p className="text-slate-50">{t("build.skillDescription")}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -271,7 +271,7 @@ export default function Setting() {
                 }
               >
                 <PlusIcon
-                  className="mr-2 text-primary hover:text-primary/80"
+                  className="mr-2 text-primary hover:text-primary/80 dark:text-slate-50"
                   onClick={(e) => e.stopPropagation()}
                 ></PlusIcon>
               </SkillSheet>
@@ -285,7 +285,7 @@ export default function Setting() {
                   className="group mt-2 flex cursor-pointer items-center justify-between"
                 >
                   <div className="flex items-center gap-2">
-                    <TitleIconBg id={flow.id} className="h-7 w-7"></TitleIconBg>
+                    <TitleLogo url={flow.logo} id={flow.id} className="h-7 w-7"></TitleLogo>
                     <p className="text-sm">{flow.name}</p>
                   </div>
                   <MinusCircledIcon
@@ -303,6 +303,12 @@ export default function Setting() {
             </div>
           </AccordionContent>
         </AccordionItem>
+        {/* <TaggingSheet>
+          <PlusIcon
+            className="mr-2 text-primary hover:text-primary/80"
+            onClick={(e) => e.stopPropagation()}
+            ></PlusIcon>
+        </TaggingSheet> */}
       </Accordion>
     </div>
   );

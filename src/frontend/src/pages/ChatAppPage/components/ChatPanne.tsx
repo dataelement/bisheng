@@ -1,5 +1,5 @@
 
-import { TitleIconBg } from "@/components/bs-comp/cardComponent";
+import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { AssistantIcon } from "@/components/bs-icons/assistant";
@@ -27,7 +27,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const { assistantState, loadAssistantState, destroy } = useAssistantStore()
     // console.log('data :>> ', flow);
     const build = useBuild()
-    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId } = useMessageStore()
+    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs} = useMessageStore()
     useEffect(() => {
         return destroy
     }, [])
@@ -37,21 +37,21 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             setAssistant(null)
             const _flow = await getFlowApi(id, version)
             await build(_flow, chatId)
-            version === 'v1' && loadHistoryMsg(_flow.id, chatId, {
+            version === 'v1' ? loadHistoryMsg(_flow.id, chatId, {
                 appendHistory,
                 lastMsg: t('historicalMessages')
-            })
+            }) : clearMsgs()
             flowRef.current = _flow
             setFlow(_flow)
             changeChatId(chatId) // ws
         } else {
             flowRef.current = null
             setFlow(null)
-            const _assistant = await loadAssistantState(id)
-            loadHistoryMsg(_assistant.id, chatId, {
+            const _assistant = await loadAssistantState(id, version)
+            version === 'v1' ? loadHistoryMsg(_assistant.id, chatId, {
                 appendHistory,
                 lastMsg: t('historicalMessages')
-            })
+            }) : clearMsgs()
             setAssistant(_assistant)
             changeChatId(chatId) // ws
         }
@@ -112,11 +112,11 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     // 应用链接
     const { appConfig } = useContext(locationContext)
     const token = localStorage.getItem("ws_token") || '';
-    let wsUrl = type === 'flow' ? `${appConfig.websocketHost}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
-        `${location.host}/api/v1/assistant/chat/${assistant?.id}?t=${token}`
+    let wsUrl = type === 'flow' ? `${appConfig.websocketHost}${__APP_ENV__.BASE_URL}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
+        `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assistant?.id}?t=${token}`
 
     if (customWsHost) {
-        wsUrl = `${appConfig.websocketHost}${customWsHost}&t=${token}`
+        wsUrl = `${appConfig.websocketHost}${__APP_ENV__.BASE_URL}${customWsHost}&t=${token}`
     }
 
     // sendmsg user name
@@ -157,14 +157,14 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         document.dispatchEvent(myEvent);
     }
 
-    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg">
-        <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src="/application-start-logo.png" alt="" />
-        <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] text-[#111111] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
-            {t('chat.chooseOne')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className="text-[#111111] dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
+    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+        <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
+        <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
+            {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
         </p>
         {
             !customWsHost && <div
-                className="relative z-50 w-[162px] h-[38px] bg-[#0055e3] rounded-lg text-[white] leading-[38px] flex cursor-pointer hover:bg-[#0165e6] justify-around mx-auto mt-[120px] text-[13px]"
+                className="relative z-50 w-[162px] h-[38px] bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg leading-[38px] flex cursor-pointer  justify-around mx-auto mt-[120px] text-[13px]"
                 onClick={() => {
                     document.getElementById('newchat')?.click()
                 }}>
@@ -174,18 +174,20 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         }
     </div>
 
-
-    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg">
+    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
         {/* 技能会话 */}
         {
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <TitleIconBg className="" id={flow.id}></TitleIconBg>
+                    <TitleLogo url={flow.logo} className="" id={flow.id}></TitleLogo>
                     <span className="text-sm">{flow.name}</span>
                 </div>
                 <ChatComponent
                     form={flowSate.isForm}
+                    logo={flow.logo}
+                    stop
+                    // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
                     guideWord={flow.guide_word}
                     wsUrl={wsUrl}
@@ -202,10 +204,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             assistant && <div className={`w-full chat-box h-full relative px-6 ${type !== 'flow' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <TitleIconBg className="" id={assistant.id}><AssistantIcon /></TitleIconBg>
+                    <TitleLogo url={assistant.logo} className="" id={assistant.id}><AssistantIcon /></TitleLogo>
                     <span className="text-sm">{assistant.name}</span>
                 </div>
                 <ChatComponent
+                    stop
+                    logo={assistant.logo}
                     useName={sendUserName}
                     questions={assistantState.guide_question.filter((item) => item)}
                     guideWord={assistantState.guide_word}
@@ -241,7 +245,7 @@ const useBuild = () => {
         let validationResults = [];
         let finished = false;
         let buildEnd = false
-        const apiUrl = `/api/v1/build/stream/${flowId}?chat_id=${chatId}`;
+        const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/build/stream/${flowId}?chat_id=${chatId}`;
         const eventSource = new EventSource(apiUrl);
 
         eventSource.onmessage = (event) => {

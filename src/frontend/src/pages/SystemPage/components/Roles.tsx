@@ -1,7 +1,6 @@
 import { PlusIcon } from "@/components/bs-icons/plus";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
@@ -19,6 +18,7 @@ import { delRoleApi, getRolesByGroupApi, getUserGroupsApi } from "../../../contr
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { ROLE } from "../../../types/api/user";
 import EditRole from "./EditRole";
+import SelectSearch from "@/components/bs-ui/select/select"
 
 interface State {
     roles: ROLE[];
@@ -117,10 +117,10 @@ export default function Roles() {
         loadData()
     }, [state.group])
 
-    const [keyWord, setKeyWord] = useState('');
+    const [keyWord, setKeyWord] = useState('')
     const options = useMemo(() => {
         if (!keyWord || !state.group) return state.groups
-        return state.groups.filter(group => group.label.toLowerCase().indexOf(keyWord.toLowerCase()) !== -1 || group.value === state.group)
+        return state.groups.filter(group => group.label.toUpperCase().includes(keyWord.toUpperCase()) || group.value === state.group)
     }, [keyWord, state.group])
 
     if (state.role) {
@@ -142,26 +142,17 @@ export default function Roles() {
                 <div className="flex justify-between">
                     <div className="flex items-center">
                         <Label>{t('system.currentGroup')}</Label>
-                        <Select value={state.group}
-                            onOpenChange={(open) => {
-                                !open && setKeyWord('')
-                            }}
-                            onValueChange={(value) =>
-                                dispatch({ type: 'SET_GROUP', payload: value })
-                            }>
-                            <SelectTrigger className="w-[180px] inline-flex ml-2">
-                                <SelectValue placeholder={t('system.defaultGroup')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SearchInput inputClassName="h-8 mb-2" placeholder={t('log.selectUserGroup')} 
-                                onChange={(e) => setKeyWord(e.target.value)} iconClassName="w-4 h-4" />
-                                <SelectGroup>
-                                    {options.map(el => (
-                                        <SelectItem key={el.value} value={el.value}>{el.label}</SelectItem>
-                                    ))}
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
+                        <SelectSearch value={state.group} options={options} selectPlaceholder={t('system.defaultGroup')} 
+                        inputPlaceholder={t('log.selectUserGroup')}
+                        selectClass="w-[180px] inline-flex ml-2" contentClass="max-w-[180px] break-all"
+                        onOpenChange={(open) => {
+                            !open && setKeyWord('')
+                        }}
+                        onValueChange={(value) => {
+                            dispatch({ type: 'SET_GROUP', payload: value})
+                        }}
+                        onChange={e => setKeyWord(e.target.value)}
+                        />
                     </div>
                     <div className="flex gap-6 items-center justify-between">
                         <div className="w-[180px] relative">
@@ -200,7 +191,7 @@ export default function Roles() {
                     </TableFooter>
                 </Table>
             </div>
-            <div className="bisheng-table-footer">
+            <div className="bisheng-table-footer bg-background-login">
                 <p className="desc">{t('system.roleList')}.</p>
             </div>
         </div>

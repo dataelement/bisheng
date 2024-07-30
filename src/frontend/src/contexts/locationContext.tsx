@@ -30,6 +30,7 @@ type locationContextType = {
   extraComponent: any;
   setExtraComponent: (newState: any) => void;
   appConfig: any;
+  reloadConfig: () => void
 };
 
 //initial value for location context
@@ -48,7 +49,8 @@ const initialValue = {
   setExtraNavigation: () => { },
   extraComponent: <></>,
   setExtraComponent: () => { },
-  appConfig: { libAccepts: [] }
+  appConfig: { libAccepts: [] },
+  reloadConfig: () => { }
 };
 
 export const locationContext = createContext<locationContextType>(initialValue);
@@ -62,11 +64,11 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [extraNavigation, setExtraNavigation] = useState({ title: "" });
   const [extraComponent, setExtraComponent] = useState(<></>);
   const [appConfig, setAppConfig] = useState<any>({
-    libAccepts: []
+    libAccepts: [],
+    noFace: true
   })
 
-  // 获取系统配置
-  useEffect(() => {
+  const loadConfig = () => {
     getAppConfig().then(res => {
       setAppConfig({
         isDev: res.env === 'dev',
@@ -76,10 +78,15 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         dialogQuickSearch: res.dialog_quick_search,
         websocketHost: res.websocket_url || window.location.host,
         isPro: !!res.pro,
-        hasSSO: !!res.sso,
-        chatPrompt: !!res.application_usage_tips
+        chatPrompt: !!res.application_usage_tips,
+        noFace: !res.show_github_and_help
       })
     })
+  }
+
+  // 获取系统配置
+  useEffect(() => {
+    loadConfig()
   }, [])
 
   return (
@@ -95,7 +102,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         setExtraNavigation,
         extraComponent,
         setExtraComponent,
-        appConfig
+        appConfig,
+        reloadConfig: loadConfig
       }}
     >
       {children}

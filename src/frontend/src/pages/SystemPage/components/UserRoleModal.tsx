@@ -7,6 +7,7 @@ import { Button } from "../../../components/bs-ui/button"
 import UserRoleItem from "./UserRoleItem"
 import { updateUserGroups, updateUserRoles } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { generateUUID } from "@/components/bs-ui/utils"
 
 export default function UserRoleModal({ user, onClose, onChange }) {
     const { t } = useTranslation()
@@ -15,13 +16,11 @@ export default function UserRoleModal({ user, onClose, onChange }) {
     const [roleItems, setRoleItems] = useState([])
     useEffect(() => {
         if (user) {
-
             const { groups, roles } = user
-            console.log(groups, roles);
             const items = groups.map(item => {
 
                 return {
-                    key: Date.now(),
+                    key: generateUUID(8),
                     groupId: item.id,
                     roles: roles.filter(role => role.group_id === item.id)
                         .map(el => el.id.toString())
@@ -47,9 +46,6 @@ export default function UserRoleModal({ user, onClose, onChange }) {
         })
         if (items.some(item => item.roles.length === 0)) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectRole') })
         if (items.length === 0) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectGroup') })
-        // console.log('roleItems :>> ', roleItems);
-        // if (!selected.length) return message({ title: t('prompt'), variant: 'warning', description: '请选择角色' })
-        // if (userGroupSelected.length === 0) return message({ title: t('prompt'), variant: 'warning', description: '请选择用户组' })
         captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, items.reduce((res, item) => [...res, ...item.roles], [])))
         captureAndAlertRequestErrorHoc(updateUserGroups(user.user_id, items.map(item => item.groupId)))
         onChange()
@@ -60,7 +56,7 @@ export default function UserRoleModal({ user, onClose, onChange }) {
             <DialogHeader>
                 <DialogTitle>{t('system.roleSelect')}</DialogTitle>
             </DialogHeader>
-            <div className="max-h-[520px] overflow-y-auto flex flex-col gap-2">
+            <div className="max-h-[520px] py-1 overflow-y-auto flex flex-col gap-2">
                 {
                     roleItems.map((item, i) => <UserRoleItem key={item.key}
                         groupId={item.groupId + ''}

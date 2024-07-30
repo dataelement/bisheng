@@ -1,17 +1,15 @@
-import json
 import os
 import re
 import time
 from typing import List, Optional
 from uuid import uuid4
 
-from bisheng.api.JWT import get_login_user
 from bisheng.api.utils import get_request_ip
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
                                                 delete_knowledge_file_vectors, retry_files)
-from bisheng.api.services.user_service import UserPayload
+from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500
 from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import session_getter
@@ -20,7 +18,7 @@ from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, Knowl
                                                KnowledgeRead)
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
                                                     KnowledgeFileRead)
-from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
+from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
@@ -68,7 +66,7 @@ async def upload_file(*, file: UploadFile = File(...)):
 
 
 @router.get('/embedding_param', status_code=201)
-async def get_embedding():
+async def get_embedding(login_user: UserPayload = Depends(get_login_user)):
     try:
         # 获取本地配置的名字
         model_list = settings.get_knowledge().get('embeddings')
@@ -173,12 +171,18 @@ async def process_knowledge(*,
         session.add(knowledge)
         session.commit()
 
+    upload_knowledge_file_hook(request, login_user, knowledge_id, files)
+    return resp_200(result)
+
+
+def upload_knowledge_file_hook(request: Request, login_user: UserPayload, knowledge_id: int,
+                               file_list: List[KnowledgeFile]):
+    logger.info(f'act=upload_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}')
     # 记录审计日志
     file_name = ""
-    for one in files:
+    for one in file_list:
         file_name += "\n\n" + one.file_name
     AuditLogService.upload_knowledge_file(login_user, get_request_ip(request), knowledge_id, file_name)
-    return resp_200(result)
 
 
 @router.post('/create', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
@@ -220,7 +224,7 @@ def create_knowledge_hook(request: Request, knowledge: Knowledge, login_user: Us
     # 查询下用户所在的用户组
     user_group = UserGroupDao.get_user_group(login_user.user_id)
     if user_group:
-        # 批量将助手资源插入到关联表里
+        # 批量将知识库资源插入到关联表里
         batch_resource = []
         for one in user_group:
             batch_resource.append(GroupResource(
@@ -338,9 +342,8 @@ def get_filelist(*,
 
 
 @router.post('/retry', status_code=200)
-def retry(data: dict, background_tasks: BackgroundTasks, Authorize: AuthJWT = Depends()):
+def retry(data: dict, background_tasks: BackgroundTasks, login_user: UserPayload = Depends(get_login_user)):
     """失败重试"""
-    Authorize.jwt_required()
     db_file_retry = data.get('file_objs')
     if db_file_retry:
         id2input = {file.get('id'): KnowledgeFile.validate(file) for file in db_file_retry}
@@ -438,6 +441,17 @@ def delete_knowledge_file(*,
     KnowledgeFileDao.delete_batch([file_id])
 
     # 删除知识库文件的审计日志
-    AuditLogService.delete_knowledge_file(login_user, get_request_ip(request), knowledge.id, knowledge_file.file_name)
+    delete_knowledge_file_hook(request, login_user, knowledge.id, [knowledge_file])
 
     return resp_200(message='删除成功')
+
+
+def delete_knowledge_file_hook(request: Request, login_user: UserPayload, knowledge_id: int,
+                               file_list: List[KnowledgeFile]):
+    logger.info(f'act=delete_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}')
+    # 记录审计日志
+    # 记录审计日志
+    file_name = ""
+    for one in file_list:
+        file_name += "\n\n" + one.file_name
+    AuditLogService.delete_knowledge_file(login_user, get_request_ip(request), knowledge_id, file_name)

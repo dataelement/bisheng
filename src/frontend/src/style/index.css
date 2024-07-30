@@ -22,10 +22,6 @@
 
     --background-new: hsla(240, 14%, 99%, 1);
 
-    --background-hoverAssistant: hsla(0, 0%, 100%, 1);
-
-    --background-Assistant: hsla(0, 0%, 100%, 1);
-
     --nav-hover: white;
 
     --header-icon: white;
@@ -71,10 +67,10 @@
     --destructive: 0 100% 50%;
     /* hsl(0 100% 50%) */
     --destructive-foreground: 210 40% 98%;
-    /* hsl(210 40% 98%) */
-    --radius: .58rem;
-    --ring: 223, 48%, 44%, 0.35;
+    --black-button: 0 0% 7%;
     /* hsl(215 20% 65%) */
+    --ring: 223, 48%, 44%, 0.35;
+    --radius: .58rem;
     --round-btn-shadow: #00000063;
 
     --error-background: #fef2f2;
@@ -124,10 +120,6 @@
 
     --background-new: hsla(0, 0%, 9%, 1);
 
-    --background-hoverAssistant: hsla(240, 1%, 13%, 1);
-
-    --background-Assistant: hsla(240, 1%, 16%, 1);
-
     --nav-hover: rgba(52, 53, 58, 1);
 
     --header-icon: rgba(33, 33, 34, 1);
@@ -142,34 +134,34 @@
 
     --background-thumb: hsla(219, 100%, 88%, 1);
 
-    --background: 219 100% 88%;
+    --background: 0 0% 7%;
     /* hsl(0 0% 7%) */
-    --foreground: 213 31% 80%;
+    --foreground: 0 0% 100%;
     /* hsl(213 31% 91%) */
 
-    --muted: 223 27% 11%;
+    --muted: 0 0% 7%;
     /* hsl(223 27% 11%) */
     --muted-foreground: 215.4 16.3% 56.9%;
     /* hsl(215 16% 56%) */
 
-    --popover: 224 71% 4%;
+    --popover: 225 5% 17%;
     /* hsl(224 71% 4%) */
     --popover-foreground: 215 20.2% 65.1%;
     /* hsl(215 20% 65%) */
 
-    --card: 224 25% 15.5%;
+    --card: 240 1% 13%;
     /* hsl(224 71% 4%) */
     --card-foreground: 213 31% 80%;
     /* hsl(213 31% 91%) */
 
     --border: 216 24% 17%;
     /* hsl(216 34% 17%) */
-    --input: 0 0% 9%;
+    --input: 0 0% 14%;
     /* hsl(216 34% 17%) */
 
     --primary: 220 98% 45%;
     /* hsl(210 20% 80%) */
-    --primary-foreground: 222.2 27.4% 1.2%;
+    --primary-foreground: 0 0% 100%;
     /* hsl(222 47% 1%) */
 
     --secondary: 222.2 37.4% 7.2%;
@@ -177,15 +169,16 @@
     --secondary-foreground: 210 40% 80%;
     /* hsl(210 40% 80%) */
 
-    --accent: 216 24% 20%;
+    --accent: 0 0% 11%;
     /* hsl(216 34% 17%) */
     --accent-foreground: 210 30% 98%;
     /* hsl(210 40% 98%) */
 
-    --destructive: 0 63% 31%;
+    --destructive: 0 81% 60%;
     /* hsl(0 63% 31%) */
     --destructive-foreground: 210 40% 98%;
     /* hsl(210 40% 98%) */
+    --black-button: 0 0% 7%;
 
     --ring: 216 24% 30%;
     /* hsl(216 24% 30%) */

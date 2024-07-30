@@ -3,6 +3,7 @@ from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import Request
+from loguru import logger
 
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                            AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
@@ -11,6 +12,7 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
@@ -23,13 +25,13 @@ from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead, Gpts
 from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
-from loguru import logger
 
 
-class AssistantService(AssistantUtils):
+class AssistantService(BaseService, AssistantUtils):
     UserCache: InMemoryCache = InMemoryCache()
 
     @classmethod
@@ -37,14 +39,25 @@ class AssistantService(AssistantUtils):
                       user: UserPayload,
                       name: str = None,
                       status: int | None = None,
+                      tag_id: int | None = None,
                       page: int = 1,
                       limit: int = 20) -> UnifiedResponseModel[List[AssistantSimpleInfo]]:
         """
         获取助手列表
         """
+        assistant_ids = []
+        if tag_id:
+            ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.ASSISTANT)
+            assistant_ids = [UUID(one.resource_id) for one in ret]
+            if not assistant_ids:
+                return resp_200(data={
+                    'data': [],
+                    'total': 0
+                })
+
         data = []
         if user.is_admin():
-            res, total = AssistantDao.get_all_assistants(name, page, limit)
+            res, total = AssistantDao.get_all_assistants(name, page, limit, assistant_ids)
         else:
             # 权限管理可见的助手信息
             assistant_ids_extra = []
@@ -54,12 +67,28 @@ class AssistantService(AssistantUtils):
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
                 if role_access:
                     assistant_ids_extra = [UUID(access.third_id).hex for access in role_access]
-            res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit)
+            res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit,
+                                                     assistant_ids)
+
+        assistant_ids = [one.id.hex for one in res]
+        # 查询助手所属的分组
+        assistant_groups = GroupResourceDao.get_resources_group(ResourceTypeEnum.ASSISTANT, assistant_ids)
+        assistant_group_dict = {}
+        for one in assistant_groups:
+            if one.third_id not in assistant_group_dict:
+                assistant_group_dict[one.third_id] = []
+            assistant_group_dict[one.third_id].append(one.group_id)
+
+        # 获取助手关联的tag
+        flow_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.ASSISTANT, assistant_ids)
 
         for one in res:
+            one.logo = cls.get_logo_share_link(one.logo)
             simple_assistant = cls.return_simple_assistant_info(one)
             if one.user_id == user.user_id or user.is_admin():
                 simple_assistant.write = True
+            simple_assistant.group_ids = assistant_group_dict.get(one.id.hex, [])
+            simple_assistant.tags = flow_tags.get(one.id.hex, [])
             data.append(simple_assistant)
         return resp_200(data={'data': data, 'total': total})
 
@@ -99,6 +128,7 @@ class AssistantService(AssistantUtils):
                 logger.error(f'not expect link info: {one.dict()}')
         tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list,
                                                                  knowledge_list)
+        assistant.logo = cls.get_logo_share_link(assistant.logo)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
                                            flow_list=flow_list,
@@ -149,6 +179,9 @@ class AssistantService(AssistantUtils):
 
         # 写入审计日志
         AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id.hex)
+
+        # 写入logo缓存
+        cls.get_logo_share_link(assistant.logo)
         return True
 
     # 删除助手
@@ -268,6 +301,9 @@ class AssistantService(AssistantUtils):
 
         # 写入审计日志
         AuditLogService.update_build_assistant(login_user, get_request_ip(request), assistant.id.hex)
+
+        # 写入缓存
+        cls.get_logo_share_link(assistant.logo)
         return True
 
     @classmethod
@@ -426,6 +462,9 @@ class AssistantService(AssistantUtils):
         tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
         if tool_type and tool_type.id != exist_tool_type.id:
             return ToolTypeRepeatError.return_resp()
+        # 判断是否有更新权限
+        if not user.access_check(exist_tool_type.user_id, exist_tool_type.id, AccessType.GPTS_TOOL_WRITE):
+            return UnAuthorizedError.return_resp()
 
         exist_tool_type.name = req.name
         exist_tool_type.logo = req.logo
@@ -488,6 +527,10 @@ class AssistantService(AssistantUtils):
             return resp_200()
         if exist_tool_type.is_preset:
             return ToolTypeIsPresetError.return_resp()
+        # 判断是否有更新权限
+        if not user.access_check(exist_tool_type.user_id, exist_tool_type.id, AccessType.GPTS_TOOL_WRITE):
+            return UnAuthorizedError.return_resp()
+
         GptsToolsDao.delete_tool_type(tool_type_id)
         cls.delete_gpts_tool_hook(user, exist_tool_type)
         return resp_200()

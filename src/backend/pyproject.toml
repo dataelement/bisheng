@@ -1,7 +1,6 @@
-
 [tool.poetry]
 name = "bisheng"
-version = "0.3.1"
+version = "0.3.3"
 description = "A Python package with a built-in web application"
 authors = ["Dataelement <hanfeng@dataelem.com>"]
 maintainers = [
@@ -19,8 +18,8 @@ include = ["./bisheng/*", "bisheng/**/*"]
 bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
-bisheng_langchain = "0.3.1"
-bisheng_pyautogen = "0.3.0"
+bisheng_langchain = "0.3.3.dev1"
+bisheng_pyautogen = "0.3.2"
 langchain = "0.1.12"
 langchain_experimental = "*"
 langchain_openai = "0.1.0"
@@ -89,6 +88,7 @@ matplotlib = "3.8.4"
 cchardet = "^2.1.7"
 llama-index = "0.9.48"
 tenacity = "<8.4.0"
+bisheng-ragas = { version = "^1.0.0", source = "dataelem-index" }
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
@@ -123,3 +123,8 @@ line-length = 120
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[[tool.poetry.source]]
+name = "dataelem-index"
+url = "https://public:26rS9HRxDqaVy5T@nx.dataelem.com/repository/pypi-hosted/simple"
+priority = "explicit"

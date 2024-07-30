@@ -11,8 +11,8 @@ const MultiItem: React.FC<
 
     return <div
         key={value}
-        className={`relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 mb-1 text-sm outline-none hover:bg-[#EBF0FF] hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 break-all 
-    ${active && 'bg-[#EBF0FF]'}`}
+        className={`relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 mb-1 text-sm outline-none hover:bg-[#EBF0FF] dark:hover:bg-gray-700 hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 break-all 
+    ${active && 'bg-[#EBF0FF] dark:bg-gray-700'}`}
         onClick={() => { onClick(value, children as string) }}
     >
         <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
@@ -193,7 +193,7 @@ const MultiSelect = ({
                     </div> : <div className="flex flex-wrap">
                         {
                             options.filter(option => (values as string[]).includes(option.value)).map(option =>
-                                <Badge onPointerDown={(e) => e.stopPropagation()} key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
+                                <Badge onPointerDown={(e) => e.stopPropagation()} key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all">
                                     {option.label}
                                     {lockedValues.includes(option.value) || <Cross1Icon className="h-3 w-3" onClick={() => handleDelete(option.value)}></Cross1Icon>}
                                 </Badge>
@@ -207,7 +207,7 @@ const MultiSelect = ({
             className={className}
             headNode={
                 <div className="p-2">
-                    <SearchInput ref={inputRef} inputClassName="h-8" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />
+                    <SearchInput ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />
                 </div>
             }
             footerNode={children}

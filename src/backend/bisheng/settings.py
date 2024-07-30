@@ -3,7 +3,6 @@ import re
 from typing import Dict, List, Optional, Union
 
 import yaml
-from bisheng.database.models.config import Config
 from cryptography.fernet import Fernet
 from langchain.pydantic_v1 import BaseSettings, root_validator, validator
 from loguru import logger
@@ -42,6 +41,12 @@ class PasswordConf(BaseModel):
     password_valid_period: Optional[int] = Field(default=0, description='密码超过X天必须进行修改, 登录提示重新修改密码')
     login_error_time_window: Optional[int] = Field(default=0, description='登录错误时间窗口,单位分钟')
     max_error_times: Optional[int] = Field(default=0, description='最大错误次数，超过后会封禁用户')
+
+
+class SystemLoginMethod(BaseModel):
+    bisheng_pro: bool = Field(default=False, description='是否是商业版, 从环境变量获取')
+    admin_username: Optional[str] = Field(default=None, description='通过网关注册的系统管理员用户名')
+    allow_multi_login: bool = Field(default=True, description='是否允许多点登录')
 
 
 class Settings(BaseSettings):
@@ -148,10 +153,12 @@ class Settings(BaseSettings):
         all_config = self.get_all_config()
         return PasswordConf(**all_config.get('password_conf', {}))
 
-    def get_system_login_method(self) -> dict:
+    def get_system_login_method(self) -> SystemLoginMethod:
         # 获取密码相关的配置项
         all_config = self.get_all_config()
-        return all_config.get('system_login_method', {})
+        tmp = SystemLoginMethod(**all_config.get('system_login_method', {}))
+        tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
+        return tmp
 
     def get_from_db(self, key: str):
         # 先获取所有的key
@@ -161,6 +168,8 @@ class Settings(BaseSettings):
     def get_all_config(self):
         from bisheng.database.base import session_getter
         from bisheng.cache.redis import redis_client
+        from bisheng.database.models.config import Config
+
         redis_key = 'config:initdb_config'
         cache = redis_client.get(redis_key)
         if cache:

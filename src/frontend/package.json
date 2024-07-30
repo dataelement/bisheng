@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "0.3.1.4",
+  "version": "0.1",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -56,6 +56,7 @@
     "react": "^18.2.0",
     "react-ace": "^10.1.0",
     "react-beautiful-dnd": "^13.1.1",
+    "react-color": "^2.19.3",
     "react-cookie": "^4.1.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.2.0",
@@ -136,6 +137,7 @@
     "tailwindcss": "^3.3.3",
     "typescript": "^5.2.2",
     "vite": "^4.5.2",
+    "vite-plugin-html": "^3.2.2",
     "vite-plugin-static-copy": "^0.17.0"
   },
   "engines": {

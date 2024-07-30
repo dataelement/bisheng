@@ -7,6 +7,9 @@ import { Input, Textarea } from "../../../components/bs-ui/input";
 import { createAssistantsApi } from "../../../controllers/API/assistant";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTranslation } from "react-i18next";
+import Avator from "@/components/bs-ui/input/avator";
+import { AssistantIcon } from "@/components/bs-icons";
+import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 
 export default function CreateAssistant() {
 
@@ -14,6 +17,7 @@ export default function CreateAssistant() {
 
     // State for form fields
     const [formData, setFormData] = useState({
+        url: '',
         name: '',
         roleAndTasks: `${t('build.example')}：
 ${t('build.exampleOne')}
@@ -77,8 +81,9 @@ ${t('build.exampleTwo')}
         if (isValid) {
             console.log('Form data:', formData);
             setLoading(true)
-            const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.roleAndTasks))
+            const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.roleAndTasks, formData.url))
             if (res) {
+                //@ts-ignore
                 window.assistantCreate = true // 标记新建助手
                 navigate('/assistant/' + res.id)
             }
@@ -86,11 +91,22 @@ ${t('build.exampleTwo')}
         }
     };
 
-    return <DialogContent className="sm:max-w-[625px]">
+    const uploadAvator = (file) => {
+        uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
+            setFormData(prev => ({ ...prev, url: res.file_path }));
+        })
+    }
+
+    return <DialogContent className="sm:max-w-[625px] bg-background-login">
         <DialogHeader>
             <DialogTitle>{t('build.establishAssistant')}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-8 py-6">
+            <div className="">
+                <label htmlFor="name" className="bisheng-label">助手头像</label>
+                <Avator value={formData.url} className="mt-2" onChange={uploadAvator}><AssistantIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
+                {/* {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>} */}
+            </div>
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantName')}<span className="bisheng-tip">*</span></label>
                 <Input id="name" name="name" placeholder={t('build.giveAssistantName')} className="mt-2" value={formData.name} onChange={handleChange} />

@@ -1,21 +1,27 @@
+import json
 from datetime import datetime
-from typing import List, Any
+from typing import List, Any, Dict
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
-from fastapi import Request
+from fastapi import Request, HTTPException
 
+from bisheng.cache.redis import redis_client
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.errcode.user import UserGroupNotDeleteError
 from bisheng.api.utils import get_request_ip
+from bisheng.api.v1.schemas import resp_200
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead, DefaultGroup
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao
+from bisheng.database.models.role import AdminRole, RoleDao
 from bisheng.database.models.user import User, UserDao
+from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from loguru import logger
 
@@ -86,12 +92,48 @@ class RoleGroupService():
 
     def delete_group(self, request: Request, login_user: UserPayload, group_id: int):
         """删除用户组"""
+        if group_id == DefaultGroup:
+            raise HTTPException(status_code=500, detail='默认组不能删除')
         group_info = GroupDao.get_user_group(group_id)
         if not group_info:
-            return None
+            return resp_200()
+
+        # 判断组下是否还有用户
+        user_group_list = UserGroupDao.get_group_user(group_id)
+        if user_group_list:
+            return UserGroupNotDeleteError.return_resp()
         GroupDao.delete_group(group_id)
+        self.delete_group_hook(request, login_user, group_info)
+        return resp_200()
+
+    def delete_group_hook(self, request: Request, login_user: UserPayload, group_info: Group):
+        logger.info(f'act=delete_group_hook user={login_user.user_name} group_id={group_info.id}')
         # 记录审计日志
         AuditLogService.delete_user_group(login_user, get_request_ip(request), group_info)
+        # 将组下资源移到默认用户组
+        # 获取组下所有的资源
+        all_resource = GroupResourceDao.get_group_all_resource(group_info.id)
+        need_move_resource = []
+        for one in all_resource:
+            # 获取资源属于几个组,属于多个组则不用处理, 否则将资源转移到默认用户组
+            resource_groups = GroupResourceDao.get_resource_group(ResourceTypeEnum(one.type), one.third_id)
+            if len(resource_groups) > 1:
+                continue
+            else:
+                one.group_id = DefaultGroup
+                need_move_resource.append(one)
+        if need_move_resource:
+            GroupResourceDao.update_group_resource(need_move_resource)
+        GroupResourceDao.delete_group_resource_by_group_id(group_info.id)
+        # 删除用户组下的角色列表
+        RoleDao.delete_role_by_group_id(group_info.id)
+        # 删除用户组的管理员
+        UserGroupDao.delete_group_all_admin(group_info.id)
+        # 将删除事件发到redis队列中
+        delete_message = json.dumps({"id": group_info.id})
+        redis_client.rpush('delete_group', delete_message)
+        redis_client.expire_key('delete_group', 86400)
+        redis_client.publish('delete_group', delete_message)
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
         """获取全量的group列表"""
@@ -115,6 +157,11 @@ class RoleGroupService():
 
     def replace_user_groups(self, request: Request, login_user: UserPayload, user_id: int, group_ids: List[int]):
         """ 覆盖用户的所在的用户组 """
+        # 判断下被操作用户是否是超级管理员
+        user_role_list = UserRoleDao.get_user_roles(user_id)
+        if any(one.role_id == AdminRole for one in user_role_list):
+            raise HTTPException(status_code=500, detail='系统管理员不允许编辑')
+
         # 获取用户之前的所有分组
         old_group = UserGroupDao.get_user_group(user_id)
         old_group = [one.group_id for one in old_group]
@@ -143,18 +190,18 @@ class RoleGroupService():
 
         # 记录审计日志
         group_infos = GroupDao.get_group_by_ids(old_group + group_ids)
-        group_dict = {}
+        group_dict: Dict[int, str] = {}
         for one in group_infos:
             group_dict[one.id] = one.group_name
         note = "编辑前用户组："
         for one in old_group:
-            note += group_dict.get(one, one) + "、"
+            note += f'{group_dict.get(one, one)}、'
         note = note.rstrip('、')
         note += "编辑后用户组："
         for one in group_ids:
-            note += group_dict.get(one, one) + "、"
+            note += f'{group_dict.get(one, one)}、'
         note = note.rstrip('、')
-        AuditLogService.update_user(login_user, get_request_ip(request), user_id, note)
+        AuditLogService.update_user(login_user, get_request_ip(request), user_id, group_dict.keys(), note)
         return None
 
     def get_user_groups_list(self, user_id: int) -> List[GroupRead]:

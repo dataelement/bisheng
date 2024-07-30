@@ -121,8 +121,13 @@
 }
 
 @font-face {
-	font-family: text-security-disc;
-	src: url("assets/text-security-disc.woff") format("woff");
+	font-family: AlibabaPuHuiTi-3-55-Regular;
+	/* src: url("assets/text-security-disc.woff") format("woff"); */
+	src: url("assets/AlibabaPuHuiTi-3-55-Regular.otf") format("opentype");
+}
+
+:root {
+	--font-sans: 'AlibabaPuHuiTi-3-55-Regular'
 }
 
 /* pdf-text */
@@ -184,7 +189,6 @@
 .build-tab {}
 
 .build-tab a.active {
-	color: #024FE5;
 	background: #fff;
 	box-shadow: 1px 1px 2px 0 #e9e9e9
 		/* background: #F4F5F8;
@@ -192,34 +196,26 @@
 }
 
 .build-tab a.active>svg {
-	color: #024FE5 !important;
+	color: hsl(var(--primary)) !important;
 }
-
-.build-tab a {
-	color: #666;
-	/* background: #F4F5F8;
-	padding: 10px 40px; */
+.build-tab a.active>span {
+	color: hsl(var(--primary)) !important;
 }
-
-.build-tab a>svg {
-	color: #666;
+:is(.dark .build-tab a.active>svg){
+	color: #fff !important;
 }
-
-.build-tab a:hover {
-	color: #024FE5;
-}
-
-.build-tab a:hover>svg {
-	color: #024FE5;
+:is(.dark .build-tab a.active>span){
+	color: #fff !important;
 }
 
 .bs-chat-bg {
 	width: 100%;
-	background: url(/points.png) 0 100% repeat-x;
+	background-position: 0 100%;
+	background-repeat: repeat-x;
 	background-size: 10px 432px;
 }
 
 /* report情况隐藏离开按钮 */
-.report-hidden .leave{
+.report-hidden .leave {
 	display: none !important;
 }

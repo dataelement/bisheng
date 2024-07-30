@@ -28,21 +28,21 @@ export default function Report() {
     }
 
     return <div className="">
-        {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+        {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
         <div className="absolute top-0 w-full flex justify-center items-center h-10 ">
-            <span className="absolute left-10 flex items-center gap-1 cursor-pointer text-gray-600 hover:text-gray-500" onClick={() => navigate(-1)}><ChevronLeft size={20} />{t('back')}</span>
+            <span className="absolute left-10 flex items-center gap-1 cursor-pointer" onClick={() => navigate(-1)}><ChevronLeft size={20} />{t('back')}</span>
             <span className="text-sm">docx</span>
         </div>
-        <div className="gap-4 flex h-screen p-10 bg-gray-50">
-            <div ref={iframeRef} className="flex-1 border flex justify-center items-center bg-[#fff]">
+        <div className="gap-4 flex h-screen p-10">
+            <div ref={iframeRef} className="flex-1 border flex justify-center items-center bg-accent">
                 {
                     docx.path
                         // office
                         ? <Word data={docx}></Word>
                         // create
-                        : <div className="border bg-gray-50 rounded-md p-8 py-10 w-full max-w-[650px]">
+                        : <div className="border rounded-md p-8 py-10 w-full max-w-[650px] bg-card">
                             <p className="text-xl">{t('report.reportTemplate')}</p>
                             <p className="text-sm mt-2">{t('report.reportDescription')}</p>
                             <div className="flex gap-2 mt-4">
@@ -55,7 +55,7 @@ export default function Report() {
                         </div>
                 }
             </div>
-            <div className="w-[240px] border px-4 pt-4 bg-[#fff] overflow-y-auto">
+            <div className="w-[240px] border px-4 pt-4 overflow-y-auto bg-accent">
                 <LabelPanne onInset={handleInset}></LabelPanne>
             </div>
         </div>
@@ -88,7 +88,7 @@ const useReport = () => {
         setDocx({
             ...docx,
             // path: 'http://192.168.106.120:3002/empty.docx'
-            path: location.origin + '/empty.docx' // 文档服务能访问到的文件地址
+            path: location.origin + __APP_ENV__.BASE_URL + '/empty.docx' // 文档服务能访问到的文件地址
         })
     }
 

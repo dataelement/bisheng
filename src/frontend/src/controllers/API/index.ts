@@ -62,7 +62,12 @@ export async function delComponentApi(name): Promise<any> {
 export async function getAppConfig(): Promise<AppConfig> {
   return await axios.get(`/api/v1/env`);
 }
-
+/**
+ * 获取平台配置
+ */
+export async function saveThemeApi(data: string): Promise<any> {
+  return await axios.post(`/api/v1/web/config`, { value: data });
+}
 /**
  * Reads all templates from the database.
  *
@@ -139,8 +144,12 @@ export async function retryKnowledgeFileApi(objs) {
 /**
  * 上传文件
  */
-export async function uploadLibFile(data, config) {
-  return await axios.post(`/api/v1/knowledge/upload`, data, config);
+export async function uploadLibFile(data, config, type: 'knowledge' | 'icon') {
+  const urls = {
+    knowledge: '/api/v1/knowledge/upload',
+    icon: '/api/v1/upload/icon',
+  }
+  return await axios.post(urls[type], data, config);
 }
 
 /**

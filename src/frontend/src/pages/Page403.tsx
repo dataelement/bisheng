@@ -13,7 +13,7 @@ export default function Page403() {
                 <div className="flex justify-center">
                     <button
                         className="rounded bg-blue-500 px-6 py-2 text-sm font-semibold hover:bg-blue-600 text-gray-50"
-                        onClick={() => window.location.href = '/'}
+                        onClick={() => window.location.href = __APP_ENV__.BASE_URL + '/'}
                     >
                         返回首页
                     </button>

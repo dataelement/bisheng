@@ -28,12 +28,14 @@ export function transformEvent(event: string): string {
         case 'create_role': return '新建角色';
         case 'delete_role': return '删除角色';
         case 'update_role': return '编辑角色';
+        case 'user_login': return '用户登录';
         default: return '转换失败'
     }
 }
 
 export function transformObjectType(object: string): string {
     switch(object) {
+        case 'none': return '无'
         case 'flow': return '技能'
         case 'assistant': return '助手'
         case 'knowledge': return '知识库'

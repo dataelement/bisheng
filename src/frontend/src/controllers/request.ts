@@ -3,17 +3,25 @@ import axios from "axios";
 import i18next from "i18next";
 axios.defaults.withCredentials = true;
 const customAxios = axios.create({
-    baseURL:''
-    // baseURL:'/proapi'
+    baseURL: import.meta.env.BASE_URL
     // 配置
 });
+export const requestInterceptor = {
+    remoteLoginFuc(msg) { }
+};
 
 customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 200) {
         return response.data.data;
     }
+    // 无权访问
     if (response.data.status_code === 403) {
-        location.href = '/403'
+        location.href = __APP_ENV__.BASE_URL + '/403'
+        return Promise.reject(response.data.status_message);
+    }
+    // 异地登录
+    if (response.data.status_code === 10604) {
+        requestInterceptor.remoteLoginFuc(response.data.status_message)
         return Promise.reject(response.data.status_message);
     }
     return Promise.reject(response.data.status_message);

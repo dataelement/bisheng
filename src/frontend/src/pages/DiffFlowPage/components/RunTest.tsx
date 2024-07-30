@@ -37,7 +37,7 @@ export default function RunTest({ nodeId }) {
             return cur ? count + 1 : count
         }, 0) + 1 // +1 测试用例列 
 
-        return 100 / (count === 2 ? 2 : count + 1) // hack 两个 按 45% 分
+        return 100 / (count === 2 ? count : count + 1) // hack 两个 按 45% 分
     }, [mulitVersionFlow])
 
     const handleUploadTxt = () => {
@@ -127,7 +127,7 @@ export default function RunTest({ nodeId }) {
     const notDiffVersion = useMemo(() => !mulitVersionFlow.some((version) => version), [mulitVersionFlow])
 
     return <div className="mt-4 px-4">
-        <div className="bg-[#fff] p-2">
+        <div className="bg-[#fff] dark:bg-gray-950 p-2">
             <div className="flex items-center justify-between ">
                 <div className="flex gap-2 items-center">
                     <Button size="sm" disabled={['all', 'row', 'col'].includes(runningType)} onClick={handleUploadTxt}>{t('test.uploadTest')}</Button>
@@ -260,7 +260,7 @@ const useBuild = () => {
         let finished = false;
         let buildEnd = false
         const qstr = flow.id ? `?version_id=${flow.id}` : ''
-        const apiUrl = `/api/v1/build/stream/${flowId}${qstr}`;
+        const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/build/stream/${flowId}${qstr}`;
         const eventSource = new EventSource(apiUrl);
 
         eventSource.onmessage = (event) => {

@@ -10,6 +10,7 @@ from collections import defaultdict, namedtuple
 from dataclasses import dataclass
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models import BaseLanguageModel
+from langchain_core.prompts import HumanMessagePromptTemplate, PromptTemplate
 
 try:
     from llama_index.node_parser import SimpleNodeParser
@@ -135,6 +136,7 @@ class TrainsetGenerator:
             prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
             filter_lowquality_context: bool = False,
             filter_lowquality_question: bool = False
+            answer_prompt: Optional[HumanMessagePromptTemplate] = ANSWER_FORMULATE,
     ) -> None:
         self.generator_llm = generator_llm
         self.critic_llm = critic_llm
@@ -154,6 +156,9 @@ class TrainsetGenerator:
         self.prompt = prompt
         self.filter_lowquality_context = filter_lowquality_context
         self.filter_lowquality_question = filter_lowquality_question
+        if answer_prompt is None:
+            answer_prompt = ANSWER_FORMULATE
+        self.answer_prompt = answer_prompt
 
     @classmethod
     def from_default(
@@ -164,6 +169,7 @@ class TrainsetGenerator:
             prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
             filter_lowquality_context: bool = False, 
             filter_lowquality_question: bool = False
+            answer_prompt: Optional[PromptTemplate] = ANSWER_FORMULATE,
     ):
         generator_llm = llm
         critic_llm = llm
@@ -175,6 +181,7 @@ class TrainsetGenerator:
             prompt=prompt,
             filter_lowquality_context=filter_lowquality_context,
             filter_lowquality_question=filter_lowquality_question
+            answer_prompt=answer_prompt,
         )
 
     def _get_evolve_type(self) -> str:
@@ -229,7 +236,7 @@ class TrainsetGenerator:
 
     def _generate_answer(self, question: str, context: t.List[str]) -> t.List[str]:
         return [
-            self._qc_template(ANSWER_FORMULATE, qstn, context[i])
+            self._qc_template(self.answer_prompt, qstn, context[i])
             for i, qstn in enumerate(question.split("\n"))
         ]
 
@@ -365,9 +372,10 @@ class QAGenerationChainV2(Chain):
             llm: BaseLanguageModel,
             k: Optional[int] = None,
             chunk_size: int = 512,
-            prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
             filter_lowquality_context: bool = False,
             filter_lowquality_question: bool = False,
+            question_prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
+            answer_prompt: Optional[HumanMessagePromptTemplate] = ANSWER_FORMULATE,
             **kwargs: Any,
     ) -> QAGenerationChainV2:
         """
@@ -375,7 +383,8 @@ class QAGenerationChainV2(Chain):
 
         Args:
             llm: a language model
-            prompt: a prompt template
+            question_prompt: a prompt template for generate question
+            answer_prompt: a prompt template for generate answer
             **kwargs: additional arguments
 
         Returns:
@@ -384,7 +393,8 @@ class QAGenerationChainV2(Chain):
         generator = TrainsetGenerator.from_default(
             llm, 
             chunk_size=chunk_size, 
-            prompt=prompt, 
+            prompt=question_prompt, 
+            answer_prompt=answer_prompt,
             filter_lowquality_context=filter_lowquality_context, 
             filter_lowquality_question=filter_lowquality_question
         )

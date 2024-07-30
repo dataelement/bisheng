@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import json
+from queue import Queue
 from typing import Any, Dict, List, Union
 
 from bisheng.api.v1.schemas import ChatResponse
@@ -19,7 +20,7 @@ from langchain.schema.messages import BaseMessage
 class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     """Callback handler for streaming LLM responses."""
 
-    def __init__(self, websocket: WebSocket, flow_id: str, chat_id: str, user_id: int = None):
+    def __init__(self, websocket: WebSocket, flow_id: str, chat_id: str, user_id: int = None, **kwargs: Any):
         self.websocket = websocket
         self.flow_id = flow_id
         self.chat_id = chat_id
@@ -34,13 +35,22 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         #     },  # 存储工具调用的input信息
         # }
 
+        # 流式输出的队列
+        self.stream_queue: Queue = kwargs.get('stream_queue')
+
     async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         logger.debug(f'on_llm_new_token token={token} kwargs={kwargs}')
+        # azure偶尔会返回一个None
+        if token is None:
+            return
         resp = ChatResponse(message=token,
                             type='stream',
                             flow_id=self.flow_id,
                             chat_id=self.chat_id)
+        # 将流式输出内容放入到队列内，以方便中断流式输出后，可以将内容记录到数据库
         await self.websocket.send_json(resp.dict())
+        if self.stream_queue:
+            self.stream_queue.put(token)
 
     async def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str],
                            **kwargs: Any) -> Any:
@@ -232,12 +242,18 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
     """Callback handler for streaming LLM responses."""
 
-    def __init__(self, websocket: WebSocket, flow_id: str, chat_id: str):
+    def __init__(self, websocket: WebSocket, flow_id: str, chat_id: str, user_id: int = None, **kwargs: Any):
         self.websocket = websocket
         self.flow_id = flow_id
         self.chat_id = chat_id
+        self.user_id = user_id
+
+        self.stream_queue: Queue = kwargs.get('stream_queue')
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        # azure偶尔会返回一个None
+        if token is None:
+            return
         resp = ChatResponse(message=token,
                             type='stream',
                             flow_id=self.flow_id,
@@ -246,6 +262,9 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
             loop = asyncio.get_event_loop()
             coroutine = self.websocket.send_json(resp.dict())
             asyncio.run_coroutine_threadsafe(coroutine, loop)
+
+        if self.stream_queue:
+            self.stream_queue.put(token)
 
     def on_agent_action(self, action: AgentAction, **kwargs: Any) -> Any:
         log = f'\nThought: {action.log}'

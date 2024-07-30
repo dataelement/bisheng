@@ -3,8 +3,9 @@ from pathlib import Path
 from typing import Optional
 
 from bisheng.api import router, router_rpc
-from bisheng.database.base import init_default_data
+from bisheng.database.init_data import init_default_data
 from bisheng.interface.utils import setup_llm_caching
+from bisheng.restructure.register import register_restructure
 from bisheng.services.utils import initialize_services, teardown_services
 from bisheng.settings import settings
 from bisheng.utils.http_middleware import CustomMiddleware
@@ -90,6 +91,7 @@ def create_app():
 
     app.include_router(router)
     app.include_router(router_rpc)
+    register_restructure(app)
     return app
 
 

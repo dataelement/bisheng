@@ -3,7 +3,7 @@ import { LoadIcon } from "@/components/bs-icons/loading";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "@/types/chat";
 import { copyText } from "@/utils";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
@@ -11,6 +11,7 @@ import remarkMath from "remark-math";
 import MessageButtons from "./MessageButtons";
 import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
+import { formatStrTime } from "@/util/utils";
 
 // 颜色列表
 const colorList = [
@@ -27,7 +28,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBs({ data, onUnlike = () => { }, onSource }: { data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -64,10 +65,10 @@ export default function MessageBs({ data, onUnlike = () => { }, onSource }: { da
                     },
                 }}
             >
-                {data.message.toString()}
+                {data.message[data.chatKey] || data.message}
             </ReactMarkdown>
         ),
-        [data.message, data.message.toString()]
+        [data.message]
     )
 
     const messageRef = useRef<HTMLDivElement>(null)
@@ -77,12 +78,22 @@ export default function MessageBs({ data, onUnlike = () => { }, onSource }: { da
 
     const chatId = useMessageStore(state => state.chatId)
 
-    return <div className="flex w-full py-1">
-        <div className="w-fit max-w-[90%]">
-            {data.sender && <p className="text-gray-600 text-xs mb-2">{data.sender}</p>}
+    return <div className="flex w-full">
+        <div className="w-fit group max-w-[90%]">
+            <div className="flex justify-between items-center mb-1">
+                {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
+                <div className={`text-right group-hover:opacity-100 opacity-0`}>
+                    <span className="text-slate-400 text-sm">{formatStrTime(data.update_time, 'MM 月 dd 日 HH:mm')}</span>
+                </div>
+            </div>
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
-                    <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} ><AvatarIcon /></div>
+                    {logo ? <div className="max-w-6 max-h-6 rounded-full overflow-hidden">
+                        <img width={24} height={24} src={logo} />
+                    </div>
+                        : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
+                            <AvatarIcon />
+                        </div>}
                     {data.message.toString() ?
                         <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
                             {mkdown}

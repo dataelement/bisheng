@@ -276,7 +276,7 @@ class ProxyChatLLM(BaseChatModel):
             function_call: Optional[dict] = None
             async for stream_resp in self.acompletion_with_retry(messages=message_dicts, **params):
 
-                role = stream_resp['choices'][0]['delta'].get('role', role)
+                role = stream_resp['choices'][0]['delta'].get('role') or role
                 token = stream_resp['choices'][0]['delta'].get('content', '')
                 inner_completion += token or ''
                 _function_call = stream_resp['choices'][0]['delta'].get('function_call')

@@ -3,6 +3,9 @@ import { cname } from "../utils"
 import { SearchIcon } from "../../bs-icons/search"
 import { generateUUID } from "../utils"
 import { MinusCircledIcon } from "@radix-ui/react-icons"
+import { EyeOpenIcon, EyeNoneIcon } from "@radix-ui/react-icons"
+import { useState } from "react"
+
 export interface InputProps
     extends React.InputHTMLAttributes<HTMLInputElement> { }
 
@@ -12,7 +15,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             <input
                 type={type}
                 className={cname(
-                    "flex h-9 w-full rounded-md border border-input bg-[#FAFBFC] px-3 py-1 text-sm text-[#111] shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                    "flex h-9 w-full rounded-md border border-input bg-search-input px-3 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
                     className
                 )}
                 ref={ref}
@@ -27,7 +30,7 @@ Input.displayName = "Input"
 const SearchInput = React.forwardRef<HTMLInputElement, InputProps & { inputClassName?: string, iconClassName?: string }>(
     ({ className, inputClassName, iconClassName, ...props }, ref) => {
         return <div className={cname("relative", className)}>
-            <SearchIcon className={cname("h-5 w-5 absolute left-2 top-2", iconClassName)} />
+            <SearchIcon className={cname("h-5 w-5 absolute left-2 top-2 text-gray-950 dark:text-gray-500", iconClassName)} />
             <Input type="text" ref={ref} className={cname("pl-8 bg-search-input", inputClassName)} {...props}></Input>
         </div>
     }
@@ -35,6 +38,25 @@ const SearchInput = React.forwardRef<HTMLInputElement, InputProps & { inputClass
 
 SearchInput.displayName = "SearchInput"
 
+
+const PasswordInput = React.forwardRef<HTMLInputElement, InputProps & { inputClassName?: string, iconClassName?: string }>(
+    ({ className, inputClassName, iconClassName, ...props }, ref) => {
+        const [type, setType] = useState('password')
+        const handleShowPwd = () => {
+            type === 'password' ? setType('text') : setType('password')
+        }
+        return <div className={cname("relative flex place-items-center", className)}>
+            <Input type={type} ref={ref} className={cname("pr-8 bg-search-input", inputClassName)} {...props}></Input>
+            {
+                type === 'password'
+                ? <EyeNoneIcon onClick={handleShowPwd} className={cname("absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)}/>
+                : <EyeOpenIcon onClick={handleShowPwd} className={cname("absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)}/>
+            }
+        </div>
+    }
+)
+
+PasswordInput.displayName = 'PasswordInput'
 
 
 /**
@@ -48,7 +70,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         return (
             <textarea
                 className={cname(
-                    "flex min-h-[80px] w-full rounded-md border border-input bg-[#FAFBFC] px-3 py-2 text-sm text-[#111] shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                    "flex min-h-[80px] w-full rounded-md border border-input bg-search-input px-3 py-2 text-sm text-[#111] dark:text-gray-50 shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
                     className
                 )}
                 ref={ref}
@@ -144,4 +166,4 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
     }
 )
 
-export { Input, SearchInput, Textarea, InputList }
+export { Input, SearchInput, PasswordInput, Textarea, InputList }

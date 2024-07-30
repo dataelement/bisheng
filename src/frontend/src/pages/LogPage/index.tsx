@@ -60,7 +60,7 @@ export default function index() {
     }
     const handleSearch = () => {
         const startTime = keys.start && formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss')
-        const endTime = keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss')
+        const endTime = keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss').replace('00:00:00','23:59:59')
         filterData({...keys, start:startTime, end:endTime})
     }
     const handleReset = () => {
@@ -89,7 +89,7 @@ export default function index() {
                     <SelectTrigger className="w-[200px]">
                         <SelectValue placeholder={t('log.selectUserGroup')} />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-w-[200px] break-all">
                         <SelectGroup>
                             {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
                         </SelectGroup>
@@ -146,35 +146,37 @@ export default function index() {
                         <TableHead className="w-[150px] min-w-[100px]">{t('log.objectType')}</TableHead>
                         <TableHead className="w-[200px] min-w-[100px]">{t('log.operationObject')}</TableHead>
                         <TableHead className="w-[150px]">{t('log.ipAddress')}</TableHead>
-                        <TableHead className="w-[250px] min-w-[250px] text-center">{t('log.remark')}</TableHead>
+                        <TableHead className="w-[250px] min-w-[250px]">{t('log.remark')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {logs.map((log:any) => (
                     <TableRow key={log.id}>
                         <TableCell>{log.id}</TableCell>
-                        <TableCell><div className="truncate-multiline">{log.operator_name}</div></TableCell>
+                        <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.operator_name}</div></TableCell>
                         <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
                         <TableCell>{transformModule(log.system_id)}</TableCell>
                         <TableCell>{transformEvent(log.event_type)}</TableCell>
                         <TableCell>{transformObjectType(log.object_type)}</TableCell>
-                        <TableCell><div className="truncate-multiline">{log.object_name}</div></TableCell> {/* div是必要的 */}
+                        <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name || '无'}</div></TableCell>
                         <TableCell>{log.ip_address}</TableCell>
-                        {/* whitespace-pre类保持原有的空格和换行符 */}
-                        <TableCell className="max-w-[250px]"><div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`)}</div></TableCell>
+                        <TableCell className="max-w-[250px]">
+                            <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || '无'}</div>
+                        </TableCell>
                     </TableRow>
                     ))}
                 </TableBody>
-                <TableFooter>
-                    {!logs.length && <TableRow>
+                {!logs.length && <TableFooter>
+                    <TableRow>
                         <TableCell colSpan={9} className="text-center text-gray-400">{t('build.empty')}</TableCell>
-                    </TableRow>}
-                </TableFooter>
+                    </TableRow>
+                </TableFooter>}
             </Table>
+            {!logs.length && <div className="h-[700px]"></div>}
         </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="bisheng-table-footer">
+        <div className="bisheng-table-footer bg-background-login">
             <p className="desc pl-4">{t('log.auditManagement')}</p>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"

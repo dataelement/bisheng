@@ -46,7 +46,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
         setTaskId(id)
     }, 600, false)
 
-    return <div className="relative">
+    return <div className="relative bg-background-main-content">
         <div className={createOpen ? 'hidden' : 'block'}>
             <FinetuneHead onSearch={search} onFilter={filterData} rtClick={rtClick} onCreate={() => setCreateOpen(true)}></FinetuneHead>
             {/* body */}
@@ -55,7 +55,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                 : <div className="flex gap-4 mt-4">
                     <div className="w-[40%] relative">
                         <div className="border-r overflow-y-auto max-h-[calc(100vh-210px)] pb-20">
-                            <Table>
+                            <Table className="px-2">
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-[100px]">{t('finetune.modelName')}</TableHead>
@@ -76,7 +76,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                                 </TableBody>
                             </Table>
                         </div>
-                        <div className="bisheng-table-footer">
+                        <div className="bisheng-table-footer bg-background-login">
                             <p className="desc"></p>
                             <AutoPagination
                                 page={page}

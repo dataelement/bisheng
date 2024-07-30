@@ -1,6 +1,6 @@
 import { AssistantIcon } from "@/components/bs-icons/assistant";
 import { cname } from "@/components/bs-ui/utils";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AddToIcon } from "../../bs-icons/addTo";
 import { DelIcon } from "../../bs-icons/del";
 import { GoIcon } from "../../bs-icons/go";
@@ -11,17 +11,21 @@ import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { Switch } from "../../bs-ui/switch";
 import { useTranslation } from "react-i18next";
+import LabelShow from "./LabelShow";
 
 interface IProps<T> {
   data: T,
   /** id为''时，表示新建 */
   id?: number | string,
+  logo?: string,
   type: "skill" | "sheet" | "assist" | "setting", // 技能列表｜侧边弹窗列表
   title: string,
   edit?: boolean,
   description: React.ReactNode | string,
   checked?: boolean,
   user?: string,
+  currentUser?: any,
+  allLabels?:any[],
   isAdmin?: boolean,
   headSelecter?: React.ReactNode,
   footer?: React.ReactNode,
@@ -64,13 +68,20 @@ export function TitleIconBg({ id, className = '', children = <SkillIcon /> }) {
   return <div className={cname(`rounded-sm flex justify-center items-center ${gradients[parseInt(id + '', 16) % gradients.length]}`, className)}>{children}</div>
 }
 
+export function TitleLogo({ id = 0, url, className = '', children = <SkillIcon /> }) {
+  return url ? <img src={url} className={cname(`w-6 h-6 rounded-sm object-cover`, className)} /> : <TitleIconBg id={id} className={className}>{children}</TitleIconBg>
+}
+
 export default function CardComponent<T>({
   id = '',
+  logo = '',
   data,
   type,
   icon: Icon = SkillIcon,
   edit = false,
   user,
+  currentUser,
+  allLabels,
   title,
   checked,
   isAdmin,
@@ -94,6 +105,17 @@ export default function CardComponent<T>({
     if (res === false) return
     setChecked(bln)
   }
+
+  const isOperator = useMemo(() => {
+    if(data && currentUser) {
+      if(currentUser.role === 'admin') return true
+      data.group_ids.forEach(element => {
+        if(currentUser.admin_groups.includes(element)) return true
+      })
+      if(data.user_id === currentUser.user_id) return true
+    }
+    return false
+  },[data, currentUser])
 
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
@@ -120,19 +142,22 @@ export default function CardComponent<T>({
       <CardDescription>{description}</CardDescription>
     </CardContent>
     <CardFooter className="flex justify-end h-10">
-      <div className="rounded cursor-pointer"><GoIcon className="group-hover:text-primary transition-none" /></div>
+      <div className="rounded cursor-pointer"><GoIcon className="group-hover:text-primary transition-none dark:text-slate-50" /></div>
     </CardFooter>
   </Card>
 
 
   // 侧边弹窗列表（sheet）
-  if (type === 'sheet') return <Card className="group w-[320px] cursor-pointer bg-[#F7F9FC] hover:bg-[#EDEFF6] hover:shadow-none relative" onClick={onClick}>
+  if (type === 'sheet') return <Card className="group max-h-[146px] w-[320px] cursor-pointer bg-[#F7F9FC] dark:bg-background-main dark:hover:bg-background-login hover:bg-[#EDEFF6] hover:shadow-none relative" onClick={onClick}>
     <CardHeader className="pb-2">
       <CardTitle className="truncate-doubleline">
         <div className="flex gap-2 pb-2 items-center">
-          <TitleIconBg id={id}>
+          <TitleLogo
+            url={logo}
+            id={id}
+          >
             <Icon />
-          </TitleIconBg>
+          </TitleLogo>
           <p className=" align-middle">{title}</p>
         </div>
         {/* <span></span> */}
@@ -146,19 +171,22 @@ export default function CardComponent<T>({
     </CardFooter>
   </Card>
 
-
   // 技能组件
-  return <Card className="group w-[320px] cursor-pointer bg-background-Assistant hover:bg-background-hoverAssistant" onClick={() => edit && onClick()}>
+  return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer" onClick={() => edit && onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
-        <TitleIconBg id={id} >
+        <TitleLogo
+          url={logo}
+          id={id}
+        >
           {type === 'skill' ? <SkillIcon /> : <AssistantIcon />}
-        </TitleIconBg>
+        </TitleLogo>
         <div className="flex gap-1 items-center">
           {headSelecter}
           <Switch
             checked={_checked}
             className="w-12"
+            // @ts-ignore
             texts={[t('skills.online'), t('skills.offline')]}
             onCheckedChange={(b) => edit && handleCheckedChange(b)}
             onClick={e => { e.stopPropagation(); onSwitchClick?.() }}
@@ -170,19 +198,26 @@ export default function CardComponent<T>({
     <CardContent className="h-[140px] overflow-auto scrollbar-hide">
       <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
-    <CardFooter className="flex justify-between h-10">
-      <div className="flex gap-1 items-center">
-        <UserIcon />
-        <span className="text-sm text-muted-foreground">{t('skills.createdBy')}</span>
-        <span className="text-sm font-medium leading-none overflow-hidden text-ellipsis max-w-32 ">{user}</span>
-      </div>
-      {edit
-        && <div className="hidden group-hover:flex">
-          {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>}
-          {isAdmin && type === 'skill' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
-          <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>
+    <CardFooter className="h-20 grid grid-rows-2">
+      <LabelShow show={data.tags.length > 0} isOperator={isOperator} 
+        resource={{id:data.id, type:type}}
+        labels={data.tags.map(d => ({label:d.name, value:d.id, selected:true, edit:false}))}
+        all={allLabels.filter(a => a.value !== -1)}>
+      </LabelShow>
+      <div className="flex justify-between items-center h-10">
+        <div className="flex gap-1 items-center">
+          <UserIcon />
+          <span className="text-sm text-muted-foreground">{t('skills.createdBy')}</span>
+          <span className="text-sm font-medium leading-none overflow-hidden text-ellipsis max-w-32 ">{user}</span>
         </div>
-      }
+        {edit
+          && <div className="hidden group-hover:flex">
+            {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>}
+            {isAdmin && type === 'skill' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
+            <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>
+          </div>
+        }
+      </div>
     </CardFooter>
   </Card>
 };

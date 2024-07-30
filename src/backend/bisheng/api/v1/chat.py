@@ -1,13 +1,23 @@
 import json
+import time
+import math
 from typing import List, Optional
 from uuid import UUID
 
-from bisheng.api.JWT import get_login_user
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketException, status, Body, Request
+from fastapi.params import Depends
+from fastapi.responses import StreamingResponse
+from fastapi_jwt_auth import AuthJWT
+from sqlalchemy import func
+from sqlmodel import select
+
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.base import BaseService
 from bisheng.api.services.chat_imp import comment_answer
+from bisheng.api.services.flow import FlowService
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
-from bisheng.api.services.user_service import UserPayload
+from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
 from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList,
                                     FlowGptsOnlineList, InitResponse, StreamData,
@@ -16,18 +26,12 @@ from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import session_getter
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
-from bisheng.database.models.flow import Flow, FlowDao
+from bisheng.database.models.flow import Flow, FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketException, status, Body, Request
-from fastapi.params import Depends
-from fastapi.responses import StreamingResponse
-from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import func
-from sqlmodel import select
 
 router = APIRouter(tags=['Chat'])
 chat_manager = ChatManager()
@@ -43,14 +47,12 @@ def get_chatmessage(*,
                     flow_id: str,
                     id: Optional[str] = None,
                     page_size: Optional[int] = 20,
-                    Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
+                    login_user: UserPayload = Depends(get_login_user)):
     if not chat_id or not flow_id:
         return {'code': 500, 'message': 'chat_id 和 flow_id 必传参数'}
     where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
                                       ChatMessage.chat_id == chat_id,
-                                      ChatMessage.user_id == payload.get('user_id'))
+                                      ChatMessage.user_id == login_user.user_id)
     if id:
         where = where.where(ChatMessage.id < int(id))
     with session_getter() as session:
@@ -140,25 +142,21 @@ def update_chat_message(*,
 
 
 @router.delete('/chat/message/{message_id}', status_code=200)
-def del_message_id(*, message_id: str, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
+def del_message_id(*, message_id: str, login_user: UserPayload = Depends(get_login_user)):
     # 获取一条消息
-    ChatMessageDao.delete_by_message_id(payload.get('user_id'), message_id)
+    ChatMessageDao.delete_by_message_id(login_user.user_id, message_id)
 
     return resp_200(message='删除成功')
 
 
 @router.post('/liked', status_code=200)
-def like_response(*, data: ChatInput, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
+def like_response(*, data: ChatInput, login_user: UserPayload = Depends(get_login_user)):
     message_id = data.message_id
     liked = data.liked
     with session_getter() as session:
         message = session.get(ChatMessage, message_id)
     if message:
-        logger.info('act=add_liked user_id={} liked={}', payload.get('user_id'), liked)
+        logger.info('act=add_liked user_id={} liked={}', login_user.user_id, liked)
         message.liked = liked
     with session_getter() as session:
         session.add(message)
@@ -168,8 +166,7 @@ def like_response(*, data: ChatInput, Authorize: AuthJWT = Depends()):
 
 
 @router.post('/chat/comment', status_code=200)
-def comment_resp(*, data: ChatInput, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
+def comment_resp(*, data: ChatInput, login_user: UserPayload = Depends(get_login_user)):
     comment_answer(data.message_id, data.comment)
     return resp_200(message='操作成功')
 
@@ -178,18 +175,16 @@ def comment_resp(*, data: ChatInput, Authorize: AuthJWT = Depends()):
 def get_chatlist_list(*,
                       page: Optional[int] = 1,
                       limit: Optional[int] = 10,
-                      Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-
+                      login_user: UserPayload = Depends(get_login_user)):
     smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
-                  func.max(ChatMessage.create_time).label('create_time'),
+                  func.min(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
-        ChatMessage.user_id == payload.get('user_id')).group_by(
+        ChatMessage.user_id == login_user.user_id).group_by(
         ChatMessage.flow_id,
-        ChatMessage.chat_id).order_by(func.max(ChatMessage.create_time).desc()))
+        ChatMessage.chat_id).order_by(func.max(ChatMessage.update_time).desc()))
     with session_getter() as session:
         db_message = session.exec(smt).all()
+
     flow_ids = [message.flow_id for message in db_message]
     with session_getter() as session:
         db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
@@ -207,6 +202,7 @@ def get_chatlist_list(*,
                          flow_id=message.flow_id,
                          flow_type='flow',
                          chat_id=message.chat_id,
+                         logo=flow_dict[message.flow_id].logo,
                          create_time=message.create_time,
                          update_time=message.update_time))
         elif message.flow_id in assistant_dict:
@@ -216,11 +212,21 @@ def get_chatlist_list(*,
                          flow_id=message.flow_id,
                          chat_id=message.chat_id,
                          flow_type='assistant',
+                         logo=assistant_dict[message.flow_id].logo,
                          create_time=message.create_time,
                          update_time=message.update_time))
         else:
-            # 通过接口创建的会话记录，不关联技能或者助手
-            logger.debug(f'unknown message.flow_id={message.flow_id}')
+            # 通过接口创建的会话记录，不关联技能或者助手, 或者技能和助手已被删除
+            pass
+    res = chat_list[(page - 1) * limit:page * limit]
+    chat_ids = [one.chat_id for one in res]
+    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids)
+    latest_messages = {one.chat_id: one for one in latest_messages}
+
+    for one in res:
+        # 获取每个会话的最后一条回复内容
+        one.latest_message = latest_messages.get(one.chat_id, None)
+        one.logo = BaseService.get_logo_share_link(one.logo)
     return resp_200(chat_list[(page - 1) * limit:page * limit])
 
 
@@ -230,28 +236,26 @@ def get_chatlist_list(*,
             status_code=200)
 def get_online_chat(*,
                     keyword: Optional[str] = None,
+                    tag_id: Optional[int] = None,
                     page: Optional[int] = 0,
                     limit: Optional[int] = 0,
-                    Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
-    user_id = user.user_id
+                    user: UserPayload = Depends(get_login_user)):
+    # 由于是获取助手和技能两个表，需要将page修改下
+    if page and limit:
+        search_page = math.ceil(page / 2)
     res = []
-    # 获取所有已上线的助手
-    if user.is_admin():
-        all_assistant = AssistantDao.get_all_online_assistants()
-        flows = FlowDao.get_all_online_flows(keyword)
-    else:
-        assistants = AssistantService.get_assistant(user, keyword, AssistantStatus.ONLINE.value, 0,
-                                                    0)
-        all_assistant = assistants.data.get('data')
-        flows = FlowDao.get_user_access_online_flows(user_id, keyword=keyword)
+    all_assistant = AssistantService.get_assistant(user, keyword, AssistantStatus.ONLINE.value,
+                                                   tag_id, page=search_page, limit=limit)
+    all_assistant = all_assistant.data.get('data')
+    flows = FlowService.get_all_flows(user, keyword, FlowStatus.ONLINE.value,
+                                      tag_id=tag_id, page=search_page, page_size=limit)
+    flows = flows.data.get('data')
     for one in all_assistant:
         res.append(
             FlowGptsOnlineList(id=str(one.id),
                                name=one.name,
                                desc=one.desc,
+                               logo=one.logo,
                                create_time=one.create_time,
                                update_time=one.update_time,
                                flow_type='assistant'))
@@ -259,11 +263,12 @@ def get_online_chat(*,
     # 获取用户可见的所有已上线的技能
     for one in flows:
         res.append(
-            FlowGptsOnlineList(id=str(one.id),
-                               name=one.name,
-                               desc=one.description,
-                               create_time=one.create_time,
-                               update_time=one.update_time,
+            FlowGptsOnlineList(id=one["id"],
+                               name=one["name"],
+                               desc=one["description"],
+                               logo=one["logo"],
+                               create_time=one["create_time"],
+                               update_time=one["update_time"],
                                flow_type='flow'))
     res.sort(key=lambda x: x.update_time, reverse=True)
     if page and limit:
@@ -288,10 +293,8 @@ async def chat(
             Authorize._token = t
         else:
             Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-
-        payload = Authorize.get_jwt_subject()
-        payload = json.loads(payload)
-        user_id = payload.get('user_id')
+        login_user = await get_login_user(Authorize)
+        user_id = login_user.user_id
         if chat_id:
             with session_getter() as session:
                 db_flow = session.get(Flow, flow_id)

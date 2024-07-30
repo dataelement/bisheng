@@ -1,12 +1,10 @@
 import json
-import os
-import time
-from typing import Dict
+from typing import Dict, Callable
 from uuid import UUID, uuid4
+from queue import Queue
 
 from loguru import logger
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain.tools.render import format_tool_to_openai_tool
 from fastapi import WebSocket, status, Request
 
 from bisheng.api.services.assistant_agent import AssistantAgent
@@ -20,6 +18,7 @@ from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.settings import settings
 from bisheng.api.utils import get_request_ip
+from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 
 
 class ChatClient:
@@ -42,6 +41,10 @@ class ChatClient:
         # 和模型对话时传入的 完整的历史对话轮数
         self.latest_history_num = 5
         self.gpts_conf = settings.get_from_db('gpts')
+        # 异步任务列表
+        self.task_ids = []
+        # 流式输出的队列，用来接受流式输出的内容，每次处理新的question时都清空
+        self.stream_queue = Queue()
 
     async def send_message(self, message: str):
         await self.websocket.send_text(message)
@@ -51,15 +54,33 @@ class ChatClient:
 
     async def handle_message(self, message: Dict[any, any]):
         trace_id = uuid4().hex
+        logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
         with logger.contextualize(trace_id=trace_id):
-            # 处理客户端发过来的信息
+            # 处理客户端发过来的信息, 提交到线程池内执行
             if self.work_type == WorkType.GPTS:
-                await self.handle_gpts_message(message)
+                thread_pool.submit(trace_id,
+                                   self.wrapper_task,
+                                   trace_id,
+                                   self.handle_gpts_message,
+                                   message,
+                                   trace_id=trace_id)
+                # await self.handle_gpts_message(message)
 
-    async def add_message(self, msg_type: str, message: str, category: str):
+    async def wrapper_task(self, task_id: str, fn: Callable, *args, **kwargs):
+        # 包装处理函数为异步任务
+        self.task_ids.append(task_id)
+        try:
+            # 执行处理函数
+            await fn(*args, **kwargs)
+        finally:
+            # 执行完成后将任务id从列表移除
+            self.task_ids.remove(task_id)
+
+    async def add_message(self, msg_type: str, message: str, category: str, remark: str = ''):
         self.chat_history.append({
             'category': category,
-            'message': message
+            'message': message,
+            'remark': remark
         })
         if not self.chat_id:
             # debug模式无需保存历史
@@ -75,6 +96,7 @@ class ChatClient:
             flow_id=self.client_id,
             chat_id=self.chat_id,
             user_id=self.user_id,
+            remark=remark,
         ))
         # 记录审计日志, 是新建会话
         if len(self.chat_history) <= 1:
@@ -116,8 +138,8 @@ class ChatClient:
                 if not assistant:
                     raise IgnoreException('该助手已被删除')
         except IgnoreException as e:
-            await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
-            raise IgnoreException('get assistant info error')
+            logger.exception("get assistant info error")
+            raise IgnoreException(f'get assistant info error: {str(e)}')
         try:
             if self.chat_id and self.gpts_agent is None:
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
@@ -128,8 +150,8 @@ class ChatClient:
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
         except Exception as e:
-            await self.websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=f'agent init error {str(e)}')
-            raise Exception('agent init error')
+            logger.exception("agent init error")
+            raise Exception(f'agent init error: {str(e)}')
 
     async def init_chat_history(self):
         # 初始化历史记录，不为空则不用重新初始化
@@ -142,7 +164,8 @@ class ChatClient:
             for one in res:
                 self.chat_history.append({
                     'message': one.message,
-                    'category': one.category
+                    'category': one.category,
+                    'remark': one.remark
                 })
 
     async def get_latest_history(self):
@@ -152,13 +175,15 @@ class ChatClient:
         is_answer = True
         # 从聊天历史里获取
         for i in range(len(self.chat_history) - 1, -1, -1):
+            one_item = self.chat_history[i]
             if find_i >= self.latest_history_num:
                 break
-            if self.chat_history[i]['category'] == 'answer' and is_answer:
-                tmp.insert(0, AIMessage(content=self.chat_history[i]['message']))
+            # 不包含中断的答案
+            if one_item['category'] == 'answer' and one_item.get('remark') != 'break_answer' and is_answer:
+                tmp.insert(0, AIMessage(content=one_item['message']))
                 is_answer = False
-            elif self.chat_history[i]['category'] == 'question' and not is_answer:
-                tmp.insert(0, HumanMessage(content=json.loads(self.chat_history[i]['message'])['input']))
+            elif one_item['category'] == 'question' and not is_answer:
+                tmp.insert(0, HumanMessage(content=json.loads(one_item['message'])['input']))
                 is_answer = True
                 find_i += 1
 
@@ -171,37 +196,62 @@ class ChatClient:
             'websocket': self.websocket,
             'flow_id': self.client_id,
             'chat_id': self.chat_id,
-            'user_id': self.user_id
+            'user_id': self.user_id,
+            'stream_queue': self.stream_queue,
         })]
         self.gpts_async_callback = async_callbacks
+
+    async def stop_handle_message(self, message: Dict[any, any]):
+        # 中止流式输出, 因为最新的任务id是中止任务的id，不能取消自己
+        logger.info(f'need stop agent, client_key: {self.client_key}, message: {message}')
+
+        # 中止之前的处理函数
+        thread_pool.cancel_task(self.task_ids[:-1])
+
+        # 将流式输出的内容写到数据库内
+        answer = ''
+        while not self.stream_queue.empty():
+            msg = self.stream_queue.get()
+            answer += msg
+
+        # 有流式输出内容的话，记录流式输出内容到数据库
+        if answer.strip():
+            res = await self.add_message('bot', answer, 'answer', 'break_answer')
+            await self.send_response('answer', 'end', '', message_id=res.id if res else None)
+        await self.send_response('processing', 'close', '')
+
+    async def clear_stream_queue(self):
+        while not self.stream_queue.empty():
+            self.stream_queue.get()
 
     async def handle_gpts_message(self, message: Dict[any, any]):
         if not message:
             return
         logger.debug(f'receive client message, client_key: {self.client_key} message: {message}')
         if message.get('action') == 'stop':
-            logger.info(f'need stop agent, client_key: {self.client_key}, message: {message}')
+            await self.stop_handle_message(message)
             return
-
-        inputs = message.get('inputs', {})
-        input_msg = inputs.get('input')
-        if not input_msg:
-            # 需要切换会话
-            logger.debug(f'need switch agent, client_key: {self.client_key} inputs: {inputs}')
-            self.client_id = inputs.get('data').get('id')
-            self.chat_id = inputs.get('data').get('chatId')
-            self.gpts_agent = None
-            self.gpts_async_callback = None
-            self.chat_history = []
-            await self.init_gpts_agent()
-            return
-
-        # 初始化agent
-        await self.init_gpts_agent()
-
-        await self.send_response('processing', 'begin', '')
 
         try:
+            await self.send_response('processing', 'begin', '')
+            # 清空流式队列，防止把上一次的回答，污染本次回答
+            await self.clear_stream_queue()
+            inputs = message.get('inputs', {})
+            input_msg = inputs.get('input')
+            if not input_msg:
+                # 需要切换会话
+                logger.debug(f'need switch agent, client_key: {self.client_key} inputs: {inputs}')
+                self.client_id = inputs.get('data').get('id')
+                self.chat_id = inputs.get('data').get('chatId')
+                self.gpts_agent = None
+                self.gpts_async_callback = None
+                self.chat_history = []
+                await self.init_gpts_agent()
+                return
+
+            # 初始化agent
+            await self.init_gpts_agent()
+
             # 将用户问题写入到数据库
             await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
 

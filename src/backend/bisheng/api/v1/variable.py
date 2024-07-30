@@ -2,14 +2,14 @@ from typing import List, Optional
 from uuid import UUID
 
 from loguru import logger
+from fastapi import APIRouter, HTTPException, Depends
+from sqlmodel import delete, select
 
+from bisheng.api.services.user_service import get_login_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.variable_value import Variable, VariableCreate, VariableRead, VariableDao
-from fastapi import APIRouter, HTTPException
-from sqlmodel import delete, select
 
 # build router
 router = APIRouter(prefix='/variable', tags=['variable'])
@@ -54,7 +54,7 @@ def get_variables(*,
                   flow_id: str,
                   node_id: Optional[str] = None,
                   variable_name: Optional[str] = None,
-                  version_id: Optional[int]= None):
+                  version_id: Optional[int] = None):
     try:
         flow_id = UUID(flow_id).hex
         # 没传ID默认获取当前版本的数据

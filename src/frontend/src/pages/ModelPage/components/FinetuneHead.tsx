@@ -1,8 +1,7 @@
-
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
-import { Input, SearchInput } from "../../../components/bs-ui/input";
+import { SearchInput } from "../../../components/bs-ui/input";
 import {
     Select,
     SelectContent,
@@ -12,9 +11,8 @@ import {
     SelectValue
 } from "../../../components/bs-ui/select";
 import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group";
-import { getAllServicesApi, getServicesApi } from "../../../controllers/API";
+import { getAllServicesApi } from "../../../controllers/API";
 import { useDebounce } from "../../../util/hook";
-import { Search } from "lucide-react";
 
 interface IProps {
     onSearch: (searchkey) => void,
@@ -56,7 +54,7 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
         onSearch(inputRef.current.value)
     }
 
-    return <div className="flex justify-between pb-4 border-b">
+    return <div className="flex justify-between pb-4 border-b ml-2">
         <div className="flex gap-4">
             <ToggleGroup type="single" defaultValue={type} onValueChange={handleTypeChange} className="border rounded-md">
                 <ToggleGroupItem value="all">{t('finetune.all')}</ToggleGroupItem>
@@ -79,9 +77,9 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
             </Select>
             <SearchInput ref={inputRef} placeholder={t('finetune.modelName')} onChange={useDebounce(handleSearch, 600, false)}></SearchInput>
         </div>
-        <div className="flex gap-4">
-            <Button className="" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
-            <Button variant="black" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+        <div className="flex gap-4 mr-2">
+            <Button className="dark:text-[#ECECEC]" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
+            <Button variant="black" className="dark:text-[#ECECEC] dark:bg-[#34353A]" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
         </div>
     </div>
 };

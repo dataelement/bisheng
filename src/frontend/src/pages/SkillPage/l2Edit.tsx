@@ -1,3 +1,6 @@
+import FlowSetting from "@/components/Pro/security/FlowSetting";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { locationContext } from "@/contexts/locationContext";
 import { ArrowLeft, ChevronUp } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -5,21 +8,17 @@ import { useNavigate, useParams } from "react-router-dom";
 import L2ParameterComponent from "../../CustomNodes/GenericNode/components/parameterComponent/l2Index";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { Button } from "../../components/bs-ui/button";
-import { Input } from "../../components/bs-ui/input";
+import { Input, Textarea } from "../../components/bs-ui/input";
 import { Label } from "../../components/bs-ui/label";
-import { Textarea } from "../../components/bs-ui/input";
-import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { userContext } from "../../contexts/userContext";
 import { createCustomFlowApi, getFlowApi } from "../../controllers/API/flow";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useHasForm } from "../../util/hook";
 import FormSet from "./components/FormSet";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { SettingIcon } from "@/components/bs-icons/setting";
-import { Switch } from "@/components/bs-ui/switch";
-import FlowSetting from "@/components/Pro/security/FlowSetting";
-import { locationContext } from "@/contexts/locationContext";
+import Avator from "@/components/bs-ui/input/avator";
+import { SkillIcon } from "@/components/bs-icons";
+import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 
 export default function l2Edit() {
     const { t } = useTranslation()
@@ -56,6 +55,7 @@ export default function l2Edit() {
             nameRef.current.value = _flow.name
             descRef.current.value = _flow.description
             guideRef.current.value = _flow.guide_word
+            setLogo(_flow.logo)
         })
     }, [id])
 
@@ -85,6 +85,7 @@ export default function l2Edit() {
 
 
     const navigate = useNavigate()
+    const flowSettingSaveRef = useRef(null)
     // 创建新技能 
     const handleCreateNewSkill = async () => {
         const name = nameRef.current.value
@@ -94,12 +95,15 @@ export default function l2Edit() {
         setLoading(true)
 
         await captureAndAlertRequestErrorHoc(createCustomFlowApi({
+            logo,
             name,
             description,
             guide_word: guideWords
         }, user.user_name).then(newFlow => {
             setFlow('l2 create flow', newFlow)
             navigate("/flow/" + newFlow.id, { replace: true }); // l3
+            // 创建技能后在保存
+            flowSettingSaveRef.current?.(newFlow.id)
         }))
         setLoading(false)
     }
@@ -119,7 +123,7 @@ export default function l2Edit() {
         setLoading(true)
         formRef.current?.save()
 
-        await saveFlow({ ...flow, name, description, guide_word: guideWords })
+        await saveFlow({ ...flow, name, description, guide_word: guideWords, logo })
         setLoading(false)
         navigate('/flow/' + id, { replace: true })
     }
@@ -132,7 +136,7 @@ export default function l2Edit() {
         setLoading(true)
         formRef.current?.save()
 
-        const res = await captureAndAlertRequestErrorHoc(saveFlow({ ...flow, name, description, guide_word: guideWords }))
+        const res = await captureAndAlertRequestErrorHoc(saveFlow({ ...flow, name, description, guide_word: guideWords, logo }))
         setLoading(false)
         if (res) {
             message({
@@ -154,6 +158,14 @@ export default function l2Edit() {
 
     // isForm
     const isForm = useHasForm(flow)
+
+    // 头像
+    const [logo, setLogo] = useState('')
+    const uploadAvator = (file) => {
+        uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
+            setLogo(res.file_path);
+        })
+    }
 
     return <div className="relative box-border h-full overflow-auto">
         <div className="p-6 pb-48 h-full overflow-y-auto">
@@ -179,6 +191,10 @@ export default function l2Edit() {
                     </p>
                     {/* base form */}
                     <div className="w-full overflow-hidden transition-all px-1">
+                        <div className="mt-4">
+                            <Label htmlFor="name">技能头像</Label>
+                            <Avator value={logo} className="mt-2" onChange={uploadAvator}><SkillIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
+                        </div>
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.skillName')}</Label>
                             <Input ref={nameRef} placeholder={t('skills.skillName')} className={`mt-2 ${error.name && 'border-red-400'}`} />
@@ -228,19 +244,19 @@ export default function l2Edit() {
                     {/* 安全审查 */}
                     {appConfig.isPro && <div>
                         <p className="text-center text-gray-400 mt-8 cursor-pointer flex justify-center" onClick={showContent}>
-                            内容安全审查设置
+                            {t('build.contentSecuritySettings')}
                             <ChevronUp />
                         </p>
                         {/* base form */}
                         <div className="w-full overflow-hidden transition-all px-1">
-                            <FlowSetting id={id} type={2} isOnline={nextFlow?.status === 2} />
+                            <FlowSetting id={id} type={2} isOnline={nextFlow?.status === 2} onSubTask={(fn) => flowSettingSaveRef.current = fn} />
                         </div>
                     </div>}
                 </div>
             </div>
         </div>
         {/* footer */}
-        <div className="absolute flex z-50 bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-[#fff] border-t dark:bg-gray-900">
+        <div className="absolute flex z-50 bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-background-login">
             {
                 isL2 ?
                     <div className="flex gap-4 w-[50%]">

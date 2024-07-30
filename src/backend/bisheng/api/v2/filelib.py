@@ -6,8 +6,6 @@ from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, 
                                                 delete_es, delete_knowledge_by,
                                                 delete_knowledge_file_vectors, delete_vector,
                                                 text_knowledge)
-from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.knowledge import delete_knowledge_hook, create_knowledge_hook
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
@@ -33,16 +31,12 @@ router = APIRouter(prefix='/filelib')
 
 
 @router.post('/', response_model=KnowledgeRead, status_code=201)
-def creat(knowledge: KnowledgeCreate):
+def create(knowledge: KnowledgeCreate):
     """创建知识库."""
     user_id = knowledge.user_id or settings.get_from_db('default_operator').get('user')
     if not user_id:
         raise HTTPException(status_code=500, detail='未配置default_operator中user配置')
-    user_payload = UserPayload(**{
-        "user_id": user_id
-    })
     db_knowledge = create_knowledge(knowledge, user_id)
-    create_knowledge_hook(db_knowledge, user_payload)
     return db_knowledge
 
 
@@ -61,8 +55,10 @@ def update_knowledge(*, knowledge: KnowledgeUpdate):
                 knowledge.user_id == settings.get_from_db('default_operator').get('user'))).all()
     if know:
         raise HTTPException(status_code=500, detail='知识库名称重复')
-
-    db_knowldge.name = knowledge.name
+    if knowledge.description:
+        db_knowldge.description = knowledge.description
+    if knowledge.name:
+        db_knowldge.name = knowledge.name
 
     with session_getter() as session:
         session.add(db_knowldge)
@@ -120,6 +116,13 @@ def get_knowledge(*, page_size: Optional[int], page_num: Optional[str]):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.get('/list', status_code=200)
+def get_knowledge_list(*, page_size: Optional[int], page_num: Optional[str]):
+    """ 读取所有知识库信息. """
+    res = get_knowledge(page_size=page_size, page_num=page_num)
+    return resp_200(res)
+
+
 @router.delete('/{knowledge_id}', status_code=200)
 def delete_knowledge_api(*, knowledge_id: int):
     """ 删除知识库信息. """
@@ -129,10 +132,7 @@ def delete_knowledge_api(*, knowledge_id: int):
         raise HTTPException(status_code=404, detail='knowledge not found')
     try:
         delete_knowledge_by(knowledge)
-        delete_knowledge_hook(knowledge, UserPayload(**{
-            "user_id": knowledge.user_id
-        }))
-        return {'message': 'knowledge deleted successfully'}
+        return resp_200(message='knowledge deleted successfully')
     except Exception as e:
         logger.exception(e)
         return resp_500(message=f'错误 e={str(e)}')
@@ -270,6 +270,13 @@ def get_filelist(*, knowledge_id: int, page_size: int = 10, page_num: int = 1):
         'total': total_count,
         'writeable': writable
     }
+
+
+@router.get('/file/list', status_code=200)
+def get_filelist_V2(*, knowledge_id: int, page_size: int = 10, page_num: int = 1):
+    """ 获取知识库文件信息. """
+    res = get_filelist(knowledge_id=knowledge_id, page_size=page_size, page_num=page_num)
+    return resp_200(res)
 
 
 @router.post('/chunks', response_model=UnifiedResponseModel[KnowledgeFileRead], status_code=200)

@@ -2,11 +2,11 @@ import json
 from typing import List
 
 from pydantic import BaseModel
-from fastapi import Depends
-from fastapi_jwt_auth import AuthJWT
 
 from bisheng.settings import settings
-from bisheng.api.services.user_service import UserPayload
+
+# 配置JWT token的有效期
+ACCESS_TOKEN_EXPIRE_TIME = 86400
 
 
 class Settings(BaseModel):
@@ -17,11 +17,3 @@ class Settings(BaseModel):
     authjwt_cookie_csrf_protect: bool = False
 
 
-async def get_login_user(authorize: AuthJWT = Depends()):
-    """
-    获取当前登录的用户
-    """
-    authorize.jwt_required()
-    current_user = json.loads(authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-    return user

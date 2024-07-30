@@ -1,17 +1,28 @@
 import json
-
 import functools
+from base64 import b64decode
 from typing import List
 
+import rsa
+from fastapi import HTTPException, Depends, Request
+from fastapi_jwt_auth import AuthJWT
+
+from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
+from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.user import UserLoginOfflineError, UserNameAlreadyExistError, UserNeedGroupAndRoleError
+from bisheng.api.utils import md5_hash
+from bisheng.api.v1.schemas import CreateUserReq
+from bisheng.cache.redis import redis_client
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeRead
+from bisheng.database.models.role import AdminRole
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
-from fastapi import HTTPException
-from fastapi_jwt_auth import AuthJWT
+from bisheng.settings import settings
+from bisheng.utils.constants import USER_CURRENT_SESSION, RSA_KEY
 
 
 class UserPayload:
@@ -25,7 +36,13 @@ class UserPayload:
         self.user_name = kwargs.get('user_name')
 
     def is_admin(self):
-        return self.user_role == 'admin'
+        if self.user_role == 'admin':
+            return True
+        if isinstance(self.user_role, list):
+            for one in self.user_role:
+                if one == AdminRole:
+                    return True
+        return False
 
     @staticmethod
     def wrapper_access_check(func):
@@ -81,6 +98,41 @@ class UserPayload:
         return False
 
 
+class UserService:
+
+    @classmethod
+    def decrypt_md5_password(cls, password: str):
+        if value := redis_client.get(RSA_KEY):
+            private_key = value[1]
+            password = md5_hash(rsa.decrypt(b64decode(password), private_key).decode('utf-8'))
+        else:
+            password = md5_hash(password)
+        return password
+
+    @classmethod
+    def create_user(cls, request: Request, login_user: UserPayload, req_data: CreateUserReq):
+        """
+        创建用户
+        """
+        exists_user = UserDao.get_user_by_username(req_data.user_name)
+        if exists_user:
+            # 抛出异常
+            raise UserNameAlreadyExistError.http_exception()
+        user = User(
+            user_name=req_data.user_name,
+            password=cls.decrypt_md5_password(req_data.password),
+        )
+        group_ids = []
+        role_ids = []
+        for one in req_data.group_roles:
+            group_ids.append(one.group_id)
+            role_ids.extend(one.role_ids)
+        if not group_ids or not role_ids:
+            raise UserNeedGroupAndRoleError.http_exception()
+        user = UserDao.add_user_with_groups_and_roles(user, group_ids, role_ids)
+        return user
+
+
 def sso_login():
     pass
 
@@ -117,7 +169,7 @@ def gen_user_jwt(db_user: User):
     # 生成JWT令牌
     payload = {'user_name': db_user.user_name, 'user_id': db_user.user_id, 'role': role}
     # Create the tokens and passing to set_access_cookies or set_refresh_cookies
-    access_token = AuthJWT().create_access_token(subject=json.dumps(payload), expires_time=86400)
+    access_token = AuthJWT().create_access_token(subject=json.dumps(payload), expires_time=ACCESS_TOKEN_EXPIRE_TIME)
 
     refresh_token = AuthJWT().create_refresh_token(subject=db_user.user_name)
 
@@ -202,3 +254,33 @@ def get_assistant_list_by_access(role_id: int, name: str, page_num: int, page_si
         'total':
             total_count
     }
+
+
+async def get_login_user(authorize: AuthJWT = Depends()) -> UserPayload:
+    """
+    获取当前登录的用户
+    """
+    # 校验是否过期，过期则直接返回http 状态码的 401
+    authorize.jwt_required()
+
+    current_user = json.loads(authorize.get_jwt_subject())
+    user = UserPayload(**current_user)
+
+    # 判断是否允许多点登录
+    if not settings.get_system_login_method().allow_multi_login:
+        # 获取access_token
+        current_token = redis_client.get(USER_CURRENT_SESSION.format(user.user_id))
+        # 登录被挤下线了，http状态码是200, status_code是特殊code
+        if current_token != authorize._token:
+            raise UserLoginOfflineError.http_exception()
+    return user
+
+
+async def get_admin_user(authorize: AuthJWT = Depends()) -> UserPayload:
+    """
+    获取超级管理账号，非超级管理员用户，抛出异常
+    """
+    login_user = await get_login_user(authorize)
+    if not login_user.is_admin():
+        raise UnAuthorizedError.http_exception()
+    return login_user

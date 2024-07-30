@@ -78,5 +78,16 @@ export function getUserGroupsProApi() {
 // GET sso URL
 export function getSSOurlApi() {
     // return Promise.resolve(url)
-    return axios.get(`/api/oauth2/list`).then(res => res.wx);
+    return axios.get(`/api/oauth2/list`)
+}
+
+export async function getKeyApi() {
+    return await axios.get('/api/getkey')
+}
+
+export async function ldapLoginApi(username:string, password:string) {
+    return await axios.post('/api/oauth2/ldap', {
+        username,
+        password
+    })
 }

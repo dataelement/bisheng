@@ -6,10 +6,9 @@ from uuid import UUID
 import yaml
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
-from bisheng.api.JWT import get_login_user
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema
-from bisheng.api.services.user_service import UserPayload
+from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import get_url_content
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500, DeleteToolTypeReq,
@@ -31,14 +30,12 @@ chat_manager = ChatManager()
 @router.get('', response_model=UnifiedResponseModel[List[AssistantInfo]])
 def get_assistant(*,
                   name: str = Query(default=None, description='助手名称，模糊匹配, 包含描述的模糊匹配'),
+                  tag_id: int = Query(default=None, description='标签ID'),
                   page: Optional[int] = Query(default=1, gt=0, description='页码'),
                   limit: Optional[int] = Query(default=10, gt=0, description='每页条数'),
                   status: Optional[int] = Query(default=None, description='是否上线状态'),
-                  Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-    return AssistantService.get_assistant(user, name, status, page, limit)
+                  login_user: UserPayload = Depends(get_login_user)):
+    return AssistantService.get_assistant(login_user, name, status, tag_id, page, limit)
 
 
 # 获取某个助手的详细信息
@@ -111,39 +108,29 @@ async def auto_update_assistant(*,
 async def update_prompt(*,
                         assistant_id: UUID = Body(description='助手唯一ID', alias='id'),
                         prompt: str = Body(description='用户使用的prompt'),
-                        Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-    return AssistantService.update_prompt(assistant_id, prompt, user)
+                        login_user: UserPayload = Depends(get_login_user)):
+    return AssistantService.update_prompt(assistant_id, prompt, login_user)
 
 
 @router.post('/flow', response_model=UnifiedResponseModel)
 async def update_flow_list(*,
                            assistant_id: UUID = Body(description='助手唯一ID', alias='id'),
                            flow_list: List[str] = Body(description='用户选择的技能列表'),
-                           Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-    return AssistantService.update_flow_list(assistant_id, flow_list, user)
+                           login_user: UserPayload = Depends(get_login_user)):
+    return AssistantService.update_flow_list(assistant_id, flow_list, login_user)
 
 
 @router.post('/tool', response_model=UnifiedResponseModel)
 async def update_tool_list(*,
                            assistant_id: UUID = Body(description='助手唯一ID', alias='id'),
                            tool_list: List[int] = Body(description='用户选择的工具列表'),
-                           Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-    return AssistantService.update_tool_list(assistant_id, tool_list, user)
+                           login_user: UserPayload = Depends(get_login_user)):
+    return AssistantService.update_tool_list(assistant_id, tool_list, login_user)
 
 
 # 获取助手可用的模型列表
 @router.get('/models', response_model=UnifiedResponseModel)
-async def get_models(*, Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
+async def get_models(*, login_user: UserPayload = Depends(get_login_user)):
     return AssistantService.get_models()
 
 
@@ -191,7 +178,7 @@ async def get_tool_schema(*,
                           download_url: Optional[str] = Body(default=None,
                                                              description='下载url不为空的话优先用下载url'),
                           file_content: Optional[str] = Body(default=None, description='上传的文件'),
-                          Authorize: AuthJWT = Depends()):
+                          login_user: UserPayload = Depends(get_login_user)):
     """ 下载或者解析openapi schema的内容 转为助手自定义工具的格式 """
     if download_url:
         try:
@@ -241,42 +228,34 @@ async def get_tool_schema(*,
 
 @router.post('/tool_list', response_model=UnifiedResponseModel[GptsToolsTypeRead])
 def add_tool_type(*, req: Dict = Body(default={}, description="openapi解析后的工具对象"),
-                  Authorize: AuthJWT = Depends()):
+                  login_user: UserPayload = Depends(get_login_user)):
     """ 新增自定义tool """
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
     req = GptsToolsTypeRead(**req)
-    return AssistantService.add_gpts_tools(user, req)
+    return AssistantService.add_gpts_tools(login_user, req)
 
 
 @router.put('/tool_list', response_model=UnifiedResponseModel[GptsToolsTypeRead])
-def update_tool_type(*, req: Dict = Body(default={}, description="通过openapi 解析后的内容，包含类别的唯一ID"),
-                     Authorize: AuthJWT = Depends()):
+def update_tool_type(*,
+                     login_user: UserPayload = Depends(get_login_user),
+                     req: Dict = Body(default={}, description="通过openapi 解析后的内容，包含类别的唯一ID")):
     """ 更新自定义tool """
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
     req = GptsToolsTypeRead(**req)
-    return AssistantService.update_gpts_tools(user, req)
+    return AssistantService.update_gpts_tools(login_user, req)
 
 
 @router.delete('/tool_list', response_model=UnifiedResponseModel)
-def delete_tool_type(*, req: DeleteToolTypeReq, Authorize: AuthJWT = Depends()):
+def delete_tool_type(*,
+                     login_user: UserPayload = Depends(get_login_user),
+                     req: DeleteToolTypeReq):
     """ 删除自定义工具 """
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-    return AssistantService.delete_gpts_tools(user, req.tool_type_id)
+    return AssistantService.delete_gpts_tools(login_user, req.tool_type_id)
 
 
 @router.post('/tool_test', response_model=UnifiedResponseModel)
-async def test_tool_type(*, req: TestToolReq, Authorize: AuthJWT = Depends()):
+async def test_tool_type(*,
+                         login_user: UserPayload = Depends(get_login_user),
+                         req: TestToolReq):
     """ 测试自定义工具 """
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-
     tool_params = OpenApiSchema.parse_openapi_tool_params('test', 'test', req.extra, req.server_host,
                                                           req.auth_method, req.auth_type, req.api_key)
 

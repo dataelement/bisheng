@@ -36,9 +36,9 @@ const enum LimitType {
     UNLIMITED = 'unlimited'
 }
 
-function FlowRadio({ limit = 0, onChange }) {
+function FlowRadio({ limit, onChange }) {
     const { t } = useTranslation()
-    const [status, setStatus] = useState(limit ? LimitType.LIMITED : LimitType.UNLIMITED)
+    const [status, setStatus] = useState(LimitType.UNLIMITED)
     const [limitState, setLimitState] = useState<any>(limit)
 
     const handleCommit = (type: LimitType, value: string = '0') => {
@@ -48,6 +48,10 @@ function FlowRadio({ limit = 0, onChange }) {
         setLimitState(value)
         onChange(Number(value))
     }
+    useEffect(() => {
+        setStatus(limit ? LimitType.LIMITED : LimitType.UNLIMITED)
+        setLimitState(limit)
+    }, [limit])
 
     return <div>
         <RadioGroup className="flex space-x-2 h-[20px] items-center" value={status}
@@ -191,7 +195,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         // 过滤系统管理员
         const users = selected.filter(item => !lockOptions.some(id => id === item.value))
 
-        const res:any = await (data.id ? updateUserGroup(data.id, form, users) : // 修改
+        const res: any = await (data.id ? updateUserGroup(data.id, form, users) : // 修改
             saveUserGroup(form, users)) // 保存
 
         if (appConfig.isPro) {
@@ -207,8 +211,8 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
     }
 
     useEffect(() => { // 初始化数据
+        setForm({ ...form, groupName: data.group_name, groupLimit: data.group_limit || 0 })
         async function init() {
-            setForm({ ...form, groupName: data.group_name, groupLimit: data.group_limit || 0 })
             const res = await getAdminsApi()
             const users = data.group_admins?.map(d => ({ label: d.user_name, value: d.user_id })) || []
             const defaultUsers = res.map(d => ({ label: d.user_name, value: d.user_id }))
@@ -254,7 +258,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
                 ></FlowControl>
             </div>
         </>}
-        <div className="flex justify-center items-center absolute bottom-0 w-[630px] h-[8vh] gap-4 mt-[100px] bg-[white]">
+        <div className="flex justify-center items-center absolute bottom-0 w-[630px] h-[8vh] gap-4 mt-[100px] bg-background-login">
             <Button variant="outline" className="px-16" onClick={onChange}>{t('cancel')}</Button>
             <Button className="px-16" onClick={handleSave}>{t('save')}</Button>
         </div>

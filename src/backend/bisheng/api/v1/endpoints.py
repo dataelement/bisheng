@@ -4,15 +4,20 @@ from typing import Annotated, Optional, Union
 from uuid import UUID
 
 import yaml
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, Request
+from sqlmodel import select
+
 from bisheng import settings
+from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
+from bisheng.api.utils import get_request_ip
 from bisheng.api.v1 import knowledge
 from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, UploadFileResponse,
                                     resp_200)
 from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import save_uploaded_file
+from bisheng.cache.utils import save_uploaded_file, upload_file_to_minio
 from bisheng.chat.utils import judge_source, process_source_document
-from bisheng.database.base import session_getter
-from bisheng.database.models.config import Config
+from bisheng.database.base import session_getter, generate_uuid
+from bisheng.database.models.config import Config, ConfigDao
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage
 from bisheng.interface.types import get_all_types_dict
@@ -20,9 +25,7 @@ from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile
-from fastapi_jwt_auth import AuthJWT
-from sqlmodel import select
+from bisheng.utils.minio_client import bucket
 
 try:
     from bisheng.worker import process_graph_cached_task
@@ -30,7 +33,6 @@ except ImportError:
 
     def process_graph_cached_task(*args, **kwargs):
         raise NotImplementedError('Celery is not installed')
-
 
 # build router
 router = APIRouter(tags=['Base'])
@@ -43,7 +45,7 @@ def get_all():
 
 
 @router.get('/env')
-def getn_env():
+def get_env():
     """获取环境变量参数"""
     uns_support = [
         'png', 'jpg', 'jpeg', 'bmp', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md',
@@ -63,19 +65,14 @@ def getn_env():
         env['office_url'] = settings.settings.get_from_db('office_url')
     # add tips from settings
     env['dialog_tips'] = settings.settings.get_from_db('dialog_tips')
-    # 判断是否SSO
-    env['sso'] = settings.settings.get_system_login_method().get('SSO_OAuth', False)
     # add env dict from settings
     env.update(settings.settings.get_from_db('env') or {})
+    env['pro'] = settings.settings.get_system_login_method().bisheng_pro
     return resp_200(env)
 
 
 @router.get('/config')
-def get_config(Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    if payload.get('role') != 'admin':
-        raise HTTPException(status_code=500, detail='Unauthorized')
+def get_config(admin_user: UserPayload = Depends(get_admin_user)):
     with session_getter() as session:
         config = session.exec(select(Config).where(Config.key == 'initdb_config')).first()
     if config:
@@ -86,7 +83,9 @@ def get_config(Authorize: AuthJWT = Depends()):
 
 
 @router.post('/config/save')
-def save_config(data: dict):
+def save_config(data: dict, admin_user: UserPayload = Depends(get_admin_user)):
+    if not data.get('data', '').strip():
+        raise HTTPException(status_code=500, detail='配置不能为空')
     try:
         # 校验是否符合yaml格式
         _ = yaml.safe_load(data.get('data'))
@@ -102,16 +101,44 @@ def save_config(data: dict):
     return resp_200('保存成功')
 
 
+@router.get('/web/config')
+async def get_web_config():
+    """ 获取一些前端所需要的配置项，内容由前端决定 """
+    web_conf = ConfigDao.get_config('web_config')
+    if not web_conf:
+        return resp_200(data='')
+    return resp_200(data={
+        "value": web_conf.value
+    })
+
+
+@router.post('/web/config')
+async def update_web_config(request: Request,
+                            admin_user: UserPayload = Depends(get_admin_user),
+                            value: str = Body(embed=True)):
+    """ 更新一些前端所需要的配置项，内容由前端决定 """
+    logger.info(f'update_web_config user_name={admin_user.user_name}, ip={get_request_ip(request)}')
+    web_conf = ConfigDao.get_config('web_config')
+    if not web_conf:
+        web_conf = Config(key='web_config', value=value)
+    else:
+        web_conf.value = value
+    ConfigDao.insert_config(web_conf)
+    return resp_200(data={
+        "value": web_conf.value
+    })
+
+
 @router.post('/process/{flow_id}')
 async def process_flow_old(
-    flow_id: UUID,
-    inputs: Optional[dict] = None,
-    tweaks: Optional[dict] = None,
-    history_count: Annotated[int, Body(embed=True)] = 10,
-    clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
-    session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
-    task_service: 'TaskService' = Depends(get_task_service),
-    sync: Annotated[bool, Body(embed=True)] = True,
+        flow_id: UUID,
+        inputs: Optional[dict] = None,
+        tweaks: Optional[dict] = None,
+        history_count: Annotated[int, Body(embed=True)] = 10,
+        clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
+        session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
+        task_service: 'TaskService' = Depends(get_task_service),
+        sync: Annotated[bool, Body(embed=True)] = True,
 ):
     return await process_flow(flow_id, inputs, tweaks, history_count, clear_cache, session_id,
                               task_service, sync)
@@ -245,6 +272,30 @@ async def process_flow(
         # Log stack trace
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post('/upload/icon')
+async def upload_icon(request: Request,
+                      login_user: UserPayload = Depends(get_login_user),
+                      file: UploadFile = None):
+    if file.size == 0:
+        raise HTTPException(status_code=500, detail='上传文件不能为空')
+    file_ext = file.filename.split('.')[-1].lower()
+    if file_ext not in ('jpeg', 'jpg', 'png'):
+        raise HTTPException(status_code=500, detail='仅支持 JPEG 和 PNG 格式的图片')
+
+    try:
+        file_name = f'icon/{generate_uuid()}.{file_ext}'
+        file_path = upload_file_to_minio(file, object_name=file_name, bucket_name=bucket)
+        if not isinstance(file_path, str):
+            file_path = str(file_path)
+        return resp_200(UploadFileResponse(
+            file_path=file_path,  # minio可访问的链接
+            relative_path=file_name,  # minio中的object_name
+        ))
+    except Exception as exc:
+        logger.exception(f'Error saving file: ')
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.post('/upload/{flow_id}',

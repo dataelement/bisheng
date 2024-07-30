@@ -17,6 +17,7 @@ export default function ToolItem({
     data,
     onEdit = (id) => { },
     onSelect,
+    onSetClick = null
 }) {
     const { t } = useTranslation();
 
@@ -30,6 +31,12 @@ export default function ToolItem({
                             type === 'edit' && <div
                                 className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
                                 onClick={(e) => onEdit(data.id)}
+                            ><SettingIcon /></div>
+                        }
+                        {
+                            onSetClick && <div
+                                className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
+                                onClick={onSetClick}
                             ><SettingIcon /></div>
                         }
                     </div>
@@ -72,7 +79,7 @@ export default function ToolItem({
                                 {
                                     api.api_params.map(param => (
                                         <div>
-                                            <span className=" rounded-xl bg-gray-200 px-2 py-1 text-xs font-medium text-white">{param.name}</span>
+                                            <span className=" rounded-xl bg-gray-200 dark:bg-background-login px-2 py-1 text-xs font-medium text-white">{param.name}</span>
                                             {/* <span>{param.schema.type}</span> */}
                                         </div>
                                     ))

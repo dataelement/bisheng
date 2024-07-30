@@ -90,6 +90,16 @@ class GroupResourceDao(GroupResourceBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_resources_group(cls, resource_type: ResourceTypeEnum, third_ids: List[str]) -> list[GroupResource]:
+        """
+        获取批量资源所属的分组
+        """
+        with session_getter() as session:
+            statement = select(GroupResource).where(GroupResource.third_id.in_(third_ids),
+                                                    GroupResource.type == resource_type.value)
+            return session.exec(statement).all()
+
+    @classmethod
     def delete_group_resource_by_third_id(cls, third_id: str, resource_type: ResourceTypeEnum) -> None:
         with (session_getter() as session):
             statement = delete(GroupResource).where(
@@ -97,3 +107,26 @@ class GroupResourceDao(GroupResourceBase):
                 GroupResource.type == resource_type.value)
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    def delete_group_resource_by_group_id(cls, group_id: int):
+        with (session_getter() as session):
+            statement = delete(GroupResource).where(GroupResource.group_id == group_id)
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def get_group_all_resource(cls, group_id: int) -> List[GroupResource]:
+        """
+        获取分组下的所有资源
+        """
+        with session_getter() as session:
+            return session.exec(
+                select(GroupResource).where(GroupResource.group_id == group_id)).all()
+
+    @classmethod
+    def update_group_resource(cls, group_resources: List[GroupResource]) -> List[GroupResource]:
+        with (session_getter() as session):
+            session.add_all(group_resources)
+            session.commit()
+        return group_resources

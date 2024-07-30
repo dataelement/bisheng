@@ -1,4 +1,4 @@
-import { TitleIconBg } from "@/components/bs-comp/cardComponent";
+import { TitleIconBg, TitleLogo } from "@/components/bs-comp/cardComponent";
 import { AssistantIcon } from "@/components/bs-icons/assistant";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
@@ -31,10 +31,14 @@ export default function Header({ onSave, onLine }) {
         needSaveRef.current = true
     }
 
-    return <div className="flex justify-between items-center border-b px-4">
+    return <div className="flex justify-between bg-background-login items-center border-b px-4">
         <div className="flex items-center gap-2 py-4">
             <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ChevronLeftIcon className="h-4 w-4" /></Button>
-            <TitleIconBg id={assistantState.id} className="ml-4"><AssistantIcon /></TitleIconBg>
+            <TitleLogo
+                url={assistantState.logo}
+                id={assistantState.id}
+                className="ml-4"
+            ><AssistantIcon /></TitleLogo>
             <span className="bisheng-title">{assistantState.name}</span>
             {/* edit dialog */}
             <Dialog open={editShow} onOpenChange={setEditShow}>
@@ -43,6 +47,7 @@ export default function Header({ onSave, onLine }) {
                 </DialogTrigger>
                 {
                     editShow && <EditAssistantDialog
+                        logo={assistantState.logo || ''}
                         name={assistantState.name}
                         desc={assistantState.desc}
                         onSave={handleEditSave}></EditAssistantDialog>

@@ -106,9 +106,9 @@ export default function Header({ flow }) {
         }))
     }
 
-    return <div className="flex justify-between items-center border-b px-4">
+    return <div className="flex justify-between items-center border-b px-4 bg-background-main">
         {
-            loading && <div className=" fixed left-0 top-0 w-full h-screen bg-gray-50/60 z-50 flex items-center justify-center">
+            loading && <div className=" fixed left-0 top-0 w-full h-screen bg-background/60 z-50 flex items-center justify-center">
                 <LoadIcon className="mr-2 text-gray-600" />
                 <span>切换到 {version.name}</span>
             </div>
@@ -155,7 +155,7 @@ export default function Header({ flow }) {
                                 handleChangeVersion(vid)
                             }} className="gap-0">
                                 {versions.map((vers, index) => (
-                                    <div key={vers.id} className="group flex items-center gap-4 px-4 py-2 cursor-pointer hover:bg-gray-100 border-b">
+                                    <div key={vers.id} className="group flex items-center gap-4 px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 border-b">
                                         <RadioGroupItem value={vers.id + ''} />
                                         <div className="w-[198px]">
                                             <TextInput

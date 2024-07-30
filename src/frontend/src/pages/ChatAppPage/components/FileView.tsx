@@ -5,7 +5,7 @@ import { FixedSizeList as List, areEqual } from 'react-window';
 
 const SASS_HOST = 'https://bisheng.dataelem.com'
 export const checkSassUrl = (url: string) => {
-    return url.replace(/https?:\/\/[^\/]+/, '')
+    return url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)
     // location.origin === SASS_HOST ? url.replace(/https?:\/\/[^\/]+/, '') : url;
 }
 interface Chunk {
@@ -144,7 +144,7 @@ export default function FileView({ data }) {
 
         // sass环境使用sass地址
         const pdfUrl = checkSassUrl(data.fileUrl);  // '/doc.pdf';
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = __APP_ENV__.BASE_URL + '/pdf.worker.min.js';
         pdfjsLib.getDocument(pdfUrl).promise.then((pdfDocument) => {
             setLoading(false)
             setPdf(pdfDocument)
@@ -183,14 +183,14 @@ export default function FileView({ data }) {
         fileWidthRef.current = w
     }
 
-    return <div ref={paneRef} className="flex-1 bg-gray-100 rounded-md py-4 px-2 relative">
+    return <div ref={paneRef} className="flex-1 bg-gray-100 rounded-md py-4 px-2 relative" onContextMenu={(e) => e.preventDefault()}>
         {
             loading
                 ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                     <span className="loading loading-infinity loading-lg"></span>
                 </div>
                 : <div id="warp-pdf" className="file-view absolute">
-                    <List
+                    <List 
                         ref={listRef}
                         itemCount={pdf?.numPages || 100}
                         // A4 比例(itemSize：item的高度)

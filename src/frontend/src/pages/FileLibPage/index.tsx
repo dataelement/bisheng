@@ -173,7 +173,7 @@ export default function FileLibPage() {
                     <TabsContent value="account">
                         <div className="flex justify-end gap-4 items-center">
                             <SearchInput placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)} />
-                            <Button className="px-8" onClick={() => setOpen(true)}>{t('create')}</Button>
+                            <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
                         </div>
                         <Table>
                             <TableHeader>
@@ -188,18 +188,22 @@ export default function FileLibPage() {
                             </TableHeader>
 
                             <TableBody>
-                                {datalist.map((el) => (
+                                {datalist.map((el:any) => (
                                     <TableRow key={el.id}>
-                                        <TableCell className="font-medium">{el.name}</TableCell>
+                                        <TableCell className="font-medium max-w-[200px]">
+                                            <div className=" truncate-multiline">{el.name}</div>
+                                        </TableCell>
                                         <TableCell>{el.model || '--'}</TableCell>
                                         <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                         <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                                        <TableCell>{el.user_name || '--'}</TableCell>
+                                        <TableCell className="max-w-[300px] break-all">
+                                            <div className=" truncate-multiline">{el.user_name || '--'}</div>
+                                        </TableCell>
                                         <TableCell className="text-right" onClick={() => {
                                             // @ts-ignore
                                             window.libname = el.name;
                                         }}>
-                                            <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-[#0455e1]" onClick={handleCachePage}>{t('lib.details')}</Link>
+                                            <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
                                             {user.role === 'admin' || user.user_id === el.user_id ?
                                                 <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500 px-0">{t('delete')}</Button> :
                                                 <Button variant="link" className="ml-4 text-gray-400 px-0">{t('delete')}</Button>
@@ -213,7 +217,7 @@ export default function FileLibPage() {
                     <TabsContent value="password"></TabsContent>
                 </Tabs>
             </div>
-            <div className="bisheng-table-footer px-6">
+            <div className="bisheng-table-footer px-6 bg-background-login">
                 <p className="desc">{t('lib.libraryCollection')}</p>
                 <div>
                     <AutoPagination
