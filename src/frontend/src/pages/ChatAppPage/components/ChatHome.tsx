@@ -82,7 +82,7 @@ export default function HomePage({ onSelect }) {
             </div>
             <SearchInput onChange={handleSearch} placeholder="搜索助手或者技能" className="w-[600px] min-w-[300px] mt-[20px]" />
         </div>
-        <div className="mt-[20px] w-[95%] ml-[3rem]">
+        <div className="mt-[20px] w-[95%]">
             <div className="flex flex-wrap">
                 <Button variant={chooseId ? "outline" : "default"} className="mb-2 mr-5"
                 onClick={() => { setChooseId(null); loadData(false) }}>全部</Button>
@@ -96,8 +96,8 @@ export default function HomePage({ onSelect }) {
                 {user.role === 'admin' && <SettingIcon onClick={() => setOpen(true)} className="h-[30px] w-[30px] cursor-pointer" />}
             </div>
         </div>
-        <div className="container m-auto relative">
-            <div className="min-w-[696px] grid sm:grid-cols-2 2xl:grid-cols-3 my-size:grid-cols-4 h-[calc(100vh-348px)] gap-3 mt-4 pb-24 overflow-y-auto scrollbar-hide">
+        <div className="m-auto relative">
+            <div className="min-w-[696px] grid auto-rows-min sm:grid-cols-2 2xl:grid-cols-3 my-size:grid-cols-4 my-size-lg:grid-cols-5 h-[calc(100vh-348px)] gap-3 mt-4 pb-24 overflow-y-auto scrollbar-hide">
                 {
                     options.length ? options.map((flow, i) => (
                         <CardComponent key={i}

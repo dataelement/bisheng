@@ -80,11 +80,11 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
     return <div className="pt-2 h-[calc(100vh-162px)] px-2 overflow-y-auto">
         <div className="border-b pb-2 flex justify-between items-center">
             <h1 className="">{t('finetune.createTrainingTask')}</h1>
-            <Button variant="black" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+            <Button variant="black" onClick={rtClick}>FT服务管理</Button>
         </div>
         {/* base */}
         <div className="border-b pb-4">
-            <div className="flex gap-4 flex-col mt-4">
+            {/* <div className="flex gap-4 flex-col mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500 flex gap-2 items-center">
                     <span>{t('finetune.rtService')}</span>
                     <TooltipProvider>
@@ -111,7 +111,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
                     </Select>
                     <Button size="sm" onClick={gpuClick}>{t('finetune.gpuResourceUsage')}</Button>
                 </div>
-            </div>
+            </div> */}
             {/* datas */}
             <div className="flex gap-4 flex-col mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.baseModel')}</small>

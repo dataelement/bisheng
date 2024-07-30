@@ -1,5 +1,5 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SearchInput } from "@/components/bs-ui/input";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Label } from "@/components/bs-ui/label";
@@ -148,11 +148,18 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
         })
     }
 
+    const showAdd = useMemo(() => {
+        if(data.length === 1 && data[0].label === keyword) {
+            return false
+        } 
+        return true
+    }, [data])
+
     return <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
             {children}
         </PopoverTrigger>
-        <PopoverContent onClick={(e) => e.stopPropagation()}>
+        <PopoverContent className="z-[20]" onClick={(e) => e.stopPropagation()}>
             <div>
                 <SearchInput placeholder="搜索标签" value={keyword} onChange={handleSearch} className="w-[240px]"
                     onKeyDown={(e) => {
@@ -178,7 +185,7 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
                         <Trash2 size={16} onClick={() => handleDelete(d)} className="text-gray-600 cursor-pointer" />
                     </div>}
                 </div>)}
-                {(!data.length && user.role === 'admin') && <div onClick={handleAdd}
+                {(showAdd && user.role === 'admin') && <div onClick={handleAdd}
                     className="flex group items-center h-8 rounded-sm bg-[#F5F5F5] cursor-pointer">
                     <PlusIcon className="mx-2 text-[#727C8F]"/>
                     <span>创建“新标签”</span>
