@@ -135,7 +135,7 @@ class TrainsetGenerator:
             seed: int = 42,
             prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
             filter_lowquality_context: bool = False,
-            filter_lowquality_question: bool = False
+            filter_lowquality_question: bool = False,
             answer_prompt: Optional[HumanMessagePromptTemplate] = ANSWER_FORMULATE,
     ) -> None:
         self.generator_llm = generator_llm
@@ -167,8 +167,8 @@ class TrainsetGenerator:
             chunk_size: int = 512,
             trainset_distribution: dict = DEFAULT_TRAIN_DISTRIBUTION,
             prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
-            filter_lowquality_context: bool = False, 
-            filter_lowquality_question: bool = False
+            filter_lowquality_context: bool = False,
+            filter_lowquality_question: bool = False,
             answer_prompt: Optional[PromptTemplate] = ANSWER_FORMULATE,
     ):
         generator_llm = llm
@@ -180,7 +180,7 @@ class TrainsetGenerator:
             trainset_distribution=trainset_distribution,
             prompt=prompt,
             filter_lowquality_context=filter_lowquality_context,
-            filter_lowquality_question=filter_lowquality_question
+            filter_lowquality_question=filter_lowquality_question,
             answer_prompt=answer_prompt,
         )
 
@@ -424,14 +424,14 @@ class QAGenerationChainV2(Chain):
         dataset = self.generator.generate(documents=self.documents, train_size=self.k)
         df = dataset.to_pandas()
         qa_pairs = df.to_dict("records")
-        qa = ''
+        qa = []
         for pair in qa_pairs:
-            qa += json.dumps(
-                {
-                    "question": pair["question"],
-                    "answer": pair["ground_truth"][0],
-                    "context": pair["ground_truth_context"][0],
-                }, ensure_ascii=False)
+            qa.append({
+                "question": pair["question"],
+                "answer": pair["ground_truth"][0],
+                "context": pair["ground_truth_context"][0],
+            })
+        qa = f'```json\n{json.dumps(qa, ensure_ascii=False, indent=4)}\n```'
         return {self.output_key: qa}
 
     async def _acall(
