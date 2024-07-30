@@ -358,9 +358,33 @@ class OpenAIChatCompletionResp(BaseModel):
 
 
 class LLMModelInfo(LLMModelBase):
-    id: [int]
+    id: Optional[int]
 
 
 class LLMServerInfo(LLMServerBase):
     id: Optional[int]
     models: List[LLMModelInfo] = Field(default=[], description="模型列表")
+
+
+class KnowledgeLLMConfig(BaseModel):
+    embedding_model_id: Optional[int] = Field(description="知识库默认embedding模型的ID")
+    source_model_id: Optional[int] = Field(description="知识库溯源模型的ID")
+    extract_title_model_id: Optional[int] = Field(description="文档知识库提取标题模型的ID")
+    qa_similar_model_id: Optional[int] = Field(description="QA知识库相似问模型的ID")
+
+
+class AssistantLLMItem(BaseModel):
+    model_id: Optional[int] = Field(description="模型的ID")
+    agent_executor_type: Optional[str] = Field(description="执行模式。function call 或者 React")
+    knowledge_search_max_content: Optional[int] = Field(description="知识库检索最大字符串数")
+    knowledge_sort_index: bool = Field(default=False, description="知识库检索后是否重排")
+    default: bool = Field(default=False, description="是否为默认模型")
+
+
+class AssistantLLMConfig(BaseModel):
+    llm_list: Optional[List[AssistantLLMItem]] = Field(default=[], description="助手可选的LLM列表")
+    auto_llm: Optional[int] = Field(description="助手画像自动优化模型的ID")
+
+
+class EvaluationLLMConfig(BaseModel):
+    model_id: Optional[int] = Field(description="评测功能默认模型的ID")

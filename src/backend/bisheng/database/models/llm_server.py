@@ -49,7 +49,7 @@ class LLMServerBase(SQLModelSerializable):
 
 
 class LLMModelBase(SQLModelSerializable):
-    server_id: int = Field(nullable=False, index=True, description='服务ID')
+    server_id: Optional[int] = Field(nullable=False, index=True, description='服务ID')
     name: str = Field(default='', description='模型展示名')
     model_name: str = Field(default='', description='模型名称，实例化组件时用的参数')
     model_type: LLMModelType = Field(description='模型类型')
@@ -92,12 +92,15 @@ class LLMDao:
     def insert_server_with_models(cls, server: LLMServer, models: List[LLMModel]):
         """ 插入服务提供方和模型 """
         with session_getter() as session:
+            if server.id:
+                session.delete(LLMModel).where(LLMModel.server_id == server.id)
             session.add(server)
             session.flush()
             for model in models:
                 model.server_id = server.id
             session.add_all(models)
             session.commit()
+            session.refresh(server)
             return server
 
     @classmethod
@@ -115,9 +118,23 @@ class LLMDao:
             return session.exec(statement).first()
 
     @classmethod
+    def get_server_by_name(cls, server_name: str) -> Optional[LLMServer]:
+        """ 根据服务名称获取服务提供方 """
+        statement = select(LLMServer).where(LLMServer.name == server_name)
+        with session_getter() as session:
+            return session.exec(statement).first()
+
+    @classmethod
     def get_model_by_id(cls, model_id: int) -> Optional[LLMModel]:
         """ 根据模型ID获取模型 """
         statement = select(LLMModel).where(LLMModel.id == model_id)
+        with session_getter() as session:
+            return session.exec(statement).first()
+
+    @classmethod
+    def get_model_by_type(cls, model_type: LLMModelType) -> Optional[LLMModel]:
+        """ 根据模型类型获取第一个创建的模型 """
+        statement = select(LLMModel).where(LLMModel.model_type == model_type).order_by(LLMModel.id.asc())
         with session_getter() as session:
             return session.exec(statement).first()
 
