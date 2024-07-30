@@ -192,7 +192,7 @@ class FlowService(BaseService):
         if not flow_info:
             raise NotFoundFlowError.http_exception()
         if not login_user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW):
-            raise UnAuthorizedError.return_resp()
+            raise UnAuthorizedError.http_exception()
         flow_info.logo = cls.get_logo_share_link(flow_info.logo)
 
         return resp_200(data=flow_info)
