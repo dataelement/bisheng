@@ -27,7 +27,7 @@ export default function BuildLayout(params) {
                 </NavLink>
             </div>
         </div>
-        <div className="" style={{ height: 'calc(100vh - 125px)' }}>
+        <div className="" style={{ height: 'calc(100vh - 130px)' }}>
             <Outlet />
         </div>
     </div>
