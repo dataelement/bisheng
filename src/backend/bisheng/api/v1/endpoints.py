@@ -10,7 +10,6 @@ from sqlmodel import select
 from bisheng import settings
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.utils import get_request_ip
-from bisheng.api.v1 import knowledge
 from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, UploadFileResponse,
                                     resp_200)
 from bisheng.cache.redis import redis_client
@@ -26,6 +25,7 @@ from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import bucket
+from bisheng.api.services.knowledge_imp import filetype_load_map
 
 try:
     from bisheng.worker import process_graph_cached_task
@@ -60,7 +60,7 @@ def get_env():
         if not env.get('uns_support'):
             env['uns_support'] = uns_support
     else:
-        env['uns_support'] = list(knowledge.filetype_load_map.keys())
+        env['uns_support'] = list(filetype_load_map.keys())
     if settings.settings.get_from_db('office_url'):
         env['office_url'] = settings.settings.get_from_db('office_url')
     # add tips from settings
