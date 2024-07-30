@@ -16,7 +16,7 @@ import FlowPage from "./pages/FlowPage";
 import LogPage from "./pages/LogPage";
 import { LoginPage } from "./pages/LoginPage/login";
 import { ResetPwdPage } from "./pages/LoginPage/resetPwd";
-import ModelPage from "./pages/ModelPage";
+import ModelPage from "./pages/ModelPage/indexNonuse";
 import Doc from "./pages/ModelPage/doc";
 import Page403 from "./pages/Page403";
 import Report from "./pages/Report";
@@ -29,6 +29,9 @@ import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
+import ModelLayout from "./layout/ModelLayout";
+import Management from "./pages/ModelPage/manage";
+import { Finetune } from "./pages/ModelPage/finetune";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -78,6 +81,16 @@ const privateRouter = [
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps", element: <Templates />, permission: 'build', },
       { path: "model", element: <ModelPage />, permission: 'model', },
+      // {
+      //   path: "model",
+      //   element: <ModelLayout />,
+      //   permission: "model",
+      //   children: [
+      //     { path: "", element: <Navigate to="management" replace/> },
+      //     { path: "management", element: <Management/>, permission: 'management' },
+      //     { path: "finetune", element: <Finetune rtClick={() => {}} gpuClick={() => {}} />, permission: 'finetune' }
+      //   ]
+      // },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
       { path: "evaluation", element: <EvaluatingPage /> },
