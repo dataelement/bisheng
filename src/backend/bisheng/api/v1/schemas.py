@@ -358,7 +358,7 @@ class OpenAIChatCompletionResp(BaseModel):
 
 
 class LLMModelInfo(LLMModelBase):
-    id: [int]
+    id: Optional[int]
 
 
 class LLMServerInfo(LLMServerBase):
