@@ -57,7 +57,6 @@ interface NonScrollLoadProps extends BaseProps<string[]> {
 
 type IProps = ScrollLoadProps | NonScrollLoadProps;
 
-// 临时用 andt 设计方案封装组件
 const MultiSelect = ({
     multiple = false,
     className,
@@ -212,17 +211,20 @@ const MultiSelect = ({
             }
             footerNode={children}
         >
-            <div className="mt-2">
-                {
-                    optionFilter.map((item) => (
-                        <MultiItem
-                            active={values.some(val => val === item.value || val.value === item.value)}
-                            value={item.value}
-                            onClick={handleSwitch}
-                        >{item.label}</MultiItem>
-                    ))
-                }
-                <div ref={footerRef} style={{ height: 20 }}></div>
+            <div className="flex">
+                {/* <div>123</div> */}
+                <div className="mt-2">
+                    {
+                        optionFilter.map((item) => (
+                            <MultiItem
+                                active={values.some(val => val === item.value || val.value === item.value)}
+                                value={item.value}
+                                onClick={handleSwitch}
+                            >{item.label}</MultiItem>
+                        ))
+                    }
+                    <div ref={footerRef} style={{ height: 20 }}></div>
+                </div>
             </div>
         </SelectContent>
     </Select>

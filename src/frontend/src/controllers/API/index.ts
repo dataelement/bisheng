@@ -112,7 +112,7 @@ export function updateTempApi(temp_id, data) {
  * 获取知识库列表
  *
  */
-export async function readFileLibDatabase(page = 1, pageSize = 40, name = '') {
+export async function readFileLibDatabase(page = 1, pageSize = 20, name = '') {
   try {
     const response: { data: any[], total: number } = await axios.get(`/api/v1/knowledge/?page_num=${page}&page_size=${pageSize}&name=${name}`);
     // const { data, total } = response
@@ -127,7 +127,7 @@ export async function readFileLibDatabase(page = 1, pageSize = 40, name = '') {
  * 获取知识库下文件列表
  *
  */
-export async function readFileByLibDatabase({ id, page, pageSize = 40, name = '', status }) {
+export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status }) {
   const statusStr = status === 999 ? '' : `&status=${status}`;
   const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}&file_name=${name}${statusStr}`);
   return response

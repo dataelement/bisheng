@@ -125,7 +125,7 @@ export default function FilesPage() {
                 <div className="flex items-center">
                     <ShadTooltip content="back" side="top">
                         <button className="extra-side-bar-buttons w-[36px]" onClick={() => { }} >
-                            <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
+                            <Link to='-1'><ArrowLeft className="side-bar-button-size" /></Link>
                         </button>
                     </ShadTooltip>
                     <span className=" text-gray-700 text-sm font-black pl-4">{title}</span>

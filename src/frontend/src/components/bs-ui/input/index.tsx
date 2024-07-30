@@ -86,13 +86,13 @@ Textarea.displayName = "Textarea"
  * input list
  */
 const InputList = React.forwardRef<HTMLDivElement, InputProps & {
-    rules: any[],
+    rules?: any[],
     value?: string[],
     inputClassName?: string,
     defaultValue?: string[],
     onChange?: (values: string[]) => void
 }>(
-    ({ rules, className, inputClassName, value = [], defaultValue = [], ...props }, ref) => {
+    ({ rules = [], className, inputClassName, value = [], defaultValue = [], ...props }, ref) => {
         // 初始化 inputs 状态，为每个值分配唯一 ID
         const [inputs, setInputs] = React.useState(() =>
             value.map(val => ({ id: generateUUID(8), value: val }))
