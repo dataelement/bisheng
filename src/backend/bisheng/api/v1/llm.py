@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request, Depends, Body, Query
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload, get_login_user, get_admin_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, LLMServerInfo, resp_200, KnowledgeLLMConfig, \
-    AssistantLLMConfig, EvaluationLLMConfig
+    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq
 
 router = APIRouter(prefix='/llm', tags=['LLM'])
 
@@ -23,7 +23,7 @@ def get_all_llm(
 def add_llm_server(
         request: Request,
         login_user: UserPayload = Depends(get_admin_user),
-        server: LLMServerInfo = Body(..., description="服务提供方所有数据"),
+        server: LLMServerCreateReq = Body(..., description="服务提供方所有数据"),
 ) -> UnifiedResponseModel[LLMServerInfo]:
     ret = LLMService.add_llm_server(request, login_user, server)
     return resp_200(data=ret)
@@ -33,7 +33,7 @@ def add_llm_server(
 def update_llm_server(
         request: Request,
         login_user: UserPayload = Depends(get_admin_user),
-        server: LLMServerInfo = Body(..., description="服务提供方所有数据"),
+        server: LLMServerCreateReq = Body(..., description="服务提供方所有数据"),
 ) -> UnifiedResponseModel[LLMServerInfo]:
     ret = LLMService.update_llm_server(request, login_user, server)
     return resp_200(data=ret)

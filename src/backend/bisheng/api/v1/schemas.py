@@ -12,7 +12,7 @@ from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import GptsToolsRead, AuthMethod, AuthType
 from bisheng.database.models.knowledge import KnowledgeRead
-from bisheng.database.models.llm_server import LLMServerBase, LLMModelBase
+from bisheng.database.models.llm_server import LLMServerBase, LLMModelBase, LLMServerType, LLMModelType
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 
@@ -355,6 +355,27 @@ class OpenAIChatCompletionResp(BaseModel):
     choices: List[OpenAIChoice] = Field(..., description="返回的答案列表")
     usage: dict = Field(default=None, description="返回的token用量, 助手此值为空")
     system_fingerprint: Optional[str] = Field(default=None, description="系统指纹")
+
+
+class LLMModelCreateReq(BaseModel):
+    id: Optional[int] = Field(default=None, description="模型唯一ID, 更新时需要传")
+    name: str = Field(..., description="模型展示名称")
+    description: Optional[str] = Field(default=None, description="模型描述")
+    model_name: str = Field(..., description="模型名称")
+    model_type: LLMModelType = Field(..., description="模型类型")
+    online: bool = Field(default=False, description='是否在线')
+    config: Optional[dict] = Field(default=None, description="模型配置")
+
+
+class LLMServerCreateReq(BaseModel):
+    id: Optional[int] = Field(default=None, description="服务提供方ID, 更新时需要传")
+    name: str = Field(..., description="服务提供方名称")
+    description: Optional[str] = Field(default=None, description="服务提供方描述")
+    type: LLMServerType = Field(..., description="服务提供方类型")
+    limit_flag: Optional[bool] = Field(default=False, description="是否开启每日调用次数限制")
+    limit: Optional[int] = Field(default=0, description="每日调用次数限制")
+    config: Optional[dict] = Field(default=None, description="服务提供方配置")
+    models: Optional[List[LLMModelCreateReq]] = Field(default=[], description="服务提供方下的模型列表")
 
 
 class LLMModelInfo(LLMModelBase):

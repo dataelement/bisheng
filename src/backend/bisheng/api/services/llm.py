@@ -7,7 +7,7 @@ from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
-    EvaluationLLMConfig, AssistantLLMItem
+    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
 
@@ -47,7 +47,7 @@ class LLMService:
         return LLMServerInfo(**llm.model_dump(), models=models)
 
     @classmethod
-    def add_llm_server(cls, request: Request, login_user: UserPayload, server: LLMServerInfo) -> LLMServerInfo:
+    def add_llm_server(cls, request: Request, login_user: UserPayload, server: LLMServerCreateReq) -> LLMServerInfo:
         """ 添加一个服务提供方 """
         exist_server = LLMDao.get_server_by_name(server.name)
         if exist_server:
@@ -57,13 +57,17 @@ class LLMService:
         model_dict = {}
         for one in server.models:
             if one.model_name not in model_dict:
-                model_dict[one.model_name] = one
+                model_dict[one.model_name] = LLMModel(**one.dict(), user_id=login_user.user_id)
             else:
                 raise ModelNameRepeatError.http_exception()
 
-        db_server = LLMServer(**server.model_dump(exclude={'models'}))
-        db_server = LLMDao.insert_server_with_models(db_server, [LLMModel(**one.model_dump()) for one in server.models])
+        db_server = LLMServer(**server.dict(exclude={'models'}))
+        db_server.user_id = login_user.user_id
+
+        db_server = LLMDao.insert_server_with_models(db_server, list(model_dict.values()))
+
         ret = cls.get_one_llm(request, login_user, db_server.id)
+
         cls.add_llm_server_hook(request, login_user, ret)
         return ret
 
@@ -135,7 +139,7 @@ class LLMService:
                 cls.update_knowledge_llm(request, login_user, knowledge_llm)
 
     @classmethod
-    def update_llm_server(cls, request: Request, login_user: UserPayload, server: LLMServerInfo) -> LLMServerInfo:
+    def update_llm_server(cls, request: Request, login_user: UserPayload, server: LLMServerCreateReq) -> LLMServerInfo:
         """ 更新服务提供方信息 """
         exist_server = LLMDao.get_server_by_id(server.id)
         if not exist_server:
@@ -148,13 +152,23 @@ class LLMService:
 
         model_dict = {}
         for one in server.models:
-            if one.name not in model_dict:
-                model_dict[one.name] = one
+            if one.model_name not in model_dict:
+                model_dict[one.model_name] = LLMModel(**one.dict())
+                # 说明是新增模型
+                if not one.id:
+                    model_dict[one.model_name].user_id = login_user.user_id
+                    model_dict[one.model_name].server_id = exist_server.id
             else:
                 raise ModelNameRepeatError.http_exception()
 
-        db_server = LLMServer(**server.model_dump(exclude={'models'}))
-        db_server = LLMDao.insert_server_with_models(db_server, [LLMModel(**one.model_dump()) for one in server.models])
+        exist_server.name = server.name
+        exist_server.description = server.description
+        exist_server.type = server.type
+        exist_server.limit_flag = server.limit_flag
+        exist_server.limit = server.limit
+        exist_server.config = server.config
+
+        db_server = LLMDao.update_server_with_models(exist_server, list(model_dict.values()))
 
         return cls.get_one_llm(request, login_user, db_server.id)
 
