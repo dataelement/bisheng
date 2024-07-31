@@ -60,7 +60,7 @@ export default function HomePage({ onSelect }) {
         setChooseId(id)
         setFlag(false)
         pageRef.current = 1
-        getChatOnlineApi(pageRef.current, '', id).then((res:any) => {
+        getChatOnlineApi(pageRef.current, '', id).then((res: any) => {
             setOptions(res)
         })
     }
@@ -80,24 +80,27 @@ export default function HomePage({ onSelect }) {
                     {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
                 </p>
             </div>
-            <SearchInput onChange={handleSearch} placeholder="搜索助手或者技能" className="w-[600px] min-w-[300px] mt-[20px]" />
+            <SearchInput onChange={handleSearch}
+                placeholder={t('chat.searchAssistantOrSkill')}
+                className="w-[600px] min-w-[300px] mt-[20px]" />
         </div>
-        <div className="mt-[20px] w-[95%] ml-[3rem]">
+        <div className="mt-[20px] w-[95%]">
             <div className="flex flex-wrap">
-                <Button variant={chooseId ? "outline" : "default"} className="mb-2 mr-5"
-                onClick={() => { setChooseId(null); loadData(false) }}>全部</Button>
+                <Button variant={chooseId ? "outline" : "default"} className="mb-2 mr-5" size="sm"
+                    onClick={() => { setChooseId(null); loadData(false) }}>全部</Button>
                 {
                     labels.map((l, index) => index <= 11 && <Button
+                        size="sm"
                         onClick={() => handleTagSearch(l.value)}
-                        className="mr-5 mb-2" variant={l.value === chooseId ? "default" : "outline"}>{l.label}
-                        </Button>)
+                        className="mr-4 mb-2" variant={l.value === chooseId ? "default" : "outline"}>{l.label}
+                    </Button>)
                 }
                 {/* @ts-ignore */}
                 {user.role === 'admin' && <SettingIcon onClick={() => setOpen(true)} className="h-[30px] w-[30px] cursor-pointer" />}
             </div>
         </div>
-        <div className="container m-auto relative">
-            <div className="min-w-[696px] grid sm:grid-cols-2 2xl:grid-cols-3 my-size:grid-cols-4 h-[calc(100vh-348px)] gap-3 mt-4 pb-24 overflow-y-auto scrollbar-hide">
+        <div className="m-auto relative">
+            <div className="min-w-[696px] grid auto-rows-min sm:grid-cols-2 2xl:grid-cols-3 my-size:grid-cols-4 my-size-lg:grid-cols-5 h-[calc(100vh-348px)] gap-3 mt-4 pb-24 overflow-y-auto scrollbar-hide">
                 {
                     options.length ? options.map((flow, i) => (
                         <CardComponent key={i}
@@ -120,7 +123,7 @@ export default function HomePage({ onSelect }) {
                         <Button className="w-[200px]" onClick={() => navigate('/build/assist')}>{t('build.onlineSA')}</Button>
                     </div>
                 }
-                { flag && <LoadMore onScrollLoad={handleLoadMore} /> }
+                {flag && <LoadMore onScrollLoad={handleLoadMore} />}
             </div>
         </div>
         <MarkLabel open={open} home={labels} onClose={handleClose}></MarkLabel>

@@ -88,8 +88,8 @@ export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }
             </div>
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
-                    {logo ? <div className="max-w-6 max-h-6 rounded-full overflow-hidden">
-                        <img width={24} height={24} src={logo} />
+                    {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
+                        <img className="w-6 h-6" src={logo} />
                     </div>
                         : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
                             <AvatarIcon />

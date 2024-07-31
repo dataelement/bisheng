@@ -29,6 +29,7 @@ import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
+import HeaderMenu from "./HeaderMenu";
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
@@ -70,7 +71,7 @@ export default function MainLayout() {
 
     return <div className="flex">
         <div className="bg-background-main w-full h-screen">
-            <div className="flex justify-between h-[64px]">
+            <div className="flex justify-between h-[64px] bg-background-main relative z-[21]">
                 <div className="flex h-9 my-[14px]">
                     <Link className="inline-block" to='/'>
                         {/* @ts-ignore */}
@@ -79,7 +80,10 @@ export default function MainLayout() {
                         <img src={__APP_ENV__.BASE_URL + '/logo-small-dark.png'} className="w-[114px] h-9 ml-8 rounded dark:w-[124px] dark:pr-[10px] dark:block hidden" alt="" />
                     </Link>
                 </div>
-                <div className="flex w-fit relative z-50">
+                <div>
+                    <HeaderMenu />
+                </div>
+                <div className="flex w-fit relative z-10">
                     <div className="flex">
                         <TooltipProvider>
                             <Tooltip>
