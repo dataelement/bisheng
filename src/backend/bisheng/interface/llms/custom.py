@@ -1,16 +1,20 @@
-from typing import List, Optional, Any, Dict
+import uuid
+from typing import List, Optional, Any, Dict, Union
 
+from langchain_core.messages import BaseMessage
+from langchain_core.outputs import LLMResult, ChatResult
+from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from pydantic import Field, root_validator
-from langchain_core.callbacks import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
-from langchain_core.language_models import LLM, BaseLanguageModel
+from langchain_core.callbacks import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun, Callbacks
+from langchain_core.language_models import LLM, BaseLanguageModel, LanguageModelInput, BaseChatModel
 
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
 
 
-class BishengChatLLM(LLM):
+class BishengChatLLM(BaseChatModel):
     """
      依赖bisheng后端服务的llm组件
      根据model的类型不同 调用不同的llm
@@ -23,8 +27,8 @@ class BishengChatLLM(LLM):
     top_p: float = Field(default=0, description="模型生成的top_p")
     cache: bool = Field(default=True, description="是否使用缓存")
 
-    _llm: Optional[LLM] = Field(default=None, exclude=True)
-    _llm_node_type = {
+    llm: Optional[BaseChatModel] = Field(default=None)
+    llm_node_type = {
         LLMServerType.OPENAI: 'ChatOpenAI',
         LLMServerType.AZURE_OPENAI: 'AzureChatOpenAI',
         LLMServerType.OLLAMA: 'CohereChatOpenAI',
@@ -39,12 +43,18 @@ class BishengChatLLM(LLM):
         LLMServerType.DEEPSEEK: 'ChatDeepSeek',
     }
 
-    @root_validator()
-    def validate_llm(cls, values: Dict) -> Dict:
-        model_id = values.get('model_id')
-        if not model_id:
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.model_id = kwargs.get('model_id')
+        self.model_name = kwargs.get('model_name')
+        self.cache = kwargs.get('cache')
+        self.streaming = kwargs.get('streaming')
+        self.temperature = kwargs.get('temperature')
+        self.top_p = kwargs.get('top_p')
+
+        if not self.model_id:
             raise Exception('没有找到模型配置')
-        model_info = LLMDao.get_model_by_id(model_id)
+        model_info = LLMDao.get_model_by_id(self.model_id)
         if not model_info:
             raise Exception('模型配置已被删除，请重新配置模型')
         server_info = LLMDao.get_server_by_id(model_info.server_id)
@@ -53,23 +63,20 @@ class BishengChatLLM(LLM):
         if model_info.model_type != LLMModelType.LLM:
             raise Exception(f'只支持LLM类型的模型，不支持{model_info.model_type.value}类型的模型')
 
-        class_object = cls._get_llm_class(server_info.type)
-        params = cls._get_llm_params(server_info, model_info)
+        class_object = self._get_llm_class(server_info.type)
+        params = self._get_llm_params(server_info, model_info)
         try:
-            values['llm'] = instantiate_llm(cls._llm_node_type.get(server_info.type), class_object, params)
+            self.llm = instantiate_llm(self.llm_node_type.get(server_info.type), class_object, params)
         except Exception as e:
             logger.exception('init bisheng llm error')
             raise Exception(f'初始化llm组件失败，请检查配置或联系管理员。错误信息：{e}')
-        return values
 
-    @classmethod
-    def _get_llm_class(cls, server_type: LLMServerType) -> BaseLanguageModel:
-        node_type = cls._llm_node_type.get(server_type)
+    def _get_llm_class(self, server_type: LLMServerType) -> BaseLanguageModel:
+        node_type = self.llm_node_type.get(server_type)
         class_object = import_by_type(_type='llms', name=node_type)
         return class_object
 
-    @classmethod
-    def _get_llm_params(cls, server_info: LLMServer, model_info: LLMModel) -> dict:
+    def _get_llm_params(self, server_info: LLMServer, model_info: LLMModel) -> dict:
         params = {}
         if server_info.config:
             params.update(server_info.config)
@@ -78,40 +85,42 @@ class BishengChatLLM(LLM):
 
         params.update({
             'model_name': model_info.model_name,
-            'stream': cls.stream,
-            'temperature': cls.temperature,
-            'top_p': cls.top_p,
-            'cache': cls.cache
+            'stream': self.stream,
+            'temperature': self.temperature,
+            'top_p': self.top_p,
+            'cache': self.cache
         })
         return params
 
     @property
     def _llm_type(self):
-        return self._llm._llm_type
+        return self.llm._llm_type
 
-    def _call(
+    def _generate(
             self,
-            prompt: str,
+            messages: List[BaseMessage],
             stop: Optional[List[str]] = None,
-            run_manager: Optional[CallbackManagerForLLMRun] = None,
+            run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+            stream: Optional[bool] = None,
             **kwargs: Any,
-    ) -> str:
+    ) -> ChatResult:
         try:
-            ret = self._llm._call(prompt, stop, run_manager, **kwargs)
+            ret = self.llm._generate(messages, stop, run_manager, **kwargs)
         except Exception as e:
-            # 记录失败状态
+            # TODO zgq 记录失败状态
             raise e
         return ret
 
-    async def _acall(
+    async def _agenerate(
             self,
-            prompt: str,
+            messages: List[BaseMessage],
             stop: Optional[List[str]] = None,
             run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+            stream: Optional[bool] = None,
             **kwargs: Any,
-    ) -> str:
+    ) -> ChatResult:
         try:
-            ret = await self._llm._acall(prompt, stop, run_manager, **kwargs)
+            ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
         except Exception as e:
             # 记录失败状态
             raise e
