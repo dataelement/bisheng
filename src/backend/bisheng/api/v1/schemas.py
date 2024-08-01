@@ -396,15 +396,16 @@ class KnowledgeLLMConfig(BaseModel):
 
 class AssistantLLMItem(BaseModel):
     model_id: Optional[int] = Field(description="模型的ID")
-    agent_executor_type: Optional[str] = Field(description="执行模式。function call 或者 React")
-    knowledge_search_max_content: Optional[int] = Field(description="知识库检索最大字符串数")
-    knowledge_sort_index: bool = Field(default=False, description="知识库检索后是否重排")
-    default: bool = Field(default=False, description="是否为默认模型")
+    agent_executor_type: Optional[str] = Field(default="ReAct", description="执行模式。function call 或者 ReAct")
+    knowledge_max_content: Optional[int] = Field(default=15000, description="知识库检索最大字符串数")
+    knowledge_sort_index: Optional[bool] = Field(default=False, description="知识库检索后是否重排")
+    streaming: Optional[bool] = Field(default=True, description="是否开启流式")
+    default: Optional[bool] = Field(default=False, description="是否为默认模型")
 
 
 class AssistantLLMConfig(BaseModel):
     llm_list: Optional[List[AssistantLLMItem]] = Field(default=[], description="助手可选的LLM列表")
-    auto_llm: Optional[int] = Field(description="助手画像自动优化模型的ID")
+    auto_llm: Optional[AssistantLLMItem] = Field(description="助手画像自动优化模型的配置")
 
 
 class EvaluationLLMConfig(BaseModel):

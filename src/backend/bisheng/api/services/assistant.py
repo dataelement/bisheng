@@ -213,7 +213,7 @@ class AssistantService(BaseService, AssistantUtils):
 
         # 初始化llm
         auto_agent = AssistantAgent(assistant, '')
-        await auto_agent.init_llm()
+        await auto_agent.init_auto_update_llm()
 
         # 流式生成提示词
         final_prompt = ''
@@ -610,7 +610,7 @@ class AssistantService(BaseService, AssistantUtils):
         """
         # 初始化agent
         auto_agent = AssistantAgent(assistant, '')
-        await auto_agent.init_llm()
+        await auto_agent.init_auto_update_llm()
 
         # 自动生成描述
         assistant.desc = auto_agent.generate_description(assistant.prompt)

@@ -87,7 +87,7 @@ class AssistantAgent(AssistantUtils):
         # 获取配置的助手模型列表
         assistant_llm = LLMService.get_assistant_llm()
         if not assistant_llm.llm_list:
-            raise Exception('助手可用的模型列表为空，请到模型菜单界面配置助手模型列表')
+            raise Exception('助手推理模型列表为空')
         default_llm = None
         for one in assistant_llm.llm_list:
             if str(one.model_id) == self.assistant.model_name:
@@ -96,16 +96,26 @@ class AssistantAgent(AssistantUtils):
             elif not default_llm and one.default:
                 default_llm = one
         if not default_llm:
-            raise Exception("未找到助手选择的模型配置，请检查助手选择的模型配置")
+            raise Exception("未找到助手推理模型配置")
 
         self.llm_agent_executor = default_llm.agent_executor_type
         self.knowledge_retriever = {
-            'max_content': default_llm.knowledge_search_max_content,
+            'max_content': default_llm.knowledge_max_content,
             'sort_by_source_and_index': default_llm.knowledge_sort_index
         }
 
         # 初始化llm
-        self.llm = BishengLLM(model_id=default_llm.model_id, temperature=self.assistant.temperature)
+        self.llm = BishengLLM(model_id=default_llm.model_id, temperature=self.assistant.temperature,
+                              streaming=default_llm.streaming)
+
+    async def init_auto_update_llm(self):
+        """ 初始化自动优化prompt等信息的llm实例 """
+        assistant_llm = LLMService.get_assistant_llm()
+        if not assistant_llm.auto_llm:
+            raise Exception("助手画像自动优化模型未配置")
+
+        self.llm = BishengLLM(model_id=assistant_llm.auto_llm.model_id, temperature=self.assistant.temperature,
+                              streaming=assistant_llm.auto_llm.streaming)
 
     async def get_knowledge_skill_data(self):
         if self.knowledge_skill_data:

@@ -116,18 +116,12 @@ class LLMService:
             assistant_llm = cls.get_assistant_llm()
             assistant_change = False
             if not assistant_llm.auto_llm:
-                assistant_llm.auto_llm = model.id
+                assistant_llm.auto_llm = AssistantLLMItem(model_id=model.id)
                 assistant_change = True
             if not assistant_llm.llm_list:
                 assistant_change = True
                 assistant_llm.llm_list = [
-                    AssistantLLMItem(
-                        model_id=model.id,
-                        agent_executor_type='React',
-                        knowledge_search_max_content=15000,
-                        knowledge_sort_index=False,
-                        default=False
-                    )
+                    AssistantLLMItem(model_id=model.id, default=True)
                 ]
             if assistant_change:
                 cls.update_assistant_llm(request, login_user, assistant_llm)
