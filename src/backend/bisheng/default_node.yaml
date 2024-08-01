@@ -156,7 +156,7 @@ embeddings:
   CustomHostEmbedding:
     documentation: ""
 llms:
-  BishengChatLLM:
+  BishengLLM:
     documentation: ""
   AzureChatOpenAI:
     documentation: ""

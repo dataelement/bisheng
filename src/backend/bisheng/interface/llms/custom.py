@@ -14,7 +14,7 @@ from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
 
 
-class BishengChatLLM(BaseChatModel):
+class BishengLLM(BaseChatModel):
     """
      依赖bisheng后端服务的llm组件
      根据model的类型不同 调用不同的llm
@@ -23,8 +23,8 @@ class BishengChatLLM(BaseChatModel):
     model_name: str = Field(description="后端服务保存的model名称")
     model_id: int = Field(description="后端服务保存的model唯一ID")
     streaming: bool = Field(default=True, description="是否使用流式输出", alias="stream")
-    temperature: float = Field(default=0, description="模型生成的温度")
-    top_p: float = Field(default=0, description="模型生成的top_p")
+    temperature: float = Field(default=0.3, description="模型生成的温度")
+    top_p: float = Field(default=1, description="模型生成的top_p")
     cache: bool = Field(default=True, description="是否使用缓存")
 
     llm: Optional[BaseChatModel] = Field(default=None)
