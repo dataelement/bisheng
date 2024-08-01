@@ -234,3 +234,25 @@ class LLMService:
             config = Config(key=ConfigKeyEnum.EVALUATION_LLM.value, value=json.dumps(data.dict()))
         ConfigDao.insert_config(config)
         return data
+
+    @classmethod
+    def get_assistant_llm_list(cls, request: Request, login_user: UserPayload) -> List[LLMServerInfo]:
+        """ 获取助手可选的模型列表 """
+        assistant_llm = cls.get_assistant_llm(request, login_user)
+        if not assistant_llm.llm_list:
+            return []
+        model_list = LLMDao.get_model_by_ids([one.model_id for one in assistant_llm.llm_list])
+        if not model_list:
+            return []
+        model_dict = {}
+        for one in model_list:
+            if one.server_id not in model_dict:
+                model_dict[one.server_id] = []
+            model_dict[one.server_id].append(LLMModelInfo(**one.dict(exclude={'config'})))
+        server_list = LLMDao.get_server_by_ids(list(model_dict.keys()))
+
+        ret = []
+        for one in server_list:
+            ret.append(LLMServerInfo(**one.dict(exclude={'config'}), models=model_dict[one.id]))
+
+        return ret

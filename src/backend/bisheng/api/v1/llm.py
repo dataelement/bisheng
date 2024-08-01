@@ -109,3 +109,13 @@ def update_evaluation_llm(
     """ 更新评价相关的模型配置 """
     ret = LLMService.update_evaluation_llm(request, login_user, data)
     return resp_200(data=ret)
+
+
+@router.get('/assistant/llm_list', response_model=UnifiedResponseModel[List[LLMServerInfo]])
+async def get_assistant_llm_list(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+) -> UnifiedResponseModel[List[LLMServerInfo]]:
+    """ 获取助手可选的模型列表 """
+    ret = LLMService.get_assistant_llm_list(request, login_user)
+    return resp_200(data=ret)

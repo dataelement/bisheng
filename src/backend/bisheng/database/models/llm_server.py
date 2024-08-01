@@ -149,6 +149,13 @@ class LLMDao:
             return session.exec(statement).first()
 
     @classmethod
+    def get_server_by_ids(cls, server_ids: List[int]) -> List[LLMServer]:
+        """ 根据服务ID获取服务提供方 """
+        statement = select(LLMServer).where(LLMServer.id.in_(server_ids))
+        with session_getter() as session:
+            return session.exec(statement).all()
+
+    @classmethod
     def get_server_by_name(cls, server_name: str) -> Optional[LLMServer]:
         """ 根据服务名称获取服务提供方 """
         statement = select(LLMServer).where(LLMServer.name == server_name)
@@ -161,6 +168,13 @@ class LLMDao:
         statement = select(LLMModel).where(LLMModel.id == model_id)
         with session_getter() as session:
             return session.exec(statement).first()
+
+    @classmethod
+    def get_model_by_ids(cls, model_ids: List[int]) -> List[LLMModel]:
+        """ 根据模型ID获取模型 """
+        statement = select(LLMModel).where(LLMModel.id.in_(model_ids))
+        with session_getter() as session:
+            return session.exec(statement).all()
 
     @classmethod
     def get_model_by_type(cls, model_type: LLMModelType) -> Optional[LLMModel]:
