@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, Tool
 from langchain_core.utils.function_calling import format_tool_to_openai_tool
+from langchain_core.vectorstores import VectorStoreRetriever
 from loguru import logger
 
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
@@ -24,6 +25,7 @@ from bisheng_langchain.gpts.load_tools import load_tools
 from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.knowledge_imp import decide_vectorstores
+from bisheng.api.services.llm import LLMService
 from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
@@ -32,6 +34,7 @@ from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType, AuthMethod
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.interface.initialize.loading import instantiate_llm, import_by_type
+from bisheng.interface.llms.custom import BishengLLM
 from bisheng.utils.embedding import decide_embeddings
 
 
@@ -70,7 +73,7 @@ class AssistantAgent(AssistantUtils):
         self.knowledge_skill_path = str(Path(__file__).parent / 'knowledge_skill.json')
         self.knowledge_skill_data = None
         # 知识库检索相关参数
-        self.knowledge_retrive = {
+        self.knowledge_retriever = {
             "max_content": 15000,
             "sort_by_source_and_index": False
         }
@@ -81,26 +84,28 @@ class AssistantAgent(AssistantUtils):
         await self.init_agent()
 
     async def init_llm(self):
-        llm_params = self.get_llm_conf(self.assistant.model_name)
-        if not llm_params:
-            logger.error(
-                f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
-            raise Exception(
-                f'act=init_llm llm_params is None, model_name: {self.assistant.model_name}')
+        # 获取配置的助手模型列表
+        assistant_llm = LLMService.get_assistant_llm()
+        if not assistant_llm.llm_list:
+            raise Exception('助手可用的模型列表为空，请到模型菜单界面配置助手模型列表')
+        default_llm = None
+        for one in assistant_llm.llm_list:
+            if str(one.model_id) == self.assistant.model_name:
+                default_llm = one
+                break
+            elif not default_llm and one.default:
+                default_llm = one
+        if not default_llm:
+            raise Exception("未找到助手选择的模型配置，请检查助手选择的模型配置")
 
-        # 使用助手配置的 temperature
-        llm_params['temperature'] = self.assistant.temperature
+        self.llm_agent_executor = default_llm.agent_executor_type
+        self.knowledge_retriever = {
+            'max_content': default_llm.knowledge_search_max_content,
+            'sort_by_source_and_index': default_llm.knowledge_sort_index
+        }
 
-        if llm_params.get('agent_executor_type'):
-            self.llm_agent_executor = llm_params.pop('agent_executor_type')
-
-        # 如果模型有单独配置知识库检索参数，则使用模型配置的
-        if llm_params.get('knowledge_retrive'):
-            self.knowledge_retrive = llm_params.pop('knowledge_retrive')
-
-        node_type = llm_params.pop('type')
-        class_object = import_by_type(_type='llms', name=node_type)
-        self.llm = instantiate_llm(node_type, class_object, llm_params, user_llm_request=False)
+        # 初始化llm
+        self.llm = BishengLLM(model_id=default_llm.model_id, temperature=self.assistant.temperature)
 
     async def get_knowledge_skill_data(self):
         if self.knowledge_skill_data:
@@ -169,8 +174,11 @@ class AssistantAgent(AssistantUtils):
         初始化知识库工具
         """
         embeddings = decide_embeddings(knowledge.model)
-        search_kwargs = {}
         vector_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
+        if isinstance(vector_client, VectorStoreRetriever):
+            vector_client = vector_client.vectorstore
+        vector_client.partition_key = knowledge.id
+
         es_vector_client = decide_vectorstores(knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
         tool_params = {
             "bisheng_rag": {
@@ -181,7 +189,7 @@ class AssistantAgent(AssistantUtils):
                 "llm": self.llm
             }
         }
-        tool_params['bisheng_rag'].update(self.knowledge_retrive)
+        tool_params['bisheng_rag'].update(self.knowledge_retriever)
         tool = load_tools(tool_params=tool_params, llm=self.llm, callbacks=callbacks)
         return tool
 

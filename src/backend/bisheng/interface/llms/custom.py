@@ -20,7 +20,7 @@ class BishengLLM(BaseChatModel):
      根据model的类型不同 调用不同的llm
     """
 
-    model_name: str = Field(description="后端服务保存的model名称")
+    model_name: str = Field(default='', description="后端服务保存的model名称")
     model_id: int = Field(description="后端服务保存的model唯一ID")
     streaming: bool = Field(default=True, description="是否使用流式输出", alias="stream")
     temperature: float = Field(default=0.3, description="模型生成的温度")

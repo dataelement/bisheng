@@ -54,7 +54,7 @@ def get_knowledge_llm(
         request: Request,
         login_user: UserPayload = Depends(get_login_user),
 ) -> UnifiedResponseModel[KnowledgeLLMConfig]:
-    ret = LLMService.get_knowledge_llm(request, login_user)
+    ret = LLMService.get_knowledge_llm()
     return resp_200(data=ret)
 
 
@@ -75,7 +75,7 @@ def get_assistant_llm(
         login_user: UserPayload = Depends(get_login_user),
 ) -> UnifiedResponseModel[AssistantLLMConfig]:
     """ 获取助手相关的模型配置 """
-    ret = LLMService.get_assistant_llm(request, login_user)
+    ret = LLMService.get_assistant_llm()
     return resp_200(data=ret)
 
 
@@ -96,7 +96,7 @@ def get_evaluation_llm(
         login_user: UserPayload = Depends(get_login_user),
 ) -> UnifiedResponseModel[EvaluationLLMConfig]:
     """ 获取评价相关的模型配置 """
-    ret = LLMService.get_evaluation_llm(request, login_user)
+    ret = LLMService.get_evaluation_llm()
     return resp_200(data=ret)
 
 

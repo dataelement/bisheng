@@ -143,11 +143,6 @@ class AssistantService(BaseService, AssistantUtils):
         if cls.judge_name_repeat(assistant.name, assistant.user_id):
             return AssistantNameRepeatError.return_resp()
 
-        # 保存数据到数据库, 补充用默认的模型
-        llm_conf = cls.get_llm_conf(assistant.model_name)
-        assistant.model_name = llm_conf['model_name']
-        assistant.temperature = llm_conf['temperature']
-
         logger.info(f"assistant original prompt id: {assistant.id}, desc: {assistant.prompt}")
 
         # 自动生成描述

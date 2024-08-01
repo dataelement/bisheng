@@ -92,7 +92,7 @@ class LLMService:
         # 设置默认的llm模型配置
         if model.model_type == LLMModelType.LLM:
             # 设置知识库的默认模型配置
-            knowledge_llm = cls.get_knowledge_llm(request, login_user)
+            knowledge_llm = cls.get_knowledge_llm()
             knowledge_change = False
             if not knowledge_llm.extract_title_model_id:
                 knowledge_llm.extract_title_model_id = model.id
@@ -107,13 +107,13 @@ class LLMService:
                 cls.update_knowledge_llm(request, login_user, knowledge_llm)
 
             # 设置评测的默认模型配置
-            evaluation_llm = cls.get_evaluation_llm(request, login_user)
+            evaluation_llm = cls.get_evaluation_llm()
             if not evaluation_llm.model_id:
                 evaluation_llm.model_id = model.id
                 cls.update_evaluation_llm(request, login_user, evaluation_llm)
 
             # 设置助手的默认模型配置
-            assistant_llm = cls.get_assistant_llm(request, login_user)
+            assistant_llm = cls.get_assistant_llm()
             assistant_change = False
             if not assistant_llm.auto_llm:
                 assistant_llm.auto_llm = model.id
@@ -133,7 +133,7 @@ class LLMService:
                 cls.update_assistant_llm(request, login_user, assistant_llm)
 
         elif model.model_type == LLMModelType.EMBEDDING:
-            knowledge_llm = cls.get_knowledge_llm(request, login_user)
+            knowledge_llm = cls.get_knowledge_llm()
             if not knowledge_llm.embedding_model_id:
                 knowledge_llm.embedding_model_id = model.id
                 cls.update_knowledge_llm(request, login_user, knowledge_llm)
@@ -173,7 +173,7 @@ class LLMService:
         return cls.get_one_llm(request, login_user, db_server.id)
 
     @classmethod
-    def get_knowledge_llm(cls, request: Request, login_user: UserPayload) -> KnowledgeLLMConfig:
+    def get_knowledge_llm(cls) -> KnowledgeLLMConfig:
         """ 获取知识库相关的默认模型配置 """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.KNOWLEDGE_LLM)
@@ -194,7 +194,7 @@ class LLMService:
         return data
 
     @classmethod
-    def get_assistant_llm(cls, request: Request, login_user: UserPayload) -> AssistantLLMConfig:
+    def get_assistant_llm(cls) -> AssistantLLMConfig:
         """ 获取助手相关的默认模型配置 """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.ASSISTANT_LLM)
@@ -215,7 +215,7 @@ class LLMService:
         return data
 
     @classmethod
-    def get_evaluation_llm(cls, request: Request, login_user: UserPayload) -> EvaluationLLMConfig:
+    def get_evaluation_llm(cls) -> EvaluationLLMConfig:
         """ 获取评测功能的默认模型配置 """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.EVALUATION_LLM)
@@ -238,12 +238,13 @@ class LLMService:
     @classmethod
     def get_assistant_llm_list(cls, request: Request, login_user: UserPayload) -> List[LLMServerInfo]:
         """ 获取助手可选的模型列表 """
-        assistant_llm = cls.get_assistant_llm(request, login_user)
+        assistant_llm = cls.get_assistant_llm()
         if not assistant_llm.llm_list:
             return []
         model_list = LLMDao.get_model_by_ids([one.model_id for one in assistant_llm.llm_list])
         if not model_list:
             return []
+
         model_dict = {}
         for one in model_list:
             if one.server_id not in model_dict:
