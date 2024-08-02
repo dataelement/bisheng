@@ -162,7 +162,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
 
     const roleId = id === -1 ? 0 : id
 
-    return <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-136px)] overflow-y-auto pb-40 scrollbar-hide">
+    return <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-128px)] overflow-y-auto pb-40 scrollbar-hide">
         <div className="font-bold mt-4">
             <p className="text-xl mb-4">{t('system.roleName')}</p>
             <Input placeholder={t('system.roleName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60}></Input>

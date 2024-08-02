@@ -136,12 +136,12 @@ export default function KnowledgeFile(params) {
 
     // 进详情页前缓存 page, 临时方案
     const handleCachePage = () => {
-        window.LibPage = page
+        window.LibPage = { page, type: 'file' }
     }
     useEffect(() => {
         const _page = window.LibPage
         if (_page) {
-            setPage(_page);
+            setPage(_page.page);
             delete window.LibPage
         } else {
             setPage(1);
@@ -152,7 +152,7 @@ export default function KnowledgeFile(params) {
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <div className="h-[calc(100vh-136px)] overflow-y-auto pb-10">
+        <div className="h-[calc(100vh-128px)] overflow-y-auto pb-10">
             <div className="flex justify-end gap-4 items-center">
                 <SearchInput placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)} />
                 <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>

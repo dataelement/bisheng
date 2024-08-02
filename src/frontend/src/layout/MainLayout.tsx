@@ -29,6 +29,7 @@ import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
+import { DatasetIcon } from "@/components/bs-icons/menu/dataset";
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
@@ -166,6 +167,13 @@ export default function MainLayout() {
                             isAdmin && <>
                                 <NavLink to='/log' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.log')}</span>
+                                </NavLink>
+                            </>
+                        }
+                        {
+                            user.role === 'admin' && <>
+                                <NavLink to='/dataset' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                    <DatasetIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.dataset')}</span>
                                 </NavLink>
                             </>
                         }

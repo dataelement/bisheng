@@ -14,9 +14,14 @@ export default function FileLibPage() {
 
     const { t } = useTranslation();
 
+    const defaultValue = (() => {
+        const page = window.LibPage;
+        return page ? page.type : 'qa'
+    })();
+
     return (
-        <div className="w-full h-full px-2 py-4 relative">
-            <Tabs defaultValue="qa" className="w-full mb-[40px]">
+        <div className="w-full h-full px-2 pt-4 relative">
+            <Tabs defaultValue={defaultValue} className="w-full mb-[40px]">
                 <TabsList className="">
                     <TabsTrigger value="qa" className="roundedrounded-xl">{t('lib.qaData')}</TabsTrigger>
                     <TabsTrigger value="file">{t('lib.fileData')}</TabsTrigger>

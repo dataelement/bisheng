@@ -213,7 +213,7 @@ export default function FileLibPage() {
 
     const copyText = useCopyText()
 
-    return <div id="model-scroll" className="w-full h-full px-2 py-4">
+    return <div id="model-scroll" className="w-full h-full px-2 pt-4">
         <Tabs defaultValue="model" className="w-full mb-[40px]" onValueChange={e => e === 'model' && loadData()}>
             <TabsList className="">
                 <TabsTrigger value="model" className="roundedrounded-xl">{t('model.modelManagement')}</TabsTrigger>
@@ -221,7 +221,7 @@ export default function FileLibPage() {
             </TabsList>
             <TabsContent value="model">
                 <div className="relative">
-                    <div className="h-[calc(100vh-136px)] overflow-y-auto pb-20">
+                    <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
                         <div className="flex justify-end gap-4">
                             {user.role === 'admin' && <Button variant="black" className="dark:bg-[#34353A] dark:text-[#ECECEC]" onClick={() => setShowCpu({ type: 'model', show: true })}>{t('model.gpuResourceUsage')}</Button>}
                             {user.role === 'admin' && appConfig.isDev && <Button variant="black" className="dark:bg-[#34353A] dark:text-[#ECECEC]" onClick={() => setRTOpen(true)}>{t('finetune.rtServiceManagement')}</Button>}

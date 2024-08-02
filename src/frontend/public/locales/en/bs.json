@@ -33,6 +33,7 @@
     "models": "Models",
     "system": "System",
     "log": "Logs",
+    "dataset": "Dataset",
     "themeSwitch": "Theme Switch",
     "document": "Documentation",
     "logout": "Logout",

@@ -249,7 +249,7 @@ export default function QasPage() {
         });
     };
 
-    return <div className="w-full h-full px-2 py-4 relative">
+    return <div className="w-full h-full px-2 pt-4 relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}

@@ -1,11 +1,11 @@
 import { locationContext } from "@/contexts/locationContext";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
-import { MagnifyingGlassIcon, Pencil2Icon, ReloadIcon } from "@radix-ui/react-icons";
+import { DrawingPinIcon, MagnifyingGlassIcon, Pencil2Icon, ReloadIcon } from "@radix-ui/react-icons";
 import { useContext } from "react";
 import { useMessageStore } from "./messageStore";
 
-export default function MessageUser({ useName = 'xxx', data }: { data: ChatMessageType }) {
+export default function MessageUser({ mark = false, useName = '', data, onMarkClick }: { data: ChatMessageType }) {
     const msg = data.message[data.chatKey]
 
     const { appConfig } = useContext(locationContext)
@@ -42,14 +42,21 @@ export default function MessageUser({ useName = 'xxx', data }: { data: ChatMessa
             {/* 附加信息 */}
             {
                 // 数组类型的 data通常是文件上传消息，不展示附加按钮
-                !Array.isArray(data.message.data) && <div className="flex justify-between mt-2">
+                mark ? <div className="flex justify-between mt-2">
+                    <span></span>
+                    <div className="flex gap-2 text-gray-400 cursor-pointer self-end">
+                        {!running && <div className="w-6 h-6 flex justify-center items-center" onClick={onMarkClick}>
+                            <DrawingPinIcon width={20} height={20} className="cursor-pointer text-gray-400 hover:text-gray-500" />
+                        </div>}
+                    </div>
+                </div> : (!Array.isArray(data.message.data) && <div className="flex justify-between mt-2">
                     <span></span>
                     <div className="flex gap-2 text-gray-400 cursor-pointer self-end">
                         {!running && <Pencil2Icon className="hover:text-gray-500" onClick={() => handleResend(false)} />}
                         {!running && <ReloadIcon className="hover:text-gray-500" onClick={() => handleResend(true)} />}
                         {appConfig.dialogQuickSearch && <MagnifyingGlassIcon className="hover:text-gray-500" onClick={handleSearch} />}
                     </div>
-                </div>
+                </div>)
             }
         </div>
     </div>

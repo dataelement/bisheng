@@ -30,6 +30,8 @@ import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
+import AppChatDetail from "./pages/LogPage/useAppLog/appChatDetail";
+import DataSetPage from "./pages/DataSetPage";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -82,9 +84,10 @@ const privateRouter = [
       { path: "model", element: <ModelPage />, permission: 'model', },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
+      { path: "chatlog/:fid/:cid", element: <AppChatDetail /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
-
+      { path: "dataset", element: <DataSetPage /> },
     ],
   },
   { path: "model/doc", element: <Doc /> },

@@ -1,10 +1,36 @@
 import MultiSelect from "@/components/bs-ui/select/multi";
+import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { readFileLibDatabase } from "@/controllers/API";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function KnowledgeSelect({ multiple = false, value, disabled = false, onChange, children }:
-    { multiple?: boolean, value: any, disabled?: boolean, onChange: (a: any) => any, children?: (fun: any) => React.ReactNode }) {
+const TabsHead = memo(({ onChange }) => {
+
+    return <Tabs defaultValue="file" className="mb-2" onValueChange={onChange}>
+        <TabsList className="grid w-full grid-cols-2 py-1 max-w-80">
+            <TabsTrigger value="file" className="text-xs">文档知识库</TabsTrigger>
+            <TabsTrigger value="qa" className="text-xs">QA知识库</TabsTrigger>
+        </TabsList>
+    </Tabs>
+})
+
+const enum KnowledgeType {
+    FILE = 'file',
+    QA = 'qa',
+    ALL = 'all'
+}
+type KnowledgeTypeValues = `${KnowledgeType}`;
+
+export default function KnowledgeSelect({
+    type = KnowledgeType.ALL,
+    multiple = false,
+    className = '',
+    value,
+    disabled = false,
+    onChange,
+    children
+}:
+    { type?: KnowledgeTypeValues, multiple?: boolean, className?: string, value: any, disabled?: boolean, onChange: (a: any) => any, children?: (fun: any) => React.ReactNode }) {
 
     const { t } = useTranslation()
     const [options, setOptions] = useState<any>([]);
@@ -12,11 +38,13 @@ export default function KnowledgeSelect({ multiple = false, value, disabled = fa
 
     const pageRef = useRef(1)
     const reload = (page, name) => {
+        // todo: KnowledgeType 区分类型
         readFileLibDatabase(page, 60, name).then(res => {
             pageRef.current = page
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))
-            setOptions(_ops => page > 1 ? [..._ops, ...opts] : opts)
+            // setOptions(_ops => page > 1 ? [..._ops, ...opts] : opts)
+            setOptions(opts)
         })
     }
 
@@ -34,8 +62,19 @@ export default function KnowledgeSelect({ multiple = false, value, disabled = fa
         reload(pageRef.current + 1, name)
     }
 
+    const handleTabChange = (val) => {
+        val === 'file' ? reload(1, '') : reload(2, '')
+        const inputDom = document.getElementById('knowledge-select')
+        if (inputDom) {
+            inputDom.value = ''
+        }
+    }
+
     return <MultiSelect
+        id="knowledge-select"
+        tabs={type === KnowledgeType.ALL ? <TabsHead onChange={handleTabChange} /> : null}
         multiple={multiple}
+        className={className}
         value={value}
         disabled={disabled}
         options={options}

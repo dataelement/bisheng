@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "."
 import { Badge } from "../badge"
 import { SearchInput } from "../input"
-import { useDebounce } from "../utils"
+import { cname, useDebounce } from "../utils"
 
 const MultiItem: React.FC<
     { active: boolean; children: React.ReactNode; value: string; onClick: (value: string, label: string) => void }
@@ -28,13 +28,16 @@ interface Option {
 
 interface BaseProps<T> {
     /** 多选 */
+    id?: string;
     multiple?: boolean;
     disabled?: boolean;
     className?: string;
+    contentClassName?: string;
     options: Option[];
     children?: React.ReactNode;
     placeholder?: string;
     searchPlaceholder?: string;
+    tabs?: React.ReactNode;
     /** 锁定不可修改的值 */
     lockedValues?: string[];
     onLoad?: () => void;
@@ -58,8 +61,10 @@ interface NonScrollLoadProps extends BaseProps<string[]> {
 type IProps = ScrollLoadProps | NonScrollLoadProps;
 
 const MultiSelect = ({
+    id = `${Date.now()}`,
     multiple = false,
     className,
+    contentClassName,
     value = [],
     defaultValue = [],
     options = [],
@@ -67,6 +72,7 @@ const MultiSelect = ({
     placeholder = '',
     searchPlaceholder = '',
     lockedValues = [],
+    tabs = null,
     onSearch,
     onLoad,
     onScrollLoad,
@@ -98,6 +104,7 @@ const MultiSelect = ({
         onChange?.(newValues)
     }
     // add
+    const triggerRef = useRef(null)
     const handleSwitch = (value: string, label: string) => {
         if (lockedValues.includes(value)) {
             return
@@ -112,6 +119,18 @@ const MultiSelect = ({
         if (!multiple) {
             const newValues = onScrollLoad ? [{ label, value }] : [value]
             updateValues(newValues);
+            // 关闭弹窗
+            const element = triggerRef.current;
+            if (element) {
+                // 创建 PointerEvent
+                const event = new PointerEvent('pointerdown', {
+                    bubbles: true,
+                    cancelable: true,
+                    pointerId: 1,
+                    pointerType: 'mouse'
+                });
+                element.dispatchEvent(event);
+            }
             return
         }
 
@@ -174,7 +193,7 @@ const MultiSelect = ({
             }
         }}
     >
-        <SelectTrigger className="h-auto">
+        <SelectTrigger className={cname('h-auto ', className)} ref={triggerRef}>
             {
                 !multiple && (values.length ? <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
             }
@@ -203,28 +222,26 @@ const MultiSelect = ({
             }
         </SelectTrigger>
         <SelectContent
-            className={className}
+            className={contentClassName}
             headNode={
                 <div className="p-2">
-                    <SearchInput ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />
+                    {tabs}
+                    <SearchInput id={id} ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />
                 </div>
             }
             footerNode={children}
         >
-            <div className="flex">
-                {/* <div>123</div> */}
-                <div className="mt-2">
-                    {
-                        optionFilter.map((item) => (
-                            <MultiItem
-                                active={values.some(val => val === item.value || val.value === item.value)}
-                                value={item.value}
-                                onClick={handleSwitch}
-                            >{item.label}</MultiItem>
-                        ))
-                    }
-                    <div ref={footerRef} style={{ height: 20 }}></div>
-                </div>
+            <div className="mt-2">
+                {
+                    optionFilter.map((item) => (
+                        <MultiItem
+                            active={values.some(val => val === item.value || val.value === item.value)}
+                            value={item.value}
+                            onClick={handleSwitch}
+                        >{item.label}</MultiItem>
+                    ))
+                }
+                <div ref={footerRef} style={{ height: 20 }}></div>
             </div>
         </SelectContent>
     </Select>

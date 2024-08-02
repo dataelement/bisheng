@@ -10,7 +10,7 @@ import RunLog from "./RunLog";
 import Separator from "./Separator";
 import { useMessageStore } from "./messageStore";
 
-export default function MessagePanne({ logo, useName, guideWord, loadMore }) {
+export default function MessagePanne({ mark = false, logo, useName, guideWord, loadMore, onMarkClick }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -56,12 +56,41 @@ export default function MessagePanne({ logo, useName, guideWord, loadMore }) {
         return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
     }, [messagesRef.current, messages, chatId]);
 
+    const messagesList = [...hisMessages, ...messages]
+    // 成对的qa msg
+    const findQa = (msgs, index) => {
+        const item = msgs[index]
+        if (item.category === 'answer') {
+            const a = item.message[item.chatKey] || item.message
+            let q = ''
+            while (index > -1) {
+                const qItem = msgs[--index]
+                if (qItem.category === 'question') {
+                    q = qItem.message[qItem.chatKey] || qItem.message
+                    break
+                }
+            }
+            return { q, a }
+        } else if (item.category === 'question') {
+            const q = item.message[item.chatKey] || item.message
+            let a = ''
+            while (msgs[++index]) {
+                const aItem = msgs[index]
+                if (aItem.category === 'answer') {
+                    a = aItem.message[aItem.chatKey] || aItem.message
+                    break
+                }
+            }
+            return { q, a }
+        }
+    }
+
     return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-60">
         {guideWord && <MessageBs
             key={9999}
             data={{ message: guideWord, isSend: false, chatKey: '', end: true, user_name: '' }} />}
         {
-            [...hisMessages, ...messages].map(msg => {
+            messagesList.map((msg, index) => {
                 // 工厂
                 let type = 'llm'
                 if (msg.isSend) {
@@ -80,14 +109,16 @@ export default function MessagePanne({ logo, useName, guideWord, loadMore }) {
 
                 switch (type) {
                     case 'user':
-                        return <MessageUser key={msg.id} useName={useName} data={msg} />;
+                        return <MessageUser mark={mark} key={msg.id} useName={useName} data={msg} onMarkClick={() => onMarkClick('question', msg.id, findQa(messagesList, index))} />;
                     case 'llm':
                         return <MessageBs
+                            mark={mark}
                             logo={logo}
                             key={msg.id}
                             data={msg}
                             onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
                             onSource={(data) => { sourceRef.current?.openModal(data) }}
+                            onMarkClick={() => onMarkClick('answer', msg.id, findQa(messagesList, index))}
                         />;
                     case 'system':
                         return <MessageSystem key={msg.id} data={msg} />;
