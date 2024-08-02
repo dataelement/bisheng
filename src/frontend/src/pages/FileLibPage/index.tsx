@@ -112,7 +112,7 @@ function CreateModal({ datalist, open, setOpen }) {
             </div>
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
+                    <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>{t('cancel')}</Button>
                 </DialogClose>
                 <Button type="submit" className="px-11" onClick={handleCreate}>{t('create')}</Button>
             </DialogFooter>
@@ -188,7 +188,7 @@ export default function FileLibPage() {
                             </TableHeader>
 
                             <TableBody>
-                                {datalist.map((el:any) => (
+                                {datalist.map((el: any) => (
                                     <TableRow key={el.id}>
                                         <TableCell className="font-medium max-w-[200px]">
                                             <div className=" truncate-multiline">{el.name}</div>

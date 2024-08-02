@@ -219,3 +219,8 @@
 .report-hidden .leave {
 	display: none !important;
 }
+
+/* react-flow */
+.dark .react-flow__controls-button{
+	background: #111;
+}

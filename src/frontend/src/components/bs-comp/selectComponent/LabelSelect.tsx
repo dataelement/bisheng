@@ -12,10 +12,11 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { PlusIcon } from "@radix-ui/react-icons";
 import { useContext } from "react";
 import { userContext } from "@/contexts/userContext";
-import { createLabelApi, updateLabelApi, 
+import {
+    createLabelApi, updateLabelApi,
     createLinkApi, deleteLinkApi,
     deleteLabelApi
- } from "@/controllers/API/label";
+} from "@/controllers/API/label";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 export enum UPDATETYPE {
@@ -26,31 +27,31 @@ export enum UPDATETYPE {
     DELETELABEL = 'deleteLabel'
 }
 
-export default function LabelSelect({labels, all, children, resource, onUpdate}) {
+export default function LabelSelect({ labels, all, children, resource, onUpdate }) {
     const [open, setOpen] = useState(false)
     const [data, setData] = useState([])
     const { user } = useContext(userContext)
     const dataRef = useRef([])
     const { message } = useToast()
     const { t } = useTranslation()
-    
+
     useEffect(() => {
         const newData = all.map(d => {
             const res = labels.find(l => l.value === d.value)
-            return res ? {...d, selected:true} : d
+            return res ? { ...d, selected: true } : d
         })
         dataRef.current = newData
         setData(newData)
     }, [all])
 
     const handleEdit = (id) => {
-        setData(pre => pre.map(d =>  ({...d, edit: d.value === id}) ))
+        setData(pre => pre.map(d => ({ ...d, edit: d.value === id })))
     }
 
     const handleChecked = (id) => {
         const type = resource.type === 'assist' ? 3 : 2
         setData(pre => {
-            const newData = pre.map(d => d.value === id ? {...d, selected: !d.selected} : d)
+            const newData = pre.map(d => d.value === id ? { ...d, selected: !d.selected } : d)
             const cur = newData.find(d => d.value === id)
             captureAndAlertRequestErrorHoc(
                 (cur.selected ? createLinkApi(id, resource.id, type) : deleteLinkApi(id, resource.id, type)).then(() => {
@@ -67,26 +68,26 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
     const nameRef = useRef('')
     const handleChange = (e, id) => {
         nameRef.current = id ? dataRef.current.find(d => d.value === id).label : ''
-        setData(pre => pre.map(d => d.value === id ? {...d, label:e.target.value} : d))
+        setData(pre => pre.map(d => d.value === id ? { ...d, label: e.target.value } : d))
     }
 
     const errorRestName = (preName, id) => { //错误发生回退初值
-        preName 
-        ? setData(pre => pre.map(d => d.value === id ? {...d, label:nameRef.current} : d))
-        : setData(pre => pre.filter(d => d.value))
+        preName
+            ? setData(pre => pre.map(d => d.value === id ? { ...d, label: nameRef.current } : d))
+            : setData(pre => pre.filter(d => d.value))
     }
 
     const handleSave = async (e, id) => {
-        if(e.key === 'Enter') {
-            setData(pre => pre.map(d => d.value === id ? {...d, edit:false} : d))
+        if (e.key === 'Enter') {
+            setData(pre => pre.map(d => d.value === id ? { ...d, edit: false } : d))
             const label = data.find(d => d.value === id)
-            if(label.label.length > 10) {
+            if (label.label.length > 10) {
                 errorRestName(nameRef.current, id)
-                return message({ title: t('prompt'), variant: 'warning', description: '标签名不能超过10个字符' })
+                return message({ title: t('prompt'), variant: 'warning', description: t('tag.labelMaxLength') })
             }
-            const err = await captureAndAlertRequestErrorHoc(updateLabelApi(id, label.label).then((res:any) => {
+            const err = await captureAndAlertRequestErrorHoc(updateLabelApi(id, label.label).then((res: any) => {
                 setData(pre => {
-                    const newData = pre.map(d => d.value ? d : {...d, label:res.name, value:res.id})
+                    const newData = pre.map(d => d.value ? d : { ...d, label: res.name, value: res.id })
                     dataRef.current = newData
                     return newData
                 })
@@ -94,9 +95,9 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
                     type: UPDATETYPE.UPDATENAME,
                     data: label
                 })
-                return message({ title: t('prompt'), variant: 'success', description: id ? '修改成功' : '创建成功' })
+                return message({ title: t('prompt'), variant: 'success', description: id ? t('updateSuccess') : t('createSuccess') })
             }))
-            if(!err) {
+            if (!err) {
                 errorRestName(nameRef.current, id)
             }
         }
@@ -105,15 +106,15 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
     const handleDelete = (label) => {
         bsConfirm({
             title: t('prompt'),
-            desc: `标签【${label.label}】正在使用中，确认删除？`,
-            okTxt: t('system.confirm'),
+            desc: t('tag.confirmDeleteLabel', { label: label.label }),
+            okTxt: t('confirm'),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteLabelApi(label.value).then(() => {
                     onUpdate({
                         type: UPDATETYPE.DELETELABEL,
                         data: label
                     })
-                    message({title: t('prompt'), variant: 'success', description: '删除成功'})
+                    message({ title: t('prompt'), variant: 'success', description: t('deleteSuccess') })
                 }))
                 next()
             }
@@ -122,7 +123,7 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
 
     const handleOpenChange = (b) => { // 可用于整体保存
         setOpen(b)
-        setData(pre => pre.map(d => ({...d, edit:false}) ))
+        setData(pre => pre.map(d => ({ ...d, edit: false })))
     }
 
     const [keyword, setKeyword] = useState('')
@@ -134,11 +135,11 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
     }
 
     const handleAdd = () => {
-        if(keyword.length > 10) {
-            return message({ title: t('prompt'), variant: 'warning', description: '标签名不能超过10个字符' })
+        if (keyword.length > 10) {
+            return message({ title: t('prompt'), variant: 'warning', description: t('tag.labelMaxLength') })
         }
-        createLabelApi(keyword).then((res:any) => {
-            const addItem = { label:res.name, value:res.id, edit:false, selected:false }
+        createLabelApi(keyword).then((res: any) => {
+            const addItem = { label: res.name, value: res.id, edit: false, selected: false }
             dataRef.current = [addItem, ...dataRef.current]
             setData([addItem])
             onUpdate({
@@ -151,7 +152,7 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
     const showAdd = useMemo(() => {
         if(data.length === 1 && data[0].label === keyword) {
             return false
-        } 
+        }
         return true
     }, [data])
 
@@ -161,36 +162,36 @@ export default function LabelSelect({labels, all, children, resource, onUpdate})
         </PopoverTrigger>
         <PopoverContent className="z-[20]" onClick={(e) => e.stopPropagation()}>
             <div>
-                <SearchInput placeholder="搜索标签" value={keyword} onChange={handleSearch} className="w-[240px]"
+                <SearchInput placeholder={t('chat.searchLabels')} value={keyword} onChange={handleSearch} className="w-[240px]"
                     onKeyDown={(e) => {
-                        if(e.key === 'Enter') {
+                        if (e.key === 'Enter') {
                             (!data.length && user.role === 'admin') ? handleAdd() : null
                         }
-                    }}/>
+                    }} />
             </div>
             <div className="mt-4 h-[200px] overflow-y-auto">
-                {data.map(d => <div className="flex group justify-between h-8 rounded-sm hover:bg-[#F5F5F5]">
+                {data.map(d => <div className="flex group justify-between h-8 rounded-sm hover:bg-[#EBF0FF] dark:hover:bg-gray-700">
                     <div className="flex place-items-center space-x-2">
-                        <Checkbox id={d.value} checked={d.selected} onCheckedChange={() => handleChecked(d.value)}/>
+                        <Checkbox id={d.value} checked={d.selected} onCheckedChange={() => handleChecked(d.value)} />
                         {
-                            d.edit 
-                            ? <Input autoFocus className="h-6" type="text" value={d.label || ''} 
-                                onChange={(e) => handleChange(e, d.value)}
-                                onKeyDown={(e) => handleSave(e, d.value)} />
-                            : <Label htmlFor={d.value} className="cursor-pointer">{d.label}</Label>
+                            d.edit
+                                ? <Input autoFocus className="h-6" type="text" value={d.label || ''}
+                                    onChange={(e) => handleChange(e, d.value)}
+                                    onKeyDown={(e) => handleSave(e, d.value)} />
+                                : <Label htmlFor={d.value} className="cursor-pointer">{d.label}</Label>
                         }
                     </div>
                     {user.role === 'admin' && <div className="flex place-items-center space-x-4 opacity-0 group-hover:opacity-100">
-                        <Pencil2Icon className="cursor-pointer" onClick={() => handleEdit(d.value)}/>
+                        <Pencil2Icon className="cursor-pointer" onClick={() => handleEdit(d.value)} />
                         <Trash2 size={16} onClick={() => handleDelete(d)} className="text-gray-600 cursor-pointer" />
                     </div>}
                 </div>)}
                 {(showAdd && user.role === 'admin') && <div onClick={handleAdd}
-                    className="flex group items-center h-8 rounded-sm bg-[#F5F5F5] cursor-pointer">
-                    <PlusIcon className="mx-2 text-[#727C8F]"/>
-                    <span>创建“新标签”</span>
+                    className="flex group items-center h-8 rounded-sm bg-[#EBF0FF] dark:bg-gray-700 cursor-pointer">
+                    <PlusIcon className="mx-2 text-[#727C8F]" />
+                    <span>{t('tag.createNewLabel')}</span>
                 </div>}
-            </div>  
+            </div>
         </PopoverContent>
     </Popover>
 }
