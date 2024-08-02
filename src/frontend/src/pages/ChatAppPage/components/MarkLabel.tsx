@@ -15,7 +15,7 @@ function DragItem({className = '', data, children, onCancel}) {
         <CrossCircledIcon onClick={(e) => {e.stopPropagation(); onCancel(data.id)}}
             className='text-gray-400 absolute top-[-6px] right-[-6px] cursor-pointer'/>
         <div className='bg-gray-500 rounded-full w-[26px] h-full text-center'>
-            <span className='text-slate-50 font-bold'>{data.index}</span>
+            <span className='text-slate-50 font-bold text-sm'>{data.index}</span>
         </div>
         <div className='ml-2 truncate'>
             {children}
@@ -89,7 +89,7 @@ export default function MarkLabel({open, home, onClose}) {
             <DialogHeader>
                 <DialogTitle className='flex items-center space-x-2'>
                     <PromptIcon/>
-                    <span className='text-sm text-gray-500'>操作提示：在左侧选择要展示的标签，在右侧拖拽进行排序</span>
+                    <span className='text-sm text-gray-500'>{t('chat.operationTips')}</span>
                 </DialogTitle>
             </DialogHeader>
             <div className='h-[650px] w-full grid grid-cols-[70%_30%]'>
@@ -98,6 +98,7 @@ export default function MarkLabel({open, home, onClose}) {
                         {
                             labels.map(l => 
                             <Button onClick={() => handleSelect(l.value)} 
+                            size='sm'
                             className={`ml-4 mt-4 p-1 ${!l.selected && 'bg-blue-300 hover:bg-blue-300'} w-[120px]`}>
                                 <span className='truncate'>{l.label}</span>
                             </Button>)
@@ -106,7 +107,7 @@ export default function MarkLabel({open, home, onClose}) {
                 </div>
                 <div className='border-l text-gray-500'>
                     <div className='ml-4'>
-                        <span className='text-xl font-bold'>已选：{selected.length}/10</span>
+                        <span className='text-md font-bold'>{t('chat.selected')}：{selected.length}/10</span>
                         <DragDropContext onDragEnd={handleDragEnd} onDragStart={() => setFlag(true)} onDragUpdate={() => setFlag(true)}>
                             <Droppable droppableId={'list'}>
                                 {(provided) => (
@@ -117,7 +118,7 @@ export default function MarkLabel({open, home, onClose}) {
                                                     <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} 
                                                         style={flag ? { ...provided.draggableProps.style, position:'relative', left:0, top:0 } : {...provided.draggableProps.style}}>
                                                         <DragItem  onCancel={handleDelete} data={{index:index + 1, id:b.value}} className='mt-4 w-[170px]'>
-                                                            <span className='font-bold'>{b.label}</span>
+                                                            <span className='font-bold text-sm'>{b.label}</span>
                                                         </DragItem>
                                                     </div>
                                                 )}

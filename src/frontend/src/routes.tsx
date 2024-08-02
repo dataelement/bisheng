@@ -65,18 +65,11 @@ const privateRouter = [
       { path: "", element: <SkillChatPage />, },
       { path: "filelib", element: <FileLibPage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
-      {
-        path: "build",
-        element: <BuildLayout />,
-        permission: 'build',
-        children: [
-          { path: "assist", element: <SkillAssisPage /> },
-          { path: "skills", element: <SkillsPage /> },
-          // @ts-ignore
-          { path: "tools", element: <SkillToolsPage /> },
-          { path: "", element: <Navigate to="assist" replace /> },
-        ]
-      },
+      { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
+      { path: "build/skills", element: <SkillsPage />, permission: 'build', },
+      // @ts-ignore
+      { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
+      { path: "build", element: <Navigate to="assist" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps", element: <Templates />, permission: 'build', },

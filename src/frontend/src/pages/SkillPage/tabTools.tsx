@@ -46,7 +46,7 @@ export default function tabTools({ select = null, onSelect }) {
 
   return (
     <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
-      <div className="w-full flex h-full overflow-y-scroll scrollbar-hide relative top-[-60px]">
+      <div className="w-full flex h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
         <div className="w-fit p-6">
           {/* <h1>{t("tools.addTool")}</h1> */}
           <SearchInput

@@ -39,7 +39,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             await build(_flow, chatId)
             version === 'v1' ? loadHistoryMsg(_flow.id, chatId, {
                 appendHistory,
-                lastMsg: t('historicalMessages')
+                lastMsg: t('chat.historicalMessages')
             }) : clearMsgs()
             flowRef.current = _flow
             setFlow(_flow)
@@ -50,7 +50,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             const _assistant = await loadAssistantState(id, version)
             version === 'v1' ? loadHistoryMsg(_assistant.id, chatId, {
                 appendHistory,
-                lastMsg: t('historicalMessages')
+                lastMsg: t('chat.historicalMessages')
             }) : clearMsgs()
             setAssistant(_assistant)
             changeChatId(chatId) // ws

@@ -1,7 +1,11 @@
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import DialogForceUpdate from "@/components/bs-ui/dialog/DialogForceUpdate";
+import SelectSearch from "@/components/bs-ui/select/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { userContext } from "@/contexts/userContext";
+import { getAllLabelsApi } from "@/controllers/API/label";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import CardComponent from "../../components/bs-comp/cardComponent";
@@ -11,10 +15,6 @@ import { AssistantItemDB, changeAssistantStatusApi, deleteAssistantApi, getAssis
 import { FlowType } from "../../types/flow";
 import { useTable } from "../../util/hook";
 import CreateAssistant from "./components/CreateAssistant";
-import { userContext } from "@/contexts/userContext";
-import { useContext, useEffect, useRef, useState } from "react";
-import SelectSearch from "@/components/bs-ui/select/select"
-import { getAllLabelsApi } from "@/controllers/API/label";
 
 export default function Assistants() {
     const { t } = useTranslation()
@@ -26,8 +26,8 @@ export default function Assistants() {
 
     useEffect(() => {
         getAllLabelsApi().then(res => {
-            const newData = res.data.map(d => ({ label:d.name, value:d.id, edit:false, selected:false }))
-            const topData = { label:'全部', value:-1, edit:false, selected:false }
+            const newData = res.data.map(d => ({ label: d.name, value: d.id, edit: false, selected: false }))
+            const topData = { label: t('all'), value: -1, edit: false, selected: false }
             labelsRef.current = [topData, ...newData]
             setLabels(labelsRef.current)
         })
@@ -47,7 +47,7 @@ export default function Assistants() {
             }
         })
     }
-    
+
     const handleCheckedChange = (checked, data) => {
         return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 1 : 0)).then(res => {
             if (res === null) {
@@ -57,10 +57,10 @@ export default function Assistants() {
         })
     }
 
-    const [selectLabel, setSelectLabel] = useState({label:'', value:null})
+    const [selectLabel, setSelectLabel] = useState({ label: '', value: null })
     const handleLabelSearch = (id) => {
         setSelectLabel(labels.find(l => l.value === id))
-        filterData({tag_id: id})
+        filterData({ tag_id: id })
     }
 
     const handleSelectSearch = (e) => {
@@ -74,16 +74,16 @@ export default function Assistants() {
     //     filterData({tag_id: -1})
     // }
 
-    return <div className="h-full relative">
-        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative top-[-60px]">
+    return <div className="h-full relative bg-background-main border-t">
+        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative">
             <div className="flex space-x-4">
                 <SearchInput className="w-64" placeholder={t('build.searchAssistant')} onChange={(e) => search(e.target.value)}></SearchInput>
-                <SelectSearch value={!selectLabel.value ? '' : selectLabel.value} options={labels} 
-                    selectPlaceholder="全部标签"
-                    inputPlaceholder="搜索标签"
+                <SelectSearch value={!selectLabel.value ? '' : selectLabel.value} options={labels}
+                    selectPlaceholder={t('chat.allLabels')}
+                    inputPlaceholder={t('chat.searchLabels')}
                     selectClass="w-64"
                     onOpenChange={() => setLabels(labelsRef.current)}
-                    onChange={handleSelectSearch} 
+                    onChange={handleSelectSearch}
                     onValueChange={handleLabelSearch}>
                     {/* <div onClick={handleClear} className="bg-[#F5F5F5] rounded-sm mb-2 item-center h-[30px]">
                         <span className="ml-2 text-[#727C8F] cursor-default">清除已选项</span>
@@ -114,7 +114,7 @@ export default function Assistants() {
                             <CreateAssistant ></CreateAssistant>
                         </DialogForceUpdate>
                         {
-                            dataSource.map((item:any, i) => (
+                            dataSource.map((item: any, i) => (
                                 <CardComponent<AssistantItemDB>
                                     data={item}
                                     id={item.id}

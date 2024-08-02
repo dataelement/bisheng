@@ -207,7 +207,13 @@
     "search": "搜索",
     "recommendationQuestions": "推荐问题",
     "historicalMessages": "以上为历史消息",
-    "clickDownload": "点击下载"
+    "clickDownload": "点击下载",
+    "searchAssistantOrSkill": "搜索助手或者技能",
+    "operationTips": "操作提示：在左侧选择要展示的标签，在右侧拖拽进行排序",
+    "selected": "已选",
+    "pleaseSelectAnApp": "请选择一个应用",
+    "allLabels": "全部标签",
+    "searchLabels": "搜索标签"
   },
   "model": {
     "modelConfiguration": "模型配置",
@@ -583,7 +589,8 @@
     "enterBingSearchUrl": "请输入Bing搜索URL",
     "apiKey": "API密钥",
     "azureEndpoint": "Azure端点",
-    "apiVersion": "API版本"
+    "apiVersion": "API版本",
+    "assistantAvatar": "助手头像"
   },
   "tools": {
     "addTool": "添加工具",
@@ -664,7 +671,32 @@
     "selectUserGroup": "选择用户组",
     "startDate": "开始日期",
     "endDate": "结束日期",
-    "actionBehavior": "操作行为"
+    "actionBehavior": "操作行为",
+    "createChat": "新建会话",
+    "deleteChat": "删除会话",
+    "createBuild": "新建应用",
+    "updateBuild": "编辑应用",
+    "deleteBuild": "删除应用",
+    "createKnowledge": "新建知识库",
+    "deleteKnowledge": "删除知识库",
+    "uploadFile": "知识库上传文件",
+    "deleteFile": "知识库删除文件",
+    "updateUser": "用户编辑",
+    "forbidUser": "停用用户",
+    "recoverUser": "启用用户",
+    "createUserGroup": "新建用户组",
+    "deleteUserGroup": "删除用户组",
+    "updateUserGroup": "编辑用户组",
+    "createRole": "新建角色",
+    "deleteRole": "删除角色",
+    "updateRole": "编辑角色",
+    "userLogin": "用户登录"
+  },
+  "tag": {
+    "labelMaxLength": "标签名不能超过10个字符",
+    "confirmDeleteLabel": "标签【{{label}}】正在使用中，确认删除？",
+    "createNewLabel": "创建“新标签”",
+    "addLabel": "添加标签"
   },
   "all": "全部",
   "confirmButton": "确定",
@@ -692,5 +724,8 @@
   "tip": "提示",
   "deleteAssistant": "确认删除该助手？",
   "chatTipsTitle": "使用提示",
+  "updateSuccess": "修改成功",
+  "createSuccess": "创建成功",
+  "confirm": "确认",
   "chatTips": "1. 请遵守《中华人民共和国网络安全法》《中华人民共和国数据安全法》《中华人民共和国个人信息保护法》及《生成式人工智能服务安全基本要求》；\n2. 禁止上传涉及公司保密管理规定范围内的保密数据；\n3. 禁止上传包含个人隐私信息的数据；\n4. 禁止上传包含恶意程序或病毒的文件；\n5. 禁止使用 AI 生成攻击性代码；\n6. 禁止向 AI 提问包括但不限于涉爆涉恐涉黄及危害国家安全及公共安全的违法不良信息；\n7. AI 生成内容受到公司保密管理规定约束。用户应根据实际情况判断生成内容的合理性，避免 AI 幻觉造成的风险。"
 }

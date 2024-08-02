@@ -52,7 +52,7 @@ export default function SkillChatPage() {
             setChatId(_chatId)
             setLocation(false)
         } else {
-            return message({ title: t('prompt'), variant: 'warning', description: '请选择一个应用' })
+            return message({ title: t('prompt'), variant: 'warning', description: t('chat.pleaseSelectAnApp') })
         }
     }
 

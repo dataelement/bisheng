@@ -68,7 +68,7 @@ export default function Skills() {
 
         flow.name = `${flow.name}-${generateUUID(5)}`
         // @ts-ignore
-        captureAndAlertRequestErrorHoc(saveFlowToDatabase({ ...flow, id: flow.flow_id }).then((res:any) => {
+        captureAndAlertRequestErrorHoc(saveFlowToDatabase({ ...flow, id: flow.flow_id }).then((res: any) => {
             res.user_name = user.user_name
             res.write = true
             setOpen(false)
@@ -77,12 +77,12 @@ export default function Skills() {
     }
 
     const [labels, setLabels] = useState<any[]>([])
-    const [selectLabel, setSelectLabel] = useState({label:'', value:null})
+    const [selectLabel, setSelectLabel] = useState({ label: '', value: null })
     const labelsRef = useRef([])
 
     const handleLabelSearch = (id) => {
         setSelectLabel(labels.find(l => l.value === id))
-        filterData({tag_id: id})
+        filterData({ tag_id: id })
     }
 
     const handleSelectSearch = (e) => {
@@ -98,23 +98,23 @@ export default function Skills() {
 
     useEffect(() => {
         getAllLabelsApi().then(res => {
-            const newData = res.data.map(d => ({ label:d.name, value:d.id, edit:false, selected:false }))
-            const topData = { label:'全部', value:-1, edit:false, selected:false }
+            const newData = res.data.map(d => ({ label: d.name, value: d.id, edit: false, selected: false }))
+            const topData = { label: t('all'), value: -1, edit: false, selected: false }
             labelsRef.current = [topData, ...newData]
             setLabels(labelsRef.current)
         })
     }, [])
 
     return <div className="h-full relative">
-        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide  relative top-[-60px]">
+        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
             <div className="flex space-x-4">
                 <SearchInput className="w-64" placeholder={t('skills.skillSearch')} onChange={(e) => search(e.target.value)}></SearchInput>
-                <SelectSearch value={!selectLabel.value ? '' : selectLabel.value} options={labels} 
-                    selectPlaceholder="全部标签"
-                    inputPlaceholder="搜索标签"
+                <SelectSearch value={!selectLabel.value ? '' : selectLabel.value} options={labels}
+                    selectPlaceholder={t('chat.allLabels')}
+                    inputPlaceholder={t('chat.searchLabels')}
                     selectClass="w-64"
                     onOpenChange={() => setLabels(labelsRef.current)}
-                    onChange={handleSelectSearch} 
+                    onChange={handleSelectSearch}
                     onValueChange={handleLabelSearch}>
                     {/* <div onClick={handleClear} className="bg-[#F5F5F5] rounded-sm mb-2 item-center h-[30px]">
                         <span className="ml-2 text-[#727C8F] cursor-default">清除已选项</span>
@@ -145,7 +145,7 @@ export default function Skills() {
                             ></CardComponent>
                         </SkillTempSheet>
                         {
-                            dataSource.map((item:any, i) => (
+                            dataSource.map((item: any, i) => (
                                 <CardComponent<FlowType>
                                     key={item.id}
                                     data={item}

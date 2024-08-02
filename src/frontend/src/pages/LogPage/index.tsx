@@ -23,25 +23,17 @@ import { transformEvent, transformModule, transformObjectType } from "./utils";
 const useGroups = () => {
     const [groups, setGroups] = useState([])
     const loadData = () => {
-        getUserGroupsApi().then((res:any) => setGroups(res.records))
+        getUserGroupsApi().then((res: any) => setGroups(res.records))
     }
     return { groups, loadData }
-}
-const useModules = () => {
-    const [modules, setModules] = useState([])
-    const loadModules = () => {
-        getModulesApi().then(res => setModules(res.data))
-    }
-    return { modules, loadModules }
 }
 
 export default function index() {
     const { t } = useTranslation()
     const { users, selectedRef, loadUsers, searchUser } = useUsers()
     const { groups, loadData } = useGroups()
-    const { modules, loadModules } = useModules()
     const { page, pageSize, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
-        getLogsApi({...param})
+        getLogsApi({ ...param })
     )
     const init = {
         userIds: [],
@@ -53,79 +45,82 @@ export default function index() {
     }
 
     const [actions, setActions] = useState<any[]>([])
-    const [keys, setKeys] = useState({...init})
+    const [keys, setKeys] = useState({ ...init })
 
     const handleActionOpen = async () => {
         setActions((keys.moduleId ? await getActionsByModuleApi(keys.moduleId) : await getActionsApi()))
     }
     const handleSearch = () => {
         const startTime = keys.start && formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss')
-        const endTime = keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss').replace('00:00:00','23:59:59')
-        filterData({...keys, start:startTime, end:endTime})
+        const endTime = keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss').replace('00:00:00', '23:59:59')
+        filterData({ ...keys, start: startTime, end: endTime })
     }
     const handleReset = () => {
-        setKeys({...init})
+        setKeys({ ...init })
         filterData(init)
     }
     useEffect(() => {
         loadUsers()
-    },[])
+    }, [])
 
     return <div className="relative">
         <div className="h-[calc(100vh-98px)] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
-            <div className="w-[200px] relative">
-                <MultiSelect className="overflow-y-auto max-w-[200px]" multiple
-                    options={users}
-                    value={keys.userIds}
-                    placeholder={t('log.selectUser')}
-                    onLoad={loadUsers}
-                    onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds}}
-                    onChange={(values) => {setKeys({...keys,userIds:values}); console.log(values)}}
-                ></MultiSelect>
-            </div>
-            <div className="w-[200px] relative">
-                <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({...keys,groupId:value})}>
-                    <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder={t('log.selectUserGroup')} />
-                    </SelectTrigger>
-                    <SelectContent className="max-w-[200px] break-all">
-                        <SelectGroup>
-                            {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="w-[180px] relative">
-                <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({...keys,start:t})} />
-            </div>
-            <div className="w-[180px] relative">
-                <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({...keys,end:t})} />
-            </div>
-            <div className="w-[180px] relative">
-                <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({...keys, action:'', moduleId:value})}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder={t('log.systemModule')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectGroup>
-                            {modules.map(m => <SelectItem value={m.value} key={m.value}>{m.name}</SelectItem>)}
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="w-[180px] relative">
-                <Select value={keys.action} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({...keys,action:value})}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder={t('log.actionBehavior')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectGroup>
-                            {actions.map(a => <SelectItem value={a.value} key={a.value}>{a.name}</SelectItem>)}
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-            </div>
+                <div className="w-[200px] relative">
+                    <MultiSelect className="overflow-y-auto max-w-[200px]" multiple
+                        options={users}
+                        value={keys.userIds}
+                        placeholder={t('log.selectUser')}
+                        onLoad={loadUsers}
+                        onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds }}
+                        onChange={(values) => { setKeys({ ...keys, userIds: values }); console.log(values) }}
+                    ></MultiSelect>
+                </div>
+                <div className="w-[200px] relative">
+                    <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({ ...keys, groupId: value })}>
+                        <SelectTrigger className="w-[200px]">
+                            <SelectValue placeholder={t('log.selectUserGroup')} />
+                        </SelectTrigger>
+                        <SelectContent className="max-w-[200px] break-all">
+                            <SelectGroup>
+                                {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="w-[180px] relative">
+                    <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({ ...keys, start: t })} />
+                </div>
+                <div className="w-[180px] relative">
+                    <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({ ...keys, end: t })} />
+                </div>
+                <div className="w-[180px] relative">
+                    <Select value={keys.moduleId} onValueChange={(value) => setKeys({ ...keys, action: '', moduleId: value })}>
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder={t('log.systemModule')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                <SelectItem value={'chat'}>{t('menu.app')}</SelectItem>
+                                <SelectItem value={'build'}>{t('menu.skills')}</SelectItem>
+                                <SelectItem value={'knowledge'}>{t('menu.knowledge')}</SelectItem>
+                                <SelectItem value={'system'}>{t('menu.system')}</SelectItem>
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="w-[180px] relative">
+                    <Select value={keys.action} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({ ...keys, action: value })}>
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder={t('log.actionBehavior')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                {actions.map(a => <SelectItem value={a.value} key={a.value}>{t(a.name)}</SelectItem>)}
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
+                </div>
                 <div>
                     <Button className="mr-3 px-6" onClick={handleSearch}>
                         {t('log.searchButton')}
@@ -150,20 +145,20 @@ export default function index() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {logs.map((log:any) => (
-                    <TableRow key={log.id}>
-                        <TableCell>{log.id}</TableCell>
-                        <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.operator_name}</div></TableCell>
-                        <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
-                        <TableCell>{transformModule(log.system_id)}</TableCell>
-                        <TableCell>{transformEvent(log.event_type)}</TableCell>
-                        <TableCell>{transformObjectType(log.object_type)}</TableCell>
-                        <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name || '无'}</div></TableCell>
-                        <TableCell>{log.ip_address}</TableCell>
-                        <TableCell className="max-w-[250px]">
-                            <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || '无'}</div>
-                        </TableCell>
-                    </TableRow>
+                    {logs.map((log: any) => (
+                        <TableRow key={log.id}>
+                            <TableCell>{log.id}</TableCell>
+                            <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.operator_name}</div></TableCell>
+                            <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
+                            <TableCell>{transformModule(log.system_id)}</TableCell>
+                            <TableCell>{transformEvent(log.event_type)}</TableCell>
+                            <TableCell>{transformObjectType(log.object_type)}</TableCell>
+                            <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name || '无'}</div></TableCell>
+                            <TableCell>{log.ip_address}</TableCell>
+                            <TableCell className="max-w-[250px]">
+                                <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || '无'}</div>
+                            </TableCell>
+                        </TableRow>
                     ))}
                 </TableBody>
                 {!logs.length && <TableFooter>
@@ -197,14 +192,14 @@ const useUsers = () => {
 
     const loadUsers = () => {
         getOperatorsApi().then(res => {
-            const options = res.map((u:any) => ({label:u.user_name, value:u.user_id}))
+            const options = res.map((u: any) => ({ label: u.user_name, value: u.user_id }))
             userRef.current = options
             setUsers(options)
         })
     }
     const search = (name) => {
         const newUsers = userRef.current.filter(u => u.label.toLowerCase().includes(name.toLowerCase())
-                                                || selectedRef.current.includes(u.value))
+            || selectedRef.current.includes(u.value))
         setUsers(newUsers)
     }
 

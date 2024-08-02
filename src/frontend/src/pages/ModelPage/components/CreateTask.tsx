@@ -80,7 +80,8 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
     return <div className="pt-2 h-[calc(100vh-162px)] px-2 overflow-y-auto">
         <div className="border-b pb-2 flex justify-between items-center">
             <h1 className="">{t('finetune.createTrainingTask')}</h1>
-            <Button variant="black" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+            {/* <Button variant="black" onClick={rtClick}>FT服务管理</Button> */}
+            <Button variant="black" onClick={rtClick}>RT服务管理</Button>
         </div>
         {/* base */}
         <div className="border-b pb-4">

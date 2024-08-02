@@ -65,7 +65,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {tasks.map((task) => (
+                                    {tasks.map((task:any) => (
                                         <TableRow key={task.id} onClick={() => changeItem(task.id)} className={`cursor-pointer ${task.id === taskId && 'bg-gray-100'}`}>
                                             <TableCell className="font-medium">{task.model_name}</TableCell>
                                             <TableCell><BadgeView value={task.status}></BadgeView></TableCell>
