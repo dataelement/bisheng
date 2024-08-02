@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from typing import Dict, List, Optional, Union
@@ -141,7 +142,31 @@ class Settings(BaseSettings):
     def get_knowledge(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
         all_config = self.get_all_config()
-        return all_config.get('knowledges', {})
+        ret = all_config.get('knowledges', {})
+        # milvus、 es、minio配置从环境变量获取
+        ret.update({
+            "vectorstores": {
+                "Milvus": {
+                    "connection_args": json.loads(os.environ.get('BS_MILVUS_CONNECTION_ARGS', '{}')),
+                    "is_partition": os.environ.get('BS_MILVUS_IS_PARTITION', 'true') == 'true',
+                    "partition_suffix": os.environ.get('BS_MILVUS_PARTITION_SUFFIX', '1'),
+                },
+                "ElasticKeywordsSearch": {
+                    "elasticsearch_url": os.environ.get('BS_ELASTICSEARCH_URL'),
+                    "ssl_verify": os.environ.get('BS_ELASTICSEARCH_SSL_VERIFY'),
+                }
+            },
+            "minio": {
+                "SCHEMA": os.environ.get('BS_MINIO_SCHEMA', 'false') == 'true',
+                "CERT_CHECK": os.environ.get('BS_MINIO_CERT_CHECK', 'false') == 'true',
+                "MINIO_ENDPOINT": os.environ.get('BS_MINIO_ENDPOINT'),
+                "MINIO_SHAREPOIN": os.environ.get('BS_MINIO_SHAREPOIN'),  # 确保和nginx的代理地址一致。同一个docker-compose启动可以直接使用默认值
+                "MINIO_ACCESS_KEY": os.environ.get('BS_MINIO_ACCESS_KEY'),
+                "MINIO_SECRET_KEY": os.environ.get('BS_MINIO_SECRET_KEY'),
+            }
+        })
+
+        return ret
 
     def get_default_llm(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
