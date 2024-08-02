@@ -65,3 +65,8 @@ class TrainFileNotExistError(BaseErrorCode):
 class GetGPUInfoError(BaseErrorCode):
     Code: int = 10125
     Msg: str = '获取GPU信息失败'
+
+
+class GetModelError(BaseErrorCode):
+    Code: int = 10126
+    Msg: str = '获取模型列表失败'
