@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Any, List, Optional
 from uuid import UUID
@@ -8,7 +9,7 @@ from loguru import logger
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                            AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
                                            ToolTypeEmptyError, ToolTypeNotExistsError, ToolTypeIsPresetError)
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
@@ -397,6 +398,14 @@ class AssistantService(BaseService, AssistantUtils):
             one["children"] = tool_type_children.get(one["id"], [])
 
         return res
+
+    @classmethod
+    def update_tool_config(cls, login_user: UserPayload, tool_id: int, extra: dict) -> GptsTools:
+        tool_info = GptsToolsDao.get_one_tool(tool_id)
+        if not tool_info:
+            raise NotFoundError.http_exception()
+        tool_info.extra = json.dumps(extra)
+        return GptsToolsDao.update_tools(tool_info)
 
     @classmethod
     def add_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
