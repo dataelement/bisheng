@@ -256,7 +256,7 @@ export default function l2Edit() {
             </div>
         </div>
         {/* footer */}
-        <div className="absolute flex z-50 bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-background-login">
+        <div className="absolute flex z-30 bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-background-login">
             {
                 isL2 ?
                     <div className="flex gap-4 w-[50%]">
