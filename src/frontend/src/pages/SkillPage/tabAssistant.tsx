@@ -1,7 +1,11 @@
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import DialogForceUpdate from "@/components/bs-ui/dialog/DialogForceUpdate";
+import SelectSearch from "@/components/bs-ui/select/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { userContext } from "@/contexts/userContext";
+import { getAllLabelsApi } from "@/controllers/API/label";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import CardComponent from "../../components/bs-comp/cardComponent";
@@ -16,9 +20,21 @@ export default function Assistants() {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const { message } = useToast()
+    const { user } = useContext(userContext)
+    const [labels, setLabels] = useState<any[]>([])
+    const labelsRef = useRef([])
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData } = useTable<AssistantItemDB>({ pageSize: 15 }, (param) =>
-        getAssistantsApi(param.page, param.pageSize, param.keyword)
+    useEffect(() => {
+        getAllLabelsApi().then(res => {
+            const newData = res.data.map(d => ({ label: d.name, value: d.id, edit: false, selected: false }))
+            const topData = { label: t('all'), value: -1, edit: false, selected: false }
+            labelsRef.current = [topData, ...newData]
+            setLabels(labelsRef.current)
+        })
+    }, [])
+
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<AssistantItemDB>({ pageSize: 15 }, (param) =>
+        getAssistantsApi(param.page, param.pageSize, param.keyword, param.tag_id)
     )
 
     const handleDelete = (data) => {
@@ -41,10 +57,38 @@ export default function Assistants() {
         })
     }
 
-    return <div className="h-full relative">
-        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative top-[-60px]">
-            <div className="flex">
+    const [selectLabel, setSelectLabel] = useState({ label: '', value: null })
+    const handleLabelSearch = (id) => {
+        setSelectLabel(labels.find(l => l.value === id))
+        filterData({ tag_id: id })
+    }
+
+    const handleSelectSearch = (e) => {
+        const key = e.target.value
+        const newData = labelsRef.current.filter(l => l.label.toUpperCase().includes(key.toUpperCase()) || l.value === selectLabel.value)
+        setLabels(newData)
+    }
+
+    // const handleClear = () => {
+    //     setSelectLabel(pre => ({...pre, value:-1}))
+    //     filterData({tag_id: -1})
+    // }
+
+    return <div className="h-full relative bg-background-main border-t">
+        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative">
+            <div className="flex space-x-4">
                 <SearchInput className="w-64" placeholder={t('build.searchAssistant')} onChange={(e) => search(e.target.value)}></SearchInput>
+                <SelectSearch value={!selectLabel.value ? '' : selectLabel.value} options={labels}
+                    selectPlaceholder={t('chat.allLabels')}
+                    inputPlaceholder={t('chat.searchLabels')}
+                    selectClass="w-64"
+                    onOpenChange={() => setLabels(labelsRef.current)}
+                    onChange={handleSelectSearch}
+                    onValueChange={handleLabelSearch}>
+                    {/* <div onClick={handleClear} className="bg-[#F5F5F5] rounded-sm mb-2 item-center h-[30px]">
+                        <span className="ml-2 text-[#727C8F] cursor-default">清除已选项</span>
+                    </div> */}
+                </SelectSearch>
             </div>
             {/* list */}
             {
@@ -70,7 +114,7 @@ export default function Assistants() {
                             <CreateAssistant ></CreateAssistant>
                         </DialogForceUpdate>
                         {
-                            dataSource.map((item:any, i) => (
+                            dataSource.map((item: any, i) => (
                                 <CardComponent<AssistantItemDB>
                                     data={item}
                                     id={item.id}
@@ -81,6 +125,8 @@ export default function Assistants() {
                                     title={item.name}
                                     description={item.desc}
                                     user={item.user_name}
+                                    currentUser={user}
+                                    allLabels={labels}
                                     onClick={() => item.status !== 1 && navigate('/assistant/' + item.id)}
                                     onSwitchClick={() => !item.write && item.status !== 1 && message({ title: t('prompt'), description: t('skills.contactAdmin'), variant: 'warning' })}
                                     onDelete={handleDelete}

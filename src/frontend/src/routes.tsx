@@ -7,6 +7,8 @@ import SkillChatPage from "./pages/ChatAppPage";
 import ChatShare from "./pages/ChatAppPage/chatShare";
 import ChatAssitantShare from "./pages/ChatAppPage/chatAssitantShare";
 import ChatPro from "./pages/ChatAppPage/chatWebview";
+import SkillChat from "./pages/ChatAppPage/chatPage/SkillChatPage";
+import AssistantChat from "./pages/ChatAppPage/chatPage/AssistantChatPage";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import FileLibPage from "./pages/FileLibPage";
 import FilesPage from "./pages/FileLibPage/files";
@@ -14,7 +16,7 @@ import FlowPage from "./pages/FlowPage";
 import LogPage from "./pages/LogPage";
 import { LoginPage } from "./pages/LoginPage/login";
 import { ResetPwdPage } from "./pages/LoginPage/resetPwd";
-import ModelPage from "./pages/ModelPage";
+import ModelPage from "./pages/ModelPage/indexNonuse";
 import Doc from "./pages/ModelPage/doc";
 import Page403 from "./pages/Page403";
 import Report from "./pages/Report";
@@ -27,6 +29,9 @@ import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
+import ModelLayout from "./layout/ModelLayout";
+import Management from "./pages/ModelPage/manage";
+import { Finetune } from "./pages/ModelPage/finetune";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -60,22 +65,25 @@ const privateRouter = [
       { path: "", element: <SkillChatPage />, },
       { path: "filelib", element: <FileLibPage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
-      {
-        path: "build",
-        element: <BuildLayout />,
-        permission: 'build',
-        children: [
-          { path: "assist", element: <SkillAssisPage /> },
-          { path: "skills", element: <SkillsPage /> },
-          // @ts-ignore
-          { path: "tools", element: <SkillToolsPage /> },
-          { path: "", element: <Navigate to="assist" replace /> },
-        ]
-      },
+      { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
+      { path: "build/skills", element: <SkillsPage />, permission: 'build', },
+      // @ts-ignore
+      { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
+      { path: "build", element: <Navigate to="assist" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps", element: <Templates />, permission: 'build', },
       { path: "model", element: <ModelPage />, permission: 'model', },
+      // {
+      //   path: "model",
+      //   element: <ModelLayout />,
+      //   permission: "model",
+      //   children: [
+      //     { path: "", element: <Navigate to="management" replace/> },
+      //     { path: "management", element: <Management/>, permission: 'management' },
+      //     { path: "finetune", element: <Finetune rtClick={() => {}} gpuClick={() => {}} />, permission: 'finetune' }
+      //   ]
+      // },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
       { path: "evaluation", element: <EvaluatingPage /> },
@@ -97,6 +105,8 @@ const privateRouter = [
     ]
   },
   // 独立会话页
+  { path: "/chat/assistant/auth/:id/", element: <AssistantChat /> },
+  { path: "/chat/skill/auth/:id/", element: <SkillChat /> },
   { path: "/chat", element: <SkillChatPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },

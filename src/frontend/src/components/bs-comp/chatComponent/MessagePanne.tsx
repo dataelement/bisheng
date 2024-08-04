@@ -10,7 +10,7 @@ import RunLog from "./RunLog";
 import Separator from "./Separator";
 import { useMessageStore } from "./messageStore";
 
-export default function MessagePanne({ useName, guideWord, loadMore }) {
+export default function MessagePanne({ logo, useName, guideWord, loadMore }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -83,6 +83,7 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
                         return <MessageUser key={msg.id} useName={useName} data={msg} />;
                     case 'llm':
                         return <MessageBs
+                            logo={logo}
                             key={msg.id}
                             data={msg}
                             onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
@@ -97,7 +98,7 @@ export default function MessagePanne({ useName, guideWord, loadMore }) {
                     case 'runLog':
                         return <RunLog key={msg.id} data={msg} />;
                     default:
-                        return <div className="text-sm mt-2 border rounded-md p-2" key={msg.id}>未知消息类型</div>;
+                        return <div className="text-sm mt-2 border rounded-md p-2" key={msg.id}>Unknown message type</div>;
                 }
             })
         }

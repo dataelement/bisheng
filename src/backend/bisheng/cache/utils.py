@@ -8,12 +8,14 @@ import tempfile
 from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, BinaryIO
 from urllib.parse import unquote, urlparse
 
 import cchardet
 import requests
 from appdirs import user_cache_dir
+from fastapi import UploadFile
+
 from bisheng.settings import settings
 from bisheng.utils.minio_client import MinioClient, tmp_bucket
 
@@ -168,8 +170,17 @@ def convert_encoding_cchardet(input_file, output_file, target_encoding='utf-8'):
     return output_file
 
 
+def upload_file_to_minio(file: UploadFile, object_name, bucket_name: str = tmp_bucket) -> str:
+    if not settings.get_knowledge().get('minio'):
+        raise ValueError('未找到minio的配置')
+
+    minio_client = MinioClient()
+    minio_client.upload_minio_file(object_name, file.file, bucket_name, file.size)
+    return minio_client.get_share_link(object_name, bucket_name)
+
+
 @create_cache_folder
-def save_uploaded_file(file, folder_name, file_name):
+def save_uploaded_file(file, folder_name, file_name, bucket_name: str = tmp_bucket):
     """
     Save an uploaded file to the specified folder with a hash of its content as the file name.
 
@@ -177,7 +188,7 @@ def save_uploaded_file(file, folder_name, file_name):
         file: The uploaded file object.
         folder_name: The name of the folder to save the file in.
         file_name: The name of the file, including its extension.
-
+        bucket_name: The name of the bucket_name
     Returns:
         The path to the saved file.
     """
@@ -205,7 +216,8 @@ def save_uploaded_file(file, folder_name, file_name):
 
     output_file = file
     # convert no utf-8 file to utf-8
-    if file_name.endswith('.txt') or file_name.endswith('.md'):
+    file_ext = file_name.split('.')[-1].lower()
+    if file_ext in ('txt', 'md', 'csv'):
         output_file = BytesIO()
         output_file = convert_encoding_cchardet(file, output_file)
 
@@ -214,7 +226,7 @@ def save_uploaded_file(file, folder_name, file_name):
         # 存储oss
         file_byte = output_file.read()
         minio_client.upload_tmp(file_name, file_byte)
-        file_path = minio_client.get_share_link(file_name, tmp_bucket)
+        file_path = minio_client.get_share_link(file_name, bucket_name)
     else:
         file_path = folder_path / f'{md5_name}_{file_name}'
         with open(file_path, 'wb') as new_file:

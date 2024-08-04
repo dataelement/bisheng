@@ -46,7 +46,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
         setTaskId(id)
     }, 600, false)
 
-    return <div className="relative">
+    return <div className="relative bg-background-main-content">
         <div className={createOpen ? 'hidden' : 'block'}>
             <FinetuneHead onSearch={search} onFilter={filterData} rtClick={rtClick} onCreate={() => setCreateOpen(true)}></FinetuneHead>
             {/* body */}
@@ -55,7 +55,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                 : <div className="flex gap-4 mt-4">
                     <div className="w-[40%] relative">
                         <div className="border-r overflow-y-auto max-h-[calc(100vh-210px)] pb-20">
-                            <Table>
+                            <Table className="px-2">
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-[100px]">{t('finetune.modelName')}</TableHead>
@@ -65,7 +65,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {tasks.map((task) => (
+                                    {tasks.map((task:any) => (
                                         <TableRow key={task.id} onClick={() => changeItem(task.id)} className={`cursor-pointer ${task.id === taskId && 'bg-gray-100'}`}>
                                             <TableCell className="font-medium">{task.model_name}</TableCell>
                                             <TableCell><BadgeView value={task.status}></BadgeView></TableCell>

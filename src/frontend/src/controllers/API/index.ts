@@ -144,8 +144,12 @@ export async function retryKnowledgeFileApi(objs) {
 /**
  * 上传文件
  */
-export async function uploadLibFile(data, config) {
-  return await axios.post(`/api/v1/knowledge/upload`, data, config);
+export async function uploadLibFile(data, config, type: 'knowledge' | 'icon') {
+  const urls = {
+    knowledge: '/api/v1/knowledge/upload',
+    icon: '/api/v1/upload/icon',
+  }
+  return await axios.post(urls[type], data, config);
 }
 
 /**
@@ -254,9 +258,38 @@ export async function postValidatePrompt(
  * 获取会话列表
  */
 export const getChatsApi = (page) => {
-  return (axios.get(`/api/v1/chat/list?page=${page}&limit=40`) as Promise<any[]>).then(res =>
-    res?.filter((el, i) => el.chat_id) || []
-  )
+  function isJsonSerializable(str) {
+    try {
+      JSON.parse(str);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  return (axios.get(`/api/v1/chat/list?page=${page}&limit=40`) as Promise<any[]>).then(res => {
+    const result = res?.filter((el, i) => el.chat_id) || []
+    return result.map(el => {
+      const { intermediate_steps, message } = el.latest_message
+      const _message = (function () {
+        if (intermediate_steps) return intermediate_steps;
+        if (isJsonSerializable(message)) {
+          const json = JSON.parse(message);
+          const chatKey = Object.keys(json)[0]
+          return json[chatKey]
+        }
+        return message;
+      }())
+
+      return {
+        ...el,
+        latest_message: {
+          ...el.latest_message,
+          message: _message.substring(0, 40)
+        }
+      }
+    })
+  })
 };
 
 /**

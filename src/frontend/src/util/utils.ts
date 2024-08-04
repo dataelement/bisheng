@@ -99,13 +99,6 @@ export function formatStrTime(time: string, notSameDayFormat: string): string {
     return date1.getFullYear() === date2.getFullYear() &&
         date1.getMonth() === date2.getMonth() &&
         date1.getDate() === date2.getDate() ? formatDate(date1, 'HH:mm') : formatDate(date1, notSameDayFormat)
-    // const newTime = time.substring(0, time.indexOf('T')).split('-')
-    // const arrayTime = newTime.map(t => Number(t))
-    // const [year, month, day] = [date.getFullYear(), date.getMonth() + 1, date.getDay()]
-    // if(year === arrayTime[0] && month === arrayTime[1] && day === arrayTime[2]) {
-    //     return time.substring(time.indexOf('T') + 1, time.length - 3)
-    // }
-    // return `${newTime[1]}月${newTime[2]}日`
 }
 
 export function toTitleCase(str: string | undefined): string {

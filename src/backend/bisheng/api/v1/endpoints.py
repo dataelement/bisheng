@@ -4,16 +4,18 @@ from typing import Annotated, Optional, Union
 from uuid import UUID
 
 import yaml
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, Request
+from sqlmodel import select
+
 from bisheng import settings
-from bisheng.api.services.user_service import UserPayload, get_admin_user
+from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.utils import get_request_ip
-from bisheng.api.v1 import knowledge
 from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, UploadFileResponse,
                                     resp_200)
 from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import save_uploaded_file
+from bisheng.cache.utils import save_uploaded_file, upload_file_to_minio
 from bisheng.chat.utils import judge_source, process_source_document
-from bisheng.database.base import session_getter
+from bisheng.database.base import session_getter, generate_uuid
 from bisheng.database.models.config import Config, ConfigDao
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage
@@ -22,8 +24,8 @@ from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, Request
-from sqlmodel import select
+from bisheng.utils.minio_client import bucket
+from bisheng.api.services.knowledge_imp import filetype_load_map
 
 try:
     from bisheng.worker import process_graph_cached_task
@@ -58,7 +60,7 @@ def get_env():
         if not env.get('uns_support'):
             env['uns_support'] = uns_support
     else:
-        env['uns_support'] = list(knowledge.filetype_load_map.keys())
+        env['uns_support'] = list(filetype_load_map.keys())
     if settings.settings.get_from_db('office_url'):
         env['office_url'] = settings.settings.get_from_db('office_url')
     # add tips from settings
@@ -270,6 +272,30 @@ async def process_flow(
         # Log stack trace
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post('/upload/icon')
+async def upload_icon(request: Request,
+                      login_user: UserPayload = Depends(get_login_user),
+                      file: UploadFile = None):
+    if file.size == 0:
+        raise HTTPException(status_code=500, detail='上传文件不能为空')
+    file_ext = file.filename.split('.')[-1].lower()
+    if file_ext not in ('jpeg', 'jpg', 'png'):
+        raise HTTPException(status_code=500, detail='仅支持 JPEG 和 PNG 格式的图片')
+
+    try:
+        file_name = f'icon/{generate_uuid()}.{file_ext}'
+        file_path = upload_file_to_minio(file, object_name=file_name, bucket_name=bucket)
+        if not isinstance(file_path, str):
+            file_path = str(file_path)
+        return resp_200(UploadFileResponse(
+            file_path=file_path,  # minio可访问的链接
+            relative_path=file_name,  # minio中的object_name
+        ))
+    except Exception as exc:
+        logger.exception(f'Error saving file: ')
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.post('/upload/{flow_id}',

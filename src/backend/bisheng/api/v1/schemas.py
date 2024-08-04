@@ -13,6 +13,7 @@ from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import GptsToolsRead, AuthMethod, AuthType
 from bisheng.database.models.knowledge import KnowledgeRead
 from bisheng.database.models.message import ChatMessageRead
+from bisheng.database.models.tag import Tag
 
 
 class CaptchaInput(BaseModel):
@@ -122,12 +123,14 @@ class ChatList(BaseModel):
     update_time: datetime = None
     flow_type: str = None  # flow: 技能 assistant：gpts助手
     latest_message: ChatMessageRead = None
+    logo: Optional[str] = None
 
 
 class FlowGptsOnlineList(BaseModel):
     id: str = Field('唯一ID')
     name: str = None
     desc: str = None
+    logo: str = None
     create_time: datetime = None
     update_time: datetime = None
     flow_type: str = None  # flow: 技能 assistant：gpts助手
@@ -208,6 +211,7 @@ class UploadFileResponse(BaseModel):
 
     flowId: Optional[str]
     file_path: str
+    relative_path: Optional[str]  # minio的相对路径，即object_name
 
 
 class StreamData(BaseModel):
@@ -274,6 +278,8 @@ class AssistantSimpleInfo(BaseModel):
     user_name: str
     status: int
     write: Optional[bool] = Field(default=False)
+    group_ids: Optional[List[int]]
+    tags: Optional[List[Tag]]
     create_time: datetime
     update_time: datetime
 

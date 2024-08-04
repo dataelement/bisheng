@@ -202,7 +202,9 @@ async def get_info(login_user: UserPayload = Depends(get_login_user)):
         user_id = login_user.user_id
         db_user = UserDao.get_user(user_id)
         role, web_menu = gen_user_role(db_user)
-        return resp_200(UserRead(role=str(role), web_menu=web_menu, **db_user.__dict__))
+        admin_group = UserGroupDao.get_user_admin_group(user_id)
+        admin_group = [one.group_id for one in admin_group]
+        return resp_200(UserRead(role=str(role), web_menu=web_menu, admin_groups=admin_group, **db_user.__dict__))
     except Exception:
         raise HTTPException(status_code=500, detail='用户信息失败')
 

@@ -112,7 +112,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     const sendWsMsg = async (msg) => {
         try {
             diffRef.current = Date.now()
-            console.log('WebSocket send: ' + diffRef.current + ' 毫秒');
+            // console.log('WebSocket send: ' + diffRef.current + ' 毫秒');
 
             wsRef.current.send(JSON.stringify(msg))
         } catch (error) {
@@ -144,12 +144,12 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     // 计算连接建立所需的时间
                     let connectionTime = endTime - startTime;
 
-                    console.log('WebSocket 连接建立时间: ' + connectionTime + ' 毫秒');
+                    // console.log('WebSocket 连接建立时间: ' + connectionTime + ' 毫秒');
                     console.log("WebSocket connection established!");
                     res('ok')
                 };
                 ws.onmessage = (event) => {
-                    console.log(`WebSocket get: ${Date.now()} 毫秒；与send差值${Date.now() - diffRef.current}毫秒`);
+                    // console.log(`WebSocket get: ${Date.now()} 毫秒；与send差值${Date.now() - diffRef.current}毫秒`);
                     const data = JSON.parse(event.data);
                     const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
                     // 异常类型处理，提示

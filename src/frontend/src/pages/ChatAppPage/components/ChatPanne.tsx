@@ -1,5 +1,5 @@
 
-import { TitleIconBg } from "@/components/bs-comp/cardComponent";
+import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { AssistantIcon } from "@/components/bs-icons/assistant";
@@ -39,7 +39,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             await build(_flow, chatId)
             version === 'v1' ? loadHistoryMsg(_flow.id, chatId, {
                 appendHistory,
-                lastMsg: t('historicalMessages')
+                lastMsg: t('chat.historicalMessages')
             }) : clearMsgs()
             flowRef.current = _flow
             setFlow(_flow)
@@ -50,7 +50,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             const _assistant = await loadAssistantState(id, version)
             version === 'v1' ? loadHistoryMsg(_assistant.id, chatId, {
                 appendHistory,
-                lastMsg: t('historicalMessages')
+                lastMsg: t('chat.historicalMessages')
             }) : clearMsgs()
             setAssistant(_assistant)
             changeChatId(chatId) // ws
@@ -180,11 +180,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <TitleIconBg className="" id={flow.id}></TitleIconBg>
+                    <TitleLogo url={flow.logo} className="" id={flow.id}></TitleLogo>
                     <span className="text-sm">{flow.name}</span>
                 </div>
                 <ChatComponent
                     form={flowSate.isForm}
+                    logo={flow.logo}
                     stop
                     // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
@@ -203,11 +204,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             assistant && <div className={`w-full chat-box h-full relative px-6 ${type !== 'flow' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <TitleIconBg className="" id={assistant.id}><AssistantIcon /></TitleIconBg>
+                    <TitleLogo url={assistant.logo} className="" id={assistant.id}><AssistantIcon /></TitleLogo>
                     <span className="text-sm">{assistant.name}</span>
                 </div>
                 <ChatComponent
                     stop
+                    logo={assistant.logo}
                     useName={sendUserName}
                     questions={assistantState.guide_question.filter((item) => item)}
                     guideWord={assistantState.guide_word}

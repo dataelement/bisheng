@@ -115,13 +115,13 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, closeDialo
 
     return <div className="flex gap-4 mt-4" style={!isMobile ? { height: 'calc(100vh - 10rem)' } : { height: 'calc(100vh - 4rem)' }}>
         {
-            isMobile && <div className="absolute top-0 left-4 z-10 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
+            isMobile && <div className="absolute top-2 left-4 z-10 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
                 {!collapse && <span onClick={() => { setCollapse(true) }} className="">收起</span>}
                 {collapse && <span onClick={() => { setCollapse(false) }} className="">展开</span>}
             </div>
         }
         {
-            isMobile && <div className="absolute top-0 right-4 z-10 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
+            isMobile && <div className="absolute top-2 right-4 z-10 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
                 <span onClick={closeDialog} >关闭</span>
             </div>
         }

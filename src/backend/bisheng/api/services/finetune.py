@@ -228,7 +228,7 @@ class FinetuneService:
     def upload_job_log(cls, finetune: Finetune, log_data: io.BytesIO, length: int) -> str:
         minio_client = MinioClient()
         log_path = f'finetune/log/{finetune.id.hex}'
-        minio_client.upload_minio_file(log_path, log_data, length)
+        minio_client.upload_minio_file(log_path, log_data, length=length)
         return log_path
 
     @classmethod

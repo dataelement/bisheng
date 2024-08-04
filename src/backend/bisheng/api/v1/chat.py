@@ -1,5 +1,6 @@
 import json
 import time
+import math
 from typing import List, Optional
 from uuid import UUID
 
@@ -12,7 +13,9 @@ from sqlmodel import select
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.base import BaseService
 from bisheng.api.services.chat_imp import comment_answer
+from bisheng.api.services.flow import FlowService
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
@@ -23,7 +26,7 @@ from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import session_getter
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
-from bisheng.database.models.flow import Flow, FlowDao
+from bisheng.database.models.flow import Flow, FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead
 from bisheng.graph.graph.base import Graph
@@ -199,6 +202,7 @@ def get_chatlist_list(*,
                          flow_id=message.flow_id,
                          flow_type='flow',
                          chat_id=message.chat_id,
+                         logo=flow_dict[message.flow_id].logo,
                          create_time=message.create_time,
                          update_time=message.update_time))
         elif message.flow_id in assistant_dict:
@@ -208,6 +212,7 @@ def get_chatlist_list(*,
                          flow_id=message.flow_id,
                          chat_id=message.chat_id,
                          flow_type='assistant',
+                         logo=assistant_dict[message.flow_id].logo,
                          create_time=message.create_time,
                          update_time=message.update_time))
         else:
@@ -215,12 +220,13 @@ def get_chatlist_list(*,
             pass
     res = chat_list[(page - 1) * limit:page * limit]
     chat_ids = [one.chat_id for one in res]
-    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids, 'answer')
+    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids)
     latest_messages = {one.chat_id: one for one in latest_messages}
 
     for one in res:
         # 获取每个会话的最后一条回复内容
         one.latest_message = latest_messages.get(one.chat_id, None)
+        one.logo = BaseService.get_logo_share_link(one.logo)
     return resp_200(chat_list[(page - 1) * limit:page * limit])
 
 
@@ -230,25 +236,26 @@ def get_chatlist_list(*,
             status_code=200)
 def get_online_chat(*,
                     keyword: Optional[str] = None,
+                    tag_id: Optional[int] = None,
                     page: Optional[int] = 0,
                     limit: Optional[int] = 0,
                     user: UserPayload = Depends(get_login_user)):
-    user_id = user.user_id
+    # 由于是获取助手和技能两个表，需要将page修改下
+    if page and limit:
+        search_page = math.ceil(page / 2)
     res = []
-    # 获取所有已上线的助手
-    if user.is_admin():
-        all_assistant = AssistantDao.get_all_online_assistants()
-        flows = FlowDao.get_all_online_flows(keyword)
-    else:
-        assistants = AssistantService.get_assistant(user, keyword, AssistantStatus.ONLINE.value, 0,
-                                                    0)
-        all_assistant = assistants.data.get('data')
-        flows = FlowDao.get_user_access_online_flows(user_id, keyword=keyword)
+    all_assistant = AssistantService.get_assistant(user, keyword, AssistantStatus.ONLINE.value,
+                                                   tag_id, page=search_page, limit=limit)
+    all_assistant = all_assistant.data.get('data')
+    flows = FlowService.get_all_flows(user, keyword, FlowStatus.ONLINE.value,
+                                      tag_id=tag_id, page=search_page, page_size=limit)
+    flows = flows.data.get('data')
     for one in all_assistant:
         res.append(
             FlowGptsOnlineList(id=str(one.id),
                                name=one.name,
                                desc=one.desc,
+                               logo=one.logo,
                                create_time=one.create_time,
                                update_time=one.update_time,
                                flow_type='assistant'))
@@ -256,11 +263,12 @@ def get_online_chat(*,
     # 获取用户可见的所有已上线的技能
     for one in flows:
         res.append(
-            FlowGptsOnlineList(id=str(one.id),
-                               name=one.name,
-                               desc=one.description,
-                               create_time=one.create_time,
-                               update_time=one.update_time,
+            FlowGptsOnlineList(id=one["id"],
+                               name=one["name"],
+                               desc=one["description"],
+                               logo=one["logo"],
+                               create_time=one["create_time"],
+                               update_time=one["update_time"],
                                flow_type='flow'))
     res.sort(key=lambda x: x.update_time, reverse=True)
     if page and limit:

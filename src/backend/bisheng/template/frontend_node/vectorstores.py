@@ -288,6 +288,8 @@ class VectorStoreFrontendNode(FrontendNode):
 
     def add_extra_base_classes(self) -> None:
         self.base_classes.extend(('BaseRetriever', 'VectorStoreRetriever'))
+        if self.name == 'ElasticsearchWithPermissionCheck':
+            self.base_classes.append('ElasticKeywordsSearch')
 
     @staticmethod
     def format_field(field: TemplateField, name: Optional[str] = None) -> None:

@@ -170,37 +170,37 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         {/* 菜单授权 */}
         <div>
             <div className="mt-20 flex justify-between items-center relative">
-                <p className="text-xl font-bold">菜单授权</p>
+                <p className="text-xl font-bold">{t('system.menuAuthorization')}</p>
             </div>
             <div className="mt-4 w-full">
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>一级菜单</TableHead>
-                            <TableHead className="text-right w-[75px]">查看权限</TableHead>
+                            <TableHead>{t('system.primaryMenu')}</TableHead>
+                            <TableHead className="text-right w-[75px]">{t('system.viewPermission')}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         <TableRow>
-                            <TableCell className="font-medium">构建</TableCell>
+                            <TableCell className="font-medium">{t('menu.skills')}</TableCell>
                             <TableCell className="text-center">
                                 <Switch checked={form.useMenu.includes(MenuType.BUILD)} onCheckedChange={(bln) => switchDataChange(MenuType.BUILD, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
                         <TableRow>
-                            <TableCell className="font-medium">知识</TableCell>
+                            <TableCell className="font-medium">{t('menu.knowledge')}</TableCell>
                             <TableCell className="text-center">
                                 <Switch checked={form.useMenu.includes(MenuType.KNOWLEDGE)} onCheckedChange={(bln) => switchDataChange(MenuType.KNOWLEDGE, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
                         <TableRow>
-                            <TableCell className="font-medium">模型</TableCell>
+                            <TableCell className="font-medium">{t('menu.models')}</TableCell>
                             <TableCell className="text-center">
                                 <Switch checked={form.useMenu.includes(MenuType.MODEL)} onCheckedChange={(bln) => switchDataChange(MenuType.MODEL, 'useMenu', bln)} />
                             </TableCell>
                         </TableRow>
                         <TableRow>
-                            <TableCell className="font-medium">评测</TableCell>
+                            <TableCell className="font-medium">{t('menu.evaluation')}</TableCell>
                             <TableCell className="text-center">
                                 <Switch checked={form.useMenu.includes(MenuType.EVALUATION)} onCheckedChange={(bln) => switchDataChange(MenuType.EVALUATION, 'useMenu', bln)} />
                             </TableCell>

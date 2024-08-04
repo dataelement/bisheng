@@ -1,36 +1,49 @@
+import { AssistantIcon } from "@/components/bs-icons/assistant";
+import { SkillIcon } from "@/components/bs-icons/skill";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { getChatOnlineApi } from "@/controllers/API/assistant";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { SearchInput } from "../../bs-ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
-import { SkillIcon } from "@/components/bs-icons/skill";
-import { AssistantIcon } from "@/components/bs-icons/assistant";
-import { useTranslation } from "react-i18next";
+import LoadMore from "../loadMore";
+import { useDebounce } from "@/util/hook";
 
 export default function SkillChatSheet({ children, onSelect }) {
     const [open, setOpen] = useState(false)
-
     const { t } = useTranslation()
-
     const navigate = useNavigate()
 
-    const [keyword, setKeyword] = useState(' ')
-    const allDataRef = useRef([])
+    const pageRef = useRef(1)
+    const searchRef = useRef('')
+    const [options, setOptions] = useState<any>([])
+
+    const loadData = (more = false) => {
+        open && getChatOnlineApi(pageRef.current, searchRef.current).then(res => {
+            setOptions(opts => more ? [...opts, ...res] : res)
+        })
+    }
+    const debounceLoad = useDebounce(loadData, 600, false)
 
     useEffect(() => {
-        open && getChatOnlineApi().then(res => {
-            allDataRef.current = res
-            setKeyword('')
-        })
-        // setKeyword(' ')
+        pageRef.current = 1
+        searchRef.current = ''
+        loadData()
     }, [open])
 
-    const options = useMemo(() => {
-        return allDataRef.current.filter(el => el.name.toLowerCase().includes(keyword.toLowerCase()))
-    }, [keyword])
+    const handleSearch = (e) => {
+        pageRef.current = 1
+        searchRef.current = e.target.value
+        debounceLoad()
+    }
+
+    const handleLoadMore = () => {
+        pageRef.current++
+        loadData(true)
+    }
 
     return <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
@@ -41,7 +54,7 @@ export default function SkillChatSheet({ children, onSelect }) {
                 <div className="w-fit p-6">
                     <SheetTitle>{t('chat.dialogueSelection')}</SheetTitle>
                     <SheetDescription>{t('chat.chooseSkillOrAssistant')}</SheetDescription>
-                    <SearchInput value={keyword} placeholder={t('chat.search')} className="my-6" onChange={(e) => setKeyword(e.target.value)} />
+                    <SearchInput placeholder={t('chat.search')} className="my-6" onChange={handleSearch} />
                 </div>
                 <div className="flex-1 min-w-[696px] bg-[#fff] dark:bg-[#030712] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
                     {
@@ -56,7 +69,7 @@ export default function SkillChatSheet({ children, onSelect }) {
                                 icon={flow.flow_type === 'flow' ? SkillIcon : AssistantIcon}
                                 footer={
                                     <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${flow.flow_type === 'flow' && 'bg-gray-950'}`}>
-                                        {flow.flow_type === 'flow' ? '技能' : '助手'}
+                                        {flow.flow_type === 'flow' ? t('build.skill') : t('build.assistant')}
                                     </Badge>
                                 }
                                 onClick={() => { onSelect(flow); setOpen(false) }}
@@ -66,6 +79,7 @@ export default function SkillChatSheet({ children, onSelect }) {
                             <Button className="w-[200px]" onClick={() => navigate('/build/assist')}>{t('build.onlineSA')}</Button>
                         </div>
                     }
+                    <LoadMore onScrollLoad={handleLoadMore} />
                 </div>
             </div>
         </SheetContent>

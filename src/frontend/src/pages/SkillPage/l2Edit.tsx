@@ -55,6 +55,7 @@ export default function l2Edit() {
             nameRef.current.value = _flow.name
             descRef.current.value = _flow.description
             guideRef.current.value = _flow.guide_word
+            setLogo(_flow.logo)
         })
     }, [id])
 
@@ -161,7 +162,7 @@ export default function l2Edit() {
     // 头像
     const [logo, setLogo] = useState('')
     const uploadAvator = (file) => {
-        uploadFileWithProgress(file, (progress) => { }).then(res => {
+        uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
             setLogo(res.file_path);
         })
     }
@@ -190,10 +191,10 @@ export default function l2Edit() {
                     </p>
                     {/* base form */}
                     <div className="w-full overflow-hidden transition-all px-1">
-                        {/* <div className="mt-4">
+                        <div className="mt-4">
                             <Label htmlFor="name">技能头像</Label>
                             <Avator value={logo} className="mt-2" onChange={uploadAvator}><SkillIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
-                        </div> */}
+                        </div>
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.skillName')}</Label>
                             <Input ref={nameRef} placeholder={t('skills.skillName')} className={`mt-2 ${error.name && 'border-red-400'}`} />
@@ -255,7 +256,7 @@ export default function l2Edit() {
             </div>
         </div>
         {/* footer */}
-        <div className="absolute flex z-50 bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-background-login">
+        <div className="absolute flex z-30 bottom-0 w-[calc(100vw-200px)] py-8 mr-5 justify-center bg-background-login">
             {
                 isL2 ?
                     <div className="flex gap-4 w-[50%]">

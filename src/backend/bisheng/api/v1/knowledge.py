@@ -39,16 +39,6 @@ from sqlmodel import select
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Skills'])
-filetype_load_map = {
-    'txt': TextLoader,
-    'pdf': PyPDFLoader,
-    'html': BSHTMLLoader,
-    'md': UnstructuredMarkdownLoader,
-    'doc': UnstructuredWordDocumentLoader,
-    'docx': UnstructuredWordDocumentLoader,
-    'ppt': UnstructuredPowerPointLoader,
-    'pptx': UnstructuredPowerPointLoader,
-}
 
 
 @router.post('/upload', response_model=UnifiedResponseModel[UploadFileResponse], status_code=201)

@@ -3,7 +3,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { SearchInput } from "../input";
 
 interface SelectSearchProps {
-    value: string,
+    value: any,
     options: {label: string, value: string}[],
     selectPlaceholder?:string,
     inputPlaceholder?:string,
@@ -11,7 +11,8 @@ interface SelectSearchProps {
     onValueChange: (value: string) => void,
     onChange: (e:ChangeEvent<HTMLInputElement>) => void,
     selectClass?: string,
-    contentClass?: string
+    contentClass?: string,
+    children?: React.ReactNode
 }
 
 const SelectSearch: React.FC<SelectSearchProps> = ({
@@ -23,7 +24,8 @@ const SelectSearch: React.FC<SelectSearchProps> = ({
     onValueChange,
     onChange,
     selectClass = '',
-    contentClass = ''
+    contentClass = '',
+    children
 }) => {
     return <Select value={value} onOpenChange={(open) => onOpenChange?.(open)} onValueChange={(v) => onValueChange(v)}>
         <SelectTrigger className={selectClass}>
@@ -33,6 +35,7 @@ const SelectSearch: React.FC<SelectSearchProps> = ({
             <SearchInput inputClassName="h-8 mb-2 dark:border-gray-700" placeholder={inputPlaceholder} 
             onChange={(e) => onChange(e)} onKeyDown={e => e.stopPropagation()} iconClassName="w-4 h-4" />
             <SelectGroup>
+                {children}
                 {options.map(el => (
                     <SelectItem key={el.value} value={el.value}>{el.label}</SelectItem>
                 ))}
