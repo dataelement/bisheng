@@ -96,6 +96,10 @@ jobs:
           cd ./src/backend
           pip install bisheng_langchain==$RELEASE_VERSION
           poetry lock
+          # 安装 nltk
+          pip install nltk
+          python -c "import nltk; nltk.download('punkt'); nltk.download('averaged_perceptron_tagger')"
+          mv /home/runner/nltk_data ./
           cd ../../
 
       - name: Build backend and push
