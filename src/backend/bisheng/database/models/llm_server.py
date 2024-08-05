@@ -22,6 +22,7 @@ class LLMServerType(Enum):
     MINIMAX = 'minimax'
     ANTHROPIC = 'anthropic'
     DEEPSEEK = 'deepseek'
+    SPARK = 'spark'  # 讯飞星火大模型
 
 
 # 模型类型枚举

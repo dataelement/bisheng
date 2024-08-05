@@ -5,7 +5,6 @@ from pydantic import Field
 
 from bisheng.database.models.llm_server import LLMServerType, LLMDao, LLMModelType, LLMServer, LLMModel
 from bisheng.interface.importing import import_by_type
-from bisheng.utils.embedding import decide_embeddings
 from langchain.embeddings.base import Embeddings
 
 
@@ -13,6 +12,10 @@ class OpenAIProxyEmbedding(Embeddings):
 
     def __init__(self) -> None:
         super().__init__()
+        from bisheng.api.services.llm import LLMService
+
+        knowledge_llm = LLMService.get_knowledge_llm()
+        self.embeddings = BishengEmbeddings(model_id=knowledge_llm.embedding_model_id)
 
     @classmethod
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
@@ -20,15 +23,13 @@ class OpenAIProxyEmbedding(Embeddings):
         if not texts:
             return []
 
-        embedding = decide_embeddings('text-embedding-ada-002')
-        return embedding.embed_documents(texts)
+        return self.embeddings.embed_documents(texts)
 
     @classmethod
     def embed_query(self, text: str) -> List[float]:
         """Embed query text."""
 
-        embedding = decide_embeddings('text-embedding-ada-002')
-        return embedding.embed_query(text)
+        return self.embeddings.embed_query(text)
 
 
 class FakeEmbedding(Embeddings):
@@ -43,12 +44,12 @@ class FakeEmbedding(Embeddings):
         return []
 
 
-class BishengEmbedding(Embeddings):
+class BishengEmbeddings(Embeddings):
     """依赖bisheng后端服务的embedding组件     根据model的类型不同 调用不同的embedding组件"""
 
     model_id: int = Field(description="后端服务保存的model唯一ID")
 
-    embedding: Optional[Embeddings] = Field(default=None)
+    embeddings: Optional[Embeddings] = Field(default=None)
     llm_node_type = {
         LLMServerType.OPENAI: 'OpenAIEmbeddings',
         LLMServerType.AZURE_OPENAI: 'AzureOpenAIEmbeddings',
@@ -84,7 +85,7 @@ class BishengEmbedding(Embeddings):
         class_object = self._get_embedding_class(server_info.type)
         params = self._get_embedding_params(server_info, model_info)
         try:
-            self.embedding = instantiate_embedding(class_object, params)
+            self.embeddings = instantiate_embedding(class_object, params)
         except Exception as e:
             logger.exception('init bisheng embedding error')
             raise Exception(f'初始化bisheng embedding组件失败，请检查配置或联系管理员。错误信息：{e}')
@@ -111,7 +112,7 @@ class BishengEmbedding(Embeddings):
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """embedding"""
         try:
-            ret = self.embedding.embed_documents(texts)
+            ret = self.embeddings.embed_documents(texts)
             self._update_model_status(0)
             return ret
         except Exception as e:
@@ -122,7 +123,7 @@ class BishengEmbedding(Embeddings):
     def embed_query(self, text: str) -> List[float]:
         """embedding"""
         try:
-            ret = self.embedding.embed_query(text)
+            ret = self.embeddings.embed_query(text)
             self._update_model_status(0)
             return ret
         except Exception as e:

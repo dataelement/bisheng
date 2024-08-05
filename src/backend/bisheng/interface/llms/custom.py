@@ -31,16 +31,17 @@ class BishengLLM(BaseChatModel):
     llm_node_type = {
         LLMServerType.OPENAI: 'ChatOpenAI',
         LLMServerType.AZURE_OPENAI: 'AzureChatOpenAI',
-        LLMServerType.OLLAMA: 'CohereChatOpenAI',
-        LLMServerType.XINFERENCE: 'XInferenceChatOpenAI',
-        LLMServerType.LLAMACPP: 'ChatOpenAI',
-        LLMServerType.VLLM: 'VLLMChatOpenAI',
-        LLMServerType.QWEN: 'ChatQWen',
-        LLMServerType.QIAN_FAN: 'ChatQianFan',
-        LLMServerType.CHAT_GLM: 'ChatGLM',
-        LLMServerType.MINIMAX: 'ChatMinimaxAI',
-        LLMServerType.ANTHROPIC: 'ChatAnthropic',
-        LLMServerType.DEEPSEEK: 'ChatDeepSeek',
+        LLMServerType.OLLAMA: 'Ollama',
+        LLMServerType.XINFERENCE: 'Xinference',
+        LLMServerType.LLAMACPP: 'LlamaCpp',  # 此组件是加载本地的模型文件，待确认是否有api服务提供
+        LLMServerType.VLLM: 'VLLMOpenAI',
+        LLMServerType.QWEN: 'ChatOpenAI',
+        LLMServerType.QIAN_FAN: 'QianfanLLMEndpoint',
+        LLMServerType.CHAT_GLM: 'ChatOpenAI',
+        LLMServerType.MINIMAX: 'Minimax',
+        LLMServerType.ANTHROPIC: 'anthropic-chat',
+        LLMServerType.DEEPSEEK: 'ChatOpenAI',
+        LLMServerType.SPARK: 'ChatOpenAI',
     }
 
     def __init__(self, **kwargs):
@@ -88,11 +89,21 @@ class BishengLLM(BaseChatModel):
 
         params.update({
             'model_name': model_info.model_name,
-            'stream': self.stream,
+            'streaming': self.streaming,
             'temperature': self.temperature,
             'top_p': self.top_p,
             'cache': self.cache
         })
+        if server_info.type == LLMServerType.OLLAMA:
+            params['model'] = params.pop('model_name')
+        elif server_info.type == LLMServerType.XINFERENCE:
+            params['model_uid'] = params.pop('model_name')
+        elif server_info.type == LLMServerType.AZURE_OPENAI:
+            params['azure_deployment'] = params.pop('model_name')
+        elif server_info.type == LLMServerType.QIAN_FAN:
+            params['model'] = params.pop('model_name')
+        elif server_info.type == LLMServerType.SPARK:
+            params['openai_api_key'] = f'{params.pop("api_key")}:{params.pop("api_secret")}'
         return params
 
     @property
