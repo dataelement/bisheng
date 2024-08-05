@@ -1,7 +1,8 @@
 import json
-from typing import List
+from typing import List, Dict, Optional
 
 from fastapi import Request
+from langchain_core.language_models import BaseChatModel
 
 from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError
@@ -10,6 +11,8 @@ from bisheng.api.v1.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConf
     EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
+from bisheng.interface.importing import import_by_type
+from bisheng.interface.initialize.loading import instantiate_llm
 
 
 class LLMService:
@@ -176,6 +179,15 @@ class LLMService:
         return KnowledgeLLMConfig(**ret)
 
     @classmethod
+    def get_knowledge_source_llm(cls) -> Optional[BaseChatModel]:
+        """ 获取知识库溯源的默认模型配置 """
+        knowledge_llm = cls.get_knowledge_llm()
+        # 没有配置模型，则用jieba
+        if not knowledge_llm.source_model_id:
+            return None
+        return cls.get_bisheng_llm(model_id=knowledge_llm.source_model_id)
+
+    @classmethod
     def update_knowledge_llm(cls, request: Request, login_user: UserPayload, data: KnowledgeLLMConfig) \
             -> KnowledgeLLMConfig:
         """ 更新知识库相关的默认模型配置 """
@@ -216,6 +228,19 @@ class LLMService:
         if config:
             ret = json.loads(config.value)
         return EvaluationLLMConfig(**ret)
+
+    @classmethod
+    def get_evaluation_llm_object(cls) -> BaseChatModel:
+        evaluation_llm = cls.get_evaluation_llm()
+        if not evaluation_llm.model_id:
+            raise Exception('未配置评测模型')
+        return cls.get_bisheng_llm(model_id=evaluation_llm.model_id)
+
+    @classmethod
+    def get_bisheng_llm(cls, **kwargs) -> BaseChatModel:
+        """ 获取评测功能的默认模型配置 """
+        class_object = import_by_type(_type='llms', name='BishengLLM')
+        return instantiate_llm('BishengLLM', class_object, kwargs)
 
     @classmethod
     def update_evaluation_llm(cls, request: Request, login_user: UserPayload, data: EvaluationLLMConfig) \
