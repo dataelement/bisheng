@@ -1,12 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Tuple, Optional, Dict
-from uuid import UUID, uuid4
+from typing import List, Optional, Dict
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from bisheng.database.models.role_access import AccessType, RoleAccess
-from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text, UniqueConstraint, update, delete
+from sqlalchemy import JSON, Column, DateTime, Text, text, UniqueConstraint, update, delete
 from sqlmodel import Field, select
 
 
@@ -56,7 +54,7 @@ class LLMModelBase(SQLModelSerializable):
     model_name: str = Field(default='', description='模型名称，实例化组件时用的参数')
     model_type: LLMModelType = Field(description='模型类型')
     config: Optional[Dict] = Field(sa_column=Column(JSON), description='服务提供方公共配置')
-    status: int = Field(default=0, description='模型状态')
+    status: int = Field(default=0, description='模型状态。0：正常，1：异常')
     online: bool = Field(default=False, description='是否在线')
     user_id: int = Field(default=0, description='创建人ID')
     create_time: Optional[datetime] = Field(sa_column=Column(
@@ -189,3 +187,10 @@ class LLMDao:
         statement = select(LLMModel).where(LLMModel.server_id.in_(server_ids)).order_by(LLMModel.update_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    def update_model_status(cls, model_id: int, status: int):
+        """ 更新模型状态 """
+        with session_getter() as session:
+            session.exec(update(LLMModel).where(LLMModel.id == model_id).values(status=status))
+            session.commit()

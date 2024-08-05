@@ -62,6 +62,9 @@ class BishengLLM(BaseChatModel):
             raise Exception('服务提供方配置已被删除，请重新配置模型')
         if model_info.model_type != LLMModelType.LLM:
             raise Exception(f'只支持LLM类型的模型，不支持{model_info.model_type.value}类型的模型')
+        if not model_info.online:
+            raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
+        logger.debug(f'init_bisheng_llm: server_info: {server_info}, model_info: {model_info}')
 
         class_object = self._get_llm_class(server_info.type)
         params = self._get_llm_params(server_info, model_info)
@@ -106,8 +109,9 @@ class BishengLLM(BaseChatModel):
     ) -> ChatResult:
         try:
             ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+            self._update_model_status(0)
         except Exception as e:
-            # TODO zgq 记录失败状态
+            self._update_model_status(1)
             raise e
         return ret
 
@@ -121,7 +125,14 @@ class BishengLLM(BaseChatModel):
     ) -> ChatResult:
         try:
             ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+            self._update_model_status(0)
         except Exception as e:
+            self._update_model_status(1)
             # 记录失败状态
             raise e
         return ret
+
+    def _update_model_status(self, status: int):
+        """更新模型状态"""
+        # todo 接入到异步任务模块
+        LLMDao.update_model_status(self.model_id, status)
