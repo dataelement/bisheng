@@ -34,7 +34,7 @@ class LLMModelType(Enum):
 
 class LLMServerBase(SQLModelSerializable):
     name: str = Field(default='', index=True, unique=True, description='服务名称')
-    description: str = Field(default='', sa_column=Column(Text), description='服务描述')
+    description: Optional[str] = Field(default='', sa_column=Column(Text), description='服务描述')
     type: LLMServerType = Field(description='服务提供方类型')
     limit_flag: bool = Field(default=False, description='是否开启每日调用次数限制')
     limit: int = Field(default=0, description='每日调用次数限制')
@@ -51,7 +51,7 @@ class LLMServerBase(SQLModelSerializable):
 class LLMModelBase(SQLModelSerializable):
     server_id: Optional[int] = Field(nullable=False, index=True, description='服务ID')
     name: str = Field(default='', description='模型展示名')
-    description: str = Field(default='', sa_column=Column(Text), description='模型描述')
+    description: Optional[str] = Field(default='', sa_column=Column(Text), description='模型描述')
     model_name: str = Field(default='', description='模型名称，实例化组件时用的参数')
     model_type: LLMModelType = Field(description='模型类型')
     config: Optional[Dict] = Field(sa_column=Column(JSON), description='服务提供方公共配置')
