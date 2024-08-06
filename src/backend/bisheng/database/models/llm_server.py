@@ -203,3 +203,11 @@ class LLMDao:
         with session_getter() as session:
             session.exec(update(LLMModel).where(LLMModel.id == model_id).values(online=online))
             session.commit()
+
+    @classmethod
+    def delete_server_by_id(cls, server_id: int):
+        """ 根据服务ID删除服务提供方 """
+        with session_getter() as session:
+            session.exec(delete(LLMServer).where(LLMServer.id == server_id))
+            session.exec(delete(LLMModel).where(LLMModel.server_id == server_id))
+            session.commit()

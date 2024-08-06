@@ -75,6 +75,12 @@ class LLMService:
         return ret
 
     @classmethod
+    def delete_llm_server(cls, request: Request, login_user: UserPayload, server_id: int) -> bool:
+        """ 删除一个服务提供方 """
+        LLMDao.delete_server_by_id(server_id)
+        return True
+
+    @classmethod
     def add_llm_server_hook(cls, request: Request, login_user: UserPayload, server: LLMServerInfo) -> bool:
         """ 添加一个服务提供方 后续动作 """
 

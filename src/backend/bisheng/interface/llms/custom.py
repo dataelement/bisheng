@@ -30,10 +30,10 @@ class BishengLLM(BaseChatModel):
     llm: Optional[BaseChatModel] = Field(default=None)
     llm_node_type = {
         # 开源推理框架
+        LLMServerType.OLLAMA: 'Ollama',
         LLMServerType.XINFERENCE: 'Xinference',
         LLMServerType.LLAMACPP: 'LlamaCpp',  # 此组件是加载本地的模型文件，待确认是否有api服务提供
         LLMServerType.VLLM: 'VLLMOpenAI',
-        LLMServerType.OLLAMA: 'Ollama',
 
         # 官方api服务
         LLMServerType.OPENAI: 'ChatOpenAI',

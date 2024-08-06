@@ -51,15 +51,17 @@ class BishengEmbeddings(Embeddings):
 
     embeddings: Optional[Embeddings] = Field(default=None)
     llm_node_type = {
+        # 开源推理框架
+        LLMServerType.OLLAMA: 'OllamaEmbeddings',
+        LLMServerType.XINFERENCE: 'XinferenceEmbeddings',
+        LLMServerType.LLAMACPP: 'LlamaCppEmbeddings',
+        LLMServerType.VLLM: '',
+
         LLMServerType.OPENAI: 'OpenAIEmbeddings',
         LLMServerType.AZURE_OPENAI: 'AzureOpenAIEmbeddings',
         LLMServerType.QWEN: 'DashScopeEmbeddings',
         LLMServerType.QIAN_FAN: 'QianfanEmbeddingsEndpoint',
-        LLMServerType.OLLAMA: 'OllamaEmbeddings',
-        LLMServerType.XINFERENCE: 'XinferenceEmbeddings',
-        LLMServerType.LLAMACPP: 'LlamaCppEmbeddings',
         LLMServerType.MINIMAX: 'MiniMaxEmbeddings',
-        LLMServerType.VLLM: '',
         LLMServerType.CHAT_GLM: '',
     }
 
@@ -103,10 +105,14 @@ class BishengEmbeddings(Embeddings):
             params.update(server_info.config)
         if model_info.config:
             params.update(model_info.config)
-
         params.update({
             'model_name': model_info.model_name,
         })
+        if server_info.type == LLMServerType.QWEN:
+            params = {
+                "dashscope_api_key": params.get('openai_api_key'),
+                "model": params.get('model_name'),
+            }
         return params
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:

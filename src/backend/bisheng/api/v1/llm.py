@@ -29,6 +29,16 @@ def add_llm_server(
     return resp_200(data=ret)
 
 
+@router.delete('', response_model=UnifiedResponseModel)
+def delete_llm_server(
+        request: Request,
+        login_user: UserPayload = Depends(get_admin_user),
+        server_id: int = Body(..., embed=True, description="服务提供方唯一ID"),
+) -> UnifiedResponseModel:
+    LLMService.delete_llm_server(request, login_user, server_id)
+    return resp_200()
+
+
 @router.put('', response_model=UnifiedResponseModel[LLMServerInfo])
 def update_llm_server(
         request: Request,
