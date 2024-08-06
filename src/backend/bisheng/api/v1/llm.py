@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request, Depends, Body, Query
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload, get_login_user, get_admin_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, LLMServerInfo, resp_200, KnowledgeLLMConfig, \
-    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq
+    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, LLMModelInfo
 
 router = APIRouter(prefix='/llm', tags=['LLM'])
 
@@ -46,6 +46,17 @@ def get_one_llm(
         server_id: int = Query(..., description="服务提供方唯一ID"),
 ) -> UnifiedResponseModel[LLMServerInfo]:
     ret = LLMService.get_one_llm(request, login_user, server_id)
+    return resp_200(data=ret)
+
+
+@router.post('/online', response_model=UnifiedResponseModel[LLMModelInfo])
+def update_model_online(
+        request: Request,
+        login_user: UserPayload = Depends(get_admin_user),
+        model_id: int = Body(..., embed=True, description="模型的唯一ID"),
+        online: bool = Body(..., embed=True, description="是否上线"),
+) -> UnifiedResponseModel[LLMModelInfo]:
+    ret = LLMService.update_model_online(request, login_user, model_id, online)
     return resp_200(data=ret)
 
 

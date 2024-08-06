@@ -170,6 +170,17 @@ class LLMService:
         return cls.get_one_llm(request, login_user, db_server.id)
 
     @classmethod
+    def update_model_online(cls, request: Request, login_user: UserPayload, model_id: int,
+                            online: bool) -> LLMModelInfo:
+        """ 更新模型是否上线 """
+        exist_model = LLMDao.get_model_by_id(model_id)
+        if not exist_model:
+            raise NotFoundError.http_exception()
+        exist_model.online = online
+        LLMDao.update_model_online(exist_model.id, online)
+        return LLMModelInfo(**exist_model.dict())
+
+    @classmethod
     def get_knowledge_llm(cls) -> KnowledgeLLMConfig:
         """ 获取知识库相关的默认模型配置 """
         ret = {}

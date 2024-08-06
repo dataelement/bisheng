@@ -29,16 +29,19 @@ class BishengLLM(BaseChatModel):
 
     llm: Optional[BaseChatModel] = Field(default=None)
     llm_node_type = {
-        LLMServerType.OPENAI: 'ChatOpenAI',
-        LLMServerType.AZURE_OPENAI: 'AzureChatOpenAI',
-        LLMServerType.OLLAMA: 'Ollama',
+        # 开源推理框架
         LLMServerType.XINFERENCE: 'Xinference',
         LLMServerType.LLAMACPP: 'LlamaCpp',  # 此组件是加载本地的模型文件，待确认是否有api服务提供
         LLMServerType.VLLM: 'VLLMOpenAI',
+        LLMServerType.OLLAMA: 'Ollama',
+
+        # 官方api服务
+        LLMServerType.OPENAI: 'ChatOpenAI',
+        LLMServerType.AZURE_OPENAI: 'AzureChatOpenAI',
         LLMServerType.QWEN: 'ChatOpenAI',
-        LLMServerType.QIAN_FAN: 'QianfanLLMEndpoint',
+        LLMServerType.QIAN_FAN: 'ChatWenxin',
         LLMServerType.CHAT_GLM: 'ChatOpenAI',
-        LLMServerType.MINIMAX: 'Minimax',
+        LLMServerType.MINIMAX: 'MiniMaxChat',
         LLMServerType.ANTHROPIC: 'anthropic-chat',
         LLMServerType.DEEPSEEK: 'ChatOpenAI',
         LLMServerType.SPARK: 'ChatOpenAI',
@@ -122,7 +125,7 @@ class BishengLLM(BaseChatModel):
             ret = self.llm._generate(messages, stop, run_manager, **kwargs)
             self._update_model_status(0)
         except Exception as e:
-            self._update_model_status(1)
+            self._update_model_status(1, str(e))
             raise e
         return ret
 
@@ -138,12 +141,12 @@ class BishengLLM(BaseChatModel):
             ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
             self._update_model_status(0)
         except Exception as e:
-            self._update_model_status(1)
+            self._update_model_status(1, str(e))
             # 记录失败状态
             raise e
         return ret
 
-    def _update_model_status(self, status: int):
+    def _update_model_status(self, status: int, remark: str = ''):
         """更新模型状态"""
         # todo 接入到异步任务模块
-        LLMDao.update_model_status(self.model_id, status)
+        LLMDao.update_model_status(self.model_id, status, remark)

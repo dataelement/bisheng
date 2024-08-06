@@ -56,6 +56,7 @@ class LLMModelBase(SQLModelSerializable):
     model_type: LLMModelType = Field(description='模型类型')
     config: Optional[Dict] = Field(sa_column=Column(JSON), description='服务提供方公共配置')
     status: int = Field(default=0, description='模型状态。0：正常，1：异常')
+    remark: Optional[str] = Field(default='', sa_column=Column(Text), description='异常原因')
     online: bool = Field(default=False, description='是否在线')
     user_id: int = Field(default=0, description='创建人ID')
     create_time: Optional[datetime] = Field(sa_column=Column(
@@ -190,8 +191,15 @@ class LLMDao:
             return session.exec(statement).all()
 
     @classmethod
-    def update_model_status(cls, model_id: int, status: int):
+    def update_model_status(cls, model_id: int, status: int, remark: str = ""):
         """ 更新模型状态 """
         with session_getter() as session:
-            session.exec(update(LLMModel).where(LLMModel.id == model_id).values(status=status))
+            session.exec(update(LLMModel).where(LLMModel.id == model_id).values(status=status, remark=remark))
+            session.commit()
+
+    @classmethod
+    def update_model_online(cls, model_id: int, online: bool):
+        """ 更新模型在线状态 """
+        with session_getter() as session:
+            session.exec(update(LLMModel).where(LLMModel.id == model_id).values(online=online))
             session.commit()

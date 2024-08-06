@@ -116,7 +116,7 @@ class BishengEmbeddings(Embeddings):
             self._update_model_status(0)
             return ret
         except Exception as e:
-            self._update_model_status(1)
+            self._update_model_status(1, str(e))
             logger.exception('embedding error')
             raise Exception(f'embedding组件异常，请检查配置或联系管理员。错误信息：{e}')
 
@@ -127,13 +127,13 @@ class BishengEmbeddings(Embeddings):
             self._update_model_status(0)
             return ret
         except Exception as e:
-            self._update_model_status(1)
+            self._update_model_status(1, str(e))
             logger.exception('embedding error')
             raise Exception(f'embedding组件异常，请检查配置或联系管理员。错误信息：{e}')
 
-    def _update_model_status(self, status: int):
+    def _update_model_status(self, status: int, remark: str = ''):
         """更新模型状态"""
-        LLMDao.update_model_status(self.model_id, status)
+        LLMDao.update_model_status(self.model_id, status, remark)
 
 
 CUSTOM_EMBEDDING = {
