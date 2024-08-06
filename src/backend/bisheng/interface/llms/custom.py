@@ -37,7 +37,7 @@ class BishengLLM(BaseChatModel):
         LLMServerType.AZURE_OPENAI: 'AzureChatOpenAI',
         LLMServerType.QWEN: 'ChatOpenAI',
         LLMServerType.QIAN_FAN: 'ChatWenxin',
-        LLMServerType.CHAT_GLM: 'ChatOpenAI',
+        LLMServerType.ZHIPU: 'ChatOpenAI',
         LLMServerType.MINIMAX: 'MiniMaxChat',
         LLMServerType.ANTHROPIC: 'anthropic-chat',
         LLMServerType.DEEPSEEK: 'ChatOpenAI',

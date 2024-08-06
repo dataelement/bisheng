@@ -18,7 +18,7 @@ class LLMServerType(Enum):
     VLLM = 'vllm'
     QWEN = 'qwen'  # 阿里通义千问
     QIAN_FAN = 'qianfan'  # 百度千帆
-    CHAT_GLM = 'chat_glm'  # 智谱清言
+    ZHIPU = 'zhipu'  # 智谱清言
     MINIMAX = 'minimax'
     ANTHROPIC = 'anthropic'
     DEEPSEEK = 'deepseek'

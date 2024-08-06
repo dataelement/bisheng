@@ -57,12 +57,13 @@ class BishengEmbeddings(Embeddings):
         LLMServerType.LLAMACPP: 'LlamaCppEmbeddings',
         LLMServerType.VLLM: '',
 
+        # 官方API服务
         LLMServerType.OPENAI: 'OpenAIEmbeddings',
         LLMServerType.AZURE_OPENAI: 'AzureOpenAIEmbeddings',
         LLMServerType.QWEN: 'DashScopeEmbeddings',
         LLMServerType.QIAN_FAN: 'QianfanEmbeddingsEndpoint',
         LLMServerType.MINIMAX: 'MiniMaxEmbeddings',
-        LLMServerType.CHAT_GLM: '',
+        LLMServerType.ZHIPU: 'OpenAIEmbeddings',
     }
 
     def __init__(self, **kwargs):
@@ -106,12 +107,24 @@ class BishengEmbeddings(Embeddings):
         if model_info.config:
             params.update(model_info.config)
         params.update({
-            'model_name': model_info.model_name,
+            'model': model_info.model_name,
         })
         if server_info.type == LLMServerType.QWEN:
             params = {
                 "dashscope_api_key": params.get('openai_api_key'),
                 "model": params.get('model_name'),
+            }
+        elif server_info.type == LLMServerType.QIAN_FAN:
+            params = {
+                "qianfan_ak": params.get("wenxin_api_key"),
+                "qianfan_sk": params.get("wenxin_secret_key"),
+                "model": params.get('model_name'),
+            }
+        elif server_info.type == LLMServerType.MINIMAX:
+            params = {
+                "minimax_api_key": params.get('minimax_api_key'),
+                "model": params.get('model_name'),
+                "minimax_group_id": params.get('minimax_group_id'),
             }
         return params
 
