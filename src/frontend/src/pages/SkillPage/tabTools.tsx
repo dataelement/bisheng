@@ -39,10 +39,7 @@ export default function tabTools({ select = null, onSelect }) {
     return ['Dalle3绘画', 'Bing web搜索', '天眼查'].includes(name)
   }
 
-  const [toolName, setToolName] = useState('')
-  const handleSetTool = (name) => {
-    setToolName(name)
-  }
+  const toolsetRef = useRef(null)
 
   return (
     <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
@@ -89,7 +86,7 @@ export default function tabTools({ select = null, onSelect }) {
                   select={select}
                   data={el}
                   onSelect={onSelect}
-                  onSetClick={hasSet(el.name) ? () => handleSetTool(el.name) : null}
+                  onSetClick={hasSet(el.name) ? () => toolsetRef.current.edit(el) : null}
                   onEdit={(id) => editRef.current.edit(el)}
                 ></ToolItem>
               ))
@@ -108,13 +105,15 @@ export default function tabTools({ select = null, onSelect }) {
         </p>
       </div>
 
-      <EditTool onReload={() => {
-        // 切换自定义工具 并 刷新
-        setType('edit');
-        type === 'edit' && loadData();
-      }}
-        ref={editRef} />
-      <ToolSet open={toolName} name={toolName} onOpenChange={(o) => !o && setToolName('')} />
+      <EditTool
+        onReload={() => {
+          // 切换自定义工具 并 刷新
+          setType('edit');
+          type === 'edit' && loadData();
+        }}
+        ref={editRef}
+      />
+      <ToolSet ref={toolsetRef} onChange={() => loadData("default")} />
     </div>
   );
 }

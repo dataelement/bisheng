@@ -14,6 +14,10 @@ customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 200) {
         return response.data.data;
     }
+    // 特殊状态码
+    if ([10802, 10803].includes(response.data.status_code)) {
+        return { ...response.data.data, code: response.data.status_code, msg: response.data.status_message };
+    }
     // 无权访问
     if (response.data.status_code === 403) {
         location.href = __APP_ENV__.BASE_URL + '/403'

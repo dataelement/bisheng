@@ -16,7 +16,7 @@ export interface AssistantItemDB {
 export const getAssistantsApi = async (page, limit, name, tag_id): Promise<AssistantItemDB[]> => {
     return await axios.get(`/api/v1/assistant`, {
         params: {
-            page, limit, name, 
+            page, limit, name,
             tag_id: tag_id === -1 ? null : tag_id
         }
     });
@@ -88,3 +88,8 @@ export const getAssistantToolsApi = async (type: 'all' | 'default' | 'custom'): 
     }
     return await axios.get(`/api/v1/assistant/tool_list${queryStr[type]}`)
 };
+
+// 修改内置工具配置
+export const updateAssistantToolApi = async (tool_id, extra) => {
+    return await axios.post(`/api/v1/assistant/tool/config`, { tool_id, extra })
+}

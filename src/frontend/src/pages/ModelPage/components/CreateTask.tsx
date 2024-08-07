@@ -11,17 +11,17 @@ import {
 } from "../../../components/bs-ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/bs-ui/tooltip";
 
+import { useTranslation } from "react-i18next";
 import { Input } from "../../../components/bs-ui/input";
 import { Label } from "../../../components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/bs-ui/table";
+import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import { alertContext } from "../../../contexts/alertContext";
-import { getServicesApi, serverListApi } from "../../../controllers/API";
+import { getFTServicesApi, getServicesApi } from "../../../controllers/API";
 import { createTaskApi } from "../../../controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import Combobox from "./Combobox";
 import CreateTaskList from "./CreateTaskList";
-import { useTranslation } from "react-i18next";
 
 export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
     const { t } = useTranslation()
@@ -218,9 +218,10 @@ const useOptions = () => {
     }, [])
 
     const selectService = async (val) => {
-        const rtName = services.find(item => item.id === val)?.name
-        const res = await serverListApi(rtName)
-        setModels(res.filter(item => item.sft_support))
+        const servceId = services.find(item => item.id === val)?.id
+        const res = await getFTServicesApi(servceId)
+        setModels(res)
+        // setModels(res.filter(item => item.sft_support))
     }
 
     return { services, models, selectService }
