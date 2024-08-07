@@ -19,32 +19,56 @@ import {
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "../../components/bs-ui/input";
-import Dropdown from "../../components/dropdownComponent";
 import { alertContext } from "../../contexts/alertContext";
 import { userContext } from "../../contexts/userContext";
-import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "../../controllers/API";
+import { createFileLib, deleteFileLib, readFileLibDatabase } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 // import PaginationComponent from "../../components/PaginationComponent";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import Cascader from "@/components/bs-ui/select/cascader";
+import { getModelListApi } from "@/controllers/API/finetune";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
-function CreateModal({ datalist, open, setOpen }) {
+function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
 
     const nameRef = useRef(null)
     const descRef = useRef(null)
-    const [modal, setModal] = useState('')
+    const [modal, setModal] = useState(null)
     const [options, setOptions] = useState([])
 
     // Fetch model data
     useEffect(() => {
-        getEmbeddingModel().then(res => {
-            const models = res.models || []
-            setOptions(models)
-            setModal(models[0] || '')
+        // getEmbeddingModel().then(res => {
+        //     const models = res.models || []
+        //     setOptions(models)
+        //     setModal(models[0] || '')
+        // })
+        getModelListApi().then(data => {
+            let embeddings = []
+            let models = {}
+            data.forEach(server => {
+                const serverItem = { value: server.id, label: server.name, children: [] }
+                serverItem.children = server.models.reduce((res, model) => {
+                    if (model.model_type !== 'embedding') return res
+                    const modelItem = { value: model.id, label: model.model_name }
+                    models[model.id] = model.model_name
+                    return [...res, modelItem]
+                }, [])
+                if (serverItem.children.length) embeddings.push(serverItem)
+            });
+            setOptions(embeddings)
+            const firstNode = embeddings[0]
+            if (firstNode) {
+                setModal([{ label: firstNode.label, value: firstNode.value }, { label: firstNode.children[0].label, value: firstNode.children[0].value }])
+            } else {
+                setModal([])
+            }
+
+            onLoadEnd(models)
         })
     }, [])
 
@@ -71,7 +95,7 @@ function CreateModal({ datalist, open, setOpen }) {
         captureAndAlertRequestErrorHoc(createFileLib({
             name,
             description: desc,
-            model: modal
+            model: modal[1].value,
         }).then(res => {
             // @ts-ignore
             window.libname = name
@@ -103,11 +127,13 @@ function CreateModal({ datalist, open, setOpen }) {
                 </div>
                 <div className="">
                     <label htmlFor="roleAndTasks" className="bisheng-label">{t('lib.model')}</label>
-                    <Dropdown
-                        options={options}
-                        onSelect={(val) => setModal(val)}
-                        value={modal}
-                    ></Dropdown>
+                    {
+                        modal && <Cascader
+                            defaultValue={modal}
+                            options={options}
+                            onChange={(a, val) => setModal(val)}
+                        />
+                    }
                 </div>
             </div>
             <DialogFooter>
@@ -123,6 +149,7 @@ function CreateModal({ datalist, open, setOpen }) {
 export default function FileLibPage() {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
+    const [modelNameMap, setModelNameMap] = useState({})
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
         readFileLibDatabase(param.page, param.pageSize, param.keyword)
@@ -193,7 +220,7 @@ export default function FileLibPage() {
                                         <TableCell className="font-medium max-w-[200px]">
                                             <div className=" truncate-multiline">{el.name}</div>
                                         </TableCell>
-                                        <TableCell>{el.model || '--'}</TableCell>
+                                        <TableCell>{modelNameMap[el.model] || '--'}</TableCell>
                                         <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                         <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                         <TableCell className="max-w-[300px] break-all">
@@ -228,7 +255,7 @@ export default function FileLibPage() {
                     />
                 </div>
             </div>
-            <CreateModal datalist={datalist} open={open} setOpen={setOpen}></CreateModal>
+            <CreateModal datalist={datalist} open={open} setOpen={setOpen} onLoadEnd={setModelNameMap}></CreateModal>
         </div>
     );
 }

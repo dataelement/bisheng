@@ -142,8 +142,8 @@ export default function Management() {
         )}
         <div className="h-full overflow-y-auto">
             <div className="flex justify-end gap-4">
-                {user.role === 'admin' && <Button onClick={() => setSystemModel(true)} variant="outline">
-                    <SettingIcon />
+                {user.role === 'admin' && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
+                    <SettingIcon className="text-red-500" />
                     系统模型设置
                 </Button>}
                 {user.role === 'admin' && <Button onClick={() => setModelId(-1)}>添加模型</Button>}

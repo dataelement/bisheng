@@ -30,14 +30,14 @@ TooltipContent.displayName = TooltipPrimitive.Content.displayName
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
 
 
-export const QuestionTooltip = ({ content }) => (
+export const QuestionTooltip = ({ className = '', content }) => (
     <TooltipProvider delayDuration={100}>
         <Tooltip>
-            <TooltipTrigger>
+            <TooltipTrigger className={className}>
                 <QuestionMarkCircledIcon />
             </TooltipTrigger>
             <TooltipContent>
-                <span>{content}</span>
+                <div className="max-w-96">{content}</div>
             </TooltipContent>
         </Tooltip>
     </TooltipProvider>

@@ -1,4 +1,5 @@
 import { Button } from "@/components/bs-ui/button";
+import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -11,10 +12,10 @@ import { useEffect, useMemo, useState } from "react";
 const ModelSelect = ({ label, tooltipText, value, options, onChange }) => {
     return (
         <div>
-            <div className="flex items-center space-x-2">
-                <span>{label}</span>
-                {tooltipText && <QuestionTooltip content={tooltipText} />}
-            </div>
+            <Label className="bisheng-label">
+                <span>模型名称</span>
+                {tooltipText && <QuestionTooltip className="relative top-0.5 ml-1" content={tooltipText} />}
+            </Label>
             <Select value={value} onValueChange={onChange}>
                 <SelectTrigger>
                     <SelectValue placeholder="" />
@@ -84,9 +85,9 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
     };
 
     return (
-        <div className="max-w-[520px] mx-auto gap-y-5 flex flex-col mt-16">
+        <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16">
             <div>
-                <span>知识库默认embedding模型</span>
+                <Label className="bisheng-label">知识库默认embedding模型</Label>
                 {
                     !loading && <Cascader
                         defaultValue={embeddingValue}
@@ -117,8 +118,8 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 onChange={(val) => setForm({ ...form, qaSimilarModelId: val })}
             />
             <div className="mt-10 text-center space-x-6">
-                <Button variant="outline" onClick={onBack}>取消</Button>
-                <Button onClick={handleSave}>保存</Button>
+                <Button className="px-6" variant="outline" onClick={onBack}>取消</Button>
+                <Button className="px-10" onClick={handleSave}>保存</Button>
             </div>
         </div>
     );

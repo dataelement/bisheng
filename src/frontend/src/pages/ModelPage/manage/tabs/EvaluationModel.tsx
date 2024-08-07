@@ -1,4 +1,5 @@
 import { Button } from "@/components/bs-ui/button";
+import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { getEvaluationModelConfig, updateEvaluationModelConfig } from "@/controllers/API/finetune";
@@ -24,7 +25,7 @@ export default function EvaluationModel({ llmOptions, onBack }) {
     return (
         <div className="max-w-[520px] mx-auto">
             <div className="mt-10">
-                <span>评测功能默认模型</span>
+                <Label className="bisheng-label">评测功能默认模型</Label>
                 <Select value={selectedModel} onValueChange={(val) => setSelectedModel(val)}>
                     <SelectTrigger className="mt-2">
                         <SelectValue placeholder="选择模型" />
@@ -39,8 +40,8 @@ export default function EvaluationModel({ llmOptions, onBack }) {
                 </Select>
             </div>
             <div className="mt-10 text-center space-x-6">
-                <Button variant="outline" onClick={onBack}>取消</Button>
-                <Button onClick={handleSave}>保存</Button>
+                <Button className="px-6" variant="outline" onClick={onBack}>取消</Button>
+                <Button className="px-10" onClick={handleSave}>保存</Button>
             </div>
         </div>
     );
