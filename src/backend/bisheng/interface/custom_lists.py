@@ -12,7 +12,7 @@ from langchain import llms, memory, requests, text_splitter
 from langchain_anthropic import ChatAnthropic
 from langchain_community import agent_toolkits, document_loaders, embeddings
 from langchain_community.chat_models import ChatVertexAI
-from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings
 
 # LLMs
 llm_type_to_cls_dict = {}
@@ -65,30 +65,31 @@ embedding_type_to_cls_dict: dict[str, Any] = {
 
 embedding_type_to_cls_dict.update({
     embedding_name:
-    import_class(f'bisheng_langchain.embeddings.{embedding_name}')
+        import_class(f'bisheng_langchain.embeddings.{embedding_name}')
     for embedding_name in contribute_embeddings.__all__
 })
 embedding_type_to_cls_dict.update({
-    "OpenAIEmbeddings": OpenAIEmbeddings
+    "OpenAIEmbeddings": OpenAIEmbeddings,
+    "AzureOpenAIEmbeddings": AzureOpenAIEmbeddings,
 })
 
 # Document Loaders
 documentloaders_type_to_cls_dict: dict[str, Any] = {
     documentloader_name:
-    import_class(f'langchain_community.document_loaders.{documentloader_name}')
+        import_class(f'langchain_community.document_loaders.{documentloader_name}')
     for documentloader_name in document_loaders.__all__
 }
 
 # contribute
 documentloaders_type_to_cls_dict.update({
     loader:
-    import_class(f'bisheng_langchain.document_loaders.{loader}')
+        import_class(f'bisheng_langchain.document_loaders.{loader}')
     for loader in contribute_loader.__all__
 })
 
 # Text Splitters
 textsplitter_type_to_cls_dict: dict[str,
-                                    Any] = dict(inspect.getmembers(text_splitter, inspect.isclass))
+Any] = dict(inspect.getmembers(text_splitter, inspect.isclass))
 
 # merge CUSTOM_AGENTS and CUSTOM_CHAINS
 CUSTOM_NODES = {
