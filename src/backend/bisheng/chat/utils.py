@@ -2,6 +2,7 @@ import json
 from typing import Dict, List
 from urllib.parse import unquote, urlparse
 
+from bisheng.api.services.llm import LLMService
 from bisheng.api.v1.schemas import ChatMessage
 from bisheng.database.base import session_getter
 from bisheng.database.models.model_deploy import ModelDeploy
@@ -133,14 +134,8 @@ async def process_source_document(source_document: List[Document], chat_id, mess
     if not source_document:
         return
 
-    from bisheng.settings import settings
     # 使用大模型进行关键词抽取，模型配置临时方案
-    keyword_conf = settings.get_default_llm() or {}
-    llm = None
-    if keyword_conf:
-        node_type = keyword_conf.pop('type', "HostQwenChat")  # 兼容旧配置
-        class_object = import_by_type(_type='llms', name=node_type)
-        llm = instantiate_llm(node_type, class_object, keyword_conf)
+    llm = LLMService.get_knowledge_source_llm()
 
     answer_keywords = extract_answer_keys(answer, llm)
 

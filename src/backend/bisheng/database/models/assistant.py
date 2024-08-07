@@ -24,7 +24,7 @@ class AssistantBase(SQLModelSerializable):
     prompt: str = Field(default='', sa_column=Column(Text), description='用户可见描述词')
     guide_word: Optional[str] = Field(default='', sa_column=Column(Text), description='开场白')
     guide_question: Optional[List] = Field(sa_column=Column(JSON), description='引导问题')
-    model_name: str = Field(default='', description='选择的模型名')
+    model_name: str = Field(default='', description='对应模型管理里模型的唯一ID')
     temperature: float = Field(default=0.5, description='模型温度')
     status: int = Field(default=AssistantStatus.OFFLINE.value, description='助手是否上线')
     user_id: int = Field(default=0, description='创建用户ID')

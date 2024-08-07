@@ -415,7 +415,7 @@
     "inProgress": "Ongoing",
     "failedAborted": "Failed/Aborted",
     "createTrainingTask": "Create training tasks",
-    "rtServiceManagement": "RT service management",
+    "rtServiceManagement": "FT service management",
     "confirmCancelPublish": "This model is currently online, whether it is still unpublished?",
     "confirmDeleteModel": "Are you sure you want to delete the model {{name}}?",
     "confirmDeleteOnlineModel": "This model has been online, do you want to delete it?",

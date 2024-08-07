@@ -150,7 +150,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
     }
 
     const showAdd = useMemo(() => {
-        if (data.length === 1 && data[0].label === keyword) {
+        if(data.length === 1 && data[0].label === keyword) {
             return false
         }
         return true

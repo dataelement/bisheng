@@ -8,5 +8,5 @@ class TagExistError(BaseErrorCode):
 
 
 class TagNotExistError(BaseErrorCode):
-    Code: int = 10700
+    Code: int = 10701
     Msg: str = '未找到对应的标签'

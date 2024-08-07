@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -37,6 +37,12 @@ class ModelDeployDao(ModelDeployBase):
         with session_getter() as session:
             statement = select(ModelDeploy).where(ModelDeploy.id == model_id)
             return session.exec(statement).first()
+
+    @classmethod
+    def find_model_by_server(cls, server_id: str) -> List[ModelDeploy]:
+        with session_getter() as session:
+            statement = select(ModelDeploy).where(ModelDeploy.server == server_id)
+            return session.exec(statement).all()
 
     @classmethod
     def find_model_by_server_and_name(cls, server: str, model: str) -> ModelDeploy | None:

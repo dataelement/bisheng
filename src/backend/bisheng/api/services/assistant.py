@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Any, List, Optional
 from uuid import UUID
@@ -8,7 +9,7 @@ from loguru import logger
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                            AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
                                            ToolTypeEmptyError, ToolTypeNotExistsError, ToolTypeIsPresetError)
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
@@ -143,11 +144,6 @@ class AssistantService(BaseService, AssistantUtils):
         if cls.judge_name_repeat(assistant.name, assistant.user_id):
             return AssistantNameRepeatError.return_resp()
 
-        # 保存数据到数据库, 补充用默认的模型
-        llm_conf = cls.get_llm_conf(assistant.model_name)
-        assistant.model_name = llm_conf['model_name']
-        assistant.temperature = llm_conf['temperature']
-
         logger.info(f"assistant original prompt id: {assistant.id}, desc: {assistant.prompt}")
 
         # 自动生成描述
@@ -218,7 +214,7 @@ class AssistantService(BaseService, AssistantUtils):
 
         # 初始化llm
         auto_agent = AssistantAgent(assistant, '')
-        await auto_agent.init_llm()
+        await auto_agent.init_auto_update_llm()
 
         # 流式生成提示词
         final_prompt = ''
@@ -402,6 +398,14 @@ class AssistantService(BaseService, AssistantUtils):
             one["children"] = tool_type_children.get(one["id"], [])
 
         return res
+
+    @classmethod
+    def update_tool_config(cls, login_user: UserPayload, tool_id: int, extra: dict) -> GptsTools:
+        tool_info = GptsToolsDao.get_one_tool(tool_id)
+        if not tool_info:
+            raise NotFoundError.http_exception()
+        tool_info.extra = json.dumps(extra)
+        return GptsToolsDao.update_tools(tool_info)
 
     @classmethod
     def add_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
@@ -615,7 +619,7 @@ class AssistantService(BaseService, AssistantUtils):
         """
         # 初始化agent
         auto_agent = AssistantAgent(assistant, '')
-        await auto_agent.init_llm()
+        await auto_agent.init_auto_update_llm()
 
         # 自动生成描述
         assistant.desc = auto_agent.generate_description(assistant.prompt)

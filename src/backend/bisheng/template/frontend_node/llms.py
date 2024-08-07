@@ -215,3 +215,7 @@ class LLMFrontendNode(FrontendNode):
 
         if name and 'azure' in name.lower():
             LLMFrontendNode.format_azure_field(field)
+
+        if name == 'BishengLLM':
+            if field.name == 'model_id':
+                field.field_type = "bisheng_model"

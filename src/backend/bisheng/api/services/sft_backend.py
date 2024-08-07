@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 
 import requests
 
@@ -117,6 +117,13 @@ class SFTBackend:
         res = requests.post(f'{host}{url}',
                             json={'uri': uri, 'job_id': job_id, 'old_model_name': old_model_name,
                                   'model_name': model_name})
+        return cls.handle_response(res)
+
+    @classmethod
+    def get_all_model(cls, host) -> (bool, List[str]):
+        """ 获取所有的模型列表 """
+        url = '/v2.1/sft/model'
+        res = requests.get(f'{host}{url}')
         return cls.handle_response(res)
 
     @classmethod

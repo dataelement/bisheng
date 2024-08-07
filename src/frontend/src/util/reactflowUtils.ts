@@ -44,6 +44,7 @@ export const LANGFLOW_SUPPORTED_TYPES = new Set([
   "int",
   "dict",
   "NestedDict",
+  "bisheng_model"
 ]);
 
 // edges (线)文档

@@ -9,11 +9,12 @@ from bisheng.api.errcode.finetune import (CancelJobError, ChangeModelNameError, 
                                           DeleteJobError, ExportJobError, GetGPUInfoError,
                                           InvalidExtraParamsError, JobStatusError,
                                           ModelNameExistsError, NotFoundJobError,
-                                          TrainDataNoneError, UnExportJobError)
+                                          TrainDataNoneError, UnExportJobError, GetModelError)
 from bisheng.api.errcode.model_deploy import NotFoundModelError
 from bisheng.api.errcode.server import NoSftServerError
 from bisheng.api.services.rt_backend import RTBackend
 from bisheng.api.services.sft_backend import SFTBackend
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import parse_gpus, parse_server_host
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.cache import InMemoryCache
@@ -507,7 +508,7 @@ class FinetuneService:
 
     @classmethod
     def get_server_filters(cls) -> UnifiedResponseModel:
-        """ 获取服务器过滤条件 """
+        """ 获取ft服务器过滤条件 """
         server_filters = FinetuneDao.get_server_filters()
         res = []
         for one in server_filters:
@@ -516,6 +517,28 @@ class FinetuneService:
                 'server_name': one,
             })
         return resp_200(data=res)
+
+    @classmethod
+    def get_model_list(cls, login_user: UserPayload, server_id: int) -> List[ModelDeploy]:
+        """ 获取ft服务下的所有模型列表 """
+        server_info = ServerDao.find_server(server_id)
+        if not server_info:
+            raise NoSftServerError.http_exception()
+        flag, model_name_list = SFTBackend.get_all_model(parse_server_host(server_info.sft_endpoint))
+        if not flag:
+            logger.error(f'get model list error: server_id: {server_id}, err: {model_name_list}')
+            raise GetModelError.http_exception()
+        ret = []
+        db_model = ModelDeployDao.find_model_by_server(str(server_id))
+        for one in db_model:
+            if one.model in model_name_list:
+                ret.append(one)
+                model_name_list.remove(one.model)
+        for one in model_name_list:
+            ret.append(ModelDeployDao.insert_one(ModelDeploy(server=str(server_id),
+                                                             model=one,
+                                                             endpoint=f'http://{server_info.endpoint}/v2.1/models')))
+        return ret
 
     @classmethod
     def get_gpu_info(cls) -> UnifiedResponseModel:

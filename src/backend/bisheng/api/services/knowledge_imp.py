@@ -6,6 +6,8 @@ from typing import Any, Dict, List
 from uuid import uuid4
 
 import requests
+
+from bisheng.api.services.llm import LLMService
 from bisheng.cache.utils import file_download
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeDao
@@ -216,16 +218,13 @@ def decide_vectorstores(collection_name: str, vector_store: str,
 def decide_knowledge_llm() -> Any:
     """ 获取用来总结知识库chunk的 llm对象 """
     # 获取llm配置
-    llm_params = settings.get_knowledge().get('llm')
-    if not llm_params:
+    knowledge_llm = LLMService.get_knowledge_llm()
+    if not knowledge_llm.extract_title_model_id:
         # 无相关配置
         return None
 
     # 获取llm对象
-    node_type = llm_params.pop('type')
-    class_object = import_by_type(_type='llms', name=node_type)
-    llm = instantiate_llm(node_type, class_object, llm_params)
-    return llm
+    return LLMService.get_bisheng_llm(model_id=knowledge_llm.extract_title_model_id)
 
 
 def addEmbedding(collection_name,

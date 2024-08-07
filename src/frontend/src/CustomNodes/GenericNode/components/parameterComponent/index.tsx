@@ -34,6 +34,7 @@ import {
   nodeIconsLucide
 } from "../../../../utils";
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
+import ModelSelect from "@/pages/SkillPage/components/editAssistant/ModelSelect";
 
 export default function ParameterComponent({
   left,
@@ -300,7 +301,8 @@ export default function ParameterComponent({
             type === "knowledge_one" ||
             type === "knowledge_list" ||
             type === "NestedDict" ||
-            type === "dict") &&
+            type === "dict" ||
+            type === "bisheng_model") &&
           !optionalHandle ? (<></>)
           : (
             <ShadTooltip
@@ -542,6 +544,16 @@ export default function ParameterComponent({
               data.node!.template[name].value = newValue;
               handleOnNewValue(newValue);
             }} />
+          </div>
+        ) : left === true && type === "bisheng_model" ? (
+          <div className="mt-2 w-full">
+            <ModelSelect
+              value={data.node!.template[name].value || null}
+              onChange={(newValue) => {
+                data.node!.template[name].value = newValue;
+                handleOnNewValue(newValue);
+              }}
+            />
           </div>
         ) : (
           <></>

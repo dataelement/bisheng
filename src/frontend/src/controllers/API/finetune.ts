@@ -117,3 +117,68 @@ export const getPresetFileApi = async (): Promise<FileItem[]> => {
 export const getFileUrlApi = async (urlkey): Promise<{ url: string }> => {
     return await axios.get(`/api/v1/finetune/job/file/download?file_url=${urlkey}`);
 };
+
+// 获模型列表
+export const getModelListApi = async (): Promise<any> => {
+    return await axios.get(`/api/v1/llm`);
+}
+
+// 添加模型
+export const addLLmServer = async (data: any) => {
+    return await axios.post(`/api/v1/llm`, data)
+};
+
+// 修改模型
+export const updateLLmServer = async (data: any) => {
+    return await axios.put(`/api/v1/llm`, data)
+}
+
+// 删除模型
+export const deleteLLmServer = async (server_id: string) => {
+    return await axios.delete(`/api/v1/llm`, { data: { server_id } })
+}
+
+// 模型上下线
+export const changeLLmServerStatus = async (model_id: string, online: number) => {
+    return await axios.post(`/api/v1/llm/online`, { model_id, online })
+}
+
+// 获取模型详情
+export const getLLmServerDetail = async (server_id: string): Promise<any> => {
+    return await axios.get(`/api/v1/llm/info?server_id=${server_id}`)
+}
+
+// 获取知识库模型配置
+export const getKnowledgeModelConfig = async (): Promise<any> => {
+    return await axios.get(`/api/v1/llm/knowledge`)
+}
+
+// 更新知识库模型配置
+export const updateKnowledgeModelConfig = async (data: any): Promise<any> => {
+    return await axios.post(`/api/v1/llm/knowledge`, data)
+}
+
+// 获取助手模型配置
+export const getAssistantModelConfig = async (): Promise<any> => {
+    return await axios.get(`/api/v1/llm/assistant`)
+}
+
+// 更新助手模型配置
+export const updateAssistantModelConfig = async (data: any): Promise<any> => {
+    return await axios.post(`/api/v1/llm/assistant`, data)
+}
+
+// 获取评测模型配置
+export const getEvaluationModelConfig = async (): Promise<any> => {
+    return await axios.get(`/api/v1/llm/evaluation`)
+}
+
+// 更新评测模型配置
+export const updateEvaluationModelConfig = async (data: any): Promise<any> => {
+    return await axios.post(`/api/v1/llm/evaluation`, data)
+}
+
+// 获取助手模型可选列表
+export const getAssistantModelList = async (): Promise<any> => {
+    return await axios.get(`/api/v1/llm/assistant/llm_list`)
+}

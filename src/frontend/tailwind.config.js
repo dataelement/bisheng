@@ -29,7 +29,8 @@ module.exports = {
     },
     extend: {
       screens: {
-        'my-size': '1800px'
+        'my-size': '1800px',
+        'my-size-lg': '2200px'
       },
       colors: {
         "search-input": "var(--search-input)",

@@ -8,7 +8,7 @@ from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema
-from bisheng.api.services.user_service import UserPayload, get_login_user
+from bisheng.api.services.user_service import UserPayload, get_login_user, get_admin_user
 from bisheng.api.utils import get_url_content
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500, DeleteToolTypeReq,
@@ -125,6 +125,7 @@ async def update_tool_list(*,
                            assistant_id: UUID = Body(description='助手唯一ID', alias='id'),
                            tool_list: List[int] = Body(description='用户选择的工具列表'),
                            login_user: UserPayload = Depends(get_login_user)):
+    """ 更新助手选择的工具列表 """
     return AssistantService.update_tool_list(assistant_id, tool_list, login_user)
 
 
@@ -171,6 +172,16 @@ async def chat(*,
 def get_tool_list(*, is_preset: Optional[bool] = None, login_user: UserPayload = Depends(get_login_user)):
     """查询所有可见的tool 列表"""
     return resp_200(AssistantService.get_gpts_tools(login_user, is_preset))
+
+
+@router.post('/tool/config', response_model=UnifiedResponseModel)
+async def update_tool_config(*,
+                             login_user: UserPayload = Depends(get_admin_user),
+                             tool_id: int = Body(description='工具唯一ID'),
+                             extra: dict = Body(description='工具配置项')):
+    """ 更新工具的配置 """
+    data = AssistantService.update_tool_config(login_user, tool_id, extra)
+    return resp_200(data=data)
 
 
 @router.post('/tool_schema', response_model=UnifiedResponseModel)

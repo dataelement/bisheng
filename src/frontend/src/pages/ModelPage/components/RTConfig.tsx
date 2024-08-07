@@ -19,17 +19,16 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 export default function RTConfig({ open, onChange }) {
 
     const nameRef = useRef(null)
-    const urlRef = useRef(null)
+    // const urlRef = useRef(null)
     const ftUrlRef = useRef(null)
 
     const { services, showAdd, addItem, handleDel, create, setShowAdd } = useRTService(onChange)
 
     const handleAdd = () => {
-        const [name, url, ftUrl] = [nameRef.current.value, urlRef.current.value, ftUrlRef.current.value]
-        if (!name || !url) return
-        addItem(name, url, ftUrl)
+        const [name, ftUrl] = [nameRef.current.value, ftUrlRef.current.value]
+        if (!name) return
+        addItem(name, ftUrl)
         nameRef.current.value = ''
-        urlRef.current.value = ''
         ftUrlRef.current.value = ''
     }
 
@@ -46,7 +45,7 @@ export default function RTConfig({ open, onChange }) {
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-[200px]">{t('model.machineName')}</TableHead>
-                            <TableHead>RT{t('model.serviceAddress')}</TableHead>
+                            {/* <TableHead>RT{t('model.serviceAddress')}</TableHead> */}
                             <TableHead>FT{t('model.serviceAddress')}</TableHead>
                             <TableHead className="text-right">{t('operations')}</TableHead>
                         </TableRow>
@@ -55,9 +54,9 @@ export default function RTConfig({ open, onChange }) {
                         {services.map((el) => (
                             <TableRow key={el.id}>
                                 <TableCell className="py-2">{el.name}</TableCell>
-                                <TableCell className="py-2">
+                                {/* <TableCell className="py-2">
                                     <p className="cursor-pointer" onClick={e => copyText(el.url)}>{el.url}</p>
-                                </TableCell>
+                                </TableCell> */}
                                 <TableCell className="py-2">
                                     <p className="cursor-pointer" onClick={e => copyText(el.ftUrl)}>{el.ftUrl}</p>
                                 </TableCell>
@@ -66,7 +65,7 @@ export default function RTConfig({ open, onChange }) {
                         ))}
                         {showAdd && <TableRow>
                             <TableCell><Input ref={nameRef} placeholder="name"></Input></TableCell>
-                            <TableCell><Input ref={urlRef} placeholder="IP:PORT"></Input></TableCell>
+                            {/* <TableCell><Input ref={urlRef} placeholder="IP:PORT"></Input></TableCell> */}
                             <TableCell><Input ref={ftUrlRef} placeholder="IP:PORT"></Input></TableCell>
                             <TableCell>
                                 <Button variant="link" className="h-8 rounded-full" onClick={handleAdd}>{t('confirmButton')}</Button>
@@ -89,7 +88,7 @@ type SERVICE = {
     id: number,
     create_time?: string,
     update_time?: string,
-    url: string,
+    url?: string,
     ftUrl: string,
     remark?: string,
     name: string
@@ -108,17 +107,15 @@ const useRTService = (onChange) => {
         setServices(res.map(el => ({
             id: el.id,
             name: el.server,
-            url: el.endpoint,
             ftUrl: el.sft_endpoint
         })))
     }
 
-    const addItem = (name, url, ftUrl) => {
-        captureAndAlertRequestErrorHoc(addServiceApi(name, url, ftUrl).then(data => {
+    const addItem = (name, ftUrl) => {
+        captureAndAlertRequestErrorHoc(addServiceApi(name, ftUrl).then(data => {
             setServices([...services, {
                 id: data.id,
                 name,
-                url,
                 ftUrl
             }])
             setShowAdd(false)

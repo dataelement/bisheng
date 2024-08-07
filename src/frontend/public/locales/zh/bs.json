@@ -412,7 +412,7 @@
     "inProgress": "进行中",
     "failedAborted": "失败/中止",
     "createTrainingTask": "创建训练任务",
-    "rtServiceManagement": "RT服务管理",
+    "rtServiceManagement": "FT服务管理",
     "confirmCancelPublish": "该模型正处于上线状态，是否仍然取消发布",
     "confirmDeleteModel": "确认要删除模型 {{name}} 吗？",
     "confirmDeleteOnlineModel": "该模型已上线，确认要删除模型 {{name}} 吗？",
