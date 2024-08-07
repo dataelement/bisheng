@@ -68,9 +68,11 @@ class BishengEmbeddings(Embeddings):
 
     def __init__(self, **kwargs):
         from bisheng.interface.initialize.loading import instantiate_embedding
-
-        super().__init__(**kwargs)
+        super().__init__()
         self.model_id = kwargs.get('model_id')
+        # 是否忽略模型是否上线的检查
+        ignore_online = kwargs.get('ignore_online', False)
+
         if not self.model_id:
             raise Exception('没有找到模型配置')
         model_info = LLMDao.get_model_by_id(self.model_id)
@@ -81,7 +83,7 @@ class BishengEmbeddings(Embeddings):
             raise Exception('服务提供方配置已被删除，请重新配置模型')
         if model_info.model_type != LLMModelType.EMBEDDING:
             raise Exception(f'只支持Embedding类型的模型，不支持{model_info.model_type.value}类型的模型')
-        if not model_info.online:
+        if not ignore_online and not model_info.online:
             raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
         logger.debug(f'init_bisheng_embedding: server_info: {server_info}, model_info: {model_info}')
 
@@ -90,7 +92,7 @@ class BishengEmbeddings(Embeddings):
         try:
             self.embeddings = instantiate_embedding(class_object, params)
         except Exception as e:
-            logger.exception('init bisheng embedding error')
+            logger.exception('init_bisheng_embedding error')
             raise Exception(f'初始化bisheng embedding组件失败，请检查配置或联系管理员。错误信息：{e}')
 
     def _get_embedding_class(self, server_type: LLMServerType) -> Embeddings:
@@ -112,18 +114,18 @@ class BishengEmbeddings(Embeddings):
         if server_info.type == LLMServerType.QWEN:
             params = {
                 "dashscope_api_key": params.get('openai_api_key'),
-                "model": params.get('model_name'),
+                "model": params.get('model'),
             }
         elif server_info.type == LLMServerType.QIAN_FAN:
             params = {
                 "qianfan_ak": params.get("wenxin_api_key"),
                 "qianfan_sk": params.get("wenxin_secret_key"),
-                "model": params.get('model_name'),
+                "model": params.get('model'),
             }
         elif server_info.type == LLMServerType.MINIMAX:
             params = {
                 "minimax_api_key": params.get('minimax_api_key'),
-                "model": params.get('model_name'),
+                "model": params.get('model'),
                 "minimax_group_id": params.get('minimax_group_id'),
             }
         return params

@@ -19,6 +19,7 @@ class BishengLLM(BaseChatModel):
     """
 
     model_id: int = Field(description="后端服务保存的model唯一ID")
+    model_name: Optional[str] = Field(default='', description="后端服务保存的model名称")
     streaming: bool = Field(default=True, description="是否使用流式输出", alias="stream")
     temperature: float = Field(default=0.3, description="模型生成的温度")
     top_p: float = Field(default=1, description="模型生成的top_p")
@@ -48,22 +49,21 @@ class BishengLLM(BaseChatModel):
         super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
         self.model_name = kwargs.get('model_name')
-        self.cache = kwargs.get('cache')
-        self.streaming = kwargs.get('streaming')
-        self.temperature = kwargs.get('temperature')
-        self.top_p = kwargs.get('top_p')
+        # 是否忽略模型是否上线的检查
+        ignore_online = kwargs.get('ignore_online', False)
 
         if not self.model_id:
             raise Exception('没有找到模型配置')
         model_info = LLMDao.get_model_by_id(self.model_id)
         if not model_info:
             raise Exception('模型配置已被删除，请重新配置模型')
+        self.model_name = model_info.model_name
         server_info = LLMDao.get_server_by_id(model_info.server_id)
         if not server_info:
             raise Exception('服务提供方配置已被删除，请重新配置模型')
         if model_info.model_type != LLMModelType.LLM:
             raise Exception(f'只支持LLM类型的模型，不支持{model_info.model_type.value}类型的模型')
-        if not model_info.online:
+        if not ignore_online and not model_info.online:
             raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
         logger.debug(f'init_bisheng_llm: server_info: {server_info}, model_info: {model_info}')
 

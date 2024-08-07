@@ -3,16 +3,19 @@ from typing import List, Dict, Optional
 
 from fastapi import Request
 from langchain_core.language_models import BaseChatModel
+from loguru import logger
 
 from bisheng.api.errcode.base import NotFoundError
-from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError
+from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
     EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
+from bisheng.interface.embeddings.custom import BishengEmbeddings
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
+from bisheng.interface.llms.custom import BishengLLM
 
 
 class LLMService:
@@ -54,7 +57,7 @@ class LLMService:
         """ 添加一个服务提供方 """
         exist_server = LLMDao.get_server_by_name(server.name)
         if exist_server:
-            raise ServerExistError.http_exception(f'<{server.name}>已存在')
+            raise ServerExistError.http_exception()
 
         # TODO 尝试实例化下对应的模型组件是否可以成功初始化
         model_dict = {}
@@ -70,6 +73,35 @@ class LLMService:
         db_server = LLMDao.insert_server_with_models(db_server, list(model_dict.values()))
 
         ret = cls.get_one_llm(request, login_user, db_server.id)
+        success_models = []
+        success_msg = ''
+        failed_models = []
+        failed_msg = ''
+        # 尝试实例化对应的模型，有报错的话删除
+        for one in ret.models:
+            try:
+                if one.model_type == LLMModelType.LLM:
+                    cls.get_bisheng_llm(model_id=one.id, ignore_online=True)
+                elif one.model_type == LLMModelType.EMBEDDING:
+                    BishengEmbeddings(model_id=one.id, ignore_online=True)
+                success_msg += f'{one.model_name},'
+                success_models.append(one)
+            except Exception as e:
+                logger.exception("init_model_error")
+                # 模型初始化失败的话，不添加到模型列表里
+                failed_msg += f'<{one.model_name}>添加失败，失败原因：{str(e)}\n'
+                failed_models.append(one)
+
+        # 说明模型全部添加失败了
+        if len(success_models) == 0 and failed_msg:
+            LLMDao.delete_server_by_id(ret.id)
+            raise ServerAddAllError.http_exception(failed_msg)
+        elif len(success_models) > 0 and failed_msg:
+            # 部分模型添加成功了, 删除失败的模型信息
+            ret.models = success_models
+            LLMDao.delete_model_by_ids(model_ids=[one.id for one in failed_models])
+            cls.add_llm_server_hook(request, login_user, ret)
+            raise ServerAddError.http_exception(f"<{success_msg.rstrip(',')}>添加成功，{failed_msg}")
 
         cls.add_llm_server_hook(request, login_user, ret)
         return ret
@@ -90,7 +122,7 @@ class LLMService:
                 continue
             handle_types.append(one.model_type)
             model_info = LLMDao.get_model_by_type(one.model_type)
-            # 判断是否是首个 模型
+            # 判断是否是首个llm或者embedding模型
             if model_info.id == one.id:
                 cls.set_default_model(request, login_user, model_info)
         return True

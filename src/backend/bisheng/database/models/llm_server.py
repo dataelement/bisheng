@@ -211,3 +211,10 @@ class LLMDao:
             session.exec(delete(LLMServer).where(LLMServer.id == server_id))
             session.exec(delete(LLMModel).where(LLMModel.server_id == server_id))
             session.commit()
+
+    @classmethod
+    def delete_model_by_ids(cls, model_ids: List[int]):
+        """ 根据模型ID删除模型 """
+        with session_getter() as session:
+            session.exec(delete(LLMModel).where(LLMModel.id.in_(model_ids)))
+            session.commit()
