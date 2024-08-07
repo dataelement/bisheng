@@ -61,7 +61,11 @@ async def create_assistant(*,
                            login_user: UserPayload = Depends(get_login_user)):
     # get login user
     assistant = Assistant(**req.dict(), user_id=login_user.user_id)
-    return await AssistantService.create_assistant(request, login_user, assistant)
+    try:
+        return await AssistantService.create_assistant(request, login_user, assistant)
+    except Exception as e:
+        logger.exception('create_assistant error')
+        return resp_500(message=f"创建助手出错：{str(e)}")
 
 
 @router.put('', response_model=UnifiedResponseModel[AssistantInfo])

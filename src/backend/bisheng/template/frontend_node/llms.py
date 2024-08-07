@@ -219,3 +219,5 @@ class LLMFrontendNode(FrontendNode):
         if name == 'BishengLLM':
             if field.name == 'model_id':
                 field.field_type = "bisheng_model"
+            elif field.name == 'model_name':
+                field.show = False
