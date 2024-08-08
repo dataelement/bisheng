@@ -117,9 +117,9 @@ export default function KnowledgeFile(params) {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
-        readFileLibDatabase(param.page, param.pageSize, param.keyword)
-    )
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) => {
+        return readFileLibDatabase({ ...param, name: param.keyword })
+    })
 
     const handleDelete = (id) => {
         bsConfirm({

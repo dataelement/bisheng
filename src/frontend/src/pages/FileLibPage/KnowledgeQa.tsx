@@ -154,9 +154,9 @@ export default function KnowledgeQa(params) {
     const [openData, setOpenData] = useState(false);
     const { user } = useContext(userContext);
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
-        readFileLibDatabase(param.page, param.pageSize, param.keyword)
-    )
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) => {
+        return readFileLibDatabase({ ...param, name: param.keyword, type: 0 })
+    })
 
     const handleDelete = (id) => {
         bsConfirm({
