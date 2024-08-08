@@ -32,7 +32,7 @@ export default function RTConfig({ open, onChange }) {
         ftUrlRef.current.value = ''
     }
 
-    const { t } = useTranslation()
+    const { t } = useTranslation('model')
     const copyText = useCopyText()
 
     return <Dialog open={open} onOpenChange={onChange}>
@@ -44,10 +44,10 @@ export default function RTConfig({ open, onChange }) {
                 <Table className="w-full">
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-[200px]">{t('model.machineName')}</TableHead>
-                            {/* <TableHead>RT{t('model.serviceAddress')}</TableHead> */}
-                            <TableHead>FT{t('model.serviceAddress')}</TableHead>
-                            <TableHead className="text-right">{t('operations')}</TableHead>
+                            <TableHead className="w-[200px]">{t('finetune.machineName')}</TableHead>
+                            {/* <TableHead>RT{t('finetune.serviceAddress')}</TableHead> */}
+                            <TableHead>FT{t('finetune.serviceAddress')}</TableHead>
+                            <TableHead className="text-right">{t('bs:operations')}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -60,7 +60,7 @@ export default function RTConfig({ open, onChange }) {
                                 <TableCell className="py-2">
                                     <p className="cursor-pointer" onClick={e => copyText(el.ftUrl)}>{el.ftUrl}</p>
                                 </TableCell>
-                                <TableCell className="py-2 text-right"><Button variant="link" className="h-8 rounded-full text-red-500 px-5" onClick={() => handleDel(el.id)}>{t('delete')}</Button></TableCell>
+                                <TableCell className="py-2 text-right"><Button variant="link" className="h-8 rounded-full text-red-500 px-5" onClick={() => handleDel(el.id)}>{t('bs:delete')}</Button></TableCell>
                             </TableRow>
                         ))}
                         {showAdd && <TableRow>
@@ -68,8 +68,8 @@ export default function RTConfig({ open, onChange }) {
                             {/* <TableCell><Input ref={urlRef} placeholder="IP:PORT"></Input></TableCell> */}
                             <TableCell><Input ref={ftUrlRef} placeholder="IP:PORT"></Input></TableCell>
                             <TableCell>
-                                <Button variant="link" className="h-8 rounded-full" onClick={handleAdd}>{t('confirmButton')}</Button>
-                                <Button variant="link" className="h-8 rounded-full text-gray-400" onClick={() => setShowAdd(false)}>{t('cancel')}</Button>
+                                <Button variant="link" className="h-8 rounded-full" onClick={handleAdd}>{t('bs:confirmButton')}</Button>
+                                <Button variant="link" className="h-8 rounded-full text-gray-400" onClick={() => setShowAdd(false)}>{t('bs:cancel')}</Button>
                             </TableCell>
                         </TableRow>}
                     </TableBody>
@@ -77,7 +77,7 @@ export default function RTConfig({ open, onChange }) {
             </div>
             <DialogFooter>
                 <div className="flex justify-start mt-4">
-                    <Button variant='outline' className="flex w-[120px]" onClick={() => setShowAdd(true)}><PlusIcon className="mr-2" />{t('create')}</Button>
+                    <Button variant='outline' className="flex w-[120px]" onClick={() => setShowAdd(true)}><PlusIcon className="mr-2" />{t('bs:create')}</Button>
                 </div>
             </DialogFooter>
         </DialogContent>

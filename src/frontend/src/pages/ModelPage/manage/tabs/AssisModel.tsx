@@ -10,6 +10,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { PlusIcon } from "@radix-ui/react-icons";
 import { Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 
 const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => (
@@ -102,6 +103,7 @@ const defaultValue = {
 
 export default function AssisModel({ llmOptions, onBack }) {
     const [form, setForm] = useState({ ...defaultValue });
+    const { t } = useTranslation('model')
 
     useEffect(() => {
         getAssistantModelConfig().then(({ llm_list, auto_llm }) => setForm({
@@ -154,31 +156,31 @@ export default function AssisModel({ llmOptions, onBack }) {
     const handleSave = () => {
         console.log('Form data to save:', form);
         captureAndAlertRequestErrorHoc(updateAssistantModelConfig(form).then(res => {
-            message({ variant: 'success', description: '保存成功' })
+            message({ variant: 'success', description: t('model.saveSuccess') })
         }));
     };
 
     return (
         <div className="w-[70vw] mx-auto pt-2">
             <div className="mb-6">
-                <span className="pl-1">助手推理模型</span>
+                <span className="pl-1">{t('model.assistantInferenceModel')}</span>
                 <div className="mt-2 border p-4 rounded-md bg-muted">
                     <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(3, 1fr) 200px repeat(2, 1fr) 80px" }}>
-                        <Label className="bisheng-label">模型</Label>
+                        <Label className="bisheng-label">{t('model.model')}</Label>
                         <Label className="bisheng-label">
-                            <span>助手执行模式</span>
-                            <QuestionTooltip className="relative top-0.5 ml-1" content="模型支持OpenAI function call 格式接口协议时，建议选择 function call 模式" />
+                            <span>{t('model.assistantExecutionMode')}</span>
+                            <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.assistantExecutionModeTooltip')} />
                         </Label>
-                        <Label className="bisheng-label">流式输出</Label>
+                        <Label className="bisheng-label">{t('model.streamingOutput')}</Label>
                         <Label className="bisheng-label">
-                            <span>助手知识库检索最大字符数</span>
-                            <QuestionTooltip className="relative top-0.5 ml-1" content="传给模型的最大字符数，超过会自动截断，可根据模型最大上下文长度灵活调整" />
+                            <span>{t('model.assistantKnowledgeBaseMaxCharacters')}</span>
+                            <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.assistantKnowledgeBaseMaxCharactersTooltip')} />
                         </Label>
                         <Label className="bisheng-label">
-                            <span>检索后是否重排</span>
-                            <QuestionTooltip className="relative top-0.5 ml-1" content="是否将检索得到的chunk重新排序" />
+                            <span>{t('model.reorderAfterRetrieval')}</span>
+                            <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.reorderAfterRetrievalTooltip')} />
                         </Label>
-                        <Label className="bisheng-label text-center">设为默认模式</Label>
+                        <Label className="bisheng-label text-center">{t('model.setAsDefault')}</Label>
                         <div></div>
                     </div>
                     {form.llm_list.map((item, index) => (
@@ -197,11 +199,11 @@ export default function AssisModel({ llmOptions, onBack }) {
                 </div>
             </div>
             <div className="">
-                <span className="pl-1">助手画像自动优化模型</span>
+                <span className="pl-1">{t('model.assistantAutoOptimizationModel')}</span>
                 <div className="mt-2 border p-4 rounded-md bg-muted">
                     <div className="grid grid-cols-5 gap-2">
-                        <Label className="bisheng-label">模型</Label>
-                        <Label className="bisheng-label">流式输出</Label>
+                        <Label className="bisheng-label">{t('model.model')}</Label>
+                        <Label className="bisheng-label">{t('model.streamingOutput')}</Label>
                     </div>
                     <div className="grid grid-cols-5 gap-2 mt-4">
                         <Select value={form.auto_llm.model_id} onValueChange={(val) => updateAutoLLMField('model_id', val)}>
@@ -222,8 +224,8 @@ export default function AssisModel({ llmOptions, onBack }) {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
-                                    <SelectItem value="1">是</SelectItem>
-                                    <SelectItem value="0">否</SelectItem>
+                                    <SelectItem value="1">{t('yes')}</SelectItem>
+                                    <SelectItem value="0">{t('no')}</SelectItem>
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
@@ -231,8 +233,8 @@ export default function AssisModel({ llmOptions, onBack }) {
                 </div>
             </div>
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outline" onClick={onBack}>取消</Button>
-                <Button className="px-10" onClick={handleSave}>保存</Button>
+                <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
+                <Button className="px-10" onClick={handleSave}>{t('model.save')}</Button>
             </div>
         </div>
     );

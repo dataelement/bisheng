@@ -275,7 +275,7 @@ const CustomForm = forwardRef(({ showDefault, provider, formData }, ref) => {
     useImperativeHandle(ref, () => ({
         getData() {
             const errorObj = fields.find(field => field.required && !form[field.key]);
-            return [form, errorObj ? `${errorObj.label} 不能为空` : ''];
+            return [form, errorObj ? `${errorObj.label} cannot be empty` : ''];
         }
     }))
 

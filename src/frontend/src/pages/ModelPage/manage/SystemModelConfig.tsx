@@ -8,7 +8,7 @@ import KnowledgeModle from "./tabs/KnowledgeModel";
 import { useMemo } from "react";
 
 export default function SystemModelConfig({ data, onBack }) {
-    const { t } = useTranslation()
+    const { t } = useTranslation('model')
     const { llmOptions, embeddings } = useMemo(() => {
         let llmOptions = []
         let embeddings = []
@@ -33,14 +33,14 @@ export default function SystemModelConfig({ data, onBack }) {
                         <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
                     </button>
                 </ShadTooltip>
-                <span>系统模型设置</span>
+                <span>{t('model.systemModelSettings')}</span>
             </div>
             <div className="px-4 h-full">
                 <Tabs defaultValue="knowledge" className="h-full flex flex-col">
                     <TabsList className="w-[450px] m-auto">
-                        <TabsTrigger value="knowledge" className="w-[150px]">知识库模型</TabsTrigger>
-                        <TabsTrigger value="assis" className="w-[150px]">助手模型</TabsTrigger>
-                        <TabsTrigger value="evaluation" className="w-[150px]">评测模型</TabsTrigger>
+                        <TabsTrigger value="knowledge" className="w-[150px]">{t('model.knowledgeBaseModel')}</TabsTrigger>
+                        <TabsTrigger value="assis" className="w-[150px]">{t('model.assistantModel')}</TabsTrigger>
+                        <TabsTrigger value="evaluation" className="w-[150px]">{t('model.evaluationModel')}</TabsTrigger>
                     </TabsList>
                     <TabsContent value="knowledge">
                         <KnowledgeModle llmOptions={llmOptions} embeddings={embeddings} onBack={onBack}></KnowledgeModle>

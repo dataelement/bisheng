@@ -24,7 +24,7 @@ import Combobox from "./Combobox";
 import CreateTaskList from "./CreateTaskList";
 
 export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
-    const { t } = useTranslation()
+    const { t } = useTranslation('model')
     const defaultTable = [
         { name: 'gpus', value: '', desc: t('finetune.gpuDesc') },
         { name: 'val_ratio', value: '0.1', desc: t('finetune.valRatioDesc') },
@@ -81,7 +81,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
         <div className="border-b pb-2 flex justify-between items-center">
             <h1 className="">{t('finetune.createTrainingTask')}</h1>
             {/* <Button variant="black" onClick={rtClick}>FT服务管理</Button> */}
-            <Button variant="black" onClick={rtClick}>RT服务管理</Button>
+            <Button variant="black" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
         </div>
         {/* base */}
         <div className="border-b pb-4">
@@ -196,8 +196,8 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             </div>
         </div>
         <div className="mt-6 flex gap-6">
-            <Button disabled={loading} className="h-10 px-12" onClick={handleCreate}>{t('create')}</Button>
-            <Button disabled={loading} className="h-10 px-12" variant="outline" onClick={onCancel}>{t('cancel')}</Button>
+            <Button disabled={loading} className="h-10 px-12" onClick={handleCreate}>{t('bs:create')}</Button>
+            <Button disabled={loading} className="h-10 px-12" variant="outline" onClick={onCancel}>{t('bs:cancel')}</Button>
         </div>
     </div>
 };

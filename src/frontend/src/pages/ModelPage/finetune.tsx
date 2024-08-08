@@ -1,5 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/bs-ui/table";
@@ -15,7 +15,12 @@ import { CpuDetail } from "./cpuInfo";
 
 export const Finetune = () => {
     const { setSuccessData } = useContext(alertContext);
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation();
+
+    useEffect(() => {
+        i18n.loadNamespaces('model');
+    }, [i18n]);
+
     const [rtOpen, setRTOpen] = useState(false)
     const [showCpu, setShowCpu] = useState({
         type: 'model',

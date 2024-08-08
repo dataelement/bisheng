@@ -5,8 +5,10 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { getEvaluationModelConfig, updateEvaluationModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function EvaluationModel({ llmOptions, onBack }) {
+    const { t } = useTranslation('model')
     const [selectedModel, setSelectedModel] = useState(null);
     useEffect(() => {
         getEvaluationModelConfig().then(res => setSelectedModel(res.model_id))
@@ -18,17 +20,17 @@ export default function EvaluationModel({ llmOptions, onBack }) {
             model_id: selectedModel
         };
         captureAndAlertRequestErrorHoc(updateEvaluationModelConfig(data).then(res => {
-            message({ variant: 'success', description: '保存成功' })
+            message({ variant: 'success', description: t('model.saveSuccess') })
         }));
     };
 
     return (
         <div className="max-w-[520px] mx-auto">
             <div className="mt-10">
-                <Label className="bisheng-label">评测功能默认模型</Label>
+                <Label className="bisheng-label">{t('model.defaultEvaluationFeature')}</Label>
                 <Select value={selectedModel} onValueChange={(val) => setSelectedModel(val)}>
                     <SelectTrigger className="mt-2">
-                        <SelectValue placeholder="选择模型" />
+                        <SelectValue placeholder={t('model.selectModel')} />
                     </SelectTrigger>
                     <SelectContent>
                         <SelectGroup>
@@ -40,8 +42,8 @@ export default function EvaluationModel({ llmOptions, onBack }) {
                 </Select>
             </div>
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outline" onClick={onBack}>取消</Button>
-                <Button className="px-10" onClick={handleSave}>保存</Button>
+                <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
+                <Button className="px-10" onClick={handleSave}>{t('model.save')}</Button>
             </div>
         </div>
     );

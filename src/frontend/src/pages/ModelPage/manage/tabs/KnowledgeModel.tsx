@@ -7,13 +7,15 @@ import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { getKnowledgeModelConfig, updateKnowledgeModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 
 const ModelSelect = ({ label, tooltipText, value, options, onChange }) => {
+
     return (
         <div>
             <Label className="bisheng-label">
-                <span>模型名称</span>
+                <span>{label}</span>
                 {tooltipText && <QuestionTooltip className="relative top-0.5 ml-1" content={tooltipText} />}
             </Label>
             <Select value={value} onValueChange={onChange}>
@@ -35,6 +37,8 @@ const ModelSelect = ({ label, tooltipText, value, options, onChange }) => {
 
 
 export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
+    const { t } = useTranslation('model')
+
     const [form, setForm] = useState({
         embeddingModelId: null,
         sourceModelId: null,
@@ -80,14 +84,14 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             qa_similar_model_id: qaSimilarModelId,
             source_model_id: sourceModelId
         }).then(res => {
-            message({ variant: 'success', description: '保存成功' })
+            message({ variant: 'success', description: t('model.saveSuccess') })
         }))
     };
 
     return (
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16">
             <div>
-                <Label className="bisheng-label">知识库默认embedding模型</Label>
+                <Label className="bisheng-label">{t('model.defaultEmbeddingModel')}</Label>
                 {
                     !loading && <Cascader
                         defaultValue={embeddingValue}
@@ -97,29 +101,29 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 }
             </div>
             <ModelSelect
-                label="知识库溯源模型"
-                tooltipText="用于知识库问答溯源，使用 LLM 自动从答案中提取关键词，来帮助用户快速定位到答案的可能来源段落，如果这里没有配置，则会使用 jieba 分词来输出答案中的关键词。"
+                label={t('model.sourceTracingModel')}
+                tooltipText={t('model.sourceTracingModelTooltip')}
                 value={form.sourceModelId}
                 options={llmOptions}
                 onChange={(val) => setForm({ ...form, sourceModelId: val })}
             />
             <ModelSelect
-                label="文档知识库总结模型"
-                tooltipText="将文档内容总结为一个标题，然后将标题和chunk合并存储到向量库内, 不配置则不总结文档。"
+                label={t('model.documentSummaryModel')}
+                tooltipText={t('model.documentSummaryModelTooltip')}
                 value={form.extractModelId}
                 options={llmOptions}
                 onChange={(val) => setForm({ ...form, extractModelId: val })}
             />
             <ModelSelect
-                label="QA知识库相似问模型"
-                tooltipText="用于生成 QA 知识库中的相似问题。"
+                label={t('model.qaSimilarModel')}
+                tooltipText={t('model.qaSimilarModelTooltip')}
                 value={form.qaSimilarModelId}
                 options={llmOptions}
                 onChange={(val) => setForm({ ...form, qaSimilarModelId: val })}
             />
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outline" onClick={onBack}>取消</Button>
-                <Button className="px-10" onClick={handleSave}>保存</Button>
+                <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
+                <Button className="px-10" onClick={handleSave}>{t('model.save')}</Button>
             </div>
         </div>
     );

@@ -15,7 +15,7 @@ import UploadModal from "./UploadModal";
 import sampleData from "./sampleData";
 
 export default function CreateTaskList({ onChange }) {
-    const { t } = useTranslation()
+    const { t } = useTranslation('model')
 
     const { openPopUp, closePopUp } = useContext(PopUpContext);
     // 预设集

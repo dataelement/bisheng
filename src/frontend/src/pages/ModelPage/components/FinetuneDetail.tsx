@@ -37,7 +37,7 @@ export const BadgeView = ({ value }) => {
 }
 
 const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete, onStop }) => {
-    const { t } = useTranslation()
+    const { t } = useTranslation('model')
     const [loading, setLoading] = useState(false)
 
     const cancelPublish = async () => {
@@ -104,7 +104,7 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
         }
         {status === TaskStatus.TRAINING_IN_PROGRESS ?
             <Button size="sm" className="bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
-            <Button size="sm" className="bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('delete')}</Button>
+            <Button size="sm" className="bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('bs:delete')}</Button>
         }
     </div>
 }
@@ -113,7 +113,7 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
 
 
 export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
-    const { t } = useTranslation()
+    const { t } = useTranslation('model')
 
     const { setSuccessData } = useContext(alertContext);
 
@@ -210,7 +210,7 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
         </div>
         <div className="border-b pb-4">
             <div className="flex gap-4 mt-4">
-                <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.createTime')}</small>
+                <small className="text-sm font-medium leading-none text-gray-500">{t('bs:createTime')}</small>
                 <small className="text-sm font-medium leading-none text-gray-700">{baseInfo.create_time.replace('T', ' ')}</small>
             </div>
             <div className="flex gap-4 mt-4">

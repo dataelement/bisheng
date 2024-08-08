@@ -43,10 +43,10 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-[200px]">模型名称</TableHead>
-                            <TableHead className="w-[200px] min-w-[100px]">模型类型</TableHead>
-                            <TableHead className="w-[200px] min-w-[100px]">状态</TableHead>
-                            <TableHead className="w-[100px] min-w-[100px]">上下线操作</TableHead>
+                            <TableHead className="w-[200px]">{t('model.modelName')}</TableHead>
+                            <TableHead className="w-[200px] min-w-[100px]">{t('model.modelType')}</TableHead>
+                            <TableHead className="w-[200px] min-w-[100px]">{t('model.status')}</TableHead>
+                            <TableHead className="w-[100px] min-w-[100px]">{t('model.onlineOfflineOperation')}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -56,7 +56,7 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                                 <TableCell>{m.model_type}</TableCell>
                                 <TableCell>
                                     <span className={m.status === 0 ? 'text-green-500' : 'text-orange-500'}>
-                                        {m.status === 0 ? '可用' : '异常'}
+                                        {m.status === 0 ? t('model.available') : t('model.abnormal')}
                                     </span>
                                     {m.status === 1 && <TooltipProvider delayDuration={0}>
                                         <Tooltip>
@@ -77,7 +77,7 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                     </TableBody>
                     {!data.models.length && <TableFooter>
                         <TableRow>
-                            <TableCell colSpan={9} className="text-center text-gray-400">{t('build.empty')}</TableCell>
+                            <TableCell colSpan={9} className="text-center text-gray-400">{t('model.empty')}</TableCell>
                         </TableRow>
                     </TableFooter>}
                 </Table>
@@ -87,7 +87,11 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
 }
 
 export default function Management() {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation();
+    useEffect(() => {
+        i18n.loadNamespaces('model');
+    }, [i18n]);
+
     const [data, setData] = useState([])
     const { user } = useContext(userContext)
     const [modelId, setModelId] = useState(null)
@@ -144,15 +148,15 @@ export default function Management() {
             <div className="flex justify-end gap-4">
                 {user.role === 'admin' && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
                     <SettingIcon className="text-red-500" />
-                    系统模型设置
+                    {t('model.systemModelSettings')}
                 </Button>}
-                {user.role === 'admin' && <Button onClick={() => setModelId(-1)}>添加模型</Button>}
-                <Button className="bg-black-button" onClick={reload}>刷新</Button>
+                {user.role === 'admin' && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
+                <Button className="bg-black-button" onClick={reload}>{t('model.refresh')}</Button>
             </div>
             <div className="h-[85%]">
                 <div className="flex h-10 justify-between items-center font-medium text-muted-foreground text-sm">
-                    <span className="ml-5">服务提供方</span>
-                    <span className="mr-5">操作</span>
+                    <span className="ml-5">{t('model.serviceProvider')}</span>
+                    <span className="mr-5">{t('model.actions')}</span>
                 </div>
                 <div className="pb-20">
                     {
@@ -172,4 +176,5 @@ export default function Management() {
             <p className="desc">{t('model.modelCollectionCaption')}.</p>
         </div>
     </div>
+
 }

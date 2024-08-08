@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
 
 function ModelItem({ data, onDelete, onInput }) {
+    const { t } = useTranslation('model')
     const [model, setModel] = useState(data)
     const [error, setError] = useState('')
 
@@ -25,9 +26,9 @@ function ModelItem({ data, onDelete, onInput }) {
         const repeated = onInput(value, model.model_type)
 
         setError('')
-        if (!value) setError('模型名称不可为空')
-        if (value.length > 30) setError('最多三十个字符')
-        if (repeated) setError('模型不可重复')
+        if (!value) setError(t('model.modelNameEmpty'))
+        if (value.length > 30) setError(t('model.modelNameLength'))
+        if (repeated) setError(t('model.modelNameDuplicate'))
     }
 
     const handleSelectChange = (val) => {
@@ -37,7 +38,7 @@ function ModelItem({ data, onDelete, onInput }) {
 
     const handleDelClick = () => {
         bsConfirm({
-            desc: '删除正在使用的模型可能导致已有应用或知识库不可用，确认删除？',
+            desc: t('model.deleteModelConfirmation'),
             onOk(next) {
                 onDelete()
                 next()
@@ -53,15 +54,15 @@ function ModelItem({ data, onDelete, onInput }) {
         <div className="space-y-2 mt-2">
             <div>
                 <Label className="bisheng-label">
-                    <span>模型名称</span>
-                    <QuestionTooltip className="relative top-0.5 ml-1" content="本地部署模型或API接口请求模型的模型名称" />
+                    <span>{t('model.modelName')}</span>
+                    <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.modelNameTooltip')} />
                 </Label>
                 <Label className="bisheng-label"></Label>
                 <Input value={model.model_name} onChange={handleInput} className="h-8"></Input>
                 {error && <span className="text-red-500 text-xs">{error}</span>}
             </div>
             <div>
-                <Label className="bisheng-label">模型类型</Label>
+                <Label className="bisheng-label">{t('model.modelType')}</Label>
                 <Select value={model.model_type} onValueChange={handleSelectChange}>
                     <SelectTrigger className="h-8">
                         <SelectValue placeholder="" />
@@ -78,6 +79,7 @@ function ModelItem({ data, onDelete, onInput }) {
         </div>
     </div>
 }
+
 
 // 模型提供方枚举
 export const modelProvider = [
@@ -112,7 +114,7 @@ const defaultForm = {
 
 export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforSave, onAfterSave }) {
     // console.log(id) // id为-1说明是添加模型，否则是模型配置
-    const { t } = useTranslation()
+    const { t } = useTranslation('model')
 
     const [formData, setFormData] = useState(id === -1 ? { ...defaultForm } : null)
     useEffect(() => {
@@ -164,7 +166,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         if (exists) {
             return message({
                 variant: 'warning',
-                description: '服务提供方名称重复，请修改'
+                description: t('model.duplicateServiceProviderName')
             })
         }
         const [config, errorMsg] = formRef.current.getData();
@@ -186,13 +188,13 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         if (error) {
             return message({
                 variant: 'warning',
-                description: '模型名称不可为空，且最多三十个字符'
+                description: t('model.modelNameValidation')
             })
         }
         if (repeat) {
             return message({
                 variant: 'warning',
-                description: '模型不可重复'
+                description: t('model.modelDuplicate')
             })
         }
 
@@ -204,12 +206,12 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                         description: res.msg
                     })
                 }
-                onAfterSave(res.code === 10803 ? res.msg : '添加成功')
+                onAfterSave(res.code === 10803 ? res.msg : t('model.addSuccess'))
                 onBack()
             }))
         } else {
             captureAndAlertRequestErrorHoc(updateLLmServer({ ...formData, config }).then(res => {
-                onAfterSave('修改成功')
+                onAfterSave(t('model.updateSuccess'))
                 onBack()
             }))
         }
@@ -217,12 +219,11 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
 
     const handleModelDel = () => {
         bsConfirm({
-            title: t('prompt'),
-            desc: `删除正在使用的模型可能导致已有应用或知识库不可用，确认删除？`,
+            desc: t('model.deleteConfirmation'),
             onOk(next) {
                 // 删除接口
                 captureAndAlertRequestErrorHoc(deleteLLmServer(id).then(res => {
-                    onAfterSave('删除成功')
+                    onAfterSave(t('model.deleteSuccess'))
                 }))
 
                 onBack()
@@ -242,11 +243,11 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
                 </button>
             </ShadTooltip>
-            <span>{id === -1 ? '添加模型' : '模型配置'}</span>
+            <span>{id === -1 ? t('model.addModel') : t('model.modelConfiguration')}</span>
         </div>
         <div className="w-[50%] min-w-64 px-4 pb-10 mx-auto mt-6 h-[calc(100vh-220px)] overflow-y-auto">
             <div className="mb-2">
-                <Label className="bisheng-label">服务提供方</Label>
+                <Label className="bisheng-label">{t('model.serviceProvider')}</Label>
                 <Select value={formData.type} onValueChange={handleTypeChange}>
                     <SelectTrigger>
                         <SelectValue placeholder="" />
@@ -260,8 +261,8 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             </div>
             <div className="mb-2">
                 <Label className="bisheng-label">
-                    <span>服务提供方名称</span>
-                    <QuestionTooltip className="relative top-0.5 ml-1" content="可自定义名称，用于区分已存在的模型，适合同一模型多实例部署场景" />
+                    <span>{t('model.serviceProviderName')}</span>
+                    <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.serviceProviderNameTooltip')} />
                 </Label>
                 <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })}></Input>
             </div>
@@ -271,36 +272,38 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 provider={formData.type}
                 formData={formData.config}
             />
-            <div className="mb-2">
-                <div className="flex items-center gap-x-6">
-                    <Label className="bisheng-label">单日调用次数上限</Label>
-                    <Switch checked={formData.limit_flag} onCheckedChange={(val) => setFormData(form => ({ ...form, limit_flag: val }))} />
-                    <div className={`flex items-center gap-x-2  ${formData.limit_flag ? '' : 'invisible'}`}>
-                        <Input type="number" value={formData.limit} onChange={(e) => setFormData({ ...formData, limit: Number(e.target.value) })}
-                            className="w-24 h-8"
-                        ></Input>
-                        <span>次/天</span>
+            <div className={formData.type ? 'visible' : 'invisible'}>
+                <div className="mb-2">
+                    <div className="flex items-center gap-x-6">
+                        <Label className="bisheng-label">{t('model.dailyCallLimit')}</Label>
+                        <Switch checked={formData.limit_flag} onCheckedChange={(val) => setFormData(form => ({ ...form, limit_flag: val }))} />
+                        <div className={`flex items-center gap-x-2 ${formData.limit_flag ? '' : 'invisible'}`}>
+                            <Input type="number" value={formData.limit} onChange={(e) => setFormData({ ...formData, limit: Number(e.target.value) })}
+                                className="w-24 h-8"
+                            ></Input>
+                            <span>{t('model.timesPerDay')}</span>
+                        </div>
                     </div>
                 </div>
-            </div>
-            {/* 模型卡片 */}
-            <div className="mb-2">
-                <Label className="bisheng-label">模型</Label>
-                <div className="w-[92%]">
-                    {
-                        formData.models.map((m, i) => <ModelItem data={m} onInput={(name, type) => handleModelChange(name, type, i)} key={m.name} onDelete={() => handleDelete(i)} />)
-                    }
-                    <Button className="w-full mt-2 border-dashed border-border" variant="outline" onClick={handleAddModel}>
-                        <PlusIcon className="size-5 text-primary mr-1" />
-                        <span>添加模型</span>
-                    </Button>
+                {/* 模型卡片 */}
+                <div className="mb-2">
+                    <Label className="bisheng-label">{t('model.model')}</Label>
+                    <div className="w-[92%]">
+                        {
+                            formData.models.map((m, i) => <ModelItem data={m} onInput={(name, type) => handleModelChange(name, type, i)} key={m.name} onDelete={() => handleDelete(i)} />)
+                        }
+                        <Button className="w-full mt-2 border-dashed border-border" variant="outline" onClick={handleAddModel}>
+                            <PlusIcon className="size-5 text-primary mr-1" />
+                            <span>{t('model.addModel')}</span>
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>
         <div className="absolute right-0 bottom-0 p-4 flex gap-4">
-            {id !== -1 && <Button className="px-8" variant="destructive" onClick={handleModelDel}>删除</Button>}
-            <Button className="px-8" variant="outline" onClick={() => onBack()}>取消</Button>
-            <Button className="px-16" disabled={!formData.type} onClick={handleSave}>保存</Button>
+            {id !== -1 && <Button className="px-8" variant="destructive" onClick={handleModelDel}>{t('model.delete')}</Button>}
+            <Button className="px-8" variant="outline" onClick={() => onBack()}>{t('model.cancel')}</Button>
+            <Button className="px-16" disabled={!formData.type} onClick={handleSave}>{t('model.save')}</Button>
         </div>
-    </div >
+    </div>
 }
