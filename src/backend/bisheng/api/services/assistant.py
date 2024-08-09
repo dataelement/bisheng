@@ -14,6 +14,7 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
+from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
@@ -145,6 +146,11 @@ class AssistantService(BaseService, AssistantUtils):
             return AssistantNameRepeatError.return_resp()
 
         logger.info(f"assistant original prompt id: {assistant.id}, desc: {assistant.prompt}")
+
+        # 自动补充默认的模型配置
+        assistant_llm = LLMService.get_assistant_llm()
+        if assistant_llm.llm_list:
+            assistant.model_name = assistant_llm.llm_list[0].model_id
 
         # 自动生成描述
         assistant, _, _ = await cls.get_auto_info(assistant)
@@ -278,10 +284,9 @@ class AssistantService(BaseService, AssistantUtils):
             AssistantLinkDao.update_assistant_flow(assistant.id, flow_list=req.flow_list)
         if req.knowledge_list is not None:
             # 使用配置的flow 进行技能补充
-            flow_id_default = AssistantUtils.get_default_retrieval()
             AssistantLinkDao.update_assistant_knowledge(assistant.id,
                                                         knowledge_list=req.knowledge_list,
-                                                        flow_id=flow_id_default)
+                                                        flow_id='')
         tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list,
                                                                  req.knowledge_list)
         cls.update_assistant_hook(request, login_user, assistant)
@@ -467,7 +472,7 @@ class AssistantService(BaseService, AssistantUtils):
         if tool_type and tool_type.id != exist_tool_type.id:
             return ToolTypeRepeatError.return_resp()
         # 判断是否有更新权限
-        if not user.access_check(exist_tool_type.user_id, exist_tool_type.id, AccessType.GPTS_TOOL_WRITE):
+        if not user.access_check(exist_tool_type.user_id, str(exist_tool_type.id), AccessType.GPTS_TOOL_WRITE):
             return UnAuthorizedError.return_resp()
 
         exist_tool_type.name = req.name
@@ -532,7 +537,7 @@ class AssistantService(BaseService, AssistantUtils):
         if exist_tool_type.is_preset:
             return ToolTypeIsPresetError.return_resp()
         # 判断是否有更新权限
-        if not user.access_check(exist_tool_type.user_id, exist_tool_type.id, AccessType.GPTS_TOOL_WRITE):
+        if not user.access_check(exist_tool_type.user_id, str(exist_tool_type.id), AccessType.GPTS_TOOL_WRITE):
             return UnAuthorizedError.return_resp()
 
         GptsToolsDao.delete_tool_type(tool_type_id)
@@ -545,14 +550,6 @@ class AssistantService(BaseService, AssistantUtils):
         logger.info(f"delete_gpts_tool_hook id: {gpts_tool_type.id}, user: {user.user_id}")
         GroupResourceDao.delete_group_resource_by_third_id(gpts_tool_type.id, ResourceTypeEnum.GPTS_TOOL)
         return True
-
-    @classmethod
-    def get_models(cls) -> UnifiedResponseModel:
-        llm_list = cls.get_gpts_conf('llms')
-        res = []
-        for one in llm_list:
-            res.append({'id': one['model_name'], 'model_name': one['model_name']})
-        return resp_200(data=res)
 
     @classmethod
     def update_tool_list(cls, assistant_id: UUID, tool_list: List[int],

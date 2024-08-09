@@ -109,6 +109,7 @@ class AssistantAgent(AssistantUtils):
                                               temperature=self.assistant.temperature,
                                               streaming=default_llm.streaming)
 
+
     async def init_auto_update_llm(self):
         """ 初始化自动优化prompt等信息的llm实例 """
         assistant_llm = LLMService.get_assistant_llm()
@@ -127,9 +128,6 @@ class AssistantAgent(AssistantUtils):
             return {}
         params = json.loads(tool.extra)
 
-        # 判断是否需要从系统配置里获取, 不需要从系统配置获取则用本身配置的
-        if params.get('&initdb_conf_key'):
-            return self.get_initdb_conf_by_more_key(params.get('&initdb_conf_key'))
         return params
 
     async def init_preset_tools(self, tool_list: List[GptsTools], callbacks: Callbacks = None):
@@ -288,7 +286,7 @@ class AssistantAgent(AssistantUtils):
         agent_executor_type = self.agent_executor_dict.get(agent_executor_type, agent_executor_type)
 
         prompt = self.assistant.prompt
-        if self.assistant.model_name.startswith("command-r"):
+        if getattr(self.llm, "model_name", "").startswith("command-r"):
             prompt = self.ASSISTANT_PROMPT_COHERE.format(preamble=prompt)
 
         # 初始化agent

@@ -49,6 +49,10 @@ class BishengLLM(BaseChatModel):
         super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
         self.model_name = kwargs.get('model_name')
+        self.streaming = kwargs.get('streaming', True)
+        self.temperature = kwargs.get('temperature', 0.3)
+        self.top_p = kwargs.get('top_p', 1)
+        self.cache = kwargs.get('cache', True)
         # 是否忽略模型是否上线的检查
         ignore_online = kwargs.get('ignore_online', False)
 
