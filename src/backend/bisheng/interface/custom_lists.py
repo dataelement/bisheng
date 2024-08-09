@@ -11,7 +11,7 @@ from bisheng_langchain import embeddings as contribute_embeddings
 from langchain import llms, memory, requests, text_splitter
 from langchain_anthropic import ChatAnthropic
 from langchain_community import agent_toolkits, document_loaders, embeddings
-from langchain_community.chat_models import ChatVertexAI
+from langchain_community.chat_models import ChatVertexAI, MiniMaxChat
 from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings
 
 # LLMs
@@ -25,6 +25,7 @@ llm_type_to_cls_dict['anthropic-chat'] = ChatAnthropic  # type: ignore
 llm_type_to_cls_dict['azure-chat'] = AzureChatOpenAI  # type: ignore
 llm_type_to_cls_dict['openai-chat'] = ChatOpenAI  # type: ignore
 llm_type_to_cls_dict['vertexai-chat'] = ChatVertexAI  # type: ignore
+llm_type_to_cls_dict['MiniMaxChat'] = MiniMaxChat
 
 # llm contribute
 llm_type_to_cls_dict.update({

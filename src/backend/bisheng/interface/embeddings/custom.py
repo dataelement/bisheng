@@ -74,20 +74,20 @@ class BishengEmbeddings(Embeddings):
         ignore_online = kwargs.get('ignore_online', False)
 
         if not self.model_id:
-            raise Exception('没有找到模型配置')
+            raise Exception('没有找到embedding模型配置')
         model_info = LLMDao.get_model_by_id(self.model_id)
         if not model_info:
-            raise Exception('模型配置已被删除，请重新配置模型')
+            raise Exception('embedding模型配置已被删除，请重新配置模型')
         server_info = LLMDao.get_server_by_id(model_info.server_id)
         if not server_info:
-            raise Exception('服务提供方配置已被删除，请重新配置模型')
-        if model_info.model_type != LLMModelType.EMBEDDING:
-            raise Exception(f'只支持Embedding类型的模型，不支持{model_info.model_type.value}类型的模型')
+            raise Exception('服务提供方配置已被删除，请重新配置embedding模型')
+        if model_info.model_type != LLMModelType.EMBEDDING.value:
+            raise Exception(f'只支持Embedding类型的模型，不支持{model_info.model_type}类型的模型')
         if not ignore_online and not model_info.online:
             raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
         logger.debug(f'init_bisheng_embedding: server_info: {server_info}, model_info: {model_info}')
 
-        class_object = self._get_embedding_class(server_info.type)
+        class_object = self._get_embedding_class(LLMServerType(server_info.type))
         params = self._get_embedding_params(server_info, model_info)
         try:
             self.embeddings = instantiate_embedding(class_object, params)
@@ -111,18 +111,18 @@ class BishengEmbeddings(Embeddings):
         params.update({
             'model': model_info.model_name,
         })
-        if server_info.type == LLMServerType.QWEN:
+        if server_info.type == LLMServerType.QWEN.value:
             params = {
                 "dashscope_api_key": params.get('openai_api_key'),
                 "model": params.get('model'),
             }
-        elif server_info.type == LLMServerType.QIAN_FAN:
+        elif server_info.type == LLMServerType.QIAN_FAN.value:
             params = {
                 "qianfan_ak": params.get("wenxin_api_key"),
                 "qianfan_sk": params.get("wenxin_secret_key"),
                 "model": params.get('model'),
             }
-        elif server_info.type == LLMServerType.MINIMAX:
+        elif server_info.type == LLMServerType.MINIMAX.value:
             params = {
                 "minimax_api_key": params.get('minimax_api_key'),
                 "model": params.get('model'),

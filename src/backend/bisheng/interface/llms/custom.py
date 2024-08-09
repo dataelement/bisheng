@@ -40,7 +40,7 @@ class BishengLLM(BaseChatModel):
         LLMServerType.QIAN_FAN: 'ChatWenxin',
         LLMServerType.ZHIPU: 'ChatOpenAI',
         LLMServerType.MINIMAX: 'MiniMaxChat',
-        LLMServerType.ANTHROPIC: 'anthropic-chat',
+        LLMServerType.ANTHROPIC: 'ChatAnthropic',
         LLMServerType.DEEPSEEK: 'ChatOpenAI',
         LLMServerType.SPARK: 'ChatOpenAI',
     }
@@ -53,21 +53,21 @@ class BishengLLM(BaseChatModel):
         ignore_online = kwargs.get('ignore_online', False)
 
         if not self.model_id:
-            raise Exception('没有找到模型配置')
+            raise Exception('没有找到llm模型配置')
         model_info = LLMDao.get_model_by_id(self.model_id)
         if not model_info:
-            raise Exception('模型配置已被删除，请重新配置模型')
+            raise Exception('llm模型配置已被删除，请重新配置模型')
         self.model_name = model_info.model_name
         server_info = LLMDao.get_server_by_id(model_info.server_id)
         if not server_info:
-            raise Exception('服务提供方配置已被删除，请重新配置模型')
-        if model_info.model_type != LLMModelType.LLM:
-            raise Exception(f'只支持LLM类型的模型，不支持{model_info.model_type.value}类型的模型')
+            raise Exception('服务提供方配置已被删除，请重新配置llm模型')
+        if model_info.model_type != LLMModelType.LLM.value:
+            raise Exception(f'只支持LLM类型的模型，不支持{model_info.model_type}类型的模型')
         if not ignore_online and not model_info.online:
             raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
         logger.debug(f'init_bisheng_llm: server_info: {server_info}, model_info: {model_info}')
 
-        class_object = self._get_llm_class(server_info.type)
+        class_object = self._get_llm_class(LLMServerType(server_info.type))
         params = self._get_llm_params(server_info, model_info)
         try:
             self.llm = instantiate_llm(self.llm_node_type.get(server_info.type), class_object, params)
@@ -94,15 +94,15 @@ class BishengLLM(BaseChatModel):
             'top_p': self.top_p,
             'cache': self.cache
         })
-        if server_info.type == LLMServerType.OLLAMA:
+        if server_info.type == LLMServerType.OLLAMA.value:
             params['model'] = params.pop('model_name')
-        elif server_info.type == LLMServerType.XINFERENCE:
+        elif server_info.type == LLMServerType.XINFERENCE.value:
             params['model_uid'] = params.pop('model_name')
-        elif server_info.type == LLMServerType.AZURE_OPENAI:
+        elif server_info.type == LLMServerType.AZURE_OPENAI.value:
             params['azure_deployment'] = params.pop('model_name')
-        elif server_info.type == LLMServerType.QIAN_FAN:
+        elif server_info.type == LLMServerType.QIAN_FAN.value:
             params['model'] = params.pop('model_name')
-        elif server_info.type == LLMServerType.SPARK:
+        elif server_info.type == LLMServerType.SPARK.value:
             params['openai_api_key'] = f'{params.pop("api_key")}:{params.pop("api_secret")}'
         return params
 

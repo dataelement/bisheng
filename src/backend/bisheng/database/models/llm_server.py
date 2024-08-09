@@ -4,7 +4,7 @@ from typing import List, Optional, Dict
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import JSON, Column, DateTime, Text, text, UniqueConstraint, update, delete
+from sqlalchemy import JSON, Column, DateTime, Text, text, CHAR, UniqueConstraint, update, delete
 from sqlmodel import Field, select
 
 
@@ -35,7 +35,7 @@ class LLMModelType(Enum):
 class LLMServerBase(SQLModelSerializable):
     name: str = Field(default='', index=True, unique=True, description='服务名称')
     description: Optional[str] = Field(default='', sa_column=Column(Text), description='服务描述')
-    type: LLMServerType = Field(description='服务提供方类型')
+    type: str = Field(sa_column=Column(CHAR(20)), description='服务提供方类型')
     limit_flag: bool = Field(default=False, description='是否开启每日调用次数限制')
     limit: int = Field(default=0, description='每日调用次数限制')
     config: Optional[Dict] = Field(sa_column=Column(JSON), description='服务提供方公共配置')
@@ -53,7 +53,7 @@ class LLMModelBase(SQLModelSerializable):
     name: str = Field(default='', description='模型展示名')
     description: Optional[str] = Field(default='', sa_column=Column(Text), description='模型描述')
     model_name: str = Field(default='', description='模型名称，实例化组件时用的参数')
-    model_type: LLMModelType = Field(description='模型类型')
+    model_type: str = Field(sa_column=Column(CHAR(20)), description='模型类型')
     config: Optional[Dict] = Field(sa_column=Column(JSON), description='服务提供方公共配置')
     status: int = Field(default=0, description='模型状态。0：正常，1：异常')
     remark: Optional[str] = Field(default='', sa_column=Column(Text), description='异常原因')
@@ -179,7 +179,7 @@ class LLMDao:
     @classmethod
     def get_model_by_type(cls, model_type: LLMModelType) -> Optional[LLMModel]:
         """ 根据模型类型获取第一个创建的模型 """
-        statement = select(LLMModel).where(LLMModel.model_type == model_type).order_by(LLMModel.id.asc())
+        statement = select(LLMModel).where(LLMModel.model_type == model_type.value).order_by(LLMModel.id.asc())
         with session_getter() as session:
             return session.exec(statement).first()
 

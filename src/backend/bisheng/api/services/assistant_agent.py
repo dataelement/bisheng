@@ -119,15 +119,6 @@ class AssistantAgent(AssistantUtils):
                                               temperature=self.assistant.temperature,
                                               streaming=assistant_llm.auto_llm.streaming)
 
-    async def get_knowledge_skill_data(self):
-        if self.knowledge_skill_data:
-            return self.knowledge_skill_data
-
-        with open(self.knowledge_skill_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        self.knowledge_skill_data = data
-        return data
-
     def parse_tool_params(self, tool: GptsTools) -> Dict:
         """
         解析预置工具的初始化参数
@@ -291,8 +282,7 @@ class AssistantAgent(AssistantUtils):
         初始化智能体的agent
         """
         # 引入agent执行参数
-        agent_executor_params = self.get_agent_executor()
-        agent_executor_type = self.llm_agent_executor or agent_executor_params.pop('type')
+        agent_executor_type = self.llm_agent_executor
         self.current_agent_executor = agent_executor_type
         # 做转换
         agent_executor_type = self.agent_executor_dict.get(agent_executor_type, agent_executor_type)
@@ -305,8 +295,7 @@ class AssistantAgent(AssistantUtils):
         self.agent = ConfigurableAssistant(agent_executor_type=agent_executor_type,
                                            tools=self.tools,
                                            llm=self.llm,
-                                           assistant_message=prompt,
-                                           **agent_executor_params)
+                                           assistant_message=prompt)
 
     async def optimize_assistant_prompt(self):
         """ 自动优化生成prompt """

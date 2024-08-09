@@ -362,7 +362,7 @@ class LLMModelCreateReq(BaseModel):
     name: str = Field(..., description="模型展示名称")
     description: Optional[str] = Field(default='', description="模型描述")
     model_name: str = Field(..., description="模型名称")
-    model_type: LLMModelType = Field(..., description="模型类型")
+    model_type: str = Field(..., description="模型类型")
     online: bool = Field(default=False, description='是否在线')
     config: Optional[dict] = Field(default=None, description="模型配置")
 
@@ -371,7 +371,7 @@ class LLMServerCreateReq(BaseModel):
     id: Optional[int] = Field(default=None, description="服务提供方ID, 更新时需要传")
     name: str = Field(..., description="服务提供方名称")
     description: Optional[str] = Field(default='', description="服务提供方描述")
-    type: LLMServerType = Field(..., description="服务提供方类型")
+    type: str = Field(..., description="服务提供方类型")
     limit_flag: Optional[bool] = Field(default=False, description="是否开启每日调用次数限制")
     limit: Optional[int] = Field(default=0, description="每日调用次数限制")
     config: Optional[dict] = Field(default=None, description="服务提供方配置")
