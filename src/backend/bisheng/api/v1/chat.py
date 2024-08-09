@@ -1,15 +1,7 @@
 import json
-import time
 import math
 from typing import List, Optional
 from uuid import UUID
-
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketException, status, Body, Request
-from fastapi.params import Depends
-from fastapi.responses import StreamingResponse
-from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import func
-from sqlmodel import select
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
@@ -19,24 +11,82 @@ from bisheng.api.services.flow import FlowService
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
-from bisheng.api.v1.schemas import (BuildStatus, BuiltResponse, ChatInput, ChatList,
-                                    FlowGptsOnlineList, InitResponse, StreamData,
-                                    UnifiedResponseModel, resp_200, AddChatMessages)
+from bisheng.api.v1.schema.base_schema import PageList
+from bisheng.api.v1.schema.chat_schema import AppChatList
+from bisheng.api.v1.schemas import (AddChatMessages, BuildStatus, BuiltResponse, ChatInput,
+                                    ChatList, FlowGptsOnlineList, InitResponse, StreamData,
+                                    UnifiedResponseModel, resp_200)
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import session_getter
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
-from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead
+from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao
+from bisheng.database.models.user import UserDao
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
+from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, WebSocketException,
+                     status)
+from fastapi.params import Depends
+from fastapi.responses import StreamingResponse
+from fastapi_jwt_auth import AuthJWT
+from sqlalchemy import func
+from sqlmodel import select
 
 router = APIRouter(tags=['Chat'])
 chat_manager = ChatManager()
 flow_data_store = redis_client
 expire = 600  # reids 60s 过期
+
+
+@router.get('/chat/app/list',
+            response_model=UnifiedResponseModel[PageList[AppChatList]],
+            status_code=200)
+def get_app_chat_list(*,
+                      flow_name: Optional[str] = None,
+                      user_name: Optional[str] = None,
+                      keyword: Optional[str] = None,
+                      page_num: Optional[int] = 1,
+                      page_size: Optional[int] = 20,
+                      login_user: UserPayload = Depends(get_login_user)):
+    """通过消息表进行聊天App统计，全量表查询，"""
+    """性能问题后续优化"""
+    flow_ids, user_ids = [], []
+    if flow_name:
+        flows = FlowDao.get_flow_list_by_name(name=flow_name)
+        if flows:
+            flow_ids = [flow.id for flow in flows]
+    if user_name:
+        users = UserDao.search_user_by_name(user_name=user_name)
+        if users:
+            user_ids = [user.user_id for user in users]
+    if keyword:
+        flows = FlowDao.get_flow_list_by_name(name=keyword)
+        users = UserDao.search_user_by_name(user_name=keyword)
+        if flows:
+            flow_ids = [flow.id for flow in flows]
+        if user_ids:
+            user_ids = [user.user_id for user in users]
+
+    res, count = MessageDao.app_list_group_by_chat_id(page_size=page_size,
+                                                      page_num=page_num,
+                                                      flow_ids=flow_ids,
+                                                      user_ids=user_ids)
+    # 补齐中文
+    user_ids = [one.get('user_id') for one in res]
+    flow_ids = [one.get('flow_id') for one in res]
+    user_list = UserDao.get_user_by_ids(user_ids)
+    flow_list = FlowDao.get_flow_by_ids(flow_ids)
+    user_map = {user.user_id: user.user_name for user in user_list}
+    flow_map = {flow.id: flow.name for flow in flow_list}
+    res_obj = PageList(list=[
+        AppChatList(user_name=user_map[one['user_id']], flow_name=flow_map[one['flow_id']], **one)
+        for one in res
+    ],
+                       total=count)
+    return resp_200(res_obj)
 
 
 @router.get('/chat/history',
@@ -81,7 +131,8 @@ def del_chat_id(*,
         else:
             assistant_info = AssistantDao.get_one_assistant(message.flow_id)
             if assistant_info:
-                AuditLogService.delete_chat_assistant(login_user, get_request_ip(request), assistant_info)
+                AuditLogService.delete_chat_assistant(login_user, get_request_ip(request),
+                                                      assistant_info)
 
     return resp_200(message='删除成功')
 
@@ -98,10 +149,20 @@ def add_chat_messages(*,
     chat_id = data.chat_id
     if not chat_id or not flow_id:
         raise HTTPException(status_code=500, detail='chat_id 和 flow_id 必传参数')
-    human_message = ChatMessage(flow_id=flow_id.hex, chat_id=chat_id, user_id=login_user.user_id, is_bot=False,
-                                message=data.human_message, type='human', category='question')
-    bot_message = ChatMessage(flow_id=flow_id.hex, chat_id=chat_id, user_id=login_user.user_id, is_bot=True,
-                              message=data.answer_message, type='bot', category='answer')
+    human_message = ChatMessage(flow_id=flow_id.hex,
+                                chat_id=chat_id,
+                                user_id=login_user.user_id,
+                                is_bot=False,
+                                message=data.human_message,
+                                type='human',
+                                category='question')
+    bot_message = ChatMessage(flow_id=flow_id.hex,
+                              chat_id=chat_id,
+                              user_id=login_user.user_id,
+                              is_bot=True,
+                              message=data.answer_message,
+                              type='bot',
+                              category='answer')
     ChatMessageDao.insert_batch([human_message, bot_message])
 
     # 写审计日志, 判断是否是新建会话
@@ -115,7 +176,8 @@ def add_chat_messages(*,
         else:
             assistant_info = AssistantDao.get_one_assistant(flow_id)
             if assistant_info:
-                AuditLogService.create_chat_assistant(login_user, get_request_ip(request), flow_id.hex)
+                AuditLogService.create_chat_assistant(login_user, get_request_ip(request),
+                                                      flow_id.hex)
 
     return resp_200(message='添加成功')
 
@@ -126,7 +188,9 @@ def update_chat_message(*,
                         message: str = Body(embed=True),
                         login_user: UserPayload = Depends(get_login_user)):
     """ 更新一条消息的内容 安全检查使用"""
-    logger.info(f"update_chat_message message_id={message_id} message={message} login_user={login_user.user_name}")
+    logger.info(
+        f'update_chat_message message_id={message_id} message={message} login_user={login_user.user_name}'
+    )
     chat_message = ChatMessageDao.get_message_by_id(message_id)
     if not chat_message:
         return resp_200(message='消息不存在')
@@ -179,9 +243,9 @@ def get_chatlist_list(*,
     smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
                   func.min(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
-        ChatMessage.user_id == login_user.user_id).group_by(
-        ChatMessage.flow_id,
-        ChatMessage.chat_id).order_by(func.max(ChatMessage.update_time).desc()))
+                      ChatMessage.user_id == login_user.user_id).group_by(
+                          ChatMessage.flow_id,
+                          ChatMessage.chat_id).order_by(func.max(ChatMessage.update_time).desc()))
     with session_getter() as session:
         db_message = session.exec(smt).all()
 
@@ -244,11 +308,19 @@ def get_online_chat(*,
     if page and limit:
         search_page = math.ceil(page / 2)
     res = []
-    all_assistant = AssistantService.get_assistant(user, keyword, AssistantStatus.ONLINE.value,
-                                                   tag_id, page=search_page, limit=limit)
+    all_assistant = AssistantService.get_assistant(user,
+                                                   keyword,
+                                                   AssistantStatus.ONLINE.value,
+                                                   tag_id,
+                                                   page=search_page,
+                                                   limit=limit)
     all_assistant = all_assistant.data.get('data')
-    flows = FlowService.get_all_flows(user, keyword, FlowStatus.ONLINE.value,
-                                      tag_id=tag_id, page=search_page, page_size=limit)
+    flows = FlowService.get_all_flows(user,
+                                      keyword,
+                                      FlowStatus.ONLINE.value,
+                                      tag_id=tag_id,
+                                      page=search_page,
+                                      page_size=limit)
     flows = flows.data.get('data')
     for one in all_assistant:
         res.append(
@@ -263,12 +335,12 @@ def get_online_chat(*,
     # 获取用户可见的所有已上线的技能
     for one in flows:
         res.append(
-            FlowGptsOnlineList(id=one["id"],
-                               name=one["name"],
-                               desc=one["description"],
-                               logo=one["logo"],
-                               create_time=one["create_time"],
-                               update_time=one["update_time"],
+            FlowGptsOnlineList(id=one['id'],
+                               name=one['name'],
+                               desc=one['description'],
+                               logo=one['logo'],
+                               create_time=one['create_time'],
+                               update_time=one['update_time'],
                                flow_type='flow'))
     res.sort(key=lambda x: x.update_time, reverse=True)
     if page and limit:

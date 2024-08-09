@@ -1,23 +1,26 @@
+import json
 import os
 import re
 import time
 from typing import List, Optional
 from uuid import uuid4
 
-from bisheng.api.utils import get_request_ip
 from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services import knowledge_imp
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
+from bisheng.api.services.knowledge_imp import (add_qa, addEmbedding, decide_vectorstores,
                                                 delete_knowledge_file_vectors, retry_files)
 from bisheng.api.services.user_service import UserPayload, get_login_user
+from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500
 from bisheng.cache.utils import file_download, save_uploaded_file
 from bisheng.database.base import session_getter
-from bisheng.database.models.group_resource import GroupResource, ResourceTypeEnum, GroupResourceDao
+from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
-                                               KnowledgeRead)
+                                               KnowledgeRead, KnowledgeTypeEnum)
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
-                                                    KnowledgeFileRead)
+                                                    KnowledgeFileRead, QAKnoweldgeDao,
+                                                    QAKnowledgeUpsert)
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
 from bisheng.database.models.user_group import UserGroupDao
@@ -26,9 +29,9 @@ from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Request
+from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Request,
+                     UploadFile)
 from fastapi.encoders import jsonable_encoder
-from fastapi_jwt_auth import AuthJWT
 from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
                                                   UnstructuredMarkdownLoader,
                                                   UnstructuredPowerPointLoader,
@@ -106,7 +109,8 @@ async def process_knowledge(*,
         chunk_overlap = 100
 
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
-    if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE):
+    if not login_user.access_check(knowledge.user_id, str(knowledge.id),
+                                   AccessType.KNOWLEDGE_WRITE):
         return UnAuthorizedError.return_resp()
 
     collection_name = knowledge.collection_name
@@ -177,12 +181,14 @@ async def process_knowledge(*,
 
 def upload_knowledge_file_hook(request: Request, login_user: UserPayload, knowledge_id: int,
                                file_list: List[KnowledgeFile]):
-    logger.info(f'act=upload_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}')
+    logger.info(
+        f'act=upload_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}')
     # 记录审计日志
-    file_name = ""
+    file_name = ''
     for one in file_list:
-        file_name += "\n\n" + one.file_name
-    AuditLogService.upload_knowledge_file(login_user, get_request_ip(request), knowledge_id, file_name)
+        file_name += '\n\n' + one.file_name
+    AuditLogService.upload_knowledge_file(login_user, get_request_ip(request), knowledge_id,
+                                          file_name)
 
 
 @router.post('/create', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
@@ -227,10 +233,10 @@ def create_knowledge_hook(request: Request, knowledge: Knowledge, login_user: Us
         # 批量将知识库资源插入到关联表里
         batch_resource = []
         for one in user_group:
-            batch_resource.append(GroupResource(
-                group_id=one.group_id,
-                third_id=knowledge.id,
-                type=ResourceTypeEnum.KNOWLEDGE.value))
+            batch_resource.append(
+                GroupResource(group_id=one.group_id,
+                              third_id=knowledge.id,
+                              type=ResourceTypeEnum.KNOWLEDGE.value))
         GroupResourceDao.insert_group_batch(batch_resource)
 
     # 记录审计日志
@@ -238,17 +244,18 @@ def create_knowledge_hook(request: Request, knowledge: Knowledge, login_user: Us
     return True
 
 
-@router.get('/', status_code=200)
+@router.get('', status_code=200)
 def get_knowledge(*,
                   name: str = None,
                   page_size: Optional[int],
                   page_num: Optional[str],
+                  type: int = 0,
                   login_user: UserPayload = Depends(get_login_user)):
     """ 读取所有知识库信息. """
 
     try:
-        sql = select(Knowledge)
-        count_sql = select(func.count(Knowledge.id))
+        sql = select(Knowledge).where(Knowledge.type == type)
+        count_sql = select(func.count(Knowledge.id)).where(Knowledge.type == type)
         if not login_user.is_admin():
             with session_getter() as session:
                 role_third_id = session.exec(
@@ -293,7 +300,7 @@ def get_knowledge(*,
         return resp_200({'data': res, 'total': total_count})
 
     except Exception as e:
-        logger.exception("get_knowledge error")
+        logger.exception('get_knowledge error')
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -309,11 +316,14 @@ def get_filelist(*,
 
     # 查询当前知识库，是否有写入权限
     with session_getter() as session:
-        db_knowledge = session.get(Knowledge, knowledge_id)
+        db_knowledge: Knowledge = session.get(Knowledge, knowledge_id)
     if not db_knowledge:
         raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
     if not login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
         return UnAuthorizedError.return_resp()
+
+    if db_knowledge.type == KnowledgeTypeEnum.QA.value:
+        return HTTPException(status_code=500, detail='知识库为QA库')
 
     # 查找上传的文件信息
     count_sql = select(func.count(
@@ -334,15 +344,65 @@ def get_filelist(*,
         files = session.exec(
             list_sql.order_by(KnowledgeFile.update_time.desc()).offset(
                 page_size * (page_num - 1)).limit(page_size)).all()
+        data = [jsonable_encoder(knowledgefile) for knowledgefile in files]
+
     return resp_200({
-        'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
-        'total': total_count,
-        'writeable': login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE)
+        'data':
+        data,
+        'total':
+        total_count,
+        'writeable':
+        login_user.access_check(db_knowledge.user_id, str(knowledge_id),
+                                AccessType.KNOWLEDGE_WRITE)
+    })
+
+
+@router.get('/qa/list/{qa_knowledge_id}', status_code=200)
+def get_QA_list(*,
+                qa_knowledge_id: int,
+                page_size: int = 10,
+                page_num: int = 1,
+                question: Optional[str] = None,
+                answer: Optional[str] = None,
+                status: Optional[int] = None,
+                login_user: UserPayload = Depends(get_login_user)):
+    """ 获取知识库文件信息. """
+
+    # 查询当前知识库，是否有写入权限
+    with session_getter() as session:
+        db_knowledge: Knowledge = session.get(Knowledge, qa_knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
+    if not login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
+                                   AccessType.KNOWLEDGE):
+        return UnAuthorizedError.return_resp()
+
+    if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+        return HTTPException(status_code=500, detail='知识库为普通知识库')
+
+    qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
+                                                                 page_num, question, answer,
+                                                                 status)
+    data = [jsonable_encoder(qa) for qa in qa_list]
+    for qa in data:
+        qa['questions'] = qa['questions'][0]
+        qa['answers'] = json.loads(qa['answers'])[0]
+
+    return resp_200({
+        'data':
+        data,
+        'total':
+        total_count,
+        'writeable':
+        login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
+                                AccessType.KNOWLEDGE_WRITE)
     })
 
 
 @router.post('/retry', status_code=200)
-def retry(data: dict, background_tasks: BackgroundTasks, login_user: UserPayload = Depends(get_login_user)):
+def retry(data: dict,
+          background_tasks: BackgroundTasks,
+          login_user: UserPayload = Depends(get_login_user)):
     """失败重试"""
     db_file_retry = data.get('file_objs')
     if db_file_retry:
@@ -374,7 +434,8 @@ def delete_knowledge(*,
         knowledge = session.get(Knowledge, knowledge_id)
     if not knowledge:
         raise HTTPException(status_code=404, detail='knowledge not found')
-    if not login_user.access_check(knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE):
+    if not login_user.access_check(knowledge.user_id, str(knowledge_id),
+                                   AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
 
     # 处理knowledgefile
@@ -419,7 +480,8 @@ def delete_knowledge_hook(request: Request, knowledge: Knowledge, login_user: Us
     # 删除知识库的审计日志
     AuditLogService.delete_knowledge(login_user, get_request_ip(request), knowledge)
 
-    GroupResourceDao.delete_group_resource_by_third_id(str(knowledge.id), ResourceTypeEnum.KNOWLEDGE)
+    GroupResourceDao.delete_group_resource_by_third_id(str(knowledge.id),
+                                                       ResourceTypeEnum.KNOWLEDGE)
 
 
 @router.delete('/file/{file_id}', status_code=200)
@@ -428,12 +490,12 @@ def delete_knowledge_file(*,
                           file_id: int,
                           login_user: UserPayload = Depends(get_login_user)):
     """ 删除知识文件信息 """
-
     knowledge_file = KnowledgeFileDao.select_list([file_id])
     if knowledge_file:
         knowledge_file = knowledge_file[0]
     knowledge = KnowledgeDao.query_by_id(knowledge_file.knowledge_id)
-    if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE):
+    if not login_user.access_check(knowledge.user_id, str(knowledge.id),
+                                   AccessType.KNOWLEDGE_WRITE):
         raise HTTPException(status_code=404, detail='没有权限执行操作')
 
     # 处理vectordb
@@ -448,10 +510,73 @@ def delete_knowledge_file(*,
 
 def delete_knowledge_file_hook(request: Request, login_user: UserPayload, knowledge_id: int,
                                file_list: List[KnowledgeFile]):
-    logger.info(f'act=delete_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}')
+    logger.info(
+        f'act=delete_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}')
     # 记录审计日志
     # 记录审计日志
-    file_name = ""
+    file_name = ''
     for one in file_list:
-        file_name += "\n\n" + one.file_name
-    AuditLogService.delete_knowledge_file(login_user, get_request_ip(request), knowledge_id, file_name)
+        file_name += '\n\n' + one.file_name
+    AuditLogService.delete_knowledge_file(login_user, get_request_ip(request), knowledge_id,
+                                          file_name)
+
+
+@router.post('/qa/add', status_code=200)
+def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(get_login_user)):
+    """ 增加知识库信息. """
+    QACreate.user_id = login_user.user_id
+    db_knowledge = KnowledgeDao.query_by_id(QACreate.knowledge_id)
+    if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+        raise HTTPException(status_code=404, detail='知识库类型错误')
+
+    add_qa(db_knowledge=db_knowledge, data=QACreate)
+    return resp_200()
+
+
+@router.post('/qa/append', status_code=200)
+def qa_append(
+        *,
+        ids: list[int] = Body(..., embed=True),
+        question: str = Body(..., embed=True),
+        login_user: UserPayload = Depends(get_login_user),
+):
+    """ 增加知识库信息. """
+    QA_list = QAKnoweldgeDao.select_list(ids)
+    knowledge = KnowledgeDao.query_by_id(QA_list[0].knowledge_id)
+    for qa in QA_list:
+        qa.questions.append(question)
+        knowledge_imp.add_qa(knowledge, qa)
+    return resp_200()
+
+
+@router.delete('/qa/delete', status_code=200)
+def qa_delete(*,
+              ids: list[int] = Body(embed=True),
+              login_user: UserPayload = Depends(get_login_user)):
+    """ 删除知识文件信息 """
+    knowledge_dbs = QAKnoweldgeDao.select_list(ids)
+    knowledge = KnowledgeDao.query_by_id(knowledge_dbs[0].knowledge_id)
+    if not login_user.access_check(knowledge.user_id, str(knowledge.id),
+                                   AccessType.KNOWLEDGE_WRITE):
+        raise HTTPException(status_code=404, detail='没有权限执行操作')
+
+    if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+        return HTTPException(status_code=500, detail='知识库类型错误')
+
+    QAKnoweldgeDao.delete_batch(ids)
+    knowledge_imp.delete_vector_data(knowledge.id, ids)
+    return resp_200()
+
+
+@router.post('/qa/auto_question')
+def qa_auto_question(
+        *,
+        number: int = Body(default=3, embed=True),
+        ori_question: str = Body(default='', embed=True),
+):
+    """通过大模型自动生成问题"""
+    questions = []
+    for _ in range(number):
+        questions.append(knowledge_imp.recommend_question(ori_question))
+
+    return resp_200(data={'questions': questions})

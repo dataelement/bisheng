@@ -14,10 +14,13 @@ class PresetTrainBase(SQLModelSerializable):
     name: str = Field(default='', index=True, description='上传的文件名字')
     user_id: str = Field(default='', index=True, description='创建人ID')
     user_name: str = Field(default='', index=True, description='创建人姓名')
+    type: int = Field(default=0, index=True, description='0 文件 1 QA')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(
+        sa_column=Column(DateTime,
+                         nullable=False,
+                         server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class PresetTrain(PresetTrainBase, table=True):

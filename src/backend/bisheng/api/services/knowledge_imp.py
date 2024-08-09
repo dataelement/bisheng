@@ -2,14 +2,15 @@ import json
 import math
 import re
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 import requests
 from bisheng.cache.utils import file_download
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeDao
-from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
+from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao, QAKnoweldgeDao,
+                                                    QAKnowledge, QAKnowledgeUpsert)
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_by_type, import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_llm, instantiate_vectorstore
@@ -32,7 +33,7 @@ from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, Tex
                                                   UnstructuredWordDocumentLoader)
 from loguru import logger
 from pymilvus import Collection
-from sqlalchemy import delete
+from sqlalchemy import delete, func
 from sqlmodel import select
 
 filetype_load_map = {
@@ -199,14 +200,19 @@ def decide_vectorstores(collection_name: str, vector_store: str,
         # 无相关配置
         return None
 
+    param = {'embedding': embedding}
     if vector_store == 'ElasticKeywordsSearch':
-        param = {'index_name': collection_name, 'embedding': embedding}
+        param = {'index_name': collection_name}
         if isinstance(vector_config['ssl_verify'], str):
             vector_config['ssl_verify'] = eval(vector_config['ssl_verify'])
-    else:
-        param = {'collection_name': collection_name, 'embedding': embedding}
+    elif vector_store == 'Milvus':
+        param = {'collection_name': collection_name}
         vector_config.pop('partition_suffix', '')
         vector_config.pop('is_partition', '')
+    else:
+        # 适配其他的vector
+        collection_name = vector_config.pop('collection_or_index_name', '')
+        vector_config[collection_name] = collection_name
 
     param.update(vector_config)
     class_obj = import_vectorstore(vector_store)
@@ -514,7 +520,7 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             original_file = input_file.object_name
             file_url = minio.get_share_link(original_file,
                                             minio_client.tmp_bucket) if original_file.startswith(
-                'tmp') else minio.get_share_link(original_file)
+                                                'tmp') else minio.get_share_link(original_file)
 
             if file_url:
                 file_path, _ = file_download(file_url)
@@ -558,3 +564,156 @@ def delete_es(index_name: str):
     if esvectore_client:
         res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
         logger.info(f'act=delete_es index={index_name} res={res}')
+
+
+def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge, documents: List[Document]):
+    """使用text 导入knowledge"""
+    try:
+        embeddings = decide_embeddings(db_knowledge.model)
+        vectore_config_dict: dict = settings.get_knowledge().get('vectorstores')
+        if not vectore_config_dict:
+            raise Exception('向量数据库必须配置')
+        vectore_client_list = [
+            decide_vectorstores(db_knowledge.index_name or db_knowledge.collection_name, db,
+                                embeddings) if db == 'ElasticKeywordsSearch' else
+            decide_vectorstores(db_knowledge.collection_name, db, embeddings)
+            for db in vectore_config_dict.keys()
+        ]
+        logger.info('vector_init_conn_done col={} dbs={}', db_knowledge.collection_name,
+                    vectore_config_dict.keys())
+    except Exception as e:
+        logger.exception(e)
+
+    try:
+        # 统一document
+        metadata = [{
+            'file_id': QA.id,
+            'knowledge_id': f'{db_knowledge.id}',
+            'page': doc.metadata.pop('page', 1),
+            'source': doc.metadata.pop('source', ''),
+            'bbox': doc.metadata.pop('bbox', ''),
+            'extra': json.dumps(doc.metadata)
+        } for doc in documents]
+
+        # 向量存储
+        for vectore_client in vectore_client_list:
+            vectore_client.add_texts(texts=[t.page_content for t in documents], metadatas=metadata)
+
+        QA.status = 2
+        with session_getter() as session:
+            session.add(QA)
+            session.commit()
+    except Exception as e:
+        logger.error(e)
+        setattr(QA, 'status', 3)
+        setattr(QA, 'remark', str(e)[:500])
+        with session_getter() as session:
+            session.add(QA)
+            session.commit()
+
+    return QA
+
+
+def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert):
+    """使用text 导入QAknowledge"""
+    if db_knowledge.type != 1:
+        raise Exception('knowledge type error')
+    try:
+        # 相似问统一插入
+        questions = data.questions
+        if questions:
+            if data.id:
+                qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
+                qa_db.questions = questions
+                qa_db.answers = json.dumps(data.answers)
+                qa = QAKnoweldgeDao.update(qa_db)
+                # 需要先删除再插入
+                delete_vector_data(db_knowledge, [data.id])
+            else:
+                qa = QAKnoweldgeDao.insert_qa(data)
+            docs = [
+                Document(page_content=question, metadata={'answer': data.answers})
+                for question in questions
+            ]
+            # 对question进行embedding，然后录入知识库
+            qa = QA_save_knowledge(db_knowledge, qa, docs)
+    except Exception as e:
+        logger.exception(e)
+        raise e
+
+
+def list_qa_by_knowledge_id(knowledge_id: int,
+                            page_size: int = 10,
+                            page_num: int = 1,
+                            question: Optional[str] = None,
+                            answer: Optional[str] = None,
+                            status: Optional[int] = None) -> List[QAKnowledge]:
+    """获取知识库下的所有qa"""
+    if not knowledge_id:
+        return []
+
+    count_sql = select(func.count(QAKnowledge.id)).where(QAKnowledge.knowledge_id == knowledge_id)
+    list_sql = select(QAKnowledge).where(QAKnowledge.knowledge_id == knowledge_id)
+
+    if status:
+        count_sql = count_sql.where(QAKnowledge.status == status)
+        list_sql = list_sql.where(QAKnowledge.status == status)
+
+    if question:
+        count_sql = count_sql.where(QAKnowledge.questions.like(f'%{question}%'))
+        list_sql = list_sql.where(QAKnowledge.questions.like(f'%{question}%'))
+
+    if answer:
+        count_sql = count_sql.where(QAKnowledge.answers.like(f'%{answer}%'))
+        list_sql = list_sql.where(QAKnowledge.answers.like(f'%{answer}%'))
+
+    list_sql = list_sql.order_by(QAKnowledge.update_time.desc()).limit(page_size).offset(
+        (page_num - 1) * page_size)
+    count = QAKnoweldgeDao.total_count(count_sql)
+    list_qa = QAKnoweldgeDao.query_by_condition(list_sql)
+
+    return list_qa, count
+
+
+def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
+    """删除向量数据"""
+    embeddings = FakeEmbedding()
+    vectore_config_dict: dict = settings.get_knowledge().get('vectorstores')
+    if not vectore_config_dict:
+        raise Exception('向量数据库必须配置')
+    elastic_index = knowledge.index_name or knowledge.collection_name
+    vectore_client_list = [
+        decide_vectorstores(elastic_index, db, embeddings) if db == 'ElasticKeywordsSearch' else
+        decide_vectorstores(knowledge.collection_name, db, embeddings)
+        for db in vectore_config_dict.keys()
+    ]
+    logger.info('vector_init_conn_done col={} dbs={}', knowledge.collection_name,
+                vectore_config_dict.keys())
+    # 查询vector primary key
+
+    for vectore_client in vectore_client_list:
+        primary_keys = vectore_client.search(file_ids)
+        vectore_client.delete(ids=primary_keys)
+
+
+def recommend_question(question: str):
+
+    from langchain.chains.llm import LLMChain
+    from langchain_core.prompts.prompt import PromptTemplate
+    prompt = """给定以下问题
+    {question}
+
+    改写新的问题，
+    """
+    keyword_conf = settings.get_default_llm() or {}
+    if keyword_conf:
+        node_type = keyword_conf.pop('type', 'HostQwenChat')  # 兼容旧配置
+        class_object = import_by_type(_type='llms', name=node_type)
+        llm = instantiate_llm(node_type, class_object, keyword_conf)
+
+        llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt))
+        gen_question = llm_chain.predict(question=question)
+        return gen_question
+    else:
+        logger.info('llm_chain is None recommend_over')
+        return '默认大模型未配置'

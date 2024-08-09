@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import Any, List, Optional, Tuple
 
 from bisheng.database.base import session_getter
@@ -11,9 +12,15 @@ from sqlalchemy import Column, DateTime, and_, func, text
 from sqlmodel import Field, or_, select
 
 
+class KnowledgeTypeEnum(Enum):
+    QA = 1
+    NORMAL = 0
+
+
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(index=True)
     name: str = Field(index=True)
+    type: str = Field(index=False, default=0, description='0 为普通知识库，1 为QA知识库')
     description: Optional[str] = Field(index=True)
     model: Optional[str] = Field(index=False)
     collection_name: Optional[str] = Field(index=False)
