@@ -11,7 +11,7 @@ import { addLLmServer, deleteLLmServer, getLLmServerDetail, updateLLmServer } fr
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { PlusIcon } from "@radix-ui/react-icons";
 import { ArrowLeft, Trash2Icon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
 
@@ -95,8 +95,9 @@ export const modelProvider = [
     { "name": "MINIMAX", "value": "minimax" },
     { "name": "ANTHROPIC", "value": "anthropic" },
     { "name": "DEEPSEEK", "value": "deepseek" },
-    { "name": "SPARK", "value": "spark" },
+    { "name": "SPARK", "value": "spark" }
 ]
+const bishengModelProvider = { "name": "BISHENG_RT", "value": "bisheng_rt" }
 
 // 默认表单项
 const defaultForm = {
@@ -232,6 +233,11 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         })
     }
 
+    const _modelProvider = useMemo(() => {
+        // 编辑模式追加bisheng rt
+        return id === -1 ? modelProvider : [...modelProvider, bishengModelProvider]
+    }, [id])
+
     if (!formData) return <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
         <span className="loading loading-infinity loading-lg"></span>
     </div>
@@ -254,7 +260,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     </SelectTrigger>
                     <SelectContent>
                         <SelectGroup>
-                            {modelProvider.map((model => <SelectItem key={model.value} value={model.value}>{model.name}</SelectItem>))}
+                            {_modelProvider.map((model => <SelectItem key={model.value} value={model.value}>{model.name}</SelectItem>))}
                         </SelectGroup>
                     </SelectContent>
                 </Select>

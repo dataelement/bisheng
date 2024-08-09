@@ -20,11 +20,11 @@ export default function ModelSelect({ value, onChange }) {
         data.forEach(server => {
             const serverItem = { value: server.id, label: server.name, children: [] }
             serverItem.children = server.models.reduce((res, model) => {
-                if (model.model_name === value) {
-                    _value = [{ ...serverItem }, { value: model.model_name, label: model.model_name }]
+                if (model.id === value) {
+                    _value = [{ ...serverItem }, { value: model.id, label: model.model_name }]
                 }
                 return model.online ? [...res, {
-                    value: model.model_name,
+                    value: model.id,
                     label: model.model_name
                 }] : res
             }, [])

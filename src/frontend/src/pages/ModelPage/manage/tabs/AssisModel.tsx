@@ -224,8 +224,8 @@ export default function AssisModel({ llmOptions, onBack }) {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
-                                    <SelectItem value="1">{t('yes')}</SelectItem>
-                                    <SelectItem value="0">{t('no')}</SelectItem>
+                                    <SelectItem value="1">{t('model.yes')}</SelectItem>
+                                    <SelectItem value="0">{t('model.no')}</SelectItem>
                                 </SelectGroup>
                             </SelectContent>
                         </Select>

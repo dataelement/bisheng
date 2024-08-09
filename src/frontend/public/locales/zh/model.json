@@ -46,7 +46,7 @@
         "assistantKnowledgeBaseMaxCharactersTooltip": "传给模型的最大字符数，超过会自动截断，可根据模型最大上下文长度灵活调整",
         "reorderAfterRetrieval": "检索后是否重排",
         "reorderAfterRetrievalTooltip": "是否将检索得到的chunk重新排序",
-        "setAsDefault": "设为默认模式",
+        "setAsDefault": "设为默认模型",
         "assistantAutoOptimizationModel": "助手画像自动优化模型",
         "yes": "是",
         "no": "否",
