@@ -25,13 +25,13 @@
 
 /* 滚动条滑块 */
 ::-webkit-scrollbar-thumb {
-	background-color: darkgrey;
+	background-color: hsl(var(--border));;
 	border-radius: 4px;
 }
 
 /* 滚动条轨道 */
 ::-webkit-scrollbar-track {
-	background: #fff;
+	background: hsl(var(--background));
 	border-radius: 8px;
 }
 

@@ -246,8 +246,8 @@ const FormField = ({ showDefault, field, value, onChange }) => {
     }, [showDefault])
 
     return (
-        <div>
-            <Label>{field.label}</Label>
+        <div className="mb-2">
+            <Label className="bisheng-label">{field.label}</Label>
             <Input
                 type={field.type}
                 placeholder={field.placeholder}
@@ -275,12 +275,12 @@ const CustomForm = forwardRef(({ showDefault, provider, formData }, ref) => {
     useImperativeHandle(ref, () => ({
         getData() {
             const errorObj = fields.find(field => field.required && !form[field.key]);
-            return [form, errorObj ? `${errorObj.label} 不能为空` : ''];
+            return [form, errorObj ? `${errorObj.label} cannot be empty` : ''];
         }
     }))
 
     return (
-        <div>
+        <div className="overflow-hidden">
             {fields.map((field) => (
                 <FormField
                     key={field.key}

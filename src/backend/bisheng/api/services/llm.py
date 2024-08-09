@@ -80,9 +80,9 @@ class LLMService:
         # 尝试实例化对应的模型，有报错的话删除
         for one in ret.models:
             try:
-                if one.model_type == LLMModelType.LLM:
+                if one.model_type == LLMModelType.LLM.value:
                     cls.get_bisheng_llm(model_id=one.id, ignore_online=True)
-                elif one.model_type == LLMModelType.EMBEDDING:
+                elif one.model_type == LLMModelType.EMBEDDING.value:
                     BishengEmbeddings(model_id=one.id, ignore_online=True)
                 success_msg += f'{one.model_name},'
                 success_models.append(one)
@@ -121,7 +121,7 @@ class LLMService:
             if one.model_type in handle_types:
                 continue
             handle_types.append(one.model_type)
-            model_info = LLMDao.get_model_by_type(one.model_type)
+            model_info = LLMDao.get_model_by_type(LLMModelType(one.model_type))
             # 判断是否是首个llm或者embedding模型
             if model_info.id == one.id:
                 cls.set_default_model(request, login_user, model_info)
@@ -131,7 +131,7 @@ class LLMService:
     def set_default_model(cls, request: Request, login_user: UserPayload, model: LLMModel):
         """ 设置默认的模型配置 """
         # 设置默认的llm模型配置
-        if model.model_type == LLMModelType.LLM:
+        if model.model_type == LLMModelType.LLM.value:
             # 设置知识库的默认模型配置
             knowledge_llm = cls.get_knowledge_llm()
             knowledge_change = False
@@ -167,7 +167,7 @@ class LLMService:
             if assistant_change:
                 cls.update_assistant_llm(request, login_user, assistant_llm)
 
-        elif model.model_type == LLMModelType.EMBEDDING:
+        elif model.model_type == LLMModelType.EMBEDDING.value:
             knowledge_llm = cls.get_knowledge_llm()
             if not knowledge_llm.embedding_model_id:
                 knowledge_llm.embedding_model_id = model.id

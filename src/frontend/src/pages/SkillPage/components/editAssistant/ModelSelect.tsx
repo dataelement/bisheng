@@ -19,15 +19,15 @@ export default function ModelSelect({ value, onChange }) {
         let _options = []
         data.forEach(server => {
             const serverItem = { value: server.id, label: server.name, children: [] }
-            serverItem.children = server.models.map(model => {
+            serverItem.children = server.models.reduce((res, model) => {
                 if (model.model_name === value) {
                     _value = [{ ...serverItem }, { value: model.model_name, label: model.model_name }]
                 }
-                return {
+                return model.online ? [...res, {
                     value: model.model_name,
                     label: model.model_name
-                }
-            })
+                }] : res
+            }, [])
             if (serverItem.children.length) _options.push(serverItem)
         });
         setModelValue(_value)

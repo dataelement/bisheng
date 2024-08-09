@@ -133,12 +133,6 @@ async def update_tool_list(*,
     return AssistantService.update_tool_list(assistant_id, tool_list, login_user)
 
 
-# 获取助手可用的模型列表
-@router.get('/models', response_model=UnifiedResponseModel)
-async def get_models(*, login_user: UserPayload = Depends(get_login_user)):
-    return AssistantService.get_models()
-
-
 # 助手对话的websocket连接
 @router.websocket('/chat/{assistant_id}')
 async def chat(*,

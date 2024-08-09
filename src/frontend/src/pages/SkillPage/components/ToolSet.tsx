@@ -139,7 +139,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     };
 
     const getFieldsToSubmit = () => {
-        const fields = {};
+        const fields: any = {};
         if (name === 'Dalle3绘画') {
             fields.openai_api_key = formData.openai_api_key;
             if (formData.provider === 'openai') {

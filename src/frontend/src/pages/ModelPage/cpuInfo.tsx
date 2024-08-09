@@ -11,7 +11,7 @@ import {
 import { GPUlistApi, GPUlistByFinetuneApi } from "../../controllers/API";
 
 export const CpuDetail = ({ type }) => {
-    const { t } = useTranslation()
+    const { t } = useTranslation('model')
 
     const [datalist, setDatalist] = useState([])
 

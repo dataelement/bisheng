@@ -6,7 +6,7 @@ import { getTaskInfoApi } from "../../../controllers/API/finetune";
 import { TaskStatus } from "./FinetuneDetail";
 
 export default function FinetuneResult({ id, training, isStop, failed, onChange }) {
-    const { t } = useTranslation()
+    const { t } = useTranslation('model')
     const timerRef = useRef(null)
 
     const [logs, setLogs] = useState(null)
