@@ -32,6 +32,7 @@ class BishengLLM(BaseChatModel):
         LLMServerType.XINFERENCE: 'Xinference',
         LLMServerType.LLAMACPP: 'LlamaCpp',  # 此组件是加载本地的模型文件，待确认是否有api服务提供
         LLMServerType.VLLM: 'VLLMOpenAI',
+        LLMServerType.BISHENG_RT: "HostChatGLM",
 
         # 官方api服务
         LLMServerType.OPENAI: 'ChatOpenAI',

@@ -23,6 +23,7 @@ class LLMServerType(Enum):
     ANTHROPIC = 'anthropic'
     DEEPSEEK = 'deepseek'
     SPARK = 'spark'  # 讯飞星火大模型
+    BISHENG_RT = 'bisheng_rt'
 
 
 # 模型类型枚举

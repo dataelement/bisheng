@@ -56,6 +56,7 @@ class BishengEmbeddings(Embeddings):
         LLMServerType.XINFERENCE: 'XinferenceEmbeddings',
         LLMServerType.LLAMACPP: 'LlamaCppEmbeddings',
         LLMServerType.VLLM: '',
+        LLMServerType.BISHENG_RT: 'HostEmbeddings',
 
         # 官方API服务
         LLMServerType.OPENAI: 'OpenAIEmbeddings',
