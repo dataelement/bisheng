@@ -4,7 +4,7 @@ import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { ArrowLeft, Filter } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
@@ -12,7 +12,6 @@ import ShadTooltip from "../../components/ShadTooltipComponent";
 import { Button } from "../../components/bs-ui/button";
 import { Input, InputList, SearchInput, Textarea } from "../../components/bs-ui/input";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "../../components/bs-ui/select";
 import {
     Table,
     TableBody,
@@ -21,7 +20,7 @@ import {
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import { deleteFile, readFileByLibDatabase } from "../../controllers/API";
+import { deleteFile, deleteQa, generateSimilarQa, getQaDetail, getQaList, updateQa } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 
@@ -31,7 +30,7 @@ const defaultQa = {
     answer: ''
 }
 // 添加&编辑qa
-const EditQa = forwardRef(function ({ onChange }, ref) {
+const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
     const [open, setOpen] = useState(false);
     const [form, setForm] = useState({ ...defaultQa });
     const [loading, setLoading] = useState(false);
@@ -41,18 +40,25 @@ const EditQa = forwardRef(function ({ onChange }, ref) {
     });
 
     const idRef = useRef('')
+    const sourceRef = useRef('')
     useImperativeHandle(ref, () => ({
         open() {
             setOpen(true);
         },
-        edit(id) {
+        edit(item) {
+            const { id, source } = item
             idRef.current = id;
+            sourceRef.current = source;
             setOpen(true);
-            // 加载表单数据
-            setForm({
-                question: '嘻嘻嘻',
-                similarQuestions: ['1234', ''],
-                answer: '呃呃呃呃'
+
+            getQaDetail(id).then(res => {
+                const { questions, answers } = res
+                const [question, ...similarQuestions] = questions
+                setForm({
+                    question,
+                    similarQuestions: [...similarQuestions, ''],
+                    answer: answers
+                })
             })
         }
     }));
@@ -74,19 +80,23 @@ const EditQa = forwardRef(function ({ onChange }, ref) {
 
     // 模型生成
     const handleModelGenerate = async () => {
-        setLoading(true);
 
-        setTimeout(() => {
+        if (!form.question) return message({
+            variant: 'warning',
+            description: '请先输入问题'
+        })
+        setLoading(true);
+        captureAndAlertRequestErrorHoc(generateSimilarQa(form.question).then(res => {
             setForm((prevForm) => {
                 const updatedSimilarQuestions = [...prevForm.similarQuestions];
-                updatedSimilarQuestions.splice(updatedSimilarQuestions.length - 1, 0, ...['1111', '2222']);
+                updatedSimilarQuestions.splice(updatedSimilarQuestions.length - 1, 0, ...res.questions);
                 return {
                     ...prevForm,
                     similarQuestions: updatedSimilarQuestions
                 };
             });
             setLoading(false);
-        }, 1000);
+        }))
     };
 
     const { message } = useToast()
@@ -106,13 +116,20 @@ const EditQa = forwardRef(function ({ onChange }, ref) {
             });
         }
 
-        // 调用接口
-        onChange();
+        const _similarQuestions = form.similarQuestions.filter((question) => question.trim() !== '');
+        captureAndAlertRequestErrorHoc(updateQa(idRef.current, {
+            questions: [form.question, ..._similarQuestions],
+            answers: [form.answer],
+            knowledge_id: knowlageId,
+            source: sourceRef.current || 1
+        }).then(res => onChange()))
+
         close();
     };
 
     const close = () => {
         idRef.current = '';
+        sourceRef.current = '';
         setForm({ ...defaultQa });
         setOpen(false);
         setError({
@@ -168,20 +185,14 @@ export default function QasPage() {
     const [selectAll, setSelectAll] = useState(false); // 全选状态
     const editRef = useRef(null)
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData, refreshData } = useTable({}, (param) =>
-        readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
+        getQaList(id, param).then(res => {
             // setHasPermission(res.writeable)
             setSelectedItems([]);
             setSelectAll(false);
             return res
         })
     )
-
-    // filter
-    const [filter, setFilter] = useState(999)
-    useEffect(() => {
-        filterData({ status: filter })
-    }, [filter])
 
     useEffect(() => {
         // @ts-ignore
@@ -191,23 +202,6 @@ export default function QasPage() {
         }
         setTitle(window.libname || localStorage.getItem('libname'))
     }, [])
-
-    const handleDelete = (id) => {
-        bsConfirm({
-            title: t('prompt'),
-            desc: '确认删除所选QA数据!',
-            onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteFile(id).then(res => {
-                    reload()
-                }))
-                next()
-            },
-        })
-    }
-
-    const selectChange = (id) => {
-        setFilter(Number(id))
-    }
 
     const handleCheckboxChange = (id) => {
         setSelectedItems((prevSelectedItems) => {
@@ -233,17 +227,27 @@ export default function QasPage() {
         setSelectAll(false);
     }, [page]);
 
+    const handleDelete = (id) => {
+        bsConfirm({
+            title: t('prompt'),
+            desc: '确认删除所选QA数据!',
+            onOk(next) {
+                captureAndAlertRequestErrorHoc(deleteQa([id]).then(res => {
+                    reload()
+                }))
+                next()
+            },
+        })
+    }
+
     const handleDeleteSelected = () => {
         bsConfirm({
             title: t('prompt'),
             desc: '确认删除所选QA数据!',
             onOk(next) {
-                captureAndAlertRequestErrorHoc(
-                    Promise.all(selectedItems.map(id => deleteFile(id)))
-                        .then(res => {
-                            reload();
-                        })
-                );
+                captureAndAlertRequestErrorHoc(deleteQa(selectedItems).then(res => {
+                    reload();
+                }));
                 next();
             },
         });
@@ -304,17 +308,24 @@ export default function QasPage() {
                             <TableCell className="font-medium">
                                 <Checkbox checked={selectedItems.includes(el.id)} onCheckedChange={() => handleCheckboxChange(el.id)} />
                             </TableCell>
-                            <TableCell className="font-medium">{el.file_name}</TableCell>
-                            <TableCell className="font-medium">{el.file_name}</TableCell>
-                            <TableCell>{el.file_name}</TableCell>
+                            <TableCell className="font-medium">
+                                <div className="max-h-48 overflow-y-auto">
+                                    {el.questions}
+                                </div></TableCell>
+                            <TableCell className="font-medium">
+                                <div className="max-h-48 overflow-y-auto">
+                                    {el.answers}
+                                </div>
+                            </TableCell>
+                            <TableCell>{['未知', '手动创建', '审计标记'][el.source]}</TableCell>
+                            <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                            <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                            <TableCell>创建人</TableCell>
+                            <TableCell>{el.user_name}</TableCell>
                             <TableCell>
-                                <Switch checked={true} onCheckedChange={(bln) => { /* api */ }} />
+                                <Switch checked={el.status === 1} onCheckedChange={(bln) => { /* api */ }} />
                             </TableCell>
                             <TableCell className="text-right">
-                                <Button variant="link" onClick={() => editRef.current.edit(el.id)} className="ml-4">更新</Button>
+                                <Button variant="link" onClick={() => editRef.current.edit(el)} className="ml-4">更新</Button>
                                 <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500">{t('delete')}</Button>
                             </TableCell>
                         </TableRow>
@@ -336,6 +347,6 @@ export default function QasPage() {
                 />
             </div>
         </div>
-        <EditQa ref={editRef} onChange={reload} />
+        <EditQa ref={editRef} knowlageId={id} onChange={reload} />
     </div >
 };

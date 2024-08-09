@@ -10,7 +10,7 @@ import KnowledgeFile from "./KnowledgeFile";
 import KnowledgeQa from "./KnowledgeQa";
 
 
-export default function FileLibPage() {
+export default function index() {
 
     const { t } = useTranslation();
 

@@ -57,11 +57,12 @@ function CreateModal({ datalist, open, setOpen }) {
         captureAndAlertRequestErrorHoc(createFileLib({
             name,
             description: desc,
-            model: modal
+            model: modal,
+            type: 0
         }).then(res => {
             // @ts-ignore
             window.libname = name
-            navigate("/qalib/" + res.id);
+            navigate("/filelib/" + res.id);
             setOpen(false)
         }))
     }
@@ -113,49 +114,12 @@ function CreateModal({ datalist, open, setOpen }) {
     </Dialog>
 }
 
-const SelectData = ({ open, setOpen }) => {
-    const [modal, setModal] = useState('')
-    const options = ['1', '2', '3']
-
-    return <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[625px]">
-            <DialogHeader>
-                <DialogTitle>设置数据集</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-4 py-2">
-                <div className="">
-                    <label htmlFor="roleAndTasks" className="bisheng-label">数据集</label>
-                    <Select value={modal} onValueChange={setModal}>
-                        <SelectTrigger className="">
-                            <SelectValue placeholder="选择数据集" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {
-                                options.map(option => (
-                                    <SelectItem key={option} value={option}>{option} </SelectItem>
-                                ))
-                            }
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
-            <DialogFooter>
-                <DialogClose>
-                    <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
-                </DialogClose>
-                <Button type="submit" className="px-11" onClick={() => { }}>确认</Button>
-            </DialogFooter>
-        </DialogContent>
-    </Dialog>
-}
-
-export default function KnowledgeQa(params) {
+export default function KnowledgeFile(params) {
     const [open, setOpen] = useState(false);
-    const [openData, setOpenData] = useState(false);
     const { user } = useContext(userContext);
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) => {
-        return readFileLibDatabase({ ...param, name: param.keyword, type: 0 })
+        return readFileLibDatabase({ ...param, name: param.keyword })
     })
 
     const handleDelete = (id) => {
@@ -173,7 +137,7 @@ export default function KnowledgeQa(params) {
 
     // 进详情页前缓存 page, 临时方案
     const handleCachePage = () => {
-        window.LibPage = { page, type: 'qa' }
+        window.LibPage = { page, type: 'file' }
     }
     useEffect(() => {
         const _page = window.LibPage
@@ -222,8 +186,7 @@ export default function KnowledgeQa(params) {
                                 // @ts-ignore
                                 window.libname = el.name;
                             }}>
-                                {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>添加到数据集</Button> */}
-                                <Link to={`/qalib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
+                                <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
                                 {user.role === 'admin' || user.user_id === el.user_id ?
                                     <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500 px-0">{t('delete')}</Button> :
                                     <Button variant="link" className="ml-4 text-gray-400 px-0">{t('delete')}</Button>
@@ -246,6 +209,5 @@ export default function KnowledgeQa(params) {
             </div>
         </div>
         <CreateModal datalist={datalist} open={open} setOpen={setOpen}></CreateModal>
-        <SelectData open={openData} setOpen={setOpenData} />
     </div>
 };

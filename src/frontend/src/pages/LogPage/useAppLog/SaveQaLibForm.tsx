@@ -4,6 +4,8 @@ import { Button } from "@/components/bs-ui/button";
 import { DialogClose, DialogContent, DialogFooter, DialogHeader, Dialog, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, InputList, Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { generateSimilarQa, updateQa } from "@/controllers/API";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 
 const DEFAULT_FORM = {
@@ -62,19 +64,23 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
     };
 
     const handleModelGenerate = async () => {
-        setLoading(true);
 
-        setTimeout(() => {
+        if (!form.question) return message({
+            variant: 'warning',
+            description: '请先输入问题'
+        })
+        setLoading(true);
+        captureAndAlertRequestErrorHoc(generateSimilarQa(form.question).then(res => {
             setForm((prevForm) => {
                 const updatedSimilarQuestions = [...prevForm.similarQuestions];
-                updatedSimilarQuestions.splice(updatedSimilarQuestions.length - 1, 0, ...['1111', '2222']);
+                updatedSimilarQuestions.splice(updatedSimilarQuestions.length - 1, 0, ...res.questions);
                 return {
                     ...prevForm,
                     similarQuestions: updatedSimilarQuestions
                 };
             });
             setLoading(false);
-        }, 1000);
+        }))
     };
 
     const { message } = useToast();
@@ -96,14 +102,18 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
             });
         }
 
-        // 调用接口，假设此处成功
-        setTimeout(() => {
+        captureAndAlertRequestErrorHoc(updateQa('', {
+            questions: [form.question, ...form.similarQuestions],
+            answers: [form.answer],
+            knowledge_id: form.knowledgeLib[0].value,
+            source: 2
+        }).then(res => {
             message({
                 variant: 'success',
                 description: '存储成功'
             });
-            close();
-        }, 500);
+        }))
+        close();
     };
 
     const close = () => {

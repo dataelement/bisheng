@@ -112,7 +112,7 @@ export function updateTempApi(temp_id, data) {
  * 获取知识库列表
  *
  */
-export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', type = 1 }) {
+export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', type = 0 }) {
   try {
     const response: { data: any[], total: number } = await axios.get('/api/v1/knowledge', {
       params: {
@@ -191,6 +191,63 @@ export async function deleteFile(id) {
 }
 
 /**
+ * 获取Qa问题列表
+ */
+export async function getQaList(id, data: { page, pageSize, keyword }) {
+  return await axios.get(`/api/v1/knowledge/qa/list/${id}`, {
+    params: {
+      page_size: data.pageSize,
+      page_num: data.page,
+      keyword: data.keyword
+    },
+  });
+}
+
+/**
+ * Qa问题新增/修改
+ */
+export async function updateQa(id, data: { questions, answers, knowledge_id, source }) {
+  if (id) {
+    data.id = id
+  }
+
+  return await axios.post(`/api/v1/knowledge/qa/add`, data);
+}
+
+/**
+ * 删除Qa问题
+ */
+export async function deleteQa(ids) {
+  return await axios.delete(`/api/v1/knowledge/qa/delete`, {
+    data: { ids }
+  });
+}
+
+/**
+ * 获取Qa问题详情
+ */
+export async function getQaDetail(id) {
+  return await axios.get(`/api/v1/knowledge/qa/detail?id=${id}`);
+}
+
+/**
+ * 添加相似问到问题
+ */
+export async function addSimilarQa(data: { ids: string[], question: string }) {
+  return await axios.post(`/api/v1/knowledge/qa/append`, data);
+}
+
+/**
+ * 生成相似问
+ */
+export async function generateSimilarQa(question) {
+  return await axios.post(`/api/v1/knowledge/qa/auto_question`, {
+    "ori_question": question,
+    "number": 3
+  });
+}
+
+/**
  * 获取模型列表
  */
 export async function getEmbeddingModel(): Promise<{ models: string[] }> {
@@ -198,7 +255,7 @@ export async function getEmbeddingModel(): Promise<{ models: string[] }> {
 }
 
 /**
- * 获取RT服务列表Ï
+ * 获取RT服务列表
  */
 export async function getServicesApi(): Promise<RTServer[]> {
   return await axios.get(`/api/v1/server/list_server`);

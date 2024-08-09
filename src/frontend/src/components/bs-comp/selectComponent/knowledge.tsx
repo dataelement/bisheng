@@ -37,14 +37,13 @@ export default function KnowledgeSelect({
     const originOptionsRef = useRef([])
 
     const pageRef = useRef(1)
+    const typeRef = useRef(type === 'qa' ? 1 : 0)
     const reload = (page, name) => {
-        // todo: KnowledgeType 区分类型
-        readFileLibDatabase(page, 60, name).then(res => {
+        readFileLibDatabase({ page, pageSize: 60, name, type: typeRef.current }).then(res => {
             pageRef.current = page
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))
-            // setOptions(_ops => page > 1 ? [..._ops, ...opts] : opts)
-            setOptions(opts)
+            setOptions(_ops => page > 1 ? [..._ops, ...opts] : opts)
         })
     }
 
@@ -63,7 +62,8 @@ export default function KnowledgeSelect({
     }
 
     const handleTabChange = (val) => {
-        val === 'file' ? reload(1, '') : reload(2, '')
+        typeRef.current = val === 'file' ? 0 : 1
+        reload(1, '')
         const inputDom = document.getElementById('knowledge-select')
         if (inputDom) {
             inputDom.value = ''

@@ -4,18 +4,21 @@ import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { deleteFileLib, readFileLibDatabase } from "@/controllers/API";
+import { deleteFileLib } from "@/controllers/API";
+import { getFileUrlApi, getPresetFileApi } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
 import { t } from "i18next";
 import { useRef } from "react";
+import { checkSassUrl } from "../ChatAppPage/components/FileView";
 import CreateDataSet from "./CreateDataSet";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 
 
 export default function index() {
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
-        readFileLibDatabase(param.page, 20, param.keyword)
+        getPresetFileApi({ page_size: 20, page_num: param.page, keyword: param.keyword }).then(res => ({ data: res, total: res.length }))
     )
 
     const handleDelete = (id) => {
@@ -32,6 +35,15 @@ export default function index() {
     }
 
     const modelRef = useRef(null)
+
+    const { toast } = useToast()
+    const handleDownloadFile = async (name, url) => {
+        const res = await getFileUrlApi(url)
+        if (!res.url) {
+            return toast({ variant: 'error', description: '文件不存在' })
+        }
+        await downloadFile(checkSassUrl(res.url), name + '.json')
+    }
 
     return <div className="relative h-full px-2 py-4">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -69,7 +81,7 @@ export default function index() {
                                 window.libname = el.name;
                             }}>
                                 {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>添加到数据集</Button> */}
-                                <Button variant="link" className="px-1" onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/dataset.json", 'xxxx.json')}>下载</Button>
+                                <Button variant="link" className="px-1" onClick={() => handleDownloadFile(el.name, el.url)}>下载</Button>
                                 <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500 px-0">{t('delete')}</Button>
                             </TableCell>
                         </TableRow>

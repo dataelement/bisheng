@@ -6,6 +6,8 @@ import { Label } from "@/components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import SimpleUpload from "@/components/bs-ui/upload/simple";
+import { createDatasetApi } from "@/controllers/API/finetune";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { downloadFile } from "@/util/utils";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 
@@ -101,15 +103,18 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
         }
         setOpen(false);
 
-        console.log('form :>> ', form);
-        // 调用接口，假设此处成功
-        setTimeout(() => {
+        // console.log('form :>> ', form);
+        captureAndAlertRequestErrorHoc(createDatasetApi({
+            name: form.dataSetName,
+            files: form.fileUrl,
+            qa_list: form.knowledgeLib
+        }).then(res => {
             message({
                 variant: 'success',
                 description: '数据集创建成功'
             });
             onChange()
-        }, 500);
+        }))
     };
 
     return (

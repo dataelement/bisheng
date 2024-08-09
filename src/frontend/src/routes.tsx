@@ -10,9 +10,9 @@ import ChatPro from "./pages/ChatAppPage/chatWebview";
 import SkillChat from "./pages/ChatAppPage/chatPage/SkillChatPage";
 import AssistantChat from "./pages/ChatAppPage/chatPage/AssistantChatPage";
 import DiffFlowPage from "./pages/DiffFlowPage";
-import FileLibPage from "./pages/FileLibPage";
-import FilesPage from "./pages/FileLibPage/files";
-import QasPage from "./pages/FileLibPage/qas";
+import KnowledgePage from "./pages/KnowledgePage";
+import FilesPage from "./pages/KnowledgePage/files";
+import QasPage from "./pages/KnowledgePage/qas";
 import FlowPage from "./pages/FlowPage";
 import LogPage from "./pages/LogPage";
 import { LoginPage } from "./pages/LoginPage/login";
@@ -63,7 +63,7 @@ const privateRouter = [
     element: <MainLayout />,
     children: [
       { path: "", element: <SkillChatPage />, },
-      { path: "filelib", element: <FileLibPage />, permission: 'knowledge', },
+      { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
       { path: "qalib/:id", element: <QasPage />, permission: 'knowledge', },
       {

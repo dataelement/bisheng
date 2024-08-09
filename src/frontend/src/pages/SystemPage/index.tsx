@@ -13,7 +13,7 @@ import Theme from "./theme";
 import UserGroups from "./components/UserGroup";
 import Users from "./components/Users";
 
-export default function FileLibPage() {
+export default function index() {
     const { user } = useContext(userContext);
 
     const { t } = useTranslation()

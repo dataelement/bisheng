@@ -1,40 +1,20 @@
 
 import { ThunmbIcon } from "@/components/bs-icons";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { userContext } from "@/contexts/userContext";
-import { deleteFileLib, readFileLibDatabase } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { getChatLabelsApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { t } from "i18next";
-import { useContext, useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 
-export default function AppUseLog(params) {
-    const [open, setOpen] = useState(false);
-    const [openData, setOpenData] = useState(false);
-    const { user } = useContext(userContext);
+export default function AppUseLog() {
 
     // 20条每页
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
-        readFileLibDatabase(param.page, param.pageSize, param.keyword)
+        getChatLabelsApi(param).then(res => ({ ...res, data: res.list }))
     )
-
-    const handleDelete = (id) => {
-        bsConfirm({
-            title: t('prompt'),
-            desc: t('lib.confirmDeleteLibrary'),
-            onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteFileLib(id).then(res => {
-                    reload();
-                }));
-                next()
-            },
-        })
-    }
 
     // 进详情页前缓存 page, 临时方案
     const handleCachePage = () => {
@@ -73,39 +53,39 @@ export default function AppUseLog(params) {
                     {datalist.map((el: any) => (
                         <TableRow key={el.id}>
                             <TableCell className="font-medium max-w-[200px]">
-                                <div className=" truncate-multiline">{el.name}</div>
+                                <div className=" truncate-multiline">{el.flow_name}</div>
                             </TableCell>
-                            <TableCell>{el.model || '--'}</TableCell>
+                            <TableCell>{el.user_name}</TableCell>
                             <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                             <TableCell className="max-w-[300px] break-all flex gap-2">
                                 <div className="text-center text-xs relative">
                                     <ThunmbIcon
                                         type='like'
-                                        className={`cursor-pointer ${'text-primary hover:text-primary'}`}
+                                        className={`cursor-pointer ${el.like_count && 'text-primary hover:text-primary'}`}
                                     />
-                                    <span className=" left-4 top-[-4px] break-keep">1</span>
+                                    <span className="left-4 top-[-4px] break-keep">{el.like_count}</span>
                                 </div>
                                 <div className="text-center text-xs relative">
                                     <ThunmbIcon
                                         type='unLike'
-                                        className={`cursor-pointer`}
+                                        className={`cursor-pointer ${el.dislike_count && 'text-primary hover:text-primary'}`}
                                     />
-                                    <span className=" left-4 top-[-4px] break-keep">9999</span>
+                                    <span className="left-4 top-[-4px] break-keep">{el.dislike_count}</span>
                                 </div>
                                 <div className="text-center text-xs relative">
                                     <ThunmbIcon
                                         type='copy'
-                                        className={`cursor-pointer ${'text-primary hover:text-primary'}`}
+                                        className={`cursor-pointer`}
                                     />
-                                    <span className=" left-4 top-[-4px] break-keep">10</span>
+                                    <span className="left-4 top-[-4px] break-keep">--</span>
                                 </div>
                             </TableCell>
                             <TableCell className="text-right" onClick={() => {
                                 // @ts-ignore
-                                window.libname = el.name;
+                                // window.libname = el.name;
                             }}>
                                 {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>添加到数据集</Button> */}
-                                <Link to={`/chatlog/6dbd4a52-bb0e-411e-8074-3737706843b6/fa0ce6a3a37be9d56e9cabd1cd2e63c6`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
+                                <Link to={`/chatlog/${el.flow_id}/${el.chat_id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
                             </TableCell>
                         </TableRow>
                     ))}

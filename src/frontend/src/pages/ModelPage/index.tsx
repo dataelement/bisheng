@@ -109,7 +109,7 @@ function ConfigModal({ data, readonly, open, setOpen, onSave }) {
     </Dialog>
 }
 
-export default function FileLibPage() {
+export default function index() {
     const { t } = useTranslation()
 
     const { appConfig } = useContext(locationContext);
