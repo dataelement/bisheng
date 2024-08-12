@@ -1,10 +1,15 @@
 import base64
+import datetime
+import functools
+import inspect
 import json
 import os
 import re
 from io import BytesIO
 
 import yaml
+
+from bisheng.cache.redis import redis_client
 from bisheng.chat.config import ChatConfig
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
@@ -49,11 +54,11 @@ def try_setting_streaming_options(langchain_object, websocket):
         if hasattr(llm, 'streaming') and isinstance(llm.streaming, bool):
             llm.streaming = settings.get_from_db('llm_request').get(
                 'stream') if 'stream' in settings.get_from_db(
-                    'llm_request') else ChatConfig.streaming
+                'llm_request') else ChatConfig.streaming
         elif hasattr(llm, 'stream') and isinstance(llm.stream, bool):
             llm.stream = settings.get_from_db('llm_request').get(
                 'stream') if 'stream' in settings.get_from_db(
-                    'llm_request') else ChatConfig.streaming
+                'llm_request') else ChatConfig.streaming
     return langchain_object
 
 
@@ -86,3 +91,25 @@ def set_langchain_cache(settings):
     logger.debug(f'Setting up LLM caching with {cache_class.__name__}')
     langchain.llm_cache = cache_class()
     logger.info(f'LLM caching setup with {cache_class.__name__}')
+
+
+def wrapper_bisheng_model_limit_check(func):
+    """
+    调用次数检查的装饰器
+    """
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        self = args[0]
+        now = datetime.datetime.now().strftime("%Y-%m-%d")
+        if self.server_info.limit_flag:
+            # 开启了调用次数检查
+            cache_key = f"model_limit:{now}:{self.server_info.id}"
+            use_num = redis_client.incr(cache_key)
+            if use_num > self.server_info.limit:
+                raise Exception(f'额度已用完')
+        if inspect.iscoroutinefunction(func):
+            return await func(*args, **kwargs)
+        return func(*args, **kwargs)
+
+    return wrapper

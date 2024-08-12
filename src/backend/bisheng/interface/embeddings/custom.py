@@ -7,6 +7,8 @@ from bisheng.database.models.llm_server import LLMServerType, LLMDao, LLMModelTy
 from bisheng.interface.importing import import_by_type
 from langchain.embeddings.base import Embeddings
 
+from bisheng.interface.utils import wrapper_bisheng_model_limit_check
+
 
 class OpenAIProxyEmbedding(Embeddings):
 
@@ -87,6 +89,8 @@ class BishengEmbeddings(Embeddings):
         if not ignore_online and not model_info.online:
             raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
         logger.debug(f'init_bisheng_embedding: server_info: {server_info}, model_info: {model_info}')
+        self.model_info: LLMModel = model_info
+        self.server_info: LLMServer = server_info
 
         class_object = self._get_embedding_class(LLMServerType(server_info.type))
         params = self._get_embedding_params(server_info, model_info)
@@ -131,17 +135,21 @@ class BishengEmbeddings(Embeddings):
             }
         return params
 
+    @wrapper_bisheng_model_limit_check
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """embedding"""
         try:
+            if self.server_info.limit_flag:
+                pass
             ret = self.embeddings.embed_documents(texts)
             self._update_model_status(0)
             return ret
         except Exception as e:
             self._update_model_status(1, str(e))
             logger.exception('embedding error')
-            raise Exception(f'embedding组件异常，请检查配置或联系管理员。错误信息：{e}')
+            raise Exception(f'embedding error: {e}')
 
+    @wrapper_bisheng_model_limit_check
     def embed_query(self, text: str) -> List[float]:
         """embedding"""
         try:

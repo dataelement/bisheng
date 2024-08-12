@@ -1,4 +1,7 @@
+import datetime
+import functools
 from typing import List, Optional, Any
+import inspect
 
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
@@ -7,9 +10,11 @@ from pydantic import Field
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
 from langchain_core.language_models import BaseLanguageModel, BaseChatModel
 
+from bisheng.cache.redis import redis_client
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
+from bisheng.interface.utils import wrapper_bisheng_model_limit_check
 
 
 class BishengLLM(BaseChatModel):
@@ -46,6 +51,10 @@ class BishengLLM(BaseChatModel):
         LLMServerType.SPARK: 'ChatOpenAI',
     }
 
+    # bisheng强相关的业务参数
+    model_info: Optional[LLMModel] = Field(default=None)
+    server_info: Optional[LLMServer] = Field(default=None)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
@@ -71,6 +80,8 @@ class BishengLLM(BaseChatModel):
         if not ignore_online and not model_info.online:
             raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
         logger.debug(f'init_bisheng_llm: server_info: {server_info}, model_info: {model_info}')
+        self.model_info = model_info
+        self.server_info = server_info
 
         class_object = self._get_llm_class(LLMServerType(server_info.type))
         params = self._get_llm_params(server_info, model_info)
@@ -115,6 +126,7 @@ class BishengLLM(BaseChatModel):
     def _llm_type(self):
         return self.llm._llm_type
 
+    @wrapper_bisheng_model_limit_check
     def _generate(
             self,
             messages: List[BaseMessage],
@@ -131,6 +143,7 @@ class BishengLLM(BaseChatModel):
             raise e
         return ret
 
+    @wrapper_bisheng_model_limit_check
     async def _agenerate(
             self,
             messages: List[BaseMessage],
