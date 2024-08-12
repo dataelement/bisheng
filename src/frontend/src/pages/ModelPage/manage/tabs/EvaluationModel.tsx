@@ -16,6 +16,9 @@ export default function EvaluationModel({ llmOptions, onBack }) {
 
     const { message } = useToast()
     const handleSave = () => {
+        if (!selectedModel) {
+            return message({ variant: 'error', description: t('model.defaultEvaluationFeature') + t('bs:required') })
+        }
         const data = {
             model_id: selectedModel
         };
@@ -27,7 +30,7 @@ export default function EvaluationModel({ llmOptions, onBack }) {
     return (
         <div className="max-w-[520px] mx-auto">
             <div className="mt-10">
-                <Label className="bisheng-label">{t('model.defaultEvaluationFeature')}</Label>
+                <Label className="bisheng-label">{t('model.defaultEvaluationFeature')}<span className="text-red-500 text-xs">*</span></Label>
                 <Select value={selectedModel} onValueChange={(val) => setSelectedModel(val)}>
                     <SelectTrigger className="mt-2">
                         <SelectValue placeholder={t('model.selectModel')} />

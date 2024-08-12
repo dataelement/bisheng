@@ -155,6 +155,13 @@ export default function AssisModel({ llmOptions, onBack }) {
     const { message } = useToast()
     const handleSave = () => {
         console.log('Form data to save:', form);
+        if (form.llm_list.some(el => el.model_id === null)) {
+            return message({ variant: 'error', description: t('model.assistantInferenceModel') + t('bs:required') })
+        }
+        if (form.auto_llm.model_id === null) {
+            return message({ variant: 'error', description: t('model.assistantAutoOptimizationModel') + t('bs:required') })
+        }
+
         captureAndAlertRequestErrorHoc(updateAssistantModelConfig(form).then(res => {
             message({ variant: 'success', description: t('model.saveSuccess') })
         }));
@@ -166,7 +173,7 @@ export default function AssisModel({ llmOptions, onBack }) {
                 <span className="pl-1">{t('model.assistantInferenceModel')}</span>
                 <div className="mt-2 border p-4 rounded-md bg-muted">
                     <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(3, 1fr) 200px repeat(2, 1fr) 80px" }}>
-                        <Label className="bisheng-label">{t('model.model')}</Label>
+                        <Label className="bisheng-label">{t('model.model')}<span className="text-red-500 text-xs">*</span></Label>
                         <Label className="bisheng-label">
                             <span>{t('model.assistantExecutionMode')}</span>
                             <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.assistantExecutionModeTooltip')} />
@@ -202,7 +209,7 @@ export default function AssisModel({ llmOptions, onBack }) {
                 <span className="pl-1">{t('model.assistantAutoOptimizationModel')}</span>
                 <div className="mt-2 border p-4 rounded-md bg-muted">
                     <div className="grid grid-cols-5 gap-2">
-                        <Label className="bisheng-label">{t('model.model')}</Label>
+                        <Label className="bisheng-label">{t('model.model')}<span className="text-red-500 text-xs">*</span></Label>
                         <Label className="bisheng-label">{t('model.streamingOutput')}</Label>
                     </div>
                     <div className="grid grid-cols-5 gap-2 mt-4">

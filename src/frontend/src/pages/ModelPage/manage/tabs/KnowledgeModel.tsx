@@ -10,12 +10,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 
-const ModelSelect = ({ label, tooltipText, value, options, onChange }) => {
-
+const ModelSelect = ({ required = false, label, tooltipText, value, options, onChange }) => {
     return (
         <div>
             <Label className="bisheng-label">
                 <span>{label}</span>
+                {required && <span className="text-red-500 text-xs">*</span>}
                 {tooltipText && <QuestionTooltip className="relative top-0.5 ml-1" content={tooltipText} />}
             </Label>
             <Select value={value} onValueChange={onChange}>
@@ -78,6 +78,15 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
     const { message } = useToast()
     const handleSave = () => {
         const { embeddingModelId, extractModelId, qaSimilarModelId, sourceModelId } = form
+        const errors = []
+        if (!embeddingModelId) {
+            errors.push(t('model.defaultEmbeddingModel') + t('bs:required'))
+        }
+        if (!sourceModelId) {
+            errors.push(t('model.qaSimilarModel') + t('bs:required'))
+        }
+        if (errors.length) return message({ variant: 'error', description: errors })
+
         captureAndAlertRequestErrorHoc(updateKnowledgeModelConfig({
             embedding_model_id: embeddingModelId,
             extract_title_model_id: extractModelId,
@@ -91,7 +100,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
     return (
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16">
             <div>
-                <Label className="bisheng-label">{t('model.defaultEmbeddingModel')}</Label>
+                <Label className="bisheng-label">{t('model.defaultEmbeddingModel')}<span className="text-red-500 text-xs">*</span></Label>
                 {
                     !loading && <Cascader
                         defaultValue={embeddingValue}
@@ -115,6 +124,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 onChange={(val) => setForm({ ...form, extractModelId: val })}
             />
             <ModelSelect
+                required
                 label={t('model.qaSimilarModel')}
                 tooltipText={t('model.qaSimilarModelTooltip')}
                 value={form.qaSimilarModelId}
