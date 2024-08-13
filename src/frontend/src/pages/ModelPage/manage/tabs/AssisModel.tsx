@@ -8,6 +8,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { getAssistantModelConfig, updateAssistantModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { PlusIcon } from "@radix-ui/react-icons";
+import uniqBy from "lodash-es/uniqBy";
 import { Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -160,6 +161,10 @@ export default function AssisModel({ llmOptions, onBack }) {
         }
         if (form.auto_llm.model_id === null) {
             return message({ variant: 'error', description: t('model.assistantAutoOptimizationModel') + t('bs:required') })
+        }
+        const uniqueList = uniqBy(form.llm_list, 'model_id');
+        if (uniqueList.length !== form.llm_list.length) {
+            return message({ variant: 'error', description: t('model.assistantInferenceModelRepetition') })
         }
 
         captureAndAlertRequestErrorHoc(updateAssistantModelConfig(form).then(res => {

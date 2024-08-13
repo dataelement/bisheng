@@ -39,6 +39,7 @@
         "qaSimilarModelTooltip": "Generates similar questions for QA Knowledge Base.",
         "saveSuccess": "Saved",
         "assistantInferenceModel": "Inference Model",
+        "assistantInferenceModelRepetition": "Assistant Reasoning Model Repetition",
         "assistantExecutionMode": "Execution Mode",
         "assistantExecutionModeTooltip": "Use function call mode if supported by model",
         "streamingOutput": "Streaming",

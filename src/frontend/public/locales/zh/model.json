@@ -39,6 +39,7 @@
         "qaSimilarModelTooltip": "用于生成 QA 知识库中的相似问题。",
         "saveSuccess": "保存成功",
         "assistantInferenceModel": "助手推理模型",
+        "assistantInferenceModelRepetition": "助手推理模型重复",
         "assistantExecutionMode": "助手执行模式",
         "assistantExecutionModeTooltip": "模型支持OpenAI function call 格式接口协议时，建议选择 function call 模式",
         "streamingOutput": "流式输出",

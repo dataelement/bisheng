@@ -189,7 +189,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
                 {(showAdd && user.role === 'admin') && <div onClick={handleAdd}
                     className="flex group items-center h-8 rounded-sm bg-[#EBF0FF] dark:bg-gray-700 cursor-pointer">
                     <PlusIcon className="mx-2 text-[#727C8F]" />
-                    <span>{t('tag.createNewLabel')}</span>
+                    <span>{t('create')}”{keyword}”</span>
                 </div>}
             </div>
         </PopoverContent>
