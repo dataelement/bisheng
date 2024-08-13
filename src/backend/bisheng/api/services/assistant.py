@@ -59,7 +59,7 @@ class AssistantService(BaseService, AssistantUtils):
 
         data = []
         if user.is_admin():
-            res, total = AssistantDao.get_all_assistants(name, page, limit, assistant_ids)
+            res, total = AssistantDao.get_all_assistants(name, page, limit, assistant_ids, status)
         else:
             # 权限管理可见的助手信息
             assistant_ids_extra = []
