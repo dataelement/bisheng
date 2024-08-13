@@ -55,9 +55,9 @@ class BishengEmbeddings(Embeddings):
     llm_node_type = {
         # 开源推理框架
         LLMServerType.OLLAMA: 'OllamaEmbeddings',
-        LLMServerType.XINFERENCE: 'XinferenceEmbeddings',
-        LLMServerType.LLAMACPP: 'LlamaCppEmbeddings',
-        LLMServerType.VLLM: '',
+        LLMServerType.XINFERENCE: 'OpenAIEmbeddings',
+        LLMServerType.LLAMACPP: 'OpenAIEmbeddings',
+        LLMServerType.VLLM: 'OpenAIEmbeddings',
         LLMServerType.BISHENG_RT: 'HostEmbeddings',
 
         # 官方API服务
@@ -88,7 +88,7 @@ class BishengEmbeddings(Embeddings):
             raise Exception(f'只支持Embedding类型的模型，不支持{model_info.model_type}类型的模型')
         if not ignore_online and not model_info.online:
             raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
-        logger.debug(f'init_bisheng_embedding: server_info: {server_info}, model_info: {model_info}')
+        logger.debug(f'init_bisheng_embedding: server_id: {server_info.id}, model_id: {model_info.id}')
         self.model_info: LLMModel = model_info
         self.server_info: LLMServer = server_info
 
@@ -133,6 +133,9 @@ class BishengEmbeddings(Embeddings):
                 "model": params.get('model'),
                 "minimax_group_id": params.get('minimax_group_id'),
             }
+        elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
+                                  LLMServerType.VLLM.value]:
+            params['openai_api_key'] = params.pop('openai_api_key', None) or "EMPTY"
         return params
 
     @wrapper_bisheng_model_limit_check
