@@ -33,10 +33,10 @@ class BishengLLM(BaseChatModel):
     llm: Optional[BaseChatModel] = Field(default=None)
     llm_node_type = {
         # 开源推理框架
-        LLMServerType.OLLAMA: 'Ollama',
-        LLMServerType.XINFERENCE: 'Xinference',
-        LLMServerType.LLAMACPP: 'LlamaCpp',  # 此组件是加载本地的模型文件，待确认是否有api服务提供
-        LLMServerType.VLLM: 'VLLMOpenAI',
+        LLMServerType.OLLAMA: 'ChatOllama',
+        LLMServerType.XINFERENCE: 'ChatOpenAI',
+        LLMServerType.LLAMACPP: 'ChatOpenAI',  # 此组件是加载本地的模型文件，待确认是否有api服务提供
+        LLMServerType.VLLM: 'ChatOpenAI',
         LLMServerType.BISHENG_RT: "HostChatGLM",
 
         # 官方api服务
@@ -79,7 +79,7 @@ class BishengLLM(BaseChatModel):
             raise Exception(f'只支持LLM类型的模型，不支持{model_info.model_type}类型的模型')
         if not ignore_online and not model_info.online:
             raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
-        logger.debug(f'init_bisheng_llm: server_info: {server_info}, model_info: {model_info}')
+        logger.debug(f'init_bisheng_llm: server_id: {server_info.id}, model_id: {model_info.id}')
         self.model_info = model_info
         self.server_info = server_info
 
@@ -120,6 +120,8 @@ class BishengLLM(BaseChatModel):
             params['model'] = params.pop('model_name')
         elif server_info.type == LLMServerType.SPARK.value:
             params['openai_api_key'] = f'{params.pop("api_key")}:{params.pop("api_secret")}'
+        elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value, LLMServerType.VLLM.value]:
+            params['openai_api_key'] = params.pop('openai_api_key', None) or "EMPTY"
         return params
 
     @property
