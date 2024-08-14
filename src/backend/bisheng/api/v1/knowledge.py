@@ -32,26 +32,12 @@ from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Request,
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
-from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
-                                                  UnstructuredMarkdownLoader,
-                                                  UnstructuredPowerPointLoader,
-                                                  UnstructuredWordDocumentLoader)
 from pymilvus import Collection
 from sqlalchemy import delete, func, or_
 from sqlmodel import select
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Skills'])
-filetype_load_map = {
-    'txt': TextLoader,
-    'pdf': PyPDFLoader,
-    'html': BSHTMLLoader,
-    'md': UnstructuredMarkdownLoader,
-    'doc': UnstructuredWordDocumentLoader,
-    'docx': UnstructuredWordDocumentLoader,
-    'ppt': UnstructuredPowerPointLoader,
-    'pptx': UnstructuredPowerPointLoader,
-}
 
 
 @router.post('/upload', response_model=UnifiedResponseModel[UploadFileResponse], status_code=201)
@@ -364,6 +350,7 @@ def get_QA_list(*,
                 page_num: int = 1,
                 question: Optional[str] = None,
                 answer: Optional[str] = None,
+                keyword: Optional[str] = None,
                 status: Optional[int] = None,
                 login_user: UserPayload = Depends(get_login_user)):
     """ 获取知识库文件信息. """
@@ -379,6 +366,9 @@ def get_QA_list(*,
 
     if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
         return HTTPException(status_code=500, detail='知识库为普通知识库')
+
+    if keyword:
+        question = keyword
 
     qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
                                                                  page_num, question, answer,
@@ -533,6 +523,25 @@ def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(get
     return resp_200()
 
 
+@router.post('/qa/status_switch', status_code=200)
+def qa_status_switch(*,
+                     status: int = Body(embed=True),
+                     id: int = Body(embed=True),
+                     login_user: UserPayload = Depends(get_login_user)):
+    """ 修改知识库信息. """
+
+    knowledge_imp.qa_status_change(id, status)
+    return resp_200()
+
+
+@router.get('/qa/detail', status_code=200)
+def qa_list(*, id: int, login_user: UserPayload = Depends(get_login_user)):
+    """ 增加知识库信息. """
+    qa_knowledge = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+    qa_knowledge.answers = json.loads(qa_knowledge.answers)[0]
+    return resp_200(data=qa_knowledge)
+
+
 @router.post('/qa/append', status_code=200)
 def qa_append(
         *,
@@ -564,7 +573,7 @@ def qa_delete(*,
         return HTTPException(status_code=500, detail='知识库类型错误')
 
     QAKnoweldgeDao.delete_batch(ids)
-    knowledge_imp.delete_vector_data(knowledge.id, ids)
+    # knowledge_imp.delete_vector_data(knowledge.id, ids)
     return resp_200()
 
 
@@ -573,10 +582,8 @@ def qa_auto_question(
         *,
         number: int = Body(default=3, embed=True),
         ori_question: str = Body(default='', embed=True),
+        answer: str = Body(default='', embed=True),
 ):
     """通过大模型自动生成问题"""
-    questions = []
-    for _ in range(number):
-        questions.append(knowledge_imp.recommend_question(ori_question))
-
+    questions = knowledge_imp.recommend_question(ori_question, number=number, answer=answer)
     return resp_200(data={'questions': questions})

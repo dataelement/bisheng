@@ -1,4 +1,5 @@
 import json
+import tempfile
 from typing import List, Optional
 from uuid import UUID
 
@@ -6,11 +7,15 @@ from bisheng.api.services.finetune import FinetuneService
 from bisheng.api.services.finetune_file import FinetuneFileService
 from bisheng.api.services.user_service import get_login_user
 from bisheng.api.v1.schemas import FinetuneCreateReq, UnifiedResponseModel, resp_200
+from bisheng.cache.utils import file_download
 from bisheng.database.models.finetune import Finetune, FinetuneChangeModelName, FinetuneList
+from bisheng.database.models.knowledge import KnowledgeDao
+from bisheng.database.models.knowledge_file import QAKnoweldgeDao
 from bisheng.database.models.preset_train import PresetTrain
 from bisheng.utils.minio_client import MinioClient
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Query, UploadFile
 from fastapi_jwt_auth import AuthJWT
+from loguru import logger
 
 router = APIRouter(prefix='/finetune', tags=['Finetune'], dependencies=[Depends(get_login_user)])
 
@@ -117,22 +122,45 @@ async def upload_file(*,
 
 @router.post('/job/file/preset', response_model=UnifiedResponseModel[List[PresetTrain]])
 async def upload_preset_file(*,
-                             files: Optional[list[UploadFile]] = File(description='预置训练文件列表'),
-                             name: Optional[str] = Form(description='数据集名字'),
-                             qa_list: Optional[list[int]] = Form(description='QA知识库'),
+                             files: Optional[str] = Body(default=None, description='预置训练文件列表'),
+                             name: Optional[str] = Body(description='数据集名字'),
+                             qa_list: Optional[list[int]] = Body(default=None,
+                                                                 description='QA知识库'),
                              Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
-
-    return FinetuneFileService.upload_file(files, True, current_user)
+    if files:
+        filepath, file_name = file_download(files)
+        logger.info(f'dataset upload_file_name: {file_name}')
+        return FinetuneFileService.upload_preset_file(name, 0, filepath, current_user)
+    elif qa_list:
+        # 将qa数据按照finetune格式，进行文件存储
+        qa_knowledge_db = KnowledgeDao.get_list_by_ids(qa_list)
+        qa_knowledge_db_ids = [qa_knowledge.id for qa_knowledge in qa_knowledge_db]
+        qa_db_list = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_ids(qa_knowledge_db_ids)
+        qa_list = []
+        for qa in qa_db_list:
+            qa_list.append([{
+                'instruction': question,
+                'input': '',
+                'output': json.loads(qa.answers)[0]
+            } for question in qa.questions])
+        with tempfile.NamedTemporaryFile(mode='w+', suffix='.json') as filepath:
+            json.dump(qa_list, filepath)
+            filepath.seek(0)
+            return FinetuneFileService.upload_preset_file(files, 1, filepath.name, current_user)
 
 
 # 获取预置训练文件列表
 @router.get('/job/file/preset', response_model=UnifiedResponseModel[List[PresetTrain]])
-async def get_preset_file(*, Authorize: AuthJWT = Depends()):
+async def get_preset_file(*,
+                          page_size: Optional[int] = None,
+                          page_num: Optional[int] = None,
+                          keyword: Optional[str] = None,
+                          Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
-    ret = FinetuneFileService.get_preset_file()
+    ret = FinetuneFileService.get_preset_file(keyword, page_size, page_num)
     return resp_200(ret)
 
 

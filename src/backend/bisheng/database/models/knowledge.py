@@ -62,7 +62,7 @@ class KnowledgeDao(KnowledgeBase):
             return session.get(Knowledge, id)
 
     @classmethod
-    def get_list_by_ids(cls, ids: List[int]):
+    def get_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
         with session_getter() as session:
             return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
 

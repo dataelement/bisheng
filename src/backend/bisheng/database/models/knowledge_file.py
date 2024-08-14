@@ -33,7 +33,7 @@ class QAKnowledgeBase(SQLModelSerializable):
     knowledge_id: int = Field(index=True)
     questions: List[str] = Field(index=False)
     answers: str = Field(index=False)
-    source: Optional[int] = Field(index=False, description='0: 未知 1: 手动；2: 审计')
+    source: Optional[int] = Field(index=False, description='0: 未知 1: 手动；2: 审计, 3: api')
     status: Optional[int] = Field(index=False, description='1: 解析中；2: 解析成功；3: 解析失败')
     extra_meta: Optional[str] = Field(index=False)
     remark: Optional[str] = Field(sa_column=Column(String(length=512)))
@@ -152,6 +152,12 @@ class QAKnoweldgeDao(QAKnowledgeBase):
                 select(QAKnowledge).where(QAKnowledge.knowledge_id == knowledge_id)).all()
 
     @classmethod
+    def get_qa_knowledge_by_knowledge_ids(cls, knowledge_ids: List[int]) -> List[QAKnowledge]:
+        with session_getter() as session:
+            return session.exec(
+                select(QAKnowledge).where(QAKnowledge.knowledge_id.in_(knowledge_ids))).all()
+
+    @classmethod
     def get_qa_knowledge_by_primary_id(cls, qa_id: int) -> QAKnowledge:
         with session_getter() as session:
             return session.exec(select(QAKnowledge).where(QAKnowledge.id == qa_id)).first()
@@ -161,7 +167,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         if qa_knowledge.id is None:
             raise ValueError('id不能为空')
         with session_getter() as session:
-            session.add(qa_knowledge)
+            session.add(QAKnowledge.validate(qa_knowledge))
             session.commit()
             session.refresh(qa_knowledge)
         return qa_knowledge

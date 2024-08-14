@@ -3,6 +3,7 @@ import uuid
 from typing import Any, List
 
 from bisheng.api.errcode.finetune import TrainFileNotExistError
+from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.models.preset_train import PresetTrain, PresetTrainDao
 from bisheng.utils.logger import logger
@@ -28,6 +29,25 @@ class FinetuneFileService(BaseModel):
             logger.info(f'save preset file : {file_list}')
             PresetTrainDao.insert_batch(file_list)
         return resp_200(data=file_list)
+
+    @classmethod
+    def upload_preset_file(cls, name: str, type: int, file_path: str,
+                           user: Any) -> UnifiedResponseModel:
+        # 将训练文件上传到minio
+        file_root = cls.get_upload_file_root(False)
+        file_id = uuid.uuid4().hex
+        file_ext = os.path.basename(file_path).split('.')[-1]
+        object_name = f'{file_root}/{file_id}.{file_ext}',
+        MinioClient().upload_minio(file_root, file_path)
+        # 将预置数据存入数据库
+        file_info = PresetTrain(id=file_id,
+                                name=name,
+                                url=object_name,
+                                type=type,
+                                user_id=user.get('user_id'),
+                                user_name=user.get('user_name'))
+        PresetTrainDao.insert_batch([file_info])
+        return resp_200(data=file_info)
 
     @classmethod
     def get_upload_file_root(cls, is_preset: bool) -> str:
@@ -57,8 +77,12 @@ class FinetuneFileService(BaseModel):
         return ret
 
     @classmethod
-    def get_preset_file(cls) -> List[PresetTrain]:
-        return PresetTrainDao.find_all()
+    def get_preset_file(cls,
+                        keyword: str = None,
+                        page_size: int = None,
+                        page_num: int = None) -> List[PresetTrain]:
+        list_res, total_count = PresetTrainDao.search_name(keyword, page_size, page_num)
+        return PageList(list=list_res, total=total_count)
 
     @classmethod
     def delete_preset_file(cls, file_id: uuid.UUID, user: Any) -> UnifiedResponseModel:

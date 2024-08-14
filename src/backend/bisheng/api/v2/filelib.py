@@ -2,17 +2,20 @@ import hashlib
 import os
 from typing import Dict, List, Optional
 
+from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, decide_vectorstores,
                                                 delete_es, delete_knowledge_by,
                                                 delete_knowledge_file_vectors, delete_vector,
                                                 text_knowledge)
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
+from bisheng.api.v2.schema.filelib import APIAddQAParam, APIAppendQAParam
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeRead,
-                                               KnowledgeUpdate)
+from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
+                                               KnowledgeRead, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
-                                                    KnowledgeFileRead)
+                                                    KnowledgeFileRead, QAKnoweldgeDao, QAKnowledge,
+                                                    QAKnowledgeUpsert)
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.user import User
@@ -20,7 +23,7 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, File, Form, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, or_
 from sqlmodel import select
@@ -215,7 +218,10 @@ async def upload_file(*,
 
 
 @router.delete('/file/{file_id}', status_code=200)
-def delete_knowledge_file(*, file_id: int):
+def delete_knowledge_file(
+    *,
+    file_id: int,
+):
     """ 删除知识文件信息 """
     with session_getter() as session:
         knowledge_file = session.get(KnowledgeFile, file_id)
@@ -250,33 +256,27 @@ def get_filelist(*, knowledge_id: int, page_size: int = 10, page_num: int = 1):
     """ 获取知识库文件信息. """
 
     # 查询当前知识库，是否有写入权限
-    with session_getter() as session:
-        db_knowledge = session.get(Knowledge, knowledge_id)
+    db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
     if not db_knowledge:
         raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
 
     writable = True
-
     # 查找上传的文件信息
-    with session_getter() as session:
-        total_count = session.scalar(
-            select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
-        files = session.exec(
-            select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id).order_by(
-                KnowledgeFile.update_time.desc()).offset(page_size *
-                                                         (page_num - 1)).limit(page_size)).all()
-    return {
-        'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
-        'total': total_count,
-        'writeable': writable
-    }
-
-
-@router.get('/file/list', status_code=200)
-def get_filelist_V2(*, knowledge_id: int, page_size: int = 10, page_num: int = 1):
-    """ 获取知识库文件信息. """
-    res = get_filelist(knowledge_id=knowledge_id, page_size=page_size, page_num=page_num)
-    return resp_200(res)
+    if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+        with session_getter() as session:
+            total_count = session.scalar(
+                select(func.count(
+                    KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id))
+            files = session.exec(
+                select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id).order_by(
+                    KnowledgeFile.update_time.desc()).offset(
+                        page_size * (page_num - 1)).limit(page_size)).all()
+            data = [jsonable_encoder(knowledgefile) for knowledgefile in files]
+    elif db_knowledge.type == KnowledgeTypeEnum.QA.value:
+        qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(knowledge_id, page_size,
+                                                                     page_num, None, None, None)
+        data = [jsonable_encoder(qa) for qa in qa_list]
+    return {'data': data, 'total': total_count, 'writeable': writable}
 
 
 @router.post('/chunks', response_model=UnifiedResponseModel[KnowledgeFileRead], status_code=200)
@@ -458,3 +458,96 @@ def dump_vector_knowledge(collection_name: str, expr: str = None, store: str = '
 def download_statistic_file(file_path: str):
     file_name = os.path.basename(file_path)
     return FileResponse(file_path, filename=file_name)
+
+
+@router.post('/add_qa')
+def add_qa(*,
+           knowledge_id: int = Body(embed=True),
+           data: List[APIAddQAParam] = Body(embed=True),
+           user_id: Optional[int] = Body(default=None, embed=True)):
+
+    user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
+    knowledge = KnowledgeDao.query_by_id(knowledge_id)
+    logger.info('add_qa_data knowledge_id={} size={}', knowledge_id, len(data))
+    res = []
+    for item in data:
+        qa_insert = QAKnowledgeUpsert()
+        qa_insert.questions = [item.question] + item.relative_questions
+        qa_insert.answers = item.answer
+        qa_insert.knowledge_id = knowledge_id
+        qa_insert.user_id = user_id
+        qa_insert.source = 3
+        res.append(knowledge_imp.add_qa(knowledge, qa_insert))
+
+    return resp_200(res)
+
+
+@router.post('/add_relative_qa', response_model=List[QAKnowledge])
+def append_qa(*,
+              knowledge_id: int = Body(embed=True),
+              data: APIAppendQAParam = Body(embed=True),
+              user_id: Optional[int] = Body(default=None, embed=True)):
+
+    user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
+    knowledge = KnowledgeDao.query_by_id(knowledge_id)
+    qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
+    if not qa_db:
+        return HTTPException(404, detail='qa 对没有找到')
+
+    qa_insert = QAKnowledgeUpsert.validate(knowledge)
+    qa_insert.questions.extend(data.relative_questions)
+
+    return resp_200(knowledge_imp.add_qa(knowledge, qa_insert))
+
+
+@router.delete('/qa/{qa_id}', status_code=200)
+def delete_qa_data(*, qa_id: int, question: Optional[str] = None):
+    """ 删除qa 问题对信息 """
+    qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
+
+    if not qa:
+        raise HTTPException(status_code=404, detail='qa 不存在')
+
+    if question:
+        qa.questions = [q for q in qa.questions if q != question]
+        QAKnoweldgeDao.update(qa)
+    else:
+        QAKnoweldgeDao.delete_batch([qa_id])
+    try:
+        knowledge = KnowledgeDao.query_by_id(qa.knowledge_id)
+        knowledge_imp.delete_vector_data(knowledge, file_ids=[qa_id])
+        if question:
+            knowledge_imp.QA_save_knowledge(knowledge, qa)
+        return resp_200()
+    except Exception as e:
+        return resp_500(message=f'error e={str(e)}')
+
+
+@router.post('/update_qa', status_code=200)
+def update_qa(
+    *,
+    id: int = Body(embed=True),
+    question: Optional[str] = None,
+    original_question: Optional[str] = None,
+    answer: Optional[List[str]] = None,
+):
+    """ 删除qa 问题对信息 """
+    qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+
+    if not qa:
+        raise HTTPException(status_code=404, detail='qa 不存在')
+
+    if original_question:
+        qa.questions = [q if q != question else question for q in qa.questions]
+    if answer:
+        qa.answers = answer
+    QAKnoweldgeDao.update(qa)
+
+    try:
+        knowledge = KnowledgeDao.query_by_id(qa.knowledge_id)
+        if question:
+            knowledge_imp.delete_vector_data(knowledge, file_ids=[id])
+            knowledge_imp.QA_save_knowledge(knowledge, qa)
+        return resp_200()
+    except Exception as e:
+        return resp_500(message=f'error e={str(e)}')

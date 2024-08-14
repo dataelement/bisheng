@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from sqlalchemy import func
 from sqlmodel import Column, DateTime, Field, select, text
 
 
@@ -57,3 +58,19 @@ class PresetTrainDao(PresetTrainBase):
         with session_getter() as session:
             statement = select(PresetTrain)
             return session.exec(statement).all()
+
+    @classmethod
+    def search_name(cls,
+                    keyword: str = None,
+                    page_size: int = None,
+                    page_num: int = None) -> Tuple[List[PresetTrain], int]:
+        with session_getter() as session:
+            statement = select(PresetTrain)
+            count = select(func.count(PresetTrain.id))
+            if keyword:
+                statement = statement.where(PresetTrain.name.like('%{}%'.format(keyword)))
+                count = count.where(PresetTrain.name.like('%{}%'.format(keyword)))
+            if page_num:
+                statement = statement.offset((page_num - 1) * page_size).limit(page_size)
+
+            return (session.exec(statement).all(), session.scalar(count))

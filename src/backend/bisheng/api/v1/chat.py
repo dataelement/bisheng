@@ -79,8 +79,12 @@ def get_app_chat_list(*,
     flow_ids = [one.get('flow_id') for one in res]
     user_list = UserDao.get_user_by_ids(user_ids)
     flow_list = FlowDao.get_flow_by_ids(flow_ids)
+    assistant_list = AssistantDao.get_assistants_by_ids(flow_ids)
     user_map = {user.user_id: user.user_name for user in user_list}
     flow_map = {flow.id: flow.name for flow in flow_list}
+    assistant_map = {assistant.id: assistant.name for assistant in assistant_list}
+
+    flow_map.update(assistant_map)
     res_obj = PageList(list=[
         AppChatList(user_name=user_map[one['user_id']], flow_name=flow_map[one['flow_id']], **one)
         for one in res

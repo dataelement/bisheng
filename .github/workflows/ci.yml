@@ -99,7 +99,7 @@ jobs:
           # 安装 nltk
           pip install nltk
           python -c "import nltk; nltk.download('punkt'); nltk.download('averaged_perceptron_tagger')"
-          mv /root/nltk_data/ ./
+          mv /home/runner/nltk_data/taggers ./
           cd ../../
 
       - name: Build backend and push

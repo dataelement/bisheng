@@ -33,7 +33,7 @@ from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, Tex
                                                   UnstructuredWordDocumentLoader)
 from loguru import logger
 from pymilvus import Collection
-from sqlalchemy import delete, func
+from sqlalchemy import delete, func, or_
 from sqlmodel import select
 
 filetype_load_map = {
@@ -202,11 +202,11 @@ def decide_vectorstores(collection_name: str, vector_store: str,
 
     param = {'embedding': embedding}
     if vector_store == 'ElasticKeywordsSearch':
-        param = {'index_name': collection_name}
+        param['index_name'] = collection_name
         if isinstance(vector_config['ssl_verify'], str):
             vector_config['ssl_verify'] = eval(vector_config['ssl_verify'])
     elif vector_store == 'Milvus':
-        param = {'collection_name': collection_name}
+        param['collection_name'] = collection_name
         vector_config.pop('partition_suffix', '')
         vector_config.pop('is_partition', '')
     else:
@@ -566,8 +566,12 @@ def delete_es(index_name: str):
         logger.info(f'act=delete_es index={index_name} res={res}')
 
 
-def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge, documents: List[Document]):
+def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
     """使用text 导入knowledge"""
+
+    questions = QA.questions
+    answer = json.loads(QA.answers)[0]
+    docs = [Document(page_content=question, metadata={'answer': answer}) for question in questions]
     try:
         embeddings = decide_embeddings(db_knowledge.model)
         vectore_config_dict: dict = settings.get_knowledge().get('vectorstores')
@@ -593,11 +597,11 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge, documents: List[
             'source': doc.metadata.pop('source', ''),
             'bbox': doc.metadata.pop('bbox', ''),
             'extra': json.dumps(doc.metadata)
-        } for doc in documents]
+        } for doc in docs]
 
         # 向量存储
         for vectore_client in vectore_client_list:
-            vectore_client.add_texts(texts=[t.page_content for t in documents], metadatas=metadata)
+            vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
 
         QA.status = 2
         with session_getter() as session:
@@ -614,7 +618,7 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge, documents: List[
     return QA
 
 
-def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert):
+def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
     """使用text 导入QAknowledge"""
     if db_knowledge.type != 1:
         raise Exception('knowledge type error')
@@ -625,21 +629,38 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert):
             if data.id:
                 qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
                 qa_db.questions = questions
-                qa_db.answers = json.dumps(data.answers)
+                qa_db.answers = data.answers
                 qa = QAKnoweldgeDao.update(qa_db)
                 # 需要先删除再插入
                 delete_vector_data(db_knowledge, [data.id])
             else:
                 qa = QAKnoweldgeDao.insert_qa(data)
-            docs = [
-                Document(page_content=question, metadata={'answer': data.answers})
-                for question in questions
-            ]
+
             # 对question进行embedding，然后录入知识库
-            qa = QA_save_knowledge(db_knowledge, qa, docs)
+            QA_save_knowledge(db_knowledge, qa)
+            return qa
     except Exception as e:
         logger.exception(e)
         raise e
+
+
+def qa_status_change(qa_id: int, target_status: int):
+    """QA 状态切换"""
+    qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
+
+    if qa_db.status == target_status:
+        logger.info('qa status is same, skip')
+        return
+
+    db_knowledge = KnowledgeDao.query_by_id(qa_db.knowledge_id)
+    if target_status == 0:
+        delete_vector_data(db_knowledge, [qa_id])
+        qa_db.status = target_status
+        QAKnoweldgeDao.update(qa_db)
+    else:
+        qa_db.status = target_status
+        QAKnoweldgeDao.update(qa_db)
+        QA_save_knowledge(db_knowledge, qa_db)
 
 
 def list_qa_by_knowledge_id(knowledge_id: int,
@@ -647,6 +668,7 @@ def list_qa_by_knowledge_id(knowledge_id: int,
                             page_num: int = 1,
                             question: Optional[str] = None,
                             answer: Optional[str] = None,
+                            keyword: Optional[str] = None,
                             status: Optional[int] = None) -> List[QAKnowledge]:
     """获取知识库下的所有qa"""
     if not knowledge_id:
@@ -666,6 +688,14 @@ def list_qa_by_knowledge_id(knowledge_id: int,
     if answer:
         count_sql = count_sql.where(QAKnowledge.answers.like(f'%{answer}%'))
         list_sql = list_sql.where(QAKnowledge.answers.like(f'%{answer}%'))
+
+    if keyword:
+        count_sql = count_sql.where(
+            or_(QAKnowledge.questions.like(f'%{keyword}%'),
+                QAKnowledge.answers.like(f'%{keyword}%')))
+        list_sql = list_sql.where(
+            or_(QAKnowledge.answers.like(f'%{keyword}%'),
+                QAKnowledge.questions.like(f'%{keyword}%')))
 
     list_sql = list_sql.order_by(QAKnowledge.update_time.desc()).limit(page_size).offset(
         (page_num - 1) * page_size)
@@ -692,18 +722,39 @@ def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
     # 查询vector primary key
 
     for vectore_client in vectore_client_list:
-        primary_keys = vectore_client.search(file_ids)
-        vectore_client.delete(ids=primary_keys)
+        vectore_client.search(file_ids)
+        # vectore_client.delete(ids=primary_keys)
+        pass
 
 
-def recommend_question(question: str):
+def recommend_question(question: str, answer: str, number: int = 3) -> List[str]:
 
     from langchain.chains.llm import LLMChain
     from langchain_core.prompts.prompt import PromptTemplate
-    prompt = """给定以下问题
-    {question}
+    prompt = """- Role: 问题生成专家
+        - Background: 用户希望通过人工智能模型根据给定的问题和答案生成相似的问题，以便于扩展知识库或用于教育和测试目的。
+        - Profile: 你是一位专业的数据分析师和语言模型专家，擅长从现有数据中提取模式，并生成新的相关问题。
+        - Constrains: 确保生成的问题在语义上与原始问题相似，同时保持多样性，避免重复。
+        - Workflow:
+        1. 分析用户输入的问题和答案，提取关键词和主题。
+        2. 根据提取的关键词和主题创建相似问题。
+        3. 验证生成的问题与原始问题在语义上的相似性，并确保多样性。
+        - Examples:
+        问题："法国的首都是哪里？"
+        答案："巴黎"
+        生成3个相似问题：
+        - "法国的首都叫什么名字？"
+        - "哪个城市是法国的首都？"
+        - "巴黎是哪个国家的首都？"
 
-    改写新的问题，
+        请使用json 返回
+        {{"question": 生成的问题列表}}
+
+        以下是用户提供的问题和答案：
+        问题：{question}
+        答案：{answer}
+
+        你生成的{number}个相似问题：
     """
     keyword_conf = settings.get_default_llm() or {}
     if keyword_conf:
@@ -712,8 +763,31 @@ def recommend_question(question: str):
         llm = instantiate_llm(node_type, class_object, keyword_conf)
 
         llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt))
-        gen_question = llm_chain.predict(question=question)
-        return gen_question
+        gen_question = llm_chain.predict(question=question, answer=answer, number=number)
+
+        try:
+            code_ret = extract_code_blocks(gen_question)
+            if code_ret:
+                question_dict = json.loads(code_ret[0])
+                return question_dict['question']
+            else:
+                logger.info('md_code_extract_error {}', gen_question)
+            return []
+        except Exception as exc:
+            logger.error('recommend_question json.loads error:{}', gen_question)
+            raise ValueError(gen_question) from exc
     else:
         logger.info('llm_chain is None recommend_over')
         return '默认大模型未配置'
+
+
+def extract_code_blocks(markdown_code_block: str):
+
+    # 定义正则表达式模式
+    pattern = r'```\w*\s*(.*?)```'
+
+    # 使用 re.DOTALL 使 . 能够匹配换行符
+    matches = re.findall(pattern, markdown_code_block, re.DOTALL)
+
+    # 去除每段代码块两端的空白字符
+    return [match.strip() for match in matches]

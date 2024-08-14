@@ -310,7 +310,7 @@ class Handler:
 
         batch_question = ['start'] if not batch_question else batch_question  # 确保点击确定，会执行LLM
         report = ''
-        logger.info(f'process_file batch_question={batch_question}')
+        logger.info(f'process_file batch_question={batch_question} input_key={input_key}')
         for question in batch_question:
             if not question:
                 continue
@@ -332,13 +332,14 @@ class Handler:
             await session.send_json(client_id, chat_id, response_step)
             report = f"""{report}### {question} \n {result} \n """
 
-        start_resp.category = 'report'
-        await session.send_json(client_id, chat_id, start_resp)
-        response = ChatResponse(type='end',
-                                intermediate_steps=report,
-                                category='report',
-                                user_id=user_id)
-        await session.send_json(client_id, chat_id, response)
+        if len(batch_question) > 1:
+            start_resp.category = 'report'
+            await session.send_json(client_id, chat_id, start_resp)
+            response = ChatResponse(type='end',
+                                    intermediate_steps=report,
+                                    category='report',
+                                    user_id=user_id)
+            await session.send_json(client_id, chat_id, response)
         close_resp = ChatResponse(type='close', category='system', user_id=user_id)
         await session.send_json(client_id, chat_id, close_resp)
 
