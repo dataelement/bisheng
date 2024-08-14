@@ -116,7 +116,7 @@ export default function FilesPage() {
         setFilter(Number(id))
     }
 
-    return <div className="w-full h-full px-2 py-4 relative">
+    return <div className="w-full h-full px-2 pt-4 relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
@@ -124,9 +124,11 @@ export default function FilesPage() {
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center">
                     <ShadTooltip content="back" side="top">
-                        <button className="extra-side-bar-buttons w-[36px]" onClick={() => { }} >
-                            <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
-                        </button>
+                        <Button
+                            className="w-[36px] px-2 rounded-full"
+                            variant="outline"
+                            onClick={() => window.history.back()}
+                        ><ArrowLeft className="side-bar-button-size" /></Button>
                     </ShadTooltip>
                     <span className=" text-gray-700 text-sm font-black pl-4">{title}</span>
                 </div>
