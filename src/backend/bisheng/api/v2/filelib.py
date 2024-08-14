@@ -471,12 +471,13 @@ def add_qa(*,
     logger.info('add_qa_data knowledge_id={} size={}', knowledge_id, len(data))
     res = []
     for item in data:
-        qa_insert = QAKnowledgeUpsert()
-        qa_insert.questions = [item.question] + item.relative_questions
-        qa_insert.answers = item.answer
-        qa_insert.knowledge_id = knowledge_id
-        qa_insert.user_id = user_id
-        qa_insert.source = 3
+        qa_insert = QAKnowledgeUpsert(knowledge_id=knowledge_id,
+                                      questions=[],
+                                      answers=item.answer,
+                                      user_id=user_id,
+                                      source=3)
+        qa_insert.questions = [item.question]
+
         res.append(knowledge_imp.add_qa(knowledge, qa_insert))
 
     return resp_200(res)
