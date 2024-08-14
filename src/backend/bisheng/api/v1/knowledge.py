@@ -22,7 +22,7 @@ from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFile
                                                     KnowledgeFileRead, QAKnoweldgeDao,
                                                     QAKnowledgeUpsert)
 from bisheng.database.models.role_access import AccessType, RoleAccess
-from bisheng.database.models.user import User
+from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
@@ -334,12 +334,12 @@ def get_filelist(*,
 
     return resp_200({
         'data':
-        data,
+            data,
         'total':
-        total_count,
+            total_count,
         'writeable':
-        login_user.access_check(db_knowledge.user_id, str(knowledge_id),
-                                AccessType.KNOWLEDGE_WRITE)
+            login_user.access_check(db_knowledge.user_id, str(knowledge_id),
+                                    AccessType.KNOWLEDGE_WRITE)
     })
 
 
@@ -373,19 +373,23 @@ def get_QA_list(*,
     qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
                                                                  page_num, question, answer,
                                                                  status)
+    user_list = UserDao.get_user_by_ids([qa.user_id for qa in qa_list])
+    user_map = {
+        user.user_id: user.user_name
+        for user in user_list
+    }
     data = [jsonable_encoder(qa) for qa in qa_list]
     for qa in data:
         qa['questions'] = qa['questions'][0]
         qa['answers'] = json.loads(qa['answers'])[0]
+        qa['user_name'] = user_map.get(qa['user_id'], qa['user_id'])
 
     return resp_200({
-        'data':
-        data,
-        'total':
-        total_count,
+        'data': data,
+        'total': total_count,
         'writeable':
-        login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
-                                AccessType.KNOWLEDGE_WRITE)
+            login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
+                                    AccessType.KNOWLEDGE_WRITE)
     })
 
 
