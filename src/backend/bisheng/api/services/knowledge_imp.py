@@ -603,13 +603,13 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
         for vectore_client in vectore_client_list:
             vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
 
-        QA.status = 2
+        QA.status = 1
         with session_getter() as session:
             session.add(QA)
             session.commit()
     except Exception as e:
         logger.error(e)
-        setattr(QA, 'status', 3)
+        setattr(QA, 'status', 0)
         setattr(QA, 'remark', str(e)[:500])
         with session_getter() as session:
             session.add(QA)
@@ -661,6 +661,7 @@ def qa_status_change(qa_id: int, target_status: int):
         qa_db.status = target_status
         QAKnoweldgeDao.update(qa_db)
         QA_save_knowledge(db_knowledge, qa_db)
+    return qa_db
 
 
 def list_qa_by_knowledge_id(knowledge_id: int,

@@ -530,8 +530,7 @@ def qa_status_switch(*,
                      login_user: UserPayload = Depends(get_login_user)):
     """ 修改知识库信息. """
 
-    knowledge_imp.qa_status_change(id, status)
-    return resp_200()
+    return resp_200(knowledge_imp.qa_status_change(id, status))
 
 
 @router.get('/qa/detail', status_code=200)
