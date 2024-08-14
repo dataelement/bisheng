@@ -92,10 +92,10 @@ class MessageDao(MessageBase):
                          func.sum(case((ChatMessage.copied == 1, 1), else_=0)), )
 
             if flow_ids:
-                count_stat.where(ChatMessage.flow_id.in_(flow_ids))
+                count_stat = count_stat.where(ChatMessage.flow_id.in_(flow_ids))
                 sql = sql.where(ChatMessage.flow_id.in_(flow_ids))
             if user_ids:
-                count_stat.where(ChatMessage.user_id.in_(user_ids))
+                count_stat = count_stat.where(ChatMessage.user_id.in_(user_ids))
                 sql = sql.where(ChatMessage.user_id.in_(user_ids))
             sql = sql.group_by(ChatMessage.chat_id, ChatMessage.user_id,
                                ChatMessage.flow_id).order_by(

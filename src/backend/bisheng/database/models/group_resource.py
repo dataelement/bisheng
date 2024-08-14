@@ -80,6 +80,23 @@ class GroupResourceDao(GroupResourceBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_groups_resource(cls,
+                            group_ids: List[int],
+                            resource_types: List[ResourceTypeEnum] = None,
+                            name: str = None,
+                            page_size: int = None,
+                            page_num: int = None) -> list[GroupResource]:
+        with session_getter() as session:
+            statement = select(GroupResource).where(GroupResource.group_id.in_(group_ids))
+            if resource_types:
+                statement = statement.where(GroupResource.type.in_([r.value for r in resource_types]))
+            if name:
+                statement = statement.where(GroupResource.third_id.like(f'%{name}%'))
+            if page_num and page_size:
+                statement = statement.offset(page_size * (page_num - 1)).limit(page_size)
+            return session.exec(statement).all()
+
+    @classmethod
     def get_resource_group(cls, resource_type: ResourceTypeEnum, third_id: str) -> list[GroupResource]:
         """
         获取资源所属的分组

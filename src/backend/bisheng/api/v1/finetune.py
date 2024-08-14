@@ -146,7 +146,7 @@ async def upload_preset_file(*,
                 'output': json.loads(qa.answers)[0]
             } for question in qa.questions])
         with tempfile.NamedTemporaryFile(mode='w+', suffix='.json') as filepath:
-            json.dump(qa_list, filepath)
+            json.dump(qa_list, filepath, ensure_ascii=False, indent=2)
             filepath.seek(0)
             return FinetuneFileService.upload_preset_file(name, 1, filepath.name, current_user)
 
