@@ -1,19 +1,18 @@
 from abc import ABC
-from typing import Optional, Any, List, Tuple, Dict, TYPE_CHECKING, Iterable, Callable
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import jieba
+from bisheng_langchain.vectorstores.elastic_keywords_search import DEFAULT_PROMPT
+from bisheng_langchain.vectorstores.milvus import DEFAULT_MILVUS_CONNECTION
 from langchain.chains.llm import LLMChain
+from langchain.docstore.document import Document
+from langchain.embeddings.base import Embeddings
+from langchain.utils import get_from_dict_or_env
+from langchain.vectorstores.base import VectorStore
+from langchain_community.vectorstores.milvus import Milvus as MilvusLangchain
 from langchain_core.language_models import BaseLLM
 from langchain_core.prompts import PromptTemplate
-from langchain.utils import get_from_dict_or_env
-from langchain.embeddings.base import Embeddings
-from langchain_community.vectorstores.milvus import Milvus as MilvusLangchain, Milvus
-from langchain.docstore.document import Document
-from langchain.vectorstores.base import VectorStore
 from loguru import logger
-
-from bisheng_langchain.vectorstores.milvus import DEFAULT_MILVUS_CONNECTION
-from bisheng_langchain.vectorstores.elastic_keywords_search import DEFAULT_PROMPT
 
 if TYPE_CHECKING:
     from elasticsearch import Elasticsearch  # noqa: F401
@@ -49,16 +48,65 @@ class MilvusWithPermissionCheck(MilvusLangchain):
 
         # Default search params when one is not provided.
         self.default_search_params = {
-            'IVF_FLAT': {'metric_type': 'L2', 'params': {'nprobe': 10}},
-            'IVF_SQ8': {'metric_type': 'L2', 'params': {'nprobe': 10}},
-            'IVF_PQ': {'metric_type': 'L2', 'params': {'nprobe': 10}},
-            'HNSW': {'metric_type': 'L2', 'params': {'ef': 100}},
-            'RHNSW_FLAT': {'metric_type': 'L2', 'params': {'ef': 10}},
-            'RHNSW_SQ': {'metric_type': 'L2', 'params': {'ef': 10}},
-            'RHNSW_PQ': {'metric_type': 'L2', 'params': {'ef': 10}},
-            'IVF_HNSW': {'metric_type': 'L2', 'params': {'nprobe': 10, 'ef': 10}},
-            'ANNOY': {'metric_type': 'L2', 'params': {'search_k': 10}},
-            'AUTOINDEX': {'metric_type': 'L2', 'params': {}},
+            'IVF_FLAT': {
+                'metric_type': 'L2',
+                'params': {
+                    'nprobe': 10
+                }
+            },
+            'IVF_SQ8': {
+                'metric_type': 'L2',
+                'params': {
+                    'nprobe': 10
+                }
+            },
+            'IVF_PQ': {
+                'metric_type': 'L2',
+                'params': {
+                    'nprobe': 10
+                }
+            },
+            'HNSW': {
+                'metric_type': 'L2',
+                'params': {
+                    'ef': 100
+                }
+            },
+            'RHNSW_FLAT': {
+                'metric_type': 'L2',
+                'params': {
+                    'ef': 10
+                }
+            },
+            'RHNSW_SQ': {
+                'metric_type': 'L2',
+                'params': {
+                    'ef': 10
+                }
+            },
+            'RHNSW_PQ': {
+                'metric_type': 'L2',
+                'params': {
+                    'ef': 10
+                }
+            },
+            'IVF_HNSW': {
+                'metric_type': 'L2',
+                'params': {
+                    'nprobe': 10,
+                    'ef': 10
+                }
+            },
+            'ANNOY': {
+                'metric_type': 'L2',
+                'params': {
+                    'search_k': 10
+                }
+            },
+            'AUTOINDEX': {
+                'metric_type': 'L2',
+                'params': {}
+            },
         }
 
         self.embedding_func = embedding_function
@@ -106,7 +154,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
             raise e
 
         if not self.col:
-            logger.warning("No collection found, please confirm user have knowledge access")
+            logger.warning('No collection found, please confirm user have knowledge access')
             # raise ValueError("No collection found, please confirm collection name correctly.")
         # Initialize the vector store
         self._init()
@@ -115,13 +163,14 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         from pymilvus import connections
         connections.remove_connection(using)
 
-    def _init(self,
-              embeddings: Optional[list] = None,
-              metadatas: Optional[list[dict]] = None,
-              partition_names: Optional[list] = None,
-              replica_number: int = 1,
-              timeout: Optional[float] = None,
-              ) -> None:
+    def _init(
+        self,
+        embeddings: Optional[list] = None,
+        metadatas: Optional[list[dict]] = None,
+        partition_names: Optional[list] = None,
+        replica_number: int = 1,
+        timeout: Optional[float] = None,
+    ) -> None:
         self._extract_fields(col_index=0)
         self._create_search_params()
         self._load()
@@ -175,18 +224,18 @@ class MilvusWithPermissionCheck(MilvusLangchain):
 
     @classmethod
     def from_texts(
-            cls,
-            texts: List[str],
-            embedding: Embeddings,
-            metadatas: Optional[List[dict]] = None,
-            collection_name: list[str] = None,
-            connection_args: dict[str, Any] = DEFAULT_MILVUS_CONNECTION,
-            consistency_level: str = "Session",
-            index_params: Optional[dict] = None,
-            search_params: Optional[dict] = None,
-            drop_old: bool = False,
-            no_embedding: bool = False,
-            **kwargs: Any,
+        cls,
+        texts: List[str],
+        embedding: Embeddings,
+        metadatas: Optional[List[dict]] = None,
+        collection_name: list[str] = None,
+        connection_args: dict[str, Any] = DEFAULT_MILVUS_CONNECTION,
+        consistency_level: str = 'Session',
+        index_params: Optional[dict] = None,
+        search_params: Optional[dict] = None,
+        drop_old: bool = False,
+        no_embedding: bool = False,
+        **kwargs: Any,
     ):
         """
         no insert data into milvus, only search from milvus
@@ -204,13 +253,13 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         return vector_db
 
     def similarity_search(
-            self,
-            query: str,
-            k: int = 4,
-            param: Optional[dict] = None,
-            expr: Optional[str] = None,
-            timeout: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        query: str,
+        k: int = 4,
+        param: Optional[dict] = None,
+        expr: Optional[str] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
     ) -> List[Document]:
         """Perform a similarity search against the query string.
 
@@ -236,13 +285,13 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         return [doc for doc, _ in res]
 
     def similarity_search_by_vector(
-            self,
-            embedding: List[float],
-            k: int = 4,
-            param: Optional[dict] = None,
-            expr: Optional[str] = None,
-            timeout: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        embedding: List[float],
+        k: int = 4,
+        param: Optional[dict] = None,
+        expr: Optional[str] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
     ) -> List[Document]:
         """Perform a similarity search against the query string.
 
@@ -268,13 +317,13 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         return [doc for doc, _ in res]
 
     def similarity_search_with_score(
-            self,
-            query: str,
-            k: int = 4,
-            param: Optional[dict] = None,
-            expr: Optional[str] = None,
-            timeout: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        query: str,
+        k: int = 4,
+        param: Optional[dict] = None,
+        expr: Optional[str] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
     ) -> List[Tuple[Document, float]]:
         """Perform a search on a query string and return results with score.
 
@@ -314,13 +363,13 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         return res
 
     def similarity_search_with_score_by_vector(
-            self,
-            embedding: List[float],
-            k: int = 4,
-            param: Optional[dict] = None,
-            expr: Optional[str] = None,
-            timeout: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        embedding: List[float],
+        k: int = 4,
+        param: Optional[dict] = None,
+        expr: Optional[str] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
     ) -> List[Tuple[Document, float]]:
         """Perform a search on a query string and return results with score.
 
@@ -355,7 +404,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         output_fields = self.fields[:]
         output_fields.remove(self._vector_field)
 
-        finally_k = kwargs.pop("k", k)
+        finally_k = kwargs.pop('k', k)
 
         ret = []
 
@@ -408,13 +457,13 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
     """
 
     def __init__(
-            self,
-            elasticsearch_url: str,
-            index_name: List[str],
-            drop_old: Optional[bool] = False,
-            *,
-            ssl_verify: Optional[Dict[str, Any]] = None,
-            llm_chain: Optional[LLMChain] = None,
+        self,
+        elasticsearch_url: str,
+        index_name: List[str],
+        drop_old: Optional[bool] = False,
+        *,
+        ssl_verify: Optional[Dict[str, Any]] = None,
+        llm_chain: Optional[LLMChain] = None,
     ):
         """Initialize with necessary components."""
         try:
@@ -477,10 +526,11 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
                 keywords = eval(keywords_str)
                 if not isinstance(keywords, list):
                     raise ValueError('Keywords extracted by llm is not list.')
-            except Exception as e:
+            except Exception:
                 keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
         else:
             keywords = jieba.analyse.extract_tags(query, topK=10, withWeight=False)
+        keywords = keywords or [query]
         logger.debug(f'finally search keywords: {keywords}')
         match_query = {'bool': {must_or_should: []}}
         for key in keywords:
@@ -491,13 +541,12 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
             response = self.client_search(self.client, one_index_name, match_query, size=k)
             hits = [hit for hit in response['hits']['hits']]
             for hit in hits:
-                ret.append((
-                    Document(page_content=hit['_source']['text'], metadata=hit['_source']['metadata']),
-                    hit['_score']
-                ))
-            logger.debug(f'ElasticsearchWithPermissionCheck Search {one_index_name} results: {hits}')
+                ret.append((Document(page_content=hit['_source']['text'],
+                                     metadata=hit['_source']['metadata']), hit['_score']))
+            logger.debug(
+                f'ElasticsearchWithPermissionCheck Search {one_index_name} results: {hits}')
         logger.debug(f'ElasticsearchWithPermissionCheck Search all results: {len(ret)}')
-        finally_k = kwargs.pop("finally_k", k)
+        finally_k = kwargs.pop('finally_k', k)
         ret.sort(key=lambda x: x[1], reverse=True)
         ret = ret[:finally_k]
         logger.debug(f'ElasticsearchWithPermissionCheck Search finally results: {len(ret)}')
@@ -515,17 +564,17 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
 
     @classmethod
     def from_texts(
-            cls,
-            texts: List[str],
-            embedding: Embeddings,
-            metadatas: Optional[List[dict]] = None,
-            ids: Optional[List[str]] = None,
-            index_name: Optional[List[str]] = None,
-            refresh_indices: bool = True,
-            llm: Optional[BaseLLM] = None,
-            prompt: Optional[PromptTemplate] = DEFAULT_PROMPT,
-            drop_old: Optional[bool] = False,
-            **kwargs: Any,
+        cls,
+        texts: List[str],
+        embedding: Embeddings,
+        metadatas: Optional[List[dict]] = None,
+        ids: Optional[List[str]] = None,
+        index_name: Optional[List[str]] = None,
+        refresh_indices: bool = True,
+        llm: Optional[BaseLLM] = None,
+        prompt: Optional[PromptTemplate] = DEFAULT_PROMPT,
+        drop_old: Optional[bool] = False,
+        **kwargs: Any,
     ):
         """Construct ElasticKeywordsSearch wrapper from raw documents.
 
