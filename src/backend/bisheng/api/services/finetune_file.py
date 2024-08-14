@@ -37,8 +37,8 @@ class FinetuneFileService(BaseModel):
         file_root = cls.get_upload_file_root(False)
         file_id = uuid.uuid4().hex
         file_ext = os.path.basename(file_path).split('.')[-1]
-        object_name = f'{file_root}/{file_id}.{file_ext}',
-        MinioClient().upload_minio(file_root, file_path)
+        object_name = f'{file_root}/{file_id}.{file_ext}'
+        MinioClient().upload_minio(object_name, file_path)
         # 将预置数据存入数据库
         file_info = PresetTrain(id=file_id,
                                 name=name,

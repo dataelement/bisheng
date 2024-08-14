@@ -148,7 +148,7 @@ async def upload_preset_file(*,
         with tempfile.NamedTemporaryFile(mode='w+', suffix='.json') as filepath:
             json.dump(qa_list, filepath)
             filepath.seek(0)
-            return FinetuneFileService.upload_preset_file(files, 1, filepath.name, current_user)
+            return FinetuneFileService.upload_preset_file(name, 1, filepath.name, current_user)
 
 
 # 获取预置训练文件列表

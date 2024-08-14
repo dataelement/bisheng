@@ -70,7 +70,8 @@ class PresetTrainDao(PresetTrainBase):
             if keyword:
                 statement = statement.where(PresetTrain.name.like('%{}%'.format(keyword)))
                 count = count.where(PresetTrain.name.like('%{}%'.format(keyword)))
-            if page_num:
+            if page_num and page_size:
                 statement = statement.offset((page_num - 1) * page_size).limit(page_size)
+            statement = statement.order_by(PresetTrain.create_time.desc())
 
-            return (session.exec(statement).all(), session.scalar(count))
+            return session.exec(statement).all(), session.scalar(count)
