@@ -89,7 +89,7 @@ def get_app_chat_list(*,
         AppChatList(user_name=user_map[one['user_id']], flow_name=flow_map[one['flow_id']], **one)
         for one in res
     ],
-                       total=count)
+        total=count)
     return resp_200(res_obj)
 
 
@@ -233,6 +233,15 @@ def like_response(*, data: ChatInput, login_user: UserPayload = Depends(get_logi
     return resp_200(message='操作成功')
 
 
+@router.post('/chat/copied', status_code=200)
+def copied_message(*,
+                   message_id: int = Body(embed=True),
+                   login_user: UserPayload = Depends(get_login_user)):
+    """ 上传复制message的数据 """
+    ChatMessageDao.update_message_copied(message_id, 1)
+    return resp_200(message='操作成功')
+
+
 @router.post('/chat/comment', status_code=200)
 def comment_resp(*, data: ChatInput, login_user: UserPayload = Depends(get_login_user)):
     comment_answer(data.message_id, data.comment)
@@ -247,9 +256,9 @@ def get_chatlist_list(*,
     smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
                   func.min(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
-                      ChatMessage.user_id == login_user.user_id).group_by(
-                          ChatMessage.flow_id,
-                          ChatMessage.chat_id).order_by(func.max(ChatMessage.update_time).desc()))
+        ChatMessage.user_id == login_user.user_id).group_by(
+        ChatMessage.flow_id,
+        ChatMessage.chat_id).order_by(func.max(ChatMessage.update_time).desc()))
     with session_getter() as session:
         db_message = session.exec(smt).all()
 

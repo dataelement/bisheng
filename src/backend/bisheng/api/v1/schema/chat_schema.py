@@ -14,6 +14,7 @@ class AppChatList(BaseModel):
     create_time: datetime
     like_count: int
     dislike_count: int
+    copied_count: int
 
 
 class APIAddQAParam(BaseModel):

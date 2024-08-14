@@ -22,6 +22,7 @@ class MessageBase(SQLModelSerializable):
     user_id: Optional[str] = Field(index=True, description='用户id')
     liked: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 喜欢/2 不喜欢')
     solved: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 解决/2 未解决')
+    copied: Optional[int] = Field(index=False, default=0, description='用户是否复制 0：未复制 1：已复制')
     sender: Optional[str] = Field(index=False, default='', description='autogen 的发送方')
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
     intermediate_steps: Optional[str] = Field(sa_column=Column(Text), description='过程日志')
@@ -76,18 +77,19 @@ class MessageDao(MessageBase):
 
     @classmethod
     def app_list_group_by_chat_id(
-        cls,
-        page_size: int,
-        page_num: int,
-        flow_ids: Optional[list[str]],
-        user_ids: Optional[list[int]],
+            cls,
+            page_size: int,
+            page_num: int,
+            flow_ids: Optional[list[str]],
+            user_ids: Optional[list[int]],
     ) -> Tuple[List[Dict], int]:
         with session_getter() as session:
             count_stat = select(func.count(func.distinct(ChatMessage.chat_id)))
             sql = select(ChatMessage.chat_id, ChatMessage.user_id, ChatMessage.flow_id,
                          func.max(ChatMessage.create_time).label('create_time'),
                          func.sum(case((ChatMessage.liked == 1, 1), else_=0)),
-                         func.sum(case((ChatMessage.liked == 2, 1), else_=0)))
+                         func.sum(case((ChatMessage.liked == 2, 1), else_=0)),
+                         func.sum(case((ChatMessage.copied == 1, 1), else_=0)), )
 
             if flow_ids:
                 count_stat.where(ChatMessage.flow_id.in_(flow_ids))
@@ -97,8 +99,8 @@ class MessageDao(MessageBase):
                 sql = sql.where(ChatMessage.user_id.in_(user_ids))
             sql = sql.group_by(ChatMessage.chat_id, ChatMessage.user_id,
                                ChatMessage.flow_id).order_by(
-                                   func.max(ChatMessage.create_time).desc()).offset(
-                                       page_size * (page_num - 1)).limit(page_size)
+                func.max(ChatMessage.create_time).desc()).offset(
+                page_size * (page_num - 1)).limit(page_size)
 
             res_list = session.exec(sql).all()
             total_count = session.scalar(count_stat)
@@ -109,10 +111,11 @@ class MessageDao(MessageBase):
                 'flow_id': flow_id,
                 'like_count': like_num,
                 'dislike_count': dislike_num,
+                'copied_count': copied_num,
                 'create_time': create_time
-            } for chat_id, user_id, flow_id, create_time, like_num, dislike_num in res_list]
+            } for chat_id, user_id, flow_id, create_time, like_num, dislike_num, copied_num in res_list]
             logger.info(res_list)
-            return (dict_res, total_count)
+            return dict_res, total_count
 
 
 class ChatMessageDao(MessageBase):
@@ -216,3 +219,10 @@ class ChatMessageDao(MessageBase):
             session.commit()
             session.refresh(message)
         return message
+
+    @classmethod
+    def update_message_copied(cls, message_id: int, copied: int):
+        with session_getter() as session:
+            statement = update(ChatMessage).where(ChatMessage.id == message_id).values(copied=copied)
+            session.exec(statement)
+            session.commit()
