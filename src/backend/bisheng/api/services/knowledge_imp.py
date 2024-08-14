@@ -795,6 +795,7 @@ def recommend_question(question: str, answer: str, number: int = 3) -> List[str]
     keyword_conf = settings.get_default_llm() or {}
     if keyword_conf:
         keyword_conf['temperature'] = 0.7
+        keyword_conf['cache'] = False
         node_type = keyword_conf.pop('type', 'HostQwenChat')  # 兼容旧配置
         class_object = import_by_type(_type='llms', name=node_type)
         llm = instantiate_llm(node_type, class_object, keyword_conf)
