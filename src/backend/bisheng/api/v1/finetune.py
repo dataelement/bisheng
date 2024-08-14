@@ -140,7 +140,7 @@ async def upload_preset_file(*,
         qa_db_list = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_ids(qa_knowledge_db_ids)
         qa_list = []
         for qa in qa_db_list:
-            qa_list.append([{
+            qa_list.extend([{
                 'instruction': question,
                 'input': '',
                 'output': json.loads(qa.answers)[0]
