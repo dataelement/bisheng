@@ -706,25 +706,60 @@ def list_qa_by_knowledge_id(knowledge_id: int,
 
 
 def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
-    """删除向量数据"""
-    embeddings = FakeEmbedding()
-    vectore_config_dict: dict = settings.get_knowledge().get('vectorstores')
-    if not vectore_config_dict:
-        raise Exception('向量数据库必须配置')
-    elastic_index = knowledge.index_name or knowledge.collection_name
-    vectore_client_list = [
-        decide_vectorstores(elastic_index, db, embeddings) if db == 'ElasticKeywordsSearch' else
-        decide_vectorstores(knowledge.collection_name, db, embeddings)
-        for db in vectore_config_dict.keys()
-    ]
-    logger.info('vector_init_conn_done col={} dbs={}', knowledge.collection_name,
-                vectore_config_dict.keys())
-    # 查询vector primary key
+    """删除向量数据, 想做一个通用的，可以对接langchain的vectorDB"""
+    # embeddings = FakeEmbedding()
+    # vectore_config_dict: dict = settings.get_knowledge().get('vectorstores')
+    # if not vectore_config_dict:
+    #     raise Exception('向量数据库必须配置')
+    # elastic_index = knowledge.index_name or knowledge.collection_name
+    # vectore_client_list = [
+    #     decide_vectorstores(elastic_index, db, embeddings) if db == 'ElasticKeywordsSearch' else
+    #     decide_vectorstores(knowledge.collection_name, db, embeddings)
+    #     for db in vectore_config_dict.keys()
+    # ]
+    # logger.info('vector_init_conn_done col={} dbs={}', knowledge.collection_name,
+    #             vectore_config_dict.keys())
 
-    for vectore_client in vectore_client_list:
-        vectore_client.search(file_ids)
-        # vectore_client.delete(ids=primary_keys)
-        pass
+    # for vectore_client in vectore_client_list:
+    # 查询vector primary key
+    embeddings = FakeEmbedding()
+    collection_name = knowledge.collection_name
+    # 处理vectordb
+    vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+    try:
+        if isinstance(vectore_client.col, Collection):
+            pk = vectore_client.col.query(expr=f'file_id in {file_ids}',
+                                          output_fields=['pk'],
+                                          timeout=10)
+        else:
+            pk = []
+    except Exception:
+        # 重试一次
+        logger.error('timeout_except')
+        vectore_client.close_connection(vectore_client.alias)
+        vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+        pk = vectore_client.col.query(expr=f'file_id in {file_ids}',
+                                      output_fields=['pk'],
+                                      timeout=10)
+    logger.info('query_milvus pk={}', pk)
+    if pk:
+        res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
+        logger.info(f'act=delete_vector file_id={file_ids} res={res}')
+    vectore_client.close_connection(vectore_client.alias)
+
+    # elastic
+    index_name = knowledge.index_name or collection_name
+    esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+
+    if esvectore_client:
+        res = esvectore_client.client.delete_by_query(
+            index=index_name, body={'query': {
+                'terms': {
+                    'metadata.file_id': file_ids
+                }
+            }})
+    logger.info(f'act=delete_es  res={res}')
+    return True
 
 
 def recommend_question(question: str, answer: str, number: int = 3) -> List[str]:
@@ -758,6 +793,7 @@ def recommend_question(question: str, answer: str, number: int = 3) -> List[str]
     """
     keyword_conf = settings.get_default_llm() or {}
     if keyword_conf:
+        keyword_conf['temperature'] = 0.7
         node_type = keyword_conf.pop('type', 'HostQwenChat')  # 兼容旧配置
         class_object = import_by_type(_type='llms', name=node_type)
         llm = instantiate_llm(node_type, class_object, keyword_conf)
