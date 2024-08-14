@@ -1,6 +1,6 @@
+import { FlagIcon } from "@/components/bs-icons";
 import { ThunmbIcon } from "@/components/bs-icons/thumbs";
-import { likeChatApi } from "@/controllers/API";
-import { DrawingPinIcon } from "@radix-ui/react-icons";
+import { copyTrackingApi, likeChatApi } from "@/controllers/API";
 import { useState } from "react";
 
 const enum ThumbsState {
@@ -32,11 +32,13 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
         setTimeout(() => {
             setCopied(false)
         }, 2000);
+
+        copyTrackingApi(id)
     }
 
     return <div className="flex gap-1">
         {mark && <div className="w-6 h-6 flex justify-center items-center" onClick={onMarkClick}>
-            <DrawingPinIcon width={20} height={20} className="cursor-pointer text-gray-400 hover:text-gray-500" />
+            <FlagIcon width={20} height={20} className="cursor-pointer text-gray-400 hover:text-gray-500" />
         </div>}
         <ThunmbIcon
             type='copy'

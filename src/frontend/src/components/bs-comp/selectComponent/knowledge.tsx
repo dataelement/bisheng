@@ -1,7 +1,7 @@
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { readFileLibDatabase } from "@/controllers/API";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const TabsHead = memo(({ onChange }) => {
@@ -62,7 +62,7 @@ export default function KnowledgeSelect({
     }
 
     const handleTabChange = (val) => {
-        typeRef.current = val === 'file' ? 0 : 1
+        typeRef.current = val === 'qa' ? 1 : 0
         reload(1, '')
         const inputDom = document.getElementById('knowledge-select')
         if (inputDom) {
@@ -81,7 +81,10 @@ export default function KnowledgeSelect({
         placeholder={t('build.selectKnowledgeBase')}
         searchPlaceholder={t('build.searchBaseName')}
         onChange={onChange}
-        onLoad={() => reload(1, '')}
+        onLoad={() => {
+            typeRef.current = type === 'qa' ? 1 : 0
+            reload(1, '');
+        }}
         onSearch={(val) => reload(1, val)}
         onScrollLoad={(val) => loadMore(val)}
     >

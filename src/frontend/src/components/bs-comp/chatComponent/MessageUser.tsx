@@ -1,7 +1,8 @@
+import { FlagIcon } from "@/components/bs-icons";
 import { locationContext } from "@/contexts/locationContext";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
-import { DrawingPinIcon, MagnifyingGlassIcon, Pencil2Icon, ReloadIcon } from "@radix-ui/react-icons";
+import { MagnifyingGlassIcon, Pencil2Icon, ReloadIcon } from "@radix-ui/react-icons";
 import { useContext } from "react";
 import { useMessageStore } from "./messageStore";
 
@@ -45,8 +46,8 @@ export default function MessageUser({ mark = false, useName = '', data, onMarkCl
                 mark ? <div className="flex justify-between mt-2">
                     <span></span>
                     <div className="flex gap-2 text-gray-400 cursor-pointer self-end">
-                        {!running && <div className="w-6 h-6 flex justify-center items-center" onClick={onMarkClick}>
-                            <DrawingPinIcon width={20} height={20} className="cursor-pointer text-gray-400 hover:text-gray-500" />
+                        {'question' === data.category && <div className="w-6 h-6 flex justify-center items-center" onClick={onMarkClick}>
+                            <FlagIcon width={20} height={20} className="cursor-pointer text-gray-400 hover:text-gray-500" />
                         </div>}
                     </div>
                 </div> : (!Array.isArray(data.message.data) && <div className="flex justify-between mt-2">

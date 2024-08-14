@@ -80,7 +80,7 @@ export default function MainLayout() {
                         <img src={__APP_ENV__.BASE_URL + '/logo-small-dark.png'} className="w-[114px] h-9 ml-8 rounded dark:w-[124px] dark:pr-[10px] dark:block hidden" alt="" />
                     </Link>
                 </div>
-                <div className="flex w-fit relative z-50">
+                <div className="flex w-fit relative z-40">
                     <div className="flex">
                         <TooltipProvider>
                             <Tooltip>
@@ -145,6 +145,13 @@ export default function MainLayout() {
                             </NavLink>
                         }
                         {
+                            user.role === 'admin' && <>
+                                <NavLink to='/dataset' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                    <DatasetIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.dataset')}</span>
+                                </NavLink>
+                            </>
+                        }
+                        {
                             isMenu('model') &&
                             <NavLink to='/model' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <ModelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.models')}</span>
@@ -158,22 +165,15 @@ export default function MainLayout() {
                         }
                         {
                             isAdmin && <>
-                                <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                                    <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.system')}</span>
-                                </NavLink>
-                            </>
-                        }
-                        {
-                            isAdmin && <>
                                 <NavLink to='/log' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.log')}</span>
                                 </NavLink>
                             </>
                         }
                         {
-                            user.role === 'admin' && <>
-                                <NavLink to='/dataset' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                                    <DatasetIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.dataset')}</span>
+                            isAdmin && <>
+                                <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                    <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.system')}</span>
                                 </NavLink>
                             </>
                         }

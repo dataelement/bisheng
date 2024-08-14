@@ -89,6 +89,7 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
     rules?: any[],
     value?: string[],
     inputClassName?: string,
+    className?: string,
     defaultValue?: string[],
     onChange?: (values: string[]) => void
 }>(
@@ -131,7 +132,7 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
         return <div className={cname('', className)}>
             {
                 inputs.map((item, index) => (
-                    <div className="relative mt-2">
+                    <div className="relative mb-2">
                         <Input
                             key={item.id}
                             defaultValue={item.value}

@@ -184,7 +184,6 @@ export async function deleteFileLib(id) {
 
 /**
  * 删除知识库下文件
- *
  */
 export async function deleteFile(id) {
   return await axios.delete(`/api/v1/knowledge/file/${id}`);
@@ -200,6 +199,16 @@ export async function getQaList(id, data: { page, pageSize, keyword }) {
       page_num: data.page,
       keyword: data.keyword
     },
+  });
+}
+
+/**
+ * 修改qa状态
+ */
+export async function updateQaStatus(id, status) {
+  return await axios.post(`/api/v1/knowledge/qa/status_switch`, {
+    id,
+    status
   });
 }
 
@@ -240,9 +249,10 @@ export async function addSimilarQa(data: { ids: string[], question: string }) {
 /**
  * 生成相似问
  */
-export async function generateSimilarQa(question) {
+export async function generateSimilarQa(question, anwser) {
   return await axios.post(`/api/v1/knowledge/qa/auto_question`, {
     "ori_question": question,
+    "anwser": anwser,
     "number": 3
   });
 }
@@ -386,6 +396,13 @@ export const likeChatApi = (chatId, liked) => {
 export const disLikeCommentApi = (message_id, comment) => {
   return axios.post(`/api/v1/chat/comment`, { message_id, comment });
 };
+
+/**
+ * 点击复制上报
+ * */
+export const copyTrackingApi = (msgId) => {
+  return axios.post(`/api/v1/chat/copied`, { message_id: msgId });
+}
 
 /**
  * Fetches the version of the API.

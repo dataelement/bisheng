@@ -20,7 +20,7 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
     const [selectedItems, setSelectedItems] = useState([]);
     const [error, setError] = useState(false);
 
-    const { page, pageSize, data: datalist, total, loading, setPage, filterData, clean } = useTable({ unInitData: true }, (param) =>
+    const { page, pageSize, loaded, data: datalist, total, loading, setPage, filterData, clean } = useTable({ unInitData: true }, (param) =>
         getQaList(param.id, { page: param.page, pageSize: 10, keyword: param.searchKey })
     );
 
@@ -35,8 +35,9 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
         }
     }));
 
-    const handleKnowledgeLibChange = (value) => {
-        setKnowledgeLib(value);
+    const handleKnowledgeLibChange = (option) => {
+        setKnowledgeLib(option);
+        filterData({ id: option[0].value, searchKey: '' })
     };
 
     const handleCheckboxChange = (id) => {
@@ -69,6 +70,7 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
                 variant: 'success',
                 description: '添加成功'
             });
+            close()
         }))
     };
 
@@ -85,7 +87,7 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
         <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
             <DialogContent className="sm:max-w-[825px]">
                 <DialogHeader>
-                    <DialogTitle>添加到相似问</DialogTitle>
+                    <DialogTitle>添加相似问到QA知识库</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2">
                     <div className="flex items-center">
@@ -113,7 +115,7 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
                                     <TableRow>
                                         <TableHead className="w-8"></TableHead>
                                         <TableHead className="w-[300px]">问题</TableHead>
-                                        <TableHead>答案</TableHead>
+                                        <TableHead className="w-[360px]">答案</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -123,16 +125,21 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
                                                 <Checkbox checked={selectedItems.includes(el.id)} onCheckedChange={() => handleCheckboxChange(el.id)} />
                                             </TableCell>
                                             <TableCell className="font-medium">
-                                                <div className="whitespace-nowrap text-ellipsis overflow-hidden">{el.questions}</div>
+                                                <div className="max-w-[360px] whitespace-nowrap text-ellipsis overflow-hidden">{el.questions}</div>
                                             </TableCell>
                                             <TableCell className="font-medium whitespace-nowrap text-ellipsis overflow-hidden">
-                                                <div className="whitespace-nowrap text-ellipsis overflow-hidden">{el.answers}</div>
+                                                <div className="max-w-[360px] whitespace-nowrap text-ellipsis overflow-hidden">{el.answers}</div>
                                             </TableCell>
                                         </TableRow>
                                     ))}
-                                    {datalist.length === 0 && <TableRow>
-                                        <TableCell colSpan={3} className="font-medium text-center">请通过搜索查找QA</TableCell>
+                                    {loaded && datalist.length === 0 && <TableRow>
+                                        <TableCell colSpan={3} className="font-medium text-center">空空如也</TableCell>
                                     </TableRow>}
+                                    {
+                                        !loaded && <TableRow>
+                                            <TableCell colSpan={3} className="font-medium text-center">请选择知识库查找QA</TableCell>
+                                        </TableRow>
+                                    }
                                 </TableBody>
                             </Table>
                         </div>

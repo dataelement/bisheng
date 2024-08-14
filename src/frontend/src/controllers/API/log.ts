@@ -59,7 +59,7 @@ export async function getActionsByModuleApi(moduleId) {
 export async function getChatLabelsApi(params) {
     const { page, pageSize, keyword } = params
 
-    return await axios.get('/api/v1//chat/app/list', {
+    return await axios.get('/api/v1/chat/app/list', {
         params: {
             page_num: page,
             page_size: pageSize,

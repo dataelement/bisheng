@@ -65,7 +65,7 @@ const privateRouter = [
       { path: "", element: <SkillChatPage />, },
       { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
-      { path: "qalib/:id", element: <QasPage />, permission: 'knowledge', },
+      { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },
       {
         path: "build",
         element: <BuildLayout />,
@@ -84,7 +84,7 @@ const privateRouter = [
       { path: "model", element: <ModelPage />, permission: 'model', },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
-      { path: "chatlog/:fid/:cid", element: <AppChatDetail /> },
+      { path: "log/chatlog/:fid/:cid", element: <AppChatDetail /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
       { path: "dataset", element: <DataSetPage /> },

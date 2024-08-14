@@ -68,6 +68,7 @@ export function useTable<T extends object>(param, apiFun) {
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState<T[]>([]);
+    const [loaded, setLoaded] = useState(false);
 
     const paramRef = useRef({});
 
@@ -84,11 +85,14 @@ export function useTable<T extends object>(param, apiFun) {
         }).catch(() => {
             setLoading(false);
         })
+
+        setLoaded(true);
     }
     const debounceLoad = useDebounce(loadData, 600, false)
 
     // 记录旧值
     const prevValueRef = useRef(page);
+
     useEffect(() => {
         if (unInitDataRef.current) return;
         // 排除页码防抖
@@ -100,6 +104,7 @@ export function useTable<T extends object>(param, apiFun) {
         page: page.page,
         pageSize: page.pageSize,
         total,
+        loaded,
         loading,
         data,
         setPage: (p) => setPage({ ...page, page: p }),
@@ -123,6 +128,7 @@ export function useTable<T extends object>(param, apiFun) {
             })
         },
         clean: () => {
+            unInitDataRef.current = !!param.unInitData;
             setPage({
                 page: 1,
                 pageSize: param.pageSize || 20,
@@ -131,6 +137,7 @@ export function useTable<T extends object>(param, apiFun) {
             paramRef.current = {}
             setTotal(0)
             setData([])
+            setLoaded(false)
         }
     }
 }

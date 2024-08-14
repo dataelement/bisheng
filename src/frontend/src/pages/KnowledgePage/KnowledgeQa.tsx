@@ -1,12 +1,12 @@
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+import { Button, LoadButton } from "@/components/bs-ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { alertContext } from "@/contexts/alertContext";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
 import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -34,10 +34,11 @@ function CreateModal({ datalist, open, setOpen }) {
         })
     }, [])
 
-    const { setErrorData } = useContext(alertContext);
+    const { toast } = useToast()
 
     const [error, setError] = useState({ name: false, desc: false })
 
+    const [saveLoad, setSaveLoad] = useState(false)
     const handleCreate = () => {
         const name = nameRef.current.value
         const desc = descRef.current.value
@@ -54,6 +55,7 @@ function CreateModal({ datalist, open, setOpen }) {
         setError({ name: !!nameErrors, desc: errorlist.length > nameErrors })
         if (errorlist.length) return handleError(errorlist)
 
+        setSaveLoad(true);
         captureAndAlertRequestErrorHoc(createFileLib({
             name,
             description: desc,
@@ -62,16 +64,17 @@ function CreateModal({ datalist, open, setOpen }) {
         }).then(res => {
             // @ts-ignore
             window.libname = name
-            navigate("/qalib/" + res.id);
+            navigate("/filelib/qalib/" + res.id);
             setOpen(false)
+            setSaveLoad(false);
         }))
     }
 
     const handleError = (list) => {
-        setErrorData({
-            title: t('prompt'),
-            list
-        });
+        toast({
+            variant: "error",
+            description: list
+        })
     }
 
     return <Dialog open={open} onOpenChange={setOpen}>
@@ -108,47 +111,47 @@ function CreateModal({ datalist, open, setOpen }) {
                 <DialogClose>
                     <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
                 </DialogClose>
-                <Button type="submit" className="px-11" onClick={handleCreate}>{t('create')}</Button>
+                <LoadButton loading={saveLoad} type="submit" className="px-11" onClick={handleCreate}>{t('create')}</LoadButton>
             </DialogFooter>
         </DialogContent>
     </Dialog>
 }
 
-const SelectData = ({ open, setOpen }) => {
-    const [modal, setModal] = useState('')
-    const options = ['1', '2', '3']
+// const SelectData = ({ open, setOpen }) => {
+//     const [modal, setModal] = useState('')
+//     const options = ['1', '2', '3']
 
-    return <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[625px]">
-            <DialogHeader>
-                <DialogTitle>设置数据集</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-4 py-2">
-                <div className="">
-                    <label htmlFor="roleAndTasks" className="bisheng-label">数据集</label>
-                    <Select value={modal} onValueChange={setModal}>
-                        <SelectTrigger className="">
-                            <SelectValue placeholder="选择数据集" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {
-                                options.map(option => (
-                                    <SelectItem key={option} value={option}>{option} </SelectItem>
-                                ))
-                            }
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
-            <DialogFooter>
-                <DialogClose>
-                    <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
-                </DialogClose>
-                <Button type="submit" className="px-11" onClick={() => { }}>确认</Button>
-            </DialogFooter>
-        </DialogContent>
-    </Dialog>
-}
+//     return <Dialog open={open} onOpenChange={setOpen}>
+//         <DialogContent className="sm:max-w-[625px]">
+//             <DialogHeader>
+//                 <DialogTitle>设置数据集</DialogTitle>
+//             </DialogHeader>
+//             <div className="flex flex-col gap-4 py-2">
+//                 <div className="">
+//                     <label htmlFor="roleAndTasks" className="bisheng-label">数据集</label>
+//                     <Select value={modal} onValueChange={setModal}>
+//                         <SelectTrigger className="">
+//                             <SelectValue placeholder="选择数据集" />
+//                         </SelectTrigger>
+//                         <SelectContent>
+//                             {
+//                                 options.map(option => (
+//                                     <SelectItem key={option} value={option}>{option} </SelectItem>
+//                                 ))
+//                             }
+//                         </SelectContent>
+//                     </Select>
+//                 </div>
+//             </div>
+//             <DialogFooter>
+//                 <DialogClose>
+//                     <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
+//                 </DialogClose>
+//                 <Button type="submit" className="px-11" onClick={() => { }}>确认</Button>
+//             </DialogFooter>
+//         </DialogContent>
+//     </Dialog>
+// }
 
 export default function KnowledgeQa(params) {
     const [open, setOpen] = useState(false);
@@ -190,7 +193,7 @@ export default function KnowledgeQa(params) {
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <div className="h-[calc(100vh-128px)] overflow-y-auto pb-10">
+        <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
             <div className="flex justify-end gap-4 items-center">
                 <SearchInput placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)} />
                 <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
@@ -198,6 +201,7 @@ export default function KnowledgeQa(params) {
             <Table>
                 <TableHeader>
                     <TableRow>
+                        <TableHead>ID</TableHead>
                         <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
                         <TableHead>{t('lib.model')}</TableHead>
                         <TableHead>{t('createTime')}</TableHead>
@@ -210,6 +214,7 @@ export default function KnowledgeQa(params) {
                 <TableBody>
                     {datalist.map((el: any) => (
                         <TableRow key={el.id}>
+                            <TableCell>{el.id}</TableCell>
                             <TableCell className="font-medium max-w-[200px]">
                                 <div className=" truncate-multiline">{el.name}</div>
                             </TableCell>
@@ -224,7 +229,7 @@ export default function KnowledgeQa(params) {
                                 window.libname = el.name;
                             }}>
                                 {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>添加到数据集</Button> */}
-                                <Link to={`/qalib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
+                                <Link to={`/filelib/qalib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
                                 {user.role === 'admin' || user.user_id === el.user_id ?
                                     <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500 px-0">{t('delete')}</Button> :
                                     <Button variant="link" className="ml-4 text-gray-400 px-0">{t('delete')}</Button>
@@ -247,6 +252,6 @@ export default function KnowledgeQa(params) {
             </div>
         </div>
         <CreateModal datalist={datalist} open={open} setOpen={setOpen}></CreateModal>
-        <SelectData open={openData} setOpen={setOpenData} />
+        {/* <SelectData open={openData} setOpen={setOpenData} /> */}
     </div>
 };

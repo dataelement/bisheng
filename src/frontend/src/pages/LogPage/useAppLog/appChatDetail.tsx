@@ -13,7 +13,7 @@ export default function AppChatDetail() {
     console.log('fid, cid :>> ', fid, cid);
 
     const loading = false;
-    const title = "Chat Detail";
+    const title = "详细会话";
     const { loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
     const qaFormRef = useRef(null)
     const similarFormRef = useRef(null)

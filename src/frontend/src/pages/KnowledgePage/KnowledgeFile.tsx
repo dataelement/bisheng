@@ -1,12 +1,12 @@
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+import { Button, LoadButton } from "@/components/bs-ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { alertContext } from "@/contexts/alertContext";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
 import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -34,10 +34,10 @@ function CreateModal({ datalist, open, setOpen }) {
         })
     }, [])
 
-    const { setErrorData } = useContext(alertContext);
-
+    const { toast } = useToast()
     const [error, setError] = useState({ name: false, desc: false })
 
+    const [saveLoad, setSaveLoad] = useState(false)
     const handleCreate = () => {
         const name = nameRef.current.value
         const desc = descRef.current.value
@@ -54,6 +54,7 @@ function CreateModal({ datalist, open, setOpen }) {
         setError({ name: !!nameErrors, desc: errorlist.length > nameErrors })
         if (errorlist.length) return handleError(errorlist)
 
+        setSaveLoad(true);
         captureAndAlertRequestErrorHoc(createFileLib({
             name,
             description: desc,
@@ -64,14 +65,15 @@ function CreateModal({ datalist, open, setOpen }) {
             window.libname = name
             navigate("/filelib/" + res.id);
             setOpen(false)
+            setSaveLoad(false);
         }))
     }
 
     const handleError = (list) => {
-        setErrorData({
-            title: t('prompt'),
-            list
-        });
+        toast({
+            variant: "error",
+            description: list
+        })
     }
 
     return <Dialog open={open} onOpenChange={setOpen}>
@@ -108,7 +110,7 @@ function CreateModal({ datalist, open, setOpen }) {
                 <DialogClose>
                     <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
                 </DialogClose>
-                <Button type="submit" className="px-11" onClick={handleCreate}>{t('create')}</Button>
+                <LoadButton loading={saveLoad} type="submit" className="px-11" onClick={handleCreate}>{t('create')}</LoadButton>
             </DialogFooter>
         </DialogContent>
     </Dialog>
@@ -153,7 +155,7 @@ export default function KnowledgeFile(params) {
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <div className="h-[calc(100vh-128px)] overflow-y-auto pb-10">
+        <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
             <div className="flex justify-end gap-4 items-center">
                 <SearchInput placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)} />
                 <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
@@ -161,6 +163,7 @@ export default function KnowledgeFile(params) {
             <Table>
                 <TableHeader>
                     <TableRow>
+                        <TableHead>ID</TableHead>
                         <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
                         <TableHead>{t('lib.model')}</TableHead>
                         <TableHead>{t('createTime')}</TableHead>
@@ -173,6 +176,7 @@ export default function KnowledgeFile(params) {
                 <TableBody>
                     {datalist.map((el: any) => (
                         <TableRow key={el.id}>
+                            <TableCell>{el.id}</TableCell>
                             <TableCell className="font-medium max-w-[200px]">
                                 <div className=" truncate-multiline">{el.name}</div>
                             </TableCell>

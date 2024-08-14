@@ -86,14 +86,15 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
         const isFileUrlEmpty = form.importMethod === 'local' && !form.fileUrl;
         const isKnowledgeLibEmpty = form.importMethod === 'qa' && form.knowledgeLib.length === 0;
         setError({
-            dataSetName: isDataSetNameEmpty,
+            dataSetName: isDataSetNameEmpty || form.dataSetName.length > 30,
             fileUrl: isFileUrlEmpty,
             knowledgeLib: isKnowledgeLibEmpty
         });
 
         const errors = []
         if (isDataSetNameEmpty) errors.push('请填写数据集名称')
-        if (isFileUrlEmpty) errors.push('请填上传文件')
+        if (form.dataSetName.length > 30) errors.push('数据集名称最多 30 个字')
+        if (isFileUrlEmpty) errors.push('请上传文件')
         if (isKnowledgeLibEmpty) errors.push('请填选择知识库')
         if (errors.length > 0) {
             return message({
@@ -107,7 +108,7 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
         captureAndAlertRequestErrorHoc(createDatasetApi({
             name: form.dataSetName,
             files: form.fileUrl,
-            qa_list: form.knowledgeLib
+            qa_list: form.knowledgeLib.map(el => el.value)
         }).then(res => {
             message({
                 variant: 'success',
@@ -160,14 +161,14 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
                                 </label>
                                 <div className="flex gap-2 items-center">
                                     <Label>示例文件：</Label>
-                                    <Button variant="link" className="px-1" onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/dataset.csv", 'CSV格式示例.csv')}>CSV格式示例</Button>
+                                    {/* <Button variant="link" className="px-1" onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/dataset.csv", 'CSV格式示例.csv')}>CSV格式示例</Button> */}
                                     <Button variant="link" className="px-1" onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/dataset.json", 'json格式示例.json')}>json格式示例</Button>
                                 </div>
                             </div>
                             <SimpleUpload
                                 filekey='file'
                                 uploadUrl={__APP_ENV__.BASE_URL + '/api/v1/knowledge/upload'}
-                                accept={['csv', 'json']}
+                                accept={['json']}
                                 className={`${error.fileUrl ? 'border-red-400' : ''}`}
                                 onSuccess={handleFileUploadSuccess}
                             />

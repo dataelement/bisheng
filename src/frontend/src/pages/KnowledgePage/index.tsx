@@ -16,15 +16,15 @@ export default function index() {
 
     const defaultValue = (() => {
         const page = window.LibPage;
-        return page ? page.type : 'qa'
+        return page ? page.type : 'file'
     })();
 
     return (
         <div className="w-full h-full px-2 pt-4 relative">
             <Tabs defaultValue={defaultValue} className="w-full mb-[40px]">
                 <TabsList className="">
-                    <TabsTrigger value="qa" className="roundedrounded-xl">{t('lib.qaData')}</TabsTrigger>
                     <TabsTrigger value="file">{t('lib.fileData')}</TabsTrigger>
+                    <TabsTrigger value="qa" className="roundedrounded-xl">{t('lib.qaData')}</TabsTrigger>
                 </TabsList>
                 <TabsContent value="qa">
                     <KnowledgeQa />

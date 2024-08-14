@@ -5,7 +5,7 @@ import { SearchInput } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { deleteFileLib } from "@/controllers/API";
-import { getFileUrlApi, getPresetFileApi } from "@/controllers/API/finetune";
+import { deleteDatasetApi, getFileUrlApi, getPresetFileApi } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
@@ -18,7 +18,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 
 export default function index() {
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
-        getPresetFileApi({ page_size: 20, page_num: param.page, keyword: param.keyword }).then(res => ({ data: res, total: res.length }))
+        getPresetFileApi({ page_size: 20, page_num: param.page, keyword: param.keyword })
     )
 
     const handleDelete = (id) => {
@@ -26,7 +26,7 @@ export default function index() {
             title: t('prompt'),
             desc: '确认删除数据集！',
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteFileLib(id).then(res => {
+                captureAndAlertRequestErrorHoc(deleteDatasetApi(id).then(res => {
                     reload();
                 }));
                 next()
@@ -90,7 +90,7 @@ export default function index() {
             </Table>
         </div>
         <div className="bisheng-table-footer px-6 bg-background-login">
-            <p className="desc">{t('lib.libraryCollection')}</p>
+            <p className="desc">数据集集合</p>
             <div>
                 <AutoPagination
                     page={page}

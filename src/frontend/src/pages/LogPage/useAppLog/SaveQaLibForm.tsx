@@ -70,7 +70,7 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
             description: '请先输入问题'
         })
         setLoading(true);
-        captureAndAlertRequestErrorHoc(generateSimilarQa(form.question).then(res => {
+        captureAndAlertRequestErrorHoc(generateSimilarQa(form.question, form.answer).then(res => {
             setForm((prevForm) => {
                 const updatedSimilarQuestions = [...prevForm.similarQuestions];
                 updatedSimilarQuestions.splice(updatedSimilarQuestions.length - 1, 0, ...res.questions);
@@ -102,8 +102,18 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
             });
         }
 
+        const _similarQuestions = form.similarQuestions.filter((question) => question.trim() !== '');
+        if (_similarQuestions.some((q) => q.length > 100)) return message({
+            variant: 'warning',
+            description: '相似问最多100个字'
+        });
+        if (form.answer.length > 1000) return message({
+            variant: 'warning',
+            description: '答案最多1000个字'
+        });
+
         captureAndAlertRequestErrorHoc(updateQa('', {
-            questions: [form.question, ...form.similarQuestions],
+            questions: [form.question, ..._similarQuestions],
             answers: [form.answer],
             knowledge_id: form.knowledgeLib[0].value,
             source: 2
@@ -131,7 +141,7 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
         <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
             <DialogContent className="sm:max-w-[625px]">
                 <DialogHeader>
-                    <DialogTitle>存储至QA知识库</DialogTitle>
+                    <DialogTitle>添加新的QA到QA知识库</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2">
                     <div>
@@ -145,11 +155,11 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
                     </div>
                     <div>
                         <label htmlFor="question" className="bisheng-label"><span className="text-red-500">*</span>问题</label>
-                        <Input name="question" className={`mt-2 col-span-3 ${error.question && 'border-red-400'}`} value={form.question} onChange={handleInputChange} />
+                        <Input name="question" className={`col-span-3 ${error.question && 'border-red-400'}`} value={form.question} onChange={handleInputChange} />
                     </div>
                     <div>
                         <label htmlFor="similarQuestions" className="bisheng-label">相似问</label>
-                        <div className="max-h-72 overflow-y-auto">
+                        <div className="max-h-52 overflow-y-auto">
                             <InputList
                                 value={form.similarQuestions}
                                 onChange={handleSimilarQuestionsChange}
@@ -161,7 +171,7 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
                     </div>
                     <div>
                         <label htmlFor="answer" className="bisheng-label"><span className="text-red-500">*</span>答案</label>
-                        <Textarea name="answer" className={`mt-2 col-span-3 ${error.answer && 'border-red-400'}`} value={form.answer} onChange={handleInputChange} />
+                        <Textarea name="answer" className={`col-span-3 min-h-36 ${error.answer && 'border-red-400'}`} value={form.answer} onChange={handleInputChange} />
                     </div>
                 </div>
                 <DialogFooter>
