@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 from typing import Dict, List, Optional
 
@@ -526,11 +527,11 @@ def delete_qa_data(*, qa_id: int, question: Optional[str] = None):
 
 @router.post('/update_qa', status_code=200)
 def update_qa(
-    *,
-    id: int = Body(embed=True),
-    question: Optional[str] = None,
-    original_question: Optional[str] = None,
-    answer: Optional[List[str]] = None,
+        *,
+        id: int = Body(embed=True),
+        question: Optional[str] = Body(default=None, embed=True),
+        original_question: Optional[str] = Body(default=None, embed=True),
+        answer: Optional[List[str]] = Body(default=None, embed=True),
 ):
     """ 删除qa 问题对信息 """
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
@@ -540,8 +541,10 @@ def update_qa(
 
     if original_question:
         qa.questions = [q if q != question else question for q in qa.questions]
+    else:
+        qa.questions = [question]
     if answer:
-        qa.answers = answer
+        qa.answers = json.dumps(answer, ensure_ascii=False)
     QAKnoweldgeDao.update(qa)
 
     try:
