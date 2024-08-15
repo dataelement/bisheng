@@ -13,19 +13,27 @@ export default function SystemModelConfig({ data, onBack }) {
         let llmOptions = []
         let embeddings = []
         data.forEach(server => {
-            const serverItem = { value: server.id, label: server.name, children: [] }
-            serverItem.children = server.models.reduce((res, model) => model.model_type === 'embedding' ? [...res, {
-                value: model.id,
-                label: model.model_name
-            }] : res, [])
-            if (serverItem.children.length) embeddings.push(serverItem)
-            llmOptions = [...llmOptions, ...server.models.filter(model => model.model_type === 'llm')];
+            const serverEmbItem = { value: server.id, label: server.name, children: [] }
+            const serverLlmItem = { value: server.id, label: server.name, children: [] }
+            server.models.forEach(model => {
+                const item = {
+                    value: model.id,
+                    label: model.model_name
+                }
+                if (!model.online) return
+
+                model.model_type === 'embedding' ?
+                    serverEmbItem.children.push(item) : serverLlmItem.children.push(item)
+            })
+
+            if (serverLlmItem.children.length) llmOptions.push(serverLlmItem)
+            if (serverEmbItem.children.length) embeddings.push(serverEmbItem)
         });
 
         return { llmOptions, embeddings }
     }, [data])
 
-    return <div className="px-2 py-4 w-full relative">
+    return <div className="px-2 py-4 size-full pb-20 relative overflow-y-auto">
         <div className="">
             <div className="flex ml-6 items-center gap-x-3">
                 <ShadTooltip content={t('back')} side="right">
@@ -35,8 +43,8 @@ export default function SystemModelConfig({ data, onBack }) {
                 </ShadTooltip>
                 <span>{t('model.systemModelSettings')}</span>
             </div>
-            <div className="px-4 h-full">
-                <Tabs defaultValue="knowledge" className="h-full flex flex-col">
+            <div className="px-4">
+                <Tabs defaultValue="knowledge" className="flex flex-col">
                     <TabsList className="w-[450px] m-auto">
                         <TabsTrigger value="knowledge" className="w-[150px]">{t('model.knowledgeBaseModel')}</TabsTrigger>
                         <TabsTrigger value="assis" className="w-[150px]">{t('model.assistantModel')}</TabsTrigger>

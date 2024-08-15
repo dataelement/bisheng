@@ -25,8 +25,8 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
             <div className="bs-table-td h-full p-2 flex items-center gap-x-3 first:rounded-l-md last:rounded-r-md font-medium">
                 {
                     expand ?
-                        <MinusCircledIcon className="cursor-pointer" onClick={() => setExpand(false)} />
-                        : <PlusCircledIcon onClick={() => setExpand(true)} className="cursor-pointer" />
+                        <MinusCircledIcon className="cursor-pointer min-w-4" onClick={() => setExpand(false)} />
+                        : <PlusCircledIcon onClick={() => setExpand(true)} className="cursor-pointer min-w-4" />
                 }
                 {data.name}
             </div>
@@ -107,13 +107,16 @@ export default function Management() {
 
     const handleGetRepeatName = (name) => {
         let index = 0
+        let nameIndex = ''
         data.forEach(el => {
             if (el.name.indexOf(name) === 0) {
-                const num = el.name.match(/(\d+)$/)[0]
+                const match = el.name.match(/\d+$/)
+                const num = match ? match[0] : 0
                 index = Math.max(index, Number(num))
+                nameIndex = ` ${index + 1}`
             }
         })
-        return `${name} ${index + 1}`
+        return `${name}${nameIndex}`
     }
     const { message } = useToast()
 

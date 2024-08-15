@@ -20,7 +20,7 @@ const modelProviders = {
             placeholder: "格式示例：http://localhost:9997",
             default: "",
             required: true,
-            key: "server_url",
+            key: "openai_api_base",
         }
     ],
     llamacpp: [
@@ -30,7 +30,7 @@ const modelProviders = {
             placeholder: "格式示例：http://localhost:8080",
             default: "",
             required: true,
-            key: "base_url",
+            key: "openai_api_base",
         },
     ],
     vllm: [
@@ -41,6 +41,14 @@ const modelProviders = {
             default: "",
             required: true,
             key: "openai_api_base",
+        },
+        {
+            label: "API Key",
+            type: "password",
+            placeholder: "",
+            default: "",
+            required: true,
+            key: "openai_api_key",
         },
     ],
     openai: [

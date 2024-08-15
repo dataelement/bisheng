@@ -88,14 +88,14 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             <div className="flex gap-4 flex-col mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500 flex gap-2 items-center">
                     <span>{t('finetune.rtService')}</span>
-                    <TooltipProvider>
+                    {/* <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger><HelpCircle size={18} /></TooltipTrigger>
                             <TooltipContent>
                                 <p>{t('finetune.rtServiceTooltip')}</p>
                             </TooltipContent>
                         </Tooltip>
-                    </TooltipProvider>
+                    </TooltipProvider> */}
                 </small>
                 <div className="flex gap-4 items-center">
                     <Select onValueChange={handleRtChange}>

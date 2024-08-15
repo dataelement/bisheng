@@ -199,7 +199,9 @@ export default function CardComponent<T>({
       <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className="h-20 grid grid-rows-2">
-      <LabelShow show={data.tags.length > 0} isOperator={isOperator}
+      <LabelShow
+        show={data.tags.length > 0}
+        isOperator={isOperator}
         resource={{ id: data.id, type: type }}
         labels={data.tags.map(d => ({ label: d.name, value: d.id, selected: true, edit: false }))}
         all={allLabels.filter(a => a.value !== -1)}>

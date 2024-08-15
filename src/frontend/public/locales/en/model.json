@@ -1,6 +1,7 @@
 {
     "model": {
         "duplicateServiceProviderName": "Name duplicated, please modify",
+        "duplicateServiceProviderNameValidation": "The service provider name cannot be empty and can be up to thirty characters long",
         "modelNameValidation": "Name required, max 30 chars",
         "modelDuplicate": "Cannot duplicate",
         "addSuccess": "Added",
@@ -46,7 +47,7 @@
         "assistantKnowledgeBaseMaxCharacters": "Knowledge Base Max Chars",
         "assistantKnowledgeBaseMaxCharactersTooltip": "Max chars for model, truncate if exceeds",
         "reorderAfterRetrieval": "Reorder",
-        "reorderAfterRetrievalTooltip": "Reorder retrieved chunks",
+        "reorderAfterRetrievalTooltip": "Whether to reorder the retrieved chunks, it is recommended to enable the single document Q & A scenario.",
         "setAsDefault": "Default",
         "assistantAutoOptimizationModel": "Auto Optimization",
         "yes": "Yes",

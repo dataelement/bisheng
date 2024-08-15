@@ -9,16 +9,16 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { forwardRef, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-const InputField = ({ label, type = "text", id, name, placeholder, value, onChange, error }) => (
+const InputField = ({ label, type = "text", id, name, required = false, placeholder, value, onChange, error = '' }) => (
     <div key={id} className="">
-        <label htmlFor={id} className="bisheng-label">{label}{type === "password" && <span className="bisheng-tip">*</span>}</label>
+        <label htmlFor={id} className="bisheng-label">{label}{required && <span className="bisheng-tip">*</span>}</label>
         <Input type={type} id={id} name={name} placeholder={placeholder} className="mt-2" value={value} onChange={onChange} />
-        {error && <p className="bisheng-tip mt-1">{error}</p>}
+        {error && <p className="bisheng-tip mt-1">{label} 不能为空</p>}
     </div>
 );
 
 const validateField = (name, value, t) => {
-    if (!value) return t(name + '不能为空');
+    if (!value) return name + '不能为空';
     return '';
 };
 
@@ -105,9 +105,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
         const fields = [];
         if (name === 'Dalle3绘画') {
             fields.push('openai_api_key');
-            if (formData.provider === 'openai') {
-                fields.push('openai_api_base', 'openai_proxy');
-            } else {
+            if (formData.provider !== 'openai') {
                 fields.push('azure_deployment', 'azure_endpoint', 'openai_api_version');
             }
         } else if (name === 'Bing web搜索') {
@@ -123,13 +121,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         const [isValid, formErrors] = validateForm();
-        if (!isValid) {
-            return toast({
-                title: t('prompt'),
-                variant: 'error',
-                description: Object.keys(formErrors).map(key => formErrors[key]),
-            });
-        }
+        if (!isValid) return
 
         const fieldsToSubmit = getFieldsToSubmit();
         await captureAndAlertRequestErrorHoc(updateAssistantToolApi(id, fieldsToSubmit));
@@ -178,6 +170,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                         {formData.provider === 'openai' ? (
                             <>
                                 <InputField
+                                    required
                                     label="OpenAI API Key"
                                     type="password"
                                     id="openai_api_key"
@@ -194,7 +187,6 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                                     placeholder={t('build.enterBaseUrl')}
                                     value={formData.openai_api_base}
                                     onChange={handleChange}
-                                    error={errors.openai_api_base}
                                 />
                                 <InputField
                                     label="OpenAI Proxy"
@@ -203,12 +195,12 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                                     placeholder={t('build.enterProxy')}
                                     value={formData.openai_proxy}
                                     onChange={handleChange}
-                                    error={errors.openai_proxy}
                                 />
                             </>
                         ) : (
                             <>
                                 <InputField
+                                    required
                                     label="Azure OpenAI API Key"
                                     type="password"
                                     id="openai_api_key"
@@ -219,6 +211,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                                     error={errors.openai_api_key}
                                 />
                                 <InputField
+                                    required
                                     label="Deployment Name"
                                     id="azure_deployment"
                                     name="azure_deployment"
@@ -228,6 +221,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                                     error={errors.azure_deployment}
                                 />
                                 <InputField
+                                    required
                                     label="Azure Endpoint"
                                     id="azure_endpoint"
                                     name="azure_endpoint"
@@ -237,6 +231,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                                     error={errors.azure_endpoint}
                                 />
                                 <InputField
+                                    required
                                     label="Openai API Version"
                                     id="openai_api_version"
                                     name="openai_api_version"
@@ -253,6 +248,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                 return (
                     <>
                         <InputField
+                            required
                             label="Bing Subscription Key"
                             type="password"
                             id="bing_subscription_key"
@@ -263,6 +259,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                             error={errors.bing_subscription_key}
                         />
                         <InputField
+                            required
                             label="Bing Search URL"
                             id="bing_search_url"
                             name="bing_search_url"
@@ -276,6 +273,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
             case '天眼查':
                 return (
                     <InputField
+                        required
                         label="API Key"
                         type="password"
                         id="api_key"

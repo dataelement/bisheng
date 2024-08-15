@@ -1,6 +1,5 @@
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
@@ -10,7 +9,23 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 
-const ModelSelect = ({ required = false, label, tooltipText, value, options, onChange }) => {
+export const ModelSelect = ({ required = false, label, tooltipText = '', value, options, onChange }) => {
+
+    const defaultValue = useMemo(() => {
+        let _defaultValue = []
+        if (!value) return _defaultValue
+        options.some(option => {
+            const model = option.children.find(el => el.value === value)
+            if (model) {
+                _defaultValue = [{ value: option.value, label: option.label }, { value: model.value, label: model.label }]
+                return true
+            }
+        })
+        // 无对应选项自动清空旧值
+        if (_defaultValue.length === 0) onChange(null)
+        return _defaultValue
+    }, [value])
+
     return (
         <div>
             <Label className="bisheng-label">
@@ -18,18 +33,11 @@ const ModelSelect = ({ required = false, label, tooltipText, value, options, onC
                 {required && <span className="text-red-500 text-xs">*</span>}
                 {tooltipText && <QuestionTooltip className="relative top-0.5 ml-1" content={tooltipText} />}
             </Label>
-            <Select value={value} onValueChange={onChange}>
-                <SelectTrigger>
-                    <SelectValue placeholder="" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        {options.map((item) => (
-                            <SelectItem key={item.id} value={item.id}>{item.model_name}</SelectItem>
-                        ))}
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
+            <Cascader
+                defaultValue={defaultValue}
+                options={options}
+                onChange={(val) => onChange(val[1])}
+            />
         </div>
     );
 };
@@ -45,35 +53,21 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
         extractModelId: null,
         qaSimilarModelId: null
     });
-    const [loading, setLoading] = useState(false);
 
+    const [loading, setLoading] = useState(true)
     useEffect(() => {
         setLoading(true)
         getKnowledgeModelConfig().then(config => {
             const { embedding_model_id, extract_title_model_id, qa_similar_model_id, source_model_id } = config
             setForm({
                 embeddingModelId: embedding_model_id,
-                sourceModelId: extract_title_model_id,
-                extractModelId: qa_similar_model_id,
-                qaSimilarModelId: source_model_id
+                sourceModelId: source_model_id,
+                extractModelId: extract_title_model_id,
+                qaSimilarModelId: qa_similar_model_id
             })
             setLoading(false)
         });
     }, []);
-
-    const embeddingValue = useMemo(() => {
-        let value = []
-        if (!form.embeddingModelId) return value
-        embeddings.some(embedding => {
-            const model = embedding.children.find(el => el.value === form.embeddingModelId)
-            if (model) {
-                value = [{ value: embedding.value, label: embedding.label }, { value: model.value, label: model.label }]
-                return true
-            }
-        })
-        return value
-    }, [form.embeddingModelId])
-    console.log('em :>> ', embeddingValue);
 
     const { message } = useToast()
     const handleSave = () => {
@@ -97,18 +91,19 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
         }))
     };
 
+    if (loading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+        <span className="loading loading-infinity loading-lg"></span>
+    </div>
+
     return (
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16">
-            <div>
-                <Label className="bisheng-label">{t('model.defaultEmbeddingModel')}<span className="text-red-500 text-xs">*</span></Label>
-                {
-                    !loading && <Cascader
-                        defaultValue={embeddingValue}
-                        options={embeddings}
-                        onChange={(val) => setForm({ ...form, embeddingModelId: val[1] })}
-                    />
-                }
-            </div>
+            <ModelSelect
+                required
+                label={t('model.defaultEmbeddingModel')}
+                value={form.embeddingModelId}
+                options={embeddings}
+                onChange={(val) => setForm({ ...form, embeddingModelId: val })}
+            />
             <ModelSelect
                 label={t('model.sourceTracingModel')}
                 tooltipText={t('model.sourceTracingModelTooltip')}

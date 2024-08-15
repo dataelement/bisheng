@@ -246,7 +246,7 @@
     "failedAborted": "Failed/Aborted",
     "modelName": "Model Name",
     "createTrainingTask": "Create Training Task",
-    "rtService": "RT Service",
+    "rtService": "FT Service",
     "rtServiceManagement": "FT Service Management",
     "createTime": "Creation Time",
     "noData": "No Data",

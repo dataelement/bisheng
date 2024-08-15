@@ -1,6 +1,7 @@
 {
     "model": {
         "duplicateServiceProviderName": "服务提供方名称重复，请修改",
+        "duplicateServiceProviderNameValidation": "服务提供方名称不可为空，且最多三十个字符",
         "modelNameValidation": "模型名称不可为空，且最多三十个字符",
         "modelDuplicate": "模型不可重复",
         "addSuccess": "添加成功",
@@ -46,7 +47,7 @@
         "assistantKnowledgeBaseMaxCharacters": "助手知识库检索最大字符数",
         "assistantKnowledgeBaseMaxCharactersTooltip": "传给模型的最大字符数，超过会自动截断，可根据模型最大上下文长度灵活调整",
         "reorderAfterRetrieval": "检索后是否重排",
-        "reorderAfterRetrievalTooltip": "是否将检索得到的chunk重新排序",
+        "reorderAfterRetrievalTooltip": "是否将检索得到的chunk重新排序，建议单文档问答场景开启",
         "setAsDefault": "设为默认模型",
         "assistantAutoOptimizationModel": "助手画像自动优化模型",
         "yes": "是",
@@ -65,9 +66,9 @@
         "machineName": "服务名",
         "serviceAddress": "服务地址",
         "createTrainingTask": "创建训练任务",
-        "rtService": "RT服务",
+        "rtService": "FT服务",
         "gpuResourceUsage": "GPU资源使用情况",
-        "rtServiceTooltip": "选择目标基准模型所在的RT服务，Finetune模型训练完成后也将部署在同一个RT服务内。",
+        "rtServiceTooltip": "选择目标基准模型所在的FT服务，Finetune模型训练完成后也将部署在同一个FT服务内。",
         "baseModel": "基准模型",
         "finetuneModelName": "Finetune模型名称",
         "dataset": "数据集",

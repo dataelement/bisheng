@@ -98,12 +98,11 @@ export default function Cascader({ selectClass = '', selectPlaceholder = '', def
     useEffect(() => {
         !open && setIsHover(false)
     }, [open])
-    console.log('values :>> ', values, defaultValue);
 
     const [cols, setCols] = useState(() => resetCols(defaultValue, options))
 
 
-    const selectOptionsRef = useRef([])
+    const selectOptionsRef = useRef(defaultValue)
     const handleHover = (option, isLeaf, colIndex) => {
         setIsHover(true)
         // // setValues([]) // 从新选择清空值
@@ -140,6 +139,9 @@ export default function Cascader({ selectClass = '', selectPlaceholder = '', def
             return loadData(option)
         }
         const vals = selectOptionsRef.current.map(el => el.value)
+        if (!selectOptionsRef.current[0]) {
+
+        }
         setValues([...selectOptionsRef.current])
         onChange?.(vals, selectOptionsRef.current)
         setOpen(false)

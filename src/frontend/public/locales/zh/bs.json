@@ -217,7 +217,7 @@
   },
   "model": {
     "modelManagement": "模型管理",
-    "modelFineTune": "模型Finetune",
+    "modelFineTune": "模型微调",
     "modelConfiguration": "模型配置",
     "modelCollectionCaption": "模型集合",
     "modelName": "模型名称",
@@ -242,7 +242,7 @@
     "failedAborted": "失败/中止",
     "modelName": "模型名称",
     "createTrainingTask": "创建训练任务",
-    "rtService": "RT服务",
+    "rtService": "FT服务",
     "rtServiceManagement": "FT服务管理",
     "createTime": "创建时间",
     "noData": "暂无数据",

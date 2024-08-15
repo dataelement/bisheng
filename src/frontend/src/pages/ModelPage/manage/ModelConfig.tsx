@@ -170,6 +170,12 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 description: t('model.duplicateServiceProviderName')
             })
         }
+        if (!formData.name || formData.name.length > 30) {
+            return message({
+                variant: 'warning',
+                description: t('model.duplicateServiceProviderNameValidation')
+            })
+        }
         const [config, errorMsg] = formRef.current.getData();
         if (errorMsg) {
             return message({

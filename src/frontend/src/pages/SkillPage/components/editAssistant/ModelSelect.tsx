@@ -33,6 +33,7 @@ export default function ModelSelect({ value, onChange }) {
         setModelValue(_value)
         setOptions(_options)
         setLoading(false)
+        if (!_value.length) onChange(null)
     }
 
     useEffect(() => {

@@ -53,7 +53,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             data.forEach(server => {
                 const serverItem = { value: server.id, label: server.name, children: [] }
                 serverItem.children = server.models.reduce((res, model) => {
-                    if (model.model_type !== 'embedding') return res
+                    if (model.model_type !== 'embedding' || !model.online) return res
                     const modelItem = { value: model.id, label: model.model_name }
                     models[model.id] = model.model_name
                     return [...res, modelItem]
@@ -205,6 +205,7 @@ export default function FileLibPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead>ID</TableHead>
                                     <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
                                     <TableHead>{t('lib.model')}</TableHead>
                                     <TableHead>{t('createTime')}</TableHead>
@@ -217,6 +218,7 @@ export default function FileLibPage() {
                             <TableBody>
                                 {datalist.map((el: any) => (
                                     <TableRow key={el.id}>
+                                        <TableCell>{el.id}</TableCell>
                                         <TableCell className="font-medium max-w-[200px]">
                                             <div className=" truncate-multiline">{el.name}</div>
                                         </TableCell>
