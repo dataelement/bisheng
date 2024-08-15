@@ -1,15 +1,13 @@
-import json
 import functools
+import json
 from base64 import b64decode
 from typing import List
 
 import rsa
-from fastapi import HTTPException, Depends, Request
-from fastapi_jwt_auth import AuthJWT
-
-from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.user import UserLoginOfflineError, UserNameAlreadyExistError, UserNeedGroupAndRoleError
+from bisheng.api.errcode.user import (UserLoginOfflineError, UserNameAlreadyExistError,
+                                      UserNeedGroupAndRoleError)
+from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
 from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import CreateUserReq
 from bisheng.cache.redis import redis_client
@@ -22,7 +20,9 @@ from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.settings import settings
-from bisheng.utils.constants import USER_CURRENT_SESSION, RSA_KEY
+from bisheng.utils.constants import RSA_KEY, USER_CURRENT_SESSION
+from fastapi import Depends, HTTPException, Request
+from fastapi_jwt_auth import AuthJWT
 
 
 class UserPayload:
@@ -140,7 +140,7 @@ def sso_login():
 def gen_user_role(db_user: User):
     # 查询用户的角色列表
     db_user_role = UserRoleDao.get_user_roles(db_user.user_id)
-    role = ""
+    role = ''
     role_ids = []
     for user_role in db_user_role:
         if user_role.role_id == 1:
@@ -148,7 +148,7 @@ def gen_user_role(db_user: User):
             role = 'admin'
         else:
             role_ids.append(user_role.role_id)
-    if role != "admin":
+    if role != 'admin':
         # 判断是否是用户组管理员
         db_user_groups = UserGroupDao.get_user_admin_group(db_user.user_id)
         if len(db_user_groups) > 0:
@@ -169,7 +169,8 @@ def gen_user_jwt(db_user: User):
     # 生成JWT令牌
     payload = {'user_name': db_user.user_name, 'user_id': db_user.user_id, 'role': role}
     # Create the tokens and passing to set_access_cookies or set_refresh_cookies
-    access_token = AuthJWT().create_access_token(subject=json.dumps(payload), expires_time=ACCESS_TOKEN_EXPIRE_TIME)
+    access_token = AuthJWT().create_access_token(subject=json.dumps(payload),
+                                                 expires_time=ACCESS_TOKEN_EXPIRE_TIME)
 
     refresh_token = AuthJWT().create_refresh_token(subject=db_user.user_name)
 
@@ -200,7 +201,7 @@ def get_knowledge_list_by_access(role_id: int, name: str, page_num: int, page_si
             }) for access in db_role_access
         ],
         'total':
-            total_count
+        total_count
     }
 
 
@@ -227,7 +228,7 @@ def get_flow_list_by_access(role_id: int, name: str, page_num: int, page_size: i
             }) for access in db_role_access
         ],
         'total':
-            total_count
+        total_count
     }
 
 
@@ -252,7 +253,7 @@ def get_assistant_list_by_access(role_id: int, name: str, page_num: int, page_si
             'id': access[0].id
         } for access in db_role_access],
         'total':
-            total_count
+        total_count
     }
 
 
