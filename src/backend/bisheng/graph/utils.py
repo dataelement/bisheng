@@ -243,7 +243,8 @@ def update_source_handle(new_edge, g_nodes, g_edges):
         dict: The updated edge with the new source handle.
     """
     last_node = copy.deepcopy(find_last_node(g_nodes, g_edges))
-    new_edge['sourceHandle'] = new_edge['sourceHandle'].replace(new_edge['source'], last_node['id'])
+    new_edge['sourceHandle'] = new_edge['sourceHandle'].replace(new_edge['source'],
+                                                                last_node['id'])
     new_edge['source'] = last_node['id']
     return new_edge
 
@@ -273,3 +274,14 @@ def get_updated_edges(base_flow, g_nodes, g_edges, group_node_id):
         if edge['target'] == group_node_id or edge['source'] == group_node_id:
             updated_edges.append(new_edge)
     return updated_edges
+
+
+def find_next_node(graph_data: Dict, node_id: str) -> List[Dict]:
+    """
+    Finds the next node in the graph data based on the given node id.
+    """
+    nodes = graph_data.get('nodes', [])
+    edges = graph_data.get('edges', [])
+
+    edges_ = [e['target'] for e in edges if e['source'] != node_id]
+    return [n for n in nodes if n['id'] in edges_]

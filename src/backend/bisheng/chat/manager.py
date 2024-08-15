@@ -22,6 +22,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.user import User, UserDao
+from bisheng.graph.utils import find_next_node
 from bisheng.processing.process import process_tweaks
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 from bisheng.utils.util import get_cache_key
@@ -441,7 +442,7 @@ class ChatManager:
         if payload and self.in_memory_cache.get(langchain_obj_key):
             action, over = await self.preper_action(flow_id, chat_id, langchain_obj_key, payload,
                                                     start_resp, step_resp)
-            logger.info(
+            logger.debug(
                 f"processing_message message={payload.get('inputs')} action={action} over={over}")
             if not over:
                 # task_service: 'TaskService' = get_task_service()
@@ -494,7 +495,14 @@ class ChatManager:
                                     or 'file_path' in payload['inputs']):
             node_data = payload['inputs'].get('data', '') or [payload['inputs']]
             graph_data = self.refresh_graph_data(graph_data, node_data)
-            self.set_cache(langchain_obj_key, None)  # rebuild object
+            # 上传文件就重新解压，有点粗, 只有document loader 需要
+            node_loader = False
+            for nod in node_data:
+                if any('Loader' in x['id'] for x in find_next_node(graph_data, nod['id'])):
+                    node_loader = True
+                    break
+            if node_loader:
+                self.set_cache(langchain_obj_key, None)  # rebuild object
             has_file = any(['InputFile' in nd.get('id', '') for nd in node_data])
             has_variable = any(['VariableNode' in nd.get('id', '') for nd in node_data])
         if has_file:
@@ -534,7 +542,7 @@ class ChatManager:
             payload['inputs']['questions'] = batch_question
             if not batch_question:
                 # no question
-                file_msg = payload['inputs']
+                file_msg = payload['inputs'].copy()
                 file_msg.pop('id', '')
                 file_msg.pop('data', '')
                 file = ChatMessage(flow_id=client_id,

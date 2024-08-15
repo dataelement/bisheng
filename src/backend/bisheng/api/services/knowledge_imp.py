@@ -607,6 +607,7 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
         with session_getter() as session:
             session.add(QA)
             session.commit()
+            session.refresh(QA)
     except Exception as e:
         logger.error(e)
         setattr(QA, 'status', 0)
@@ -614,6 +615,7 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
         with session_getter() as session:
             session.add(QA)
             session.commit()
+            session.refresh(QA)
 
     return QA
 
@@ -637,7 +639,7 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
                 qa = QAKnoweldgeDao.insert_qa(data)
 
             # 对question进行embedding，然后录入知识库
-            QA_save_knowledge(db_knowledge, qa)
+            qa = QA_save_knowledge(db_knowledge, qa)
             return qa
     except Exception as e:
         logger.exception(e)
