@@ -93,23 +93,37 @@ def set_langchain_cache(settings):
     logger.info(f'LLM caching setup with {cache_class.__name__}')
 
 
-def wrapper_bisheng_model_limit_check(func):
+def bisheng_model_limit_check(self: 'BishengLLM | BishengEmbedding'):
+    now = datetime.datetime.now().strftime("%Y-%m-%d")
+    if self.server_info.limit_flag:
+        # 开启了调用次数检查
+        cache_key = f"model_limit:{now}:{self.server_info.id}"
+        use_num = redis_client.incr(cache_key)
+        if use_num > self.server_info.limit:
+            raise Exception(f'额度已用完')
+
+
+def wrapper_bisheng_model_limit_check_async(func):
     """
     调用次数检查的装饰器
     """
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
-        self = args[0]
-        now = datetime.datetime.now().strftime("%Y-%m-%d")
-        if self.server_info.limit_flag:
-            # 开启了调用次数检查
-            cache_key = f"model_limit:{now}:{self.server_info.id}"
-            use_num = redis_client.incr(cache_key)
-            if use_num > self.server_info.limit:
-                raise Exception(f'额度已用完')
-        if inspect.iscoroutinefunction(func):
-            return await func(*args, **kwargs)
+        bisheng_model_limit_check(args[0])
+        return await func(*args, **kwargs)
+
+    return wrapper
+
+
+def wrapper_bisheng_model_limit_check(func):
+    """
+    调用次数检查的装饰器
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        bisheng_model_limit_check(args[0])
         return func(*args, **kwargs)
 
     return wrapper

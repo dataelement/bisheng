@@ -10,11 +10,10 @@ from pydantic import Field
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
 from langchain_core.language_models import BaseLanguageModel, BaseChatModel
 
-from bisheng.cache.redis import redis_client
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
-from bisheng.interface.utils import wrapper_bisheng_model_limit_check
+from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async
 
 
 class BishengLLM(BaseChatModel):
@@ -120,7 +119,8 @@ class BishengLLM(BaseChatModel):
             params['model'] = params.pop('model_name')
         elif server_info.type == LLMServerType.SPARK.value:
             params['openai_api_key'] = f'{params.pop("api_key")}:{params.pop("api_secret")}'
-        elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value, LLMServerType.VLLM.value]:
+        elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
+                                  LLMServerType.VLLM.value]:
             params['openai_api_key'] = params.pop('openai_api_key', None) or "EMPTY"
         return params
 
@@ -145,7 +145,7 @@ class BishengLLM(BaseChatModel):
             raise e
         return ret
 
-    @wrapper_bisheng_model_limit_check
+    @wrapper_bisheng_model_limit_check_async
     async def _agenerate(
             self,
             messages: List[BaseMessage],
