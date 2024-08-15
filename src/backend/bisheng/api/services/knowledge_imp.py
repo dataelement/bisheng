@@ -520,7 +520,7 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             original_file = input_file.object_name
             file_url = minio.get_share_link(original_file,
                                             minio_client.tmp_bucket) if original_file.startswith(
-                                                'tmp') else minio.get_share_link(original_file)
+                'tmp') else minio.get_share_link(original_file)
 
             if file_url:
                 file_path, _ = file_download(file_url)
@@ -625,6 +625,7 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
     try:
         # 相似问统一插入
         questions = data.questions
+        data.answers = data.answers if isinstance(data.answers, str) else json.dumps(data.answers, ensure_ascii=False)
         if questions:
             if data.id:
                 qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
@@ -764,7 +765,6 @@ def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
 
 
 def recommend_question(question: str, answer: str, number: int = 3) -> List[str]:
-
     from langchain.chains.llm import LLMChain
     from langchain_core.prompts.prompt import PromptTemplate
     prompt = """- Role: 问题生成专家
@@ -820,7 +820,6 @@ def recommend_question(question: str, answer: str, number: int = 3) -> List[str]
 
 
 def extract_code_blocks(markdown_code_block: str):
-
     # 定义正则表达式模式
     pattern = r'```\w*\s*(.*?)```'
 
