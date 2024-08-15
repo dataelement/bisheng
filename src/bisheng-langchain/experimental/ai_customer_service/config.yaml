@@ -1,0 +1,15 @@
+web_host: 
+web_port: 
+
+reranker:
+  device: cuda:6
+  model_path: 
+
+vector_store:
+  cache_path: cache/vector_store
+  store_name: 
+  embedding:
+    device: cuda:6
+    model_path: 
+
+  
