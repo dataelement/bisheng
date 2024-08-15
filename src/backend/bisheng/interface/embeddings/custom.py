@@ -11,6 +11,7 @@ from bisheng.interface.utils import wrapper_bisheng_model_limit_check
 
 
 class OpenAIProxyEmbedding(Embeddings):
+    embeddings: Optional[Embeddings] = Field(default=None)
 
     def __init__(self) -> None:
         super().__init__()
