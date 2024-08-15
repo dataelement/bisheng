@@ -61,7 +61,7 @@ class QAKnowledgeBase(SQLModelSerializable):
         if not v:
             return v
         if isinstance(v, List):
-            return json.dumps(v)
+            return json.dumps(v, ensure_ascii=False)
 
         return v
 
@@ -87,7 +87,7 @@ class KnowledgeFileCreate(KnowledgeFileBase):
 class QAKnowledgeUpsert(QAKnowledgeBase):
     """支持修改"""
     id: Optional[int]
-    answers: Union[List[str], str]
+    answers: Optional[List[str]]
 
 
 class KnowledgeFileDao(KnowledgeFileBase):

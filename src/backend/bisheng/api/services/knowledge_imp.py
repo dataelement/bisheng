@@ -625,7 +625,6 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
     try:
         # 相似问统一插入
         questions = data.questions
-        data.answers = data.answers if isinstance(data.answers, str) else json.dumps(data.answers, ensure_ascii=False)
         if questions:
             if data.id:
                 qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
