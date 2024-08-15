@@ -24,10 +24,6 @@ jobs:
       - name: checkout
         uses: actions/checkout@v2 
 
-      - name: git message
-        id: git_message
-        run: |
-          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
 
       # 构建 bisheng-langchain
       - name: Set python version 3.10
@@ -46,6 +42,14 @@ jobs:
       #    repo="http://${{ env.PY_NEXUS }}/repository/pypi-hosted/"
       #    twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl
       #    cd ../../
+      
+      - name: Get version
+        id: get_version
+        run: |
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      
+      - name: Set Environment Variable
+        run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
 
       # 发布到 私有仓库
       - name: set insecure registry
