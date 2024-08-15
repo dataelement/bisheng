@@ -1,19 +1,14 @@
-from http import HTTPStatus
-import dashscope
+import os
+from typing import Dict, List
+
+from openai import AsyncAzureOpenAI, AzureOpenAI
 
 
-def call_qwen2(messages, model_name='qwen2-72b-instruct'):
-    response = dashscope.Generation.call(
-        model_name,
-        messages=messages,
-        result_format='message',  # set the result is message format.
+def call_openai(model: str, messages: List[Dict[str, str]], **kwargs) -> str:
+    client = AzureOpenAI(
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
     )
-    if response.status_code == HTTPStatus.OK:
-        return response['output']['choices'][0]['message']['content']
-    else:
-        return 'Request id: %s, Status code: %s, error code: %s, error message: %s' % (
-            response.request_id,
-            response.status_code,
-            response.code,
-            response.message,
-        )
+    response = client.chat.completions.create(model=model, messages=messages, **kwargs)
+    return response.choices[0].message.content
