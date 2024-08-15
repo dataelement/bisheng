@@ -1,10 +1,10 @@
-name: release
+name: test_build
 
 on:
   push:
     # Sequence of patterns matched against refs/tags
-    tags:
-      - "v*"
+    branches:
+      - "develop/*"
 
 env:
   DOCKERHUB_REPO: project/
@@ -20,32 +20,21 @@ jobs:
     runs-on: ubuntu-latest
     #if: startsWith(github.event.ref, 'refs/tags')
     steps:
-      # deploy  
       - name: checkout
-        uses: actions/checkout@v2 
+        uses: actions/checkout@v2
 
-      - name: git message
-        id: git_message
+      - name: Get version
+        id: get_version
         run: |
-          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/heads\/develop\//}
+          echo $GITHUB_REF
+          echo $VERSION
 
       # 构建 bisheng-langchain
-      - name: Set python version 3.10
+      - name: Set python version 3.8
         uses: actions/setup-python@v1
         with:
-          python-version: "3.10"
-
-      #- name: Build PyPi bisheng-langchain and push
-      #  id: pypi_build_bisheng_langchain
-      #  run: |
-      #    pip install Cython
-      #    pip install wheel
-      #    pip install twine
-      #    cd ./src/bisheng-langchain
-      #    python setup.py bdist_wheel
-      #    repo="http://${{ env.PY_NEXUS }}/repository/pypi-hosted/"
-      #    twine upload --verbose -u ${{ secrets.NEXUS_USER }}  -p ${{ secrets.NEXUS_PASSWORD }} --repository-url $repo  dist/*.whl
-      #    cd ../../
+          python-version: 3.8
 
       # 发布到 私有仓库
       - name: set insecure registry
