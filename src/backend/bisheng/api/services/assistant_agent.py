@@ -36,6 +36,7 @@ from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.interface.initialize.loading import instantiate_llm, import_by_type
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.utils.embedding import decide_embeddings
+from bisheng.settings import settings
 
 
 class AssistantAgent(AssistantUtils):
@@ -109,7 +110,6 @@ class AssistantAgent(AssistantUtils):
                                               temperature=self.assistant.temperature,
                                               streaming=default_llm.streaming)
 
-
     async def init_auto_update_llm(self):
         """ 初始化自动优化prompt等信息的llm实例 """
         assistant_llm = LLMService.get_assistant_llm()
@@ -124,6 +124,11 @@ class AssistantAgent(AssistantUtils):
         """
         解析预置工具的初始化参数
         """
+        # 特殊处理下bisheng_code_interpreter的参数
+        if tool.tool_key == 'bisheng_code_interpreter':
+            return {
+                "minio": settings.get_knowledge().get("minio", {})
+            }
         if not tool.extra:
             return {}
         params = json.loads(tool.extra)
