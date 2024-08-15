@@ -32,22 +32,22 @@ class BishengLLM(BaseChatModel):
     llm: Optional[BaseChatModel] = Field(default=None)
     llm_node_type = {
         # 开源推理框架
-        LLMServerType.OLLAMA: 'ChatOllama',
-        LLMServerType.XINFERENCE: 'ChatOpenAI',
-        LLMServerType.LLAMACPP: 'ChatOpenAI',  # 此组件是加载本地的模型文件，待确认是否有api服务提供
-        LLMServerType.VLLM: 'ChatOpenAI',
-        LLMServerType.BISHENG_RT: "HostChatGLM",
+        LLMServerType.OLLAMA.value: 'ChatOllama',
+        LLMServerType.XINFERENCE.value: 'ChatOpenAI',
+        LLMServerType.LLAMACPP.value: 'ChatOpenAI',  # 此组件是加载本地的模型文件，待确认是否有api服务提供
+        LLMServerType.VLLM.value: 'ChatOpenAI',
+        LLMServerType.BISHENG_RT.value: "HostChatGLM",
 
         # 官方api服务
-        LLMServerType.OPENAI: 'ChatOpenAI',
-        LLMServerType.AZURE_OPENAI: 'AzureChatOpenAI',
-        LLMServerType.QWEN: 'ChatOpenAI',
-        LLMServerType.QIAN_FAN: 'ChatWenxin',
-        LLMServerType.ZHIPU: 'ChatOpenAI',
-        LLMServerType.MINIMAX: 'MiniMaxChat',
-        LLMServerType.ANTHROPIC: 'ChatAnthropic',
-        LLMServerType.DEEPSEEK: 'ChatOpenAI',
-        LLMServerType.SPARK: 'ChatOpenAI',
+        LLMServerType.OPENAI.value: 'ChatOpenAI',
+        LLMServerType.AZURE_OPENAI.value: 'AzureChatOpenAI',
+        LLMServerType.QWEN.value: 'ChatOpenAI',
+        LLMServerType.QIAN_FAN.value: 'ChatWenxin',
+        LLMServerType.ZHIPU.value: 'ChatOpenAI',
+        LLMServerType.MINIMAX.value: 'MiniMaxChat',
+        LLMServerType.ANTHROPIC.value: 'ChatAnthropic',
+        LLMServerType.DEEPSEEK.value: 'ChatOpenAI',
+        LLMServerType.SPARK.value: 'ChatOpenAI',
     }
 
     # bisheng强相关的业务参数
@@ -82,7 +82,7 @@ class BishengLLM(BaseChatModel):
         self.model_info = model_info
         self.server_info = server_info
 
-        class_object = self._get_llm_class(LLMServerType(server_info.type))
+        class_object = self._get_llm_class(server_info.type)
         params = self._get_llm_params(server_info, model_info)
         try:
             self.llm = instantiate_llm(self.llm_node_type.get(server_info.type), class_object, params)
@@ -90,8 +90,8 @@ class BishengLLM(BaseChatModel):
             logger.exception('init bisheng llm error')
             raise Exception(f'初始化llm组件失败，请检查配置或联系管理员。错误信息：{e}')
 
-    def _get_llm_class(self, server_type: LLMServerType) -> BaseLanguageModel:
-        node_type = self.llm_node_type.get(server_type)
+    def _get_llm_class(self, server_type: str) -> BaseLanguageModel:
+        node_type = self.llm_node_type[server_type]
         class_object = import_by_type(_type='llms', name=node_type)
         return class_object
 

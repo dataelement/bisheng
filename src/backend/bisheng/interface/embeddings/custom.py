@@ -55,19 +55,19 @@ class BishengEmbeddings(Embeddings):
     embeddings: Optional[Embeddings] = Field(default=None)
     llm_node_type = {
         # 开源推理框架
-        LLMServerType.OLLAMA: 'OllamaEmbeddings',
-        LLMServerType.XINFERENCE: 'OpenAIEmbeddings',
-        LLMServerType.LLAMACPP: 'OpenAIEmbeddings',
-        LLMServerType.VLLM: 'OpenAIEmbeddings',
-        LLMServerType.BISHENG_RT: 'HostEmbeddings',
+        LLMServerType.OLLAMA.value: 'OllamaEmbeddings',
+        LLMServerType.XINFERENCE.value: 'OpenAIEmbeddings',
+        LLMServerType.LLAMACPP.value: 'OpenAIEmbeddings',
+        LLMServerType.VLLM.value: 'OpenAIEmbeddings',
+        LLMServerType.BISHENG_RT.value: 'HostEmbeddings',
 
         # 官方API服务
-        LLMServerType.OPENAI: 'OpenAIEmbeddings',
-        LLMServerType.AZURE_OPENAI: 'AzureOpenAIEmbeddings',
-        LLMServerType.QWEN: 'DashScopeEmbeddings',
-        LLMServerType.QIAN_FAN: 'QianfanEmbeddingsEndpoint',
-        LLMServerType.MINIMAX: 'MiniMaxEmbeddings',
-        LLMServerType.ZHIPU: 'OpenAIEmbeddings',
+        LLMServerType.OPENAI.value: 'OpenAIEmbeddings',
+        LLMServerType.AZURE_OPENAI.value: 'AzureOpenAIEmbeddings',
+        LLMServerType.QWEN.value: 'DashScopeEmbeddings',
+        LLMServerType.QIAN_FAN.value: 'QianfanEmbeddingsEndpoint',
+        LLMServerType.MINIMAX.value: 'MiniMaxEmbeddings',
+        LLMServerType.ZHIPU.value: 'OpenAIEmbeddings',
     }
 
     def __init__(self, **kwargs):
@@ -93,7 +93,7 @@ class BishengEmbeddings(Embeddings):
         self.model_info: LLMModel = model_info
         self.server_info: LLMServer = server_info
 
-        class_object = self._get_embedding_class(LLMServerType(server_info.type))
+        class_object = self._get_embedding_class(server_info.type)
         params = self._get_embedding_params(server_info, model_info)
         try:
             self.embeddings = instantiate_embedding(class_object, params)
@@ -101,7 +101,7 @@ class BishengEmbeddings(Embeddings):
             logger.exception('init_bisheng_embedding error')
             raise Exception(f'初始化bisheng embedding组件失败，请检查配置或联系管理员。错误信息：{e}')
 
-    def _get_embedding_class(self, server_type: LLMServerType) -> Embeddings:
+    def _get_embedding_class(self, server_type: str) -> Embeddings:
         node_type = self.llm_node_type.get(server_type)
         if not node_type:
             raise Exception(f'没有找到对应的embedding组件{server_type}')
