@@ -77,6 +77,9 @@ jobs:
         run: |
           cd ./src/backend
           poetry source add --priority=supplemental foo http://${{ secrets.NEXUS_PUBLIC }}:${{ secrets.NEXUS_PUBLIC_PASSWORD }}@${{ env.PY_NEXUS }}/repository/pypi-group/simple
+          # 安装 nltk
+          pip install nltk
+          python -c "import nltk; nltk.download('punkt'); nltk.download('averaged_perceptron_tagger')"
           poetry lock
           cd ../../
 
