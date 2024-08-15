@@ -58,7 +58,7 @@ class LLMModelBase(SQLModelSerializable):
     config: Optional[Dict] = Field(sa_column=Column(JSON), description='服务提供方公共配置')
     status: int = Field(default=0, description='模型状态。0：正常，1：异常')
     remark: Optional[str] = Field(default='', sa_column=Column(Text), description='异常原因')
-    online: bool = Field(default=False, description='是否在线')
+    online: bool = Field(default=True, description='是否在线')
     user_id: int = Field(default=0, description='创建人ID')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
