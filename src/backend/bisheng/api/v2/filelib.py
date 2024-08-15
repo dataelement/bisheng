@@ -557,7 +557,7 @@ def update_qa(
         return resp_500(message=f'error e={str(e)}')
 
 
-@router.get('/deatil_qa', status_code=200)
+@router.get('/detail_qa', status_code=200)
 def detail_qa(*, id: int):
     """ 删除qa 问题对信息 """
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
