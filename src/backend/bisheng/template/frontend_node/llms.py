@@ -217,7 +217,12 @@ class LLMFrontendNode(FrontendNode):
             LLMFrontendNode.format_azure_field(field)
 
         if name == 'BishengLLM':
+            if field.name in ["streaming", "temperature", "top_p", "cache"]:
+                field.show = True
             if field.name == 'model_id':
                 field.field_type = "bisheng_model"
+                field.display_name = "Model Name"
             elif field.name == 'model_name':
                 field.show = False
+            elif field.name == 'streaming':
+                field.display_name = "Stream"
