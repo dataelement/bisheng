@@ -10,8 +10,9 @@ import ChatPro from "./pages/ChatAppPage/chatWebview";
 import SkillChat from "./pages/ChatAppPage/chatPage/SkillChatPage";
 import AssistantChat from "./pages/ChatAppPage/chatPage/AssistantChatPage";
 import DiffFlowPage from "./pages/DiffFlowPage";
-import FileLibPage from "./pages/FileLibPage";
-import FilesPage from "./pages/FileLibPage/files";
+import KnowledgePage from "./pages/KnowledgePage";
+import FilesPage from "./pages/KnowledgePage/files";
+import QasPage from "./pages/KnowledgePage/qas";
 import FlowPage from "./pages/FlowPage";
 import LogPage from "./pages/LogPage";
 import { LoginPage } from "./pages/LoginPage/login";
@@ -29,6 +30,8 @@ import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
+import AppChatDetail from "./pages/LogPage/useAppLog/appChatDetail";
+import DataSetPage from "./pages/DataSetPage";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -60,8 +63,9 @@ const privateRouter = [
     element: <MainLayout />,
     children: [
       { path: "", element: <SkillChatPage />, },
-      { path: "filelib", element: <FileLibPage />, permission: 'knowledge', },
+      { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
+      { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },
       {
         path: "build",
         element: <BuildLayout />,
@@ -80,9 +84,10 @@ const privateRouter = [
       { path: "model", element: <ModelPage />, permission: 'model', },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
+      { path: "log/chatlog/:fid/:cid", element: <AppChatDetail /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
-
+      { path: "dataset", element: <DataSetPage /> },
     ],
   },
   { path: "model/doc", element: <Doc /> },

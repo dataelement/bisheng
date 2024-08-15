@@ -108,4 +108,3 @@ jobs:
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
             ${{ env.DOCKER_NEXUS }}/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
-      

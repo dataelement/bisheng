@@ -133,7 +133,7 @@ export function usePresetList(onChange) {
     const [prsetList, setPrsetList] = useState([]);
 
     useEffect(() => {
-        getPresetFileApi().then(setPrsetList);
+        getPresetFileApi({ page_size: 400, page_num: 1, keyword: '' }).then(res => setPrsetList(res.data));
     }, []);
 
     const handleChangePrsetList = (id, key, val) => {

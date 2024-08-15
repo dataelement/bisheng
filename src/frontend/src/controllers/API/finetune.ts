@@ -99,17 +99,19 @@ export const uploadTaskFileApi = async (data, config): Promise<FileItem> => {
 };
 
 // 获取预设文件列表
-export const getPresetFileApi = async (): Promise<FileItem[]> => {
-    return await (axios.get(`/api/v1/finetune/job/file/preset`) as Promise<FileDB[]>).then((data) => {
-        return data.map(item => {
+export const getPresetFileApi = async (data: { page_size: number, page_num: number, keyword: string }): Promise<FileItem[]> => {
+    return await (axios.get(`/api/v1/finetune/job/file/preset`, { params: data }) as Promise<FileDB[]>).then((data) => {
+        const list = data.list.map(item => {
             return {
+                ...item,
                 id: item.id,
                 checked: false,
                 sampleSize: 1000,
                 name: item.name,
                 dataSource: item.url
             }
-        }) as FileItem[]
+        })
+        return { data: list, total: data.total }
     });
 };
 
@@ -117,3 +119,13 @@ export const getPresetFileApi = async (): Promise<FileItem[]> => {
 export const getFileUrlApi = async (urlkey): Promise<{ url: string }> => {
     return await axios.get(`/api/v1/finetune/job/file/download?file_url=${urlkey}`);
 };
+
+// 创建数据集
+export const createDatasetApi = async (data: { name: string, files: string, qa_list: string[] }): Promise<any> => {
+    return await axios.post(`/api/v1/finetune/job/file/preset `, data);
+}
+
+// 删除数据集
+export const deleteDatasetApi = async (id) => {
+    return await axios.delete(`/api/v1/finetune/job/file/preset?file_id=${id}`);
+}

@@ -2,6 +2,7 @@ import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cname } from "../utils"
+import { LoadIcon } from "@/components/bs-icons"
 const buttonVariants = cva(
     "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
     {
@@ -63,41 +64,47 @@ const ButtonNumber = React.forwardRef<HTMLButtonElement, {
     step?: number,
     size?: "default" | "sm" | "lg" | "icon",
     onChange?: (value: number) => void
-    }>(({ className, value: userValue, defaultValue, max = 100, min = 0, step = 1, size = 'sm', onChange }, ref) => {
-        if (max <= min) {
-            throw new Error('max must be greater than min');
-        }
-        const [value, setValue] = React.useState(defaultValue)
-        React.useEffect(() => {
-            setValue(userValue)
-        }, [userValue])
-
-        const getDecimalCount = (value: number) => {
-            return (String(value).split('.')[1] || '').length;
-        }
-        const roundValue = (value: number, decimalCount: number) => {
-            const rounder = Math.pow(10, decimalCount);
-            return Math.round(value * rounder) / rounder;
-        }
-        const valueAdd = () => {
-            const sum = roundValue(value + step, getDecimalCount(step))
-            const updateValue = sum > max ? max : sum
-            setValue(updateValue)
-            onChange?.(updateValue)
-        }
-        const valueReduce = () => {
-            const sum = roundValue(value - step, getDecimalCount(step))
-            const updateValue = sum < min ? min : sum
-            setValue(updateValue)
-            onChange?.(updateValue)
-        }
-        return (<div className={cname("flex items-center border input-border bg-gray-50 dark:bg-background-login rounded-md", className)}>
-            <Button variant="ghost" size={size} disabled={value === min} onClick={valueReduce}>-</Button>
-            <span className="min-w-10 block text-center">{value}</span>
-            <Button variant="ghost" size={size} disabled={value === max} onClick={valueAdd}>+</Button>
-        </div>)
+}>(({ className, value: userValue, defaultValue, max = 100, min = 0, step = 1, size = 'sm', onChange }, ref) => {
+    if (max <= min) {
+        throw new Error('max must be greater than min');
     }
+    const [value, setValue] = React.useState(defaultValue)
+    React.useEffect(() => {
+        setValue(userValue)
+    }, [userValue])
+
+    const getDecimalCount = (value: number) => {
+        return (String(value).split('.')[1] || '').length;
+    }
+    const roundValue = (value: number, decimalCount: number) => {
+        const rounder = Math.pow(10, decimalCount);
+        return Math.round(value * rounder) / rounder;
+    }
+    const valueAdd = () => {
+        const sum = roundValue(value + step, getDecimalCount(step))
+        const updateValue = sum > max ? max : sum
+        setValue(updateValue)
+        onChange?.(updateValue)
+    }
+    const valueReduce = () => {
+        const sum = roundValue(value - step, getDecimalCount(step))
+        const updateValue = sum < min ? min : sum
+        setValue(updateValue)
+        onChange?.(updateValue)
+    }
+    return (<div className={cname("flex items-center border input-border bg-gray-50 dark:bg-background-login rounded-md", className)}>
+        <Button variant="ghost" size={size} disabled={value === min} onClick={valueReduce}>-</Button>
+        <span className="min-w-10 block text-center">{value}</span>
+        <Button variant="ghost" size={size} disabled={value === max} onClick={valueAdd}>+</Button>
+    </div>)
+}
 )
 ButtonNumber.displayName = "ButtonNumber"
 
-export { Button, ButtonNumber, buttonVariants }
+const LoadButton = React.forwardRef<HTMLButtonElement, ButtonProps & { loading?: boolean }>(
+    ({ loading = false, disabled = false, ...props }, ref) => {
+        return <Button {...props} disabled={loading || disabled} ref={ref}>{loading && <LoadIcon className="mr-1" />}{props.children}</Button>
+    }
+)
+
+export { Button, ButtonNumber, LoadButton, buttonVariants }

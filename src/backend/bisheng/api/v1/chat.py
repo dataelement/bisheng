@@ -125,8 +125,7 @@ def get_chatmessage(*,
     if not chat_id or not flow_id:
         return {'code': 500, 'message': 'chat_id 和 flow_id 必传参数'}
     where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
-                                      ChatMessage.chat_id == chat_id,
-                                      ChatMessage.user_id == login_user.user_id)
+                                      ChatMessage.chat_id == chat_id)
     if id:
         where = where.where(ChatMessage.id < int(id))
     with session_getter() as session:

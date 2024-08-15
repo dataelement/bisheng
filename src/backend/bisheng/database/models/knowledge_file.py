@@ -61,7 +61,7 @@ class QAKnowledgeBase(SQLModelSerializable):
         if not v:
             return v
         if isinstance(v, List):
-            return json.dumps(v)
+            return json.dumps(v, ensure_ascii=False)
 
         return v
 
@@ -87,7 +87,7 @@ class KnowledgeFileCreate(KnowledgeFileBase):
 class QAKnowledgeUpsert(QAKnowledgeBase):
     """支持修改"""
     id: Optional[int]
-    answers: Union[List[str], str]
+    answers: Optional[List[str]]
 
 
 class KnowledgeFileDao(KnowledgeFileBase):
@@ -163,7 +163,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return session.exec(select(QAKnowledge).where(QAKnowledge.id == qa_id)).first()
 
     @classmethod
-    def update(cls, qa_knowledge):
+    def update(cls, qa_knowledge: QAKnowledge):
         if qa_knowledge.id is None:
             raise ValueError('id不能为空')
         with session_getter() as session:
@@ -173,7 +173,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         return qa_knowledge
 
     @classmethod
-    def delete_batch(cls, qa_ids: int) -> bool:
+    def delete_batch(cls, qa_ids: List[int]) -> bool:
         with session_getter() as session:
             session.exec(delete(QAKnowledge).where(QAKnowledge.id.in_(qa_ids)))
             session.commit()

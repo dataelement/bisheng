@@ -70,7 +70,7 @@ export default function UserGroups() {
     />
 
     return <div className="relative">
-        <div className="h-[calc(100vh-136px)] overflow-y-auto pb-10">
+        <div className="h-[calc(100vh-128px)] overflow-y-auto pb-10">
             <div className="flex gap-6 items-center justify-end">
                 <div className="w-[180px] relative">
                     <SearchInput placeholder={t('system.groupName')} onChange={handleSearch}></SearchInput>

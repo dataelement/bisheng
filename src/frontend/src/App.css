@@ -34,6 +34,9 @@
 	background: #fff;
 	border-radius: 8px;
 }
+.dark ::-webkit-scrollbar-track {
+	background: #111;
+}
 
 @media (prefers-reduced-motion: no-preference) {
 	.App-logo {
