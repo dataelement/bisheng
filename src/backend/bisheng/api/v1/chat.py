@@ -64,7 +64,8 @@ def get_app_chat_list(*,
         user_group_ids = [user_group.group_id for user_group in user_groups]
         # 获取分组下的所有资源ID
         resources = GroupResourceDao.get_groups_resource(user_group_ids,
-                                                         resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
+                                                         resource_types=[ResourceTypeEnum.FLOW,
+                                                                         ResourceTypeEnum.ASSISTANT])
         group_flow_ids = [one.third_id for one in resources]
         if not group_flow_ids:
             return resp_200(PageList(list=[], total=0))
@@ -333,12 +334,15 @@ def get_chatlist_list(*,
 def get_online_chat(*,
                     keyword: Optional[str] = None,
                     tag_id: Optional[int] = None,
-                    page: Optional[int] = 0,
-                    limit: Optional[int] = 0,
+                    page: Optional[int] = 1,
+                    limit: Optional[int] = 10,
                     user: UserPayload = Depends(get_login_user)):
     # 由于是获取助手和技能两个表，需要将page修改下
     if page and limit:
         search_page = math.ceil(page / 2)
+    else:
+        search_page = 1
+        limit = 10
     res = []
     all_assistant = AssistantService.get_assistant(user,
                                                    keyword,
