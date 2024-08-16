@@ -175,7 +175,7 @@ def get_tool_list(*, is_preset: Optional[bool] = None, login_user: UserPayload =
 @router.post('/tool/config', response_model=UnifiedResponseModel)
 async def update_tool_config(*,
                              login_user: UserPayload = Depends(get_admin_user),
-                             tool_id: int = Body(description='工具唯一ID'),
+                             tool_id: int = Body(description='工具类别唯一ID'),
                              extra: dict = Body(description='工具配置项')):
     """ 更新工具的配置 """
     data = AssistantService.update_tool_config(login_user, tool_id, extra)

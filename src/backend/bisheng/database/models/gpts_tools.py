@@ -41,6 +41,8 @@ class GptsToolsTypeBase(SQLModelSerializable):
     id: Optional[int] = Field(index=True, primary_key=True)
     name: str = Field(default='', index=True, description="工具类别名字")
     logo: Optional[str] = Field(default='', description="工具类别的logo文件地址")
+    extra: Optional[str] = Field(default='', sa_column=Column(String(length=2048)),
+                                 description="工具类别的配置信息，用来存储工具类别所需的配置信息")
     description: str = Field(default='', description="工具类别的描述")
     server_host: Optional[str] = Field(default='', description="自定义工具的访问根地址，必须以http或者https开头")
     auth_method: Optional[int] = Field(default=0, description="工具类别的鉴权方式")
@@ -325,3 +327,13 @@ class GptsToolsDao(GptsToolsBase):
         拼接自定义工具的tool_key
         """
         return f"tool_type_{tool_type_id}_{tool_key}"
+
+    @classmethod
+    def update_tools_extra(cls, tool_type_id: int, extra: str) -> bool:
+        with session_getter() as session:
+            statement = update(GptsToolsType).where(GptsToolsType.id == tool_type_id).values(extra=extra)
+            session.exec(statement)
+            statement = update(GptsTools).where(GptsTools.type == tool_type_id).values(extra=extra)
+            session.exec(statement)
+            session.commit()
+            return True

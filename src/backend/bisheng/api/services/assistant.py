@@ -400,17 +400,23 @@ class AssistantService(BaseService, AssistantUtils):
             tool_type_children[one.type].append(one)
 
         for one in res:
+            if not user.is_admin():
+                one['extra'] = ''
             one["children"] = tool_type_children.get(one["id"], [])
 
         return res
 
     @classmethod
-    def update_tool_config(cls, login_user: UserPayload, tool_id: int, extra: dict) -> GptsTools:
-        tool_info = GptsToolsDao.get_one_tool(tool_id)
-        if not tool_info:
+    def update_tool_config(cls, login_user: UserPayload, tool_type_id: int, extra: dict) -> GptsToolsTypeRead:
+        # 获取工具类别
+        tool_type = GptsToolsDao.get_one_tool_type(tool_type_id)
+        if not tool_type:
             raise NotFoundError.http_exception()
-        tool_info.extra = json.dumps(extra)
-        return GptsToolsDao.update_tools(tool_info)
+
+        # 更新工具类别下所有工具的配置
+        tool_type.extra = json.dumps(extra, ensure_ascii=False)
+        GptsToolsDao.update_tools_extra(tool_type_id, tool_type.extra)
+        return tool_type
 
     @classmethod
     def add_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
