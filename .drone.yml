@@ -66,6 +66,13 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         from_secret: NEXUS_USER
       password:
         from_secret: NEXUS_PASSWORD
+    when:
+      status:
+        - success
+      ref: # git 分支
+        - refs/tags/*
+      event: # 事  件
+        - tag
 
   - name: build_docker_frontend
     pull: if-not-exists
@@ -88,6 +95,13 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         from_secret: NEXUS_USER
       password:
         from_secret: NEXUS_PASSWORD
+    when:
+      status:
+        - success
+      ref: # git 分支
+        - refs/tags/*
+      event: # 事  件
+        - tag
 
   - name: publish_nexus
     pull: if-not-exists
@@ -122,10 +136,14 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     volumes:
       - name: dockersock
         path: /var/run
+    when:
+      status:
+        - success
+      ref: # git 分支
+        - refs/tags/*
+      event: # 事  件
+        - tag
 
-trigger:
-  event:
-    -push
    
 volumes:
 - name: bisheng-cache
