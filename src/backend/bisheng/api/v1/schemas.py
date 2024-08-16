@@ -363,7 +363,7 @@ class LLMModelCreateReq(BaseModel):
     description: Optional[str] = Field(default='', description="模型描述")
     model_name: str = Field(..., description="模型名称")
     model_type: str = Field(..., description="模型类型")
-    online: bool = Field(default=False, description='是否在线')
+    online: bool = Field(default=True, description='是否在线')
     config: Optional[dict] = Field(default=None, description="模型配置")
 
 
