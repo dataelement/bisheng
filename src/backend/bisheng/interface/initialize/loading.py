@@ -266,7 +266,7 @@ def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: boo
             params.pop('max_tokens', None)
 
     llm = class_object(**params)
-
+    llm_config = settings.get_from_db('llm_request')
     # 支持request_timeout & max_retries
     if hasattr(llm, 'request_timeout') and 'request_timeout' in llm_config:
         if isinstance(llm_config.get('request_timeout'), str):
