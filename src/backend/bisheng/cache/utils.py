@@ -159,7 +159,7 @@ def detect_encoding_cchardet(file_obj, num_bytes=1024):
 def convert_encoding_cchardet(input_file, output_file, target_encoding='utf-8'):
     """将文件转换为目标编码"""
     source_encoding, confidence = detect_encoding_cchardet(input_file)
-    if confidence < 0.5 or source_encoding.lower() == target_encoding:  # 检测不出来不做任何处理
+    if confidence is None or confidence < 0.5 or source_encoding.lower() == target_encoding:  # 检测不出来不做任何处理
         output_file.close()
         output_file = input_file
         return output_file
