@@ -122,15 +122,6 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     volumes:
       - name: dockersock
         path: /var/run
-trigger:
-  branch:
-  - release
-  # - feat/*
-  ref: # git 分支
-  - refs/tags/*
-  event:
-  - push
-  - tag
    
 volumes:
 - name: bisheng-cache
