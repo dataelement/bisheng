@@ -134,7 +134,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - tar czf bisheng-$version.tar.gz bisheng-$version
       - curl -k --progress-bar -o /dev/null --user $USERNAME --upload-file bisheng-$version.tar.gz http://192.168.106.244:5081/repository/raw-hosted/product/bisheng-ent/bisheng-$version.tar.gz
     volumes:
-      - name: dockersock
+      - name: socket 
         path: /var/run
     when:
       status:
