@@ -2,7 +2,7 @@ import hashlib
 import json
 import os
 from typing import Dict, List, Optional
-
+from urllib.parse import quote, unquote
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, decide_vectorstores,
                                                 delete_es, delete_knowledge_by,
@@ -169,7 +169,7 @@ async def upload_file(*,
                       chunk_overlap: int = Form(default=100),
                       file: UploadFile = File(...),
                       background_tasks: BackgroundTasks):
-    file_name = file.filename
+    file_name = unquote(file.filename)
     # 缓存本地
     file_byte = await file.read()
     file_path = save_download_file(file_byte, 'bisheng', file_name)

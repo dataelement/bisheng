@@ -97,9 +97,9 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       USERNAME:
         from_secret: upload_name
       docker_username:
-        from_secret: docker_username
+        from_secret: DOCKER_USER
       docker_password:
-        from_secret: docker_password
+        from_secret: DOCKER_PASSWORD
     commands:
       - apk add --no-cache curl
       - apk add --no-cache tar
@@ -122,6 +122,10 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     volumes:
       - name: dockersock
         path: /var/run
+
+trigger:
+  event:
+    -push
    
 volumes:
 - name: bisheng-cache
