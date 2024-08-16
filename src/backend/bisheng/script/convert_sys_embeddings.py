@@ -106,6 +106,19 @@ def convert_sys_embeddings_to_mysql():
             if one.name == name:
                 need_add_server[name] = one
 
+    if not need_add_server[LLMServerType.BISHENG_RT.value]:
+        # 添加一个默认的RT服务提供方
+        server = LLMServer(
+            name=f"RT_OLD",
+            description='系统升级自动添加',
+            type=LLMServerType.BISHENG_RT.value,
+            config={
+                "host_base_url": 'http://xxxx:8000',
+            },
+            user_id=1,
+        )
+        llm_server = LLMDao.insert_server_with_models(server, [])
+
     # 重新设置知识库的模型配置
     update_knowledge = []
     for one in all_knowledge:
