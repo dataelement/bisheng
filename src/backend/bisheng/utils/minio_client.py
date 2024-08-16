@@ -96,7 +96,8 @@ class MinioClient():
     def upload_minio_file(self, object_name: str, file: BinaryIO, bucket_name=bucket, length: int = -1, **kwargs):
         # 初始化minio
         if length == -1:
-            length = file.getbuffer().nbytes
+            length = len(file.read())
+            file.seek(0)
         self.minio_client.put_object(bucket_name=bucket_name,
                                      object_name=object_name,
                                      data=file,
