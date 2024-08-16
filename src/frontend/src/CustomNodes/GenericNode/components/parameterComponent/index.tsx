@@ -548,6 +548,7 @@ export default function ParameterComponent({
         ) : left === true && type === "bisheng_model" ? (
           <div className="mt-2 w-full">
             <ModelSelect
+              type='flow'
               value={data.node!.template[name].value || null}
               onChange={(newValue) => {
                 data.node!.template[name].value = newValue;

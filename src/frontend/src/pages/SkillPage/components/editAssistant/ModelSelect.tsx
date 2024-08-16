@@ -1,8 +1,8 @@
 import Cascader from "@/components/bs-ui/select/cascader";
-import { getAssistantModelList } from "@/controllers/API/finetune";
+import { getAssistantModelList, getModelListApi } from "@/controllers/API/finetune";
 import { useEffect, useState } from "react";
 
-export default function ModelSelect({ value, onChange }) {
+export default function ModelSelect({ type = 'assistant', value, onChange }) {
 
     // const [configServers, setConfigServers] = useState([])
     const [loading, setLoading] = useState(true)
@@ -13,7 +13,7 @@ export default function ModelSelect({ value, onChange }) {
         // const data = await getAssistantModelsApi()
         // setConfigServers(data)
         setLoading(true)
-        const data = await getAssistantModelList()
+        const data = await (type === 'assistant' ? getAssistantModelList() : getModelListApi())
 
         let _value = []
         let _options = []
@@ -23,7 +23,7 @@ export default function ModelSelect({ value, onChange }) {
                 if (model.id === value) {
                     _value = [{ ...serverItem }, { value: model.id, label: model.model_name }]
                 }
-                return model.online ? [...res, {
+                return model.online && model.model_type !== 'embedding' ? [...res, {
                     value: model.id,
                     label: model.model_name
                 }] : res
