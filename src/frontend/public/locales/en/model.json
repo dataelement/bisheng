@@ -28,7 +28,7 @@
         "modelNameTooltip": "Name for local deployment or API request",
         "modelType": "Type",
         "systemModelSettings": "System Settings",
-        "knowledgeBaseModel": "Knowledge Base Model",
+        "knowledgeBaseModel": "Knowledge Model",
         "assistantModel": "Assistant Model",
         "evaluationModel": "Eval Model",
         "defaultEmbeddingModel": "Default Embedding for Knowledge Base",
@@ -59,7 +59,8 @@
         "gpuID": "GPU ID",
         "totalMemory": "Total Memory",
         "freeMemory": "Free Memory",
-        "gpuUtilization": "GPU Utilization"
+        "gpuUtilization": "GPU Utilization",
+        "notBeEmpty": "cannot be empty"
     },
     "finetune": {
         "rtServiceManagement": "FT Service Management",

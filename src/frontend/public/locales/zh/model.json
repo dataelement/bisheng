@@ -59,7 +59,8 @@
         "gpuID": "GPU-ID",
         "totalMemory": "总显存",
         "freeMemory": "空余显存",
-        "gpuUtilization": "GPU利用率"
+        "gpuUtilization": "GPU利用率",
+        "notBeEmpty": "不能为空"
     },
     "finetune": {
         "rtServiceManagement": "FT服务管理",

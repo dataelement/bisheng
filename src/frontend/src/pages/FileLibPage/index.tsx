@@ -27,7 +27,7 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import Cascader from "@/components/bs-ui/select/cascader";
-import { getModelListApi } from "@/controllers/API/finetune";
+import { getKnowledgeModelConfig, getModelListApi } from "@/controllers/API/finetune";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
 
@@ -42,31 +42,27 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
 
     // Fetch model data
     useEffect(() => {
-        // getEmbeddingModel().then(res => {
-        //     const models = res.models || []
-        //     setOptions(models)
-        //     setModal(models[0] || '')
-        // })
-        getModelListApi().then(data => {
+        Promise.all([getKnowledgeModelConfig(), getModelListApi()]).then(([config, data]) => {
+            const { embedding_model_id } = config
             let embeddings = []
             let models = {}
+            let _model = []
             data.forEach(server => {
                 const serverItem = { value: server.id, label: server.name, children: [] }
                 serverItem.children = server.models.reduce((res, model) => {
                     if (model.model_type !== 'embedding' || !model.online) return res
                     const modelItem = { value: model.id, label: model.model_name }
                     models[model.id] = model.model_name
+                    // 找到默认值
+                    if (model.id === embedding_model_id) {
+                        _model = [serverItem, modelItem]
+                    }
                     return [...res, modelItem]
                 }, [])
                 if (serverItem.children.length) embeddings.push(serverItem)
             });
             setOptions(embeddings)
-            const firstNode = embeddings[0]
-            if (firstNode) {
-                setModal([{ label: firstNode.label, value: firstNode.value }, { label: firstNode.children[0].label, value: firstNode.children[0].value }])
-            } else {
-                setModal([])
-            }
+            setModal(_model)
 
             onLoadEnd(models)
         })

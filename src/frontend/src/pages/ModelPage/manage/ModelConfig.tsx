@@ -83,21 +83,21 @@ function ModelItem({ data, onDelete, onInput }) {
 
 // 模型提供方枚举
 export const modelProvider = [
-    { "name": "OPENAI", "value": "openai" },
-    { "name": "AZURE_OPENAI", "value": "azure_openai" },
-    { "name": "OLLAMA", "value": "ollama" },
-    { "name": "XINFERENCE", "value": "xinference" },
-    { "name": "LLAMACPP", "value": "llamacpp" },
-    { "name": "VLLM", "value": "vllm" },
-    { "name": "QWEN", "value": "qwen" },
-    { "name": "QIAN_FAN", "value": "qianfan" },
-    { "name": "ZHIPU", "value": "zhipu" },
-    { "name": "MINIMAX", "value": "minimax" },
-    { "name": "ANTHROPIC", "value": "anthropic" },
-    { "name": "DEEPSEEK", "value": "deepseek" },
-    { "name": "SPARK", "value": "spark" }
+    { "name": "OpenAI", "value": "openai" },
+    { "name": "Azure OpenAI", "value": "azure_openai" },
+    { "name": "Ollama", "value": "ollama" },
+    { "name": "xinference", "value": "xinference" },
+    { "name": "llamacpp", "value": "llamacpp" },
+    { "name": "vllm", "value": "vllm" },
+    { "name": "通义千问", "value": "qwen" },
+    { "name": "百度千帆", "value": "qianfan" },
+    { "name": "智谱 AI", "value": "zhipu" },
+    { "name": "Minimax", "value": "minimax" },
+    { "name": "Anthropic", "value": "anthropic" },
+    { "name": "Deepseek", "value": "deepseek" },
+    { "name": "讯飞星火", "value": "spark" }
 ]
-const bishengModelProvider = { "name": "BISHENG_RT", "value": "bisheng_rt" }
+const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt" }
 
 // 默认表单项
 const defaultForm = {
@@ -176,11 +176,11 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 description: t('model.duplicateServiceProviderNameValidation')
             })
         }
-        const [config, errorMsg] = formRef.current.getData();
-        if (errorMsg) {
+        const [config, errorKey] = formRef.current.getData();
+        if (errorKey) {
             return message({
                 variant: 'warning',
-                description: errorMsg
+                description: `${errorKey} ${t('model.notBeEmpty')}`
             })
         }
 

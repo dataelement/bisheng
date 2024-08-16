@@ -88,7 +88,7 @@ export default function HomePage({ onSelect }) {
         <div className="mt-[20px] px-12">
             <div className="flex flex-wrap">
                 <Button variant={chooseId ? "outline" : "default"} className="mb-2 mr-4 h-7" size="sm"
-                    onClick={() => { setChooseId(null); loadData(false) }}>全部</Button>
+                    onClick={() => { setChooseId(null); loadData(false) }}>{t('all')}</Button>
                 {
                     labels.map((l, index) => index <= 11 && <Button
                         size="sm"
@@ -114,7 +114,7 @@ export default function HomePage({ onSelect }) {
                             icon={flow.flow_type === 'flow' ? SkillIcon : AssistantIcon}
                             footer={
                                 <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${flow.flow_type === 'flow' && 'bg-gray-950'}`}>
-                                    {flow.flow_type === 'flow' ? '技能' : '助手'}
+                                    {flow.flow_type === 'flow' ? t('build.skill') : t('build.assistant')}
                                 </Badge>
                             }
                             onClick={() => { onSelect(flow) }}

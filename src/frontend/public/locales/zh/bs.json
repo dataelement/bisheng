@@ -161,7 +161,8 @@
     "guideQuestions50": "引导问题最多50个字符",
     "promptWords1000": "提示词最多为1000个字符",
     "contactAdmin": "请联系管理员上线助手",
-    "deleteSure": "确认删除该工具？"
+    "deleteSure": "确认删除该工具？",
+    "modelRequired": "模型为空"
   },
   "chat": {
     "newChat": "新建会话",
