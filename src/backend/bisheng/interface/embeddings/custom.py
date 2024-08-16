@@ -20,7 +20,6 @@ class OpenAIProxyEmbedding(Embeddings):
         knowledge_llm = LLMService.get_knowledge_llm()
         self.embeddings = BishengEmbeddings(model_id=knowledge_llm.embedding_model_id)
 
-    @classmethod
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Embed search docs."""
         if not texts:
@@ -28,7 +27,6 @@ class OpenAIProxyEmbedding(Embeddings):
 
         return self.embeddings.embed_documents(texts)
 
-    @classmethod
     def embed_query(self, text: str) -> List[float]:
         """Embed query text."""
 
