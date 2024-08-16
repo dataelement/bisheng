@@ -17,9 +17,7 @@ class MinioClient():
     def __init__(self) -> None:
         if 'minio' not in settings.get_knowledge(
         ) or not settings.get_knowledge().get('minio').get('MINIO_ENDPOINT'):
-            self.minio_client = None
-            self.minio_share = None
-            return
+            raise Exception('请配置minio地址等相关配置')
         self.minio_client = minio.Minio(
             endpoint=settings.get_knowledge().get('minio').get('MINIO_ENDPOINT'),
             access_key=settings.get_knowledge().get('minio').get('MINIO_ACCESS_KEY'),
@@ -32,17 +30,16 @@ class MinioClient():
             secret_key=settings.get_knowledge().get('minio').get('MINIO_SECRET_KEY'),
             secure=settings.get_knowledge().get('minio').get('SCHEMA'),
             cert_check=settings.get_knowledge().get('minio').get('CERT_CHECK'))
-        self.mkdir(bucket=bucket)
+        self.mkdir(new_bucket=bucket)
 
     def upload_minio(self, object_name: str, file_path, content_type='application/text', bucket_name=bucket):
         # 初始化minio
-        if self.minio_client:
-            logger.debug('upload_file obj={} bucket={} file_paht={}', object_name, bucket,
-                         file_path)
-            return self.minio_client.fput_object(bucket_name=bucket_name,
-                                                 object_name=object_name,
-                                                 file_path=file_path,
-                                                 content_type=content_type)
+        logger.debug('upload_file obj={} bucket={} file_paht={}', object_name, bucket,
+                     file_path)
+        return self.minio_client.fput_object(bucket_name=bucket_name,
+                                             object_name=object_name,
+                                             file_path=file_path,
+                                             content_type=content_type)
 
     def upload_minio_file_io(self, object_name: str, file: BinaryIO, bucket_name=bucket, **kwargs):
         # 初始化minio
@@ -54,34 +51,26 @@ class MinioClient():
 
     def upload_minio_data(self, object_name: str, data, length, content_type):
         # 初始化minio
-        if self.minio_client:
-            self.minio_client.put_object(bucket_name=bucket,
-                                         object_name=object_name,
-                                         data=io.BytesIO(data),
-                                         length=length,
-                                         content_type=content_type)
+        self.minio_client.put_object(bucket_name=bucket,
+                                     object_name=object_name,
+                                     data=io.BytesIO(data),
+                                     length=length,
+                                     content_type=content_type)
 
     def get_share_link(self, object_name, bucket=bucket):
         # filepath "/" 开头会有nginx问题
         if object_name[0] == '/':
             object_name = object_name[1:]
-        try:
-            if self.minio_share and self.minio_share.stat_object(bucket_name=bucket,
-                                                                 object_name=object_name):
-                return self.minio_share.presigned_get_object(bucket_name=bucket,
-                                                             object_name=object_name,
-                                                             expires=timedelta(days=7))
-            else:
-                return ''
-        except Exception:
-            return ''
+        return self.minio_share.presigned_get_object(bucket_name=bucket,
+                                                     object_name=object_name,
+                                                     expires=timedelta(days=7))
 
     def upload_tmp(self, object_name, data):
         self.mkdir(tmp_bucket)
         from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
         from minio.commonconfig import Filter
 
-        if self.minio_client and not self.minio_client.get_bucket_lifecycle(tmp_bucket):
+        if not self.minio_client.get_bucket_lifecycle(tmp_bucket):
             lifecycle_conf = LifecycleConfig([
                 Rule(
                     'Enabled',
@@ -92,29 +81,26 @@ class MinioClient():
             ], )
             self.minio_client.set_bucket_lifecycle(tmp_bucket, lifecycle_conf)
 
-        if self.minio_client:
-            self.minio_client.put_object(bucket_name=tmp_bucket,
-                                         object_name=object_name,
-                                         data=io.BytesIO(data),
-                                         length=len(data))
+        self.minio_client.put_object(bucket_name=tmp_bucket,
+                                     object_name=object_name,
+                                     data=io.BytesIO(data),
+                                     length=len(data))
 
     def delete_minio(self, object_name: str):
-        if self.minio_client:
-            self.minio_client.remove_object(bucket_name=bucket, object_name=object_name)
+        self.minio_client.remove_object(bucket_name=bucket, object_name=object_name)
 
-    def mkdir(self, bucket: str):
-        if self.minio_client:
-            if not self.minio_client.bucket_exists(bucket):
-                self.minio_client.make_bucket(bucket)
+    def mkdir(self, new_bucket: str):
+        if not self.minio_client.bucket_exists(new_bucket):
+            self.minio_client.make_bucket(new_bucket)
 
-    def upload_minio_file(self, object_name: str, file: BinaryIO, bucket_name=bucket, length: int = 0, **kwargs):
+    def upload_minio_file(self, object_name: str, file: BinaryIO, bucket_name=bucket, length: int = -1, **kwargs):
         # 初始化minio
-        if self.minio_client:
-            self.minio_client.put_object(bucket_name=bucket_name,
-                                         object_name=object_name,
-                                         data=file,
-                                         length=length, **kwargs)
+        if length == -1:
+            length = file.getbuffer().nbytes
+        self.minio_client.put_object(bucket_name=bucket_name,
+                                     object_name=object_name,
+                                     data=file,
+                                     length=length, **kwargs)
 
     def download_minio(self, object_name: str):
-        if self.minio_client:
-            return self.minio_client.get_object(bucket_name=bucket, object_name=object_name)
+        return self.minio_client.get_object(bucket_name=bucket, object_name=object_name)
