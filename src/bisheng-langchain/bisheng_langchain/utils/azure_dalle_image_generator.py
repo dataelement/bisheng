@@ -127,12 +127,9 @@ class AzureDallEWrapper(DallEAPIWrapper):
             values['default_query'],
         }
         if not values.get('client'):
-            sync_specific = {'http_client': values['http_client']}
-            values['client'] = openai.AzureOpenAI(**client_params, **sync_specific).images
+            values['client'] = openai.AzureOpenAI(**client_params).images
         if not values.get('async_client'):
-            async_specific = {'http_client': values['http_async_client']}
-            values['async_client'] = openai.AsyncAzureOpenAI(**client_params,
-                                                             **async_specific).images
+            values['async_client'] = openai.AsyncAzureOpenAI(**client_params).images
         return values
 
     @property

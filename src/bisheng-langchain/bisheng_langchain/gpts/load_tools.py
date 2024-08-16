@@ -27,6 +27,7 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.tools import BaseTool, Tool
 from mypy_extensions import Arg, KwArg
 from bisheng_langchain.rag import BishengRAGTool
+from bisheng_langchain.utils.azure_dalle_image_generator import AzureDallEWrapper
 
 
 def _get_current_time() -> BaseTool:
@@ -59,17 +60,22 @@ def _get_bing_search(**kwargs: Any) -> BaseTool:
 
 
 def _get_dalle_image_generator(**kwargs: Any) -> Tool:
-    openai_api_key = kwargs.get('openai_api_key')
-    openai_api_base = kwargs.get('openai_api_base')
-    http_async_client = httpx.AsyncClient(proxies=kwargs.get('openai_proxy'))
-    httpc_client = httpx.Client(proxies=kwargs.get('openai_proxy'))
+    if kwargs.get('openai_proxy'):
+        kwargs['http_async_client'] = httpx.AsyncClient(proxies=kwargs.get('openai_proxy'))
+        kwargs['http_client'] = httpx.Client(proxies=kwargs.get('openai_proxy'))
+
+    # 说明是azure的openai配置
+    if kwargs.get("azure_endpoint"):
+        kwargs['api_key'] = kwargs.pop('openai_api_key')
+        kwargs['api_version'] = kwargs.pop('openai_api_version')
+        return DallEImageGenerator(
+            api_wrapper=AzureDallEWrapper(**kwargs)
+        )
+
     return DallEImageGenerator(
         api_wrapper=DallEAPIWrapper(
             model='dall-e-3',
-            api_key=openai_api_key,
-            base_url=openai_api_base,
-            http_client=httpc_client,
-            http_async_client=http_async_client,
+            **kwargs
         )
     )
 
@@ -83,11 +89,16 @@ def _get_native_code_interpreter(**kwargs: Any) -> Tool:
 
 
 # 第二个list内填必填参数，第三个list内填可选参数
-_EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optional[str]], List[Optional[str]]]] = {  # type: ignore
-    'dalle_image_generator': (_get_dalle_image_generator, ['openai_api_key', 'openai_proxy'], []),
+_EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optional[str]], List[Optional[str]]]] = {
+    # type: ignore
+    'dalle_image_generator': (_get_dalle_image_generator,
+                              ['openai_api_key'],
+                              ['openai_api_base', 'openai_proxy', 'azure_deployment', 'azure_endpoint', 'openai_api_version']),
     'bing_search': (_get_bing_search, ['bing_subscription_key', 'bing_search_url'], []),
     'bisheng_code_interpreter': (_get_native_code_interpreter, ["minio"], ['files']),
-    'bisheng_rag': (BishengRAGTool.get_rag_tool, ['name', 'description'], ['vector_store', 'keyword_store', 'llm', 'collection_name', 'max_content', 'sort_by_source_and_index']),
+    'bisheng_rag': (BishengRAGTool.get_rag_tool, ['name', 'description'],
+                    ['vector_store', 'keyword_store', 'llm', 'collection_name', 'max_content',
+                     'sort_by_source_and_index']),
 }
 
 _API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {**ALL_API_TOOLS}  # type: ignore
@@ -114,10 +125,10 @@ def _handle_callbacks(callback_manager: Optional[BaseCallbackManager], callbacks
 
 
 def load_tools(
-    tool_params: Dict[str, Dict[str, Any]],
-    llm: Optional[BaseLanguageModel] = None,
-    callbacks: Callbacks = None,
-    **kwargs: Any,
+        tool_params: Dict[str, Dict[str, Any]],
+        llm: Optional[BaseLanguageModel] = None,
+        callbacks: Callbacks = None,
+        **kwargs: Any,
 ) -> List[BaseTool]:
     tools = []
     callbacks = _handle_callbacks(callback_manager=kwargs.get('callback_manager'), callbacks=callbacks)
@@ -171,7 +182,6 @@ def get_all_tool_names() -> List[str]:
 
 
 def get_tool_table():
-
     load_dotenv('.sql_env', override=True)
     db = pymysql.connect(
         host=os.getenv('MYSQL_HOST'),
@@ -184,7 +194,7 @@ def get_tool_table():
     cursor.execute("SELECT name, t.desc, tool_key, extra FROM t_gpts_tools as t;")
     results = cursor.fetchall()
     db.close()
-    
+
     df = pd.DataFrame(
         columns=[
             '前端工具名',
