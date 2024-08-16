@@ -3,11 +3,11 @@ from bisheng.database.models.llm_server import LLMServer, LLMServerType, LLMMode
 from bisheng.settings import settings
 
 
-def parse_openai_embedding_conf(name, model_name, embedding_conf, i):
+def parse_openai_embedding_conf(name, model_name, embedding_conf):
     # 说明是azure的api服务
     if embedding_conf.get('openai_api_type') in ('azure', 'azure_ad', 'azuread'):
         server = LLMServer(
-            name=f"AzureOpenAI_{i}",
+            name=f"AzureOpenAI",
             description='系统升级自动添加',
             type=LLMServerType.AZURE_OPENAI.value,
             config={
@@ -26,7 +26,7 @@ def parse_openai_embedding_conf(name, model_name, embedding_conf, i):
         )
     else:
         server = LLMServer(
-            name=f"OpenAI_{i}",
+            name=f"OpenAI",
             description='系统升级自动添加',
             type=LLMServerType.OPENAI.value,
             config={
@@ -46,9 +46,9 @@ def parse_openai_embedding_conf(name, model_name, embedding_conf, i):
     return server, model
 
 
-def parse_rt_embedding_conf(name, model_name, embedding_conf, i):
+def parse_rt_embedding_conf(name, model_name, embedding_conf):
     server = LLMServer(
-        name=f"RT_{i}",
+        name=f"RT",
         description='系统升级自动添加',
         type=LLMServerType.BISHENG_RT.value,
         config={
@@ -80,7 +80,7 @@ def convert_sys_embeddings_to_mysql():
 
     # 先将系统配置全部入库
     need_add_server = {}
-    i = 0
+    need_add_server_index = {}
     for name, embedding_conf in embeddings.items():
         model_name = embedding_conf.get('model')
         if not model_name and name == 'text-embedding-ada-002':
@@ -89,13 +89,17 @@ def convert_sys_embeddings_to_mysql():
         if not model_name:
             print("未找到model名字，不插入到模型管理内")
             continue
-        i += 1
         # 说明是openai的官方服务
         if name == 'text-embedding-ada-002' or embedding_conf.get('component') == 'openai':
-            server, model = parse_openai_embedding_conf(name, model_name, embedding_conf, i)
+            server, model = parse_openai_embedding_conf(name, model_name, embedding_conf)
         else:
             # 说明是rt部署的embedding模型
-            server, model = parse_rt_embedding_conf(name, model_name, embedding_conf, i)
+            server, model = parse_rt_embedding_conf(name, model_name, embedding_conf)
+        if server.type not in need_add_server_index:
+            need_add_server_index[server.type] = 0
+        need_add_server_index[server.type] += 1
+        server.name = f"{server.name}_{need_add_server_index[server.type]}"
+
         llm_server = LLMDao.insert_server_with_models(server, [model])
         llm_model_list = LLMDao.get_model_by_server_ids([llm_server.id])
         for one in llm_model_list:
