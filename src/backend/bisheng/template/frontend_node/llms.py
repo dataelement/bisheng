@@ -216,13 +216,15 @@ class LLMFrontendNode(FrontendNode):
         if name and 'azure' in name.lower():
             LLMFrontendNode.format_azure_field(field)
 
+        # 把组件的流式配置放出来，取消全局的流式控制
+        if field.name == 'streaming':
+            field.show = True
+
         if name == 'BishengLLM':
-            if field.name in ["streaming", "temperature", "top_p", "cache"]:
+            if field.name in ["temperature", "top_p", "cache"]:
                 field.show = True
             if field.name == 'model_id':
                 field.field_type = "bisheng_model"
                 field.display_name = "Model Name"
             elif field.name == 'model_name':
                 field.show = False
-            elif field.name == 'streaming':
-                field.display_name = "Stream"

@@ -264,16 +264,8 @@ def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: boo
             params['max_tokens'] = int(params['max_tokens'])
         elif not isinstance(params.get('max_tokens'), int):
             params.pop('max_tokens', None)
-    # 支持stream
+
     llm = class_object(**params)
-    llm_config = settings.get_from_db('llm_request')
-    if user_llm_request and isinstance(llm, BaseLanguageModel):
-        if hasattr(llm, 'streaming') and isinstance(llm.streaming, bool):
-            llm.streaming = llm_config.get(
-                'stream') if 'stream' in llm_config else ChatConfig.streaming
-        elif hasattr(llm, 'stream') and isinstance(llm.stream, bool):
-            llm.stream = llm_config.get(
-                'stream') if 'stream' in llm_config else ChatConfig.streaming
 
     # 支持request_timeout & max_retries
     if hasattr(llm, 'request_timeout') and 'request_timeout' in llm_config:
