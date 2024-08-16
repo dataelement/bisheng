@@ -1,0 +1,19 @@
+services:
+  bisheng-unstructured:
+    container_name: bisheng-unstructured
+    image: dataelement/bisheng-unstructured:latest
+    ports:
+      - "10001:10001"
+    environment:
+      rt_server: bisheng-rt:9001  # 填写rt或者idp（即项素的ocrSdk）服务的根地址
+      rt_type:  idp  # 这里选择 idp 或 rt
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng-uns/config.yaml:/opt/bisheng-unstructured/bisheng_unstructured/config/config.yaml
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10001/health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: on-failure
+
