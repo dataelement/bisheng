@@ -1,0 +1,29 @@
+services:
+  ft_server:
+    container_name: bisheng-ft-server
+    image: dataelement/bisheng-ft:latest
+    ports:
+      - "8000:8000"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng-ft/config.yaml:/opt/bisheng-ft/sft_server/config.yaml  # 服务启动所需的配置文件地址，默认不用改
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/llm:/opt/bisheng-ft/models/model_repository # 这个是存放基座模型的目录，挂载到本机目录
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/finetune_output:/opt/bisheng-ft/finetune_output # 这个是存放微调过程的中间日志和微调训练后模型的目录，挂载到本机目录，不能与存放基座模型的目录相同
+    security_opt:
+      - seccomp:unconfined
+    command: bash start-sft-server.sh # 启动服务
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      start_period: 30s
+      interval: 90s
+      timeout: 30s
+      retries: 3
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]

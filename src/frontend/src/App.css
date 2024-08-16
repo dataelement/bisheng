@@ -25,13 +25,13 @@
 
 /* 滚动条滑块 */
 ::-webkit-scrollbar-thumb {
-	background-color: darkgrey;
+	background-color: hsl(var(--border));;
 	border-radius: 4px;
 }
 
 /* 滚动条轨道 */
 ::-webkit-scrollbar-track {
-	background: #fff;
+	background: hsl(var(--background));
 	border-radius: 8px;
 }
 
@@ -198,13 +198,16 @@
 .build-tab a.active>svg {
 	color: hsl(var(--primary)) !important;
 }
+
 .build-tab a.active>span {
 	color: hsl(var(--primary)) !important;
 }
-:is(.dark .build-tab a.active>svg){
+
+:is(.dark .build-tab a.active>svg) {
 	color: #fff !important;
 }
-:is(.dark .build-tab a.active>span){
+
+:is(.dark .build-tab a.active>span) {
 	color: #fff !important;
 }
 
@@ -221,6 +224,14 @@
 }
 
 /* react-flow */
-.dark .react-flow__controls-button{
+.dark .react-flow__controls-button {
 	background: #111;
 }
+
+.bs-table-td { background-color: #FBFBFB; }
+.dark .bs-table-td { background-color: #171717; }
+.bs-table-row:nth-child(odd) .bs-table-td { background-color: #f4f5f8;}
+.dark .bs-table-row:nth-child(odd) .bs-table-td { background-color: #111;}
+.bs-table-row:hover .bs-table-td { background-color: #ebf0ff;}
+.dark .bs-table-row:hover .bs-table-td { background-color: #2a2b2e;}
+

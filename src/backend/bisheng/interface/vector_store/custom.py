@@ -398,6 +398,9 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         # Todo: normalize the es score on a scale [0, 1]
         return 1 - distance
 
+    def _select_relevance_score_fn(self) -> Callable[[float], float]:
+        return self._relevance_score_fn
+
 
 class ElasticsearchWithPermissionCheck(VectorStore, ABC):
     """
@@ -501,12 +504,12 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
         return ret
 
     def add_texts(
-        self,
-        texts: Iterable[str],
-        metadatas: Optional[List[dict]] = None,
-        ids: Optional[List[str]] = None,
-        refresh_indices: bool = True,
-        **kwargs: Any,
+            self,
+            texts: Iterable[str],
+            metadatas: Optional[List[dict]] = None,
+            ids: Optional[List[str]] = None,
+            refresh_indices: bool = True,
+            **kwargs: Any,
     ) -> List[str]:
         pass
 

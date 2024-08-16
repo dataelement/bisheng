@@ -3,6 +3,7 @@
 import * as React from "react"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { cname } from "../utils"
+import { QuestionMarkCircledIcon } from "@radix-ui/react-icons"
 
 const TooltipProvider = TooltipPrimitive.Provider
 
@@ -27,3 +28,17 @@ const TooltipContent = React.forwardRef<
 TooltipContent.displayName = TooltipPrimitive.Content.displayName
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+
+
+export const QuestionTooltip = ({ className = '', content }) => (
+    <TooltipProvider delayDuration={100}>
+        <Tooltip>
+            <TooltipTrigger className={className}>
+                <QuestionMarkCircledIcon />
+            </TooltipTrigger>
+            <TooltipContent>
+                <div className="max-w-96">{content}</div>
+            </TooltipContent>
+        </Tooltip>
+    </TooltipProvider>
+);

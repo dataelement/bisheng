@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Any, List, Optional
 from uuid import UUID
@@ -8,11 +9,12 @@ from loguru import logger
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                            AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
                                            ToolTypeEmptyError, ToolTypeNotExistsError, ToolTypeIsPresetError)
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
+from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
@@ -57,7 +59,7 @@ class AssistantService(BaseService, AssistantUtils):
 
         data = []
         if user.is_admin():
-            res, total = AssistantDao.get_all_assistants(name, page, limit, assistant_ids)
+            res, total = AssistantDao.get_all_assistants(name, page, limit, assistant_ids, status)
         else:
             # 权限管理可见的助手信息
             assistant_ids_extra = []
@@ -143,12 +145,12 @@ class AssistantService(BaseService, AssistantUtils):
         if cls.judge_name_repeat(assistant.name, assistant.user_id):
             return AssistantNameRepeatError.return_resp()
 
-        # 保存数据到数据库, 补充用默认的模型
-        llm_conf = cls.get_llm_conf(assistant.model_name)
-        assistant.model_name = llm_conf['model_name']
-        assistant.temperature = llm_conf['temperature']
-
         logger.info(f"assistant original prompt id: {assistant.id}, desc: {assistant.prompt}")
+
+        # 自动补充默认的模型配置
+        assistant_llm = LLMService.get_assistant_llm()
+        if assistant_llm.llm_list:
+            assistant.model_name = assistant_llm.llm_list[0].model_id
 
         # 自动生成描述
         assistant, _, _ = await cls.get_auto_info(assistant)
@@ -218,7 +220,7 @@ class AssistantService(BaseService, AssistantUtils):
 
         # 初始化llm
         auto_agent = AssistantAgent(assistant, '')
-        await auto_agent.init_llm()
+        await auto_agent.init_auto_update_llm()
 
         # 流式生成提示词
         final_prompt = ''
@@ -282,10 +284,9 @@ class AssistantService(BaseService, AssistantUtils):
             AssistantLinkDao.update_assistant_flow(assistant.id, flow_list=req.flow_list)
         if req.knowledge_list is not None:
             # 使用配置的flow 进行技能补充
-            flow_id_default = AssistantUtils.get_default_retrieval()
             AssistantLinkDao.update_assistant_knowledge(assistant.id,
                                                         knowledge_list=req.knowledge_list,
-                                                        flow_id=flow_id_default)
+                                                        flow_id='')
         tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list,
                                                                  req.knowledge_list)
         cls.update_assistant_hook(request, login_user, assistant)
@@ -399,9 +400,23 @@ class AssistantService(BaseService, AssistantUtils):
             tool_type_children[one.type].append(one)
 
         for one in res:
+            if not user.is_admin():
+                one['extra'] = ''
             one["children"] = tool_type_children.get(one["id"], [])
 
         return res
+
+    @classmethod
+    def update_tool_config(cls, login_user: UserPayload, tool_type_id: int, extra: dict) -> GptsToolsTypeRead:
+        # 获取工具类别
+        tool_type = GptsToolsDao.get_one_tool_type(tool_type_id)
+        if not tool_type:
+            raise NotFoundError.http_exception()
+
+        # 更新工具类别下所有工具的配置
+        tool_type.extra = json.dumps(extra, ensure_ascii=False)
+        GptsToolsDao.update_tools_extra(tool_type_id, tool_type.extra)
+        return tool_type
 
     @classmethod
     def add_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
@@ -463,7 +478,7 @@ class AssistantService(BaseService, AssistantUtils):
         if tool_type and tool_type.id != exist_tool_type.id:
             return ToolTypeRepeatError.return_resp()
         # 判断是否有更新权限
-        if not user.access_check(exist_tool_type.user_id, exist_tool_type.id, AccessType.GPTS_TOOL_WRITE):
+        if not user.access_check(exist_tool_type.user_id, str(exist_tool_type.id), AccessType.GPTS_TOOL_WRITE):
             return UnAuthorizedError.return_resp()
 
         exist_tool_type.name = req.name
@@ -528,7 +543,7 @@ class AssistantService(BaseService, AssistantUtils):
         if exist_tool_type.is_preset:
             return ToolTypeIsPresetError.return_resp()
         # 判断是否有更新权限
-        if not user.access_check(exist_tool_type.user_id, exist_tool_type.id, AccessType.GPTS_TOOL_WRITE):
+        if not user.access_check(exist_tool_type.user_id, str(exist_tool_type.id), AccessType.GPTS_TOOL_WRITE):
             return UnAuthorizedError.return_resp()
 
         GptsToolsDao.delete_tool_type(tool_type_id)
@@ -541,14 +556,6 @@ class AssistantService(BaseService, AssistantUtils):
         logger.info(f"delete_gpts_tool_hook id: {gpts_tool_type.id}, user: {user.user_id}")
         GroupResourceDao.delete_group_resource_by_third_id(gpts_tool_type.id, ResourceTypeEnum.GPTS_TOOL)
         return True
-
-    @classmethod
-    def get_models(cls) -> UnifiedResponseModel:
-        llm_list = cls.get_gpts_conf('llms')
-        res = []
-        for one in llm_list:
-            res.append({'id': one['model_name'], 'model_name': one['model_name']})
-        return resp_200(data=res)
 
     @classmethod
     def update_tool_list(cls, assistant_id: UUID, tool_list: List[int],
@@ -615,7 +622,7 @@ class AssistantService(BaseService, AssistantUtils):
         """
         # 初始化agent
         auto_agent = AssistantAgent(assistant, '')
-        await auto_agent.init_llm()
+        await auto_agent.init_auto_update_llm()
 
         # 自动生成描述
         assistant.desc = auto_agent.generate_description(assistant.prompt)

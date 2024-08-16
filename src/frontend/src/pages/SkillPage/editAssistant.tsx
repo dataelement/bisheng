@@ -79,6 +79,9 @@ export default function editAssistant() {
     // 校验助手数据
     const handleCheck = () => {
         const errors = []
+        // if (!assistantState.model_name) {
+        //     errors.push(t('skills.modelRequired'))
+        // }
         if (assistantState.guide_question.some(que => que.length > 50)) {
             errors.push(t('skills.guideQuestions50'))
         }

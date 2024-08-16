@@ -16,7 +16,7 @@ from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file, upload_file_to_minio
 from bisheng.chat.utils import judge_source, process_source_document
 from bisheng.database.base import session_getter, generate_uuid
-from bisheng.database.models.config import Config, ConfigDao
+from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage
 from bisheng.interface.types import get_all_types_dict
@@ -104,7 +104,7 @@ def save_config(data: dict, admin_user: UserPayload = Depends(get_admin_user)):
 @router.get('/web/config')
 async def get_web_config():
     """ 获取一些前端所需要的配置项，内容由前端决定 """
-    web_conf = ConfigDao.get_config('web_config')
+    web_conf = ConfigDao.get_config(ConfigKeyEnum.WEB_CONFIG)
     if not web_conf:
         return resp_200(data='')
     return resp_200(data={
@@ -118,9 +118,9 @@ async def update_web_config(request: Request,
                             value: str = Body(embed=True)):
     """ 更新一些前端所需要的配置项，内容由前端决定 """
     logger.info(f'update_web_config user_name={admin_user.user_name}, ip={get_request_ip(request)}')
-    web_conf = ConfigDao.get_config('web_config')
+    web_conf = ConfigDao.get_config(ConfigKeyEnum.WEB_CONFIG)
     if not web_conf:
-        web_conf = Config(key='web_config', value=value)
+        web_conf = Config(key=ConfigKeyEnum.WEB_CONFIG.value, value=value)
     else:
         web_conf.value = value
     ConfigDao.insert_config(web_conf)

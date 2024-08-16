@@ -1,8 +1,9 @@
 import i18n from "i18next";
+import Backend from 'i18next-http-backend';
 import {
     initReactI18next
 } from "react-i18next";
-import Backend from 'i18next-http-backend';
+import json from "../package.json";
 
 const userLanguage = (localStorage.getItem('language') ||
     navigator.language ||
@@ -15,7 +16,7 @@ i18n.use(Backend)
         ns: ['bs'],
         lng: 'zh', // userLanguage === 'zh' ? userLanguage : 'en', // 除中文即英文
         backend: {
-            loadPath: __APP_ENV__.BASE_URL + '/locales/{{lng}}/{{ns}}.json?v=' + new Date().getTime()
+            loadPath: __APP_ENV__.BASE_URL + '/locales/{{lng}}/{{ns}}.json?v=' + json.version
         },
         interpolation: {
             escapeValue: false // react already safes from xss

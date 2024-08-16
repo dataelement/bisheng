@@ -186,10 +186,10 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
                         <Trash2 size={16} onClick={() => handleDelete(d)} className="text-gray-600 cursor-pointer" />
                     </div>}
                 </div>)}
-                {(showAdd && user.role === 'admin') && <div onClick={handleAdd}
+                {(keyword && showAdd && user.role === 'admin') && <div onClick={handleAdd}
                     className="flex group items-center h-8 rounded-sm bg-[#EBF0FF] dark:bg-gray-700 cursor-pointer">
                     <PlusIcon className="mx-2 text-[#727C8F]" />
-                    <span>{t('tag.createNewLabel')}</span>
+                    <span>{t('create')}”{keyword}”</span>
                 </div>}
             </div>
         </PopoverContent>

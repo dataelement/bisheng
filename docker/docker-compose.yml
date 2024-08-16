@@ -58,6 +58,17 @@ services:
       - "7860:7860"
     environment:
       TZ: Asia/Shanghai
+      BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
+      BS_MILVUS_IS_PARTITION: 'true'
+      BS_MILVUS_PARTITION_SUFFIX: '1'
+      BS_ELASTICSEARCH_URL: 'http://elasticsearch:9200'
+      BS_ELASTICSEARCH_SSL_VERIFY: '{"basic_auth": ("elastic", "elastic")}'  # 根据自己部署的密码进行配置
+      BS_MINIO_SCHEMA: 'false'
+      BS_MINIO_CERT_CHECK: 'false'
+      BS_MINIO_ENDPOINT: 'minio:9000'
+      BS_MINIO_SHAREPOIN: 'minio:9000'
+      BS_MINIO_ACCESS_KEY: 'minioadmin'
+      BS_MINIO_SECRET_KEY: 'minioadmin'
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data

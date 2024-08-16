@@ -16,7 +16,7 @@ export interface AssistantDetail {
     /** 引导问题列表，为空则不更新 */
     guide_question?: string[]; // 更具体的类型可能需要根据实际对象结构定义
     /** 选择的模型名，为空则不更新 */
-    model_name?: string;
+    model_name?: string | number;
     /** 模型温度，为0则不更新 */
     temperature?: number;
     /** 助手的状态 */

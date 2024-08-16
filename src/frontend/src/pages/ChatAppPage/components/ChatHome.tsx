@@ -70,37 +70,38 @@ export default function HomePage({ onSelect }) {
         await debounceLoad(true)
     }
 
+    // const [cardBoxWidth, cardboxRef] = useAutoWidth()
     {/* @ts-ignore */ }
-    return <div className="h-full overflow-hidden bs-chat-bg px-[40px]" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
-        <div className="flex flex-col place-items-center">
-            <div className="flex flex-row place-items-center">
-                {/* @ts-ignore */}
-                <img className="w-[150px] h-[136.5px] mx-auto" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
-                <p className="text-2xl ml-16 whitespace-normal leading-[50px] dark:text-[#D4D4D4] mx-auto font-light">
-                    {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
-                </p>
-            </div>
+    return <div className="h-full overflow-hidden bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+        <div className="flex justify-center place-items-center gap-20">
+            {/* @ts-ignore */}
+            <img className="w-[138px]" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
+            <p className="text-2xl leading-[50px] dark:text-[#D4D4D4]">
+                {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
+            </p>
+        </div>
+        <div className="flex justify-center">
             <SearchInput onChange={handleSearch}
                 placeholder={t('chat.searchAssistantOrSkill')}
-                className="w-[600px] min-w-[300px] mt-[20px]" />
+                className="w-[600px] min-w-[300px] mt-[10px]" />
         </div>
-        <div className="mt-[20px] w-[95%]">
+        <div className="mt-[20px] px-12">
             <div className="flex flex-wrap">
-                <Button variant={chooseId ? "outline" : "default"} className="mb-2 mr-5" size="sm"
-                    onClick={() => { setChooseId(null); loadData(false) }}>全部</Button>
+                <Button variant={chooseId ? "outline" : "default"} className="mb-2 mr-4 h-7" size="sm"
+                    onClick={() => { setChooseId(null); loadData(false) }}>{t('all')}</Button>
                 {
                     labels.map((l, index) => index <= 11 && <Button
                         size="sm"
                         onClick={() => handleTagSearch(l.value)}
-                        className="mr-4 mb-2" variant={l.value === chooseId ? "default" : "outline"}>{l.label}
+                        className="mr-3 mb-2 h-7" variant={l.value === chooseId ? "default" : "outline"}>{l.label}
                     </Button>)
                 }
                 {/* @ts-ignore */}
                 {user.role === 'admin' && <SettingIcon onClick={() => setOpen(true)} className="h-[30px] w-[30px] cursor-pointer" />}
             </div>
         </div>
-        <div className="m-auto relative">
-            <div className="min-w-[696px] grid auto-rows-min sm:grid-cols-2 2xl:grid-cols-3 my-size:grid-cols-4 my-size-lg:grid-cols-5 h-[calc(100vh-348px)] gap-3 mt-4 pb-24 overflow-y-auto scrollbar-hide">
+        <div className="relative">
+            <div className="flex flex-wrap gap-2 px-12 overflow-y-auto scrollbar-hide h-[calc(100vh-308px)] pt-4 pb-20" >
                 {
                     options.length ? options.map((flow, i) => (
                         <CardComponent key={i}
@@ -113,7 +114,7 @@ export default function HomePage({ onSelect }) {
                             icon={flow.flow_type === 'flow' ? SkillIcon : AssistantIcon}
                             footer={
                                 <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${flow.flow_type === 'flow' && 'bg-gray-950'}`}>
-                                    {flow.flow_type === 'flow' ? '技能' : '助手'}
+                                    {flow.flow_type === 'flow' ? t('build.skill') : t('build.assistant')}
                                 </Badge>
                             }
                             onClick={() => { onSelect(flow) }}
@@ -128,4 +129,26 @@ export default function HomePage({ onSelect }) {
         </div>
         <MarkLabel open={open} home={labels} onClose={handleClose}></MarkLabel>
     </div>
+}
+
+
+const useAutoWidth = () => {
+    const [width, setWidth] = useState(0);
+    const cardboxRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const resize = () => {
+            // console.log('cardboxRef.current.width :>> ', cardboxRef.current.offsetWidth);
+            setWidth(Math.floor(cardboxRef.current.offsetWidth / 323) * 323)
+        }
+        if (cardboxRef.current) {
+            window.addEventListener('resize', resize)
+            resize()
+        }
+
+        return () => {
+            window.removeEventListener('resize', resize)
+        }
+    }, []);
+    return [width, cardboxRef];
+
 }

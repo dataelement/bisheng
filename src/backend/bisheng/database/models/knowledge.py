@@ -150,3 +150,16 @@ class KnowledgeDao(KnowledgeBase):
         statement = statement.order_by(Knowledge.update_time.desc())
         with session_getter() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
+
+    @classmethod
+    def get_all_knowledge(cls) -> List[Knowledge]:
+        with session_getter() as session:
+            return session.exec(select(Knowledge)).all()
+
+    @classmethod
+    def update_knowledge_list(cls, knowledge_list: List[Knowledge]):
+        with session_getter() as session:
+            for knowledge in knowledge_list:
+                session.add(knowledge)
+            session.commit()
+

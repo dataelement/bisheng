@@ -4,48 +4,86 @@ import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { useEffect, useState } from "react";
+import { updateAssistantToolApi } from "@/controllers/API/assistant";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { forwardRef, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-// 代码由毕昇生成
-export default function ToolSet({ open, name, onOpenChange }) {
+const InputField = ({ label, type = "text", id, name, required = false, placeholder, value, onChange, error = '' }) => (
+    <div key={id} className="">
+        <label htmlFor={id} className="bisheng-label">{label}{required && <span className="bisheng-tip">*</span>}</label>
+        <Input type={type} id={id} name={name} placeholder={placeholder} className="mt-2" value={value} onChange={onChange} />
+        {error && <p className="bisheng-tip mt-1">{label} 不能为空</p>}
+    </div>
+);
+
+const validateField = (name, value, t) => {
+    if (!value) return name + '不能为空';
+    return '';
+};
+
+const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
+    const [open, setOpen] = useState(false);
     const { t } = useTranslation();
     const [formData, setFormData] = useState({
         provider: 'openai',
-        apiKey: '',
-        baseUrl: 'https://api.openai.com/v1',
-        proxy: '',
-        subscriptionKey: '',
-        searchUrl: 'https://api.bing.microsoft.com/v7.0/search',
-        deploymentName: '',
-        azureEndpoint: '',
-        apiVersion: ''
+        openai_api_key: '',
+        azure_api_key: '', // 新增 azure 的 API key
+        openai_api_base: 'https://api.openai.com/v1',
+        openai_proxy: '',
+        bing_subscription_key: '',
+        bing_search_url: 'https://api.bing.microsoft.com/v7.0/search',
+        azure_deployment: '',
+        azure_endpoint: '',
+        openai_api_version: ''
     });
 
-    useEffect(() => {
+    const [id, setId] = useState('');
+    const [name, setName] = useState('');
+    const [errors, setErrors] = useState({});
+
+    useImperativeHandle(ref, () => ({
+        edit: (item) => {
+            setName(item.name);
+            setId(item.id);
+
+            const configStr = item.children[0]?.extra;
+            if (configStr) {
+                const config = JSON.parse(configStr);
+                config.provider = config.azure_deployment ? 'azure' : 'openai';
+                if (config.provider === 'openai') {
+                    config.openai_api_key = config.openai_api_key;
+                    config.azure_api_key = ''
+                } else {
+                    config.openai_api_key = '';
+                    config.azure_api_key = config.openai_api_key;
+                }
+                setFormData(config);
+            } else {
+                resetFormData();
+            }
+            setOpen(true);
+        }
+    }));
+
+    const resetFormData = () => {
         setFormData({
             provider: 'openai',
-            apiKey: '',
-            baseUrl: 'https://api.openai.com/v1',
-            proxy: '',
-            subscriptionKey: '',
-            searchUrl: 'https://api.bing.microsoft.com/v7.0/search',
-            deploymentName: '',
-            azureEndpoint: '',
-            apiVersion: ''
+            openai_api_key: '',
+            azure_api_key: '', // 重置 azure 的 API key
+            openai_api_base: 'https://api.openai.com/v1',
+            openai_proxy: '',
+            bing_subscription_key: '',
+            bing_search_url: 'https://api.bing.microsoft.com/v7.0/search',
+            azure_deployment: '',
+            azure_endpoint: '',
+            openai_api_version: ''
         });
-    }, [name]);
-
-    const [errors, setErrors] = useState<any>({});
-
-    const validateField = (name, value) => {
-        if (!value) return t('build.fieldRequired');
-        return '';
     };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        const error = validateField(name, value);
+        const error = validateField(name, value, t);
 
         setFormData(prev => ({ ...prev, [name]: value }));
         setErrors(prev => ({ ...prev, [name]: error }));
@@ -59,22 +97,9 @@ export default function ToolSet({ open, name, onOpenChange }) {
         const formErrors = {};
         let isValid = true;
 
-        const fieldsToValidate = [];
-        if (name === 'Dalle3绘画') {
-            fieldsToValidate.push('apiKey');
-            if (formData.provider === 'openai') {
-                fieldsToValidate.push('baseUrl', 'proxy');
-            } else {
-                fieldsToValidate.push('deploymentName', 'azureEndpoint', 'apiVersion');
-            }
-        } else if (name === 'Bing web搜索') {
-            fieldsToValidate.push('subscriptionKey', 'searchUrl');
-        } else if (name === '天眼查') {
-            fieldsToValidate.push('apiKey');
-        }
-
+        const fieldsToValidate = getFieldsToValidate();
         fieldsToValidate.forEach((key) => {
-            const error = validateField(key, formData[key]);
+            const error = validateField(key, formData[key], t);
             if (error) {
                 formErrors[key] = error;
                 isValid = false;
@@ -82,103 +107,150 @@ export default function ToolSet({ open, name, onOpenChange }) {
         });
 
         setErrors(formErrors);
-        return isValid;
+        return [isValid, formErrors];
+    };
+
+    const getFieldsToValidate = () => {
+        const fields = [];
+        if (name === 'Dalle3绘画') {
+            fields.push(formData.provider === 'openai' ? 'openai_api_key' : 'azure_api_key'); // 根据 provider 决定校验哪个 API key
+            if (formData.provider !== 'openai') {
+                fields.push('azure_deployment', 'azure_endpoint', 'openai_api_version');
+            }
+        } else if (name === 'Bing web搜索') {
+            fields.push('bing_subscription_key', 'bing_search_url');
+        } else if (name === '天眼查') {
+            fields.push('api_key');
+        }
+        return fields;
     };
 
     const { message, toast } = useToast();
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        const isValid = validateForm();
-        if (!isValid) return toast({
-            title: t('prompt'),
-            variant: 'error',
-            description: Object.keys(errors).map(key => errors[key]).join(', '),
-        });
+        const [isValid, formErrors] = validateForm();
+        if (!isValid) return
 
-        const fieldsToSubmit = {};
-        if (name === 'Dalle3绘画') {
-            fieldsToSubmit.apiKey = formData.apiKey;
-            if (formData.provider === 'openai') {
-                fieldsToSubmit.baseUrl = formData.baseUrl;
-                fieldsToSubmit.proxy = formData.proxy;
-            } else {
-                fieldsToSubmit.deploymentName = formData.deploymentName;
-                fieldsToSubmit.azureEndpoint = formData.azureEndpoint;
-                fieldsToSubmit.apiVersion = formData.apiVersion;
-            }
-        } else if (name === 'Bing web搜索') {
-            fieldsToSubmit.subscriptionKey = formData.subscriptionKey;
-            fieldsToSubmit.searchUrl = formData.searchUrl;
-        } else if (name === '天眼查') {
-            fieldsToSubmit.apiKey = formData.apiKey;
-        }
-
-        handleSave(fieldsToSubmit);
+        const fieldsToSubmit = getFieldsToSubmit();
+        await captureAndAlertRequestErrorHoc(updateAssistantToolApi(id, fieldsToSubmit));
+        setOpen(false);
+        message({ variant: 'success', description: t('build.saveSuccess') });
+        onChange();
     };
 
-    const handleSave = (form) => {
-        console.log('form :>> ', form);
-        // api
-    }
+    const getFieldsToSubmit = () => {
+        const fields: any = {};
+        if (name === 'Dalle3绘画') {
+            // 提交时根据 provider 提交不同的 API key
+            if (formData.provider === 'openai') {
+                fields.openai_api_key = formData.openai_api_key;
+                fields.openai_api_base = formData.openai_api_base;
+                fields.openai_proxy = formData.openai_proxy;
+            } else {
+                fields.openai_api_key = formData.azure_api_key; // 提交 azure 的 API key
+                fields.azure_deployment = formData.azure_deployment;
+                fields.azure_endpoint = formData.azure_endpoint;
+                fields.openai_api_version = formData.openai_api_version;
+                fields.openai_api_type = 'azure';
+            }
+        } else if (name === 'Bing web搜索') {
+            fields.bing_subscription_key = formData.bing_subscription_key;
+            fields.bing_search_url = formData.bing_search_url;
+        } else if (name === '天眼查') {
+            fields.api_key = formData.api_key;
+        }
+        return fields;
+    };
 
     const renderFormContent = () => {
         switch (name) {
             case 'Dalle3绘画':
                 return (
                     <>
-                        <div className="">
-                            <RadioGroup defaultValue="openai" className="flex gap-6 mt-2" onValueChange={handleProviderChange}>
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="openai" id="provider-openai" />
-                                    <Label htmlFor="provider-openai">OpenAI</Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="azure" id="provider-azure" />
-                                    <Label htmlFor="provider-azure">Azure</Label>
-                                </div>
-                            </RadioGroup>
-                        </div>
+                        <RadioGroup value={formData.provider} className="flex gap-6 mt-2" onValueChange={handleProviderChange}>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="openai" id="provider-openai" />
+                                <Label htmlFor="provider-openai">OpenAI</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="azure" id="provider-azure" />
+                                <Label htmlFor="provider-azure">Azure</Label>
+                            </div>
+                        </RadioGroup>
                         {formData.provider === 'openai' ? (
                             <>
-                                <div className="">
-                                    <label htmlFor="apiKey" className="bisheng-label">OpenAI API Key<span className="bisheng-tip">*</span></label>
-                                    <Input type="password" id="apiKey" name="apiKey" placeholder={t('build.enterApiKey')} className="mt-2" value={formData.apiKey} onChange={handleChange} />
-                                    {errors.apiKey && <p className="bisheng-tip mt-1">{errors.apiKey}</p>}
-                                </div>
-                                <div className="">
-                                    <label htmlFor="baseUrl" className="bisheng-label">OpenAI Base URL</label>
-                                    <Input type="text" id="baseUrl" name="baseUrl" placeholder={t('build.enterBaseUrl')} className="mt-2" value={formData.baseUrl} onChange={handleChange} />
-                                    {errors.baseUrl && <p className="bisheng-tip mt-1">{errors.baseUrl}</p>}
-                                </div>
-                                <div className="">
-                                    <label htmlFor="proxy" className="bisheng-label">OpenAI Proxy</label>
-                                    <Input type="text" id="proxy" name="proxy" placeholder={t('build.enterProxy')} className="mt-2" value={formData.proxy} onChange={handleChange} />
-                                    {errors.proxy && <p className="bisheng-tip mt-1">{errors.proxy}</p>}
-                                </div>
+                                <InputField
+                                    required
+                                    label="OpenAI API Key"
+                                    type="password"
+                                    id="openai_api_key"
+                                    name="openai_api_key"
+                                    placeholder={t('build.enterApiKey')}
+                                    value={formData.openai_api_key}
+                                    onChange={handleChange}
+                                    error={errors.openai_api_key}
+                                />
+                                <InputField
+                                    label="OpenAI Base URL"
+                                    id="openai_api_base"
+                                    name="openai_api_base"
+                                    placeholder={t('build.enterBaseUrl')}
+                                    value={formData.openai_api_base}
+                                    onChange={handleChange}
+                                />
+                                <InputField
+                                    label="OpenAI Proxy"
+                                    id="openai_proxy"
+                                    name="openai_proxy"
+                                    placeholder={t('build.enterProxy')}
+                                    value={formData.openai_proxy}
+                                    onChange={handleChange}
+                                />
                             </>
                         ) : (
                             <>
-                                <div className="">
-                                    <label htmlFor="apiKey" className="bisheng-label">Azure OpenAI API Key<span className="bisheng-tip">*</span></label>
-                                    <Input type="password" id="apiKey" name="apiKey" placeholder={t('build.enterApiKey')} className="mt-2" value={formData.apiKey} onChange={handleChange} />
-                                    {errors.apiKey && <p className="bisheng-tip mt-1">{errors.apiKey}</p>}
-                                </div>
-                                <div className="">
-                                    <label htmlFor="deploymentName" className="bisheng-label">Deployment Name<span className="bisheng-tip">*</span></label>
-                                    <Input type="text" id="deploymentName" name="deploymentName" placeholder={t('build.enterDeploymentName')} className="mt-2" value={formData.deploymentName} onChange={handleChange} />
-                                    {errors.deploymentName && <p className="bisheng-tip mt-1">{errors.deploymentName}</p>}
-                                </div>
-                                <div className="">
-                                    <label htmlFor="azureEndpoint" className="bisheng-label">Azure Endpoint<span className="bisheng-tip">*</span></label>
-                                    <Input type="text" id="azureEndpoint" name="azureEndpoint" placeholder="格式示例：https://xxx.openai.azure.com/" className="mt-2" value={formData.azureEndpoint} onChange={handleChange} />
-                                    {errors.azureEndpoint && <p className="bisheng-tip mt-1">{errors.azureEndpoint}</p>}
-                                </div>
-                                <div className="">
-                                    <label htmlFor="apiVersion" className="bisheng-label">Openai API Version<span className="bisheng-tip">*</span></label>
-                                    <Input type="text" id="apiVersion" name="apiVersion" placeholder="格式示例：2024-02-01" className="mt-2" value={formData.apiVersion} onChange={handleChange} />
-                                    {errors.apiVersion && <p className="bisheng-tip mt-1">{errors.apiVersion}</p>}
-                                </div>
+                                <InputField
+                                    required
+                                    label="Azure OpenAI API Key"
+                                    type="password"
+                                    id="azure_api_key" // 修改为 azure_api_key
+                                    name="azure_api_key"
+                                    placeholder={t('build.enterApiKey')}
+                                    value={formData.azure_api_key}
+                                    onChange={handleChange}
+                                    error={errors.azure_api_key}
+                                />
+                                <InputField
+                                    required
+                                    label="Deployment Name"
+                                    id="azure_deployment"
+                                    name="azure_deployment"
+                                    placeholder={t('build.enterDeploymentName')}
+                                    value={formData.azure_deployment}
+                                    onChange={handleChange}
+                                    error={errors.azure_deployment}
+                                />
+                                <InputField
+                                    required
+                                    label="Azure Endpoint"
+                                    id="azure_endpoint"
+                                    name="azure_endpoint"
+                                    placeholder="格式示例：https://xxx.openai.azure.com/"
+                                    value={formData.azure_endpoint}
+                                    onChange={handleChange}
+                                    error={errors.azure_endpoint}
+                                />
+                                <InputField
+                                    required
+                                    label="Openai API Version"
+                                    id="openai_api_version"
+                                    name="openai_api_version"
+                                    placeholder="格式示例：2024-02-01"
+                                    value={formData.openai_api_version}
+                                    onChange={handleChange}
+                                    error={errors.openai_api_version}
+                                />
                             </>
                         )}
                     </>
@@ -186,27 +258,42 @@ export default function ToolSet({ open, name, onOpenChange }) {
             case 'Bing web搜索':
                 return (
                     <>
-                        <div className="">
-                            <label htmlFor="subscriptionKey" className="bisheng-label">Bing Subscription Key<span className="bisheng-tip">*</span></label>
-                            <Input type="password" id="subscriptionKey" name="subscriptionKey" placeholder={t('build.enterSubscriptionKey')} className="mt-2" value={formData.subscriptionKey} onChange={handleChange} />
-                            {errors.subscriptionKey && <p className="bisheng-tip mt-1">{errors.subscriptionKey}</p>}
-                        </div>
-                        <div className="">
-                            <label htmlFor="searchUrl" className="bisheng-label">Bing Search URL<span className="bisheng-tip">*</span></label>
-                            <Input type="text" id="searchUrl" name="searchUrl" placeholder={t('build.enterSearchUrl')} className="mt-2" value={formData.searchUrl} onChange={handleChange} />
-                            {errors.searchUrl && <p className="bisheng-tip mt-1">{errors.searchUrl}</p>}
-                        </div>
+                        <InputField
+                            required
+                            label="Bing Subscription Key"
+                            type="password"
+                            id="bing_subscription_key"
+                            name="bing_subscription_key"
+                            placeholder={t('build.enterSubscriptionKey')}
+                            value={formData.bing_subscription_key}
+                            onChange={handleChange}
+                            error={errors.bing_subscription_key}
+                        />
+                        <InputField
+                            required
+                            label="Bing Search URL"
+                            id="bing_search_url"
+                            name="bing_search_url"
+                            placeholder={t('build.enterSearchUrl')}
+                            value={formData.bing_search_url}
+                            onChange={handleChange}
+                            error={errors.bing_search_url}
+                        />
                     </>
                 );
             case '天眼查':
                 return (
-                    <>
-                        <div className="">
-                            <label htmlFor="apiKey" className="bisheng-label">API Key<span className="bisheng-tip">*</span></label>
-                            <Input type="password" id="apiKey" name="apiKey" placeholder={t('build.enterApiKey')} className="mt-2" value={formData.apiKey} onChange={handleChange} />
-                            {errors.apiKey && <p className="bisheng-tip mt-1">{errors.apiKey}</p>}
-                        </div>
-                    </>
+                    <InputField
+                        required
+                        label="API Key"
+                        type="password"
+                        id="api_key"
+                        name="api_key"
+                        placeholder={t('build.enterApiKey')}
+                        value={formData.api_key}
+                        onChange={handleChange}
+                        error={errors.api_key}
+                    />
                 );
             default:
                 return null;
@@ -214,21 +301,23 @@ export default function ToolSet({ open, name, onOpenChange }) {
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent className="sm:max-w-[625px] bg-background-login">
                 <DialogHeader>
                     <DialogTitle>{t('build.editTool')}</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="flex flex-col gap-4 py-6">
+                <form autoComplete="off" className="flex flex-col gap-4 py-6">
                     {renderFormContent()}
                     <DialogFooter>
                         <DialogClose>
                             <Button variant="outline" className="px-11" type="button">{t('build.cancel')}</Button>
                         </DialogClose>
-                        <Button type="submit" className="px-11">{t('build.confirm')}</Button>
+                        <Button onClick={handleSubmit} className="px-11">{t('build.confirm')}</Button>
                     </DialogFooter>
                 </form>
             </DialogContent>
         </Dialog>
     );
-}
+});
+
+export default ToolSet;

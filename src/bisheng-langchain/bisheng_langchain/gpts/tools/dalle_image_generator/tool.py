@@ -10,6 +10,8 @@ from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env, get_pydantic_field_names
 
+from bisheng_langchain.utils.azure_dalle_image_generator import AzureDallEWrapper
+
 logger = logging.getLogger(__name__)
 
 
@@ -170,7 +172,7 @@ class DallEImageGenerator(BaseTool):
         "A wrapper around OpenAI DALL-E API. Useful for when you need to generate images from a text description. Input should be an image description."
     )
     args_schema: Type[BaseModel] = DallEInput
-    api_wrapper: DallEAPIWrapper
+    api_wrapper: DallEAPIWrapper | AzureDallEWrapper
 
     def _run(
         self,

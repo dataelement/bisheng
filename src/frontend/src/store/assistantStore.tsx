@@ -61,6 +61,7 @@ export const useAssistantStore = create<State & Actions>((set) => ({
       set({
         assistantState: {
           ...data,
+          model_name: Number(data.model_name),
           // 补一个空行
           guide_question: data.guide_question ? [...data.guide_question, ''] : ['']
         }

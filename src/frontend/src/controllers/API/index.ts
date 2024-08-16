@@ -192,10 +192,16 @@ export async function getEmbeddingModel(): Promise<{ models: string[] }> {
 }
 
 /**
- * 获取RT服务列表Ï
+ * 获取RT服务列表
  */
 export async function getServicesApi(): Promise<RTServer[]> {
   return await axios.get(`/api/v1/server/list_server`);
+}
+/**
+ * 获取FT服务列表
+ */
+export async function getFTServicesApi(server_id: number): Promise<RTServer[]> {
+  return await axios.get(`/api/v1/finetune/model/list?server_id=${server_id}`);
 }
 
 /**
@@ -208,9 +214,9 @@ export async function getAllServicesApi(): Promise<any[]> {
 /**
  * 添加服务
  */
-export async function addServiceApi(name: string, url: string, ftUrl: string): Promise<{ id: number }> {
+export async function addServiceApi(name: string, ftUrl: string): Promise<{ id: number }> {
   return await axios.post(`/api/v1/server/add`,
-    { endpoint: url, sft_endpoint: ftUrl, server: name, remark: 'RT模块创建' });
+    { endpoint: '', sft_endpoint: ftUrl, server: name, remark: 'RT模块创建' });
 }
 
 /**

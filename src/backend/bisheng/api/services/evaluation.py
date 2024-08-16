@@ -5,6 +5,7 @@ import io
 import json
 from typing import List
 
+from bisheng.api.services.llm import LLMService
 from bisheng.interface.initialize.loading import instantiate_llm
 from fastapi import UploadFile, HTTPException
 import pandas as pd
@@ -137,7 +138,7 @@ class EvaluationService:
 
         file_ext = os.path.basename(file.filename).split('.')[-1]
         file_path = f'evaluation/dataset/{file_id}.{file_ext}'
-        minio_client.upload_minio_file(file_path, file.file, length=file.size, content_type=file.content_type)
+        minio_client.upload_minio_file(file_path, file.file, content_type=file.content_type)
         return file_name, file_path
 
     @classmethod
@@ -282,11 +283,7 @@ def add_evaluation_task(evaluation_id: int):
                 current_progress += progress_increment
                 redis_client.set(redis_key, round(current_progress))
 
-        llm_params = settings.get_default_llm()
-        logger.info(f'start evaluate with default llm: {llm_params}')
-        node_type = llm_params.pop('type', "HostQwenChat")  # 兼容旧配置
-        class_object = import_by_type(_type='llms', name=node_type)
-        _llm = instantiate_llm(node_type, class_object, llm_params)
+        _llm = LLMService.get_evaluation_llm_object()
         llm = LangchainLLM(_llm)
         data_samples = {
             "question": [one.get('question') for one in csv_data],

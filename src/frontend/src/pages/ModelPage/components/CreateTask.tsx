@@ -11,20 +11,20 @@ import {
 } from "../../../components/bs-ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/bs-ui/tooltip";
 
+import { useTranslation } from "react-i18next";
 import { Input } from "../../../components/bs-ui/input";
 import { Label } from "../../../components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/bs-ui/table";
+import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import { alertContext } from "../../../contexts/alertContext";
-import { getServicesApi, serverListApi } from "../../../controllers/API";
+import { getFTServicesApi, getServicesApi } from "../../../controllers/API";
 import { createTaskApi } from "../../../controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import Combobox from "./Combobox";
 import CreateTaskList from "./CreateTaskList";
-import { useTranslation } from "react-i18next";
 
 export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
-    const { t } = useTranslation()
+    const { t } = useTranslation('model')
     const defaultTable = [
         { name: 'gpus', value: '', desc: t('finetune.gpuDesc') },
         { name: 'val_ratio', value: '0.1', desc: t('finetune.valRatioDesc') },
@@ -81,21 +81,21 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
         <div className="border-b pb-2 flex justify-between items-center">
             <h1 className="">{t('finetune.createTrainingTask')}</h1>
             {/* <Button variant="black" onClick={rtClick}>FT服务管理</Button> */}
-            <Button variant="black" onClick={rtClick}>RT服务管理</Button>
+            <Button variant="black" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
         </div>
         {/* base */}
         <div className="border-b pb-4">
             <div className="flex gap-4 flex-col mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500 flex gap-2 items-center">
                     <span>{t('finetune.rtService')}</span>
-                    <TooltipProvider>
+                    {/* <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger><HelpCircle size={18} /></TooltipTrigger>
                             <TooltipContent>
                                 <p>{t('finetune.rtServiceTooltip')}</p>
                             </TooltipContent>
                         </Tooltip>
-                    </TooltipProvider>
+                    </TooltipProvider> */}
                 </small>
                 <div className="flex gap-4 items-center">
                     <Select onValueChange={handleRtChange}>
@@ -196,8 +196,8 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             </div>
         </div>
         <div className="mt-6 flex gap-6">
-            <Button disabled={loading} className="h-10 px-12" onClick={handleCreate}>{t('create')}</Button>
-            <Button disabled={loading} className="h-10 px-12" variant="outline" onClick={onCancel}>{t('cancel')}</Button>
+            <Button disabled={loading} className="h-10 px-12" onClick={handleCreate}>{t('bs:create')}</Button>
+            <Button disabled={loading} className="h-10 px-12" variant="outline" onClick={onCancel}>{t('bs:cancel')}</Button>
         </div>
     </div>
 };
@@ -218,9 +218,10 @@ const useOptions = () => {
     }, [])
 
     const selectService = async (val) => {
-        const rtName = services.find(item => item.id === val)?.name
-        const res = await serverListApi(rtName)
-        setModels(res.filter(item => item.sft_support))
+        const servceId = services.find(item => item.id === val)?.id
+        const res = await getFTServicesApi(servceId)
+        setModels(res)
+        // setModels(res.filter(item => item.sft_support))
     }
 
     return { services, models, selectService }

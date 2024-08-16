@@ -66,7 +66,7 @@ export const LoginPage = () => {
                 ? ldapLoginApi(mail, encryptPwd)
                 : loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
             ).then((res: any) => {
-                localStorage.setItem('ws_token', res.access_token)
+                window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)
                 localStorage.setItem('isLogin', '1')
                 location.href = location.href
                 // location.href = __APP_ENV__.BASE_URL + '/'

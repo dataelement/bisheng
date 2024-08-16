@@ -54,7 +54,7 @@ const Item = (props: {
 
     return <div
         data-focus={value === option.value}
-        className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+        className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
         onMouseEnter={() => onHover(option, isLeaf)}
         onClick={handleClick}>
         <span className="w-28 overflow-hidden text-ellipsis">{option.label}</span>
@@ -98,12 +98,11 @@ export default function Cascader({ selectClass = '', selectPlaceholder = '', def
     useEffect(() => {
         !open && setIsHover(false)
     }, [open])
-    console.log('values :>> ', values, defaultValue);
 
     const [cols, setCols] = useState(() => resetCols(defaultValue, options))
 
 
-    const selectOptionsRef = useRef([])
+    const selectOptionsRef = useRef(defaultValue)
     const handleHover = (option, isLeaf, colIndex) => {
         setIsHover(true)
         // // setValues([]) // 从新选择清空值
@@ -140,14 +139,17 @@ export default function Cascader({ selectClass = '', selectPlaceholder = '', def
             return loadData(option)
         }
         const vals = selectOptionsRef.current.map(el => el.value)
+        if (!selectOptionsRef.current[0]) {
+
+        }
         setValues([...selectOptionsRef.current])
         onChange?.(vals, selectOptionsRef.current)
         setOpen(false)
     }
 
     return <Select open={open} onOpenChange={setOpen}>
-        <SelectTrigger className={selectClass}>
-            <Input className="border-none bg-transparent" placeholder={selectPlaceholder} readOnly value={values.map(el => el.label).join('/')} />
+        <SelectTrigger className={'data-[placeholder]:text-inherit ' + selectClass}>
+            <Input className="border-none bg-transparent px-0" readOnly value={values.map(el => el.label).join('/')} />
             {/* <SelectValue placeholder={selectPlaceholder} >123</SelectValue> */}
         </SelectTrigger>
         <SelectContent auto>

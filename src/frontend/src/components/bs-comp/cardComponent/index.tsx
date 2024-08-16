@@ -25,7 +25,7 @@ interface IProps<T> {
   checked?: boolean,
   user?: string,
   currentUser?: any,
-  allLabels?:any[],
+  allLabels?: any[],
   isAdmin?: boolean,
   headSelecter?: React.ReactNode,
   footer?: React.ReactNode,
@@ -107,15 +107,15 @@ export default function CardComponent<T>({
   }
 
   const isOperator = useMemo(() => {
-    if(data && currentUser) {
-      if(currentUser.role === 'admin') return true
+    if (data && currentUser) {
+      if (currentUser.role === 'admin') return true
       data.group_ids.forEach(element => {
-        if(currentUser.admin_groups.includes(element)) return true
+        if (currentUser.admin_groups.includes(element)) return true
       })
-      if(data.user_id === currentUser.user_id) return true
+      if (data.user_id === currentUser.user_id) return true
     }
     return false
-  },[data, currentUser])
+  }, [data, currentUser])
 
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
@@ -148,7 +148,7 @@ export default function CardComponent<T>({
 
 
   // 侧边弹窗列表（sheet）
-  if (type === 'sheet') return <Card className="group max-h-[146px] w-[320px] cursor-pointer bg-[#F7F9FC] dark:bg-background-main dark:hover:bg-background-login hover:bg-[#EDEFF6] hover:shadow-none relative" onClick={onClick}>
+  if (type === 'sheet') return <Card className="group max-h-[146px] w-[316px] cursor-pointer bg-[#F7F9FC] dark:bg-background-main dark:hover:bg-background-login hover:bg-[#EDEFF6] hover:shadow-none relative" onClick={onClick}>
     <CardHeader className="pb-2">
       <CardTitle className="truncate-doubleline">
         <div className="flex gap-2 pb-2 items-center">
@@ -158,7 +158,7 @@ export default function CardComponent<T>({
           >
             <Icon />
           </TitleLogo>
-          <p className=" align-middle">{title}</p>
+          <p className="leading-5 align-middle">{title}</p>
         </div>
         {/* <span></span> */}
       </CardTitle>
@@ -199,9 +199,11 @@ export default function CardComponent<T>({
       <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className="h-20 grid grid-rows-2">
-      <LabelShow show={data.tags.length > 0} isOperator={isOperator} 
-        resource={{id:data.id, type:type}}
-        labels={data.tags.map(d => ({label:d.name, value:d.id, selected:true, edit:false}))}
+      <LabelShow
+        show={data.tags.length > 0}
+        isOperator={isOperator}
+        resource={{ id: data.id, type: type }}
+        labels={data.tags.map(d => ({ label: d.name, value: d.id, selected: true, edit: false }))}
         all={allLabels.filter(a => a.value !== -1)}>
       </LabelShow>
       <div className="flex justify-between items-center h-10">

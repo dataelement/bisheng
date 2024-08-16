@@ -155,7 +155,8 @@ def import_llm(llm: str) -> BaseLanguageModel:
     """Import llm from llm name"""
     if llm == 'OpenAI':
         return import_class('langchain_openai.OpenAI')
-    return import_class(f'langchain.llms.{llm}')
+    from bisheng.interface.llms.base import llm_creator
+    return next(x for x in llm_creator.type_to_loader_dict.values() if x.__name__ == llm)
 
 
 def import_tool(tool: str) -> BaseTool:

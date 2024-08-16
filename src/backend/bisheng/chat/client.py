@@ -139,6 +139,7 @@ class ChatClient:
                     raise IgnoreException('该助手已被删除')
         except IgnoreException as e:
             logger.exception("get assistant info error")
+            await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
             raise IgnoreException(f'get assistant info error: {str(e)}')
         try:
             if self.chat_id and self.gpts_agent is None:

@@ -1,4 +1,5 @@
-import { useContext, useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/bs-ui/table";
@@ -9,10 +10,22 @@ import { useDebounce, useTable } from "../../util/hook";
 import CreateTask from "./components/CreateTask";
 import FinetuneDetail, { BadgeView } from "./components/FinetuneDetail";
 import FinetuneHead from "./components/FinetuneHead";
+import RTConfig from "./components/RTConfig";
+import { CpuDetail } from "./cpuInfo";
 
-export const Finetune = ({ rtClick, gpuClick }) => {
+export const Finetune = () => {
     const { setSuccessData } = useContext(alertContext);
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation();
+
+    useEffect(() => {
+        i18n.loadNamespaces('model');
+    }, [i18n]);
+
+    const [rtOpen, setRTOpen] = useState(false)
+    const [showCpu, setShowCpu] = useState({
+        type: 'model',
+        show: false
+    })
 
     const { page, pageSize, data: tasks, total, setPage, search, reload, filterData } = useTable({}, (param) =>
         getTasksApi({
@@ -46,15 +59,15 @@ export const Finetune = ({ rtClick, gpuClick }) => {
         setTaskId(id)
     }, 600, false)
 
-    return <div className="relative bg-background-main-content">
+    return <div className="relative bg-background-main-content pt-2">
         <div className={createOpen ? 'hidden' : 'block'}>
-            <FinetuneHead onSearch={search} onFilter={filterData} rtClick={rtClick} onCreate={() => setCreateOpen(true)}></FinetuneHead>
+            <FinetuneHead onSearch={search} onFilter={filterData} rtClick={() => setRTOpen(true)} onCreate={() => setCreateOpen(true)}></FinetuneHead>
             {/* body */}
             {tasks?.length === 0 ?
                 <div className="mt-6 text-center text-gray-400">{t('finetune.noData')}</div>
                 : <div className="flex gap-4 mt-4">
                     <div className="w-[40%] relative">
-                        <div className="border-r overflow-y-auto max-h-[calc(100vh-210px)] pb-20">
+                        <div className="border-r overflow-y-auto max-h-[calc(100vh-150px)] pb-20">
                             <Table className="px-2">
                                 <TableHeader>
                                     <TableRow>
@@ -65,7 +78,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {tasks.map((task:any) => (
+                                    {tasks.map((task: any) => (
                                         <TableRow key={task.id} onClick={() => changeItem(task.id)} className={`cursor-pointer ${task.id === taskId && 'bg-gray-100'}`}>
                                             <TableCell className="font-medium">{task.model_name}</TableCell>
                                             <TableCell><BadgeView value={task.status}></BadgeView></TableCell>
@@ -86,7 +99,7 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                             />
                         </div>
                     </div>
-                    <div className="flex-1 overflow-hidden overflow-y-auto max-h-[calc(100vh-210px)]">
+                    <div className="flex-1 overflow-hidden overflow-y-auto max-h-[calc(100vh-150px)]">
                         {taskId ?
                             <FinetuneDetail id={taskId} onDelete={handleDeleteTask} onStatusChange={reload}></FinetuneDetail> :
                             <div className="flex justify-center items-center h-full">
@@ -102,8 +115,8 @@ export const Finetune = ({ rtClick, gpuClick }) => {
             {
                 createOpen && <div>
                     <CreateTask
-                        rtClick={rtClick}
-                        gpuClick={gpuClick}
+                        rtClick={() => setRTOpen(true)}
+                        gpuClick={() => setShowCpu({ type: 'finetune', show: true })}
                         onCancel={() => setCreateOpen(false)}
                         onCreate={(id) => {
                             reload();
@@ -113,5 +126,18 @@ export const Finetune = ({ rtClick, gpuClick }) => {
                 </div>
             }
         </div>
+        {/* RT配置 */}
+        <RTConfig open={rtOpen} onChange={() => setRTOpen(false)}></RTConfig>
+        {/* CPU使用情况 */}
+        <Dialog open={showCpu.show} onOpenChange={(show) => setShowCpu({ ...showCpu, show })}>
+            <DialogContent className="sm:max-w-[80%]">
+                <DialogHeader>
+                    <DialogTitle>{t('model.gpuResourceUsageTitle')}</DialogTitle>
+                </DialogHeader>
+                <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
+                    {showCpu.show && <CpuDetail type={showCpu.type} />}
+                </div>
+            </DialogContent>
+        </Dialog>
     </div>
 };

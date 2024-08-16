@@ -27,7 +27,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const { assistantState, loadAssistantState, destroy } = useAssistantStore()
     // console.log('data :>> ', flow);
     const build = useBuild()
-    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs} = useMessageStore()
+    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
     useEffect(() => {
         return destroy
     }, [])
@@ -157,7 +157,10 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         document.dispatchEvent(myEvent);
     }
 
-    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg relative" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+        <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+            <span className="loading loading-infinity loading-lg"></span>
+        </div>
         <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
         <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
             {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>

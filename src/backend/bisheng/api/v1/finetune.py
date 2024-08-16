@@ -2,14 +2,15 @@ import json
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile, Request
 from fastapi_jwt_auth import AuthJWT
 
 from bisheng.api.services.finetune import FinetuneService
 from bisheng.api.services.finetune_file import FinetuneFileService
-from bisheng.api.services.user_service import get_login_user
+from bisheng.api.services.user_service import get_login_user, UserPayload
 from bisheng.api.v1.schemas import FinetuneCreateReq, UnifiedResponseModel, resp_200
 from bisheng.database.models.finetune import Finetune, FinetuneChangeModelName, FinetuneList
+from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.preset_train import PresetTrain
 from bisheng.utils.minio_client import MinioClient
 
@@ -170,6 +171,15 @@ async def get_server_filters(*,
     Authorize.jwt_required()
 
     return FinetuneService.get_server_filters()
+
+
+@router.get('/model/list', response_model=UnifiedResponseModel[List[ModelDeploy]])
+async def get_model_list(request: Request,
+                         login_user: UserPayload = Depends(get_login_user),
+                         server_id: int = Query(..., description='ft服务唯一ID')):
+    """ 获取ft服务下所有的模型列表 """
+    ret = FinetuneService.get_model_list(login_user, server_id)
+    return resp_200(data=ret)
 
 
 @router.get('/gpu', response_model=UnifiedResponseModel)
