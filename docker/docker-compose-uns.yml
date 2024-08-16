@@ -5,8 +5,8 @@ services:
     ports:
       - "10001:10001"
     environment:
-      rt_server: bisheng-rt:9001  # 填写rt或者idp（即项素的ocrSdk）服务的根地址
-      rt_type:  idp  # 这里选择 idp 或 rt
+      # server_address: bisheng-rt:9001  # 填写ocr_sdk或rt服务的根地址
+      # server_type: ocr_sdk  # 这里填 ocr_sdk 或 rt
       TZ: Asia/Shanghai
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng-uns/config.yaml:/opt/bisheng-unstructured/bisheng_unstructured/config/config.yaml

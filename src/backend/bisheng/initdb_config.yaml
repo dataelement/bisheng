@@ -1,4 +1,5 @@
 knowledges:
+  # bisheng-uns服务地址填写示例： http://ip:port/v1/etl4llm/predict
   unstructured_api_url: ""  # 毕昇非结构化数据解析服务地址，提供包括OCR文字识别、表格识别、版式分析等能力。非必填，溯源必填
 
 llm_request:
