@@ -28,6 +28,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const [formData, setFormData] = useState({
         provider: 'openai',
         openai_api_key: '',
+        azure_api_key: '', // 新增 azure 的 API key
         openai_api_base: 'https://api.openai.com/v1',
         openai_proxy: '',
         bing_subscription_key: '',
@@ -50,6 +51,13 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
             if (configStr) {
                 const config = JSON.parse(configStr);
                 config.provider = config.azure_deployment ? 'azure' : 'openai';
+                if (config.provider === 'openai') {
+                    config.openai_api_key = config.openai_api_key;
+                    config.azure_api_key = ''
+                } else {
+                    config.openai_api_key = '';
+                    config.azure_api_key = config.openai_api_key;
+                }
                 setFormData(config);
             } else {
                 resetFormData();
@@ -62,6 +70,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
         setFormData({
             provider: 'openai',
             openai_api_key: '',
+            azure_api_key: '', // 重置 azure 的 API key
             openai_api_base: 'https://api.openai.com/v1',
             openai_proxy: '',
             bing_subscription_key: '',
@@ -104,7 +113,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const getFieldsToValidate = () => {
         const fields = [];
         if (name === 'Dalle3绘画') {
-            fields.push('openai_api_key');
+            fields.push(formData.provider === 'openai' ? 'openai_api_key' : 'azure_api_key'); // 根据 provider 决定校验哪个 API key
             if (formData.provider !== 'openai') {
                 fields.push('azure_deployment', 'azure_endpoint', 'openai_api_version');
             }
@@ -133,11 +142,13 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const getFieldsToSubmit = () => {
         const fields: any = {};
         if (name === 'Dalle3绘画') {
-            fields.openai_api_key = formData.openai_api_key;
+            // 提交时根据 provider 提交不同的 API key
             if (formData.provider === 'openai') {
+                fields.openai_api_key = formData.openai_api_key;
                 fields.openai_api_base = formData.openai_api_base;
                 fields.openai_proxy = formData.openai_proxy;
             } else {
+                fields.openai_api_key = formData.azure_api_key; // 提交 azure 的 API key
                 fields.azure_deployment = formData.azure_deployment;
                 fields.azure_endpoint = formData.azure_endpoint;
                 fields.openai_api_version = formData.openai_api_version;
@@ -203,12 +214,12 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                                     required
                                     label="Azure OpenAI API Key"
                                     type="password"
-                                    id="openai_api_key"
-                                    name="openai_api_key"
+                                    id="azure_api_key" // 修改为 azure_api_key
+                                    name="azure_api_key"
                                     placeholder={t('build.enterApiKey')}
-                                    value={formData.openai_api_key}
+                                    value={formData.azure_api_key}
                                     onChange={handleChange}
-                                    error={errors.openai_api_key}
+                                    error={errors.azure_api_key}
                                 />
                                 <InputField
                                     required
