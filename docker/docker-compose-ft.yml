@@ -7,9 +7,9 @@ services:
     environment:
       TZ: Asia/Shanghai
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng-ft/config.yaml:/opt/bisheng-ft/sft_server/config.yaml  # 服务启动所需的配置文件地址
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/llm:/opt/bisheng-ft/models/model_repository # 挂载模型目录为本机目录
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/finetune_output:/opt/bisheng-ft/finetune_output # 微调过程的中间日志和训练完成的模型存储目录，挂载部署机器上的实际目录
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng-ft/config.yaml:/opt/bisheng-ft/sft_server/config.yaml  # 服务启动所需的配置文件地址，默认不用改
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/llm:/opt/bisheng-ft/models/model_repository # 这个是存放基座模型的目录，挂载到本机目录
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/finetune_output:/opt/bisheng-ft/finetune_output # 这个是存放微调过程的中间日志和微调训练后模型的目录，挂载到本机目录，不能与存放基座模型的目录相同
     security_opt:
       - seccomp:unconfined
     command: bash start-sft-server.sh # 启动服务
