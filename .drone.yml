@@ -50,8 +50,8 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
       - name: apt-cache
         path: /var/cache/apt/archives # 将应用打包好的Jar和执行脚本挂载出来
-      - name: socket
-        path: /var/run/docker.sock
+      - name: dockersock
+        path: /var/run/
       - name: bisheng-cache
         path: /app/build/
     settings:
@@ -81,8 +81,8 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
       - name: apt-cache
         path: /var/cache/apt/archives # 将应用打包好的Jar和执行脚本挂载出来
-      - name: socket
-        path: /var/run/docker.sock
+      - name: dockersock
+        path: /var/run/
     settings:
       registry: http://192.168.106.8:6082
       insecure: true
@@ -134,7 +134,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - tar czf bisheng-$version.tar.gz bisheng-$version
       - curl -k --progress-bar -o /dev/null --user $USERNAME --upload-file bisheng-$version.tar.gz http://192.168.106.244:5081/repository/raw-hosted/product/bisheng-ent/bisheng-$version.tar.gz
     volumes:
-      - name: socket 
+      - name: dockersock
         path: /var/run
     when:
       status:
@@ -146,12 +146,18 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
 
    
 volumes:
-- name: bisheng-cache
-  host:
-    path: /opt/drone/data/bisheng/
-- name: apt-cache
-  host:
-    path: /opt/drone/data/bisheng/apt/
-- name: socket
-  host:
-    path: /var/run/docker.sock
+  - name: bisheng-cache
+    host:
+      path: /opt/drone/data/bisheng/
+  - name: apt-cache
+    host:
+      path: /opt/drone/data/bisheng/apt/
+  - name: maven_local_repo
+    host:
+      path: /data/drone-data/m2
+  - name: data
+    host:
+      path: /data/drone-data/package/
+  - name: dockersock
+    host:
+      path: /var/run/
