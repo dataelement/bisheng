@@ -1,5 +1,5 @@
-import { Link, useParams } from "react-router-dom";
-import { Button } from "../../components/bs-ui/button";
+import { useParams } from "react-router-dom";
+import { Button } from "../../../components/bs-ui/button";
 import {
     Table,
     TableBody,
@@ -7,30 +7,28 @@ import {
     TableHead,
     TableHeader,
     TableRow
-} from "../../components/bs-ui/table";
+} from "../../../components/bs-ui/table";
 
-import { ArrowLeft, Filter, RotateCw, X } from "lucide-react";
+import { Filter, RotateCw, X } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import PaginationComponent from "../../components/PaginationComponent";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import ShadTooltip from "../../components/ShadTooltipComponent";
-import { SearchInput } from "../../components/bs-ui/input";
-import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "../../components/bs-ui/select";
-import { locationContext } from "../../contexts/locationContext";
-import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-import UploadModal from "../../modals/UploadModal";
-import { useTable } from "../../util/hook";
+import { SearchInput } from "../../../components/bs-ui/input";
+import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "../../../components/bs-ui/select";
+import { locationContext } from "../../../contexts/locationContext";
+import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../controllers/API";
+import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import UploadModal from "../../../modals/UploadModal";
+import { useTable } from "../../../util/hook";
 
-export default function FilesPage() {
+export default function Flies(params) {
     const { t } = useTranslation()
 
     const { id } = useParams()
     // 上传 上传成功添加到列表
     const [open, setOpen] = useState(false)
-    const [title, setTitle] = useState('')
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData, refreshData } = useTable({}, (param) =>
         readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
@@ -48,14 +46,6 @@ export default function FilesPage() {
         filterData({ status: filter })
     }, [filter])
 
-    useEffect(() => {
-        // @ts-ignore
-        const libname = window.libname // 临时记忆
-        if (libname) {
-            localStorage.setItem('libname', window.libname)
-        }
-        setTitle(window.libname || localStorage.getItem('libname'))
-    }, [])
 
     const handleOpen = (e) => {
         setOpen(e)
@@ -116,25 +106,15 @@ export default function FilesPage() {
         setFilter(Number(id))
     }
 
-    return <div className="w-full h-full px-2 py-4 relative">
+    return <div className="relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <div className="h-full overflow-y-auto pb-10 bg-background-login">
-            <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center">
-                    <ShadTooltip content="back" side="top">
-                        <button className="extra-side-bar-buttons w-[36px]" onClick={() => { }} >
-                            <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
-                        </button>
-                    </ShadTooltip>
-                    <span className=" text-gray-700 text-sm font-black pl-4">{title}</span>
-                </div>
-                <div className="flex gap-4 items-center">
-                    <SearchInput placeholder={t('lib.fileName')} onChange={(e) => search(e.target.value)}></SearchInput>
-                    {hasPermission && <Button className="px-8" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
-                </div>
-            </div>
+        <div className="absolute right-0 top-[-46px] flex gap-4 items-center">
+            <SearchInput placeholder={t('lib.fileName')} onChange={(e) => search(e.target.value)}></SearchInput>
+            {hasPermission && <Button className="px-8" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
+        </div>
+        <div className="h-[calc(100vh-200px)] overflow-y-auto pb-20">
             <Table>
                 <TableHeader>
                     <TableRow>
@@ -176,7 +156,8 @@ export default function FilesPage() {
                             </TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
-                                {hasPermission ? <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500">{t('delete')}</Button> :
+                                <Button variant="link" disabled={el.status !== 2} className="px-2">查看</Button>
+                                {hasPermission ? <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-2">{t('delete')}</Button> :
                                     <Button variant="link" className="ml-4 text-gray-400">{t('delete')}</Button>}
                             </TableCell>
                         </TableRow>
@@ -217,6 +198,5 @@ export default function FilesPage() {
                 </div>
             </div>
         </dialog>
-
-    </div >
+    </div>
 };

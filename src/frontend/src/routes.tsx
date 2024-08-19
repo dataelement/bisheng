@@ -12,7 +12,7 @@ import DiffFlowPage from "./pages/DiffFlowPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
 import FileLibPage from "./pages/FileLibPage";
-import FilesPage from "./pages/FileLibPage/files";
+import FilesPage from "./pages/FileLibPage/detail";
 import FlowPage from "./pages/FlowPage";
 import LogPage from "./pages/LogPage";
 import { LoginPage } from "./pages/LoginPage/login";

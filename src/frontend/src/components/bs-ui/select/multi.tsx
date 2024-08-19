@@ -29,6 +29,8 @@ interface Option {
 interface BaseProps<T> {
     /** 多选 */
     multiple?: boolean;
+    /** 高度不变，内部滚动 */
+    scroll?: boolean;
     disabled?: boolean;
     className?: string;
     options: Option[];
@@ -62,6 +64,7 @@ const MultiSelect = ({
     multiple = false,
     className,
     value = [],
+    scroll = false,
     defaultValue = [],
     options = [],
     children = null,
@@ -175,7 +178,7 @@ const MultiSelect = ({
             }
         }}
     >
-        <SelectTrigger className="h-auto">
+        <SelectTrigger className={`min-h-9 py-1 ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`}>
             {
                 !multiple && (values.length ? <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
             }
