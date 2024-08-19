@@ -80,7 +80,7 @@ export default function tabTools({ select = null, onSelect }) {
             </div>
           </div>
         </div>
-        <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pt-12 scrollbar-hide">
+        <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pb-20 pt-12 scrollbar-hide">
           <Accordion type="single" collapsible className="w-full">
             {options.length ? (
               options.map((el) => (
