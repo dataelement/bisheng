@@ -240,6 +240,10 @@ async def list_user(*,
             groups = list(set(groups) & set(group_id))
             if not groups:
                 raise HTTPException(status_code=500, detail='无查看权限')
+        # 查询用户组下的角色, 和角色筛选条件做交集，得到真正去查询的角色ID
+        group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0)
+        if role_id:
+            roles = list(set(role_id) & set([one.id for one in group_roles]))
     # 通过用户组和角色过滤出来的用户id
     user_ids = []
     if groups:
@@ -248,10 +252,7 @@ async def list_user(*,
         if not groups_user_ids:
             return resp_200({'data': [], 'total': 0})
         user_ids = list(set([one.user_id for one in groups_user_ids]))
-        # 查询用户组下的角色, 和角色筛选条件做交集，得到真正去查询的角色ID
-        group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0)
-        if role_id:
-            roles = list(set(role_id) & set([one.id for one in group_roles]))
+
     if roles:
         roles_user_ids = UserRoleDao.get_roles_user(roles)
         if not roles_user_ids:
