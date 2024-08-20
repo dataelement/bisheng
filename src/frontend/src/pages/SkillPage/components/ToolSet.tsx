@@ -51,12 +51,13 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
             if (configStr) {
                 const config = JSON.parse(configStr);
                 config.provider = config.azure_deployment ? 'azure' : 'openai';
+                const apiKey = config.openai_api_key
                 if (config.provider === 'openai') {
-                    config.openai_api_key = config.openai_api_key;
+                    config.openai_api_key = apiKey;
                     config.azure_api_key = ''
                 } else {
                     config.openai_api_key = '';
-                    config.azure_api_key = config.openai_api_key;
+                    config.azure_api_key = apiKey;
                 }
                 setFormData(config);
             } else {
