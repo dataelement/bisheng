@@ -150,7 +150,10 @@ class AssistantService(BaseService, AssistantUtils):
         # 自动补充默认的模型配置
         assistant_llm = LLMService.get_assistant_llm()
         if assistant_llm.llm_list:
-            assistant.model_name = assistant_llm.llm_list[0].model_id
+            for one in assistant_llm.llm_list:
+                if one.default:
+                    assistant.model_id = one.model_id
+                    break
 
         # 自动生成描述
         assistant, _, _ = await cls.get_auto_info(assistant)

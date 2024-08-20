@@ -33,12 +33,12 @@ export default function ToolItem({
                                 onClick={(e) => onEdit(data.id)}
                             ><SettingIcon /></div>
                         }
-                        {/* {
+                        {
                             onSetClick && <div
                                 className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
                                 onClick={onSetClick}
                             ><SettingIcon /></div>
-                        } */}
+                        }
                     </div>
                     <p className="text-sm text-muted-foreground mt-2">{data.description}</p>
                 </div>

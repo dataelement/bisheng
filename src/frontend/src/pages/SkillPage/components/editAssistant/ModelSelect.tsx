@@ -33,12 +33,13 @@ export default function ModelSelect({ type = 'assistant', value, onChange }) {
         setModelValue(_value)
         setOptions(_options)
         setLoading(false)
+
         if (!_value.length) onChange(null)
     }
 
     useEffect(() => {
         loadModels()
-    }, [])
+    }, [value])
     if (loading) return null
     return <Cascader
         selectPlaceholder="选择一个模型"
