@@ -196,7 +196,7 @@ const modelProviders = {
             label: "Base Url",
             type: "text",
             placeholder: "",
-            default: "https://open.bigmodel.cn/api/paas/v4/",
+            default: "https://spark-api-open.xf-yun.com/v1",
             required: true,
             key: "openai_api_base",
         }
