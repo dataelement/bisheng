@@ -1,12 +1,21 @@
-<img src="https://www.dataelem.com/nstatic/bisheng.png" alt="Bisheng banner">
+<img src="https://dataelem.com/bs/face.png" alt="Bisheng banner">
 
+<p align="center">
+    <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
+    <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
+    <img src="https://img.shields.io/docker/pulls/dataelement/bisheng-frontend" alt="docker-pull-count" />
+    <a href=""><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
+    <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
+</p>
 <p align="center">
   <a href="./README.md">简体中文</a> |
   <a href="./README_ENG.md">English</a> |
   <a href="./README_JPN.md">日本語</a>
 </p>
 
-
+<p align="center">
+  <a href="https://trendshift.io/repositories/717" target="_blank"><img src="https://trendshift.io/api/badge/repositories/717" alt="dataelement%2Fbisheng | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
 <div class="column" align="middle">
   <!-- <a href="https://bisheng.slack.com/join/shared_invite/"> -->
     <!-- <img src="https://img.shields.io/badge/Join-Slack-orange" alt="join-slack"/> -->
@@ -15,131 +24,78 @@
   <!-- <img src="https://img.shields.io/docker/pulls/bisheng-io/bisheng" alt="docker-pull-count" /> -->
 </div>
 
-# Welcome to Bisheng
 
-## What is Bisheng
+BISHENG is an open LLM application devops platform, focusing on enterprise scenarios. It has been used by a large number of industry leading organizations and Fortune 500 companies.
 
-Bisheng is a leading open-source platform for developing LLM applications. It empowers and accelerates the development of LLM applications and helps users to enter the next generation of application development mode with the best experience.
-
-"Bisheng" is the inventor of movable type printing, which played a huge role in the dissemination of human knowledge. We hope that "Bisheng" can also provide strong support for the widespread landing of intelligent applications. Welcome to participate together.
-
-Bisheng was released under the Apache 2.0 License at the end of August 2023.
+"Bi Sheng" was the inventor of movable type printing, which played a vital role in promoting the transmission of human knowledge. We hope that BISHENG can also provide strong support for the widespread implementation of intelligent applications. Everyone is welcome to participate.
 
 
-## Key Features
+## Features 
 
-- Convenience: Even business person can quickly build intelligent applications centered around LLM through simple and intuitive form filling based on our pre-configured application templates.
-- Flexibility: For person familiar with LLM technologies, we provide hundreds of development components following the latest trends in the LLM technology ecosystem. With visual and flexible process orchestration capabilities, any type of LLM application can be developed, not just simple prompting projects.
-- Reliability and Enterprise-level: Many similar open-source projects are only suitable for experimental testing scenarios and lack enterprise-level features for real production use, including high availability under high concurrency, continuous iteration and optimization of application operations and effects, and practical functions that fit real business scenarios. These are the differentiated capabilities of the ByteDance platform. In addition, data quality within enterprises is uneven. To truly utilize all data, comprehensive unstructured data governance capabilities are needed, which is the core capability our team has accumulated over the past few years. In Bisheng's demo environment, you can directly access these capabilities through related components, and these capabilities are free and unlimited.
+1. <b>Designed for Enterprise Applications</b>: Document review, fixed-layout report generation, multi-agent collaboration, policy update comparison, support ticket assistance, customer service assistance, meeting minutes generation, resume screening, call record analysis, unstructured data governance, knowledge mining, data analysis, and more. 
 
+The platform supports the construction of <b>highly complex enterprise application scenarios</b> and offers <b>deep optimization</b> with hundreds of components and thousands of parameters.
+<p align="center"><img src="https://dataelem.com/bs/chat.png" alt="sence1"></p>
 
-## Product Applications
+2. <b>Enterprise-grade</b> features are the fundamental guarantee for application implementation: security review, RBAC, user group management, traffic control by group, SSO/LDAP, vulnerability scanning and patching, high availability deployment solutions, monitoring, statistics, and more.
+<p align="center"><img src="https://dataelem.com/bs/pro.png" alt="sence2"></p>
 
-With the Bisheng platform, we can build a variety of LLM applications:
+3. <b>High-Precision Document Parsing</b>: Our high-precision document parsing model is trained on a vast amount of high-quality data accumulated over past 5 years. It includes high-precision printed text, handwritten text, and rare character recognition models, table recognition models, layout analysis models, and seal models., table recognition models, layout analysis models, and seal models. You can deploy it privately for free.
+<p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="sence3"></p>
 
-Analysis Report Generation:
-
-- 📃 Contract Review Report Generation
-- 🏦 Credit Investigation Report Generation
-- 📈 IPO Analysis Report Generation
-- 💼 Intelligent Investment Advisory Report Generation
-- 👀 Document Summary Generation
+4. A community for sharing best practices across various enterprise scenarios: An open repository of application cases and best practices.
+<p align="center"><img src="https://dataelem.com/bs/sence.png" alt="sence3"></p>
 
 
-Knowledge Base Q&A:
+## Quick start 
 
-- 👩‍💻 User Manual Q&A
-- 👩‍🔬 Research Report Knowledge Base Q&A
-- 🗄 Regulations and Rules Q&A
-- 💊 "Chinese Pharmacopoeia" Knowledge Q&A
-- 📊 Stock Price Database Q&A
+Please ensure the following conditions are met before installing BISHENG:
+- CPU >= 8 Core
+- RAM >= 32 GB
+- Docker 19.03.9+
+- Docker Compose 1.25.1+
+> In addition to installing BISHENG, we will also install the following third-party components by default: ES, Milvus, and Onlyoffice.
 
+Download BISHENG
+```bash
+git clone https://github.com/dataelement/bisheng.git
+# Enter the installation directory
+cd bisheng/docker
 
-Dialogues:
+# If the system does not have the git command, you can download the BISHENG code as a zip file.
+wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
+# Unzip and enter the installation directory
+unzip main.zip && cd bisheng-main/docker
+```
+Start BISHENG
+```bash
+docker-compose up -d
+```
+After the startup is complete, access http://IP:3001 in the browser. The login page will appear, proceed with user registration. 
 
-- 🎭 Role-play as an interviewer
-- 📍 Xiaohongshu (Red Book) Copywriting Assistant
-- 👩‍🎤 Role-play as a foreign language teacher
-- 👨‍🏫 Resume Optimization Assistant
+By default, the first registered user will become the system admin. 
 
+For more installation and deployment issues, refer to:：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
-Element Extraction:
+## Acknowledgement 
+This repo benefits from [langchain](https://github.com/langchain-ai/langchain) [langflow](https://github.com/logspace-ai/langflow) [unstructured](https://github.com/Unstructured-IO/unstructured) and [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) . Thanks for their wonderful works.
 
-- 📄 Key Elements Extraction from Contracts
-- 🏗️ Engineering Report Elements Extraction
-- 🗂️ General Metadata Extraction
-- 🎫 Key Elements Extraction from Cards and Bills
+<b>感谢我们的贡献者：</b>
 
-
-For methods to build various applications, see[Application Cases](https://m7a7tqsztt.feishu.cn/wiki/ZfkmwLPfeiAhQSkK2WvcX87unxc).
-
-We believe that in real enterprise scenarios, "dialogue" is just one of many interaction forms. 
-In the future, we will also add support for more application forms such as process automation and search.
-
-
-## Quick Start
-
-### Start With Bisheng
-
-- [Install Bisheng](https://m7a7tqsztt.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
-
-
-### Compile Bisheng From Src
-
-Todo: update later
-
-Get More Contents，Please Read [Dev Documents](https://m7a7tqsztt.feishu.cn/wiki/ITmJwMXVliBnzpkW3nkcqPVrnse)。
+<a href="https://github.com/dataelement/bisheng/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=dataelement/bisheng" />
+</a>
 
 
-## Contributing
 
-Contributions to Bisheng are welcome from everyone. See [Guidelines for Contributing]((https://github.com/dataelement/bisheng/blob/main/CONTRIBUTING.md)) 
-for details on submitting patches and the contribution workflow. 
-Refer [community repository](https://github.com/dataelement/community) to learn about our governance and access more community resources.
-
-<!-- ### All contributors -->
-
-<!-- Do not remove end of hero-bot -->
-<br>
-
-## Bisheng Document
-
-For more guides on installation, development, deployment, and management, please see [Bisheng Documentation](https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde).
-
-
-## Community
-
-- You're welcome to join our [Slack](https://www.dataelem.com/) channel to share your suggestions and issues.
-- You can also visit the [FAQ](https://m7a7tqsztt.feishu.cn/wiki/XdGCwkDJviC0Z8klbdbcF790n9b) page to see frequently asked questions and their answers.
-- You can also join the [Discussion Group](https://github.com/dataelement/bisheng/discussions) to raise questions and discussions.
-
-
-<!-- 订阅 Bisheng 邮件：
-
-- [Technical Steering Committee](https://www.dataelem.com/)
-- [Technical Discussions](https://www.dataelem.com/)
-- [Announcement](https://www.dataelem.com/) -->
-
-Follow Bisheng on social media:
-
-<!-- - [知乎](https://www.zhihu.com/org/bisheng-io)
-- [CSDN](http://bishengio.blog.csdn.net/)
-- [Bilibili](http://space.bilibili.com/xxxxx) -->
-- Bisheng Technical Exchange WeChat Group
+## Community & contact 
+Welcome to join our discussion group
 
 <img src="https://www.dataelem.com/nstatic/qrcode.png" alt="Wechat QR Code">
 
-## Join Us
 
-DataElem Inc. is the company behind the Bisheng project. We are [hiring](https://www.dataelem.com/contact/team) algorithm developers, developers, and full-stack engineers. 
-Join us as we work together to build the next generation of intelligent application development platform
+<!--
+## Star History
 
-
-## Acknowledgments
-
-Bisheng adopts dependencies from the following:
-
-- Thanks to the open-source model inference framework [Triton](https://github.com/triton-inference-server).
-- Thanks to the open-source LLM application development library [langchain](https://github.com/langchain-ai/langchain).
-- Thanks to the open-source unstructured data parsing engine [unstructured](https://github.com/Unstructured-IO/unstructured).
-- Thanks to the open-source langchain visualization tool [langflow](https://github.com/logspace-ai/langflow).
+[![Star History Chart](https://api.star-history.com/svg?repos=dataelement/bisheng&type=Date)](https://star-history.com/#dataelement/bisheng&Date)
+-->
