@@ -44,7 +44,7 @@ class BishengLLM(BaseChatModel):
         LLMServerType.QWEN.value: 'ChatOpenAI',
         LLMServerType.QIAN_FAN.value: 'ChatWenxin',
         LLMServerType.ZHIPU.value: 'ChatOpenAI',
-        LLMServerType.MINIMAX.value: 'MiniMaxChat',
+        LLMServerType.MINIMAX.value: 'ChatOpenAI',
         LLMServerType.ANTHROPIC.value: 'ChatAnthropic',
         LLMServerType.DEEPSEEK.value: 'ChatOpenAI',
         LLMServerType.SPARK.value: 'ChatOpenAI',

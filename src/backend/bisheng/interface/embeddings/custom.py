@@ -64,7 +64,7 @@ class BishengEmbeddings(Embeddings):
         LLMServerType.AZURE_OPENAI.value: 'AzureOpenAIEmbeddings',
         LLMServerType.QWEN.value: 'DashScopeEmbeddings',
         LLMServerType.QIAN_FAN.value: 'QianfanEmbeddingsEndpoint',
-        LLMServerType.MINIMAX.value: 'MiniMaxEmbeddings',
+        LLMServerType.MINIMAX.value: 'OpenAIEmbeddings',
         LLMServerType.ZHIPU.value: 'OpenAIEmbeddings',
     }
 
@@ -125,12 +125,6 @@ class BishengEmbeddings(Embeddings):
                 "qianfan_ak": params.get("wenxin_api_key"),
                 "qianfan_sk": params.get("wenxin_secret_key"),
                 "model": params.get('model'),
-            }
-        elif server_info.type == LLMServerType.MINIMAX.value:
-            params = {
-                "minimax_api_key": params.get('minimax_api_key'),
-                "model": params.get('model'),
-                "minimax_group_id": params.get('minimax_group_id'),
             }
         elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
                                   LLMServerType.VLLM.value]:
