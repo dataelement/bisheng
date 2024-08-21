@@ -152,7 +152,7 @@ class AssistantService(BaseService, AssistantUtils):
         if assistant_llm.llm_list:
             for one in assistant_llm.llm_list:
                 if one.default:
-                    assistant.model_id = one.model_id
+                    assistant.model_name = one.model_id
                     break
 
         # 自动生成描述
