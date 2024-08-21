@@ -145,7 +145,10 @@ class StockInfo(APIToolBase):
             if resp.status_code != 200:
                 logger.info('api_call_fail res={}', resp.text)
             k_data = resp.text
-            data_array = json.loads(kLinePattern.search(k_data).group(1))
+            k_data = kLinePattern.search(k_data)
+            if not k_data:
+                return '{}'
+            data_array = json.loads(k_data.group(1))
             for item in data_array:
                 if item.get('day') == date:
                     return json.dumps(item)
@@ -173,7 +176,10 @@ class StockInfo(APIToolBase):
             count = datetime.today() - date_obj
             url = self.url.format(stockName=stock_number, stock=stock, count=count.days)
             k_data = await self.async_client.aget(url)
-            data_array = json.loads(kLinePattern.search(k_data).group(1))
+            k_data = kLinePattern.search(k_data)
+            if not k_data:
+                return '{}'
+            data_array = json.loads(k_data.group(1))
             for item in data_array:
                 if item.get('day') == date:
                     return json.dumps(item)
