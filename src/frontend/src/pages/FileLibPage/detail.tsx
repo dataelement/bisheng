@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
-import Flies from "./components/Flies";
+import Files from "./components/Files";
 import Header from "./components/Header";
 import Paragraphs from "./components/Paragraphs";
 
@@ -15,7 +15,7 @@ export default function FilesPage() {
                 <TabsTrigger value="paragraph">分段管理</TabsTrigger>
             </TabsList>
             <TabsContent value="file">
-                <Flies />
+                <Files />
             </TabsContent>
             <TabsContent value="paragraph">
                 <Paragraphs />

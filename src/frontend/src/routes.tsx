@@ -29,6 +29,8 @@ import SkillsPage from "./pages/SkillPage/tabSkills";
 import SkillToolsPage from "./pages/SkillPage/tabTools";
 import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
+import ParagraphEdit from "./pages/FileLibPage/paragraphEdit";
+import FilesUpload from "./pages/FileLibPage/filesUpload";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -62,24 +64,25 @@ const privateRouter = [
       { path: "", element: <SkillChatPage />, },
       { path: "filelib", element: <FileLibPage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
+      { path: "filelib/upload", element: <FilesUpload />, permission: 'knowledge', },
       { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
       { path: "build/skills", element: <SkillsPage />, permission: 'build', },
-      // @ts-ignore
+      // @ts-ignore 
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
       { path: "build", element: <Navigate to="assist" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps", element: <Templates />, permission: 'build', },
-      { path: "model/management", element: <Management />},
+      { path: "model/management", element: <Management /> },
       { path: "model/finetune", element: <Finetune /> },
       { path: "model", element: <Navigate to="management" replace /> },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
-
     ],
   },
+  { path: "filelib/edit/:fileid", element: <ErrorHoc Comp={ParagraphEdit} /> },
   { path: "model/doc", element: <Doc /> },
   {
     path: "/flow/:id/",

@@ -12,6 +12,7 @@ import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
 import MultiSelect from "@/components/bs-ui/select/multi"
 import { readFileByLibDatabase } from "@/controllers/API"
 import { useTable } from "@/util/hook"
+import { Link } from "react-router-dom"
 
 const Item = ({ data }) => {
 
@@ -44,9 +45,11 @@ const Item = ({ data }) => {
                     <Button variant="link" className="p-0" onClick={handleDel}>
                         删除
                     </Button>
-                    <Button variant="link" className="p-0">
-                        编辑
-                    </Button>
+                    <Link to={`/filelib/edit/1234`}>
+                        <Button variant="link" className="p-0">
+                            编辑
+                        </Button>
+                    </Link>
                 </div>
                 <p className="text-xs text-muted-foreground">{data.charCount || "500个字符"}</p>
             </CardFooter>

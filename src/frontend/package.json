@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "0.3.4.dev1",
+  "version": "0.3.5",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -83,6 +83,7 @@
     "tailwind-merge": "^2.0.0",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^9.0.0",
+    "vditor": "^3.10.5",
     "vite-plugin-svgr": "^3.2.0",
     "web-vitals": "^2.1.4",
     "xlsx": "^0.18.5",

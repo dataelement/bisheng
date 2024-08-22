@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Button } from "../../../components/bs-ui/button";
 import {
     Table,
@@ -9,26 +9,21 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 
-import { Filter, RotateCw, X } from "lucide-react";
-import { useContext, useEffect, useState } from "react";
+import { Filter, RotateCw } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import PaginationComponent from "../../components/PaginationComponent";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "../../../components/bs-ui/select";
-import { locationContext } from "../../../contexts/locationContext";
-import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../controllers/API";
+import { deleteFile, readFileByLibDatabase } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
-import UploadModal from "../../../modals/UploadModal";
 import { useTable } from "../../../util/hook";
 
-export default function Flies(params) {
+export default function Files(params) {
     const { t } = useTranslation()
-
     const { id } = useParams()
-    // 上传 上传成功添加到列表
-    const [open, setOpen] = useState(false)
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData, refreshData } = useTable({}, (param) =>
         readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
@@ -38,7 +33,6 @@ export default function Flies(params) {
     )
 
     const [hasPermission, setHasPermission] = useState(true)
-    const { appConfig } = useContext(locationContext)
 
     // filter
     const [filter, setFilter] = useState(999)
@@ -46,11 +40,6 @@ export default function Flies(params) {
         filterData({ status: filter })
     }, [filter])
 
-
-    const handleOpen = (e) => {
-        setOpen(e)
-        reload()
-    }
 
     const handleDelete = (id) => {
         bsConfirm({
@@ -65,43 +54,6 @@ export default function Flies(params) {
         })
     }
 
-    const [repeatFiles, setRepeatFiles] = useState([])
-    // 上传结果展示
-    const handleUploadResult = (fileCount, failFiles, res) => {
-        const _repeatFiles = res.filter(e => e.status === 3)
-        if (_repeatFiles.length) {
-            setRepeatFiles(_repeatFiles)
-        } else {
-            failFiles.length && bsConfirm({
-                desc: <div>
-                    <p>{t('lib.fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
-                    <div className="max-h-[160px] overflow-y-auto no-scrollbar">
-                        {failFiles.map(str => <p className=" text-red-400" key={str}>{str}</p>)}
-                    </div>
-                </div>,
-                onOk(next) {
-                    next()
-                }
-            })
-        }
-    }
-
-    // 重试解析
-    const [retryLoad, setRetryLoad] = useState(false)
-    const handleRetry = (objs) => {
-        setRetryLoad(true)
-        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(objs).then(res => {
-            // 乐观更新
-            // refreshData(
-            //     (item) => ids.includes(item.id),
-            //     { status: 1 }
-            // )
-            reload()
-            setRepeatFiles([])
-            setRetryLoad(false)
-        }))
-    }
-
     const selectChange = (id) => {
         setFilter(Number(id))
     }
@@ -112,7 +64,7 @@ export default function Flies(params) {
         </div>}
         <div className="absolute right-0 top-[-46px] flex gap-4 items-center">
             <SearchInput placeholder={t('lib.fileName')} onChange={(e) => search(e.target.value)}></SearchInput>
-            {hasPermission && <Button className="px-8" onClick={() => setOpen(true)}>{t('lib.upload')}</Button>}
+            {hasPermission && <Link to='/filelib/upload'><Button className="px-8" onClick={() => { }}>添加文件</Button></Link>}
         </div>
         <div className="h-[calc(100vh-200px)] overflow-y-auto pb-20">
             <Table>
@@ -176,27 +128,6 @@ export default function Flies(params) {
                 />
             </div>
         </div>
-        {/* upload modal */}
-        <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen} onResult={handleUploadResult}></UploadModal>
-        {/* 重复文件提醒 */}
-        <dialog className={`modal ${repeatFiles.length && 'modal-open'}`}>
-            <div className="modal-box w-[560px] bg-[#fff] shadow-lg dark:bg-background">
-                <h3 className="font-bold text-lg relative">{t('lib.modalTitle')}
-                    <X className="absolute right-0 top-0 text-gray-400 cursor-pointer" size={20} onClick={() => setRepeatFiles([])}></X>
-                </h3>
-                <p className="py-4">{t('lib.modalMessage')}</p>
-                <ul className="overflow-y-auto max-h-[400px]">
-                    {repeatFiles.map(el => (
-                        <li key={el.id} className="py-2 text-red-500">{el.remark}</li>
-                    ))}
-                </ul>
-                <div className="modal-action">
-                    <Button className="h-8" variant="outline" onClick={() => setRepeatFiles([])}>{t('lib.keepOriginal')}</Button>
-                    <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
-                        {retryLoad && <span className="loading loading-spinner loading-xs"></span>}{t('lib.override')}
-                    </Button>
-                </div>
-            </div>
-        </dialog>
+        {/* <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen} onResult={handleUploadResult}></UploadModal> */}
     </div>
 };
