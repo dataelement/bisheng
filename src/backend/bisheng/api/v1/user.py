@@ -262,6 +262,8 @@ async def list_user(*,
         # 如果user_ids不为空，说明是groups一起做交集筛选，否则是只做角色筛选
         if user_ids:
             user_ids = list(set(user_ids) & set(roles_user_ids))
+            if not user_ids:
+                return resp_200({'data': [], 'total': 0})
         else:
             user_ids = list(set(roles_user_ids))
 

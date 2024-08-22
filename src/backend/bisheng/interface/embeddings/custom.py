@@ -3,9 +3,11 @@ from typing import List, Optional
 from loguru import logger
 from pydantic import Field
 
+from langchain_core.pydantic_v1 import BaseModel
+from langchain.embeddings.base import Embeddings
+
 from bisheng.database.models.llm_server import LLMServerType, LLMDao, LLMModelType, LLMServer, LLMModel
 from bisheng.interface.importing import import_by_type
-from langchain.embeddings.base import Embeddings
 
 from bisheng.interface.utils import wrapper_bisheng_model_limit_check
 
@@ -18,7 +20,7 @@ class OpenAIProxyEmbedding(Embeddings):
         from bisheng.api.services.llm import LLMService
 
         knowledge_llm = LLMService.get_knowledge_llm()
-        self.embeddings = BishengEmbeddings(model_id=knowledge_llm.embedding_model_id)
+        self.embeddings = BishengEmbedding(model_id=knowledge_llm.embedding_model_id)
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Embed search docs."""
@@ -45,10 +47,15 @@ class FakeEmbedding(Embeddings):
         return []
 
 
-class BishengEmbeddings(Embeddings):
-    """依赖bisheng后端服务的embedding组件     根据model的类型不同 调用不同的embedding组件"""
+class BishengEmbedding(BaseModel, Embeddings):
+    """使用模型管理中已上线的 embedding 模型"""
 
-    model_id: int = Field(description="后端服务保存的model唯一ID")
+    model_id: int = Field(default=0, description="后端服务保存的model唯一ID")
+    model: str = Field(default="", description="后端服务保存的model名称")
+    embedding_ctx_length: int = Field(default=8192, description="embedding模型上下文长度")
+    max_retries: int = Field(default=6, description="embedding模型调用失败重试次数")
+    request_timeout: int = Field(default=200, description="embedding模型调用超时时间")
+    model_kwargs: dict = Field(default={}, description="embedding模型调用参数")
 
     embeddings: Optional[Embeddings] = Field(default=None)
     llm_node_type = {
@@ -64,9 +71,18 @@ class BishengEmbeddings(Embeddings):
         LLMServerType.AZURE_OPENAI.value: 'AzureOpenAIEmbeddings',
         LLMServerType.QWEN.value: 'DashScopeEmbeddings',
         LLMServerType.QIAN_FAN.value: 'QianfanEmbeddingsEndpoint',
-        LLMServerType.MINIMAX.value: 'MiniMaxEmbeddings',
+        LLMServerType.MINIMAX.value: 'OpenAIEmbeddings',
         LLMServerType.ZHIPU.value: 'OpenAIEmbeddings',
     }
+
+    # bisheng强相关的业务参数
+    model_info: Optional[LLMModel] = Field(default=None)
+    server_info: Optional[LLMServer] = Field(default=None)
+
+    class Config:
+        """Configuration for this pydantic object."""
+        allow_population_by_field_name = True
+        arbitrary_types_allowed = True
 
     def __init__(self, **kwargs):
         from bisheng.interface.initialize.loading import instantiate_embedding
@@ -90,6 +106,7 @@ class BishengEmbeddings(Embeddings):
         logger.debug(f'init_bisheng_embedding: server_id: {server_info.id}, model_id: {model_info.id}')
         self.model_info: LLMModel = model_info
         self.server_info: LLMServer = server_info
+        self.model = model_info.model_name
 
         class_object = self._get_embedding_class(server_info.type)
         params = self._get_embedding_params(server_info, model_info)
@@ -102,7 +119,7 @@ class BishengEmbeddings(Embeddings):
     def _get_embedding_class(self, server_type: str) -> Embeddings:
         node_type = self.llm_node_type.get(server_type)
         if not node_type:
-            raise Exception(f'没有找到对应的embedding组件{server_type}')
+            raise Exception(f'{server_type}类型的服务提供方暂不支持embedding')
         class_object = import_by_type(_type='embeddings', name=node_type)
         return class_object
 
@@ -125,12 +142,6 @@ class BishengEmbeddings(Embeddings):
                 "qianfan_ak": params.get("wenxin_api_key"),
                 "qianfan_sk": params.get("wenxin_secret_key"),
                 "model": params.get('model'),
-            }
-        elif server_info.type == LLMServerType.MINIMAX.value:
-            params = {
-                "minimax_api_key": params.get('minimax_api_key'),
-                "model": params.get('model'),
-                "minimax_group_id": params.get('minimax_group_id'),
             }
         elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
                                   LLMServerType.VLLM.value]:
@@ -170,4 +181,5 @@ class BishengEmbeddings(Embeddings):
 
 CUSTOM_EMBEDDING = {
     'OpenAIProxyEmbedding': OpenAIProxyEmbedding,
+    'BishengEmbedding': BishengEmbedding,
 }

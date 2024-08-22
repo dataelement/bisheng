@@ -44,7 +44,7 @@ class BishengLLM(BaseChatModel):
         LLMServerType.QWEN.value: 'ChatOpenAI',
         LLMServerType.QIAN_FAN.value: 'ChatWenxin',
         LLMServerType.ZHIPU.value: 'ChatOpenAI',
-        LLMServerType.MINIMAX.value: 'MiniMaxChat',
+        LLMServerType.MINIMAX.value: 'ChatOpenAI',
         LLMServerType.ANTHROPIC.value: 'ChatAnthropic',
         LLMServerType.DEEPSEEK.value: 'ChatOpenAI',
         LLMServerType.SPARK.value: 'ChatOpenAI',
@@ -111,16 +111,14 @@ class BishengLLM(BaseChatModel):
         })
         if server_info.type == LLMServerType.OLLAMA.value:
             params['model'] = params.pop('model_name')
-        elif server_info.type == LLMServerType.XINFERENCE.value:
-            params['model_uid'] = params.pop('model_name')
-            params['openai_api_key'] = params.pop('openai_api_key', None) or "EMPTY"
         elif server_info.type == LLMServerType.AZURE_OPENAI.value:
             params['azure_deployment'] = params.pop('model_name')
         elif server_info.type == LLMServerType.QIAN_FAN.value:
             params['model'] = params.pop('model_name')
         elif server_info.type == LLMServerType.SPARK.value:
             params['openai_api_key'] = f'{params.pop("api_key")}:{params.pop("api_secret")}'
-        elif server_info.type in [LLMServerType.LLAMACPP.value, LLMServerType.VLLM.value]:
+        elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
+                                  LLMServerType.VLLM.value]:
             params['openai_api_key'] = params.pop('openai_api_key', None) or "EMPTY"
         return params
 

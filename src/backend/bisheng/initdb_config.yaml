@@ -1,51 +1,44 @@
-knowledges:
-  # bisheng-uns服务地址填写示例： http://ip:port/v1/etl4llm/predict
-  unstructured_api_url: ""  # 毕昇非结构化数据解析服务地址，提供包括OCR文字识别、表格识别、版式分析等能力。非必填，溯源必填
+knowledges:  # 知识库相关配置
+  unstructured_api_url: ""  # 非必填，若要开启溯源能力则必填。使用毕昇官网提供的测试服务，可以填入地址：https://bisheng.dataelem.com/api/v1/etl4llm/predict，如果在私有环境部署了bisheng-unstructured服务，可以填入地址：http://ip:port/v1/etl4llm/predict。注意：添加地址后，需要手动刷新页面后在知识库中上传文档。
 
 llm_request:
-  # 模型访问的超时配置
+# 控制技能 LLM 组件模型访问的超时配置, 以下是默认值
   request_timeout: 600
-  # 失败的重试次数
   max_retries: 1
 
-# v2免登录接口使用的默认操作用户
 default_operator:
-  user: 3
-  url: https://bisheng.dataelem.com
-  # 免登录接口是否校验权限
-  api_need_login: false
+# 使用免登录链接的方式需要配置，因为免登录链接相当于不知道用户信息，我们系统会自动把这些行为记录到某个用户头上，这里用来配置该用户的id
+  user: 1
+  api_need_login: false # 是否需要登录才能使用，默认为false，代表可以通过免登录链接的方式使用
 
-# 是否需要验证码
-use_captcha:
-  False
+# 密码安全相关配置
+password_conf:
+  # 密码超过X天必须进行修改, 登录提示重新修改密码。大于0策略才生效
+  password_valid_period: 200
+  # 登录错误时间窗口,单位分钟。在错误时间窗口内超过最大错误次数会封禁用户，password_valid_period和login_error_time_window都大于0才生效
+  login_error_time_window: 5
+  # 最大错误次数，超过后会封禁用户，大于0时生效
+  max_error_times: 0
 
-# 聊天对话框配置
+system_login_method:
+     # 是否允许多点登录
+    allow_multi_login: true
+    # sso系统登录配置（毕昇商业扩展套件功能，开源版无需配置）
+    gateway_login: false # 是否开启sso登录
+    admin_username: admin # 从 SSO/LDAP 注册的管理员用户名
+
+# 登陆页面是否需要输入验证码，可设置为True或False
+use_captcha: True
+
+# 会话窗口底部提示文案
 dialog_tips:
   "内容由AI生成，仅供参考！"
 
 env:
-  # 聊天窗口支持快捷搜索的搜索引擎
+  # 聊天窗口快捷搜索功能使用的搜索引擎，默认为百度，可以配置为内部文档搜索
   # dialog_quick_search: http://www.baidu.com/s?wd=
-  # 可配置与http不一致的websocket地址
+  # 当用户的环境前面的网关，不能在同一个端口上既有http又有socket时，需要这个配置，将两个请求区分开，默认可以不用
   # websocket_url: 192.168.106.120:3003
-  office_url: http://IP:8701 # office 组件访问地址，需要浏览器能直接访问
+  office_url: http://IP:8701 # onlyoffice 组件地址，需要浏览器能直接访问
   # 是否展示前端界面上的github和帮助链接
   show_github_and_help: true
-
-# 密码配置
-password_conf:
-  # 密码超过X天必须进行修改, 登录提示重新修改密码。大于0策略才生效
-  password_valid_period: 180
-  # 登录错误时间窗口,单位分钟。在错误时间窗口内超过最大错误次数会封禁用户。两个值都大于0才生效
-  login_error_time_window: 10
-  # 最大错误次数，超过后会封禁用户
-  max_error_times: 5
-
-system_login_method:
-  # 是否支持闭源网关的登录
-  gateway_login: false
-  # 从闭源网关注册的管理员用户名
-  admin_username: admin
-  # 是否允许多点登录
-  allow_multi_login: true
-

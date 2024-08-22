@@ -363,7 +363,7 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
             raise Exception('类型不支持')
-        loader = filetype_load_map[file_type](file_path=input_file)
+        loader = filetype_load_map[file_type](file_path=input_file, encoding='utf-8')
         separator = separator[0] if separator and isinstance(separator, list) else separator
         text_splitter = CharacterTextSplitter(separator=separator,
                                               chunk_size=size,
