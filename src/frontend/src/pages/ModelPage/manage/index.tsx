@@ -55,8 +55,8 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                                 <TableCell>{m.model_name}</TableCell>
                                 <TableCell>{m.model_type}</TableCell>
                                 <TableCell>
-                                    <span className={m.status === 0 ? 'text-green-500' : 'text-orange-500'}>
-                                        {m.status === 0 ? t('model.available') : t('model.abnormal')}
+                                    <span className={['text-green-500', 'text-orange-500', 'text-gray-500'][m.status]}>
+                                        {[t('model.available'), t('model.abnormal'), t('model.unknown')][m.status]}
                                     </span>
                                     {m.status === 1 && <TooltipProvider delayDuration={0}>
                                         <Tooltip>

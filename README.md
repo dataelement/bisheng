@@ -8,8 +8,8 @@
     <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
 </p>
 <p align="center">
-  <a href="./README.md">简体中文</a> |
-  <a href="./README_ENG.md">English</a> |
+  <a href="./README_CN.md">简体中文</a> |
+  <a href="./README.md">English</a> |
   <a href="./README_JPN.md">日本語</a>
 </p>
 
@@ -25,84 +25,70 @@
 </div>
 
 
-BISHENG毕昇 是一款 <b>开源</b> LLM应用开发平台，主攻<b>企业场景</b>， 已有大量行业头部组织及世界500强企业在使用。
+BISHENG is an open LLM application devops platform, focusing on enterprise scenarios. It has been used by a large number of industry leading organizations and Fortune 500 companies.
 
-“毕昇”是活字印刷术的发明人，活字印刷术为人类知识的传递起到了巨大的推动作用。我们希望“BISHENG毕昇”同样能够为智能应用的广泛落地提供有力支撑。欢迎大家一道参与。
+"Bi Sheng" was the inventor of movable type printing, which played a vital role in promoting the transmission of human knowledge. We hope that BISHENG can also provide strong support for the widespread implementation of intelligent applications. Everyone is welcome to participate.
 
 
-## 特点 
+## Features 
 
-1. 专为企业应用而生：文档审核、固定版式报告生成、多智能体协作、规范制度更新差异比对、工单问答、客服辅助、会议纪要生成、简历筛选、通话记录分析、非结构化数据治理、知识挖掘、数据分析...平台支持高复杂度企业应用场景构建，支持数百个组件与数千个参数的深度调优。
+1. <b>Designed for Enterprise Applications</b>: Document review, fixed-layout report generation, multi-agent collaboration, policy update comparison, support ticket assistance, customer service assistance, meeting minutes generation, resume screening, call record analysis, unstructured data governance, knowledge mining, data analysis, and more. 
+
+The platform supports the construction of <b>highly complex enterprise application scenarios</b> and offers <b>deep optimization</b> with hundreds of components and thousands of parameters.
 <p align="center"><img src="https://dataelem.com/bs/chat.png" alt="sence1"></p>
 
-2. 企业级特性是应用落地的基本保障：安全审查、基于角色的细颗粒度权限管理、用户组管理、分组流量控制、SSO/LDAP、漏洞扫描修复、高可用部署方案、监控、统计...
+2. <b>Enterprise-grade</b> features are the fundamental guarantee for application implementation: security review, RBAC, user group management, traffic control by group, SSO/LDAP, vulnerability scanning and patching, high availability deployment solutions, monitoring, statistics, and more.
 <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="sence2"></p>
 
-3. 高精度文档解析：5年海量数据沉淀，高精度文档解析模型支持免费私有化部署使用，包括高精度印刷体、手写体与生僻字识别模型、表格识别模型、版式分析模型、印章模型
+3. <b>High-Precision Document Parsing</b>: Our high-precision document parsing model is trained on a vast amount of high-quality data accumulated over past 5 years. It includes high-precision printed text, handwritten text, and rare character recognition models, table recognition models, layout analysis models, and seal models., table recognition models, layout analysis models, and seal models. You can deploy it privately for free.
 <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="sence3"></p>
 
-4. 大量企业场景落地最佳实践分享社区：开放的应用案例与最佳实践库。
-<p align="center"><img src="https://dataelem.com/bs/sence.png" alt="sence3"></p>
+4. A community for sharing best practices across various enterprise scenarios: An open repository of application cases and best practices.
 
 
-## 快速安装 
+## Quick start 
 
-安装BISHENG前请先确保满足以下条件：
+Please ensure the following conditions are met before installing BISHENG:
 - CPU >= 8 Core
 - RAM >= 32 GB
 - Docker 19.03.9+
 - Docker Compose 1.25.1+
-> 除了BISHENG前后端，我们默认还会安装第三方组件ES、Milvus、Onlyoffice
+> In addition to installing BISHENG, we will also install the following third-party components by default: ES, Milvus, and Onlyoffice.
 
-下载BISHENG代码
+Download BISHENG
 ```bash
-# 如果系统中有git命令，可以直接下载毕昇代码
 git clone https://github.com/dataelement/bisheng.git
-# 进入安装目录
+# Enter the installation directory
 cd bisheng/docker
 
-# 如果系统没有没有git命令，可以下载毕昇代码zip包
+# If the system does not have the git command, you can download the BISHENG code as a zip file.
 wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
-# 解压并进入安装目录
+# Unzip and enter the installation directory
 unzip main.zip && cd bisheng-main/docker
 ```
-启动BISHENG
+Start BISHENG
 ```bash
-# 进入bisheng/docker或bisheng-main/docker目录，执行
 docker-compose up -d
 ```
-启动后，在浏览器中访问 http://IP:3001 ，出现登录页，进行用户注册。默认第一个注册的用户会成为系统admin。
+After the startup is complete, access http://IP:3001 in the browser. The login page will appear, proceed with user registration. 
 
-其他安装部署问题参考：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
+By default, the first registered user will become the system admin. 
 
+For more installation and deployment issues, refer to:：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
-## 资源
-- [📄应用案例/场景库](https://dataelem.feishu.cn/wiki/ZfkmwLPfeiAhQSkK2WvcX87unxc)
-- [📄经验技巧](https://dataelem.feishu.cn/wiki/OWFRwknFaiIMajke4m5cFeLrnie)
-- [📄功能使用说明](https://dataelem.feishu.cn/wiki/WxH6wubbAiBkRIkSEyecmpDMnjF)
-- [📄BISHENG Blog](https://dataelem.feishu.cn/wiki/BiNowcaYWilewdksXQ5cZl3tnzy)
+## Acknowledgement 
+This repo benefits from [langchain](https://github.com/langchain-ai/langchain) [langflow](https://github.com/logspace-ai/langflow) [unstructured](https://github.com/Unstructured-IO/unstructured) and [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) . Thanks for their wonderful works.
 
-
-## 感谢 
-
-感谢我们的贡献者：
+<b>Thank you to our contributors：</b>
 
 <a href="https://github.com/dataelement/bisheng/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=dataelement/bisheng" />
 </a>
 
 
-<br>
-Bisheng 采用了以下依赖库:
 
-- 感谢开源LLM应用开发库 [langchain](https://github.com/langchain-ai/langchain)。
-- 感谢开源langchain可视化工具 [langflow](https://github.com/logspace-ai/langflow)。
-- 感谢开源非结构化数据解析引擎 [unstructured](https://github.com/Unstructured-IO/unstructured)。
-- 感谢开源LLM微调框架 [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) 。
-
-
-## 社区与支持 
-欢迎加入我们的交流群
+## Community & contact 
+Welcome to join our discussion group
 
 <img src="https://www.dataelem.com/nstatic/qrcode.png" alt="Wechat QR Code">
 

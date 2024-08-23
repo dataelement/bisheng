@@ -206,9 +206,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     }
 
     // 接受 ws 消息
+    const msgClosedRef = useRef(true) // 消息闭合
     const handleWsMessage = (data) => {
         if (Array.isArray(data) && data.length) return
         if (data.type === 'start') {
+            msgClosedRef.current = false
             // 非continue时，展示stop按钮
             !continueRef.current && setStop({ show: true, disable: false })
             createWsMsg(data)
@@ -220,6 +222,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 thought: data.intermediate_steps
             })
         } else if (['end', 'end_cover'].includes(data.type)) {
+            if (msgClosedRef.current) {
+                // 无未闭合的消息，先创建（补一条start）
+                console.log('重复end,新建消息 :>> ');
+                createWsMsg(data)
+            }
             updateCurrentMessage({
                 ...data,
                 end: true,
@@ -229,6 +236,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 liked: 0,
                 update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
             }, data.type === 'end_cover')
+
+            if (!msgClosedRef.current) msgClosedRef.current = true
         } else if (data.type === "close") {
             setStop({ show: false, disable: false })
             setInputLock({ locked: false, reason: '' })
@@ -302,12 +311,9 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
             {/* send */}
             <div className="flex gap-2 absolute right-3 top-4 z-10">
                 {stop.show ?
-                    <StopIcon className={`mt-1 rounded-sm bg-foreground cursor-pointer ${stop.disable && 'bg-muted-foreground text-muted-foreground'}`}
-                        onClick={() => {
-                            if (stop.disable) return
-                            setStop({ show: true, disable: true });
-                            sendWsMsg({ "action": "stop" });
-                        }} />
+                    <div className={`w-6 h-6 bg-foreground rounded-full flex justify-center items-center cursor-pointer ${stop.disable && 'bg-muted-foreground text-muted-foreground'}`}>
+                        <span className="w-2 h-2.5 border-x-2 border-border"></span>
+                    </div>
                     : <div
                         id="bs-send-btn"
                         className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"

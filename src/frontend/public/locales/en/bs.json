@@ -236,6 +236,7 @@
     "onlineOfflineOperation": "Online/Offline",
     "available": "Available",
     "abnormal": "Abnormal",
+    "unknown": "Unknown",
     "empty": "No Data",
     "gpuResourceUsageTitle": "GPU Resource Usage",
     "jsonFormatError": "JSON Format Error"

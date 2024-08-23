@@ -232,6 +232,7 @@
     "onlineOfflineOperation": "上下线操作",
     "available": "可用",
     "abnormal": "异常",
+    "unknown": "未知",
     "empty": "暂无数据",
     "gpuResourceUsageTitle": "GPU资源使用情况",
     "jsonFormatError": "JSON格式有误"
