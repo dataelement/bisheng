@@ -1,16 +1,15 @@
-import { Button } from "@/components/bs-ui/button";
-import { Cross1Icon, Crosshair2Icon, InfoCircledIcon } from "@radix-ui/react-icons";
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from "react-router-dom";
-import Markdown from './components/Markdown';
 import { LoadIcon } from "@/components/bs-icons";
-import FileView from "./components/FileView";
+import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Crosshair2Icon, InfoCircledIcon } from "@radix-ui/react-icons";
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useParams } from "react-router-dom";
+import FileView from "./FileView";
+import Markdown from './Markdown';
 
-export default function ParagraphEdit() {
+export default function ParagraphEdit({ id, onClose }) {
     const param = useParams();
     const fileId = param['fileid'];
-    const navigate = useNavigate();
     const v = `# Milkdown React Commonmark
 
     > You're scared of a world where you're needed.
@@ -40,6 +39,7 @@ export default function ParagraphEdit() {
         setTimeout(() => {
             setLoading(false)
             message({ variant: 'success', description: '修改成功' })
+            onClose()
         }, 2000);
     }
     const fileUrl = 'http://192.168.106.116:9000/bisheng/33407?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=minioadmin%2F20240820%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20240820T115721Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=3c943f2951f04e98d258fd567f43acc32b691769668e0ea0cbb2464c0febb4f6'
@@ -100,7 +100,7 @@ export default function ParagraphEdit() {
                 <Markdown ref={markDownRef} value={value} />
                 {!value && <p className="absolute left-0 text-red-500 text-xs mt-2">输入内容不可为空</p>}
                 <div className="flex justify-end gap-4">
-                    <Button className="px-6" variant="outline" onClick={() => navigate(-1)}>取消</Button>
+                    <Button className="px-6" variant="outline" onClick={onClose}>取消</Button>
                     <Button className="px-6" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />保存</Button>
                 </div>
             </div>
@@ -118,7 +118,7 @@ export default function ParagraphEdit() {
                             <span>检测到分段范围调整,</span>
                             <span className="text-primary cursor-pointer" onClick={handleOvergap}>覆盖分段内容</span>
                         </div>
-                        <Button variant="ghost" className="absolute right-0" size="icon" onClick={() => navigate(-1)}><Cross1Icon /></Button>
+                        {/* <Button variant="ghost" className="absolute right-0" size="icon" onClick={() => navigate(-1)}><Cross1Icon /></Button> */}
                     </div>
                     <div className="bg-gray-100 relative">
                         {value && Object.keys(labels).length && <Button className="absolute top-2 right-2 z-10" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair2Icon className="mr-1" />回到定位</Button>}

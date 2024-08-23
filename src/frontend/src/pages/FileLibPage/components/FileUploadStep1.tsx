@@ -11,7 +11,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useContext, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function FileUploadStep1({ onNext }) {
+export default function FileUploadStep1({ hidden, onNext }) {
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
     const uploadRef = useRef<any>(null)
@@ -58,8 +58,8 @@ export default function FileUploadStep1({ onNext }) {
         }))
     }
 
-    return <div className="flex flex-col">
-        <div className="flex items-center gap-2 my-6 px-12">
+    return <div className={`flex flex-col ${hidden ? 'hidden' : ''}`}>
+        <div className="flex items-center gap-2 my-6 px-12 text-sm font-bold max-w-96">
             <span className="text-primary">①上传文件</span>
             <div className="h-[1px] flex-grow bg-gray-300"></div>
             <span>②文档处理策略</span>
@@ -67,7 +67,7 @@ export default function FileUploadStep1({ onNext }) {
         <Upload ref={uploadRef} url='/api/v1/knowledge/upload' accept={appConfig.libAccepts} progressClassName='max-h-[374px]' onFileCountChange={setFileCount} />
         <div className="flex justify-end">
             <Button className="px-10 mt-4" disabled={loading || !fileCount} onClick={handleSaveFiles}>
-                {loading && <LoadIcon className="mr-2" />} {fileCount ? <span>{fileCount}<span className="mx-1">|</span></span> : null}下一步
+                {loading && <LoadIcon className="mr-2" />} {fileCount ? <span>共{fileCount}个文件<span className="mx-1">|</span></span> : null}下一步
             </Button>
         </div>
 

@@ -7,14 +7,17 @@ import {
     CardHeader,
     CardTitle
 } from "@/components/bs-ui/card"
+import { Dialog, DialogContent } from "@/components/bs-ui/dialog"
 import { SearchInput } from "@/components/bs-ui/input"
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
 import MultiSelect from "@/components/bs-ui/select/multi"
 import { readFileByLibDatabase } from "@/controllers/API"
 import { useTable } from "@/util/hook"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
+import ParagraphEdit from "./ParagraphEdit"
+import { useState } from "react"
 
-const Item = ({ data }) => {
+export const ParagraphsItem = ({ data, onEdit }) => {
 
     const handleDel = () => {
         bsConfirm({
@@ -45,11 +48,9 @@ const Item = ({ data }) => {
                     <Button variant="link" className="p-0" onClick={handleDel}>
                         删除
                     </Button>
-                    <Link to={`/filelib/edit/1234`}>
-                        <Button variant="link" className="p-0">
-                            编辑
-                        </Button>
-                    </Link>
+                    <Button variant="link" className="p-0" onClick={() => onEdit('1234')}>
+                        编辑
+                    </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">{data.charCount || "500个字符"}</p>
             </CardFooter>
@@ -67,6 +68,13 @@ export default function Paragraphs(params) {
             return res
         })
     )
+
+    const [paragraph, setParagraph] = useState<any>({
+        id: '',
+        show: false
+    })
+
+    const navigator = useNavigate()
 
     return <div className="relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -89,7 +97,7 @@ export default function Paragraphs(params) {
         </div>
         <div className="h-[calc(100vh-200px)] overflow-y-auto pb-20 bg-background-main flex flex-wrap gap-2 p-2">
             {
-                datalist.map((item, index) => <Item key={index} data={item}></Item>)
+                datalist.map((item, index) => <ParagraphsItem key={index} data={item} onEdit={(id) => setParagraph({ id, show: true })}></ParagraphsItem>)
             }
         </div>
         <div className="bisheng-table-footer px-6">
@@ -103,5 +111,10 @@ export default function Paragraphs(params) {
                 />
             </div>
         </div>
+        <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph({ ...paragraph, show })}>
+            <DialogContent className='size-full max-w-full sm:rounded-none p-0 border-none'>
+                <ParagraphEdit id={paragraph.id} onClose={() => setParagraph({ ...paragraph, show: false })} />
+            </DialogContent>
+        </Dialog>
     </div>
 };

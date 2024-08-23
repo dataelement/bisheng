@@ -21,7 +21,7 @@ const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
 }, {});
 // 文件服务地址
 proxyTargets['/bisheng'] = {
-  target: "http://127.0.0.1:50061",
+  target: "http://192.168.106.116:9000",
   changeOrigin: true,
   withCredentials: true,
   secure: false

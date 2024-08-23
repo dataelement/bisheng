@@ -29,7 +29,6 @@ import SkillsPage from "./pages/SkillPage/tabSkills";
 import SkillToolsPage from "./pages/SkillPage/tabTools";
 import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
-import ParagraphEdit from "./pages/FileLibPage/paragraphEdit";
 import FilesUpload from "./pages/FileLibPage/filesUpload";
 
 // react 与 react router dom版本不匹配
@@ -82,7 +81,6 @@ const privateRouter = [
       { path: "evaluation/create", element: <EvaluatingCreate /> },
     ],
   },
-  { path: "filelib/edit/:fileid", element: <ErrorHoc Comp={ParagraphEdit} /> },
   { path: "model/doc", element: <Doc /> },
   {
     path: "/flow/:id/",
