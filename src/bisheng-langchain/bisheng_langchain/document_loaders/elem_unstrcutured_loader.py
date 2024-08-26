@@ -100,7 +100,12 @@ class ElemUnstructuredLoader(BasePDFLoader):
         elif resp.get('text'):
             logger.info(f'content_from_text')
             content = resp['text']
-            metadata = {}
+            metadata = {
+                "bboxes": [],
+                "pages": [],
+                "indexes": [],
+                "types": [],
+            }
         else:
             logger.warning(f'content_is_empty resp={resp}')
             content = ''
