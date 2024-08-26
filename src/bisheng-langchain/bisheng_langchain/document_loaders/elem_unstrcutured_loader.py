@@ -93,6 +93,7 @@ class ElemUnstructuredLoader(BasePDFLoader):
         resp = resp.json()
         if 200 != resp.get('status_code'):
             logger.info(f'file partition {os.path.basename(self.file_name)} error resp={resp}')
+            raise Exception(f'file partition error {os.path.basename(self.file_name)} error resp={resp}')
         partitions = resp['partitions']
         if partitions:
             logger.info(f'content_from_partitions')
