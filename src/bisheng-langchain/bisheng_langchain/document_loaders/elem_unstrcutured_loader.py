@@ -94,17 +94,25 @@ class ElemUnstructuredLoader(BasePDFLoader):
         if 200 != resp.get('status_code'):
             logger.info(f'file partition {os.path.basename(self.file_name)} error resp={resp}')
         partitions = resp['partitions']
-        if not partitions:
-            logger.info(f'partition_error resp={resp}')
+        if partitions:
+            logger.info(f'content_from_partitions')
+            content, metadata = merge_partitions(partitions)
+        elif resp.get('text'):
+            logger.info(f'content_from_text')
+            content = resp['text']
+            metadata = {}
+        else:
+            logger.warning(f'content_is_empty resp={resp}')
+            content = ''
+            metadata = {}
+
         logger.info(f'unstruct_return code={resp.get("status_code")}')
 
         if resp.get('b64_pdf'):
             with open(self.file_path, 'wb') as f:
                 f.write(base64.b64decode(resp['b64_pdf']))
 
-        content, metadata = merge_partitions(partitions)
         metadata['source'] = self.file_name
-
         doc = Document(page_content=content, metadata=metadata)
         return [doc]
 
