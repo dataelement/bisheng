@@ -2,11 +2,19 @@ import hashlib
 import os
 from typing import Dict, List, Optional
 
-from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, decide_vectorstores,
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile, Request
+from fastapi.encoders import jsonable_encoder
+from sqlalchemy import func, or_
+from sqlmodel import select
+from starlette.responses import FileResponse
+
+from bisheng.api.services.knowledge import KnowledgeService
+from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
                                                 delete_es, delete_knowledge_by,
                                                 delete_knowledge_file_vectors, delete_vector,
                                                 text_knowledge)
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
+from bisheng.api.v2.utils import get_default_operator
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeRead,
@@ -20,51 +28,26 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
-from fastapi.encoders import jsonable_encoder
-from sqlalchemy import func, or_
-from sqlmodel import select
-from starlette.responses import FileResponse
 
 # build router
-router = APIRouter(prefix='/filelib')
+router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
 
 
 @router.post('/', response_model=KnowledgeRead, status_code=201)
-def create(knowledge: KnowledgeCreate):
+def create(request: Request,
+           knowledge: KnowledgeCreate):
     """创建知识库."""
-    user_id = knowledge.user_id or settings.get_from_db('default_operator').get('user')
-    if not user_id:
-        raise HTTPException(status_code=500, detail='未配置default_operator中user配置')
-    db_knowledge = create_knowledge(knowledge, user_id)
-    return db_knowledge
+    login_user = get_default_operator()
+    db_knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge)
+    return resp_200(db_knowledge)
 
 
 @router.put('/', response_model=KnowledgeRead, status_code=201)
 def update_knowledge(*, knowledge: KnowledgeUpdate):
-    """创建知识库."""
-    with session_getter() as session:
-        db_knowldge = session.get(Knowledge, knowledge.id)
-    if not db_knowldge:
-        raise HTTPException(status_code=500, detail='无知识库')
-
-    with session_getter() as session:
-        know = session.exec(
-            select(Knowledge).where(
-                Knowledge.name == knowledge.name,
-                knowledge.user_id == settings.get_from_db('default_operator').get('user'))).all()
-    if know:
-        raise HTTPException(status_code=500, detail='知识库名称重复')
-    if knowledge.description:
-        db_knowldge.description = knowledge.description
-    if knowledge.name:
-        db_knowldge.name = knowledge.name
-
-    with session_getter() as session:
-        session.add(db_knowldge)
-        session.commit()
-        session.refresh(db_knowldge)
-    return db_knowldge
+    """ 更新知识库."""
+    login_user = get_default_operator()
+    db_knowledge = KnowledgeService.update_knowledge(request, login_user, knowledge)
+    return resp_200(db_knowledge)
 
 
 @router.get('/', status_code=200)

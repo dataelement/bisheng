@@ -50,9 +50,25 @@ class KnowledgeDao(KnowledgeBase):
     from bisheng.database.models.role_access import RoleAccess
 
     @classmethod
-    def query_by_id(cls, id: int) -> Knowledge:
+    def insert_one(cls, data: Knowledge) -> Knowledge:
         with session_getter() as session:
-            return session.get(Knowledge, id)
+            session.add(data)
+            session.commit()
+            session.refresh(data)
+            return data
+
+    @classmethod
+    def update_one(cls, data: Knowledge) -> Knowledge:
+        with session_getter() as session:
+            session.add(data)
+            session.commit()
+            session.refresh(data)
+            return data
+
+    @classmethod
+    def query_by_id(cls, knowledge_id: int) -> Knowledge:
+        with session_getter() as session:
+            return session.get(Knowledge, knowledge_id)
 
     @classmethod
     def get_list_by_ids(cls, ids: List[int]):
@@ -163,3 +179,11 @@ class KnowledgeDao(KnowledgeBase):
                 session.add(knowledge)
             session.commit()
 
+    @classmethod
+    def get_knowledge_by_name(cls, name: str, user_id: int = 0) -> Knowledge:
+        """ 通过知识库名称获取知识库详情 """
+        statement = select(Knowledge).where(Knowledge.name == name)
+        if user_id:
+            statement = statement.where(Knowledge.user_id == user_id)
+        with session_getter() as session:
+            return session.exec(statement).first()

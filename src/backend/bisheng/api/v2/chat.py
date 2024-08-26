@@ -15,7 +15,7 @@ from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, WebSocket, status
 
-router = APIRouter(prefix='/chat', tags=['Chat'])
+router = APIRouter(prefix='/chat', tags=['OpenAPI', 'Chat'])
 chat_manager = ChatManager()
 flow_data_store = redis_client
 expire = 600  # reids 60s 过期

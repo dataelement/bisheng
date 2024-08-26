@@ -9,7 +9,7 @@ from bisheng.api.v1.schemas import resp_200
 from bisheng.api.v2.assistant import get_default_operator
 from bisheng.database.models.flow import FlowDao
 from bisheng.settings import settings
-router = APIRouter(prefix='/flows', tags=['FlowV2'])
+router = APIRouter(prefix='/flows', tags=['OpenAPI', 'FlowV2'])
 
 
 @router.get("/{flow_id}", status_code=200)

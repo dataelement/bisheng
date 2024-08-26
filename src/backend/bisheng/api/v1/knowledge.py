@@ -4,6 +4,7 @@ import time
 from typing import List, Optional
 from uuid import uuid4
 
+from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.utils import get_request_ip
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.audit_log import AuditLogService
@@ -178,54 +179,11 @@ def upload_knowledge_file_hook(request: Request, login_user: UserPayload, knowle
 @router.post('/create', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
 def create_knowledge(*,
                      request: Request,
-                     knowledge: KnowledgeCreate,
-                     login_user: UserPayload = Depends(get_login_user)):
+                     login_user: UserPayload = Depends(get_login_user),
+                     knowledge: KnowledgeCreate):
     """ 创建知识库. """
-    user_id = login_user.user_id
-    knowledge.is_partition = knowledge.is_partition or settings.get_knowledge().get(
-        'vectorstores', {}).get('Milvus', {}).get('is_partition', True)
-    db_knowldge = Knowledge.model_validate(knowledge)
-    with session_getter() as session:
-        know = session.exec(
-            select(Knowledge).where(Knowledge.name == knowledge.name,
-                                    knowledge.user_id == user_id)).all()
-    if know:
-        raise HTTPException(status_code=500, detail='知识库名称重复')
-    if not db_knowldge.collection_name:
-        if knowledge.is_partition:
-            embedding = re.sub(r'[^\w]', '_', knowledge.model)
-            suffix_id = settings.get_knowledge().get('vectorstores').get('Milvus', {}).get(
-                'partition_suffix', 1)
-            db_knowldge.collection_name = f'partition_{embedding}_knowledge_{suffix_id}'
-        else:
-            # 默认collectionName
-            db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
-    db_knowldge.index_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
-    db_knowldge.user_id = user_id
-    with session_getter() as session:
-        session.add(db_knowldge)
-        session.commit()
-        session.refresh(db_knowldge)
-    create_knowledge_hook(request, db_knowldge, login_user)
-    return resp_200(db_knowldge.copy())
-
-
-def create_knowledge_hook(request: Request, knowledge: Knowledge, login_user: UserPayload):
-    # 查询下用户所在的用户组
-    user_group = UserGroupDao.get_user_group(login_user.user_id)
-    if user_group:
-        # 批量将知识库资源插入到关联表里
-        batch_resource = []
-        for one in user_group:
-            batch_resource.append(GroupResource(
-                group_id=one.group_id,
-                third_id=knowledge.id,
-                type=ResourceTypeEnum.KNOWLEDGE.value))
-        GroupResourceDao.insert_group_batch(batch_resource)
-
-    # 记录审计日志
-    AuditLogService.create_knowledge(login_user, get_request_ip(request), knowledge.id)
-    return True
+    db_knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge)
+    return resp_200(db_knowledge)
 
 
 @router.get('/', status_code=200)
