@@ -4,13 +4,13 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile, Request
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlmodel import select
 from starlette.responses import FileResponse
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
-                                                delete_es, delete_knowledge_by,
+                                                delete_es,
                                                 delete_knowledge_file_vectors, delete_vector,
                                                 text_knowledge)
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
@@ -22,10 +22,7 @@ from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, Knowl
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
                                                     KnowledgeFileRead)
 from bisheng.database.models.message import ChatMessageDao
-from bisheng.database.models.role_access import AccessType, RoleAccess
-from bisheng.database.models.user import User
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 
@@ -43,7 +40,8 @@ def create(request: Request,
 
 
 @router.put('/', response_model=KnowledgeRead, status_code=201)
-def update_knowledge(*, knowledge: KnowledgeUpdate):
+def update_knowledge(*, request: Request,
+                     knowledge: KnowledgeUpdate):
     """ 更新知识库."""
     login_user = get_default_operator()
     db_knowledge = KnowledgeService.update_knowledge(request, login_user, knowledge)
@@ -51,90 +49,36 @@ def update_knowledge(*, knowledge: KnowledgeUpdate):
 
 
 @router.get('/', status_code=200)
-def get_knowledge(*, page_size: Optional[int], page_num: Optional[str]):
+def get_knowledge(*, request: Request,
+                  name: str = None,
+                  page_size: Optional[int] = 10,
+                  page_num: Optional[int] = 1):
     """ 读取所有知识库信息. """
-    default_user_id = settings.get_from_db('default_operator').get('user')
-    try:
-        sql = select(Knowledge)
-        count_sql = select(func.count(Knowledge.id))
-        if True:
-            with session_getter() as session:
-                role_third_id = session.exec(
-                    select(RoleAccess).where(RoleAccess.role_id.in_([1]))).all()
-            if role_third_id:
-                third_ids = [
-                    acess.third_id for acess in role_third_id
-                    if acess.type == AccessType.KNOWLEDGE.value
-                ]
-                sql = sql.where(
-                    or_(Knowledge.user_id == default_user_id, Knowledge.id.in_(third_ids)))
-                count_sql = count_sql.where(
-                    or_(Knowledge.user_id == default_user_id, Knowledge.id.in_(third_ids)))
-            else:
-                sql = sql.where(Knowledge.user_id == default_user_id)
-                count_sql = count_sql.where(Knowledge.user_id == default_user_id)
-        sql = sql.order_by(Knowledge.update_time.desc())
-
-        # get total count
-        with session_getter() as session:
-            total_count = session.scalar(count_sql)
-
-        if page_num and page_size and page_num != 'undefined':
-            page_num = int(page_num)
-            sql = sql.offset((page_num - 1) * page_size).limit(page_size)
-
-        with session_getter() as session:
-            knowledges = session.exec(sql).all()
-        res = [jsonable_encoder(flow) for flow in knowledges]
-        if knowledges:
-            db_user_ids = {flow.user_id for flow in knowledges}
-            with session_getter() as session:
-                db_user = session.exec(select(User).where(User.user_id.in_(db_user_ids))).all()
-            userMap = {user.user_id: user.user_name for user in db_user}
-            for r in res:
-                r['user_name'] = userMap[r['user_id']]
-        return {'data': res, 'total': total_count}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@router.get('/list', status_code=200)
-def get_knowledge_list(*, page_size: Optional[int], page_num: Optional[str]):
-    """ 读取所有知识库信息. """
-    res = get_knowledge(page_size=page_size, page_num=page_num)
-    return resp_200(res)
+    login_user = get_default_operator()
+    res, total = KnowledgeService.get_knowledge(request, login_user, name, page_num, page_size)
+    return resp_200(data={
+        'data': res,
+        'total': total
+    })
 
 
 @router.delete('/{knowledge_id}', status_code=200)
-def delete_knowledge_api(*, knowledge_id: int):
+def delete_knowledge_api(*, request: Request,
+                         knowledge_id: int):
     """ 删除知识库信息. """
-    with session_getter() as session:
-        knowledge = session.get(Knowledge, knowledge_id)
-    if not knowledge:
-        raise HTTPException(status_code=404, detail='knowledge not found')
-    try:
-        delete_knowledge_by(knowledge)
-        return resp_200(message='knowledge deleted successfully')
-    except Exception as e:
-        logger.exception(e)
-        return resp_500(message=f'错误 e={str(e)}')
+    login_user = get_default_operator()
+    KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
+    return resp_200(message='knowledge deleted successfully')
 
 
 # 清空知识库的所有文件内容
 @router.delete('/clear/{knowledge_id}', status_code=200)
-def clear_knowledge_files(*, knowledge_id: int):
-    """ 删除知识库信息. """
-    with session_getter() as session:
-        knowledge = session.get(Knowledge, knowledge_id)
-    if not knowledge:
-        raise HTTPException(status_code=404, detail='knowledge not found')
-    try:
-        delete_knowledge_by(knowledge, only_clear=True)
-        return {'message': 'knowledge deleted successfully'}
-    except Exception as e:
-        logger.exception(e)
-        return resp_500(message=f'错误 e={str(e)}')
+def clear_knowledge_files(*, request: Request,
+                          knowledge_id: int):
+    """ 清空知识库的内容. """
+    login_user = get_default_operator()
+    KnowledgeService.delete_knowledge(request, login_user, knowledge_id, only_clear=True)
+    return resp_200(message='knowledge clear successfully')
 
 
 @router.post('/file/{knowledge_id}',

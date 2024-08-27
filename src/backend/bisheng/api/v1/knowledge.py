@@ -27,7 +27,7 @@ from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Request, Path
 from fastapi.encoders import jsonable_encoder
 from fastapi_jwt_auth import AuthJWT
 from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
@@ -51,21 +51,6 @@ async def upload_file(*, file: UploadFile = File(...)):
         if not isinstance(file_path, str):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(file_path=file_path))
-    except Exception as exc:
-        logger.error(f'Error saving file: {exc}')
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@router.get('/embedding_param', status_code=201)
-async def get_embedding(login_user: UserPayload = Depends(get_login_user)):
-    try:
-        # 获取本地配置的名字
-        model_list = settings.get_knowledge().get('embeddings')
-        if model_list:
-            models = list(model_list.keys())
-        else:
-            models = list()
-        return resp_200({'models': models})
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -188,61 +173,17 @@ def create_knowledge(*,
 
 @router.get('/', status_code=200)
 def get_knowledge(*,
+                  request: Request,
+                  login_user: UserPayload = Depends(get_login_user),
                   name: str = None,
-                  page_size: Optional[int],
-                  page_num: Optional[str],
-                  login_user: UserPayload = Depends(get_login_user)):
+                  page_size: Optional[int] = 1,
+                  page_num: Optional[int] = 10):
     """ 读取所有知识库信息. """
-
-    try:
-        sql = select(Knowledge)
-        count_sql = select(func.count(Knowledge.id))
-        if not login_user.is_admin():
-            with session_getter() as session:
-                role_third_id = session.exec(
-                    select(RoleAccess).where(RoleAccess.role_id.in_(login_user.user_role))).all()
-            if role_third_id:
-                third_ids = [
-                    acess.third_id for acess in role_third_id
-                    if acess.type == AccessType.KNOWLEDGE.value
-                ]
-                sql = sql.where(
-                    or_(Knowledge.user_id == login_user.user_id, Knowledge.id.in_(third_ids)))
-                count_sql = count_sql.where(
-                    or_(Knowledge.user_id == login_user.user_id, Knowledge.id.in_(third_ids)))
-            else:
-                sql = sql.where(Knowledge.user_id == login_user.user_id)
-                count_sql = count_sql.where(Knowledge.user_id == login_user.user_id)
-        if name:
-            name = name.strip()
-            sql = sql.where(Knowledge.name.like(f'%{name}%'))
-            count_sql = count_sql.where(Knowledge.name.like(f'%{name}%'))
-
-        sql = sql.order_by(Knowledge.update_time.desc())
-        # get total count
-        with session_getter() as session:
-            total_count = session.scalar(count_sql)
-
-        if page_num and page_size and page_num != 'undefined':
-            page_num = int(page_num)
-            sql = sql.offset((page_num - 1) * page_size).limit(page_size)
-
-        # get flow id
-        with session_getter() as session:
-            knowledges = session.exec(sql).all()
-        res = [jsonable_encoder(flow) for flow in knowledges]
-        if knowledges:
-            db_user_ids = {flow.user_id for flow in knowledges}
-            with session_getter() as session:
-                db_user = session.exec(select(User).where(User.user_id.in_(db_user_ids))).all()
-            userMap = {user.user_id: user.user_name for user in db_user}
-            for r in res:
-                r['user_name'] = userMap[r['user_id']]
-        return resp_200({'data': res, 'total': total_count})
-
-    except Exception as e:
-        logger.exception("get_knowledge error")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    res, total = KnowledgeService.get_knowledge(request, login_user, name, page_num, page_size)
+    return resp_200(data={
+        'data': res,
+        'total': total
+    })
 
 
 @router.get('/file_list/{knowledge_id}', status_code=200)
@@ -314,60 +255,12 @@ def retry(data: dict, background_tasks: BackgroundTasks, login_user: UserPayload
 @router.delete('/{knowledge_id}', status_code=200)
 def delete_knowledge(*,
                      request: Request,
-                     knowledge_id: int,
-                     login_user: UserPayload = Depends(get_login_user)):
+                     login_user: UserPayload = Depends(get_login_user),
+                     knowledge_id: int = Path(...)):
     """ 删除知识库信息. """
 
-    with session_getter() as session:
-        knowledge = session.get(Knowledge, knowledge_id)
-    if not knowledge:
-        raise HTTPException(status_code=404, detail='knowledge not found')
-    if not login_user.access_check(knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE):
-        raise HTTPException(status_code=404, detail='没有权限执行操作')
-
-    # 处理knowledgefile
-    with session_getter() as session:
-        session.exec(delete(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
-        session.commit()
-    # 处理vector
-    embeddings = FakeEmbedding()
-    vectore_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
-    if isinstance(vectore_client.col, Collection):
-        logger.info(f'delete_vectore col={knowledge.collection_name}')
-        if knowledge.collection_name.startswith('col'):
-            vectore_client.col.drop()
-        else:
-            pk = vectore_client.col.query(expr=f'knowledge_id=="{knowledge.id}"',
-                                          output_fields=['pk'])
-            vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
-            # 判断milvus 是否还有entity
-            if vectore_client.col.is_empty:
-                vectore_client.col.drop()
-
-    # 处理 es
-    # elastic
-    esvectore_client: 'ElasticKeywordsSearch' = decide_vectorstores(knowledge.index_name,
-                                                                    'ElasticKeywordsSearch',
-                                                                    embeddings)
-    if esvectore_client:
-        index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
-        res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
-        logger.info(f'act=delete_es index={index_name} res={res}')
-
-    with session_getter() as session:
-        session.delete(knowledge)
-        session.commit()
-    delete_knowledge_hook(request, knowledge, login_user)
+    KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
     return resp_200(message='删除成功')
-
-
-def delete_knowledge_hook(request: Request, knowledge: Knowledge, login_user: UserPayload):
-    logger.info(f'delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}')
-
-    # 删除知识库的审计日志
-    AuditLogService.delete_knowledge(login_user, get_request_ip(request), knowledge)
-
-    GroupResourceDao.delete_group_resource_by_third_id(str(knowledge.id), ResourceTypeEnum.KNOWLEDGE)
 
 
 @router.delete('/file/{file_id}', status_code=200)
