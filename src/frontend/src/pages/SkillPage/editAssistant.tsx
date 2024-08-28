@@ -11,6 +11,7 @@ import Prompt from "./components/editAssistant/Prompt";
 import Setting from "./components/editAssistant/Setting";
 import TestChat from "./components/editAssistant/TestChat";
 import { useTranslation } from "react-i18next";
+import ApiMainPage from "@/components/bs-comp/apiComponent";
 
 export default function editAssistant() {
     const { t } = useTranslation()
@@ -105,20 +106,27 @@ export default function editAssistant() {
         return destroy
     }, [])
 
+    const [showApiPage, setShowApiPage] = useState(false)
+
     return <div className="bg-background-main">
-        <Header onSave={() => handleSave(true)} onLine={handleOnline}></Header>
-        <div className="flex h-[calc(100vh-70px)]">
-            <div className="w-[60%]">
-                <div className="text-md font-medium leading-none p-4 shadow-sm">{t('build.assistantConfiguration')}</div>
-                <div className="flex h-[calc(100vh-120px)]">
-                    <Prompt></Prompt>
-                    <Setting></Setting>
+        <Header onSave={() => handleSave(true)} onLine={handleOnline} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
+        <div className="h-[calc(100vh-70px)]">
+            <div className={`flex h-full ${showApiPage ? 'hidden' : ''}`}>
+                <div className="w-[60%]">
+                    <div className="text-md font-medium leading-none p-4 shadow-sm">{t('build.assistantConfiguration')}</div>
+                    <div className="flex h-[calc(100vh-120px)]">
+                        <Prompt></Prompt>
+                        <Setting></Setting>
+                    </div>
+                </div>
+                <div className="w-[40%] h-full bg-[#fff] relative">
+                    <TestChat guideQuestion={guideQuestion} assisId={assisId}></TestChat>
+                    {/* 变更触发保存的蒙版按钮 */}
+                    {changed && <div className="absolute w-full bottom-0 h-60" onClick={handleStartChat}></div>}
                 </div>
             </div>
-            <div className="w-[40%] h-full bg-[#fff] relative">
-                <TestChat guideQuestion={guideQuestion} assisId={assisId}></TestChat>
-                {/* 变更触发保存的蒙版按钮 */}
-                {changed && <div className="absolute w-full bottom-0 h-60" onClick={handleStartChat}></div>}
+            <div className={`h-full ${showApiPage ? '' : 'hidden'}`}>
+                <ApiMainPage />
             </div>
         </div>
     </div>

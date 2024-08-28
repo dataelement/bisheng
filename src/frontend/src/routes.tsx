@@ -101,6 +101,7 @@ const privateRouter = [
   { path: "/chat/:id/", element: <ChatShare /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
   { path: "/chatpro/:id", element: <ChatPro /> },
+  { path: "/chatpro/assistant/:id/", element: <ChatPro type='assistant' /> },
   { path: "/report/:id/", element: <Report /> },
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
   { path: "/reset", element: <ResetPwdPage /> },

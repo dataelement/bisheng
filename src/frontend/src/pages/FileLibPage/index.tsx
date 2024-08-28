@@ -201,7 +201,7 @@ export default function FileLibPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>ID</TableHead>
+                                    <TableHead>知识库ID</TableHead>
                                     <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
                                     <TableHead>{t('lib.model')}</TableHead>
                                     <TableHead>{t('createTime')}</TableHead>
