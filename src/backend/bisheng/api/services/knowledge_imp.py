@@ -571,7 +571,9 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
 
     questions = QA.questions
     answer = json.loads(QA.answers)[0]
-    extra = json.loads(QA.extra_meta) or {}
+    extra = {}
+    if QA.extra_meta:
+        extra = json.loads(QA.extra_meta) or {}
     extra.update({'answer': answer})
     docs = [Document(page_content=question, metadata=extra) for question in questions]
     try:
