@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 from typing import Dict, List, Optional
+from urllib.parse import unquote
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, decide_vectorstores,
@@ -9,7 +10,7 @@ from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, 
                                                 delete_knowledge_file_vectors, delete_vector,
                                                 text_knowledge)
 from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
-from bisheng.api.v2.schema.filelib import APIAddQAParam, APIAppendQAParam
+from bisheng.api.v2.schema.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
 from bisheng.cache.utils import save_download_file
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
@@ -169,7 +170,7 @@ async def upload_file(*,
                       chunk_overlap: int = Form(default=100),
                       file: UploadFile = File(...),
                       background_tasks: BackgroundTasks):
-    file_name = file.filename
+    file_name = unquote(file.filename)
     # 缓存本地
     file_byte = await file.read()
     file_path = save_download_file(file_byte, 'bisheng', file_name)
@@ -473,11 +474,11 @@ def add_qa(*,
     res = []
     for item in data:
         qa_insert = QAKnowledgeUpsert(knowledge_id=knowledge_id,
-                                      questions=[],
+                                      questions=[item.question],
                                       answers=item.answer,
                                       user_id=user_id,
+                                      extra_meta=json.dumps(item.extra),
                                       source=3)
-        qa_insert.questions = [item.question]
 
         res.append(knowledge_imp.add_qa(knowledge, qa_insert))
 
@@ -559,6 +560,20 @@ def update_qa(
 
 @router.get('/detail_qa', status_code=200)
 def detail_qa(*, id: int):
-    """ 删除qa 问题对信息 """
+    """ 获取问题对信息 """
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     return resp_200(qa)
+
+
+@router.post('/query_qa', status_code=200)
+def query_qa(QueryQAParam: QueryQAParam):
+    """ 删除qa 问题对信息 """
+    sources = [1, 2]  # 3 是api倒入的
+    qa_list = QAKnoweldgeDao.query_by_condition_v1(source=sources,
+                                                   create_start=QueryQAParam.timeRange[0],
+                                                   create_end=QueryQAParam.timeRange[1])
+    if qa_list:
+        for q in qa_list:
+            q.answers = json.loads(q.answers)
+
+    return resp_200(qa_list)

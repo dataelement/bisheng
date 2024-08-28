@@ -22,7 +22,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.user import User, UserDao
-from bisheng.graph.utils import find_next_node
+from bisheng.graph.utils import cut_graph_bynode, find_next_node
 from bisheng.processing.process import process_tweaks
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 from bisheng.utils.util import get_cache_key
@@ -497,12 +497,31 @@ class ChatManager:
             graph_data = self.refresh_graph_data(graph_data, node_data)
             # 上传文件就重新解压，有点粗, 只有document loader 需要
             node_loader = False
+
             for nod in node_data:
                 if any('Loader' in x['id'] for x in find_next_node(graph_data, nod['id'])):
                     node_loader = True
                     break
             if node_loader:
                 self.set_cache(langchain_obj_key, None)  # rebuild object
+            else:
+                # 能力，只考虑一个file input的情况
+                node_id = find_next_node(graph_data, nod['id'])[0]['id']
+                nodes, edges = cut_graph_bynode(graph_data, node_id)
+                chat_history = payload.get('chatHistory') or [{
+                    'isSend': False,
+                    'message': '请问想买什么'
+                }]
+                last_msg = [m['message'] for m in chat_history if not m['isSend']][-1]
+                graph_data_input = {'edges': edges, 'nodes': nodes}
+                graph_data_input = process_tweaks(graph_data_input,
+                                                  tweaks={node_id: {
+                                                      'question': last_msg
+                                                  }})
+                obj = await build_flow_no_yield(graph_data_input, {}, process_file=True)
+                obj.abuild()
+                question = [await x.get_result() for x in obj.get_input_nodes()][-1]
+                self.set_cache(langchain_obj_key + '_question', [question])
             has_file = any(['InputFile' in nd.get('id', '') for nd in node_data])
             has_variable = any(['VariableNode' in nd.get('id', '') for nd in node_data])
         if has_file:
@@ -542,7 +561,7 @@ class ChatManager:
             payload['inputs']['questions'] = batch_question
             if not batch_question:
                 # no question
-                file_msg = payload['inputs'].copy()
+                file_msg = payload['inputs']
                 file_msg.pop('id', '')
                 file_msg.pop('data', '')
                 file = ChatMessage(flow_id=client_id,

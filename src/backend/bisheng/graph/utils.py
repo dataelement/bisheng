@@ -283,5 +283,31 @@ def find_next_node(graph_data: Dict, node_id: str) -> List[Dict]:
     nodes = graph_data.get('nodes', [])
     edges = graph_data.get('edges', [])
 
-    edges_ = [e['target'] for e in edges if e['source'] != node_id]
+    edges_ = [e['target'] for e in edges if e['source'] == node_id]
     return [n for n in nodes if n['id'] in edges_]
+
+
+def cut_graph_bynode(graph_data: Dict, node_id: str) -> List[Dict]:
+    """
+    通过node_id 找到和node相关的所有依赖节点。
+    """
+    nodes = graph_data.get('nodes', [])
+    edges = graph_data.get('edges', [])
+
+    nodes_new_list = []
+    edges_new_list = []
+    iflast = True
+    for e in edges:
+        if e['target'] == node_id:
+            iflast = False
+            node_list, edge_list = cut_graph_bynode(graph_data, e['source'])
+            nodes_new_list.extend(node_list)
+            edges_new_list.extend(edge_list)
+            nodes_new_list.append([n for n in nodes if n['id'] == node_id][0])
+            edges_new_list.append(e)
+    if iflast:
+        for node in nodes:
+            if node['id'] == node_id:
+                return [node], []
+
+    return nodes_new_list, edges_new_list

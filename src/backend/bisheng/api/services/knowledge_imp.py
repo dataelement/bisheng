@@ -520,7 +520,7 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             original_file = input_file.object_name
             file_url = minio.get_share_link(original_file,
                                             minio_client.tmp_bucket) if original_file.startswith(
-                'tmp') else minio.get_share_link(original_file)
+                                                'tmp') else minio.get_share_link(original_file)
 
             if file_url:
                 file_path, _ = file_download(file_url)
@@ -571,7 +571,9 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
 
     questions = QA.questions
     answer = json.loads(QA.answers)[0]
-    docs = [Document(page_content=question, metadata={'answer': answer}) for question in questions]
+    extra = json.loads(QA.extra_meta) or {}
+    extra.update({'answer': answer})
+    docs = [Document(page_content=question, metadata=extra) for question in questions]
     try:
         embeddings = decide_embeddings(db_knowledge.model)
         vectore_config_dict: dict = settings.get_knowledge().get('vectorstores')
@@ -596,7 +598,7 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             'page': doc.metadata.pop('page', 1),
             'source': doc.metadata.pop('source', ''),
             'bbox': doc.metadata.pop('bbox', ''),
-            'extra': json.dumps(doc.metadata)
+            'extra': json.dumps(doc.metadata, ensure_ascii=True)
         } for doc in docs]
 
         # 向量存储

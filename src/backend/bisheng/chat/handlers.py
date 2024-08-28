@@ -3,6 +3,7 @@ import time
 from queue import Queue
 from typing import Dict
 
+from bisheng.api.utils import build_input_keys_response
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.utils import judge_source, process_graph, process_source_document
@@ -304,7 +305,8 @@ class Handler:
             input_key = 'input'
             input_dict = {}
         else:
-            input_key = langchain_object.input_keys[0]
+            input_key = list(build_input_keys_response(langchain_object,
+                                                       {})['input_keys'].keys())[0]
             input_dict = {k: '' for k in langchain_object.input_keys}
 
         batch_question = ['start'] if not batch_question else batch_question  # 确保点击确定，会执行LLM

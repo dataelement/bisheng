@@ -63,8 +63,8 @@ def get_app_chat_list(*,
             raise UnAuthorizedError.http_exception()
         user_group_ids = [user_group.group_id for user_group in user_groups]
         # 获取分组下的所有资源ID
-        resources = GroupResourceDao.get_groups_resource(user_group_ids,
-                                                         resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
+        resources = GroupResourceDao.get_groups_resource(
+            user_group_ids, resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
         group_flow_ids = [one.third_id for one in resources]
         if not group_flow_ids:
             return resp_200(PageList(list=[], total=0))
@@ -106,10 +106,10 @@ def get_app_chat_list(*,
     flow_map.update(assistant_map)
     res_obj = PageList(list=[
         AppChatList(user_name=user_map.get(one['user_id'], one['user_id']),
-                    flow_name=flow_map.get(one['flow_id'], one['flow_id']), **one)
-        for one in res
+                    flow_name=flow_map.get(one['flow_id'], one['flow_id']),
+                    **one) for one in res
     ],
-        total=count)
+                       total=count)
     return resp_200(res_obj)
 
 
@@ -275,9 +275,9 @@ def get_chatlist_list(*,
     smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
                   func.min(ChatMessage.create_time).label('create_time'),
                   func.max(ChatMessage.update_time).label('update_time')).where(
-        ChatMessage.user_id == login_user.user_id).group_by(
-        ChatMessage.flow_id,
-        ChatMessage.chat_id).order_by(func.max(ChatMessage.update_time).desc()))
+                      ChatMessage.user_id == login_user.user_id).group_by(
+                          ChatMessage.flow_id,
+                          ChatMessage.chat_id).order_by(func.max(ChatMessage.update_time).desc()))
     with session_getter() as session:
         db_message = session.exec(smt).all()
 

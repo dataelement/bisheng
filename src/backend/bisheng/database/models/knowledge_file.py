@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -204,4 +204,12 @@ class QAKnoweldgeDao(QAKnowledgeBase):
     @classmethod
     def query_by_condition(cls, sql):
         with session_getter() as session:
+            return session.exec(sql).all()
+
+    @classmethod
+    def query_by_condition_v1(cls, source: List[int], create_start: str, create_end: str):
+        with session_getter() as session:
+            sql = select(QAKnowledge).where(QAKnowledge.source.in_(source)).where(
+                QAKnowledge.create_time.between(create_start, create_end))
+
             return session.exec(sql).all()

@@ -26,7 +26,7 @@ class InputOutputNode(FrontendNode):
     base_classes: list[str] = ['input', 'output']
 
     def add_extra_base_classes(self) -> None:
-        if self.name == 'AudioInputNode':
+        if self.name in {'AudioInputNode', 'FileInputNode'}:
             self.base_classes.append('input')
 
     def add_extra_fields(self) -> None:
@@ -66,6 +66,16 @@ class InputOutputNode(FrontendNode):
             elif field.name == 'openai_proxy':
                 field.show = True
 
+        if name == 'FileInputNode':
+            if field.name == 'file_path':
+                field.show = True
+                field.field_type = 'fileNode'
+                field.required = True
+                field.suffixes = ['.jpg', '.png', '.jpeg']
+                field.fileTypes = ['jpg', 'png', 'jpeg']
+            elif field.name == 'openai_proxy':
+                field.show = True
+
 
 class InputNode(FrontendNode):
     name: str = 'InputNode'
@@ -85,60 +95,6 @@ class InputNode(FrontendNode):
     )
     description: str = """输入节点，用来自动对接输入"""
     base_classes: list[str] = ['input']
-
-    def to_dict(self):
-        return super().to_dict()
-
-
-class AudioInputNode(FrontendNode):
-    name: str = 'AudioInputNode'
-    description: str = """语音输入节点，用来自动对接输入"""
-    base_classes: list[str] = ['input']
-
-    @staticmethod
-    def format_field(field: TemplateField, name: Optional[str] = None) -> None:
-        FrontendNode.format_field(field, name)
-        field.show = True
-
-    def add_extra_fields(self) -> None:
-        self.template.add_field(build_file_field(
-            suffixes=['.mp3'],
-            fileTypes=['mp3'],
-        ))
-        self.template.add_field(
-            TemplateField(
-                field_type='str',
-                show=True,
-                name='openai_proxy',
-                value='',
-            ), )
-
-    def to_dict(self):
-        return super().to_dict()
-
-
-class FileInputNode(FrontendNode):
-    name: str = 'AudioInputNode'
-    description: str = """语音输入节点，用来自动对接输入"""
-    base_classes: list[str] = ['input']
-
-    @staticmethod
-    def format_field(field: TemplateField, name: Optional[str] = None) -> None:
-        FrontendNode.format_field(field, name)
-        field.show = True
-
-    def add_extra_fields(self) -> None:
-        self.template.add_field(build_file_field(
-            suffixes=['.mp3'],
-            fileTypes=['mp3'],
-        ))
-        self.template.add_field(
-            TemplateField(
-                field_type='str',
-                show=True,
-                name='openai_proxy',
-                value='',
-            ), )
 
     def to_dict(self):
         return super().to_dict()
