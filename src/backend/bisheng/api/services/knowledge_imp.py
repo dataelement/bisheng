@@ -598,7 +598,7 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             'page': doc.metadata.pop('page', 1),
             'source': doc.metadata.pop('source', ''),
             'bbox': doc.metadata.pop('bbox', ''),
-            'extra': json.dumps(doc.metadata, ensure_ascii=True)
+            'extra': json.dumps(doc.metadata, ensure_ascii=False)
         } for doc in docs]
 
         # 向量存储
