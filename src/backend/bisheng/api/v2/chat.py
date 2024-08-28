@@ -117,7 +117,7 @@ def sync_message(*,
                     category='answer',
                     flow_id=flow_id,
                     user_id=user_id,
-                    caht_id=flow_id.hex) for message in message_list
+                    chat_id=flow_id.hex) for message in message_list
     ]
     ChatMessageDao.insert_batch(batch_message)
     return resp_200()
