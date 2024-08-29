@@ -31,7 +31,8 @@ def handle_node_type(node_type, class_object, params: Dict):
     elif node_type == 'ChatPromptTemplate':
         prompt = class_object.from_messages(**params)
     elif hasattr(class_object, 'from_template') and params.get('template'):
-        prompt = class_object.from_template(template=params.pop('template'))
+        prompt = class_object.from_template(template=params.pop('template'),
+                                            output_parser=params.get('output_parser'))
     else:
         prompt = class_object(**params)
     return params, prompt
