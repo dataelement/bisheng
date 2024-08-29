@@ -128,7 +128,7 @@ export default function FilesPage() {
                             <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
                         </button>
                     </ShadTooltip>
-                    <span className=" text-gray-700 text-sm font-black pl-4">{title}</span>
+                    <span className="text-foreground text-sm font-black pl-4">{title}</span>
                 </div>
                 <div className="flex gap-4 items-center">
                     <SearchInput placeholder={t('lib.fileName')} onChange={(e) => search(e.target.value)}></SearchInput>

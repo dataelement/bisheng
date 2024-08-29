@@ -60,11 +60,11 @@ export default function CreateTaskList({ onChange }) {
                 </TooltipProvider>
             </div>
         </div>
-        <div className="border rounded-md p-4 overflow-y-auto max-h-[400px] mt-4 shadow-md bg-gray-100 dark:bg-gray-800">
+        <div className="border rounded-md p-2 overflow-y-auto max-h-[400px] mt-4 shadow-md bg-gray-100 dark:bg-gray-800">
             <p className="text-sm text-muted-foreground mt-4">{t('finetune.presetDatasets')}</p>
             {
                 prsetList.length ? prsetList.map((data, i) =>
-                    <div key={data.id} className="flex gap-4 items-center mt-2 h-8 hover:bg-gray-200 dark:hover:bg-gray-600">
+                    <div key={data.id} className="flex gap-4 items-center mt-2 h-8 hover:bg-gray-200 dark:hover:bg-gray-600 px-2">
                         <Checkbox
                             checked={data.checked}
                             onCheckedChange={(val: boolean) => handleChangePrsetList(data.id, 'checked', val)} />
@@ -92,7 +92,7 @@ export default function CreateTaskList({ onChange }) {
             <p className="text-sm text-muted-foreground mt-4">{t('finetune.userDatasets')}</p>
             {
                 userList.length ? userList.map(data =>
-                    <div className="flex gap-4 items-center mt-2 h-8 hover:bg-gray-200">
+                    <div className="flex gap-4 items-center mt-2 h-8 hover:bg-gray-200 dark:hover:bg-gray-600 px-2">
                         <Checkbox
                             checked={data.checked}
                             onCheckedChange={(val: boolean) => handleChangeUserList(data.id, 'checked', val)} />

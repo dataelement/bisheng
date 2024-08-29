@@ -104,7 +104,18 @@
     "menuAuthorization": "菜单授权",
     "primaryMenu": "一级菜单",
     "viewPermission": "查看权限",
-    "themeColor": "主题配色"
+    "themeColor": "主题配色",
+    "toolAuthorization": "工具授权",
+    "createUser": "创建用户",
+    "usernamePlaceholder": "后续使用此用户名进行登录，用户名不可修改",
+    "initialPassword": "初始密码",
+    "passwordPlaceholder": "至少 8 个字符，必须包含大写字母、小写字母、数字和符号的组合",
+    "userGroupRoleSelection": "用户组/角色选择",
+    "usernameRequired": "用户名不可为空",
+    "usernameMaxLength": "用户名最长 30 个字符",
+    "passwordRequirements": "初始密码至少 8 个字符，必须包含大写字母、小写字母、数字和符号的组合",
+    "roleRequired": "至少选择一个角色",
+    "userCreationSuccess": "创建用户成功！已复制用户名和初始密码到剪贴板"
   },
   "skills": {
     "manageTemplate": "管理技能模板",
@@ -162,7 +173,8 @@
     "promptWords1000": "提示词最多为1000个字符",
     "contactAdmin": "请联系管理员上线助手",
     "deleteSure": "确认删除该工具？",
-    "modelRequired": "模型为空"
+    "modelRequired": "模型为空",
+    "avatar": "技能头像"
   },
   "chat": {
     "newChat": "新建会话",
@@ -577,7 +589,14 @@
     "parameter": "参数",
     "value": "值",
     "result": "测试结果",
-    "outResultPlaceholder": "点击按钮，输出结果"
+    "outResultPlaceholder": "点击按钮，输出结果",
+    "maxAddVersions": "最多添加4个版本",
+    "versionEvaluation": "版本评估",
+    "addVersion": "添加版本",
+    "selectVersion": "选择版本",
+    "component": "组件",
+    "parameterName": "参数名",
+    "parameterValue": "参数值"
   },
   "resetPassword": {
     "slogen": "安全地重置您的密码",
@@ -631,7 +650,36 @@
     "createRole": "新建角色",
     "deleteRole": "删除角色",
     "updateRole": "编辑角色",
-    "userLogin": "用户登录"
+    "userLogin": "用户登录",
+    "chat": "会话",
+    "build": "构建",
+    "knowledge": "知识库",
+    "system": "系统",
+    "create_chat": "新建会话",
+    "delete_chat": "删除会话",
+    "create_build": "新建应用",
+    "update_build": "编辑应用",
+    "create_knowledge": "新建知识库",
+    "delete_knowledge": "删除知识库",
+    "upload_file": "知识库上传文件",
+    "delete_file": "知识库删除文件",
+    "update_user": "用户编辑",
+    "forbid_user": "停用用户",
+    "recover_user": "启用用户",
+    "create_user_group": "新建用户组",
+    "delete_user_group": "删除用户组",
+    "update_user_group": "编辑用户组",
+    "create_role": "新建角色",
+    "delete_role": "删除角色",
+    "update_role": "编辑角色",
+    "user_login": "用户登录",
+    "none": "无",
+    "flow": "技能",
+    "assistant": "助手",
+    "file": "文件",
+    "user_conf": "用户配置",
+    "user_group_conf": "用户组配置",
+    "role_conf": "角色配置"
   },
   "tag": {
     "labelMaxLength": "标签名不能超过10个字符",
@@ -648,7 +696,7 @@
   "deleteSuccess": "删除成功",
   "createTime": "创建时间",
   "updateTime": "更新时间",
-  "success": "保存成功",
+  "saved": "保存成功",
   "edit": "编辑",
   "enable": "启用",
   "disable": "禁用",
@@ -669,5 +717,8 @@
   "createSuccess": "创建成功",
   "confirm": "确认",
   "required": "不可为空",
+  "inProgress": "进行中",
+  "failed": "失败",
+  "success": "成功",
   "chatTips": "1. 请遵守《中华人民共和国网络安全法》《中华人民共和国数据安全法》《中华人民共和国个人信息保护法》及《生成式人工智能服务安全基本要求》；\n2. 禁止上传涉及公司保密管理规定范围内的保密数据；\n3. 禁止上传包含个人隐私信息的数据；\n4. 禁止上传包含恶意程序或病毒的文件；\n5. 禁止使用 AI 生成攻击性代码；\n6. 禁止向 AI 提问包括但不限于涉爆涉恐涉黄及危害国家安全及公共安全的违法不良信息；\n7. AI 生成内容受到公司保密管理规定约束。用户应根据实际情况判断生成内容的合理性，避免 AI 幻觉造成的风险。"
 }

@@ -2,9 +2,10 @@ import { DelIcon } from "@/components/bs-icons/del";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { useMemo } from "react";
 import ComponentParameter from "./ComponentParameter";
+import { useTranslation } from "react-i18next";
 
 export default function Component({ compId, options, disables, version, className, onChangeVersion, onClose }) {
-
+    const { t } = useTranslation()
     // 保留当前compId和上游组件
     const nodes = useMemo(() => {
         if (!version?.data) return [];
@@ -30,7 +31,7 @@ export default function Component({ compId, options, disables, version, classNam
         <div className="group flex justify-center items-center pb-2 border-b relative">
             <Select onValueChange={onChangeVersion}>
                 <SelectTrigger className="w-[120px] h-6">
-                    <SelectValue placeholder="选择版本" />
+                    <SelectValue placeholder={t('test.selectVersion')} />
                 </SelectTrigger>
                 <SelectContent>
                     {
@@ -58,7 +59,7 @@ export default function Component({ compId, options, disables, version, classNam
         <div className="group flex justify-between items-center pb-2 border-b">
             <Select value={version.id} onValueChange={onChangeVersion}>
                 <SelectTrigger className="w-[120px] h-6">
-                    <SelectValue placeholder="选择版本" />
+                    <SelectValue placeholder={t('test.selectVersion')} />
                 </SelectTrigger>
                 <SelectContent>
                     {
@@ -84,9 +85,9 @@ export default function Component({ compId, options, disables, version, classNam
 
         <div className="max-h-52 overflow-y-auto pb-10">
             <div className="flex gap-1 px-2 py-1 text-sm text-muted-foreground">
-                <span className="min-w-12 w-28">组件</span>
-                <span className="min-w-12 w-28">参数名</span>
-                <span className="flex-1">参数值</span>
+                <span className="min-w-12 w-28">{t('test.component')}</span>
+                <span className="min-w-12 w-28">{t('test.parameterName')}</span>
+                <span className="flex-1">{t('test.parameterValue')}</span>
             </div>
             {
                 nodes.map(node => (

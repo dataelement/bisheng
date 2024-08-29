@@ -35,7 +35,7 @@ export default function Config() {
             message({
                 variant: 'success',
                 title: t('prompt'),
-                description: t('success')
+                description: t('saved')
             })
             setConfig(codeRef.current)
 

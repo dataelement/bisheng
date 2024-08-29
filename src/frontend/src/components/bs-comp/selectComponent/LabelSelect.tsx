@@ -3,8 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SearchInput } from "@/components/bs-ui/input";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Label } from "@/components/bs-ui/label";
-import { Pencil2Icon } from "@radix-ui/react-icons";
-import { Trash2 } from "lucide-react";
+import { Pencil2Icon, TrashIcon } from "@radix-ui/react-icons";
 import { Input } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { useTranslation } from "react-i18next";
@@ -18,6 +17,7 @@ import {
     deleteLabelApi
 } from "@/controllers/API/label";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { DelIcon } from "@/components/bs-icons";
 
 export enum UPDATETYPE {
     DELETELINK = 'deleteLink',
@@ -183,7 +183,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
                     </div>
                     {user.role === 'admin' && <div className="flex place-items-center space-x-4 opacity-0 group-hover:opacity-100">
                         <Pencil2Icon className="cursor-pointer" onClick={() => handleEdit(d.value)} />
-                        <Trash2 size={16} onClick={() => handleDelete(d)} className="text-gray-600 cursor-pointer" />
+                        <TrashIcon className="cursor-pointer" onClick={() => handleDelete(d)} />
                     </div>}
                 </div>)}
                 {(keyword && showAdd && user.role === 'admin') && <div onClick={handleAdd}

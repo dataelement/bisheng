@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "0.3.4.dev1",
+  "version": "0.3.4.rls",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.1",

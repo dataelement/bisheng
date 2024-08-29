@@ -5,10 +5,10 @@ export enum EvaluationType {
 
 export const EvaluationTypeLabelMap = {
   [EvaluationType.flow]: {
-    label: "技能",
+    label: "build.skill",
   },
   [EvaluationType.assistant]: {
-    label: "助手",
+    label: "build.assistant",
   },
 };
 
@@ -37,15 +37,15 @@ export enum EvaluationStatusEnum {
 }
 export const EvaluationStatusLabelMap = {
   [EvaluationStatusEnum.running]: {
-    label: "进行中",
+    label: "inProgress",
     variant: "secondary",
   },
   [EvaluationStatusEnum.failed]: {
-    label: "失败",
+    label: "failed",
     variant: "destructive",
   },
   [EvaluationStatusEnum.success]: {
-    label: "成功",
+    label: "success",
     variant: "default",
   },
 };

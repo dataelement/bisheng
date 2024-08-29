@@ -278,7 +278,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
             {/* form */}
             {
                 formShow && <div className="relative">
-                    <div className="absolute left-0 border bottom-2 bg-background-login px-4 py-2 rounded-md w-[50%] min-w-80 z-50">
+                    <div className="absolute left-0 border bottom-2 bg-background-login px-4 py-2 rounded-md w-[50%] min-w-80 z-40">
                         {inputForm}
                     </div>
                 </div>
@@ -296,7 +296,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     clear && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => { !inputLock.locked && destory() }}
-                    ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-950'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></ClearIcon></div>
+                    ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></ClearIcon></div>
                 }
             </div>
             {/* form switch */}
@@ -305,7 +305,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     form && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
-                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-800'}></FormIcon></div>
+                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></FormIcon></div>
                 }
             </div>
             {/* send */}

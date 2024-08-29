@@ -34,7 +34,7 @@ type Actions = {
     createWsMsg: (data: any) => void;
     updateCurrentMessage: (wsdata: any, cover: boolean) => void;
     changeChatId: (chatId: string) => void;
-    startNewRound: () => void;
+    startNewRound: (str: string) => void;
     insetSeparator: (text: string) => void;
     insetSystemMsg: (text: string) => void;
     insetBsMsg: (text: string) => void;
@@ -234,8 +234,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     changeChatId(chatId) {
         set((state) => ({ chatId }))
     },
-    startNewRound() {
-        get().insetSeparator('配置已更新')
+    startNewRound(str) {
+        get().insetSeparator(str)
         set((state) => ({ showGuideQuestion: true }))
     },
     insetSeparator(text) {

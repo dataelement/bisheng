@@ -4,8 +4,6 @@ import CrashErrorComponent from "./components/CrashErrorComponent";
 import MainLayout from "./layout/MainLayout";
 import SkillChatPage from "./pages/ChatAppPage";
 import ChatAssitantShare from "./pages/ChatAppPage/chatAssitantShare";
-import AssistantChat from "./pages/ChatAppPage/chatPage/AssistantChatPage";
-import SkillChat from "./pages/ChatAppPage/chatPage/SkillChatPage";
 import ChatShare from "./pages/ChatAppPage/chatShare";
 import ChatPro from "./pages/ChatAppPage/chatWebview";
 import DiffFlowPage from "./pages/DiffFlowPage";
@@ -70,7 +68,7 @@ const privateRouter = [
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps", element: <Templates />, permission: 'build', },
-      { path: "model/management", element: <Management />},
+      { path: "model/management", element: <Management /> },
       { path: "model/finetune", element: <Finetune /> },
       { path: "model", element: <Navigate to="management" replace /> },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
@@ -94,12 +92,12 @@ const privateRouter = [
     ]
   },
   // 独立会话页
-  { path: "/chat/assistant/auth/:id/", element: <AssistantChat /> },
-  { path: "/chat/skill/auth/:id/", element: <SkillChat /> },
+  { path: "/chat/assistant/auth/:id/", element: <ChatPro type='assistant' /> },
+  { path: "/chat/skill/auth/:id/", element: <ChatPro /> },
   { path: "/chat", element: <SkillChatPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
-  { path: "/chatpro/:id", element: <ChatPro /> },
+  { path: "/chatpro/:id", element: <ChatPro /> }, // ⚠️废弃
   { path: "/report/:id/", element: <Report /> },
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
   { path: "/reset", element: <ResetPwdPage /> },
