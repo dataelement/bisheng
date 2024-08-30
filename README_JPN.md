@@ -12,8 +12,8 @@
     <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
 </p>
 <p align="center">
-  <a href="./README.md">简体中文</a> |
-  <a href="./README_ENG.md">English</a> |
+  <a href="./README_CN.md">简体中文</a> |
+  <a href="./README.md">English</a> |
   <a href="./README_JPN.md">日本語</a>
 </p>
 
@@ -46,7 +46,6 @@ BISHENGは、エンタープライズシナリオに焦点を当てたオープ�
 <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="sence3"></p>
 
 4. 様々なエンタープライズシナリオにおけるベストプラクティスを共有するコミュニティ: オープンなアプリケーションケースとベストプラクティスのリポジトリ。
-<p align="center"><img src="https://dataelem.com/bs/sence.png" alt="sence3"></p>
 
 ## クイックスタート
 

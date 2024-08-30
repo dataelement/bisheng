@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 
-export const ModelSelect = ({ required = false, label, tooltipText = '', value, options, onChange }) => {
+export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange }) => {
 
     const defaultValue = useMemo(() => {
         let _defaultValue = []
@@ -36,6 +36,7 @@ export const ModelSelect = ({ required = false, label, tooltipText = '', value, 
             <Cascader
                 defaultValue={defaultValue}
                 options={options}
+                close={close}
                 onChange={(val) => onChange(val[1])}
             />
         </div>
@@ -76,7 +77,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
         if (!embeddingModelId) {
             errors.push(t('model.defaultEmbeddingModel') + t('bs:required'))
         }
-        if (!sourceModelId) {
+        if (!qaSimilarModelId) {
             errors.push(t('model.qaSimilarModel') + t('bs:required'))
         }
         if (errors.length) return message({ variant: 'error', description: errors })
@@ -105,6 +106,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 onChange={(val) => setForm({ ...form, embeddingModelId: val })}
             />
             <ModelSelect
+                close
                 label={t('model.sourceTracingModel')}
                 tooltipText={t('model.sourceTracingModelTooltip')}
                 value={form.sourceModelId}
@@ -112,6 +114,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 onChange={(val) => setForm({ ...form, sourceModelId: val })}
             />
             <ModelSelect
+                close
                 label={t('model.documentSummaryModel')}
                 tooltipText={t('model.documentSummaryModelTooltip')}
                 value={form.extractModelId}

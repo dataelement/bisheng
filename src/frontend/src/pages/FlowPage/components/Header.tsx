@@ -100,7 +100,7 @@ export default function Header({ flow, onTabChange }) {
 
             _ && message({
                 variant: "success",
-                title: t('success'),
+                title: t('saved'),
                 description: ""
             })
         }))

@@ -9,8 +9,10 @@ import { useEffect, useState } from "react"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { getFlowVersions } from "@/controllers/API/flow"
 import { FlowVersionItem } from "@/types/flow"
+import { useTranslation } from "react-i18next"
 
 export default function index(params) {
+    const { t } = useTranslation()
     // 技能 id, 版本id, 组件id
     const { id, vid, cid } = useParams()
     const navigate = useNavigate()
@@ -26,7 +28,7 @@ export default function index(params) {
     const handleAddVersion = () => {
         if (mulitVersionFlow.length >= 4) return message({
             title: '',
-            description: '最多添加4个版本',
+            description: t('test.maxAddVersions'),
             variant: 'error',
         })
         addEmptyVersionFlow()
@@ -39,13 +41,13 @@ export default function index(params) {
         {/* header */}
         <div className="absolute top-0 w-full h-14 flex justify-between items-center border-b px-4 bg-[#fff] dark:bg-[#222]">
             <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ChevronLeftIcon className="h-4 w-4" /></Button>
-            <span>版本评估</span>
+            <span>{t('test.versionEvaluation')}</span>
             <Button type="button" onClick={handleAddVersion}>
                 <PlusIcon className="text-primary" />
-                添加版本({mulitVersionFlow.length}/4)
+                {t('test.addVersion')}({mulitVersionFlow.length}/4)
             </Button>
         </div>
-        
+
         {/* content */}
         <div className="h-full pt-14 overflow-y-auto">
             {/* comps */}
@@ -70,6 +72,7 @@ export default function index(params) {
         </div>
     </div>
 };
+
 
 
 const useVersions = (flowId) => {

@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/bs-ui/select";
 import {
+  QuestionTooltip,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -33,13 +34,14 @@ import { TabsContext } from "@/contexts/tabsContext";
 import { readFlowsFromDatabase } from "@/controllers/API/flow";
 import PromptAreaComponent from "./PromptCom";
 import defaultPrompt from "./defaultPrompt";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 
 export default function EvaluatingCreate() {
   const { t } = useTranslation();
 
   const { id } = useParams();
   const { flow: nextFlow } = useContext(TabsContext);
-  const { setErrorData } = useContext(alertContext);
+  const { toast } = useToast()
   const flow = useMemo(() => {
     return id ? nextFlow : null;
   }, [nextFlow]);
@@ -109,9 +111,9 @@ export default function EvaluatingCreate() {
   };
 
   const handleError = (list) => {
-    setErrorData({
-      title: t("prompt"),
-      list,
+    toast({
+      variant: "error",
+      description: list
     });
   };
 
@@ -180,8 +182,8 @@ export default function EvaluatingCreate() {
           <div className="mx-auto mt-4 w-full max-w-2xl">
             {/* base form */}
             <div className="w-full overflow-hidden px-1 transition-all">
-              <div className="mt-4 flex items-center justify-between">
-                <Label className="w-[180px] whitespace-nowrap text-right">
+              <div className="mt-4 flex items-center justify-between gap-1">
+                <Label className="w-[180px] text-right">
                   {t("evaluation.selectLabel")}
                 </Label>
                 <div className="flex flex-1 gap-2">
@@ -274,7 +276,7 @@ export default function EvaluatingCreate() {
                   )}
                 </div>
               </div>
-              <div className="mt-4 flex items-center">
+              <div className="mt-4 flex items-center gap-1">
                 <div className="min-w-[180px] text-right">
                   <Label className="whitespace-nowrap">
                     {t("evaluation.dataLabel")}
@@ -308,25 +310,10 @@ export default function EvaluatingCreate() {
                   </Button>
                 </div>
               </div>
-              <div className="mt-4 flex items-center justify-between">
+              <div className="mt-4 flex items-center justify-between gap-1">
                 <div className="min-w-[180px] text-right">
-                  <Label className="flex items-center justify-end whitespace-nowrap">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="link" className="mr-1 p-0">
-                            <QuestionMarkIcon
-                              className={
-                                "icons-parameters-comp w-[15px] hover:text-accent-foreground"
-                              }
-                            />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>{t("evaluation.tooltip")}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                  <Label className="flex items-center justify-end">
+                    <QuestionTooltip content={t("evaluation.tooltip")} />
                     {t("evaluation.promptLabel")}
                   </Label>
                 </div>

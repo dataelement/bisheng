@@ -66,19 +66,20 @@ const privateRouter = [
       { path: "filelib/upload", element: <FilesUpload />, permission: 'knowledge', },
       { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
       { path: "build/skills", element: <SkillsPage />, permission: 'build', },
-      // @ts-ignore 
+      // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
       { path: "build", element: <Navigate to="assist" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps", element: <Templates />, permission: 'build', },
-      { path: "model/management", element: <Management /> },
+      { path: "model/management", element: <Management />},
       { path: "model/finetune", element: <Finetune /> },
       { path: "model", element: <Navigate to="management" replace /> },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
+
     ],
   },
   { path: "model/doc", element: <Doc /> },
@@ -95,12 +96,12 @@ const privateRouter = [
     ]
   },
   // 独立会话页
-  { path: "/chat/assistant/auth/:id/", element: <AssistantChat /> },
-  { path: "/chat/skill/auth/:id/", element: <SkillChat /> },
+  { path: "/chat/assistant/auth/:id/", element: <ChatPro type='assistant' /> },
+  { path: "/chat/skill/auth/:id/", element: <ChatPro /> },
   { path: "/chat", element: <SkillChatPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
-  { path: "/chatpro/:id", element: <ChatPro /> },
+  { path: "/chatpro/:id", element: <ChatPro /> }, // ⚠️废弃
   { path: "/chatpro/assistant/:id/", element: <ChatPro type='assistant' /> },
   { path: "/report/:id/", element: <Report /> },
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },

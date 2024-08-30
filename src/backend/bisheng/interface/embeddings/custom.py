@@ -48,7 +48,7 @@ class FakeEmbedding(Embeddings):
 
 
 class BishengEmbedding(BaseModel, Embeddings):
-    """使用模型管理中已上线的 embedding 模型"""
+    """ Use the embedding model that has been launched in model management """
 
     model_id: int = Field(default=0, description="后端服务保存的model唯一ID")
     model: str = Field(default="", description="后端服务保存的model名称")

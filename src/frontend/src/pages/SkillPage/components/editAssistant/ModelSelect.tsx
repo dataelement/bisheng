@@ -2,7 +2,7 @@ import Cascader from "@/components/bs-ui/select/cascader";
 import { getAssistantModelList, getModelListApi } from "@/controllers/API/finetune";
 import { useEffect, useState } from "react";
 
-export default function ModelSelect({ type = 'assistant', value, onChange }) {
+export default function ModelSelect({ type = 'assistant', modelType = 'llm', value, onChange }) {
 
     // const [configServers, setConfigServers] = useState([])
     const [loading, setLoading] = useState(true)
@@ -23,7 +23,7 @@ export default function ModelSelect({ type = 'assistant', value, onChange }) {
                 if (model.id === value) {
                     _value = [{ ...serverItem }, { value: model.id, label: model.model_name }]
                 }
-                return model.online && model.model_type !== 'embedding' ? [...res, {
+                return model.online && model.model_type === modelType ? [...res, {
                     value: model.id,
                     label: model.model_name
                 }] : res

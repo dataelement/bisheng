@@ -37,7 +37,7 @@ export const QuestionTooltip = ({ className = '', content }) => (
                 <QuestionMarkCircledIcon />
             </TooltipTrigger>
             <TooltipContent>
-                <div className="max-w-96">{content}</div>
+                <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>
             </TooltipContent>
         </Tooltip>
     </TooltipProvider>

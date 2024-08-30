@@ -220,8 +220,8 @@ const useOptions = () => {
     const selectService = async (val) => {
         const servceId = services.find(item => item.id === val)?.id
         const res = await getFTServicesApi(servceId)
-        setModels(res)
-        // setModels(res.filter(item => item.sft_support))
+        // setModels(res)
+        setModels(res.filter(item => item.sft_support))
     }
 
     return { services, models, selectService }

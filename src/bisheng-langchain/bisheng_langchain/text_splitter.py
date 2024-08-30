@@ -168,18 +168,19 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
             split_texts = self.split_text(text)
             for chunk in split_texts:
                 new_metadata = copy.deepcopy(metadatas[i])
-                index = text.find(chunk, index + 1)
-                inter0 = [index, index + len(chunk) - 1]
-                norm_inter = searcher.find(inter0)
-                new_metadata['chunk_bboxes'] = []
-                for j in range(norm_inter[0], norm_inter[1] + 1):
-                    new_metadata['chunk_bboxes'].append(
-                        {'page': pages[j], 'bbox': bboxes[j]})
+                if indexes and bboxes:
+                    index = text.find(chunk, index + 1)
+                    inter0 = [index, index + len(chunk) - 1]
+                    norm_inter = searcher.find(inter0)
+                    new_metadata['chunk_bboxes'] = []
+                    for j in range(norm_inter[0], norm_inter[1] + 1):
+                        new_metadata['chunk_bboxes'].append(
+                            {'page': pages[j], 'bbox': bboxes[j]})
 
-                c = Counter([types[j] for j in norm_inter])
-                chunk_type = c.most_common(1)[0][0]
-                new_metadata['chunk_type'] = chunk_type
-                new_metadata['source'] = metadatas[i].get('source', '')
+                    c = Counter([types[j] for j in norm_inter])
+                    chunk_type = c.most_common(1)[0][0]
+                    new_metadata['chunk_type'] = chunk_type
+                    new_metadata['source'] = metadatas[i].get('source', '')
 
                 # for chunk in split_texts:
                 #     new_metadata = {}

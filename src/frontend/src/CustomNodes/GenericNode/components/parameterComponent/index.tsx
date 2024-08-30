@@ -302,7 +302,8 @@ export default function ParameterComponent({
             type === "knowledge_list" ||
             type === "NestedDict" ||
             type === "dict" ||
-            type === "bisheng_model") &&
+            type === "bisheng_model" ||
+            type === "bisheng_embedding") &&
           !optionalHandle ? (<></>)
           : (
             <ShadTooltip
@@ -549,6 +550,18 @@ export default function ParameterComponent({
           <div className="mt-2 w-full">
             <ModelSelect
               type='flow'
+              value={data.node!.template[name].value || null}
+              onChange={(newValue) => {
+                data.node!.template[name].value = newValue;
+                handleOnNewValue(newValue);
+              }}
+            />
+          </div>
+        ) : left === true && type === "bisheng_embedding" ? (
+          <div className="mt-2 w-full">
+            <ModelSelect
+              type='flow'
+              modelType="embedding"
               value={data.node!.template[name].value || null}
               onChange={(newValue) => {
                 data.node!.template[name].value = newValue;

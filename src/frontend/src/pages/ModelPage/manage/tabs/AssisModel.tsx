@@ -13,10 +13,13 @@ import { Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ModelSelect } from "./KnowledgeModel";
+import { generateUUID } from "@/components/bs-ui/utils";
 
 
-const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => (
-    <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 110px 68px 90px 40px" }}>
+const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => {
+    const { t } = useTranslation('model')
+
+    return <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 110px 68px 90px 40px" }}>
         <div className="pr-2">
             <ModelSelect
                 label={''}
@@ -45,8 +48,8 @@ const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => (
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
-                        <SelectItem value="1">是</SelectItem>
-                        <SelectItem value="0">否</SelectItem>
+                        <SelectItem value="1">{t('model.yes')}</SelectItem>
+                        <SelectItem value="0">{t('model.no')}</SelectItem>
                     </SelectGroup>
                 </SelectContent>
             </Select>
@@ -67,8 +70,8 @@ const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => (
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
-                        <SelectItem value="1">是</SelectItem>
-                        <SelectItem value="0">否</SelectItem>
+                        <SelectItem value="1">{t('model.yes')}</SelectItem>
+                        <SelectItem value="0">{t('model.no')}</SelectItem>
                     </SelectGroup>
                 </SelectContent>
             </Select>
@@ -82,7 +85,7 @@ const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => (
             <Trash2Icon className="text-gray-500 cursor-pointer size-4" onClick={() => deleteRow(index)} />
         </div>
     </div>
-);
+};
 
 const defaultValue = {
     llm_list: [{
@@ -152,8 +155,15 @@ export default function AssisModel({ llmOptions, onBack }) {
     };
 
     const deleteRow = (index) => {
-        const updatedList = form.llm_list.filter((_, i) => i !== index).map((item, i) => {
-            if (i === 0) return { ...item, default: true };
+        let target = null
+        const updatedList = form.llm_list.filter((_, i) => {
+            if (i === index) {
+                target = _
+                return false
+            }
+            return true
+        }).map((item, i) => {
+            if (target.default && i === 0) return { ...item, default: true };
             return item;
         });
         setForm({ ...form, llm_list: updatedList });
@@ -207,7 +217,7 @@ export default function AssisModel({ llmOptions, onBack }) {
                     </div>
                     {form.llm_list.map((item, index) => (
                         <ModelRow
-                            key={item.model_id}
+                            key={generateUUID(6)} // more render
                             item={item}
                             index={index}
                             llmOptions={llmOptions}

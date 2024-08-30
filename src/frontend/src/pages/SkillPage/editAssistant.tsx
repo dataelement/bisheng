@@ -35,7 +35,7 @@ export default function editAssistant() {
         if (!handleCheck()) return
         await handleSave(true)
         saveAfter()
-        startNewRound()
+        startNewRound(t('build.configurationUpdated'))
         setGuideQuestion(assistantState.guide_question.filter((item) => item))
         assistantState.guide_word && insetBsMsg(assistantState.guide_word)
     }
