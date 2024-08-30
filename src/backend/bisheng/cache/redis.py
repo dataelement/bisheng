@@ -111,6 +111,13 @@ class RedisClient:
         finally:
             self.close()
 
+    def hdel(self, name, *keys):
+        try:
+            self.cluster_nodes(name)
+            return self.connection.hdel(name, *keys)
+        finally:
+            self.close()
+
     def get(self, key):
         try:
             self.cluster_nodes(key)

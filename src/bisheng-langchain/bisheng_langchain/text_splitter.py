@@ -160,10 +160,10 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
         for i, text in enumerate(texts):
             index = -1
             # metadata = copy.deepcopy(_metadatas[i])
-            indexes = metadatas[i]['indexes']
-            pages = metadatas[i]['pages']
-            types = metadatas[i]['types']
-            bboxes = metadatas[i]['bboxes']
+            indexes = metadatas[i].get('indexes', [])
+            pages = metadatas[i].get('pages', [])
+            types = metadatas[i].get('types', [])
+            bboxes = metadatas[i].get('bboxes', [])
             searcher = IntervalSearch(indexes)
             split_texts = self.split_text(text)
             for chunk in split_texts:

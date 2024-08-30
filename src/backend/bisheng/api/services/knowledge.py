@@ -362,7 +362,7 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError.http_exception()
 
         if not login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
-            return UnAuthorizedError.return_resp()
+            raise UnAuthorizedError.http_exception()
 
         res = KnowledgeFileDao.get_file_by_filters(knowledge_id, file_name, status, page, page_size)
         total = KnowledgeFileDao.count_file_by_filters(knowledge_id, file_name, status)

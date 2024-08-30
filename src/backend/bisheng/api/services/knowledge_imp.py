@@ -83,10 +83,18 @@ def process_file_task(knowledge: Knowledge, db_files: List[KnowledgeFile],
                       separator: List[str], separator_rule: List[str], chunk_size: int, chunk_overlap: int,
                       callback_url: str = None, extra_metadata: Dict = None, preview_cache_keys: List[str] = None):
     """ 处理知识文件任务 """
-    index_name = knowledge.index_name or knowledge.collection_name
-    addEmbedding(knowledge.collection_name, index_name, knowledge.id, knowledge.model,
-                 separator, separator_rule, chunk_size, chunk_overlap, db_files,
-                 callback_url, extra_metadata, preview_cache_keys=preview_cache_keys)
+    try:
+        index_name = knowledge.index_name or knowledge.collection_name
+        addEmbedding(knowledge.collection_name, index_name, knowledge.id, knowledge.model,
+                     separator, separator_rule, chunk_size, chunk_overlap, db_files,
+                     callback_url, extra_metadata, preview_cache_keys=preview_cache_keys)
+    except Exception as e:
+        logger.exception('process_file_task error')
+        for file in db_files:
+            file.status = KnowledgeFileStatus.FAILED.value
+            file.remark = str(e)[:500]
+            KnowledgeFileDao.update(file)
+        raise e
 
 
 def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True):
@@ -319,7 +327,6 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
         loader = filetype_load_map[file_type](file_path=input_file, encoding='utf-8')
         documents = loader.load()
     else:
-        t = time.time()
         loader = ElemUnstructuredLoader(
             file_name,
             input_file,
@@ -338,9 +345,11 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
     logger.info(f'start_split_text file_name={file_name}')
     texts = text_splitter.split_documents(documents)
     raw_texts = [t.page_content for t in texts]
+    logger.info(f'start_process_metadata file_name={file_name}')
     metadatas = [{
         'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
-        'page': t.metadata.get('page') or 0,
+        'page': t.metadata['chunk_bboxes'][0].get('page') if t.metadata.get('chunk_bboxes', None) else t.metadata.get(
+            'page', 0),
         'source': file_name,
         'title': t.metadata.get('title', ''),
         'chunk_index': t_index,
