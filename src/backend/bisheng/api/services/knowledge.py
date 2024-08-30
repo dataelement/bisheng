@@ -1,4 +1,3 @@
-import json
 import math
 import os
 import time
@@ -6,7 +5,6 @@ from typing import List
 from uuid import uuid4
 
 from fastapi import Request, BackgroundTasks
-from h11._abnf import chunk_size
 from loguru import logger
 from pymilvus import Collection
 
@@ -398,3 +396,41 @@ class KnowledgeService(KnowledgeUtils):
         for one in file_list:
             file_name += "\n\n" + one.file_name
         AuditLogService.delete_knowledge_file(login_user, get_request_ip(request), knowledge_id, file_name)
+
+    @classmethod
+    def get_knowledge_chunks(cls, request: Request, login_user: UserPayload, knowledge_id: int,
+                             file_ids: List[int] = None, keyword: str = None, page: int = None,
+                             limit: int = None) -> (List[FileChunk], int):
+        db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError.http_exception()
+
+        if not login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
+            raise UnAuthorizedError.http_exception()
+
+        index_name = db_knowledge.index_name if db_knowledge.index_name else db_knowledge.collection_name
+        embeddings = FakeEmbedding()
+        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+
+        query = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "match": {
+                                "content": keyword
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+
+        res = es_client.client.search(index=index_name, query={
+            "query": query,
+            "from": (page-1) * limit,
+            "size": limit
+        })
+
+        print(res)
+        return [], 0
