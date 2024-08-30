@@ -30,7 +30,7 @@ export default function Component({ compId, options, disables, version, classNam
     if (!version) return <div className="bg-[#fff] dark:bg-gray-950 rounded-md p-2 shadow-sm">
         <div className="group flex justify-center items-center pb-2 border-b relative">
             <Select onValueChange={onChangeVersion}>
-                <SelectTrigger className="w-[120px] h-6">
+                <SelectTrigger className="w-[140px] h-6">
                     <SelectValue placeholder={t('test.selectVersion')} />
                 </SelectTrigger>
                 <SelectContent>
