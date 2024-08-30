@@ -14,6 +14,9 @@ class MinioClient():
     minio_share: minio.Minio
     minio_client: minio.Minio
 
+    tmp_bucket = tmp_bucket
+    bucket = bucket
+
     def __init__(self) -> None:
         if 'minio' not in settings.get_knowledge(
         ) or not settings.get_knowledge().get('minio').get('MINIO_ENDPOINT'):

@@ -369,7 +369,7 @@ async def init_build(*,
 
         # Delete from cache if already exists
         flow_data_store.hset(flow_data_key,
-                             map={
+                             mapping={
                                  'graph_data': json.dumps(graph_data),
                                  'status': BuildStatus.STARTED.value
                              },

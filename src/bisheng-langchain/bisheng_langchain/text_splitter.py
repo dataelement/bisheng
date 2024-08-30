@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def _split_text_with_regex(
-    text: str, separator: str, keep_separator: bool
+        text: str, separator: str, keep_separator: bool
 ) -> List[str]:
     # Now that we have the separator, split the text
     if separator:
@@ -82,11 +82,14 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
     """
     todo
     """
+
     def __init__(
-        self,
-        separators: Optional[List[str]] = None,
-        keep_separator: bool = True,
-        **kwargs: Any,
+            self,
+            separators: Optional[List[str]] = None,
+            separator_rule: Optional[List[str]] = None,
+            is_separator_regex: bool = False,
+            keep_separator: bool = True,
+            **kwargs: Any,
     ) -> None:
         """Create a new TextSplitter."""
         super().__init__(
@@ -95,7 +98,8 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
             **kwargs
         )
         self._separators = separators or ['\n\n', '\n', ' ', '']
-        self._is_separator_regex = False
+        self._separator_rule = separator_rule or ['after' for _ in range(4)]
+        self._is_separator_regex = is_separator_regex
 
     def split_documents(self, documents: Iterable[Document]) -> List[Document]:
         texts, metadatas = [], []
@@ -118,7 +122,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
                 break
             if re.search(_separator, text):
                 separator = _s
-                new_separators = separators[i + 1 :]
+                new_separators = separators[i + 1:]
                 break
 
         _separator = separator if self._is_separator_regex else re.escape(separator)
@@ -149,7 +153,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
         return self._split_text(text, self._separators)
 
     def create_documents(
-        self, texts: List[str], metadatas: Optional[List[dict]] = None
+            self, texts: List[str], metadatas: Optional[List[dict]] = None
     ) -> List[Document]:
         """Create documents from a list of texts."""
         documents = []
@@ -177,32 +181,31 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
                 new_metadata['chunk_type'] = chunk_type
                 new_metadata['source'] = metadatas[i].get('source', '')
 
+                # for chunk in split_texts:
+                #     new_metadata = {}
+                #     new_metadata['chunk_type'] = metadata.get('chunk_type', 'paragraph')
+                #     new_metadata['bboxes'] = metadata.get('bboxes', [])
+                #     new_metadata['source'] = metadata.get('source', '')
+                #     # chunk's start index in text
+                #     index = text.find(chunk, index + 1)
+                #     new_metadata['start'] = metadata.get('start', 0) + index
+                #     new_metadata['end'] = metadata.get('start', 0) + index + len(chunk) - 1
 
-            # for chunk in split_texts:
-            #     new_metadata = {}
-            #     new_metadata['chunk_type'] = metadata.get('chunk_type', 'paragraph')
-            #     new_metadata['bboxes'] = metadata.get('bboxes', [])
-            #     new_metadata['source'] = metadata.get('source', '')
-            #     # chunk's start index in text
-            #     index = text.find(chunk, index + 1)
-            #     new_metadata['start'] = metadata.get('start', 0) + index
-            #     new_metadata['end'] = metadata.get('start', 0) + index + len(chunk) - 1
+                #     if 'page' in metadata:
+                #         new_metadata['page'] = metadata['page'][new_metadata['start']:new_metadata['end']+1]
+                #     if 'token_to_bbox' in metadata:
+                #         new_metadata['token_to_bbox'] = metadata['token_to_bbox'][new_metadata['start']:new_metadata['end']+1]
 
-            #     if 'page' in metadata:
-            #         new_metadata['page'] = metadata['page'][new_metadata['start']:new_metadata['end']+1]
-            #     if 'token_to_bbox' in metadata:
-            #         new_metadata['token_to_bbox'] = metadata['token_to_bbox'][new_metadata['start']:new_metadata['end']+1]
+                #     if 'page' in new_metadata and 'token_to_bbox' in new_metadata:
+                #         box_no_duplicates = set()
+                #         for index in range(len(new_metadata['page'])):
+                #             box_no_duplicates.add(
+                #                 (new_metadata['page'][index], new_metadata['token_to_bbox'][index]))
 
-            #     if 'page' in new_metadata and 'token_to_bbox' in new_metadata:
-            #         box_no_duplicates = set()
-            #         for index in range(len(new_metadata['page'])):
-            #             box_no_duplicates.add(
-            #                 (new_metadata['page'][index], new_metadata['token_to_bbox'][index]))
-
-            #         new_metadata['chunk_bboxes'] = []
-            #         for elem in box_no_duplicates:
-            #             new_metadata['chunk_bboxes'].append(
-            #                 {'page': elem[0], 'bbox': new_metadata['bboxes'][elem[1]]})
+                #         new_metadata['chunk_bboxes'] = []
+                #         for elem in box_no_duplicates:
+                #             new_metadata['chunk_bboxes'].append(
+                #                 {'page': elem[0], 'bbox': new_metadata['bboxes'][elem[1]]})
 
                 new_doc = Document(page_content=chunk, metadata=new_metadata)
                 documents.append(new_doc)
