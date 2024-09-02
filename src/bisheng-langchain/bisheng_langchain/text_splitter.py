@@ -21,17 +21,22 @@ logger = logging.getLogger(__name__)
 
 
 def _split_text_with_regex(
-        text: str, separator: str, keep_separator: bool
+        text: str, separator: str, keep_separator: bool, separator_rule: str
 ) -> List[str]:
     # Now that we have the separator, split the text
     if separator:
         if keep_separator:
             # The parentheses in the pattern keep the delimiters in the result.
             _splits = re.split(f'({separator})', text)
-            splits = [_splits[i] + _splits[i + 1] for i in range(1, len(_splits), 2)]
-            if len(_splits) % 2 == 0:
-                splits += _splits[-1:]
-            splits = [_splits[0]] + splits
+
+            if separator_rule == "before":
+                splits = [_splits[i] + _splits[i + 1] for i in range(1, len(_splits), 2)]
+                if len(_splits) % 2 == 0:
+                    splits += _splits[-1:]
+                splits = [_splits[0]] + splits
+            else:
+                splits = [_splits[i-1] + _splits[i] for i in range(1, len(_splits), 2)]
+                splits = splits + [_splits[-1]]
         else:
             splits = re.split(separator, text)
     else:
@@ -99,6 +104,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
         )
         self._separators = separators or ['\n\n', '\n', ' ', '']
         self._separator_rule = separator_rule or ['after' for _ in range(4)]
+        self.separator_rule = {one: self._separator_rule[index] for index, one in enumerate(separators)}
         self._is_separator_regex = is_separator_regex
 
     def split_documents(self, documents: Iterable[Document]) -> List[Document]:
@@ -114,9 +120,11 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
         final_chunks = []
         # Get appropriate separator to use
         separator = separators[-1]
+        separator_rule = 'after'
         new_separators = []
         for i, _s in enumerate(separators):
             _separator = _s if self._is_separator_regex else re.escape(_s)
+            separator_rule = self.separator_rule[_s]
             if _s == '':
                 separator = _s
                 break
@@ -126,7 +134,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
                 break
 
         _separator = separator if self._is_separator_regex else re.escape(separator)
-        splits = _split_text_with_regex(text, _separator, self._keep_separator)
+        splits = _split_text_with_regex(text, _separator, self._keep_separator, separator_rule)
 
         # Now go merging things, recursively splitting longer texts.
         _good_splits = []
