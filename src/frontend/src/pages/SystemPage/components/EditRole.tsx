@@ -156,7 +156,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         ])
 
         console.log('form :>> ', form, res);
-        setSuccessData({ title: t('success') })
+        setSuccessData({ title: t('saved') })
         onChange(true)
     }
 
@@ -307,7 +307,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         {/* 工具 */}
         <div className="">
             <SearchPanne
-                title={'工具授权'}
+                title={t('system.toolAuthorization')}
                 groupId={groupId}
                 role_id={roleId}
                 type={'tool'}>

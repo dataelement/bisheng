@@ -456,6 +456,8 @@ def instantiate_embedding(class_object, params: Dict):
         if params.get('openai_proxy'):
             params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
             params['http_async_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
+        if class_object.__name__ == 'OpenAIEmbeddings':
+            params["check_embedding_ctx_length"] = False
 
         return class_object(**params)
     except ValidationError:

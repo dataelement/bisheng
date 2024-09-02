@@ -3,6 +3,6 @@ from langchain.embeddings.base import Embeddings
 
 def decide_embeddings(model: str) -> Embeddings:
     """ embed method """
-    from bisheng.interface.embeddings.custom import BishengEmbeddings
+    from bisheng.api.services.llm import LLMService
 
-    return BishengEmbeddings(model_id=model)
+    return LLMService.get_bisheng_embedding(model_id=model)

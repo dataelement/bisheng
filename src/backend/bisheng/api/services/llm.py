@@ -1,7 +1,8 @@
 import json
-from typing import List, Dict, Optional
+from typing import List, Optional
 
 from fastapi import Request
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
 
@@ -12,10 +13,8 @@ from bisheng.api.v1.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConf
     EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
-from bisheng.interface.embeddings.custom import BishengEmbeddings
 from bisheng.interface.importing import import_by_type
-from bisheng.interface.initialize.loading import instantiate_llm
-from bisheng.interface.llms.custom import BishengLLM
+from bisheng.interface.initialize.loading import instantiate_llm, instantiate_embedding
 
 
 class LLMService:
@@ -83,7 +82,7 @@ class LLMService:
                 if one.model_type == LLMModelType.LLM.value:
                     cls.get_bisheng_llm(model_id=one.id, ignore_online=True)
                 elif one.model_type == LLMModelType.EMBEDDING.value:
-                    BishengEmbeddings(model_id=one.id, ignore_online=True)
+                    cls.get_bisheng_embedding(model_id=one.id, ignore_online=True)
                 success_msg += f'{one.model_name},'
                 success_models.append(one)
             except Exception as e:
@@ -290,6 +289,12 @@ class LLMService:
         """ 获取评测功能的默认模型配置 """
         class_object = import_by_type(_type='llms', name='BishengLLM')
         return instantiate_llm('BishengLLM', class_object, kwargs)
+
+    @classmethod
+    def get_bisheng_embedding(cls, **kwargs) -> Embeddings:
+        """ 获取评测功能的默认模型配置 """
+        class_object = import_by_type(_type='embeddings', name='BishengEmbedding')
+        return instantiate_embedding(class_object, kwargs)
 
     @classmethod
     def update_evaluation_llm(cls, request: Request, login_user: UserPayload, data: EvaluationLLMConfig) \

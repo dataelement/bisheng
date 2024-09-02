@@ -52,9 +52,9 @@ export default function RunLog({ data }) {
                 </div>
                 <CaretDownIcon className={open && 'rotate-180'} />
             </div>
-            <div className={cname('bg-gray-100 px-4 py-2 text-gray-500 overflow-hidden text-sm ', open ? 'h-auto' : 'h-0 p-0')}>
+            <div className={cname('bg-[#F5F6F8] dark:bg-[#313336] px-4 py-2 overflow-hidden text-sm ', open ? 'h-auto' : 'h-0 p-0')}>
                 {data.thought.split('\n').map((line, index) => (
-                    <p className="text-md mb-1 text-gray-600" key={index}>{line}</p>
+                    <p className="text-md mb-1 text-muted-foreground" key={index}>{line}</p>
                 ))}
             </div>
         </div>

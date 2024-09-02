@@ -363,7 +363,7 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
             raise Exception('类型不支持')
-        loader = filetype_load_map[file_type](file_path=input_file)
+        loader = filetype_load_map[file_type](file_path=input_file, encoding='utf-8')
         separator = separator[0] if separator and isinstance(separator, list) else separator
         text_splitter = CharacterTextSplitter(separator=separator,
                                               chunk_size=size,
@@ -416,7 +416,7 @@ def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
         ]
         metadatas = [{
             'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
-            'page': t.metadata.get('chunk_bboxes')[0].get('page'),
+            'page': t.metadata['chunk_bboxes'][0].get('page') if t.metadata.get('chunk_bboxes', None) else 0,
             'source': t.metadata.get('source', ''),
             'title': t.metadata.get('title', ''),
             'chunk_index': t_index,

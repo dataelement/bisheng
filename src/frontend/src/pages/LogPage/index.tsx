@@ -150,9 +150,9 @@ export default function index() {
                             <TableCell>{log.id}</TableCell>
                             <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.operator_name}</div></TableCell>
                             <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
-                            <TableCell>{transformModule(log.system_id)}</TableCell>
-                            <TableCell>{transformEvent(log.event_type)}</TableCell>
-                            <TableCell>{transformObjectType(log.object_type)}</TableCell>
+                            <TableCell>{t('log.' + log.system_id)}</TableCell>
+                            <TableCell>{t('log.' + log.event_type)}</TableCell>
+                            <TableCell>{t('log.' + log.object_type)}</TableCell>
                             <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name || '无'}</div></TableCell>
                             <TableCell>{log.ip_address}</TableCell>
                             <TableCell className="max-w-[250px]">

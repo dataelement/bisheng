@@ -59,8 +59,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         path: /app/build/
     commands:
     - cd ./src/backend
-    - mkdir nltk_data
-    - cp -r /app/build/taggers ./nltk_data/
+    - cp -r /app/build/nltk_data ./
     - echo $REPO
     - REPO2=$(echo $REPO | sed 's/http:\\/\\///g')
     - sed  '/apt-get/ s|$| '"$PROXY"'|' Dockerfile

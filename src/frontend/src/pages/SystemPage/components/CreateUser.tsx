@@ -32,10 +32,10 @@ export default function CreateUser({open, onClose, onSave}) {
     }
     const errors = []
     const handleConfirm = async () => {
-        if(form.user_name === '') errors.push('用户名不可为空')
-        if(form.user_name.length > 30) errors.push('用户名最长 30 个字符')
-        if(!PWD_RULE.test(form.password)) errors.push('初始密码至少 8 个字符，必须包含大写字母、小写字母、数字和符号的组合')
-        if(items.every(item => item.roles.length === 0)) errors.push('至少选择一个角色')
+        if(form.user_name === '') errors.push(t('system.usernameRequired'))
+        if(form.user_name.length > 30) errors.push(t('system.usernameMaxLength'))
+        if(!PWD_RULE.test(form.password)) errors.push(t('system.passwordRequirements'))
+        if(items.every(item => item.roles.length === 0)) errors.push(t('system.roleRequired'))
         if(errors.length > 0) return message({title:t('prompt'), description:errors, variant:'warning'})
 
         const encryptPwd = await handleEncrypt(form.password)
@@ -44,8 +44,8 @@ export default function CreateUser({open, onClose, onSave}) {
             role_ids: item.roles.map(r => Number(r))
         }))
         captureAndAlertRequestErrorHoc(createUserApi(form.user_name, encryptPwd, group_roles).then(() => {
-            copyText(`用户名：${form.user_name}，初始密码：${form.password}`).then(() => 
-                message({title:t('prompt'), description:'创建用户成功！已复制用户名和初始密码到剪贴板', variant:'success'}))
+            copyText(`${t('system.username')}: ${form.user_name}，${t('system.initialPassword')}: ${form.password}`).then(() => 
+                message({title:t('prompt'), description:t('system.userCreationSuccess'), variant:'success'}))
             onClose(false)
             setItems([initItems])
             setForm(initUser)
@@ -62,21 +62,21 @@ export default function CreateUser({open, onClose, onSave}) {
     return <Dialog open={open} onOpenChange={b => onClose(b)}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
-                <DialogTitle>创建用户</DialogTitle>
+                <DialogTitle>{t('system.createUser')}</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 mb-4">
                 <div>
-                    <Label htmlFor="user" className="bisheng-label">{t('log.username')}</Label>
+                    <Label htmlFor="user" className="bisheng-label">{t('system.username')}</Label>
                     <Input id="user" value={form.user_name} onChange={(e) => setForm({...form, user_name:e.target.value})}
-                    placeholder="后续使用此用户名进行登录，用户名不可修改" className="h-[48px]"/>
+                    placeholder={t('system.usernamePlaceholder')} className="h-[48px]"/>
                 </div>
                 <div>
-                    <Label htmlFor="password" className="bisheng-label">初始密码</Label>
-                    <PasswordInput id="password" value={form.password} placeholder="至少 8 个字符，必须包含大写字母、小写字母、数字和符号的组合"
+                    <Label htmlFor="password" className="bisheng-label">{t('system.initialPassword')}</Label>
+                    <PasswordInput id="password" value={form.password} placeholder={t('system.passwordPlaceholder')}
                     onChange={(e) => setForm({...form, password:e.target.value})} inputClassName="h-[48px]"/>
                 </div>
                 <div className="flex flex-col gap-2">
-                    <Label className="bisheng-label">用户组/角色选择</Label>
+                    <Label className="bisheng-label">{t('system.userGroupRoleSelection')}</Label>
                     <div className="max-h-[520px] overflow-y-auto flex flex-col gap-2">
                         {items.map((item, index) => <UserRoleItem key={item.key}
                             groupId={item.groupId + ''}
@@ -95,7 +95,7 @@ export default function CreateUser({open, onClose, onSave}) {
             </div>
             <DialogFooter>
                 <Button variant="outline" className="h-10 w-[120px] px-16" onClick={handleCancel}>{t('cancel')}</Button>
-                <Button className="px-16 h-10 w-[120px]" onClick={handleConfirm}>{t('system.confirm')}</Button>
+                <Button className="px-16 h-10 w-[120px]" onClick={handleConfirm}>{t('confirm')}</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

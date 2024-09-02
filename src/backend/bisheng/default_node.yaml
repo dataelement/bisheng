@@ -141,6 +141,8 @@ documentloaders:
   PDFWithSemanticLoader:
     documentation: "https://python.langchain.com/docs/modules/data_connection/document_loaders/integrations/git"
 embeddings:
+  BishengEmbedding:
+    documentation: ""
   OpenAIProxyEmbedding:
     documentation: ""
   OpenAIEmbeddings:

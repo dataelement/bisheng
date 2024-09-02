@@ -118,7 +118,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
                 break
             if re.search(_separator, text):
                 separator = _s
-                new_separators = separators[i + 1 :]
+                new_separators = separators[i + 1:]
                 break
 
         _separator = separator if self._is_separator_regex else re.escape(separator)
@@ -164,45 +164,45 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
             split_texts = self.split_text(text)
             for chunk in split_texts:
                 new_metadata = copy.deepcopy(metadatas[i])
-                index = text.find(chunk, index + 1)
-                inter0 = [index, index + len(chunk) - 1]
-                norm_inter = searcher.find(inter0)
-                new_metadata['chunk_bboxes'] = []
-                for j in range(norm_inter[0], norm_inter[1] + 1):
-                    new_metadata['chunk_bboxes'].append(
-                        {'page': pages[j], 'bbox': bboxes[j]})
+                if indexes and bboxes:
+                    index = text.find(chunk, index + 1)
+                    inter0 = [index, index + len(chunk) - 1]
+                    norm_inter = searcher.find(inter0)
+                    new_metadata['chunk_bboxes'] = []
+                    for j in range(norm_inter[0], norm_inter[1] + 1):
+                        new_metadata['chunk_bboxes'].append(
+                            {'page': pages[j], 'bbox': bboxes[j]})
 
-                c = Counter([types[j] for j in norm_inter])
-                chunk_type = c.most_common(1)[0][0]
-                new_metadata['chunk_type'] = chunk_type
-                new_metadata['source'] = metadatas[i].get('source', '')
+                    c = Counter([types[j] for j in norm_inter])
+                    chunk_type = c.most_common(1)[0][0]
+                    new_metadata['chunk_type'] = chunk_type
+                    new_metadata['source'] = metadatas[i].get('source', '')
 
+                # for chunk in split_texts:
+                #     new_metadata = {}
+                #     new_metadata['chunk_type'] = metadata.get('chunk_type', 'paragraph')
+                #     new_metadata['bboxes'] = metadata.get('bboxes', [])
+                #     new_metadata['source'] = metadata.get('source', '')
+                #     # chunk's start index in text
+                #     index = text.find(chunk, index + 1)
+                #     new_metadata['start'] = metadata.get('start', 0) + index
+                #     new_metadata['end'] = metadata.get('start', 0) + index + len(chunk) - 1
 
-            # for chunk in split_texts:
-            #     new_metadata = {}
-            #     new_metadata['chunk_type'] = metadata.get('chunk_type', 'paragraph')
-            #     new_metadata['bboxes'] = metadata.get('bboxes', [])
-            #     new_metadata['source'] = metadata.get('source', '')
-            #     # chunk's start index in text
-            #     index = text.find(chunk, index + 1)
-            #     new_metadata['start'] = metadata.get('start', 0) + index
-            #     new_metadata['end'] = metadata.get('start', 0) + index + len(chunk) - 1
+                #     if 'page' in metadata:
+                #         new_metadata['page'] = metadata['page'][new_metadata['start']:new_metadata['end']+1]
+                #     if 'token_to_bbox' in metadata:
+                #         new_metadata['token_to_bbox'] = metadata['token_to_bbox'][new_metadata['start']:new_metadata['end']+1]
 
-            #     if 'page' in metadata:
-            #         new_metadata['page'] = metadata['page'][new_metadata['start']:new_metadata['end']+1]
-            #     if 'token_to_bbox' in metadata:
-            #         new_metadata['token_to_bbox'] = metadata['token_to_bbox'][new_metadata['start']:new_metadata['end']+1]
+                #     if 'page' in new_metadata and 'token_to_bbox' in new_metadata:
+                #         box_no_duplicates = set()
+                #         for index in range(len(new_metadata['page'])):
+                #             box_no_duplicates.add(
+                #                 (new_metadata['page'][index], new_metadata['token_to_bbox'][index]))
 
-            #     if 'page' in new_metadata and 'token_to_bbox' in new_metadata:
-            #         box_no_duplicates = set()
-            #         for index in range(len(new_metadata['page'])):
-            #             box_no_duplicates.add(
-            #                 (new_metadata['page'][index], new_metadata['token_to_bbox'][index]))
-
-            #         new_metadata['chunk_bboxes'] = []
-            #         for elem in box_no_duplicates:
-            #             new_metadata['chunk_bboxes'].append(
-            #                 {'page': elem[0], 'bbox': new_metadata['bboxes'][elem[1]]})
+                #         new_metadata['chunk_bboxes'] = []
+                #         for elem in box_no_duplicates:
+                #             new_metadata['chunk_bboxes'].append(
+                #                 {'page': elem[0], 'bbox': new_metadata['bboxes'][elem[1]]})
 
                 new_doc = Document(page_content=chunk, metadata=new_metadata)
                 documents.append(new_doc)

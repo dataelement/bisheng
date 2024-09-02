@@ -18,8 +18,7 @@ from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_b
 
 class BishengLLM(BaseChatModel):
     """
-     依赖bisheng后端服务的llm组件
-     根据model的类型不同 调用不同的llm
+     Use the llm model that has been launched in model management
     """
 
     model_id: int = Field(description="后端服务保存的model唯一ID")

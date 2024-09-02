@@ -132,8 +132,8 @@ export default function EvaluationPage() {
                       <div className="flex items-center">
                         <Badge className="whitespace-nowrap">
                           {
-                            EvaluationTypeLabelMap[EvaluationType[el.exec_type]]
-                              .label
+                            t(EvaluationTypeLabelMap[EvaluationType[el.exec_type]]
+                              .label)
                           }
                         </Badge>
                         &nbsp;
@@ -152,7 +152,7 @@ export default function EvaluationPage() {
                           variant={EvaluationStatusLabelMap[el.status].variant}
                           className={"whitespace-nowrap"}
                         >
-                          {EvaluationStatusLabelMap[el.status].label}
+                          {t(EvaluationStatusLabelMap[el.status].label)}
                           {el.status === EvaluationStatusEnum.running
                             ? ` ${el.progress}`
                             : null}

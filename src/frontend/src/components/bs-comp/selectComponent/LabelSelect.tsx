@@ -1,23 +1,22 @@
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { SearchInput } from "@/components/bs-ui/input";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Label } from "@/components/bs-ui/label";
-import { Pencil2Icon } from "@radix-ui/react-icons";
-import { Trash2 } from "lucide-react";
-import { Input } from "@/components/bs-ui/input";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { useTranslation } from "react-i18next";
+import { TrashIcon } from "@/components/bs-icons";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { PlusIcon } from "@radix-ui/react-icons";
-import { useContext } from "react";
+import { Checkbox } from "@/components/bs-ui/checkBox";
+import { Input, SearchInput } from "@/components/bs-ui/input";
+import { Label } from "@/components/bs-ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
 import {
-    createLabelApi, updateLabelApi,
-    createLinkApi, deleteLinkApi,
-    deleteLabelApi
+    createLabelApi,
+    createLinkApi,
+    deleteLabelApi,
+    deleteLinkApi,
+    updateLabelApi
 } from "@/controllers/API/label";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { Pencil2Icon, PlusIcon } from "@radix-ui/react-icons";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export enum UPDATETYPE {
     DELETELINK = 'deleteLink',
@@ -170,7 +169,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
                     }} />
             </div>
             <div className="mt-4 h-[200px] overflow-y-auto">
-                {data.map(d => <div className="flex group justify-between h-8 rounded-sm hover:bg-[#EBF0FF] dark:hover:bg-gray-700">
+                {data.map(d => <div className="flex group justify-between h-8 rounded-sm px-2 hover:bg-[#EBF0FF] dark:hover:bg-gray-700">
                     <div className="flex place-items-center space-x-2">
                         <Checkbox id={d.value} checked={d.selected} onCheckedChange={() => handleChecked(d.value)} />
                         {
@@ -181,9 +180,9 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
                                 : <Label htmlFor={d.value} className="cursor-pointer">{d.label}</Label>
                         }
                     </div>
-                    {user.role === 'admin' && <div className="flex place-items-center space-x-4 opacity-0 group-hover:opacity-100">
-                        <Pencil2Icon className="cursor-pointer" onClick={() => handleEdit(d.value)} />
-                        <Trash2 size={16} onClick={() => handleDelete(d)} className="text-gray-600 cursor-pointer" />
+                    {user.role === 'admin' && <div className="flex place-items-center gap-2 opacity-0 group-hover:opacity-100">
+                        <Pencil2Icon className="cursor-pointer text-muted-foreground" onClick={() => handleEdit(d.value)} />
+                        <TrashIcon className="cursor-pointer text-muted-foreground" onClick={() => handleDelete(d)} />
                     </div>}
                 </div>)}
                 {(keyword && showAdd && user.role === 'admin') && <div onClick={handleAdd}

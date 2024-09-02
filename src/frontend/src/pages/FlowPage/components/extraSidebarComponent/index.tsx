@@ -190,7 +190,7 @@ export default function ExtraSidebar({ flow }: { flow: FlowType }) {
       {/* 高级配置l2配置 */}
       <L2ParamsModal data={flow} open={open} setOpen={setOpen} onSave={() => {
         saveFlow(flow);
-        setSuccessData({ title: t('success') });
+        setSuccessData({ title: t('saved') });
       }}></L2ParamsModal>
     </div >
   );

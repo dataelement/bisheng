@@ -142,7 +142,7 @@ export default function l2Edit() {
             message({
                 title: t('prompt'),
                 variant: 'success',
-                description: t('success')
+                description: t('saved')
             });
             setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
         }
@@ -192,7 +192,7 @@ export default function l2Edit() {
                     {/* base form */}
                     <div className="w-full overflow-hidden transition-all px-1">
                         <div className="mt-4">
-                            <Label htmlFor="name">技能头像</Label>
+                            <Label htmlFor="name">{t('skills.avatar')}</Label>
                             <Avator value={logo} className="mt-2" onChange={uploadAvator}><SkillIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
                         </div>
                         <div className="mt-4">

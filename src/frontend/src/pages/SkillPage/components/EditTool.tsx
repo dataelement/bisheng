@@ -462,6 +462,7 @@ const EditTool = forwardRef((props: any, ref) => {
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
+                                                    className="dark:bg-[#666]"
                                                     onClick={() => testDialogRef.current.open(item, fromDataRef.current)}
                                                 >{t('test.test')}</Button>
                                             </TableCell>

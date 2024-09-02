@@ -5,13 +5,12 @@ import { Button } from "@/components/bs-ui/button";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
-import { PauseIcon } from "@radix-ui/react-icons";
+import { formatDate } from "@/util/utils";
+import { StopIcon } from "@radix-ui/react-icons";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
-import { formatDate } from "@/util/utils";
-import { StopIcon } from "@radix-ui/react-icons";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
@@ -31,6 +30,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         show: false,
         disable: false
     })
+    const [autogenStop, setAutogenStop] = useState(false)
     /**
      * 记录会话切换状态，等待消息加载完成时，控制表单在新会话自动展开
      */
@@ -161,7 +161,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
                         setInputLock({ locked: false, reason: '' })
                         setStop({ show: false, disable: false })
+                        setAutogenStop(true)
                         continueRef.current = true
+                    }
+                    if ('close' === data.type) {
+                        setAutogenStop(false)
                     }
                 }
                 ws.onclose = (event) => {
@@ -206,9 +210,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     }
 
     // 接受 ws 消息
+    const msgClosedRef = useRef(true) // 消息闭合
     const handleWsMessage = (data) => {
         if (Array.isArray(data) && data.length) return
         if (data.type === 'start') {
+            msgClosedRef.current = false
             // 非continue时，展示stop按钮
             !continueRef.current && setStop({ show: true, disable: false })
             createWsMsg(data)
@@ -220,6 +226,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 thought: data.intermediate_steps
             })
         } else if (['end', 'end_cover'].includes(data.type)) {
+            if (msgClosedRef.current && !['tool', 'flow', 'knowledge'].includes(data.category)) {
+                // 无未闭合的消息，先创建（补一条start）  工具类除外
+                console.log('重复end,新建消息 :>> ');
+                createWsMsg(data)
+            }
             updateCurrentMessage({
                 ...data,
                 end: true,
@@ -229,6 +240,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 liked: 0,
                 update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
             }, data.type === 'end_cover')
+
+            if (!msgClosedRef.current) msgClosedRef.current = true
         } else if (data.type === "close") {
             setStop({ show: false, disable: false })
             setInputLock({ locked: false, reason: '' })
@@ -269,7 +282,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
             {/* form */}
             {
                 formShow && <div className="relative">
-                    <div className="absolute left-0 border bottom-2 bg-background-login px-4 py-2 rounded-md w-[50%] min-w-80 z-50">
+                    <div className="absolute left-0 border bottom-2 bg-background-login px-4 py-2 rounded-md w-[50%] min-w-80 z-40">
                         {inputForm}
                     </div>
                 </div>
@@ -287,7 +300,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     clear && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => { !inputLock.locked && destory() }}
-                    ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-950'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></ClearIcon></div>
+                    ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></ClearIcon></div>
                 }
             </div>
             {/* form switch */}
@@ -296,18 +309,21 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     form && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
-                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-gray-400' : 'text-gray-800'}></FormIcon></div>
+                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></FormIcon></div>
                 }
             </div>
             {/* send */}
             <div className="flex gap-2 absolute right-3 top-4 z-10">
                 {stop.show ?
-                    <StopIcon className={`mt-1 rounded-sm bg-foreground cursor-pointer ${stop.disable && 'bg-muted-foreground text-muted-foreground'}`}
+                    <div
                         onClick={() => {
                             if (stop.disable) return
                             setStop({ show: true, disable: true });
                             sendWsMsg({ "action": "stop" });
-                        }} />
+                        }}
+                        className={`w-6 h-6 bg-foreground rounded-full flex justify-center items-center cursor-pointer ${stop.disable && 'bg-muted-foreground text-muted-foreground'}`}>
+                        <span className="w-2 h-2.5 border-x-2 border-border"></span>
+                    </div>
                     : <div
                         id="bs-send-btn"
                         className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
@@ -315,6 +331,15 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                         <SendIcon className={`${inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}`} />
                     </div>
                 }
+            </div>
+            {/* stop autogen等待输入时专用*/}
+            <div className="absolute w-full flex justify-center bottom-32">
+                {autogenStop && <Button className="rounded-full" variant="outline" onClick={() => {
+                    if (stop.disable) return
+                    setStop({ show: true, disable: true });
+                    setAutogenStop(false)
+                    sendWsMsg({ "action": "stop" });
+                }}><StopIcon className="mr-2" />Stop</Button>}
             </div>
             {/* question */}
             <Textarea

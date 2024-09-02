@@ -3,11 +3,11 @@ import { ExternalLink, Plus, X } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { alertContext } from "../../contexts/alertContext";
-import { PopUpContext } from "../../contexts/popUpContext";
 import { Variable, VariableType, delVariableApi, getVariablesApi, saveVariableApi } from "../../controllers/API/flow";
-import { generateUUID } from "../../utils";
-import VarDialog from "./VarDialog";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { generateUUID } from "../../utils";
+import { Dialog } from "../bs-ui/dialog";
+import VarDialog from "./VarDialog";
 
 /**
  * @component 变量编辑，分文本和options类型
@@ -34,7 +34,7 @@ export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
         }).then(arr => setItems(arr))
     }, [flowId, vid])
 
-    const { openPopUp, closePopUp } = useContext(PopUpContext);
+    const [openPop, setOpenPop] = useState(false)
     const { setErrorData } = useContext(alertContext);
 
     const { t } = useTranslation()
@@ -56,7 +56,7 @@ export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
             });
         }
 
-        closePopUp()
+        setOpenPop(false)
         // api
         const param: any = {
             "flow_id": flowId,
@@ -106,12 +106,11 @@ export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
             {items.map((item, idx) => {
                 return (
                     <div key={idx} className="flex w-full gap-3">
-                        <div className="input-primary min-h-8"
-                            onClick={() => { openPopUp(<VarDialog data={item} onSave={handleSave} onClose={closePopUp} />) }}
-                        >{item.name}</div>
-                        <button
-                            onClick={() => { openPopUp(<VarDialog data={item} onSave={handleSave} onClose={closePopUp} />) }}
-                        ><ExternalLink className={"h-4 w-4 hover:text-accent-foreground"} /></button>
+                        <div className="input-primary min-h-8" onClick={() => setOpenPop(true)}>{item.name}</div>
+                        <button  onClick={() => setOpenPop(true)}><ExternalLink className={"h-4 w-4 hover:text-accent-foreground"} /></button>
+                        <Dialog open={openPop} onOpenChange={setOpenPop}>
+                            <VarDialog data={item} onSave={handleSave} onClose={setOpenPop} />
+                        </Dialog>
                         <button onClick={() => handleDelClick(idx)} >
                             <X className={"h-4 w-4 hover:text-accent-foreground"} />
                         </button>

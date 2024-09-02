@@ -48,7 +48,7 @@ function ModelItem({ data, onDelete, onInput }) {
 
     return <div className="group w-full border rounded-sm p-4 mb-2">
         <div className="flex items-center justify-between">
-            <span>{model.name}</span>
+            <span>{model.name.replace('model', t('model.model'))}</span>
             <Trash2Icon onClick={handleDelClick} className="w-[16px] h-[16px] opacity-0 group-hover:opacity-100 cursor-pointer text-gray-500" />
         </div>
         <div className="space-y-2 mt-2">
@@ -106,11 +106,7 @@ const defaultForm = {
     limit_flag: false,
     limit: 1,
     config: {},
-    models: [{
-        name: '模型 1',
-        model_name: '',
-        model_type: 'llm'
-    }]
+    models: []
 }
 
 export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforSave, onAfterSave }) {
@@ -133,10 +129,10 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
 
     const handleAddModel = () => {
         // 找最大
-        const maxIndex = formData.models.reduce((max, el, i) => el.name.match(/模型 (\d+)/) ? Math.max(max, +el.name.match(/模型 (\d+)/)[1]) : max, 1)
+        const maxIndex = formData.models.reduce((max, el, i) => el.name.match(/model (\d+)/) ? Math.max(max, +el.name.match(/model (\d+)/)[1]) : max, 0)
 
         const model = {
-            name: `模型 ${maxIndex + 1}`,
+            name: `model ${maxIndex + 1}`,
             model_name: '',
             model_type: 'llm'
         }

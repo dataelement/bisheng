@@ -34,7 +34,7 @@ type Actions = {
     createWsMsg: (data: any) => void;
     updateCurrentMessage: (wsdata: any, cover: boolean) => void;
     changeChatId: (chatId: string) => void;
-    startNewRound: () => void;
+    startNewRound: (str: string) => void;
     insetSeparator: (text: string) => void;
     insetSystemMsg: (text: string) => void;
     insetBsMsg: (text: string) => void;
@@ -202,7 +202,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         // 无id补上（如文件解析完成消息，后端无返回messageid）
         if (!newCurrentMessage.id) {
             newCurrentMessage.id = Math.random() * 1000000
-            console.log('msg:', newCurrentMessage);
+            // console.log('msg:', newCurrentMessage);
         }
 
         messages[currentMessageIndex] = newCurrentMessage
@@ -234,8 +234,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     changeChatId(chatId) {
         set((state) => ({ chatId }))
     },
-    startNewRound() {
-        get().insetSeparator('配置已更新')
+    startNewRound(str) {
+        get().insetSeparator(str)
         set((state) => ({ showGuideQuestion: true }))
     },
     insetSeparator(text) {

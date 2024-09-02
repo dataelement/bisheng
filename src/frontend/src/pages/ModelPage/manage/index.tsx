@@ -10,7 +10,7 @@ import { Switch } from "@/components/bs-ui/switch"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
 // import { transformModule, transformEvent, transformObjectType } from "../LogPage/utils"
 import { changeLLmServerStatus, getModelListApi } from "@/controllers/API/finetune"
-import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip"
+import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger, QuestionTooltip } from "@/components/bs-ui/tooltip"
 import ModelConfig from "./ModelConfig"
 import SystemModelConfig from "./SystemModelConfig"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
@@ -55,19 +55,10 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                                 <TableCell>{m.model_name}</TableCell>
                                 <TableCell>{m.model_type}</TableCell>
                                 <TableCell>
-                                    <span className={m.status === 0 ? 'text-green-500' : 'text-orange-500'}>
-                                        {m.status === 0 ? t('model.available') : t('model.abnormal')}
+                                    <span className={['text-green-500', 'text-orange-500', 'text-gray-500'][m.status]}>
+                                        {[t('model.available'), t('model.abnormal'), t('model.unknown')][m.status]}
                                     </span>
-                                    {m.status === 1 && <TooltipProvider delayDuration={0}>
-                                        <Tooltip>
-                                            <TooltipTrigger className="ml-1 inherit" style={{ verticalAlign: 'inherit' }}>
-                                                <QuestionMarkCircledIcon />
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                <p className="text-slate-50">{m.remark}</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>}
+                                    {m.status === 1 && <QuestionTooltip className=" align-middle" content={m.remark} />}
                                 </TableCell>
                                 <TableCell>
                                     <Switch disabled={user.role !== 'admin'} checked={m.online} onCheckedChange={(bool) => onCheck(index, bool, m.id)} />
