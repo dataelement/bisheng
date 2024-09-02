@@ -16,7 +16,7 @@ from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_t
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import PreviewFileChunk, FileChunk, UpdatePreviewFileChunk, KnowledgeFileProcess, \
-    KnowledgeFileOne
+    KnowledgeFileOne, FileChunkMetadata
 from bisheng.cache.utils import file_download
 from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, Knowledge, KnowledgeUpdate, KnowledgeRead
@@ -28,6 +28,7 @@ from bisheng.database.models.user_role import UserRoleDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.minio_client import MinioClient
+from bisheng.utils.embedding import decide_embeddings
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -412,25 +413,119 @@ class KnowledgeService(KnowledgeUtils):
         embeddings = FakeEmbedding()
         es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
 
-        query = {
-            "query": {
-                "bool": {
-                    "must": [
-                        {
-                            "match": {
-                                "content": keyword
-                            }
-                        }
-                    ]
-                }
-            }
+        search_data = {
+            "from": (page - 1) * limit,
+            "size": limit,
+            "sort": [
+                {"metadata.file_id": {"order": "desc"}},
+                {"metadata.chunk_index": {"order": "asc"}}
+            ]
         }
+        if file_ids:
+            search_data["post_filter"] = {"terms": {"metadata.file_id": file_ids}}
+        if keyword:
+            search_data["query"] = {"match": {"text": keyword}}
+        res = es_client.client.search(index=index_name, body=search_data)
+        return [FileChunk(text=one["_source"]["text"], metadata=one["_source"]["metadata"]) for one in
+                res["hits"]["hits"]], res['hits']['total']['value']
 
-        res = es_client.client.search(index=index_name, query={
-            "query": query,
-            "from": (page-1) * limit,
-            "size": limit
+    @classmethod
+    def update_knowledge_chunk(cls, request: Request, login_user: UserPayload, knowledge_id: int, file_id: int,
+                               chunk_index: int, text: str):
+        db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError.http_exception()
+
+        if not login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
+            raise UnAuthorizedError.http_exception()
+
+        index_name = db_knowledge.index_name if db_knowledge.index_name else db_knowledge.collection_name
+
+        embeddings = decide_embeddings(db_knowledge.model)
+
+        logger.info(f'act=update_vector knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}')
+        vector_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
+        # search metadata
+        output_fields = ['pk']
+        output_fields.extend(list(FileChunkMetadata.__fields__.keys()))
+        res = vector_client.col.query(expr=f'file_id == {file_id} && chunk_index == {chunk_index}',
+                                      output_fields=output_fields, timeout=10)
+        metadata = []
+        pk = []
+        for one in res:
+            pk.append(one.pop('pk'))
+            one['knowledge_id'] = str(knowledge_id)
+            metadata.append(one)
+        # insert data
+        if metadata:
+            logger.info(f'act=add_vector')
+            res = vector_client.add_texts([text], [metadata[0]], timeout=10)
+        # delete data
+        logger.info(f'act=delete_vector pk={pk}')
+        res = vector_client.col.delete(f"pk in {pk}", timeout=10)
+        logger.info(f'act=update_vector_over {res}')
+
+        logger.info(f'act=update_es knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}')
+        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+        res = es_client.client.update_by_query(index=index_name, body={
+            "query": {"bool": {
+                "must": {
+                    "match": {
+                        "metadata.file_id": file_id
+                    }
+                },
+                "filter": {
+                    "match": {
+                        "metadata.chunk_index": chunk_index
+                    }
+                }
+            }},
+            "script": {
+                "source": "ctx._source.text=params.text",
+                "params": {"text": text}
+            }
         })
+        logger.info(f'act=update_es_over {res}')
+        return True
 
-        print(res)
-        return [], 0
+    @classmethod
+    def delete_knowledge_chunk(cls, request: Request, login_user: UserPayload, knowledge_id: int, file_id: int,
+                               chunk_index: int):
+        db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError.http_exception()
+
+        if not login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
+            raise UnAuthorizedError.http_exception()
+
+        index_name = db_knowledge.index_name if db_knowledge.index_name else db_knowledge.collection_name
+        embeddings = FakeEmbedding()
+
+        logger.info(f'act=delete_vector knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}')
+        vector_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
+        pk = vector_client.col.query(expr=f'file_id == {file_id} && chunk_index == {chunk_index}',
+                                     output_fields=['pk'],
+                                     timeout=10)
+        res = vector_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
+        logger.info(f'act=delete_vector_over {res}')
+
+        logger.info(f'act=delete_es knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index} res={res}')
+        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
+        res = es_client.client.delete_by_query(
+            index=index_name, query={
+                "bool": {
+                    "must": {
+                        "match": {
+                            "metadata.file_id": file_id
+                        }
+                    },
+                    "filter": {
+                        "match": {
+                            "metadata.chunk_index": chunk_index
+                        }
+                    }
+                }
+            })
+        logger.info(f'act=delete_es_over {res}')
+
+        return True

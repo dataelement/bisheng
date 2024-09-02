@@ -415,8 +415,8 @@ class EvaluationLLMConfig(BaseModel):
 # 文件切分请求基础参数
 class FileProcessBase(BaseModel):
     knowledge_id: int = Field(..., description="知识库ID")
-    separator: List[str] = Field(default=['\n\n'], description="切分文本规则, 不传则为默认")
-    separator_rule: List[str] = Field(default=['after'], description="切分规则前还是后进行切分；before/after")
+    separator: List[str] = Field(default=['\n\n', '\n'], description="切分文本规则, 不传则为默认")
+    separator_rule: List[str] = Field(default=['after', 'after'], description="切分规则前还是后进行切分；before/after")
     chunk_size: int = Field(default=1000, description="切分文本长度，不传则为默认")
     chunk_overlap: int = Field(default=100, description="切分文本重叠长度，不传则为默认")
 
@@ -428,6 +428,7 @@ class FileChunkMetadata(BaseModel):
     bbox: str = Field(default='', description="文本块bbox信息")
     page: int = Field(default=0, description="文本块所在页码")
     extra: str = Field(default='', description="文本块额外信息")
+    file_id: int = Field(default=0, description="文本块所属文件ID")
 
 
 # 文件分块数据格式

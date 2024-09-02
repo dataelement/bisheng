@@ -7,7 +7,7 @@ import yaml
 from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, Request
 from sqlmodel import select
 
-from bisheng import settings
+from bisheng import settings, __version__
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, UploadFileResponse,
@@ -68,6 +68,7 @@ def get_env():
     # add env dict from settings
     env.update(settings.settings.get_from_db('env') or {})
     env['pro'] = settings.settings.get_system_login_method().bisheng_pro
+    env['version'] = __version__
     return resp_200(env)
 
 

@@ -6,7 +6,7 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import retry_files
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500, PreviewFileChunk, \
-    UpdatePreviewFileChunk, KnowledgeFileProcess
+    UpdatePreviewFileChunk, KnowledgeFileProcess, FileChunkMetadata
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeRead, KnowledgeUpdate
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
@@ -142,17 +142,6 @@ def retry(data: dict, background_tasks: BackgroundTasks, login_user: UserPayload
     return resp_200()
 
 
-@router.delete('/{knowledge_id}', status_code=200)
-def delete_knowledge(*,
-                     request: Request,
-                     login_user: UserPayload = Depends(get_login_user),
-                     knowledge_id: int = Path(...)):
-    """ 删除知识库信息. """
-
-    KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
-    return resp_200(message='删除成功')
-
-
 @router.delete('/file/{file_id}', status_code=200)
 def delete_knowledge_file(*,
                           request: Request,
@@ -175,7 +164,10 @@ async def get_knowledge_chunk(request: Request, login_user: UserPayload = Depend
     """ 获取知识库分块内容 """
     res, total = KnowledgeService.get_knowledge_chunks(request, login_user, knowledge_id, file_ids, keyword, page,
                                                        limit)
-    return resp_200()
+    return resp_200(data={
+        "data": res,
+        "total": total
+    })
 
 
 @router.put('/chunk', status_code=200)
@@ -185,7 +177,7 @@ async def update_knowledge_chunk(request: Request, login_user: UserPayload = Dep
                                  chunk_index: int = Body(..., embed=True, description='分块索引号'),
                                  text: str = Body(..., embed=True, description='分块内容')):
     """ 更新知识库分块内容 """
-    pass
+    KnowledgeService.update_knowledge_chunk(request, login_user, knowledge_id, file_id, chunk_index, text)
     return resp_200()
 
 
@@ -195,5 +187,16 @@ async def delete_knowledge_chunk(request: Request, login_user: UserPayload = Dep
                                  file_id: int = Body(..., embed=True, description='文件ID'),
                                  chunk_index: int = Body(..., embed=True, description='分块索引号')):
     """ 删除知识库分块内容 """
-    pass
+    KnowledgeService.delete_knowledge_chunk(request, login_user, knowledge_id, file_id, chunk_index)
     return resp_200()
+
+
+@router.delete('/{knowledge_id}', status_code=200)
+def delete_knowledge(*,
+                     request: Request,
+                     login_user: UserPayload = Depends(get_login_user),
+                     knowledge_id: int = Path(...)):
+    """ 删除知识库信息. """
+
+    KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
+    return resp_200(message='删除成功')
