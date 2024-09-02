@@ -17,7 +17,7 @@ const modelProviders = {
         {
             label: "Base URL",
             type: "text",
-            placeholder: "格式示例：http://localhost:9997",
+            placeholder: "格式示例：http://localhost:9997/v1",
             default: "",
             required: true,
             key: "openai_api_base",
@@ -27,7 +27,7 @@ const modelProviders = {
         {
             label: "Base URL",
             type: "text",
-            placeholder: "格式示例：http://localhost:8080",
+            placeholder: "格式示例：http://localhost:8080/v1",
             default: "",
             required: true,
             key: "openai_api_base",
@@ -37,7 +37,7 @@ const modelProviders = {
         {
             label: "Base URL",
             type: "text",
-            placeholder: "格式示例：http://localhost:8000",
+            placeholder: "格式示例：http://localhost:8000/v1",
             default: "",
             required: true,
             key: "openai_api_base",

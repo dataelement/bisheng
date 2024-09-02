@@ -226,8 +226,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 thought: data.intermediate_steps
             })
         } else if (['end', 'end_cover'].includes(data.type)) {
-            if (msgClosedRef.current) {
-                // 无未闭合的消息，先创建（补一条start）
+            if (msgClosedRef.current && !['tool', 'flow', 'knowledge'].includes(data.category)) {
+                // 无未闭合的消息，先创建（补一条start）  工具类除外
                 console.log('重复end,新建消息 :>> ');
                 createWsMsg(data)
             }

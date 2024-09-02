@@ -47,8 +47,8 @@ export default function tabTools({ select = null, onSelect }) {
 
   return (
     <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
-      <div className="w-full flex h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
-        <div className="w-fit p-6">
+      <div className="relative w-full flex h-full overflow-y-scroll scrollbar-hide bg-background-main border-t">
+        <div className="relative w-fit p-6">
           {/* <h1>{t("tools.addTool")}</h1> */}
           <SearchInput
             placeholder={t("tools.search")}
@@ -79,6 +79,11 @@ export default function tabTools({ select = null, onSelect }) {
               <span>{t("tools.customTools")}</span>
             </div>
           </div>
+          <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-betwee px-2">
+            <p className="text-sm text-muted-foreground break-all">
+              {t("tools.manageCustomTools")}
+            </p>
+          </div>
         </div>
         <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pb-20 pt-12 scrollbar-hide">
           <Accordion type="single" collapsible className="w-full">
@@ -101,12 +106,6 @@ export default function tabTools({ select = null, onSelect }) {
             )}
           </Accordion>
         </div>
-      </div>
-      {/* footer */}
-      <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between bg-background-login px-10">
-        <p className="break-keep text-sm text-muted-foreground">
-          {t("tools.manageCustomTools")}
-        </p>
       </div>
 
       <EditTool
