@@ -36,8 +36,12 @@ async def preview_file_chunk(*, request: Request, login_user: UserPayload = Depe
                              req_data: PreviewFileChunk):
     """ 获取某个文件的分块预览内容 """
     try:
-        res = KnowledgeService.get_preview_file_chunk(request, login_user, req_data)
-        return resp_200(res)
+        parse_type, file_share_url, res = KnowledgeService.get_preview_file_chunk(request, login_user, req_data)
+        return resp_200(data={
+            "parse_type": parse_type,
+            "file_url": file_share_url,
+            "chunks": res
+        })
     except Exception as e:
         logger.exception('preview_file_chunk_error')
         return resp_500(data=str(e))
@@ -208,3 +212,10 @@ async def get_file_share_url(request: Request, login_user: UserPayload = Depends
                              file_id: int = Query(description='文件唯一ID')):
     url = KnowledgeService.get_file_share_url(request, login_user, file_id)
     return resp_200(data=url)
+
+
+@router.get('/file_bbox')
+async def get_file_bbox(request: Request, login_user: UserPayload = Depends(get_login_user),
+                        file_id: int = Query(description='文件唯一ID')):
+    res = KnowledgeService.get_file_bbox(request, login_user, file_id)
+    return resp_200(data=res)

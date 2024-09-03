@@ -18,6 +18,7 @@ from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import PreviewFileChunk, FileChunk, UpdatePreviewFileChunk, KnowledgeFileProcess, \
     KnowledgeFileOne, FileChunkMetadata
 from bisheng.cache.utils import file_download
+from bisheng.cache.redis import redis_client
 from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, Knowledge, KnowledgeUpdate, KnowledgeRead
 from bisheng.database.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus
@@ -205,7 +206,12 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def get_preview_file_chunk(cls, request: Request, login_user: UserPayload, req_data: PreviewFileChunk) \
-            -> List[FileChunk]:
+            -> (str, str, List[FileChunk]):
+        """
+         0：解析模式，uns 或者 local
+         1：转换后的文件路径
+         2：切分后的chunk列表
+        """
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE):
             raise UnAuthorizedError.http_exception()
@@ -215,19 +221,21 @@ class KnowledgeService(KnowledgeUtils):
         # 尝试从缓存获取
         if req_data.cache:
             if cache_value := cls.get_preview_cache(cache_key):
+                parse_type = redis_client.get(f"{cache_key}_parse_type", parse_type)
+                file_share_url = redis_client.get(f"{cache_key}_file_path", file_share_url)
                 res = []
                 for key, val in cache_value.items():
                     res.append(FileChunk(
                         text=val['text'],
                         metadata=val['metadata']
                     ))
-                return res
+                return parse_type, file_share_url, res
 
         filepath, file_name = file_download(req_data.file_path)
 
         # 切分文本
-        texts, metadatas = read_chunk_text(filepath, file_name, req_data.separator, req_data.separator_rule,
-                                           req_data.chunk_size, req_data.chunk_overlap)
+        texts, metadatas, parse_type = read_chunk_text(filepath, file_name, req_data.separator, req_data.separator_rule,
+                                                       req_data.chunk_size, req_data.chunk_overlap)
         res = []
         cache_map = {}
         for index, val in enumerate(texts):
@@ -240,9 +248,19 @@ class KnowledgeService(KnowledgeUtils):
                 metadata=metadatas[index]
             ))
 
+        # 将转换后pdf文件上传到minio
+        file_share_url = ""
+        if parse_type == 'uns':
+            minio_client = MinioClient()
+            with open(filepath, 'rb') as f:
+                minio_client.upload_tmp(f"{cache_key}.pdf", f.read())
+            file_share_url = minio_client.get_share_link(f"{cache_key}.pdf", minio_client.tmp_bucket)
+
         # 存入缓存
         cls.save_preview_cache(cache_key, mapping=cache_map)
-        return res
+        redis_client.set(f"{cache_key}_parse_type", parse_type)
+        redis_client.set(f"{cache_key}_file_path", file_share_url)
+        return parse_type, file_share_url, res
 
     @classmethod
     def update_preview_file_chunk(cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk):

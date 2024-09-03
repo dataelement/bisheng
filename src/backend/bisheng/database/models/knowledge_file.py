@@ -14,11 +14,18 @@ class KnowledgeFileStatus(Enum):
     FAILED = 3
 
 
+class ParseType(Enum):
+    LOCAL = 'local'  # 本地模式解析
+    UNS = 'uns'  # uns服务解析，全部转为pdf文件
+
+
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(index=True)
     knowledge_id: int = Field(index=True)
     file_name: str = Field(index=True)
     md5: Optional[str] = Field(index=False)
+    parse_type: Optional[str] = Field(default=ParseType.LOCAL.value, index=False, description="采用什么模式解析的文件")
+    bbox_object_name: Optional[str] = Field(default='', description="bbox文件在minio存储的对象名称")
     status: Optional[int] = Field(default=KnowledgeFileStatus.PROCESSING.value,
                                   index=False, description="1: 解析中；2: 解析成功；3: 解析失败")
     object_name: Optional[str] = Field(index=False)

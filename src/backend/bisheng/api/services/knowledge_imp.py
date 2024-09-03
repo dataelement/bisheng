@@ -266,8 +266,8 @@ def add_file_embedding(vector_client, es_client, minio_client, db_file: Knowledg
         raise ValueError('es not found, please check your es config')
 
     # extract text from file
-    texts, metadatas = read_chunk_text(filepath, db_file.file_name, separator,
-                                       separator_rule, chunk_size, chunk_overlap)
+    texts, metadatas, parse_type = read_chunk_text(filepath, db_file.file_name, separator,
+                                                   separator_rule, chunk_size, chunk_overlap)
     if len(texts) == 0:
         raise ValueError('文件解析为空')
 
@@ -320,6 +320,7 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
                                               is_separator_regex=True)
     # 加载文档内容
     logger.info(f'start_file_loader file_name={file_name}')
+    parse_type = 'local'
     if not settings.get_knowledge().get('unstructured_api_url'):
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
@@ -332,6 +333,7 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
             input_file,
             unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
         documents = loader.load()
+        parse_type = 'uns'
 
     logger.info(f'start_extract_title file_name={file_name}')
     if llm:
@@ -356,7 +358,7 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
         'extra': ''
     } for t_index, t in enumerate(texts)]
     logger.info(f'file_chunk_over file_name=={file_name}')
-    return raw_texts, metadatas
+    return raw_texts, metadatas, parse_type
 
 
 def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]):
