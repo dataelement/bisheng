@@ -202,7 +202,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         // 无id补上（如文件解析完成消息，后端无返回messageid）
         if (!newCurrentMessage.id) {
             newCurrentMessage.id = Math.random() * 1000000
-            console.log('msg:', newCurrentMessage);
+            // console.log('msg:', newCurrentMessage);
         }
 
         messages[currentMessageIndex] = newCurrentMessage

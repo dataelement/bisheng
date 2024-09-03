@@ -4,7 +4,7 @@ export { AssistantIcon } from './assistant';
 export { AvatarIcon } from './avatar';
 export { BookOpenIcon } from './bookOpen';
 export { ClearIcon } from './clear';
-export { DelIcon } from './del';
+export { DelIcon, TrashIcon } from './del';
 export { EnIcon } from './en';
 export { FilterIcon } from './filter';
 export { FormIcon } from './form';

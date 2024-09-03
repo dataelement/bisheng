@@ -5,13 +5,12 @@ import { Button } from "@/components/bs-ui/button";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
-import { PauseIcon } from "@radix-ui/react-icons";
+import { formatDate } from "@/util/utils";
+import { StopIcon } from "@radix-ui/react-icons";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
-import { formatDate } from "@/util/utils";
-import { StopIcon } from "@radix-ui/react-icons";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
@@ -31,6 +30,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         show: false,
         disable: false
     })
+    const [autogenStop, setAutogenStop] = useState(false)
     /**
      * 记录会话切换状态，等待消息加载完成时，控制表单在新会话自动展开
      */
@@ -161,7 +161,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
                         setInputLock({ locked: false, reason: '' })
                         setStop({ show: false, disable: false })
+                        setAutogenStop(true)
                         continueRef.current = true
+                    }
+                    if ('close' === data.type) {
+                        setAutogenStop(false)
                     }
                 }
                 ws.onclose = (event) => {
@@ -222,8 +226,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 thought: data.intermediate_steps
             })
         } else if (['end', 'end_cover'].includes(data.type)) {
-            if (msgClosedRef.current) {
-                // 无未闭合的消息，先创建（补一条start）
+            if (msgClosedRef.current && !['tool', 'flow', 'knowledge'].includes(data.category)) {
+                // 无未闭合的消息，先创建（补一条start）  工具类除外
                 console.log('重复end,新建消息 :>> ');
                 createWsMsg(data)
             }
@@ -311,7 +315,13 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
             {/* send */}
             <div className="flex gap-2 absolute right-3 top-4 z-10">
                 {stop.show ?
-                    <div className={`w-6 h-6 bg-foreground rounded-full flex justify-center items-center cursor-pointer ${stop.disable && 'bg-muted-foreground text-muted-foreground'}`}>
+                    <div
+                        onClick={() => {
+                            if (stop.disable) return
+                            setStop({ show: true, disable: true });
+                            sendWsMsg({ "action": "stop" });
+                        }}
+                        className={`w-6 h-6 bg-foreground rounded-full flex justify-center items-center cursor-pointer ${stop.disable && 'bg-muted-foreground text-muted-foreground'}`}>
                         <span className="w-2 h-2.5 border-x-2 border-border"></span>
                     </div>
                     : <div
@@ -321,6 +331,15 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                         <SendIcon className={`${inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}`} />
                     </div>
                 }
+            </div>
+            {/* stop autogen等待输入时专用*/}
+            <div className="absolute w-full flex justify-center bottom-32">
+                {autogenStop && <Button className="rounded-full" variant="outline" onClick={() => {
+                    if (stop.disable) return
+                    setStop({ show: true, disable: true });
+                    setAutogenStop(false)
+                    sendWsMsg({ "action": "stop" });
+                }}><StopIcon className="mr-2" />Stop</Button>}
             </div>
             {/* question */}
             <Textarea
