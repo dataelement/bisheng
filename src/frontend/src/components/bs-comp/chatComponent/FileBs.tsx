@@ -1,8 +1,8 @@
 import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { WordIcon } from "@/components/bs-icons/office";
-import { checkSassUrl } from "@/pages/ChatAppPage/components/FileView";
 import { downloadFile } from "@/util/utils";
 import { useTranslation } from "react-i18next";
+import { checkSassUrl } from "../FileView";
 
 // 颜色列表
 const colorList = [

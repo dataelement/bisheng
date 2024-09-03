@@ -180,7 +180,7 @@ const DragPanne = ({ onMouseEnd }) => {
         </div>
     );
 };
-export default function FileView({ drawfont = false, scrollTo, fileUrl, labels, onSelectLabel }) {
+export default function FileView({ drawfont = false, select = false, scrollTo, fileUrl, labels, onSelectLabel = () => { } }) {
     const { t } = useTranslation()
     const paneRef = useRef(null)
     const listRef = useRef(null)
@@ -296,11 +296,18 @@ export default function FileView({ drawfont = false, scrollTo, fileUrl, labels, 
                             size={boxSize.width}
                             labels={labels[props.index + 1]}
                             onLoad={handleLoadPage}
-                            onSelectLabel={val => onSelectLabel([val])}
+                            onSelectLabel={val => select && onSelectLabel([val])}
                         ></Row>}
                     </List>
                 </div>
         }
-        <DragPanne onMouseEnd={hanleDragSelectLabel} />
+        {select && <DragPanne onMouseEnd={hanleDragSelectLabel} />}
     </div>
 };
+
+
+const SASS_HOST = 'https://bisheng.dataelem.com'
+export const checkSassUrl = (url: string) => {
+    return url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)
+    // location.origin === SASS_HOST ? url.replace(/https?:\/\/[^\/]+/, '') : url;
+}

@@ -1,20 +1,34 @@
 import { Button } from "@/components/bs-ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { t } from "i18next";
 import { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { useNavigate } from "react-router-dom";
+import { LoadIcon } from "@/components/bs-icons";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 const initialStrategies = [
-    { id: '2', regex: '\\n\\n', position: 'before' },
-    { id: '6', regex: '\\.', position: 'after' }
+    { id: '1', regex: '\\n\\n', position: 'after' },
+    { id: '2', regex: '\\.', position: 'after' }
 ];
 
-export default function FileUploadStep2({ onPrev, onPreview, onChange }) {
+interface IProps {
+    fileInfo: { fileCount: number, files: any, failFiles: any }
+    onPrev: () => void
+    onPreview: (data: any, files: any) => void
+    onChange: () => void
+}
+
+export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange }: IProps) {
+    const { id: kid } = useParams()
+
     const chunkType = useRef('smart')
     // 切分
     const [strategies, setStrategies] = useState(initialStrategies);
@@ -26,12 +40,75 @@ export default function FileUploadStep2({ onPrev, onPreview, onChange }) {
         onChange()
     }, [strategies, size, overlap])
 
+    const [loading, setLoading] = useState(false)
     const { message } = useToast()
     const navaigate = useNavigate()
-    const handleSubmit = () => {
-        console.log('data :>> ', strategies, size, overlap);
-        message({ variant: 'success', description: '添加成功' })
-        navaigate(-1)
+
+    const getParams = (size, overlap) => {
+        const [separator, separator_rule] = strategies.reduce((res, item) => {
+            const { regex, position } = item
+            res[0].push(regex)
+            res[1].push(position)
+            return res
+        }, [[], []])
+        const handleFileParams = chunkType.current === 'chunk' ? {
+            separator,
+            separator_rule,
+            chunk_size: size,
+            chunk_overlap: overlap
+        } : {}
+        return {
+            knowledge_id: Number(kid),
+            ...handleFileParams
+        }
+    }
+    const handleSubmit = async () => {
+        const { fileCount, failFiles } = fileInfo
+        const params = {
+            ...getParams(size, overlap),
+            file_list: fileInfo.files.map(file => ({ file_path: file.path }))
+        }
+
+        setLoading(true)
+        await captureAndAlertRequestErrorHoc(subUploadLibFile(params).then(res => {
+            const _repeatFiles = res.filter(e => e.status === 3)
+            if (_repeatFiles.length) {
+                setRepeatFiles(_repeatFiles)
+            } else {
+                failFiles.length ? bsConfirm({
+                    desc: <div>
+                        <p>{t('lib.fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
+                        <div className="max-h-[160px] overflow-y-auto no-scrollbar">
+                            {failFiles.map(el => <p className=" text-red-400" key={el.id}>{el.name}</p>)}
+                        </div>
+                    </div>,
+                    onOk(next) {
+                        next()
+                        navaigate(-1)
+                    }
+                }) : (message({ variant: 'success', description: '添加成功' }), navaigate(-1))
+            }
+        }))
+        setLoading(false)
+    }
+
+    // 重复文件列表
+    const [repeatFiles, setRepeatFiles] = useState([])
+    // 重试解析
+    const [retryLoad, setRetryLoad] = useState(false)
+    const handleRetry = (objs) => {
+        setRetryLoad(true)
+        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(objs).then(res => {
+            setRepeatFiles([])
+            setRetryLoad(false)
+            // onNext()
+        }))
+    }
+
+    // 预览
+    const handlePreview = () => {
+        const params = getParams(size, overlap)
+        onPreview(params, fileInfo.files)
     }
 
     return <div className="flex flex-col">
@@ -60,8 +137,29 @@ export default function FileUploadStep2({ onPrev, onPreview, onChange }) {
         </Tabs>
         <div className="flex justify-end mt-8 gap-4">
             <Button className="h-8" variant="outline" onClick={onPrev}>上一步</Button>
-            <Button className="h-8" onClick={handleSubmit}>提交</Button>
-            <Button className="h-8" onClick={() => onPreview()}>预览分段结果</Button>
+            <Button disabled={loading} className="h-8" onClick={handleSubmit}>{loading && <LoadIcon />} 提交</Button>
+            <Button className="h-8" onClick={handlePreview}>预览分段结果</Button>
         </div>
+
+        {/* 重复文件提醒 */}
+        <Dialog open={!!repeatFiles.length} onOpenChange={b => !b && setRepeatFiles([])}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>{t('lib.modalTitle')}</DialogTitle>
+                    <DialogDescription>{t('lib.modalMessage')}</DialogDescription>
+                </DialogHeader>
+                <ul className="overflow-y-auto max-h-[400px]">
+                    {repeatFiles.map(el => (
+                        <li key={el.id} className="py-2 text-red-500">{el.remark}</li>
+                    ))}
+                </ul>
+                <DialogFooter>
+                    <Button className="h-8" variant="outline" onClick={() => { setRepeatFiles([]); navaigate(-1) }}>{t('lib.keepOriginal')}</Button>
+                    <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
+                        {retryLoad && <span className="loading loading-spinner loading-xs"></span>}{t('lib.override')}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
 };

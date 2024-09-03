@@ -17,10 +17,16 @@ export default function FilesUpload() {
 
     const [showView, setShowView] = useState(false)
     const viewRef = useRef(null)
-    const handlePreviewClick = (data) => {
+    const handlePreviewClick = (data, files) => {
         setChange(false)
         setShowView(true)
-        viewRef.current.load(data)
+        viewRef.current.load(data, files)
+    }
+
+    const [fileInfo, setFileInfo] = useState(null)
+    const handleStep1NextClick = (fileInfo) => {
+        setFileInfo(fileInfo)
+        setStepEnd(true)
     }
 
     return <div className="flex px-2 py-4 h-full gap-2">
@@ -34,16 +40,16 @@ export default function FilesUpload() {
                 </ShadTooltip>
                 <span className=" text-gray-700 text-sm font-black pl-4">返回</span>
             </div>
-            <FileUploadStep1 hidden={stepEnd} onNext={() => setStepEnd(true)} />
-            {stepEnd && <FileUploadStep2 onPrev={() => setStepEnd(false)} onPreview={handlePreviewClick} onChange={() => setChange(true)} />}
+            <FileUploadStep1 hidden={stepEnd} onNext={handleStep1NextClick} />
+            {stepEnd && <FileUploadStep2 fileInfo={fileInfo} onPrev={() => setStepEnd(false)} onPreview={handlePreviewClick} onChange={() => setChange(true)} />}
         </div>
         {/* 段落 */}
-        <div className="flex-1 bg-muted h-full">
-            {showView ? <FileUploadParagraphs change={change} onChange={setChange} />
-                : <div className="flex justify-center items-center flex-col h-full text-gray-400">
-                    <ReaderIcon width={160} height={160} className="text-border" />
-                    {stepEnd ? '左侧点击按钮预览结果' : '请先完成文件上传'}
-                </div>
+        <div className="flex-1 bg-muted h-full relative">
+            <FileUploadParagraphs open={showView} ref={viewRef} change={change} onChange={setChange} />
+            {!showView && <div className="flex justify-center items-center flex-col h-full text-gray-400">
+                <ReaderIcon width={160} height={160} className="text-border" />
+                {stepEnd ? '左侧点击按钮预览结果' : '请先完成文件上传'}
+            </div>
             }
         </div>
     </div>

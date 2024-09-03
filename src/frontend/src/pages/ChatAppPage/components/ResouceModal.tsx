@@ -1,12 +1,13 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { checkSassUrl } from "@/components/bs-comp/FileView";
+import { Dialog, DialogContent } from "@/components/bs-ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
 import { Download, Import } from "lucide-react";
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
 import { downloadFile } from "../../../util/utils";
-import FileView, { checkSassUrl } from "./FileView";
-import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import FileViewPanne from "./ FileViewPanne";
 
 // 顶部答案区
 const Anwser = ({ id, msg, onInit, onAdd }) => {
@@ -220,7 +221,6 @@ const ResouceModal = forwardRef((props, ref) => {
         }
     }));
 
-    const MemoizedFileView = React.memo(FileView);
 
     return <Dialog open={open} onOpenChange={setOpen} >
         <DialogContent className="min-w-[80%]">
@@ -229,10 +229,9 @@ const ResouceModal = forwardRef((props, ref) => {
             </DialogHeader> */}
             {open && <div>
                 <Anwser id={data.messageId} msg={data.message} onInit={setKeywords} onAdd={handleAddWord}></Anwser>
-                <ResultPanne words={keywords} chatId={data.chatId} data={data} onClose={handleDelKeyword} onAdd={handleAddWord} closeDialog={()=>setOpen(false)}>
+                <ResultPanne words={keywords} chatId={data.chatId} data={data} onClose={handleDelKeyword} onAdd={handleAddWord} closeDialog={() => setOpen(false)}>
                     {
-                        (file) => file.fileUrl ?
-                            <MemoizedFileView data={file}></MemoizedFileView> :
+                        (file) => file.fileUrl ? <FileViewPanne file={file} /> :
                             <div className="flex-1 bg-gray-100 dark:bg-[#3C4048] rounded-md text-center">
                                 <p className="text-gray-500 text-md mt-[40%]">{t('chat.fileStorageFailure')}</p>
                             </div>

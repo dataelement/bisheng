@@ -200,8 +200,8 @@ print(run_flow(inputs, flow_id=FLOW_ID, tweaks=TWEAKS))`}
                     </SyntaxHighlighter>
 
                     <h3 className="text-lg font-medium mb-2 mt-12">报告生成应用示例</h3>
-                    <p className="text-md mb-2">step1：查找通过接口上传的节点</p>
-                    <p className="text-md text-gray-500 mb-2">可通过应用会话看到上传参数，一般为一般有 <Badge variant='secondary'>inputFileNode</Badge>、<Badge variant='secondary'>variableNode</Badge>节点，例如下面示例中对应有两个文件上传节点：InputFileNode-16u46、InputFileNode-0zsI2</p>
+                    <p className="text-md mb-2">step1：确认触发该技能执行的依赖项</p>
+                    <p className="text-md text-gray-500 mb-2">依赖项即对应界面上会话页面中创建会话时左下角表单中的内容，对应技能编辑时使用的组件 <Badge variant='secondary'>inputFileNode</Badge>、<Badge variant='secondary'>variableNode</Badge>组件，例如下面示例中对应有两个文件上传组件：InputFileNode-16u46、InputFileNode-0zsI2</p>
                     <p className="text-md mb-2">step2：准备入参</p>
                     <p className="text-md text-gray-500 mb-2">本示例中入参为 2 个文件：</p>
                     <SyntaxHighlighter

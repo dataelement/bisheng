@@ -36,7 +36,6 @@ import FilesUpload from "./pages/FileLibPage/filesUpload";
 // const FilesPage = lazy(() => import(/* webpackChunkName: "FilesPage" */ "./pages/FileLibPage/files"));
 // const SkillPage = lazy(() => import(/* webpackChunkName: "SkillPage" */ "./pages/SkillPage"));
 // const SkillChatPage = lazy(() => import(/* webpackChunkName: "SkillChatPage" */ "./pages/SkillChatPage"));
-// const FileViewPage = lazy(() => import(/* webpackChunkName: "FileViewPage" */ "./pages/FileViewPage"));
 
 const ErrorHoc = ({ Comp }) => {
   return (
@@ -63,7 +62,7 @@ const privateRouter = [
       { path: "", element: <SkillChatPage />, },
       { path: "filelib", element: <FileLibPage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
-      { path: "filelib/upload", element: <FilesUpload />, permission: 'knowledge', },
+      { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },
       { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
       { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore

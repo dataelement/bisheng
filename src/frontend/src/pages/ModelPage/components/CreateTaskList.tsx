@@ -10,9 +10,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../
 import { PopUpContext } from "../../../contexts/popUpContext";
 import { getFileUrlApi, getPresetFileApi, uploadTaskFileApi } from "../../../controllers/API/finetune";
 import { downloadFile, downloadJson } from "../../../util/utils";
-import { checkSassUrl } from "../../ChatAppPage/components/FileView";
 import UploadModal from "./UploadModal";
 import sampleData from "./sampleData";
+import { checkSassUrl } from "@/components/bs-comp/FileView";
 
 export default function CreateTaskList({ onChange }) {
     const { t } = useTranslation('model')

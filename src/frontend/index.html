@@ -10,7 +10,7 @@
     <title>BISHENG</title>
     <!-- style -->
     <script>
-        fetch('/api/v1/web/config').then(function (res) {
+        fetch('<%- baseUrl %>/api/v1/web/config').then(function (res) {
             return res.json()
         }).then(function (res) {
             console.log('res :>> ', res.data);

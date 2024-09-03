@@ -33,7 +33,7 @@ import {
   EvaluationType,
   EvaluationTypeLabelMap,
 } from "./types";
-import { checkSassUrl } from "../ChatAppPage/components/FileView";
+import { checkSassUrl } from "@/components/bs-comp/FileView";
 
 export default function EvaluationPage() {
   const navigate = useNavigate();

@@ -11,21 +11,21 @@ import { Dialog, DialogContent } from "@/components/bs-ui/dialog"
 import { SearchInput } from "@/components/bs-ui/input"
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
 import MultiSelect from "@/components/bs-ui/select/multi"
-import { readFileByLibDatabase } from "@/controllers/API"
+import { delChunkApi, getKnowledgeChunkApi, readFileByLibDatabase } from "@/controllers/API"
 import { useTable } from "@/util/hook"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import ParagraphEdit from "./ParagraphEdit"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 
-export const ParagraphsItem = ({ data, onEdit }) => {
+export const ParagraphsItem = ({ data, onEdit, onDeled }) => {
 
     const handleDel = () => {
         bsConfirm({
             title: "提示",
             desc: "确定删除分段吗？",
             onOk: () => {
-                // api
-                // onDeled() 乐观更新
+                onDeled(data)
             }
         })
     }
@@ -33,14 +33,13 @@ export const ParagraphsItem = ({ data, onEdit }) => {
     return (
         <Card className="relative w-[420px]">
             {/* 序号部分 */}
-            <div className="absolute right-4 top-4 font-semibold">#1</div>
+            <div className="absolute right-4 top-4 font-semibold">#{data.metadata.chunk_index + 1}</div>
             <CardHeader>
-                <CardTitle className="font-semibold">{data.fileName || "讲座实录.docx"}</CardTitle>
+                <CardTitle className="font-semibold">{data.metadata.source || ""}</CardTitle>
             </CardHeader>
             <CardContent className="pb-2">
-                <p className="truncate-multiline text-sm text-muted-foreground ">
-                    {data.description ||
-                        "杨赤忠《从投资市场到政府管理》讲座实录 编者按：本文为杨赤忠先生2018年12月13日杨赤忠《从投资市场到政府管理》讲座实录 编者按：本文为杨赤忠先生2018年12月13日杨赤忠《从投资市场到政府管理》讲座实录 编者按：本文为杨赤忠先生2018年12月13日"} {/* 省略多余内容 */}
+                <p className="truncate-multiline text-sm text-muted-foreground h-[60px]">
+                    {data.text}
                 </p>
             </CardContent>
             <CardFooter className="flex justify-between items-center">
@@ -48,29 +47,51 @@ export const ParagraphsItem = ({ data, onEdit }) => {
                     <Button variant="link" className="p-0" onClick={handleDel}>
                         删除
                     </Button>
-                    <Button variant="link" className="p-0" onClick={() => onEdit('1234')}>
+                    <Button variant="link" className="p-0" onClick={onEdit}>
                         编辑
                     </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">{data.charCount || "500个字符"}</p>
+                <p className="text-xs text-muted-foreground">{data.text.length}个字符</p>
             </CardFooter>
         </Card>
     );
 };
 
-export default function Paragraphs(params) {
-    const options = [{ label: '选项1', value: '1' }, { label: '选项2', value: '2' }, { label: '选项1', value: '12' }, { label: '选项2', value: '22' },
-    { label: '选项1', value: '211' }, { label: '选项2', value: '212' }, { label: '选项1', value: '112' }, { label: '选项2', value: '122' }
-    ]
+export default function Paragraphs({ fileId }) {
+    const { id } = useParams()
+    const [value, setValue] = useState([])
+    useEffect(() => {
+        if (fileId) {
+            setValue([fileId])
+            filterData({ file_ids: [fileId] })
+        }
+    }, [fileId])
+
+    const [files, setFiles] = useState<any>([])
+    useEffect(() => {
+        readFileByLibDatabase({ id, page: 1, pageSize: 4000, status: 2 }).then(res => {
+            setFiles(res.data.map(el => ({ label: el.file_name, value: el.id })))
+        })
+    }, [])
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData, refreshData } = useTable({}, (param) =>
-        readFileByLibDatabase({ ...param, id: 1046, name: param.keyword, status: 999 }).then(res => {
+        getKnowledgeChunkApi({ ...param, limit: param.pageSize, knowledge_id: id }).then(res => {
             return res
         })
     )
 
+    const handleDeleteChunk = (data) => {
+        captureAndAlertRequestErrorHoc(delChunkApi({
+            knowledge_id: id,
+            file_id: data.metadata.file_id,
+            chunk_index: data.metadata.chunk_index
+        }))
+        reload()
+    }
+
     const [paragraph, setParagraph] = useState<any>({
-        id: '',
+        fileId: '',
+        chunkId: '',
         show: false
     })
 
@@ -81,24 +102,36 @@ export default function Paragraphs(params) {
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
         <div className="absolute right-0 top-[-46px] flex gap-4 items-center">
-            <SearchInput placeholder='搜索相关分段' onChange={(e) => { }}></SearchInput>
+            <SearchInput placeholder='搜索相关分段' onChange={(e) => search(e.target.value)}></SearchInput>
             <div className="min-w-72 max-w-[400px]">
                 <MultiSelect
+                    close
                     className="max-w-[630px]"
                     multiple
                     scroll
-                    value={[]}
-                    options={options}
+                    value={value}
+                    options={files}
                     placeholder={'选择文件'}
                     searchPlaceholder=''
-                    onChange={() => { }}
+                    onChange={(ids) => filterData({ file_ids: ids })}
                 ></MultiSelect>
             </div>
         </div>
-        <div className="h-[calc(100vh-200px)] overflow-y-auto pb-20 bg-background-main flex flex-wrap gap-2 p-2">
-            {
-                datalist.map((item, index) => <ParagraphsItem key={index} data={item} onEdit={(id) => setParagraph({ id, show: true })}></ParagraphsItem>)
-            }
+        <div className="h-[calc(100vh-200px)] overflow-y-auto pb-20 bg-background-main">
+            <div className=" flex flex-wrap gap-2 p-2 items-start">
+                {
+                    datalist.map((item, index) => <ParagraphsItem
+                        key={index}
+                        data={item}
+                        onEdit={() => setParagraph({
+                            fileId: item.metadata.file_id,
+                            chunkId: item.metadata.chunk_index,
+                            show: true
+                        })}
+                        onDeled={handleDeleteChunk}
+                    ></ParagraphsItem>)
+                }
+            </div>
         </div>
         <div className="bisheng-table-footer px-6">
             <p></p>
@@ -113,7 +146,7 @@ export default function Paragraphs(params) {
         </div>
         <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph({ ...paragraph, show })}>
             <DialogContent className='size-full max-w-full sm:rounded-none p-0 border-none'>
-                <ParagraphEdit id={paragraph.id} onClose={() => setParagraph({ ...paragraph, show: false })} />
+                <ParagraphEdit fileId={paragraph.fileId} chunkId={paragraph.chunkId} onClose={() => setParagraph({ ...paragraph, show: false })} />
             </DialogContent>
         </Dialog>
     </div>

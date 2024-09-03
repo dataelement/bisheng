@@ -19,7 +19,6 @@ import {
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "../../components/bs-ui/input";
-import { alertContext } from "../../contexts/alertContext";
 import { userContext } from "../../contexts/userContext";
 import { createFileLib, deleteFileLib, readFileLibDatabase } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
@@ -27,6 +26,7 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import Cascader from "@/components/bs-ui/select/cascader";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { getKnowledgeModelConfig, getModelListApi } from "@/controllers/API/finetune";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
@@ -68,7 +68,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
         })
     }, [])
 
-    const { setErrorData } = useContext(alertContext);
+    const {toast} = useToast()
 
     const [error, setError] = useState({ name: false, desc: false })
 
@@ -94,16 +94,16 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             model: modal[1].value,
         }).then(res => {
             // @ts-ignore
-            window.libname = name
+            window.libname = [name, desc]
             navigate("/filelib/" + res.id);
             setOpen(false)
         }))
     }
 
     const handleError = (list) => {
-        setErrorData({
-            title: t('prompt'),
-            list
+        toast({
+            variant: 'error',
+            description: list
         });
     }
 
@@ -226,7 +226,7 @@ export default function FileLibPage() {
                                         </TableCell>
                                         <TableCell className="text-right" onClick={() => {
                                             // @ts-ignore
-                                            window.libname = el.name;
+                                            window.libname = [el.name, el.description];
                                         }}>
                                             <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
                                             {user.role === 'admin' || user.user_id === el.user_id ?

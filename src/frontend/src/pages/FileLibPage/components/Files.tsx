@@ -21,7 +21,7 @@ import { deleteFile, readFileByLibDatabase } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 
-export default function Files(params) {
+export default function Files({ onPreview }) {
     const { t } = useTranslation()
     const { id } = useParams()
 
@@ -63,8 +63,8 @@ export default function Files(params) {
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
         <div className="absolute right-0 top-[-46px] flex gap-4 items-center">
-            <SearchInput placeholder={t('lib.fileName')} onChange={(e) => search(e.target.value)}></SearchInput>
-            {hasPermission && <Link to='/filelib/upload'><Button className="px-8" onClick={() => { }}>添加文件</Button></Link>}
+            <SearchInput placeholder={'搜索文件内容'} onChange={(e) => search(e.target.value)}></SearchInput>
+            {hasPermission && <Link to={`/filelib/upload/${id}`}><Button className="px-8" onClick={() => { }}>添加文件</Button></Link>}
         </div>
         <div className="h-[calc(100vh-200px)] overflow-y-auto pb-20">
             <Table>
@@ -108,7 +108,7 @@ export default function Files(params) {
                             </TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
-                                <Button variant="link" disabled={el.status !== 2} className="px-2">查看</Button>
+                                <Button variant="link" disabled={el.status !== 2} className="px-2" onClick={() => onPreview(el.id)}>查看</Button>
                                 {hasPermission ? <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-2">{t('delete')}</Button> :
                                     <Button variant="link" className="ml-4 text-gray-400">{t('delete')}</Button>}
                             </TableCell>

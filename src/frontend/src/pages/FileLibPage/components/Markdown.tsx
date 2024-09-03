@@ -53,7 +53,7 @@ const VditorEditor = forwardRef(({ markdown, hidden }, ref) => {
     // vditorRef.current.getValue()
     // vditorRef.current.getHTML();
     // vditorRef.current.getText();
-    return <div id="vditor" className={hidden ? 'hidden' : ''}></div>;
+    return <div id="vditor" className={`${hidden ? 'hidden' : ''} overflow-y-auto`}></div>;
 });
 
 const AceEditorCom = ({ markdown, hidden, onChange }) => {
@@ -89,6 +89,9 @@ export default forwardRef(function Markdown({ value }, ref) {
         getValue() {
             const _value = isAce ? val : vditorRef.current.getResult()
             return _value
+        },
+        setValue(_value) {
+            setValue(_value)
         }
     }))
 

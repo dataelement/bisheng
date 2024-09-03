@@ -71,8 +71,8 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
             </div>
 
             <div className="flex flex-wrap mt-4 gap-2">
-                <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'before')}>✂️\n</Button>
-                <Button className="px-2 h-6" variant="secondary" onClick={() => handleRegexClick('\\n\\n', 'before')}>✂️\n\n</Button>
+                <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'after')}>\n✂️</Button>
+                <Button className="px-2 h-6" variant="secondary" onClick={() => handleRegexClick('\\n\\n', 'after')}>\n\n✂️</Button>
                 <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before')}>{'✂️第.{1, 3}章'}</Button>
                 <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before')}>{'✂️第.{1, 3}条'}</Button>
                 <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('。', 'after')}>。✂️</Button>

@@ -34,7 +34,7 @@ const uploadFileWithProgress = async ({ url, fileName, file, callback, cancel = 
         data && callback(100);
 
         console.log('Upload complete:', data);
-        return data
+        return data.data
         // Handle the response data as needed
     } catch (error) {
         console.error('Error uploading file:', error);
@@ -56,7 +56,7 @@ const Upload = forwardRef(({ url, fileName = 'file', accept, size = 50, progress
 
     useImperativeHandle(ref, () => ({
         getUploadResult() {
-            return [progressList.length, filePathsRef.current.length, failFilesRef.current.map(el => el.name)]
+            return [progressList.length, filePathsRef.current, failFilesRef.current]
         }
     }));
 
@@ -132,11 +132,11 @@ const Upload = forwardRef(({ url, fileName = 'file', accept, size = 50, progress
                             }
                         }))
                     }
-                }).then(data => {
+                }).then(({ data }) => {
                     // console.log('task.file, end :>> ', task.file, 'end');
                     // console.log('filePathsRef.current.length, progressCountRef.current :>> ', filePathsRef.current.length, progressCountRef.current);
                     if (data) {
-                        filePathsRef.current.push({ id: task.id, path: data.file_path })
+                        filePathsRef.current.push({ id: task.id, name: task.file.name, path: data.file_path })
                         onFileCountChange(filePathsRef.current.length)
                     } else {
                         failFilesRef.current.push({ id: task.id, name: task.file.name })

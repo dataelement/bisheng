@@ -2,31 +2,42 @@ import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Pencil2Icon } from "@radix-ui/react-icons";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Button } from "../../../components/bs-ui/button";
 import ShadTooltip from "../../../components/ShadTooltipComponent";
 import KnowledgeBaseSettingsDialog from "./EditKnowledgeDialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { updateKnowledgeApi } from "@/controllers/API";
 
-export default function Header(params) {
+export default function Header() {
     const [libInfo, setLibInfo] = useState({ name: '', desc: '' })
     const [open, setOpen] = useState(false)
+    const { id } = useParams()
 
     useEffect(() => {
         // @ts-ignore
-        const libname = window.libname // 临时记忆
+        const [libname, libdesc] = window.libname || [] // 临时记忆
         if (libname) {
-            localStorage.setItem('libname', window.libname)
+            localStorage.setItem('libname', libname)
+            localStorage.setItem('libdesc', libdesc)
         }
-        setLibInfo({ name: window.libname || localStorage.getItem('libname'), desc: '假装是描述xxxxx' })
+        setLibInfo({ name: libname || localStorage.getItem('libname'), desc: libdesc || localStorage.getItem('libdesc') })
     }, [])
 
     const { message } = useToast()
     const handleSave = (form) => {
-        // api
-        setLibInfo(form)
-        setOpen(false)
-        message({ variant: 'success', description: '保存成功' })
+        captureAndAlertRequestErrorHoc(updateKnowledgeApi({
+            id: Number(id),
+            name: form.name,
+            description: form.desc
+        })).then((res) => {
+            if (!res) return
+            // api
+            setLibInfo(form)
+            setOpen(false)
+            message({ variant: 'success', description: '保存成功' })
+        })
     }
 
     return <div className="flex items-start">
