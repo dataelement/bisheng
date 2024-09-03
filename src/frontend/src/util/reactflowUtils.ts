@@ -1,4 +1,4 @@
-import { cloneDeep } from "lodash";
+import { cloneDeep } from "lodash-es";
 import {
   Connection,
   Edge,
@@ -855,7 +855,7 @@ export function generateNodeFromFlow(
   const id = getNodeId(outputNode?.data.type!);
   // 检查是否有 fileinput
   const hasFileInput = flow.data.nodes.some((node) => node.data.type === "InputFileNode")
-  
+
   const newGroupNode: NodeType = {
     data: {
       id,

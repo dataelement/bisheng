@@ -22,7 +22,7 @@ import {
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
-import { map } from "lodash";
+import { map } from "lodash-es";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
