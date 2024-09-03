@@ -144,8 +144,8 @@ export default function ApiModal({ flow }: { flow: FlowType }) {
   function filterNodes() {
     let arrNodesWithValues = [];
 
-    flow["data"]["nodes"].forEach((t) => {
-      Object.keys(t["data"]["node"]["template"])
+    flow?.data?.nodes?.forEach((t) => {
+      Object.keys(t?.data?.node?.template || {})
         .filter(
           (n) =>
             n.charAt(0) !== "_" &&
