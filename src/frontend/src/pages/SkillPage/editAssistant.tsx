@@ -4,8 +4,7 @@ import { changeAssistantStatusApi, saveAssistanttApi } from "@/controllers/API/a
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Header from "./components/editAssistant/Header";
 import Prompt from "./components/editAssistant/Prompt";
 import Setting from "./components/editAssistant/Setting";
