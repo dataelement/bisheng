@@ -11,6 +11,7 @@ from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeRead, KnowledgeUpdate
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.utils.logger import logger
+from bisheng.utils.minio_client import MinioClient
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
@@ -98,6 +99,17 @@ async def update_knowledge(*, request: Request, login_user: UserPayload = Depend
                            knowledge: KnowledgeUpdate):
     res = KnowledgeService.update_knowledge(request, login_user, knowledge)
     return resp_200(data=res)
+
+
+@router.delete('/', status_code=200)
+def delete_knowledge(*,
+                     request: Request,
+                     login_user: UserPayload = Depends(get_login_user),
+                     knowledge_id: int = Body(...)):
+    """ 删除知识库信息. """
+
+    KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
+    return resp_200(message='删除成功')
 
 
 @router.get('/file_list/{knowledge_id}', status_code=200)
@@ -191,12 +203,8 @@ async def delete_knowledge_chunk(request: Request, login_user: UserPayload = Dep
     return resp_200()
 
 
-@router.delete('/{knowledge_id}', status_code=200)
-def delete_knowledge(*,
-                     request: Request,
-                     login_user: UserPayload = Depends(get_login_user),
-                     knowledge_id: int = Path(...)):
-    """ 删除知识库信息. """
-
-    KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
-    return resp_200(message='删除成功')
+@router.get('/file_share')
+async def get_file_share_url(request: Request, login_user: UserPayload = Depends(get_login_user),
+                             file_id: int = Query(description='文件唯一ID')):
+    url = KnowledgeService.get_file_share_url(request, login_user, file_id)
+    return resp_200(data=url)

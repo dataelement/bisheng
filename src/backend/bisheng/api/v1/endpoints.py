@@ -4,7 +4,7 @@ from typing import Annotated, Optional, Union
 from uuid import UUID
 
 import yaml
-from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, Request, Query
 from sqlmodel import select
 
 from bisheng import settings, __version__
@@ -24,7 +24,7 @@ from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import bucket
+from bisheng.utils.minio_client import bucket, MinioClient
 from bisheng.api.services.knowledge_imp import filetype_load_map
 
 try:
@@ -320,6 +320,4 @@ async def create_upload_file(file: UploadFile, flow_id: str):
 # get endpoint to return version of bisheng
 @router.get('/version')
 def get_version():
-    from bisheng import __version__
-
     return resp_200({'version': __version__})

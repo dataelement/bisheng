@@ -529,3 +529,9 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(f'act=delete_es_over {res}')
 
         return True
+
+    @classmethod
+    def get_file_share_url(cls, request: Request, login_user: UserPayload, file_id: int) -> str:
+        minio_client = MinioClient()
+        download_url = minio_client.get_share_link(str(file_id))
+        return download_url
