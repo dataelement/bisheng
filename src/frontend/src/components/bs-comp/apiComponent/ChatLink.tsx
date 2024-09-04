@@ -62,7 +62,7 @@ const enum API_TYPE {
 const NoLoginLink = ({ type, noLogin = false }) => {
   const [isCopied, setIsCopied] = useState<Boolean>(false);
   const { id } = useParams()
-  // /chatpro/assistant
+
   const copyToClipboard = (code: string) => {
     setIsCopied(true);
     copyText(code).then(() => {
@@ -74,8 +74,9 @@ const NoLoginLink = ({ type, noLogin = false }) => {
 
   const [embed, setEmbed] = useState(false)
   const url = useMemo(() => {
-    const chat = noLogin ? 'chat' : 'chatpro'
-    return `${location.origin}/${chat}/${type === API_TYPE.ASSISTANT ? 'assistant/' : ''}${id}`
+    const loginUrl = `${location.origin}/chat/${type === API_TYPE.ASSISTANT ? 'assistant' : 'skill'}/auth/${id}`
+    const noLoginUrl = `${location.origin}/chat/${type === API_TYPE.ASSISTANT ? 'assistant/' : ''}${id}`
+    return noLogin ? noLoginUrl : loginUrl;
   }, [type, noLogin])
 
   const embedCode = useMemo(() => {
