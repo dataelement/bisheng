@@ -9,7 +9,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from "react-router-dom";
 import Markdown from './Markdown';
 
-const ParagraphEdit = ({ chunks = null, isUns = false, filePath = '', fileId, chunkId, onClose }) => {
+const ParagraphEdit = ({ chunks = null, isUns = true, filePath = '', fileId, chunkId, onClose }) => {
     const { id } = useParams();
     const [value, setValue] = useState('');
     const [data, setData] = useState([])

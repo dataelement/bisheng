@@ -12,11 +12,11 @@ import { SearchInput } from "@/components/bs-ui/input"
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
 import MultiSelect from "@/components/bs-ui/select/multi"
 import { delChunkApi, getKnowledgeChunkApi, readFileByLibDatabase } from "@/controllers/API"
-import { useTable } from "@/util/hook"
-import { Link, useNavigate, useParams } from "react-router-dom"
-import ParagraphEdit from "./ParagraphEdit"
-import { useEffect, useRef, useState } from "react"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { useTable } from "@/util/hook"
+import { useEffect, useState } from "react"
+import { useParams } from "react-router-dom"
+import ParagraphEdit from "./ParagraphEdit"
 
 export const ParagraphsItem = ({ data, onEdit, onDeled }) => {
 
@@ -95,9 +95,7 @@ export default function Paragraphs({ fileId }) {
         show: false
     })
 
-    const navigator = useNavigate()
-
-    return <div className="relative">
+    return <div className="relative mt-8">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
@@ -117,7 +115,7 @@ export default function Paragraphs({ fileId }) {
                 ></MultiSelect>
             </div>
         </div>
-        <div className="h-[calc(100vh-200px)] overflow-y-auto pb-20 bg-background-main">
+        <div className="h-[calc(100vh-168px)] overflow-y-auto pb-20 bg-background-main">
             <div className=" flex flex-wrap gap-2 p-2 items-start">
                 {
                     datalist.map((item, index) => <ParagraphsItem

@@ -247,8 +247,8 @@ tweaks = {
 
 print(response.text)`}
                     </SyntaxHighlighter>
-                    <h3 className="text-lg font-medium mb-2 mt-12">知识库问答应用示例</h3>
-                    <p className="text-md text-gray-500 mb-2">期待你的大作@张国清 </p>
+                    {/* <h3 className="text-lg font-medium mb-2 mt-12">文档审核应用示例</h3>
+                    <p className="text-md text-gray-500 mb-2">期待你的大作@张国清 </p> */}
                 </CardContent>
             </Card>
         </section>
