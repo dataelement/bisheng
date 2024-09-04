@@ -21,7 +21,7 @@ from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
-from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus
+from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, ParseType
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -266,10 +266,17 @@ def add_file_embedding(vector_client, es_client, minio_client, db_file: Knowledg
         raise ValueError('es not found, please check your es config')
 
     # extract text from file
-    texts, metadatas, parse_type = read_chunk_text(filepath, db_file.file_name, separator,
-                                                   separator_rule, chunk_size, chunk_overlap)
+    texts, metadatas, parse_type, partitions = read_chunk_text(filepath, db_file.file_name, separator,
+                                                               separator_rule, chunk_size, chunk_overlap)
     if len(texts) == 0:
         raise ValueError('文件解析为空')
+
+    # 存储ocr识别后的partitions结果
+    if partitions:
+        partition_data = json.dumps(partitions, ensure_ascii=False).encode('utf-8')
+        minio_client.upload_minio_data(f'partitions/{db_file.id}.json', partition_data, len(partition_data),
+                                       "application/json")
+        db_file.bbox_object_name = f'partitions/{db_file.id}.json'
 
     # 缓存中有数据则用缓存中的数据去入库，因为是用户在界面编辑过的
     if preview_cache_key:
@@ -304,9 +311,31 @@ def add_file_embedding(vector_client, es_client, minio_client, db_file: Knowledg
     if preview_cache_key:
         KnowledgeUtils.delete_preview_cache(preview_cache_key)
 
+def parse_partitions(partitions: List[Any]) -> Dict:
+    """ 解析生成bbox和文本的对应关系 """
+    if not partitions:
+        return partitions
+    res = {}
+    for one in partitions:
+        bboxes = one["metadata"]["extra_data"]["bboxes"]
+        indexes = one["metadata"]["extra_data"]["indexes"]
+        text = one["text"]
+        for index, bbox in enumerate(bboxes):
+            key = "-".join([str(int(one)) for one in bbox])
+            val = text[indexes[index][0]:indexes[index][1]]
+            res[key] = val
+    return res
+
+
 
 def read_chunk_text(input_file, file_name, separator: List[str], separator_rule: List[str], chunk_size: int,
-                    chunk_overlap: int):
+                    chunk_overlap: int) -> (List[str], List[dict], str, Any):
+    """
+     0：chunks text
+     1：chunks metadata
+     2：parse_type: uns or local
+     3: ocr bbox data: maybe None
+    """
     # 获取文档总结标题的llm
     try:
         llm = decide_knowledge_llm()
@@ -320,12 +349,13 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
                                               is_separator_regex=True)
     # 加载文档内容
     logger.info(f'start_file_loader file_name={file_name}')
-    parse_type = 'local'
+    parse_type = ParseType.LOCAL.value
     if not settings.get_knowledge().get('unstructured_api_url'):
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
             raise Exception('类型不支持')
         loader = filetype_load_map[file_type](file_path=input_file, encoding='utf-8')
+        partitions = []
         documents = loader.load()
     else:
         loader = ElemUnstructuredLoader(
@@ -333,7 +363,9 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
             input_file,
             unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
         documents = loader.load()
-        parse_type = 'uns'
+        parse_type = ParseType.UNS.value
+        partitions = loader.partitions
+        partitions = parse_partitions(partitions)
 
     logger.info(f'start_extract_title file_name={file_name}')
     if llm:
@@ -358,7 +390,7 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
         'extra': ''
     } for t_index, t in enumerate(texts)]
     logger.info(f'file_chunk_over file_name=={file_name}')
-    return raw_texts, metadatas, parse_type
+    return raw_texts, metadatas, parse_type, partitions
 
 
 def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]):

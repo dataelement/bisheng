@@ -36,11 +36,12 @@ async def preview_file_chunk(*, request: Request, login_user: UserPayload = Depe
                              req_data: PreviewFileChunk):
     """ 获取某个文件的分块预览内容 """
     try:
-        parse_type, file_share_url, res = KnowledgeService.get_preview_file_chunk(request, login_user, req_data)
+        parse_type, file_share_url, res, partitions = KnowledgeService.get_preview_file_chunk(request, login_user, req_data)
         return resp_200(data={
             "parse_type": parse_type,
             "file_url": file_share_url,
-            "chunks": res
+            "chunks": res,
+            "partitions": partitions
         })
     except Exception as e:
         logger.exception('preview_file_chunk_error')

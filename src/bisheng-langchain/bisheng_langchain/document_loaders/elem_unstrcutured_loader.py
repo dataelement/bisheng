@@ -73,6 +73,7 @@ class ElemUnstructuredLoader(BasePDFLoader):
         self.start = start
         self.n = n
         self.extra_kwargs = kwargs
+        self.partitions = None
         super().__init__(file_path)
 
     def load(self) -> List[Document]:
@@ -97,6 +98,7 @@ class ElemUnstructuredLoader(BasePDFLoader):
         partitions = resp['partitions']
         if partitions:
             logger.info(f'content_from_partitions')
+            self.partitions = partitions
             content, metadata = merge_partitions(partitions)
         elif resp.get('text'):
             logger.info(f'content_from_text')

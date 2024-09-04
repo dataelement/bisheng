@@ -1,8 +1,10 @@
 import math
 import os
+import io
 import time
-from typing import List
+from typing import List, Any
 from uuid import uuid4
+import json
 
 from fastapi import Request, BackgroundTasks
 from loguru import logger
@@ -21,7 +23,7 @@ from bisheng.cache.utils import file_download
 from bisheng.cache.redis import redis_client
 from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, Knowledge, KnowledgeUpdate, KnowledgeRead
-from bisheng.database.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus
+from bisheng.database.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus, ParseType
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -206,11 +208,12 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def get_preview_file_chunk(cls, request: Request, login_user: UserPayload, req_data: PreviewFileChunk) \
-            -> (str, str, List[FileChunk]):
+            -> (str, str, List[FileChunk], Any):
         """
          0：解析模式，uns 或者 local
          1：转换后的文件路径
          2：切分后的chunk列表
+         3: ocr识别后的bbox
         """
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE):
@@ -234,8 +237,9 @@ class KnowledgeService(KnowledgeUtils):
         filepath, file_name = file_download(req_data.file_path)
 
         # 切分文本
-        texts, metadatas, parse_type = read_chunk_text(filepath, file_name, req_data.separator, req_data.separator_rule,
-                                                       req_data.chunk_size, req_data.chunk_overlap)
+        texts, metadatas, parse_type, partitions = read_chunk_text(filepath, file_name, req_data.separator,
+                                                                   req_data.separator_rule,
+                                                                   req_data.chunk_size, req_data.chunk_overlap)
         res = []
         cache_map = {}
         for index, val in enumerate(texts):
@@ -250,7 +254,7 @@ class KnowledgeService(KnowledgeUtils):
 
         # 将转换后pdf文件上传到minio
         file_share_url = ""
-        if parse_type == 'uns':
+        if parse_type == ParseType.UNS.value:
             minio_client = MinioClient()
             with open(filepath, 'rb') as f:
                 minio_client.upload_tmp(f"{cache_key}.pdf", f.read())
@@ -260,7 +264,7 @@ class KnowledgeService(KnowledgeUtils):
         cls.save_preview_cache(cache_key, mapping=cache_map)
         redis_client.set(f"{cache_key}_parse_type", parse_type)
         redis_client.set(f"{cache_key}_file_path", file_share_url)
-        return parse_type, file_share_url, res
+        return parse_type, file_share_url, res, partitions
 
     @classmethod
     def update_preview_file_chunk(cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk):
@@ -553,3 +557,21 @@ class KnowledgeService(KnowledgeUtils):
         minio_client = MinioClient()
         download_url = minio_client.get_share_link(str(file_id))
         return download_url
+
+    @classmethod
+    def get_file_bbox(cls, request: Request, login_user: UserPayload, file_id: int) -> Any:
+        file_info = KnowledgeFileDao.select_list([file_id])
+        file_info = file_info[0]
+        if not file_info.bbox_object_name:
+            return None
+
+        # download bbox file
+        minio_client = MinioClient()
+        resp = minio_client.download_minio(file_info.bbox_object_name)
+        new_data = io.BytesIO()
+        for d in resp.stream(32 * 1024):
+            new_data.write(d)
+        resp.close()
+        resp.release_conn()
+        new_data.seek(0)
+        return json.loads(new_data.read().decode('utf-8'))
