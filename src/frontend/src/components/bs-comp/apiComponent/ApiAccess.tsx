@@ -4,6 +4,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/bs-ui/tabs';
 import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { copyText } from '@/utils';
+import { Check, Clipboard } from 'lucide-react';
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
@@ -82,6 +84,16 @@ print(response.text)`
         })
     }
 
+    const [isCopied, setIsCopied] = useState<Boolean>(false);
+    const copyToClipboard = (code: string) => {
+        setIsCopied(true);
+        copyText(code).then(() => {
+            setTimeout(() => {
+                setIsCopied(false);
+            }, 2000);
+        })
+    }
+
     return (
         <section className='max-w-[1600px] flex-grow'>
             <Card className="mb-8">
@@ -101,8 +113,13 @@ print(response.text)`
                             <TabsTrigger value="curl" className="">cURL</TabsTrigger>
                             <TabsTrigger value="python">Python API</TabsTrigger>
                         </TabsList>
-
-                        <TabsContent value="curl">
+                        <TabsContent value="curl" className='relative'>
+                            <button
+                                className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
+                                onClick={() => copyToClipboard(curl())}
+                            >
+                                {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
+                            </button>
                             <SyntaxHighlighter
                                 className="w-full overflow-auto custom-scroll"
                                 language={'bash'}
@@ -111,7 +128,13 @@ print(response.text)`
                                 {curl()}
                             </SyntaxHighlighter>
                         </TabsContent>
-                        <TabsContent value="python">
+                        <TabsContent value="python" className='relative'>
+                            <button
+                                className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
+                                onClick={() => copyToClipboard(python())}
+                            >
+                                {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
+                            </button>
                             <SyntaxHighlighter
                                 className="w-full overflow-auto custom-scroll"
                                 language={'python'}
@@ -213,7 +236,7 @@ print(response.text)`
                                     >
                                         {`
 {
-  "id": "${assisId}",
+  "id": "148964adf7ec439f87a6240289735740",
   "object": "chat.completion",
   "created": 1720755036,
   "model": "a31d044d-af13-43da-b715-d87a29569809",
@@ -222,14 +245,11 @@ print(response.text)`
       "index": 0,
       "message": {
         "role": "assistant",
-        "content": "你在之前的消息中提到，你叫张国清。"
+        "content": "你好，有什么可以帮你的？"
       },
-      "finish_reason": "stop",
-      "delta": null
+      "finish_reason": "stop"
     }
-  ],
-  "usage": null,
-  "system_fingerprint": null
+  ]
 }`}
                                     </SyntaxHighlighter>
                                 </TableCell>

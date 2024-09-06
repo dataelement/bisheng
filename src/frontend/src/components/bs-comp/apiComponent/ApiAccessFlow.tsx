@@ -2,27 +2,37 @@ import { Badge } from '@/components/bs-ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/bs-ui/tabs';
-import { getCurlCode, getPythonCode } from '@/constants';
-import { darkContext } from '@/contexts/darkContext';
+import { useToast } from '@/components/bs-ui/toast/use-toast';
+import { getCurlCode, getPythonApiCode } from '@/constants';
 import { TabsContext } from '@/contexts/tabsContext';
-import { useContext } from 'react';
+import { copyText } from '@/utils';
+import { Check, Clipboard } from 'lucide-react';
+import { useContext, useState } from 'react';
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { JsonItem } from './ApiAccess';
-import { useToast } from '@/components/bs-ui/toast/use-toast';
-import { copyText } from '@/utils';
 
 
 const ApiAccessFlow = ({ }) => {
 
     const { flow, getTweak, tabsState } = useContext(TabsContext);
     const curl_code = getCurlCode(flow, getTweak, tabsState);
-    const pythonCode = getPythonCode(flow, getTweak, tabsState);
+    const pythonCode = getPythonApiCode(flow, getTweak, tabsState);
 
     const { message } = useToast()
     const handleCopyLink = (e) => {
         copyText(e.target).then(() => {
             message({ variant: 'success', description: '复制成功' })
+        })
+    }
+
+    const [isCopied, setIsCopied] = useState<Boolean>(false);
+    const copyToClipboard = (code: string) => {
+        setIsCopied(true);
+        copyText(code).then(() => {
+            setTimeout(() => {
+                setIsCopied(false);
+            }, 2000);
         })
     }
 
@@ -34,7 +44,7 @@ const ApiAccessFlow = ({ }) => {
                 </CardHeader>
                 <CardContent>
                     <h3 className="mb-2 bg-secondary px-4 py-2 inline-flex items-center rounded-md gap-1">
-                        <Badge>POST</Badge> <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>/api/v1/process/{'{flow_id}'}</span>
+                        <Badge>POST</Badge> <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>/api/v1/process/{flow.id}</span>
                     </h3>
                     <p className='my-2'>示例代码如下：</p>
                     <Tabs defaultValue="curl" className="w-full mb-[40px]">
@@ -43,7 +53,13 @@ const ApiAccessFlow = ({ }) => {
                             <TabsTrigger value="python">Python API</TabsTrigger>
                         </TabsList>
 
-                        <TabsContent value="curl">
+                        <TabsContent value="curl" className='relative'>
+                            <button
+                                className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
+                                onClick={() => copyToClipboard(curl_code)}
+                            >
+                                {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
+                            </button>
                             <SyntaxHighlighter
                                 className="w-full overflow-auto custom-scroll"
                                 language={'bash'}
@@ -52,7 +68,13 @@ const ApiAccessFlow = ({ }) => {
                                 {curl_code}
                             </SyntaxHighlighter>
                         </TabsContent>
-                        <TabsContent value="python">
+                        <TabsContent value="python" className='relative'>
+                            <button
+                                className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
+                                onClick={() => copyToClipboard(pythonCode)}
+                            >
+                                {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
+                            </button>
                             <SyntaxHighlighter
                                 className="w-full overflow-auto custom-scroll"
                                 language={'python'}
@@ -83,6 +105,7 @@ const ApiAccessFlow = ({ }) => {
                                     <JsonItem name="flow_id" required type="UUID" desc="技能ID" remark='URL传参'></JsonItem>
                                     <JsonItem name="inputs" required type="Json" desc="对整个技能的问题输入json里的具体key和技能本身相关，不一定都是query" example='{"query":"什么是金融"}' remark='当输入节点只有一个时，id可不传'></JsonItem>
                                     <JsonItem name="history_count" type="int" desc="对于技能里支持Memery，选取几条历史消息进行多轮问答，默认值10"></JsonItem>
+                                    <JsonItem name="clear_cache" type="boolean" desc="是否清除session缓存"></JsonItem>
                                     <JsonItem name="session_id" type="str" desc="用于session查找，当我们进行多轮时，此参数必填，且建议采用后端生成的key" remark='每次调用，当session_id 传入时，返回传入sessionid，当session_id不传时，自动生成id'></JsonItem>
                                     <JsonItem name="tweaks" required type="Json" desc="对每个组件的控制，可以替换组件输入参数的值" remark='当没有指定组件传参的时候，可以不传'>
                                         <JsonItem line name="ChatOpenAI-MzIaC" type="Json" desc="示例，技能中OpenAI大模型组件的配置信息，key为组件名，命名为{组件}-{id}" example='{"openai_api_key": "sk-xxx"} 或者 {}' remark='当{}为空，表示保持默认值'></JsonItem>
@@ -95,7 +118,21 @@ const ApiAccessFlow = ({ }) => {
                                         language={'json'}
                                         style={oneDark}
                                     >
-                                        {`{}`}
+                                        {`{
+  "inputs": {
+    "query": "总结下文档内容"
+  },
+  "tweaks": {
+    "Milvus-f74d8": {
+      "collection_id": "10"
+    },
+    "ChatOpenAI-7f49c": {},
+    "ElasticKeywordsSearch-0d2c8": {},
+    "BishengRetrievalQA-7e0ae": {}
+  },
+  "history_count": 10,
+  "clear_cache": false
+}`}
                                     </SyntaxHighlighter>
                                 </TableCell>
                             </TableRow>
@@ -114,7 +151,7 @@ const ApiAccessFlow = ({ }) => {
                         <TableHeader>
                             <TableRow>
                                 <TableHead className='w-[60%]'>数据结构</TableHead>
-                                <TableHead>示例</TableHead>
+                                <TableHead className='w-[40%]'>示例</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -132,11 +169,31 @@ const ApiAccessFlow = ({ }) => {
                                 </TableCell>
                                 <TableCell className='align-top'>
                                     <SyntaxHighlighter
-                                        className="w-full overflow-auto custom-scroll"
+                                        className="w-full max-w-[40vw] overflow-auto custom-scroll"
                                         language={'json'}
                                         style={oneDark}
                                     >
-                                        {`{"status_code":200,"status_message":"SUCCESS","data":{}}}`}
+                                        {`{
+  "status_code": 200,
+  "status_message": "SUCCESS",
+  "data": {
+    "result": {
+      "result": "文档内容是关于电力集团关键信息基础设施网络安全保护的标准起草。文档以“基于管理防护要求”为主题，参考知识库内容，根据模版撰写相应内容。这份文档的撰写要求是不少于500字，不允许使用markdown格式，每行需要缩进两格。\n\n文档的模板包括以下几个部分：4.3.1 网络安全建设管理要求，4.3.2 网络安全风险管理，4.3.3 和 4.3.4 这两部分的内容未给出。每一部分都由多个小点组成，每个小点后面都有\"xxxx....\"表示待填写的内容。",
+      "doc": [
+        {
+          "title": "关基网络安全保护工作指南.docx",
+          "url": "www.baidu.com"
+        }
+      ],
+      "source": 3,
+      "message_id": 1322,
+      "answer": "文档内容是关于电力集团关键信息基础设施网络安全保护的标准起草。文档以“基于管理防护要求”为主题，参考知识库内容，根据模版撰写相应内容。这份文档的撰写要求是不少于500字，不允许使用markdown格式，每行需要缩进两格。\n\n文档的模板包括以下几个部分：4.3.1 网络安全建设管理要求，4.3.2 网络安全风险管理，4.3.3 和 4.3.4 这两部分的内容未给出。每一部分都由多个小点组成，每个小点后面都有\"xxxx....\"表示待填写的内容。"
+    },
+    "session_id": "AUU629:059865218b3e895f103dbcad4d1b60ee40157191800f3aa8adaa12488f2cf82b",
+    "backend": "anyio"
+  }
+}`
+                                        }
                                     </SyntaxHighlighter>
                                 </TableCell>
                             </TableRow>

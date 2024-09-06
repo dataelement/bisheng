@@ -4,7 +4,7 @@ import { delChunkInPreviewApi, previewFileSplitApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { InfoCircledIcon } from "@radix-ui/react-icons";
 import isEqual from "lodash-es/isEqual";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import ParagraphEdit from "./ParagraphEdit";
 import { ParagraphsItem } from "./Paragraphs";
@@ -27,20 +27,19 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
     const preveParamsRef = useRef(null)
     useImperativeHandle(ref, () => ({
         load(data, files) {
+            paramsRef.current = data
             // has change
             if (!paramChangRef.current || !isEqual(data, preveParamsRef.current)) {
                 paramChangRef.current = false
                 preveParamsRef.current = data
             }
 
-            setFileValue(files[0].path) // default first 
             allFilesRef.current = files.map(el => ({
                 label: el.name,
                 value: el.path
             }))
             setFiles([...allFilesRef.current])
-
-            paramsRef.current = data
+            loadchunks(files[0].path) // default first 
         }
     }))
 
@@ -48,16 +47,20 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
     const [paragraphs, setParagraphs] = useState<any>([])
     const [fileUrl, setFileUrl] = useState('')
     const [isUns, setIsUns] = useState(false)
+    const [partitions, setPartitions] = useState<any>([])
     // 加载文件分段结果
-    useEffect(() => {
+    const loadchunks = async (fileValue) => {
+        if (!fileValue) return
         setLoading(true)
+        setFileValue(fileValue)
         previewFileSplitApi({ ...paramsRef.current, file_path: fileValue, cache: paramChangRef.current }).then(res => {
             setLoading(false)
             setParagraphs(res.chunks)
             setFileUrl(res.file_url)
             setIsUns(res.parse_type === 'uns')
+            setPartitions(res.partitions)
         })
-    }, [fileValue])
+    }
 
     const handleSelectSearch = (value: any) => {
         // 按label查找
@@ -68,6 +71,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
     const handleReload = () => {
         setLoading(true)
         onChange(false)
+
+        loadchunks(fileValue)
     }
 
     const handleDeleteChunk = async (data) => {
@@ -98,7 +103,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                 onChange={handleSelectSearch}
                 onValueChange={(val) => {
                     paramChangRef.current = true
-                    setFileValue(val)
+                    loadchunks(val)
                 }}>
             </SelectSearch>
             <div className={`${change ? '' : 'hidden'} flex items-center`}>
@@ -112,6 +117,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                 paragraphs.map(item => (
                     <ParagraphsItem
                         key={item.text}
+                        disabled={change}
                         data={item}
                         onDeled={handleDeleteChunk}
                         onEdit={() => {
@@ -128,6 +134,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
             <DialogContent className='size-full max-w-full sm:rounded-none p-0 border-none'>
                 <ParagraphEdit
                     chunks={paragraphs}
+                    partitions={partitions}
                     isUns={isUns}
                     filePath={fileUrl}
                     fileId={paragraph.fileId}

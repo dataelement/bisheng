@@ -16,7 +16,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 const initialStrategies = [
     { id: '1', regex: '\\n\\n', position: 'after' },
-    { id: '2', regex: '\\.', position: 'after' }
+    { id: '2', regex: '\\n', position: 'after' }
 ];
 
 interface IProps {
@@ -126,10 +126,10 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
             </TabsContent>
             <TabsContent value="chunk">
                 <div className="grid items-start gap-4 mt-8 max-w-[760px] mx-auto" style={{ gridTemplateColumns: '114px 1fr' }}>
-                    <Label htmlFor="name" className="mt-2.5 flex justify-end text-left">切分方式 <QuestionTooltip content={'可选择筛选项中的切分规则，或通过正则表达式自定义切分规则，例如在"第.{1,3}条" 前进行切分时，会在“第1条”、“第ab条”“第三条”等文本之前进行切分'} /></Label>
+                    <Label htmlFor="name" className="mt-2.5 flex justify-end text-left">切分方式 <QuestionTooltip content={'可选择下方筛选项，或通过正则表达式自定义切分规则，例如在"第.{1,3}条" 前进行切分时，会在“第1条”、“第ab条”“第三条”等文本之前进行切分。'} /></Label>
                     <FileUploadSplitStrategy data={strategies} onChange={setStrategies} />
                     <Label htmlFor="name" className="mt-2.5 text-right">{t('code.splitLength')}</Label>
-                    <Input id="name" value={size} onChange={(e) => setSize(e.target.value)} placeholder={t('code.splitSizePlaceholder')} />
+                    <Input id="name" type="number" value={size} onChange={(e) => setSize(e.target.value)} placeholder={t('code.splitSizePlaceholder')} />
                     <Label htmlFor="name" className="mt-2.5 text-right">{t('code.chunkOverlap')}</Label>
                     <Input id="name" value={overlap} onChange={(e) => setOverlap(e.target.value)} placeholder={t('code.chunkOverlap')} />
                 </div>

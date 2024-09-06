@@ -109,7 +109,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps & { boxClas
         // 当 value 或 defaultValue 改变时更新 currentValue
         React.useEffect(() => {
             if (value !== undefined) {
-                setCurrentValue(value);
+                setCurrentValue(value || '');
             }
         }, [value]);
 

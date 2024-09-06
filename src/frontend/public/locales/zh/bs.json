@@ -382,7 +382,7 @@
     "useOwnAPIKeys": "使用自己的API keys",
     "exportSkill": "导出技能",
     "uploadFile": "上传文件",
-    "clickOrDragHere": "点击或将文件拖拽到这里上传",
+    "clickOrDragHere": "点击或拖动文件到此处上传",
     "dropFileHere": "将文件拖拽到这里上传",
     "delimiter": "切分符(多个以;分隔)",
     "splitLength": "切分文本长度",

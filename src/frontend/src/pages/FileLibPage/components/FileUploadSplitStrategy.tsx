@@ -1,6 +1,8 @@
+import { DelIcon } from '@/components/bs-icons';
 import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/bs-ui/radio';
+import { generateUUID } from '@/components/bs-ui/utils';
 import { useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 
@@ -22,7 +24,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
         if (customRegex) {
             setStrategies([
                 ...strategies,
-                { id: `${strategies.length + 1}`, regex: customRegex, position }
+                { id: generateUUID(4), regex: customRegex, position }
             ]);
             setCustomRegex('');
         }
@@ -31,7 +33,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
     const handleRegexClick = (reg: string, position: string) => {
         setStrategies([
             ...strategies,
-            { id: `${strategies.length + 1}`, regex: reg, position }
+            { id: generateUUID(4), regex: reg, position }
         ]);
     }
 
@@ -43,27 +45,32 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                         {(provided) => (
                             <div {...provided.droppableProps} ref={provided.innerRef}>
                                 {
-                                    strategies.length ? strategies.map((strategy, index) => (
+                                    strategies.length && strategies.map((strategy, index) => (
                                         <Draggable key={strategy.id} draggableId={strategy.id} index={index}>
                                             {(provided) => (
                                                 <div
                                                     ref={provided.innerRef}
                                                     {...provided.draggableProps}
                                                     {...provided.dragHandleProps}
-                                                    className="py-1 my-1 border rounded bg-gray-100 text-sm"
+                                                    className="my-1 border rounded bg-gray-100 text-sm"
                                                 >
-                                                    {strategy.position === 'before' ? (
-                                                        <span>✂️{strategy.regex}</span>
-                                                    ) : (
-                                                        <span>{strategy.regex}✂️</span>
-                                                    )}
+                                                    <div className='relative group h-full py-1 '>
+                                                        {strategy.position === 'before' ? (
+                                                            <span>✂️{strategy.regex}</span>
+                                                        ) : (
+                                                            <span>{strategy.regex}✂️</span>
+                                                        )}
+                                                        <DelIcon
+                                                            onClick={() => setStrategies(strategies.filter((_, i) => i !== index))}
+                                                            className='absolute right-1 top-0 hidden group-hover:block cursor-pointer' />
+                                                    </div>
                                                 </div>
                                             )}
                                         </Draggable>
                                     ))
-                                        : <p className='text-xs text-gray-500'>切分优先级按从高到低排序，可拖拽调整排序</p>
                                 }
                                 {provided.placeholder}
+                                <p className='text-xs text-gray-500'>切分优先级按展示顺序从高到低排序，可拖拽调整</p>
                             </div>
                         )}
                     </Droppable>

@@ -2,18 +2,19 @@ import FileView from "@/components/bs-comp/FileView";
 import { LoadIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { getFilePathApi, getKnowledgeChunkApi, updateChunkApi, updatePreviewChunkApi } from "@/controllers/API";
+import { getFilePathApi, getKnowledgeChunkApi, updateChunkApi, updatePreviewChunkApi, getFileBboxApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Crosshair2Icon, InfoCircledIcon } from "@radix-ui/react-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from "react-router-dom";
 import Markdown from './Markdown';
 
-const ParagraphEdit = ({ chunks = null, isUns = true, filePath = '', fileId, chunkId, onClose }) => {
+const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePath = '', fileId, chunkId, onClose }) => {
     const { id } = useParams();
     const [value, setValue] = useState('');
     const [data, setData] = useState([])
 
+    const labelTexts = useLabelTexts(fileId, partitions)
     const [fileUrl, setFileUrl] = useState('')
     useEffect(() => {
         chunks ? setFileUrl(filePath) : getFilePathApi(fileId).then(setFileUrl)
@@ -30,7 +31,11 @@ const ParagraphEdit = ({ chunks = null, isUns = true, filePath = '', fileId, chu
             const active = chunk_index === chunkId
             const resData = labels.map(label => {
                 return {
-                    page: label.page, label: label.bbox, active, txt: chunk.text
+                    id: [label.page, ...label.bbox].join('-'),
+                    page: label.page,
+                    label: label.bbox,
+                    active,
+                    txt: chunk.text
                 }
             })
 
@@ -76,7 +81,7 @@ const ParagraphEdit = ({ chunks = null, isUns = true, filePath = '', fileId, chu
             if (!acc[item.page]) {
                 acc[item.page] = [];
             }
-            acc[item.page].push({ id: item.txt, ...item });
+            acc[item.page].push({ ...item });
 
             return acc;
         }, {});
@@ -85,26 +90,27 @@ const ParagraphEdit = ({ chunks = null, isUns = true, filePath = '', fileId, chu
     const handleSelectLabels = (lbs) => {
         let arr = data
         lbs.forEach((item) => {
-            arr = arr.map(el => el.txt === item.id ? { ...el, active: item.active } : el)
+            arr = arr.map(el => el.id === item.id ? { ...el, active: item.active } : el)
         })
         setData(arr)
-        console.log('arr :>> ', lbs, arr);
+        // console.log('arr :>> ', lbs, arr);
 
         setLabelChange(true)
     }
 
     const handleOvergap = () => {
         setLabelChange(false)
-        const res = data.filter(el => el.active)
-        const _value = res[0]?.txt || ''
-        setValue(_value)
-        markDownRef.current.setValue(_value) // fouceupdate
+        const str = data.reduce((str, item) => {
+            return str + (item.active ? labelTexts[item.id] + '\n' : '')
+        }, '')
+        setValue(str)
+        markDownRef.current.setValue(str) // fouceupdate
     }
 
     const [random, setRandom] = useState(0)
     const postion = useMemo(() => {
         const target = data.find(el => el.active)
-        return target ? [target.page, target.label[1] + random] : null
+        return target ? [target.page, target.label[1] + random] : [1, 0]
     }, [random])
 
     return (
@@ -189,6 +195,20 @@ const useDragSize = (full) => {
     }, [full, isDragging, handleMouseMove, handleMouseUp]);
 
     return { leftPanelWidth, handleMouseDown };
+}
+
+// 标注文本数据
+const useLabelTexts = (fileId: string, partitions: any) => {
+    const [labelText, setLabelText] = useState<any>({});
+    useEffect(() => {
+        partitions ?
+            setLabelText(partitions)
+            : getFileBboxApi(fileId).then(res => {
+                setLabelText(res)
+            })
+    }, [])
+
+    return labelText;
 }
 
 export default ParagraphEdit;

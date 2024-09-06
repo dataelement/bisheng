@@ -154,10 +154,10 @@ export default function Cascader({ selectClass = '', close = false, selectPlaceh
     }
 
     return <Select open={open} onOpenChange={setOpen}>
-        <SelectTrigger className={'data-[placeholder]:text-inherit ' + selectClass}>
+        <SelectTrigger className={'group data-[placeholder]:text-inherit ' + selectClass}>
             <Input className="border-none bg-transparent px-0" readOnly value={values.map(el => el.label).join('/')} />
             {close && values.length !== 0 && <Cross1Icon
-                className="bg-border text-[#666] rounded-full p-0.5"
+                className="hidden group-hover:block bg-border text-[#666] rounded-full p-0.5"
                 width={14}
                 height={14}
                 onPointerDown={(e) => e.stopPropagation()}

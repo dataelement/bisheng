@@ -126,16 +126,16 @@ export default function Header({ flow, onTabChange }) {
             <Button variant="outline" onClick={() => { openPopUp(<ExportModal />) }}>
                 <ArrowDownIcon className="h-4 w-4 mr-1" />{t('skills.export')}
             </Button>
-            <Button variant="outline" onClick={() => { openPopUp(<ApiModal flow={flow} />) }} >
+            {/* <Button variant="outline" onClick={() => { openPopUp(<ApiModal flow={flow} />) }} >
                 <CodeIcon className="h-4 w-4 mr-1" />{t('skills.code')}
-            </Button>
+            </Button> */}
             <Button variant="outline" onClick={() => setOpen(true)} >
                 <StackIcon className="h-4 w-4 mr-1" />{t('skills.simplify')}
             </Button>
         </div>
         {/* api */}
         <div className="flex gap-4 items-center">
-            <div className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-border px-4 py-1 rounded-md cursor-pointer`} onClick={() => { setTabType('edit'); onTabChange('edit') }}>技能编辑</div>
+            <div className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-border px-4 py-1 rounded-md cursor-pointer`} onClick={() => { setTabType('edit'); onTabChange('edit') }}>技能编排</div>
             <div className={`${tabType === 'api' ? 'text-primary' : ''} hover:bg-border px-4 py-1 rounded-md cursor-pointer`} onClick={() => { setTabType('api'); onTabChange('api') }}>对外发布</div>
         </div>
         {

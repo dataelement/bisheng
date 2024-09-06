@@ -237,7 +237,7 @@ export async function createFileLib(data) {
  * 修改知识库
  */
 export async function updateKnowledgeApi(data) {
-  return await axios.put(`/api/v1/knowledge`, data);
+  return await axios.put(`/api/v1/knowledge/`, data);
 };
 
 /**
@@ -266,6 +266,13 @@ export async function getEmbeddingModel(): Promise<{ models: string[] }> {
  */
 export async function getFilePathApi(file_id) {
   return await axios.get(`/api/v1/knowledge/file_share`, { params: { file_id } });
+}
+
+/**
+ * 获取文件chunk对应的文本
+ */
+export async function getFileBboxApi(file_id) {
+  return await axios.get(`/api/v1/knowledge/file_bbox`, { params: { file_id } });
 }
 
 /**

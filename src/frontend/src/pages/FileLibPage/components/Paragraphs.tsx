@@ -18,7 +18,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
 import ParagraphEdit from "./ParagraphEdit"
 
-export const ParagraphsItem = ({ data, onEdit, onDeled }) => {
+export const ParagraphsItem = ({ data, disabled = false, onEdit, onDeled }) => {
 
     const handleDel = () => {
         bsConfirm({
@@ -44,10 +44,10 @@ export const ParagraphsItem = ({ data, onEdit, onDeled }) => {
             </CardContent>
             <CardFooter className="flex justify-between items-center">
                 <div className="flex space-x-2">
-                    <Button variant="link" className="p-0" onClick={handleDel}>
+                    <Button variant="link" disabled={disabled} className="p-0" onClick={handleDel}>
                         删除
                     </Button>
-                    <Button variant="link" className="p-0" onClick={onEdit}>
+                    <Button variant="link" disabled={disabled} className="p-0" onClick={onEdit}>
                         编辑
                     </Button>
                 </div>

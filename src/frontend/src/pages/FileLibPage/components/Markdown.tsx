@@ -78,7 +78,7 @@ const AceEditorCom = ({ markdown, hidden, onChange }) => {
 
 export default forwardRef(function Markdown({ value }, ref) {
     const [val, setValue] = useState('')
-    const [isAce, setIsAce] = useState(true)
+    const [isAce, setIsAce] = useState(false)
     useEffect(() => {
         setValue(value)
     }, [value])

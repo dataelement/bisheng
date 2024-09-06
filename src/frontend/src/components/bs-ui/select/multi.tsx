@@ -185,7 +185,7 @@ const MultiSelect = ({
             }
         }}
     >
-        <SelectTrigger className={`min-h-9 py-1 ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`}>
+        <SelectTrigger className={`group min-h-9 py-1 ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`}>
             {
                 !multiple && (values.length ? <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
             }
@@ -213,7 +213,7 @@ const MultiSelect = ({
                     : placeholder)
             }
             {close && values.length !== 0 && <Cross1Icon
-                className="bg-border text-[#666] rounded-full p-0.5 min-w-[14px] mt-1"
+                className="group-hover:block hidden bg-border text-[#666] rounded-full p-0.5 min-w-[14px] mt-1"
                 width={14}
                 height={14}
                 onPointerDown={(e) => e.stopPropagation()}

@@ -108,7 +108,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
         <AlertDescription className='mt-0.5'>
           {noLogin ?
             '免登录链接无需登录即可使用，仅在系统配置 enable_guest_access = True 时可访问免登录链接'
-            : '控制免登录链接的 api_need_login 参数改名为 enable_guest_access。'}
+            : '需登录链接需要在登录后使用'}
         </AlertDescription>
       </Alert>
       <h3 className="text-lg font-bold mt-8 mb-2">发布为独立页面</h3>
@@ -137,7 +137,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
         </CardContent>
       </Card>
 
-      <h3 className="text-lg font-bold mt-8 mb-2">嵌入到网站中 <QuestionTooltip content={'--'} /> </h3>
+      <h3 className="text-lg font-bold mt-8 mb-2">嵌入到网站中</h3>
       <div className='flex gap-2 mb-4'>
         <Card className={`w-1/2 cursor-pointer border-2 ${embed ? '' : 'border-primary hover:border-primary'}`} onClick={() => setEmbed(false)}>
           <CardHeader className='pt-2 pb-0'>
@@ -164,7 +164,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
             <div>
               <button
                 className="flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
-                onClick={() => copyToClipboard(`http:/ip:port/chat/assistant/${id}`)}
+                onClick={() => copyToClipboard(embedCode)}
               >
                 {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
               </button>

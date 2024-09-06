@@ -231,7 +231,7 @@ export default function FileView({ drawfont = false, select = false, scrollTo, f
         listRef.current.scrollTo(pageY + offsetY);
     })
     useEffect(() => {
-        scrollTo && scrollToFunc()
+        scrollToFunc()
     }, [scrollTo])
 
     const fileWidthRef = useRef(1)

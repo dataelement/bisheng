@@ -56,7 +56,7 @@ export default function Header({ onSave, onLine, onTabChange }) {
             </Dialog>
         </div>
         <div className="flex gap-4 items-center">
-            <div className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-secondary px-4 py-1 rounded-md cursor-pointer`} onClick={() => { setTabType('edit'); onTabChange('edit') }}>助手编辑</div>
+            <div className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-secondary px-4 py-1 rounded-md cursor-pointer`} onClick={() => { setTabType('edit'); onTabChange('edit') }}>助手编排</div>
             <div className={`${tabType === 'api' ? 'text-primary' : ''} hover:bg-secondary px-4 py-1 rounded-md cursor-pointer`} onClick={() => { setTabType('api'); onTabChange('api') }}>对外发布</div>
         </div>
         <div className="flex gap-4">

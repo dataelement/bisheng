@@ -28,7 +28,7 @@ export default function Header() {
     const { message } = useToast()
     const handleSave = (form) => {
         captureAndAlertRequestErrorHoc(updateKnowledgeApi({
-            id: Number(id),
+            knowledge_id: Number(id),
             name: form.name,
             description: form.desc
         })).then((res) => {
@@ -37,6 +37,8 @@ export default function Header() {
             setLibInfo(form)
             setOpen(false)
             message({ variant: 'success', description: '保存成功' })
+            localStorage.setItem('libname', form.name)
+            localStorage.setItem('libdesc', form.desc)
         })
     }
 
