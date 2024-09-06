@@ -40,7 +40,7 @@ services:
 
   office:
     container_name: bisheng-office
-    image: onlyoffice/documentserver:7.2.1
+    image: onlyoffice/documentserver:7.1.1
     ports:
       - "8701:80"
     environment:
