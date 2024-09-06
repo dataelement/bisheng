@@ -125,7 +125,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def update_knowledge(cls, request: Request, login_user: UserPayload, knowledge: KnowledgeUpdate) -> KnowledgeRead:
-        db_knowledge = KnowledgeDao.query_by_id(knowledge.id)
+        db_knowledge = KnowledgeDao.query_by_id(knowledge.knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
 

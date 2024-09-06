@@ -40,7 +40,7 @@ class KnowledgeRead(KnowledgeBase):
 
 
 class KnowledgeUpdate(BaseModel):
-    id: int
+    knowledge_id: int
     name: Optional[str]
     description: Optional[str]
 
