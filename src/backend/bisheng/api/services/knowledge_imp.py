@@ -81,7 +81,7 @@ class KnowledgeUtils:
 
 def process_file_task(knowledge: Knowledge, db_files: List[KnowledgeFile],
                       separator: List[str], separator_rule: List[str], chunk_size: int, chunk_overlap: int,
-                      callback_url: str = None, extra_metadata: Dict = None, preview_cache_keys: List[str] = None):
+                      callback_url: str = None, extra_metadata: str = None, preview_cache_keys: List[str] = None):
     """ 处理知识文件任务 """
     try:
         index_name = knowledge.index_name or knowledge.collection_name
@@ -90,10 +90,14 @@ def process_file_task(knowledge: Knowledge, db_files: List[KnowledgeFile],
                      callback_url, extra_metadata, preview_cache_keys=preview_cache_keys)
     except Exception as e:
         logger.exception('process_file_task error')
+        new_files = KnowledgeFileDao.select_list([file.id for file in db_files])
+        new_files_map = {file.id: file for file in new_files}
         for file in db_files:
-            file.status = KnowledgeFileStatus.FAILED.value
-            file.remark = str(e)[:500]
-            KnowledgeFileDao.update(file)
+            if new_files_map[file.id].status == KnowledgeFileStatus.PROCESSING.value:
+                file.status = KnowledgeFileStatus.FAILED.value
+                file.remark = str(e)[:500]
+                KnowledgeFileDao.update(file)
+        logger.info('update files failed status over')
         raise e
 
 
@@ -311,6 +315,17 @@ def add_file_embedding(vector_client, es_client, minio_client, db_file: Knowledg
     if preview_cache_key:
         KnowledgeUtils.delete_preview_cache(preview_cache_key)
 
+
+def add_text_into_vector(vector_client, es_client, db_file: KnowledgeFile, texts: List[str], metadatas: List[dict]):
+    logger.info(f'add_vectordb file={db_file.id} file_name={db_file.file_name}')
+    # 存入milvus
+    vector_client.add_texts(texts=texts, metadatas=metadatas)
+
+    logger.info(f'add_es file={db_file.id} file_name={db_file.file_name}')
+    # 存入es
+    es_client.add_texts(texts=texts, metadatas=metadatas)
+
+
 def parse_partitions(partitions: List[Any]) -> Dict:
     """ 解析生成bbox和文本的对应关系 """
     if not partitions:
@@ -325,7 +340,6 @@ def parse_partitions(partitions: List[Any]) -> Dict:
             val = text[indexes[index][0]:indexes[index][1]]
             res[key] = val
     return res
-
 
 
 def read_chunk_text(input_file, file_name, separator: List[str], separator_rule: List[str], chunk_size: int,
@@ -395,14 +409,11 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
 
 def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]):
     """使用text 导入knowledge"""
-    try:
-        embeddings = decide_embeddings(db_knowledge.model)
-        vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
-        logger.info('vector_init_conn_done milvus={}', db_knowledge.collection_name)
-        index_name = db_knowledge.index_name or db_knowledge.collection_name
-        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
-    except Exception as e:
-        logger.exception(e)
+    embeddings = decide_embeddings(db_knowledge.model)
+    vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
+    logger.info('vector_init_conn_done milvus={}', db_knowledge.collection_name)
+    index_name = db_knowledge.index_name or db_knowledge.collection_name
+    es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
 
     separator = '\n\n'
     chunk_size = 1000
@@ -432,8 +443,10 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
             'page': doc.metadata.pop('page', 1),
             'source': doc.metadata.pop('source', ''),
             'bbox': doc.metadata.pop('bbox', ''),
-            'extra': json.dumps(doc.metadata)
-        } for doc in documents]
+            'extra': json.dumps(doc.metadata, ensure_ascii=False),
+            'title': '',
+            'chunk_index': index
+        } for index, doc in enumerate(documents)]
         vectore_client.add_texts(texts=[t.page_content for t in texts], metadatas=metadata)
 
         # 存储es

@@ -114,7 +114,7 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def update_knowledge(cls, request: Request, login_user: UserPayload, knowledge: KnowledgeUpdate) -> Knowledge:
+    def update_knowledge(cls, request: Request, login_user: UserPayload, knowledge: KnowledgeUpdate) -> KnowledgeRead:
         db_knowledge = KnowledgeDao.query_by_id(knowledge.id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
@@ -132,7 +132,9 @@ class KnowledgeService(KnowledgeUtils):
             db_knowledge.description = knowledge.description
 
         db_knowledge = KnowledgeDao.update_one(db_knowledge)
-        return db_knowledge
+        user = UserDao.get_user(db_knowledge.user_id)
+        res = KnowledgeRead(**db_knowledge.model_dump(), user_name=user.user_name if user else db_knowledge.user_id)
+        return res
 
     @classmethod
     def delete_knowledge(cls, request: Request, login_user: UserPayload, knowledge_id: int, only_clear: bool = False):
@@ -152,7 +154,8 @@ class KnowledgeService(KnowledgeUtils):
         # 删除mysql数据
         KnowledgeDao.delete_knowledge(knowledge_id, only_clear)
 
-        cls.delete_knowledge_hook(request, login_user, knowledge)
+        if not only_clear:
+            cls.delete_knowledge_hook(request, login_user, knowledge)
         return True
 
     @classmethod
@@ -224,8 +227,8 @@ class KnowledgeService(KnowledgeUtils):
         # 尝试从缓存获取
         if req_data.cache:
             if cache_value := cls.get_preview_cache(cache_key):
-                parse_type = redis_client.get(f"{cache_key}_parse_type", parse_type)
-                file_share_url = redis_client.get(f"{cache_key}_file_path", file_share_url)
+                parse_type = redis_client.get(f"{cache_key}_parse_type")
+                file_share_url = redis_client.get(f"{cache_key}_file_path")
                 res = []
                 for key, val in cache_value.items():
                     res.append(FileChunk(
@@ -289,30 +292,39 @@ class KnowledgeService(KnowledgeUtils):
         cls.delete_preview_cache(cache_key, chunk_index=req_data.chunk_index)
 
     @classmethod
-    def process_knowledge_file(cls, request: Request, login_user: UserPayload, background_tasks: BackgroundTasks,
-                               req_data: KnowledgeFileProcess) -> List[KnowledgeFile]:
-        """ 处理上传的文件 """
-
+    def save_knowledge_file(cls, login_user: UserPayload, req_data: KnowledgeFileProcess):
+        """ 处理上传的文件, 只上传到minio和mysql """
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
+        if not knowledge:
+            raise NotFoundError.http_exception()
         if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE):
             raise UnAuthorizedError.http_exception()
-
+        failed_files = []
         # 处理每个文件
-        res = []
         process_files = []
         preview_cache_keys = []
         for one in req_data.file_list:
             # 上传源文件，创建数据记录
             db_file = cls.process_one_file(login_user, knowledge, one)
-            res.append(db_file)
             # 不重复的文件数据使用异步任务去执行
             if db_file.status != KnowledgeFileStatus.FAILED.value:
                 # 获取此文件的预览缓存key
-                cache_key = cls.get_preview_cache_key(knowledge.id, one.file_path)
+                cache_key = cls.get_preview_cache_key(req_data.knowledge_id, one.file_path)
                 preview_cache_keys.append(cache_key)
                 process_files.append(db_file)
+            else:
+                failed_files.append(db_file)
+        return knowledge, failed_files, process_files, preview_cache_keys
+
+    @classmethod
+    def process_knowledge_file(cls, request: Request, login_user: UserPayload, background_tasks: BackgroundTasks,
+                               req_data: KnowledgeFileProcess) -> List[KnowledgeFile]:
+        """ 处理上传的文件 """
+        knowledge, failed_files, process_files, preview_cache_keys = cls.save_knowledge_file(login_user,
+                                                                                             req_data)
+
+        # 异步处理文件解析和入库, 如果通过cache_key可以获取到数据，则使用cache中的数据来进行入库操作
         if process_files:
-            # 异步处理文件上传任务, 如果通过cache_key可以获取到数据，则使用cache中的数据来进行入库操作
             background_tasks.add_task(process_file_task,
                                       knowledge=knowledge,
                                       db_files=process_files,
@@ -320,11 +332,28 @@ class KnowledgeService(KnowledgeUtils):
                                       separator_rule=req_data.separator_rule,
                                       chunk_size=req_data.chunk_size,
                                       chunk_overlap=req_data.chunk_overlap,
-                                      callback_url=None,
+                                      callback_url=req_data.callback_url,
                                       extra_metadata=None,
                                       preview_cache_keys=preview_cache_keys)
         cls.upload_knowledge_file_hook(request, login_user, req_data.knowledge_id, process_files)
-        return res
+        return failed_files + process_files
+
+    @classmethod
+    def sync_process_knowledge_file(cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess) \
+            -> List[KnowledgeFile]:
+        """ 同步处理上传的文件 """
+        knowledge, failed_files, process_files, preview_cache_keys = cls.save_knowledge_file(login_user,
+                                                                                             req_data)
+
+        if process_files:
+            process_file_task(knowledge, process_files, req_data.separator, req_data.separator_rule,
+                              req_data.chunk_size, req_data.chunk_overlap, req_data.callback_url,
+                              req_data.extra, preview_cache_keys)
+
+            process_files = KnowledgeFileDao.select_list([f.id for f in process_files])
+
+        cls.upload_knowledge_file_hook(request, login_user, req_data.knowledge_id, process_files)
+        return failed_files + process_files
 
     @classmethod
     def upload_knowledge_file_hook(cls, request: Request, login_user: UserPayload, knowledge_id: int,
@@ -391,21 +420,20 @@ class KnowledgeService(KnowledgeUtils):
         return res, total, login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE)
 
     @classmethod
-    def delete_knowledge_file(cls, request: Request, login_user: UserPayload, file_id: int):
-        knowledge_file = KnowledgeFileDao.select_list([file_id])
+    def delete_knowledge_file(cls, request: Request, login_user: UserPayload, file_ids: List[int]):
+        knowledge_file = KnowledgeFileDao.select_list(file_ids)
         if not knowledge_file:
             raise NotFoundError.http_exception()
-        knowledge_file = knowledge_file[0]
-        db_knowledge = KnowledgeDao.query_by_id(knowledge_file.knowledge_id)
+        db_knowledge = KnowledgeDao.query_by_id(knowledge_file[0].knowledge_id)
         if not login_user.access_check(db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE):
             raise UnAuthorizedError.http_exception()
 
         # 处理vectordb
-        delete_knowledge_file_vectors([file_id])
-        KnowledgeFileDao.delete_batch([file_id])
+        delete_knowledge_file_vectors(file_ids)
+        KnowledgeFileDao.delete_batch(file_ids)
 
         # 删除知识库文件的审计日志
-        cls.delete_knowledge_file_hook(request, login_user, db_knowledge.id, [knowledge_file])
+        cls.delete_knowledge_file_hook(request, login_user, db_knowledge.id, knowledge_file)
 
         return True
 

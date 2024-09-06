@@ -264,8 +264,7 @@ def save_download_file(file_byte, folder_name, filename):
     # Use the hex digest of the hash as the file name
     hex_dig = sha256_hash.hexdigest()
     md5_name = hex_dig
-    file_type = filename.split('.')[-1]
-    file_path = folder_path / f'{md5_name}.{file_type}'
+    file_path = folder_path / f'{md5_name}_{filename}'
     with open(file_path, 'wb') as new_file:
         new_file.write(file_byte)
     return str(file_path)
@@ -289,7 +288,10 @@ def file_download(file_path: str):
         return file_path, filename
     elif not os.path.isfile(file_path):
         raise ValueError('File path %s is not a valid file or url' % file_path)
-    return file_path, file_path.split('_', 1)[1] if '_' in file_path else ''
+    file_name = os.path.basename(file_path)
+    # 处理下是否包含了md5的逻辑
+    file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
+    return file_path, file_name
 
 
 def _is_valid_url(url: str):

@@ -36,7 +36,8 @@ async def preview_file_chunk(*, request: Request, login_user: UserPayload = Depe
                              req_data: PreviewFileChunk):
     """ 获取某个文件的分块预览内容 """
     try:
-        parse_type, file_share_url, res, partitions = KnowledgeService.get_preview_file_chunk(request, login_user, req_data)
+        parse_type, file_share_url, res, partitions = KnowledgeService.get_preview_file_chunk(request, login_user,
+                                                                                              req_data)
         return resp_200(data={
             "parse_type": parse_type,
             "file_url": file_share_url,
@@ -166,7 +167,7 @@ def delete_knowledge_file(*,
                           login_user: UserPayload = Depends(get_login_user)):
     """ 删除知识文件信息 """
 
-    KnowledgeService.delete_knowledge_file(request, login_user, file_id)
+    KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
 
     return resp_200(message='删除成功')
 
