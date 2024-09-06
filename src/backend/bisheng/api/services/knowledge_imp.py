@@ -329,14 +329,15 @@ def add_text_into_vector(vector_client, es_client, db_file: KnowledgeFile, texts
 def parse_partitions(partitions: List[Any]) -> Dict:
     """ 解析生成bbox和文本的对应关系 """
     if not partitions:
-        return partitions
+        return {}
     res = {}
     for one in partitions:
         bboxes = one["metadata"]["extra_data"]["bboxes"]
         indexes = one["metadata"]["extra_data"]["indexes"]
+        pages = one["metadata"]["extra_data"]["pages"]
         text = one["text"]
         for index, bbox in enumerate(bboxes):
-            key = "-".join([str(int(one)) for one in bbox])
+            key = f"{pages[index]}-" + "-".join([str(int(one)) for one in bbox])
             val = text[indexes[index][0]:indexes[index][1]]
             res[key] = val
     return res
