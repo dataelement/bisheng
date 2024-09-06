@@ -11,7 +11,7 @@ from loguru import logger
 from pymilvus import Collection
 
 from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
-from bisheng.api.errcode.knowledge import KnowledgeExistError
+from bisheng.api.errcode.knowledge import KnowledgeExistError, KnowledgeNoEmbeddingError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_text, process_file_task, KnowledgeUtils, \
     delete_knowledge_file_vectors
@@ -24,6 +24,7 @@ from bisheng.cache.redis import redis_client
 from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, Knowledge, KnowledgeUpdate, KnowledgeRead
 from bisheng.database.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus, ParseType
+from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -74,6 +75,15 @@ class KnowledgeService(KnowledgeUtils):
             raise KnowledgeExistError.http_exception()
 
         db_knowledge = Knowledge.model_validate(knowledge)
+
+        # 校验embedding模型
+        if not db_knowledge.model:
+            raise KnowledgeNoEmbeddingError.http_exception()
+        embed_info = LLMDao.get_model_by_id(int(db_knowledge.model))
+        if not embed_info:
+            raise KnowledgeNoEmbeddingError.http_exception()
+        if embed_info.model_type != LLMModelType.EMBEDDING.value:
+            raise KnowledgeNoEmbeddingError.http_exception()
 
         # 自动生成 es和milvus的 collection_name
         if not db_knowledge.collection_name:
