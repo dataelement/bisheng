@@ -16,7 +16,7 @@ from sqlmodel import Field, or_, select
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(index=True)
-    name: str = Field(index=True)
+    name: str = Field(index=True, min_length=1, max_length=30, description="知识库名, 最少一个字符，最多30个字符")
     description: Optional[str] = Field(index=True)
     model: Optional[str] = Field(index=False)
     collection_name: Optional[str] = Field(index=False)
