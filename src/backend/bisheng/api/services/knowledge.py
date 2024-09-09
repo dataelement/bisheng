@@ -11,7 +11,7 @@ from loguru import logger
 from pymilvus import Collection
 
 from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
-from bisheng.api.errcode.knowledge import KnowledgeExistError, KnowledgeNoEmbeddingError
+from bisheng.api.errcode.knowledge import KnowledgeExistError, KnowledgeNoEmbeddingError, KnowledgeChunkError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_text, process_file_task, KnowledgeUtils, \
     delete_knowledge_file_vectors
