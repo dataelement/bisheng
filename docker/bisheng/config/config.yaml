@@ -28,7 +28,7 @@ vector_stores:
     is_partition: !env ${BS_MILVUS_IS_PARTITION}
     partition_suffix: !env ${BS_MILVUS_PARTITION_SUFFIX}
   elasticsearch:
-    elasticsearch_url: !env ${BS_ELASTICSEARCH_URL}
+    url: !env ${BS_ELASTICSEARCH_URL}
     ssl_verify: !env ${BS_ELASTICSEARCH_SSL_VERIFY}
 
 

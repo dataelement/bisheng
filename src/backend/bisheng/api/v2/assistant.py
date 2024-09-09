@@ -18,6 +18,7 @@ from bisheng.api.v1.schemas import OpenAIChatCompletionResp, OpenAIChatCompletio
     AssistantInfo, OpenAIChoice
 from bisheng.api.v2.utils import get_default_operator
 from bisheng.chat.types import WorkType
+from bisheng.settings import settings
 
 router = APIRouter(prefix='/assistant', tags=['OpenAPI', 'Assistant'])
 
@@ -115,6 +116,9 @@ async def get_assistant_info(request: Request, assistant_id: UUID):
     获取助手信息, 用系统配置里的default_operator.user的用户信息来做权限校验
     """
     logger.info(f'act=get_default_operator assistant_id={assistant_id}, ip={get_request_ip(request)}')
+    # 判断下配置是否打开
+    if not settings.get_from_db("default_operator").get("enable_guest_access"):
+        raise HTTPException(status_code=403, detail="无权限访问")
     login_user = get_default_operator()
     return AssistantService.get_assistant_info(assistant_id, login_user)
 
