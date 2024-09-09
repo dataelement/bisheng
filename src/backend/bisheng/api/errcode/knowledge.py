@@ -10,3 +10,8 @@ class KnowledgeExistError(BaseErrorCode):
 class KnowledgeNoEmbeddingError(BaseErrorCode):
     Code: int = 10901
     Msg: str = '知识库必须选择一个embedding模型'
+
+
+class KnowledgeChunkError(BaseErrorCode):
+    Code: int = 10910
+    Msg: str = '当前知识库版本不支持修改分段，请创建新知识库后进行分段修改'

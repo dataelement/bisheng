@@ -468,6 +468,9 @@ class KnowledgeService(KnowledgeUtils):
 
         if not login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
             raise UnAuthorizedError.http_exception()
+        files = KnowledgeFileDao.get_file_simple_by_knowledge_id(knowledge_id, 1, 1)
+        if not files:
+            return [], 0
 
         index_name = db_knowledge.index_name if db_knowledge.index_name else db_knowledge.collection_name
         embeddings = FakeEmbedding()
@@ -485,7 +488,11 @@ class KnowledgeService(KnowledgeUtils):
             search_data["post_filter"] = {"terms": {"metadata.file_id": file_ids}}
         if keyword:
             search_data["query"] = {"match": {"text": keyword}}
-        res = es_client.client.search(index=index_name, body=search_data)
+        try:
+            res = es_client.client.search(index=index_name, body=search_data)
+        except Exception as e:
+            logger.warning(f'act=get_knowledge_chunks error={str(e)}')
+            raise KnowledgeChunkError.http_exception()
         return [FileChunk(text=one["_source"]["text"], metadata=one["_source"]["metadata"]) for one in
                 res["hits"]["hits"]], res['hits']['total']['value']
 
