@@ -277,6 +277,9 @@ def add_file_embedding(vector_client, es_client, minio_client, db_file: Knowledg
                                                                separator_rule, chunk_size, chunk_overlap)
     if len(texts) == 0:
         raise ValueError('文件解析为空')
+    for one in texts:
+        if len(one) > 10000:
+            raise ValueError('分段结果超长，请尝试使用自定义策略进行切分')
 
     db_file.parse_type = parse_type
     # 存储ocr识别后的partitions结果
