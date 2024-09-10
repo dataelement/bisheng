@@ -447,6 +447,7 @@ class FileChunkMetadata(BaseModel):
 # 文件分块数据格式
 class FileChunk(BaseModel):
     text: str = Field(..., description="文本块内容")
+    parse_type: Optional[str] = Field(default=None, description="文本所属的文件解析类型")
     metadata: FileChunkMetadata = Field(..., description="文本块元数据")
 
 

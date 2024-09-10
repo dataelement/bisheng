@@ -493,8 +493,20 @@ class KnowledgeService(KnowledgeUtils):
         except Exception as e:
             logger.warning(f'act=get_knowledge_chunks error={str(e)}')
             raise KnowledgeChunkError.http_exception()
-        return [FileChunk(text=one["_source"]["text"], metadata=one["_source"]["metadata"]) for one in
-                res["hits"]["hits"]], res['hits']['total']['value']
+
+        # 查询下分块对应的文件信息
+        file_ids = set()
+        result = []
+        for one in res["hits"]["hits"]:
+            file_ids.add(one["_source"]["metadata"]["file_id"])
+        file_list = KnowledgeFileDao.select_list(list(file_ids))
+        file_map = {one.id: one for one in file_list}
+        for one in res["hits"]["hits"]:
+            file_id = one["_source"]["metadata"]["file_id"]
+            file_info = file_map.get(file_id, None)
+            result.append(FileChunk(text=one["_source"]["text"], metadata=one["_source"]["metadata"],
+                                    parse_type=file_info.parse_type if file_info else None))
+        return result, res['hits']['total']['value']
 
     @classmethod
     def update_knowledge_chunk(cls, request: Request, login_user: UserPayload, knowledge_id: int, file_id: int,

@@ -275,6 +275,7 @@ def add_file_embedding(vector_client, es_client, minio_client, db_file: Knowledg
     if len(texts) == 0:
         raise ValueError('文件解析为空')
 
+    db_file.parse_type = parse_type
     # 存储ocr识别后的partitions结果
     if partitions:
         partition_data = json.dumps(partitions, ensure_ascii=False).encode('utf-8')
