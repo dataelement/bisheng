@@ -21,7 +21,7 @@
         "save": "保存",
         "back": "返回",
         "modelNameEmpty": "模型名称不可为空",
-        "modelNameLength": "最多三十个字符",
+        "modelNameLength": "最多100个字符",
         "modelNameDuplicate": "模型不可重复",
         "deleteModelConfirmation": "删除正在使用的模型可能导致已有应用或知识库不可用，确认删除？",
         "modelName": "模型名称",

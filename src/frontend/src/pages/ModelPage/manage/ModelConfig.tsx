@@ -27,7 +27,7 @@ function ModelItem({ data, onDelete, onInput }) {
 
         setError('')
         if (!value) setError(t('model.modelNameEmpty'))
-        if (value.length > 30) setError(t('model.modelNameLength'))
+        if (value.length > 100) setError(t('model.modelNameLength'))
         if (repeated) setError(t('model.modelNameDuplicate'))
     }
 

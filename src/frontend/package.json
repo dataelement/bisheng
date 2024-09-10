@@ -66,6 +66,7 @@
     "react-icons": "^4.10.1",
     "react-laag": "^2.0.5",
     "react-markdown": "^8.0.7",
+    "react-query": "^3.39.3",
     "react-router-dom": "6.17.0",
     "react-syntax-highlighter": "^15.5.0",
     "react-tabs": "^6.0.2",

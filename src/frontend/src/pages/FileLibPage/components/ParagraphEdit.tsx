@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from "react-router-dom";
 import Markdown from './Markdown';
 
+// 上传预览时携带chunks
 const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePath = '', fileId, chunkId, onClose }) => {
     const { id } = useParams();
     const [value, setValue] = useState('');
@@ -26,7 +27,7 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
         let value = ''
         res.data.forEach(chunk => {
             const { bbox, chunk_index } = chunk.metadata
-            const labels = JSON.parse(bbox).chunk_bboxes
+            const labels = bbox ? JSON.parse(bbox).chunk_bboxes : []
 
             const active = chunk_index === chunkId
             const resData = labels.map(label => {
@@ -54,7 +55,7 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
     }, [])
 
     const markDownRef = useRef(null)
-    const { leftPanelWidth, handleMouseDown } = useDragSize(false)
+    const { leftPanelWidth, handleMouseDown } = useDragSize(!isUns)
     const [labelChange, setLabelChange] = useState(false)
     const { message } = useToast()
 
@@ -116,7 +117,7 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
     return (
         <div className="flex px-4 py-2 select-none">
             <div className="relative" style={{ width: leftPanelWidth }}>
-                <div className="flex justify-between h-10 items-center mb-2">
+                <div className="flex justify-between h-10 items-center mb-2 max-w-96">
                     <span>{fileName}</span>
                     <span># {chunkId + 1}</span>
                 </div>

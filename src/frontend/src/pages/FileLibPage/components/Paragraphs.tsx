@@ -17,6 +17,7 @@ import { useTable } from "@/util/hook"
 import { useEffect, useState } from "react"
 import { useParams } from "react-router-dom"
 import ParagraphEdit from "./ParagraphEdit"
+import { ReaderIcon } from "@radix-ui/react-icons"
 
 export const ParagraphsItem = ({ data, disabled = false, onEdit, onDeled }) => {
 
@@ -92,14 +93,15 @@ export default function Paragraphs({ fileId }) {
     const [paragraph, setParagraph] = useState<any>({
         fileId: '',
         chunkId: '',
+        isUns: false,
         show: false
     })
 
-    return <div className="relative mt-8">
+    return <div className="relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <div className="absolute right-0 top-[-46px] flex gap-4 items-center">
+        <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
             <SearchInput placeholder='搜索相关分段' onChange={(e) => search(e.target.value)}></SearchInput>
             <div className="min-w-72 max-w-[400px]">
                 <MultiSelect
@@ -115,19 +117,24 @@ export default function Paragraphs({ fileId }) {
                 ></MultiSelect>
             </div>
         </div>
-        <div className="h-[calc(100vh-168px)] overflow-y-auto pb-20 bg-background-main">
-            <div className=" flex flex-wrap gap-2 p-2 items-start">
+        <div className="h-[calc(100vh-144px)] overflow-y-auto pb-20 bg-background-main">
+            <div className="h-full flex flex-wrap gap-2 p-2 items-start">
                 {
-                    datalist.map((item, index) => <ParagraphsItem
+                    datalist.length ? datalist.map((item, index) => <ParagraphsItem
                         key={index}
                         data={item}
                         onEdit={() => setParagraph({
                             fileId: item.metadata.file_id,
                             chunkId: item.metadata.chunk_index,
+                            isUns: item.parse_type === 'uns',
                             show: true
                         })}
                         onDeled={handleDeleteChunk}
-                    ></ParagraphsItem>)
+                    ></ParagraphsItem>) :
+                        <div className="flex justify-center items-center flex-col size-full text-gray-400">
+                            <ReaderIcon width={160} height={160} className="text-border" />
+                            请先完成文件上传
+                        </div>
                 }
             </div>
         </div>
@@ -144,7 +151,12 @@ export default function Paragraphs({ fileId }) {
         </div>
         <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph({ ...paragraph, show })}>
             <DialogContent className='size-full max-w-full sm:rounded-none p-0 border-none'>
-                <ParagraphEdit fileId={paragraph.fileId} chunkId={paragraph.chunkId} onClose={() => setParagraph({ ...paragraph, show: false })} />
+                <ParagraphEdit
+                    fileId={paragraph.fileId}
+                    chunkId={paragraph.chunkId}
+                    isUns={paragraph.isUns}
+                    onClose={() => setParagraph({ ...paragraph, show: false })}
+                />
             </DialogContent>
         </Dialog>
     </div>

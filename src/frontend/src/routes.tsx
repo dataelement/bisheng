@@ -71,7 +71,7 @@ const privateRouter = [
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps", element: <Templates />, permission: 'build', },
-      { path: "model/management", element: <Management />},
+      { path: "model/management", element: <Management /> },
       { path: "model/finetune", element: <Finetune /> },
       { path: "model", element: <Navigate to="management" replace /> },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
@@ -141,6 +141,7 @@ export const publicRouter = createBrowserRouter([
   { path: "/reset", element: <ResetPwdPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
+  { path: "/403", element: <Page403 /> },
   { path: "*", element: <LoginPage /> }
 ],
   baseConfig)

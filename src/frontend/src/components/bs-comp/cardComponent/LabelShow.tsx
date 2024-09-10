@@ -1,15 +1,35 @@
-import { LabelIcon } from "@/components/bs-icons/label";
-import LabelSelect from "../selectComponent/LabelSelect";
-import { UPDATETYPE } from "../selectComponent/LabelSelect";
-import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { BookmarkFilledIcon } from "@radix-ui/react-icons";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import LabelSelect, { UPDATETYPE } from "../selectComponent/LabelSelect";
 
-export default function LabelShow({ show, isOperator, labels, all, resource }) {
+export default function LabelShow({ data, user, all, type, onChange }) {
   const { t } = useTranslation()
-  const [freshData, setFreshData] = useState(labels)
-  const [allData, setAllData] = useState(all)
-  const [isShow, setIsShow] = useState(show)
+  const [freshData, setFreshData] = useState(() =>
+    data.tags.map(d => ({ label: d.name, value: d.id, selected: true, edit: false }))
+  )
+  const labels = useMemo(() => {
+    return data.tags.map(d => ({ label: d.name, value: d.id, selected: true, edit: false }))
+  }, [data])
+
+  const [allData, setAllData] = useState([])
+  useEffect(() => {
+    setAllData(all)
+  }, [all])
+  const [isShow, setIsShow] = useState(data.tags.length > 0)
+
+  const resource = { id: data.id, type }
+
+  const isOperator = useMemo(() => {
+    if (data && user) {
+      if (user.role === 'admin') return true
+      data.group_ids.forEach(element => {
+        if (user.admin_groups.includes(element)) return true
+      })
+      if (data.user_id === user.user_id) return true
+    }
+    return false
+  }, [data, user])
 
   const handleUpdate = (obj: { type: string, data: any }) => {
     switch (obj.type) {
@@ -23,15 +43,17 @@ export default function LabelShow({ show, isOperator, labels, all, resource }) {
       }
       case UPDATETYPE.UPDATENAME: {
         setFreshData(pre => pre.map(d => d.value === obj.data.value ? { ...d, label: obj.data.label } : d))
+        onChange()
         break
       }
       case UPDATETYPE.CREATELABEL: {
-        // 什么也不用做
+        onChange()
         break
       }
       case UPDATETYPE.DELETELABEL: {
         setFreshData(pre => pre.filter(d => d.value !== obj.data.value))
-        setAllData(pre => pre.filter(a => a.value !== obj.data.value))
+        onChange()
+        // setAllData(pre => pre.filter(a => a.value !== obj.data.value))
         break
       }
       default: console.log('error：>>事件类型错误！！！')

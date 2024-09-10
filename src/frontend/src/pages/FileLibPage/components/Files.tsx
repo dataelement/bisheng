@@ -65,15 +65,15 @@ export default function Files({ onPreview }) {
         }))
     }
 
-    return <div className="relative mt-8">
+    return <div className="relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <div className="absolute right-0 top-[-46px] flex gap-4 items-center">
+        <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
             <SearchInput placeholder={'搜索文名称'} onChange={(e) => search(e.target.value)}></SearchInput>
             {hasPermission && <Link to={`/filelib/upload/${id}`}><Button className="px-8" onClick={() => { }}>上传文件</Button></Link>}
         </div>
-        <div className="h-[calc(100vh-168px)] overflow-y-auto pb-20">
+        <div className="h-[calc(100vh-144px)] overflow-y-auto pb-20">
             <Table>
                 <TableHeader>
                     <TableRow>

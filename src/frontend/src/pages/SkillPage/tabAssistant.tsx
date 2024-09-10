@@ -1,3 +1,4 @@
+import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import DialogForceUpdate from "@/components/bs-ui/dialog/DialogForceUpdate";
 import SelectSearch from "@/components/bs-ui/select/select";
@@ -5,8 +6,9 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
 import { getAllLabelsApi } from "@/controllers/API/label";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from 'react-query';
 import { useNavigate } from "react-router-dom";
 import CardComponent from "../../components/bs-comp/cardComponent";
 import { SearchInput } from "../../components/bs-ui/input";
@@ -21,17 +23,6 @@ export default function Assistants() {
     const navigate = useNavigate()
     const { message } = useToast()
     const { user } = useContext(userContext)
-    const [labels, setLabels] = useState<any[]>([])
-    const labelsRef = useRef([])
-
-    useEffect(() => {
-        getAllLabelsApi().then(res => {
-            const newData = res.data.map(d => ({ label: d.name, value: d.id, edit: false, selected: false }))
-            const topData = { label: t('all'), value: -1, edit: false, selected: false }
-            labelsRef.current = [topData, ...newData]
-            setLabels(labelsRef.current)
-        })
-    }, [])
 
     const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<AssistantItemDB>({ pageSize: 15 }, (param) =>
         getAssistantsApi(param.page, param.pageSize, param.keyword, param.tag_id)
@@ -57,37 +48,23 @@ export default function Assistants() {
         })
     }
 
-    const [selectLabel, setSelectLabel] = useState({ label: '', value: null })
+    const { selectLabel, setSelectLabel, setSearchKey, filteredOptions, allOptions, refetchLabels } = useQueryLabels(t)
     const handleLabelSearch = (id) => {
-        setSelectLabel(labels.find(l => l.value === id))
+        setSelectLabel(allOptions.find(l => l.value === id))
         filterData({ tag_id: id })
     }
-
-    const handleSelectSearch = (e) => {
-        const key = e.target.value
-        const newData = labelsRef.current.filter(l => l.label.toUpperCase().includes(key.toUpperCase()) || l.value === selectLabel.value)
-        setLabels(newData)
-    }
-
-    // const handleClear = () => {
-    //     setSelectLabel(pre => ({...pre, value:-1}))
-    //     filterData({tag_id: -1})
-    // }
 
     return <div className="h-full relative bg-background-main border-t">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative">
             <div className="flex space-x-4">
                 <SearchInput className="w-64" placeholder={t('build.searchAssistant')} onChange={(e) => search(e.target.value)}></SearchInput>
-                <SelectSearch value={!selectLabel.value ? '' : selectLabel.value} options={labels}
+                <SelectSearch value={!selectLabel.value ? '' : selectLabel.value} options={allOptions}
                     selectPlaceholder={t('chat.allLabels')}
                     inputPlaceholder={t('chat.searchLabels')}
                     selectClass="w-64"
-                    onOpenChange={() => setLabels(labelsRef.current)}
-                    onChange={handleSelectSearch}
+                    onOpenChange={() => setSearchKey('')}
+                    onChange={(e) => setSearchKey(e.target.value)}
                     onValueChange={handleLabelSearch}>
-                    {/* <div onClick={handleClear} className="bg-[#F5F5F5] rounded-sm mb-2 item-center h-[30px]">
-                        <span className="ml-2 text-[#727C8F] cursor-default">清除已选项</span>
-                    </div> */}
                 </SelectSearch>
             </div>
             {/* list */}
@@ -126,12 +103,20 @@ export default function Assistants() {
                                     description={item.desc}
                                     user={item.user_name}
                                     currentUser={user}
-                                    allLabels={labels}
                                     onClick={() => item.status !== 1 && navigate('/assistant/' + item.id)}
                                     onSwitchClick={() => !item.write && item.status !== 1 && message({ title: t('prompt'), description: t('skills.contactAdmin'), variant: 'warning' })}
                                     onDelete={handleDelete}
                                     onSetting={() => navigate('/assistant/' + item.id)}
                                     onCheckedChange={handleCheckedChange}
+                                    labelPannel={
+                                        <LabelShow
+                                            data={item}
+                                            user={user}
+                                            type={'assist'}
+                                            all={filteredOptions}
+                                            onChange={refetchLabels}>
+                                        </LabelShow>
+                                    }
                                 ></CardComponent>
                             ))
                         }
@@ -145,3 +130,34 @@ export default function Assistants() {
         </div>
     </div>
 };
+
+
+export const useQueryLabels = (t) => {
+    const { data: options, refetch } = useQuery({
+        queryKey: "QueryLabelsKey",
+        queryFn: () => getAllLabelsApi().then(res =>
+            res.data.map(d => ({ label: d.name, value: d.id, edit: false, selected: false }))
+        )
+    });
+
+    const [searchKey, setSearchKey] = useState('');
+    const [selectLabel, setSelectLabel] = useState({ label: '', value: null })
+
+    const [filteredOptions, allOptions] = useMemo(() => {
+        if (!options) return [[], []]
+        const topItem = { label: t('all'), value: -1, edit: false, selected: false }
+        if (!searchKey) return [options, [topItem, ...options]];
+        // 检索
+        const _newOptions = options.filter(op => op.label.toUpperCase().includes(searchKey.toUpperCase()) || op.value === selectLabel.value)
+        return [_newOptions, [topItem, ..._newOptions]]
+    }, [searchKey, options, selectLabel])
+
+    return {
+        selectLabel,
+        setSelectLabel,
+        setSearchKey,
+        filteredOptions,
+        allOptions,
+        refetchLabels: refetch
+    }
+}

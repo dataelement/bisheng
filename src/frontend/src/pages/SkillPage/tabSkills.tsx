@@ -1,7 +1,9 @@
+import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
 import SkillTempSheet from "@/components/bs-comp/sheets/SkillTempSheet";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import SelectSearch from "@/components/bs-ui/select/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { useContext, useRef, useState, useEffect } from "react";
+import { useContext, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import CardComponent from "../../components/bs-comp/cardComponent";
@@ -18,8 +20,7 @@ import { useTable } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import CardSelectVersion from "./components/CardSelectVersion";
 import CreateTemp from "./components/CreateTemp";
-import { getAllLabelsApi } from "@/controllers/API/label";
-import SelectSearch from "@/components/bs-ui/select/select"
+import { useQueryLabels } from "./tabAssistant";
 
 export default function Skills() {
     const { t } = useTranslation()
@@ -30,7 +31,6 @@ export default function Skills() {
     const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14 }, (param) =>
         readFlowsFromDatabase(param.page, param.pageSize, param.keyword, param.tag_id)
     )
-    const [open, setOpen] = useState(false)
 
     const { open: tempOpen, flowRef, toggleTempModal } = useCreateTemp()
 
@@ -71,54 +71,28 @@ export default function Skills() {
         captureAndAlertRequestErrorHoc(saveFlowToDatabase({ ...flow, id: flow.flow_id }).then((res: any) => {
             res.user_name = user.user_name
             res.write = true
-            setOpen(false)
+            // setOpen(false)
             navigate(`/build/skill/${res.id}/${res.version_id}`)
         }))
     }
 
-    const [labels, setLabels] = useState<any[]>([])
-    const [selectLabel, setSelectLabel] = useState({ label: '', value: null })
-    const labelsRef = useRef([])
-
+    const { selectLabel, setSelectLabel, setSearchKey, filteredOptions, allOptions, refetchLabels } = useQueryLabels(t)
     const handleLabelSearch = (id) => {
-        setSelectLabel(labels.find(l => l.value === id))
+        setSelectLabel(allOptions.find(l => l.value === id))
         filterData({ tag_id: id })
     }
-
-    const handleSelectSearch = (e) => {
-        const key = e.target.value
-        const newData = labelsRef.current.filter(l => l.label.toUpperCase().includes(key.toUpperCase()) || l.value === selectLabel.value)
-        setLabels(newData)
-    }
-
-    // const handleClear = () => {
-    //     setSelectLabel(pre => ({...pre, value:-1}))
-    //     filterData({tag_id: -1})
-    // }
-
-    useEffect(() => {
-        getAllLabelsApi().then(res => {
-            const newData = res.data.map(d => ({ label: d.name, value: d.id, edit: false, selected: false }))
-            const topData = { label: t('all'), value: -1, edit: false, selected: false }
-            labelsRef.current = [topData, ...newData]
-            setLabels(labelsRef.current)
-        })
-    }, [])
 
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
             <div className="flex space-x-4">
                 <SearchInput className="w-64" placeholder={t('skills.skillSearch')} onChange={(e) => search(e.target.value)}></SearchInput>
-                <SelectSearch value={!selectLabel.value ? '' : selectLabel.value} options={labels}
+                <SelectSearch value={!selectLabel.value ? '' : selectLabel.value} options={allOptions}
                     selectPlaceholder={t('chat.allLabels')}
                     inputPlaceholder={t('chat.searchLabels')}
                     selectClass="w-64"
-                    onOpenChange={() => setLabels(labelsRef.current)}
-                    onChange={handleSelectSearch}
+                    onOpenChange={() => setSearchKey('')}
+                    onChange={(e) => setSearchKey(e.target.value)}
                     onValueChange={handleLabelSearch}>
-                    {/* <div onClick={handleClear} className="bg-[#F5F5F5] rounded-sm mb-2 item-center h-[30px]">
-                        <span className="ml-2 text-[#727C8F] cursor-default">清除已选项</span>
-                    </div> */}
                 </SelectSearch>
                 {user.role === 'admin' && <Button
                     variant="ghost"
@@ -159,7 +133,6 @@ export default function Skills() {
                                     checked={item.status === 2}
                                     user={item.user_name}
                                     currentUser={user}
-                                    allLabels={labels}
                                     onClick={() => handleSetting(item)}
                                     onSwitchClick={() => !item.write && item.status !== 2 && message({ title: t('prompt'), description: t('skills.contactAdmin'), variant: 'warning' })}
                                     onAddTemp={toggleTempModal}
@@ -172,6 +145,15 @@ export default function Skills() {
                                             data={item}
                                         ></CardSelectVersion>
                                     )}
+                                    labelPannel={
+                                        <LabelShow
+                                            data={item}
+                                            user={user}
+                                            type={'skill'}
+                                            all={filteredOptions}
+                                            onChange={refetchLabels}>
+                                        </LabelShow>
+                                    }
                                 ></CardComponent>
                             ))
                         }

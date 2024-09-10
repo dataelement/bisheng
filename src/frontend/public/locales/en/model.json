@@ -21,7 +21,7 @@
         "save": "Save",
         "back": "Back",
         "modelNameEmpty": "Name required",
-        "modelNameLength": "Max 30 chars",
+        "modelNameLength": "Max 100 chars",
         "modelNameDuplicate": "Cannot duplicate",
         "deleteModelConfirmation": "Deleting may affect existing apps or Knowledge Base. Confirm?",
         "modelName": "Model Name",
