@@ -107,7 +107,7 @@ class KnowledgeDao(KnowledgeBase):
         statement = select(func.count(Knowledge.id))
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra, name)
         with session_getter() as session:
-            return session.exec(statement).scalar()
+            return session.scalar(statement)
 
     @classmethod
     def count_by_filter(cls, filters: List[Any]) -> int:
