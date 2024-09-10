@@ -50,7 +50,7 @@ export default function Header() {
         </ShadTooltip>
         <div>
             <div className="group flex items-center">
-                <span className=" text-gray-700 text-sm font-black pl-4">{libInfo.name}</span>
+                <span className=" text-foreground text-sm font-black pl-4">{libInfo.name}</span>
                 {/* edit dialog */}
                 <Dialog open={open} onOpenChange={setOpen} >
                     <DialogTrigger asChild>

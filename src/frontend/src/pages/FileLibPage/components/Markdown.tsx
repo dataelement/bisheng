@@ -76,7 +76,7 @@ const AceEditorCom = ({ markdown, hidden, onChange }) => {
     />
 }
 
-export default forwardRef(function Markdown({ value }, ref) {
+export default forwardRef(function Markdown({ isUns, title, q, value }, ref) {
     const [val, setValue] = useState('')
     const [isAce, setIsAce] = useState(false)
     useEffect(() => {
@@ -104,11 +104,12 @@ export default forwardRef(function Markdown({ value }, ref) {
 
     {/* markdown */ }
     return <div >
-        <div className="flex justify-between mb-2">
-            <Label className="bisheng-label"><span className="text-red-500">*</span>分段内容</Label>
+        <div className="flex justify-between items-center mb-2 h-10">
+            <Label ><span className="text-red-500">*</span>#{q} 分段内容</Label>
+            {!isUns && <span>{title}</span>}
             <div className="flex items-center gap-2"><Label>markdown预览</Label><Switch checked={!isAce} onCheckedChange={hangleCheckChagne} /></div>
         </div>
-        <div className="border mb-2 h-[calc(100vh-140px)]">
+        <div className="border mb-2 h-[calc(100vh-104px)]">
             {/* 编辑器 */}
             <AceEditorCom hidden={!isAce} markdown={val} onChange={setValue} />
             <VditorEditor ref={vditorRef} hidden={isAce} markdown={val} />

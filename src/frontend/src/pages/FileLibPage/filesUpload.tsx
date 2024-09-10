@@ -38,7 +38,7 @@ export default function FilesUpload() {
                         <ArrowLeft className="side-bar-button-size" />
                     </button>
                 </ShadTooltip>
-                <span className=" text-gray-700 text-sm font-black pl-4">退出</span>
+                <span className=" text-foreground text-sm font-black pl-4">退出</span>
             </div>
             <FileUploadStep1 hidden={stepEnd} onNext={handleStep1NextClick} />
             {stepEnd && <FileUploadStep2 fileInfo={fileInfo} onPrev={() => setStepEnd(false)} onPreview={handlePreviewClick} onChange={() => setChange(true)} />}

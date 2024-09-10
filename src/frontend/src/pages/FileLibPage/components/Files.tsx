@@ -10,10 +10,10 @@ import {
 } from "../../../components/bs-ui/table";
 
 import { Filter, RotateCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-// import PaginationComponent from "../../components/PaginationComponent";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "../../../components/bs-ui/select";
@@ -31,6 +31,16 @@ export default function Files({ onPreview }) {
             return res
         })
     )
+    // 解析中 轮巡
+    const timerRef = useRef(null)
+    useEffect(() => {
+        if (datalist.some(el => el.status === 1)) {
+            timerRef.current = setTimeout(() => {
+                reload()
+            }, 5000)
+            return () => clearTimeout(timerRef.current)
+        }
+    }, [datalist])
 
     const [hasPermission, setHasPermission] = useState(true)
 
@@ -105,9 +115,16 @@ export default function Files({ onPreview }) {
                             <TableCell className="font-medium">{el.file_name}</TableCell>
                             <TableCell>
                                 {el.status === 3 ? <div className="flex items-center">
-                                    <div className="tooltip" data-tip={el.remark}>
-                                        <span className='text-red-500'>{t('lib.parseFailed')}</span>
-                                    </div>
+                                    <TooltipProvider delayDuration={100}>
+                                        <Tooltip>
+                                            <TooltipTrigger>
+                                                <span className='text-red-500'>{t('lib.parseFailed')}</span>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <div className="max-w-96 text-left break-all whitespace-normal">{el.remark}</div>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
                                     <Button variant="link"><RotateCw size={16} onClick={() => handleRetry([el])} /></Button>
                                 </div> :
                                     <span className={el.status === 3 && 'text-red-500'}>{[t('lib.parseFailed'), t('lib.parsing'), t('lib.completed'), t('lib.parseFailed')][el.status]}</span>

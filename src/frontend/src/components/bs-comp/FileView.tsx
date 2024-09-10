@@ -95,40 +95,15 @@ const DragPanne = ({ onMouseEnd }) => {
     const [isDragging, setIsDragging] = useState(false);
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
     const [currentPos, setCurrentPos] = useState({ x: 0, y: 0 });
-    const [isShiftPressed, setIsShiftPressed] = useState(false);
+    // const [isShiftPressed, setIsShiftPressed] = useState(false);
     const boxRef = useRef(null);
 
     useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (e.key === 'Shift') {
-                setIsShiftPressed(true);
-            }
-        };
-
-        const handleKeyUp = (e) => {
-            if (e.key === 'Shift') {
-                setIsShiftPressed(false);
-                setIsDragging(false);
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-        };
-    }, []);
-
-    useEffect(() => {
         const handleMouseDown = (e) => {
-            if (isShiftPressed) {
-                const rect = boxRef.current.getBoundingClientRect();
-                setIsDragging(true);
-                setStartPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-                setCurrentPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-            }
+            const rect = boxRef.current.getBoundingClientRect();
+            setIsDragging(true);
+            setStartPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+            setCurrentPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
         };
 
         const handleMouseMove = (e) => {
@@ -158,13 +133,13 @@ const DragPanne = ({ onMouseEnd }) => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isShiftPressed, isDragging, startPos, currentPos, onMouseEnd]);
+    }, [isDragging, startPos, currentPos, onMouseEnd]);
 
     return (
         <div
             ref={boxRef}
             className="absolute inset-x-2 inset-y-4 overflow-hidden z-10"
-            style={{ pointerEvents: isShiftPressed ? 'auto' : 'none' }}
+            style={{ pointerEvents: 'none' }}
         >
             {isDragging && (
                 <div
@@ -180,7 +155,15 @@ const DragPanne = ({ onMouseEnd }) => {
         </div>
     );
 };
-export default function FileView({ drawfont = false, select = false, scrollTo, fileUrl, labels, onSelectLabel = () => { } }) {
+export default function FileView({
+    drawfont = false,
+    select = false,
+    scrollTo,
+    fileUrl,
+    labels,
+    onPageChange = (offset, h, paperSize, scale) => { },
+    onSelectLabel = () => { }
+}) {
     const { t } = useTranslation()
     const paneRef = useRef(null)
     const listRef = useRef(null)
@@ -262,12 +245,18 @@ export default function FileView({ drawfont = false, select = false, scrollTo, f
                 const pageH = (key - 1) * (boxSize.width / 0.7 * scale)
                 if (x <= sx && y <= sy + pageH && x1 >= ex && y1 >= ey + pageH) {
                     console.log('item.id :>> ', item.id);
-                    selects.push({ id: item.id, active: !item.active })
+                    selects.push({ id: item.id, active: true })
                 }
             })
         })
         selects.length && onSelectLabel(selects)
     }, [boxSize, labels])
+
+    const handleScroll = ({ scrollOffset }) => {
+        scrollOffsetRef.current = scrollOffset
+        onPageChange?.(scrollOffset, boxSize.height, boxSize.width / 0.7, fileWidthRef.current / boxSize.width)
+        // console.log('object :>> ', scrollOffset, boxSize.height, boxSize.width / 0.7);
+    }
 
     return <div ref={paneRef} className="flex-1 h-full bg-gray-100 rounded-md py-4 px-2 relative"
         onContextMenu={(e) => e.preventDefault()}
@@ -287,7 +276,7 @@ export default function FileView({ drawfont = false, select = false, scrollTo, f
                         // 滚动区盒子大小
                         width={boxSize.width}
                         height={boxSize.height}
-                        onScroll={val => scrollOffsetRef.current = val.scrollOffset}
+                        onScroll={handleScroll}
                     >
                         {(props) => <Row
                             {...props}

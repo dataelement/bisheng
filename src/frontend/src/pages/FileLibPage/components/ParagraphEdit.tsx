@@ -114,39 +114,55 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
         return target ? [target.page, target.label[1] + random] : [1, 0]
     }, [random])
 
+    const [showPos, setShowPos] = useState(true)
+    const handlePageChange = (offset, h, paperSize, scale) => {
+        // console.log('data :>> ', data, offset, h, paperSize);
+        setShowPos(!data.some(item => {
+            const pageHeight = (item.page - 1) * paperSize
+            const labelTop = pageHeight + item.label[1] / scale
+            return item.active && labelTop > offset && labelTop < (offset + h)
+        }))
+    }
+
     return (
         <div className="flex px-4 py-2 select-none">
+            {/* left */}
             <div className="relative" style={{ width: leftPanelWidth }}>
-                <div className="flex justify-between h-10 items-center mb-2 max-w-96">
-                    <span>{fileName}</span>
-                    <span># {chunkId + 1}</span>
-                </div>
-                <Markdown ref={markDownRef} value={value} />
+                <Markdown ref={markDownRef} isUns={isUns} title={fileName} q={chunkId + 1} value={value} />
                 {!value && <p className="absolute left-0 text-red-500 text-xs mt-2">输入内容不可为空</p>}
-                <div className="flex justify-end gap-4">
-                    <Button className="px-6" variant="outline" onClick={onClose}>取消</Button>
-                    <Button className="px-6" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />保存</Button>
-                </div>
+                {!isUns && <div className="flex justify-end gap-4">
+                    <Button className="px-6 h-8" variant="outline" onClick={onClose}>取消</Button>
+                    <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />保存</Button>
+                </div>}
             </div>
             {isUns && <>
+                {/* drag line */}
                 <div className="h-full p-2">
                     <div
                         className="h-full w-1 border cursor-ew-resize"
                         onMouseDown={handleMouseDown}
                     ></div>
                 </div>
+                {/* right */}
                 <div className="flex-1">
-                    <div className="flex items-center relative h-10 mb-2 text-sm">
+                    {/* head */}
+                    <div className="flex justify-between items-center relative h-10 mb-2 text-sm">
+                        <span>{fileName}</span>
                         <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
-                            <InfoCircledIcon className='mr-1' />
-                            <span>检测到分段范围调整,</span>
+                            <InfoCircledIcon className='mr-1 text-red-500' />
+                            <span className="text-red-500">检测到分段范围调整,</span>
                             <span className="text-primary cursor-pointer" onClick={handleOvergap}>覆盖分段内容</span>
                         </div>
+                        <div className="flex justify-end gap-4">
+                            <Button className="px-6 h-8" variant="outline" onClick={onClose}>取消</Button>
+                            <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />保存</Button>
+                        </div>
                     </div>
+                    {/* file view */}
                     <div className="bg-gray-100 relative">
-                        {value && Object.keys(labels).length && <Button className="absolute top-2 right-2 z-10" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair2Icon className="mr-1" />回到定位</Button>}
+                        {showPos && value && Object.keys(labels).length && <Button className="absolute top-2 right-2 z-10" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair2Icon className="mr-1" />回到定位</Button>}
                         <div className="h-[calc(100vh-72px)]">
-                            {fileUrl && <FileView select fileUrl={fileUrl} labels={labels} scrollTo={postion} onSelectLabel={handleSelectLabels} />}
+                            {fileUrl && <FileView select fileUrl={fileUrl} labels={labels} scrollTo={postion} onSelectLabel={handleSelectLabels} onPageChange={handlePageChange} />}
                         </div>
                     </div>
                 </div>

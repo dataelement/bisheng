@@ -118,7 +118,7 @@ export default function Paragraphs({ fileId }) {
             </div>
         </div>
         <div className="h-[calc(100vh-144px)] overflow-y-auto pb-20 bg-background-main">
-            <div className="h-full flex flex-wrap gap-2 p-2 items-start">
+            <div className="flex flex-wrap gap-2 p-2 items-start">
                 {
                     datalist.length ? datalist.map((item, index) => <ParagraphsItem
                         key={index}
@@ -150,7 +150,7 @@ export default function Paragraphs({ fileId }) {
             </div>
         </div>
         <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph({ ...paragraph, show })}>
-            <DialogContent className='size-full max-w-full sm:rounded-none p-0 border-none'>
+            <DialogContent close={false} className='size-full max-w-full sm:rounded-none p-0 border-none'>
                 <ParagraphEdit
                     fileId={paragraph.fileId}
                     chunkId={paragraph.chunkId}

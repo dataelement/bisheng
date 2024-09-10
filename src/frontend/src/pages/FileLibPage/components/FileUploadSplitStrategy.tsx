@@ -45,7 +45,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                         {(provided) => (
                             <div {...provided.droppableProps} ref={provided.innerRef}>
                                 {
-                                    strategies.length && strategies.map((strategy, index) => (
+                                    strategies.length !== 0 && strategies.map((strategy, index) => (
                                         <Draggable key={strategy.id} draggableId={strategy.id} index={index}>
                                             {(provided) => (
                                                 <div

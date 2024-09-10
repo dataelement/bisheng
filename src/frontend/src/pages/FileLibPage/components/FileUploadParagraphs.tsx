@@ -107,8 +107,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                 }}>
             </SelectSearch>
             <div className={`${change ? '' : 'hidden'} flex items-center`}>
-                <InfoCircledIcon className='mr-1' />
-                <span>检测到策略调整，</span>
+                <InfoCircledIcon className='mr-1 text-red-500' />
+                <span className="text-red-500">检测到策略调整，</span>
                 <span className="text-primary cursor-pointer" onClick={handleReload}>重新生成预览</span>
             </div>
         </div>
@@ -131,7 +131,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
             }
         </div>
         <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph({ ...paragraph, show })}>
-            <DialogContent className='size-full max-w-full sm:rounded-none p-0 border-none'>
+            <DialogContent close={false} className='size-full max-w-full sm:rounded-none p-0 border-none'>
                 <ParagraphEdit
                     chunks={paragraphs}
                     partitions={partitions}
