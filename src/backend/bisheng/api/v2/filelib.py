@@ -99,6 +99,8 @@ async def upload_file(request: Request,
                       file: UploadFile = File(...),
                       background_tasks: BackgroundTasks = None):
     file_name = file.filename
+    if not file_name:
+        return resp_500(message='file name must be not empty')
     # 缓存本地
     file_byte = await file.read()
     file_path = save_download_file(file_byte, 'bisheng', file_name)
@@ -163,6 +165,8 @@ async def post_chunks(request: Request,
                       file: UploadFile = File(...)):
     """ 上传文件到知识库内，同步接口 """
     file_name = file.filename
+    if not file_name:
+        return resp_500(message='file name must be not empty')
     file_byte = await file.read()
     file_path = save_download_file(file_byte, 'bisheng', file_name)
 
