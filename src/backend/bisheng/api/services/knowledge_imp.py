@@ -62,6 +62,9 @@ class KnowledgeUtils:
     def delete_preview_cache(cls, cache_key, chunk_index: int = None):
         if chunk_index is None:
             redis_client.delete(cache_key)
+            redis_client.delete(f'{cache_key}_parse_type')
+            redis_client.delete(f'{cache_key}_file_path')
+            redis_client.delete(f'{cache_key}_partitions')
         else:
             redis_client.hdel(cache_key, chunk_index)
 

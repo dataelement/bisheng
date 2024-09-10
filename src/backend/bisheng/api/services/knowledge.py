@@ -239,13 +239,14 @@ class KnowledgeService(KnowledgeUtils):
             if cache_value := cls.get_preview_cache(cache_key):
                 parse_type = redis_client.get(f"{cache_key}_parse_type")
                 file_share_url = redis_client.get(f"{cache_key}_file_path")
+                partitions = redis_client.get(f"{cache_key}_partitions")
                 res = []
                 for key, val in cache_value.items():
                     res.append(FileChunk(
                         text=val['text'],
                         metadata=val['metadata']
                     ))
-                return parse_type, file_share_url, res
+                return parse_type, file_share_url, res, partitions
 
         filepath, file_name = file_download(req_data.file_path)
 
@@ -277,6 +278,7 @@ class KnowledgeService(KnowledgeUtils):
         cls.save_preview_cache(cache_key, mapping=cache_map)
         redis_client.set(f"{cache_key}_parse_type", parse_type)
         redis_client.set(f"{cache_key}_file_path", file_share_url)
+        redis_client.set(f"{cache_key}_partitions", partitions)
         return parse_type, file_share_url, res, partitions
 
     @classmethod

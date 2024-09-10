@@ -27,7 +27,7 @@ async def upload_file(*, file: UploadFile = File(...)):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(file_path=file_path))
     except Exception as exc:
-        logger.error(f'Error saving file: {exc}')
+        logger.exception(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
