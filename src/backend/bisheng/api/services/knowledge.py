@@ -479,8 +479,8 @@ class KnowledgeService(KnowledgeUtils):
             "from": (page - 1) * limit,
             "size": limit,
             "sort": [
-                {"metadata.file_id": {"order": "desc"}},
-                {"metadata.chunk_index": {"order": "asc"}}
+                {"metadata.file_id": {"order": "desc", "missing": 0, "unmapped_type": "long"}},
+                {"metadata.chunk_index": {"order": "asc", "missing": 0, "unmapped_type": "long"}}
             ]
         }
         if file_ids:
