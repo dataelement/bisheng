@@ -470,9 +470,6 @@ class KnowledgeService(KnowledgeUtils):
 
         if not login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
             raise UnAuthorizedError.http_exception()
-        files = KnowledgeFileDao.get_file_simple_by_knowledge_id(knowledge_id, 1, 1)
-        if not files:
-            return [], 0
 
         index_name = db_knowledge.index_name if db_knowledge.index_name else db_knowledge.collection_name
         embeddings = FakeEmbedding()
@@ -501,8 +498,10 @@ class KnowledgeService(KnowledgeUtils):
         result = []
         for one in res["hits"]["hits"]:
             file_ids.add(one["_source"]["metadata"]["file_id"])
-        file_list = KnowledgeFileDao.select_list(list(file_ids))
-        file_map = {one.id: one for one in file_list}
+        file_map = {}
+        if file_ids:
+            file_list = KnowledgeFileDao.get_file_by_ids(list(file_ids))
+            file_map = {one.id: one for one in file_list}
         for one in res["hits"]["hits"]:
             file_id = one["_source"]["metadata"]["file_id"]
             file_info = file_map.get(file_id, None)

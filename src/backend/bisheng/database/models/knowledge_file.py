@@ -113,6 +113,13 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return knowledge_files
 
     @classmethod
+    def get_file_by_ids(cls, file_ids: List[int]):
+        if not file_ids:
+            return []
+        with session_getter() as session:
+            return session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
+
+    @classmethod
     def get_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: int = None,
                             page: int = 0, page_size: int = 0) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
