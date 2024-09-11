@@ -492,6 +492,8 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
     if db_files:
         for file in db_files:
             knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
+            input_files = new_files.get(file.id)
+            file.object_name = input_files.object_name
             process_file_task(knowledge, [file], fake_req.separator, fake_req.separator_rule,
                               fake_req.chunk_size, fake_req.chunk_overlap, extra_metadata=file.extra_meta)
 
