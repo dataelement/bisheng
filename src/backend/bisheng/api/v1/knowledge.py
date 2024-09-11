@@ -1,5 +1,7 @@
+import urllib.parse
 from typing import List, Optional
 
+import urllib3.util
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Request, Path, Body, Query
 
 from bisheng.api.services.knowledge import KnowledgeService
@@ -180,6 +182,9 @@ async def get_knowledge_chunk(request: Request, login_user: UserPayload = Depend
                               page: int = Query(default=1, description='页数'),
                               limit: int = Query(default=10, description='每页条数条数')):
     """ 获取知识库分块内容 """
+    # 为了解决keyword参数有时候没有进行urldecode的bug
+    if keyword.startswith("%"):
+        keyword = urllib.parse.unquote(keyword)
     res, total = KnowledgeService.get_knowledge_chunks(request, login_user, knowledge_id, file_ids, keyword, page,
                                                        limit)
     return resp_200(data={
