@@ -193,9 +193,10 @@ async def update_knowledge_chunk(request: Request, login_user: UserPayload = Dep
                                  knowledge_id: int = Body(..., embed=True, description='知识库ID'),
                                  file_id: int = Body(..., embed=True, description='文件ID'),
                                  chunk_index: int = Body(..., embed=True, description='分块索引号'),
-                                 text: str = Body(..., embed=True, description='分块内容')):
+                                 text: str = Body(..., embed=True, description='分块内容'),
+                                 bbox: str = Body(default='', embed=True, description='分块框选位置')):
     """ 更新知识库分块内容 """
-    KnowledgeService.update_knowledge_chunk(request, login_user, knowledge_id, file_id, chunk_index, text)
+    KnowledgeService.update_knowledge_chunk(request, login_user, knowledge_id, file_id, chunk_index, text, bbox)
     return resp_200()
 
 

@@ -511,7 +511,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def update_knowledge_chunk(cls, request: Request, login_user: UserPayload, knowledge_id: int, file_id: int,
-                               chunk_index: int, text: str):
+                               chunk_index: int, text: str, bbox: str):
         db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
@@ -539,7 +539,9 @@ class KnowledgeService(KnowledgeUtils):
         # insert data
         if metadata:
             logger.info(f'act=add_vector')
-            res = vector_client.add_texts([text], [metadata[0]], timeout=10)
+            new_metadata = metadata[0]
+            new_metadata['bbox'] = bbox
+            res = vector_client.add_texts([text], [new_metadata], timeout=10)
         # delete data
         logger.info(f'act=delete_vector pk={pk}')
         res = vector_client.col.delete(f"pk in {pk}", timeout=10)
@@ -561,8 +563,8 @@ class KnowledgeService(KnowledgeUtils):
                 }
             }},
             "script": {
-                "source": "ctx._source.text=params.text",
-                "params": {"text": text}
+                "source": "ctx._source.text=params.text;ctx._source.metadata.bbox=params.bbox;",
+                "params": {"text": text, "bbox": bbox}
             }
         })
         logger.info(f'act=update_es_over {res}')
