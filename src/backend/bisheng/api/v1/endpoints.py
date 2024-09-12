@@ -291,7 +291,7 @@ async def upload_icon(request: Request,
         if not isinstance(file_path, str):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(
-            file_path=file_path,  # minio可访问的链接
+            file_path=MinioClient.clear_minio_share_host(file_path),  # minio可访问的链接
             relative_path=file_name,  # minio中的object_name
         ))
     except Exception as exc:
