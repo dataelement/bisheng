@@ -16,7 +16,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 const initialStrategies = [
     { id: '1', regex: '\\n\\n', position: 'after' },
-    { id: '2', regex: '\\n', position: 'after' }
+    // { id: '2', regex: '\\n', position: 'after' }
 ];
 
 interface IProps {
@@ -102,6 +102,8 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
             setRepeatFiles([])
             setRetryLoad(false)
             // onNext()
+            message({ variant: 'success', description: '添加成功' });
+            navaigate(-1)
         }))
     }
 

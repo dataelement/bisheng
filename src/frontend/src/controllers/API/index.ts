@@ -221,6 +221,7 @@ type KnowledgePutRequest = {
   file_id: number;
   chunk_index: number;
   text: string;
+  bbox: any
 }
 export async function updateChunkApi(data: KnowledgePutRequest) {
   return await axios.put(`/api/v1/knowledge/chunk`, data);

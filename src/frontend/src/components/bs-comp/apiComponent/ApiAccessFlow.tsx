@@ -103,7 +103,7 @@ const ApiAccessFlow = ({ }) => {
                             <TableRow>
                                 <TableCell className='align-top'>
                                     <JsonItem name="flow_id" required type="UUID" desc="技能ID" remark='URL传参'></JsonItem>
-                                    <JsonItem name="inputs" required type="Json" desc="对整个技能的问题输入json里的具体key和技能本身相关，不一定都是query" example='{"query":"什么是金融"}' remark='当输入节点只有一个时，id可不传'></JsonItem>
+                                    <JsonItem name="inputs" required type="Json" desc="对整个技能的问题输入，json里的具体key和技能本身相关，不一定都是query" example='{"query":"什么是金融"}' remark='当输入节点只有一个时，id可不传'></JsonItem>
                                     <JsonItem name="history_count" type="int" desc="对于技能里支持Memery，选取几条历史消息进行多轮问答，默认值10"></JsonItem>
                                     <JsonItem name="clear_cache" type="boolean" desc="是否清除session缓存"></JsonItem>
                                     <JsonItem name="session_id" type="str" desc="用于session查找，当我们进行多轮时，此参数必填，且建议采用后端生成的key" remark='每次调用，当session_id 传入时，返回传入sessionid，当session_id不传时，自动生成id'></JsonItem>

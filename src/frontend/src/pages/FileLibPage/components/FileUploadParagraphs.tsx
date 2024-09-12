@@ -25,6 +25,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
 
     const paramChangRef = useRef(false)
     const preveParamsRef = useRef(null)
+    console.log('load :>> ');
     useImperativeHandle(ref, () => ({
         load(data, files) {
             paramsRef.current = data
@@ -56,15 +57,18 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
         previewFileSplitApi({ ...paramsRef.current, file_path: fileValue, cache: paramChangRef.current }).then(res => {
             setLoading(false)
             setParagraphs(res.chunks)
-            setFileUrl(res.file_url)
+            setFileUrl(fileValue)
+            // setFileUrl(res.file_url)
             setIsUns(res.parse_type === 'uns')
             setPartitions(res.partitions)
         })
     }
 
-    const handleSelectSearch = (value: any) => {
+    const handleSelectSearch = (e: any) => {
+        const value = e.target.value
+        if (!value) return setFiles([...allFilesRef.current])
         // 按label查找
-        const res = allFilesRef.current.filter(el => el.label.indexOf(value) !== -1)
+        const res = allFilesRef.current.filter(el => el.label.indexOf(value) !== -1 || el.value === fileValue)
         setFiles(res)
     }
 
@@ -112,7 +116,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                 <span className="text-primary cursor-pointer" onClick={handleReload}>重新生成预览</span>
             </div>
         </div>
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap gap-2 min-w-[770px]">
             {
                 paragraphs.map(item => (
                     <ParagraphsItem

@@ -187,14 +187,14 @@ export default function FileLibPage() {
                 <span className="loading loading-infinity loading-lg"></span>
             </div>}
             <div className="h-full overflow-y-auto pb-10">
-                <Tabs defaultValue="account" className="w-full mb-[40px]">
+                <Tabs defaultValue="account" className="w-full mb-[40px] relative">
                     <TabsList className="">
                         <TabsTrigger value="account" className="roundedrounded-xl">{t('lib.fileData')}</TabsTrigger>
                         <TabsTrigger disabled value="password">{t('lib.structuredData')}</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="account">
-                        <div className="flex justify-end gap-4 items-center">
+                        <div className="flex justify-end gap-4 items-center absolute right-0 top-0">
                             <SearchInput placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)} />
                             <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
                         </div>

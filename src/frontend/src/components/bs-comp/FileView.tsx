@@ -80,7 +80,7 @@ const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onS
                     height={(box.label[3] - box.label[1]) * scaleState}
                     style={box.active ?
                         { fill: 'rgba(255, 236, 61, 0.2)', strokeWidth: 1, stroke: '#ffec3d', cursor: 'pointer' }
-                        : { fill: 'rgba(0,0,0,0.1)', strokeWidth: 1, stroke: '#333', strokeDasharray: 4, cursor: 'pointer' }}
+                        : { fill: 'transparent', strokeWidth: 1, stroke: '#666', strokeDasharray: 4, cursor: 'pointer' }}
                     onClick={() => onSelectLabel({ id: box.id, active: !box.active })}
                 />
             )}
@@ -145,6 +145,7 @@ const DragPanne = ({ onMouseEnd }) => {
                 <div
                     className="absolute border-2 border-blue-500 bg-blue-100 bg-opacity-25"
                     style={{
+                        opacity: Math.abs(currentPos.x - startPos.x) + Math.abs(currentPos.y - startPos.y) > 2 ? 1 : 0,
                         left: Math.min(startPos.x, currentPos.x),
                         top: Math.min(startPos.y, currentPos.y),
                         width: Math.abs(currentPos.x - startPos.x),
@@ -214,12 +215,13 @@ export default function FileView({
         listRef.current.scrollTo(pageY + offsetY);
     })
     useEffect(() => {
-        scrollToFunc()
+        listRef.current && scrollToFunc()
     }, [scrollTo])
 
     const fileWidthRef = useRef(1)
     const handleLoadPage = (w: number) => {
-        if (fileWidthRef.current === w) return
+        // 文档宽度变化时 初始化样式、宽度、定位等信息
+        if (Math.abs(fileWidthRef.current - w) < 1) return
         const warpDom = document.getElementById('warp-pdf')
         warpDom.style.setProperty("--scale-factor", boxSize.width / w + '')
         fileWidthRef.current = w

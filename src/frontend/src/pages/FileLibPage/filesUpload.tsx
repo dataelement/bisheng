@@ -40,11 +40,11 @@ export default function FilesUpload() {
                 </ShadTooltip>
                 <span className=" text-foreground text-sm font-black pl-4">退出</span>
             </div>
-            <FileUploadStep1 hidden={stepEnd} onNext={handleStep1NextClick} />
+            <FileUploadStep1 hidden={stepEnd} onNext={handleStep1NextClick} onChange={() => setChange(true)}/>
             {stepEnd && <FileUploadStep2 fileInfo={fileInfo} onPrev={() => setStepEnd(false)} onPreview={handlePreviewClick} onChange={() => setChange(true)} />}
         </div>
         {/* 段落 */}
-        <div className="flex-1 bg-muted h-full relative">
+        <div className="flex-1 bg-muted h-full relative overflow-x-auto">
             <FileUploadParagraphs open={showView} ref={viewRef} change={change} onChange={setChange} />
             {!showView && <div className="flex justify-center items-center flex-col h-full text-gray-400">
                 <ReaderIcon width={160} height={160} className="text-border" />

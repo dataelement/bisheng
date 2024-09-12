@@ -178,15 +178,15 @@ export default function l2Edit() {
                         </div>
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.skillName')}</Label>
-                            <Input value={name} placeholder={t('skills.skillName')} className={`mt-2 ${error.name && 'border-red-400'}`} />
+                            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('skills.skillName')} className={`mt-2 ${error.name && 'border-red-400'}`} />
                         </div>
                         <div className="mt-4">
                             <Label htmlFor="username">{t('skills.description')}</Label>
-                            <Textarea value={description} id="name" placeholder={t('skills.description')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
+                            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} id="name" placeholder={t('skills.description')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
                         </div>
                         <div className="mt-4">
                             <Label htmlFor="username">{t('skills.guideWords')}</Label>
-                            <Textarea value={guideWords} maxLength={1000} id="name" placeholder={t('skills.guideWords')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
+                            <Textarea value={guideWords} onChange={(e) => setGuideWords(e.target.value)} maxLength={1000} id="name" placeholder={t('skills.guideWords')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
                         </div>
                     </div>
                     {

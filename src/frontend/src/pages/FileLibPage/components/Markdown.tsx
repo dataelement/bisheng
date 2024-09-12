@@ -8,10 +8,13 @@ import 'vditor/dist/index.css';
 const VditorEditor = forwardRef(({ markdown, hidden }, ref) => {
     const vditorRef = useRef(null);
     const readyRef = useRef(false);
+    const valurCacheRef = useRef('');
 
     useEffect(() => {
         if (!hidden && vditorRef.current && readyRef.current) {
             vditorRef.current.setValue(markdown);
+        } else {
+            valurCacheRef.current = markdown;
         }
     }, [markdown, hidden])
 
@@ -40,8 +43,11 @@ const VditorEditor = forwardRef(({ markdown, hidden }, ref) => {
             },
             after: () => {
                 console.log('Vditor is ready');
-                vditorRef.current.setValue(markdown);
                 readyRef.current = true;
+
+                if (valurCacheRef.current) {
+                    vditorRef.current.setValue(valurCacheRef.current);
+                }
             },
         });
 

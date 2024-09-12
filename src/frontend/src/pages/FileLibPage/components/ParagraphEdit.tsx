@@ -13,7 +13,8 @@ import Markdown from './Markdown';
 const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePath = '', fileId, chunkId, onClose }) => {
     const { id } = useParams();
     const [value, setValue] = useState('');
-    const [data, setData] = useState([])
+    const [data, setData] = useState([]);
+    const prevOvergapData = useRef(null);
 
     const labelTexts = useLabelTexts(fileId, partitions)
     const [fileUrl, setFileUrl] = useState('')
@@ -27,7 +28,7 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
         let value = ''
         res.data.forEach(chunk => {
             const { bbox, chunk_index } = chunk.metadata
-            const labels = bbox ? JSON.parse(bbox).chunk_bboxes : []
+            const labels = bbox && JSON.parse(bbox).chunk_bboxes || []
 
             const active = chunk_index === chunkId
             const resData = labels.map(label => {
@@ -48,10 +49,13 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
         })
         setFileName(res.data[0].metadata.source)
         setData(labelsData)
+        prevOvergapData.current = labelsData
         setValue(value)
+        // 自动滚动到当前chunk
+        setRandom(Math.random() / 10000)
     }
     useEffect(() => {
-        chunks ? initData({ data: chunks }) : getKnowledgeChunkApi({ knowledge_id: id, file_ids: [fileId] }).then(initData)
+        chunks ? initData({ data: chunks }) : getKnowledgeChunkApi({ knowledge_id: id, file_ids: [fileId], limit: 1000 }).then(initData)
     }, [])
 
     const markDownRef = useRef(null)
@@ -65,12 +69,23 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
         setValue(_value)
         if (!_value) return
 
+        const bbox = {
+            chunk_bboxes: prevOvergapData.current.reduce((arr, item) => {
+                if (item.active) {
+                    arr.push({ page: item.page, bbox: item.label })
+                }
+                return arr
+            }, [])
+        }
+
         setLoading(true)
-        await captureAndAlertRequestErrorHoc(chunks ? updatePreviewChunkApi({
-            knowledge_id: Number(id), file_path: filePath, chunk_index: chunkId, text: _value
+        
+        const promise = chunks ? updatePreviewChunkApi({
+            knowledge_id: Number(id), file_path: filePath, chunk_index: chunkId, text: _value, bbox: JSON.stringify(bbox)
         }) : updateChunkApi({
-            knowledge_id: Number(id), file_id: fileId, chunk_index: chunkId, text: _value
-        }).then(res => {
+            knowledge_id: Number(id), file_id: fileId, chunk_index: chunkId, text: _value, bbox: JSON.stringify(bbox)
+        })
+        await captureAndAlertRequestErrorHoc(promise.then(res => {
             message({ variant: 'success', description: '修改成功' })
             onClose()
         }))
@@ -106,6 +121,7 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
         }, '')
         setValue(str)
         markDownRef.current.setValue(str) // fouceupdate
+        prevOvergapData.current = data
     }
 
     const [random, setRandom] = useState(0)
@@ -114,9 +130,10 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
         return target ? [target.page, target.label[1] + random] : [1, 0]
     }, [random])
 
-    const [showPos, setShowPos] = useState(true)
+    const [showPos, setShowPos] = useState(false)
     const handlePageChange = (offset, h, paperSize, scale) => {
-        // console.log('data :>> ', data, offset, h, paperSize);
+        if (offset === 0) return
+        // console.log('data :>> ', data, offset, h, paperSize, scale);
         setShowPos(!data.some(item => {
             const pageHeight = (item.page - 1) * paperSize
             const labelTop = pageHeight + item.label[1] / scale
@@ -160,9 +177,16 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
                     </div>
                     {/* file view */}
                     <div className="bg-gray-100 relative">
-                        {showPos && value && Object.keys(labels).length && <Button className="absolute top-2 right-2 z-10" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair2Icon className="mr-1" />回到定位</Button>}
-                        <div className="h-[calc(100vh-72px)]">
-                            {fileUrl && <FileView select fileUrl={fileUrl} labels={labels} scrollTo={postion} onSelectLabel={handleSelectLabels} onPageChange={handlePageChange} />}
+                        {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair2Icon className="mr-1" />回到定位</Button>}
+                        <div className="h-[calc(100vh-104px)]">
+                            {fileUrl && <FileView
+                                select
+                                fileUrl={fileUrl}
+                                labels={labels}
+                                scrollTo={postion}
+                                onSelectLabel={handleSelectLabels}
+                                onPageChange={handlePageChange}
+                            />}
                         </div>
                     </div>
                 </div>

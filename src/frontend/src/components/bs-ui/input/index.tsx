@@ -100,10 +100,11 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps & { boxClas
 
         // 处理 onChange 事件，更新 currentValue
         const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-            setCurrentValue(e.target.value);
             if (onChange) {
                 onChange(e);
             }
+            if (value === undefined && defaultValue === undefined) return
+            setCurrentValue(e.target.value);
         };
 
         // 当 value 或 defaultValue 改变时更新 currentValue
@@ -112,6 +113,9 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps & { boxClas
                 setCurrentValue(value || '');
             }
         }, [value]);
+
+        const noEmptyProps =
+            value === undefined && defaultValue === undefined ? {} : { value: currentValue }
 
         return (
             <div className={cname('relative w-full', boxClassName)}>
@@ -122,8 +126,8 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps & { boxClas
                     )}
                     ref={ref}
                     maxLength={maxLength}
-                    value={currentValue}
                     onChange={handleChange}
+                    {...noEmptyProps}
                     {...props}
                 />
                 {maxLength && (

@@ -25,7 +25,7 @@ export default function Files({ onPreview }) {
     const { t } = useTranslation()
     const { id } = useParams()
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData, refreshData } = useTable({}, (param) =>
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
             setHasPermission(res.writeable)
             return res
@@ -80,7 +80,7 @@ export default function Files({ onPreview }) {
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
         <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
-            <SearchInput placeholder={'搜索文名称'} onChange={(e) => search(e.target.value)}></SearchInput>
+            <SearchInput placeholder={'搜索文件名称'} onChange={(e) => search(e.target.value)}></SearchInput>
             {hasPermission && <Link to={`/filelib/upload/${id}`}><Button className="px-8" onClick={() => { }}>上传文件</Button></Link>}
         </div>
         <div className="h-[calc(100vh-144px)] overflow-y-auto pb-20">

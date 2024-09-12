@@ -3,16 +3,20 @@ import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import Upload from "@/components/bs-ui/upload";
 import { locationContext } from "@/contexts/locationContext";
-import { useContext, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function FileUploadStep1({ hidden, onNext }) {
+export default function FileUploadStep1({ hidden, onNext, onChange }) {
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
     const uploadRef = useRef<any>(null)
     const { message } = useToast()
 
     const [fileCount, setFileCount] = useState(0)
+    // useEffect(() => {
+    //     onChange()
+    // }, [fileCount])
+
     const handleSaveFiles = () => {
         const [fileCount, files, failFiles] = uploadRef.current?.getUploadResult()
         if (!files.length) return message({ variant: 'error', description: t('code.selectFileToUpload') })
