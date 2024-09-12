@@ -111,7 +111,7 @@ async def update_knowledge(*, request: Request, login_user: UserPayload = Depend
 def delete_knowledge(*,
                      request: Request,
                      login_user: UserPayload = Depends(get_login_user),
-                     knowledge_id: int = Body(...)):
+                     knowledge_id: int = Body(..., embed=True)):
     """ 删除知识库信息. """
 
     KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
