@@ -345,8 +345,11 @@ def parse_partitions(partitions: List[Any]) -> Dict:
         text = one["text"]
         for index, bbox in enumerate(bboxes):
             key = f"{pages[index]}-" + "-".join([str(int(one)) for one in bbox])
-            val = text[indexes[index][0]:indexes[index][1]]
-            res[key] = val
+            val = text[indexes[index][0]:indexes[index][1]+1]
+            res[key] = {
+                "text": val,
+                "type": one["type"]
+            }
     return res
 
 
