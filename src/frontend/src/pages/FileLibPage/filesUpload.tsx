@@ -1,15 +1,15 @@
+import ShadTooltip from "@/components/ShadTooltipComponent";
+import { ReaderIcon } from "@radix-ui/react-icons";
+import { ArrowLeft } from "lucide-react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import FileUploadParagraphs from "./components/FileUploadParagraphs";
 import FileUploadStep1 from "./components/FileUploadStep1";
 import FileUploadStep2 from "./components/FileUploadStep2";
-import { useRef, useState } from "react";
-import ShadTooltip from "@/components/ShadTooltipComponent";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
-import { ReaderIcon } from "@radix-ui/react-icons";
-import FileUploadParagraphs from "./components/FileUploadParagraphs";
 
 export default function FilesUpload() {
-    const { t } = useTranslation()
+    const { t } = useTranslation('knowledge')
     const navigate = useNavigate();
     const [stepEnd, setStepEnd] = useState(false)
 
@@ -38,19 +38,27 @@ export default function FilesUpload() {
                         <ArrowLeft className="side-bar-button-size" />
                     </button>
                 </ShadTooltip>
-                <span className=" text-foreground text-sm font-black pl-4">退出</span>
+                <span className=" text-foreground text-sm font-black pl-4">{t('back')}</span>
             </div>
-            <FileUploadStep1 hidden={stepEnd} onNext={handleStep1NextClick} onChange={() => setChange(true)}/>
-            {stepEnd && <FileUploadStep2 fileInfo={fileInfo} onPrev={() => setStepEnd(false)} onPreview={handlePreviewClick} onChange={() => setChange(true)} />}
+            <FileUploadStep1 hidden={stepEnd} onNext={handleStep1NextClick} onChange={() => setChange(true)} />
+            {stepEnd && (
+                <FileUploadStep2
+                    fileInfo={fileInfo}
+                    onPrev={() => setStepEnd(false)}
+                    onPreview={handlePreviewClick}
+                    onChange={() => setChange(true)}
+                />
+            )}
         </div>
         {/* 段落 */}
         <div className="flex-1 bg-muted h-full relative overflow-x-auto">
             <FileUploadParagraphs open={showView} ref={viewRef} change={change} onChange={setChange} />
-            {!showView && <div className="flex justify-center items-center flex-col h-full text-gray-400">
-                <ReaderIcon width={160} height={160} className="text-border" />
-                {stepEnd ? '左侧点击按钮预览结果' : '请先完成文件上传'}
-            </div>
-            }
+            {!showView && (
+                <div className="flex justify-center items-center flex-col h-full text-gray-400">
+                    <ReaderIcon width={160} height={160} className="text-border" />
+                    {stepEnd ? t('previewHint') : t('uploadHint')}
+                </div>
+            )}
         </div>
     </div>
 };

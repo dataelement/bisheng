@@ -245,7 +245,7 @@ export async function updateKnowledgeApi(data) {
  * 删除支持库
  */
 export async function deleteFileLib(id) {
-  return await axios.delete(`/api/v1/knowledge`, { data: { knowledge_id: id } });
+  return await axios.delete(`/api/v1/knowledge/`, { data: { knowledge_id: id } });
 }
 
 /**

@@ -68,7 +68,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
         })
     }, [])
 
-    const {toast} = useToast()
+    const { toast } = useToast()
 
     const [error, setError] = useState({ name: false, desc: false })
 
@@ -179,7 +179,10 @@ export default function FileLibPage() {
     }, [])
 
 
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
+    useEffect(() => {
+        i18n.loadNamespaces('knowledge');
+    }, [i18n]);
 
     return (
         <div className="w-full h-full px-2 py-4 relative">
@@ -201,7 +204,7 @@ export default function FileLibPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>知识库ID</TableHead>
+                                    <TableHead>{t('lib.knowledgeBaseId')}</TableHead>
                                     <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
                                     <TableHead>{t('lib.model')}</TableHead>
                                     <TableHead>{t('createTime')}</TableHead>

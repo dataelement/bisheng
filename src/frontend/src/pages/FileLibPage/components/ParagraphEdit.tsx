@@ -2,10 +2,11 @@ import FileView from "@/components/bs-comp/FileView";
 import { LoadIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { getFilePathApi, getKnowledgeChunkApi, updateChunkApi, updatePreviewChunkApi, getFileBboxApi } from "@/controllers/API";
+import { getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, updateChunkApi, updatePreviewChunkApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Crosshair2Icon, InfoCircledIcon } from "@radix-ui/react-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import Markdown from './Markdown';
 
@@ -15,6 +16,7 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
     const [value, setValue] = useState('');
     const [data, setData] = useState([]);
     const prevOvergapData = useRef(null);
+    const { t } = useTranslation('knowledge')
 
     const labelTexts = useLabelTexts(fileId, partitions)
     const [fileUrl, setFileUrl] = useState('')
@@ -79,14 +81,14 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
         }
 
         setLoading(true)
-        
+
         const promise = chunks ? updatePreviewChunkApi({
             knowledge_id: Number(id), file_path: filePath, chunk_index: chunkId, text: _value, bbox: JSON.stringify(bbox)
         }) : updateChunkApi({
             knowledge_id: Number(id), file_id: fileId, chunk_index: chunkId, text: _value, bbox: JSON.stringify(bbox)
         })
         await captureAndAlertRequestErrorHoc(promise.then(res => {
-            message({ variant: 'success', description: '修改成功' })
+            message({ variant: 'success', description: t('editSuccess') })
             onClose()
         }))
         setLoading(false)
@@ -146,10 +148,10 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
             {/* left */}
             <div className="relative" style={{ width: leftPanelWidth }}>
                 <Markdown ref={markDownRef} isUns={isUns} title={fileName} q={chunkId + 1} value={value} />
-                {!value && <p className="absolute left-0 text-red-500 text-xs mt-2">输入内容不可为空</p>}
+                {!value && <p className="absolute left-0 text-red-500 text-xs mt-2">{t('inputNotEmpty')}</p>}
                 {!isUns && <div className="flex justify-end gap-4">
-                    <Button className="px-6 h-8" variant="outline" onClick={onClose}>取消</Button>
-                    <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />保存</Button>
+                    <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel')}</Button>
+                    <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save')}</Button>
                 </div>}
             </div>
             {isUns && <>
@@ -167,17 +169,17 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
                         <span>{fileName}</span>
                         <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
                             <InfoCircledIcon className='mr-1 text-red-500' />
-                            <span className="text-red-500">检测到分段范围调整,</span>
-                            <span className="text-primary cursor-pointer" onClick={handleOvergap}>覆盖分段内容</span>
+                            <span className="text-red-500">{t('segmentRangeDetected')}</span>
+                            <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
                         </div>
                         <div className="flex justify-end gap-4">
-                            <Button className="px-6 h-8" variant="outline" onClick={onClose}>取消</Button>
-                            <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />保存</Button>
+                            <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel')}</Button>
+                            <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save')}</Button>
                         </div>
                     </div>
                     {/* file view */}
                     <div className="bg-gray-100 relative">
-                        {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair2Icon className="mr-1" />回到定位</Button>}
+                        {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair2Icon className="mr-1" />{t('backToPosition')}</Button>}
                         <div className="h-[calc(100vh-104px)]">
                             {fileUrl && <FileView
                                 select

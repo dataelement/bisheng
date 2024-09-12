@@ -1,19 +1,21 @@
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { updateKnowledgeApi } from "@/controllers/API";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Pencil2Icon } from "@radix-ui/react-icons";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { Button } from "../../../components/bs-ui/button";
 import ShadTooltip from "../../../components/ShadTooltipComponent";
 import KnowledgeBaseSettingsDialog from "./EditKnowledgeDialog";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { updateKnowledgeApi } from "@/controllers/API";
 
 export default function Header() {
     const [libInfo, setLibInfo] = useState({ name: '', desc: '' })
     const [open, setOpen] = useState(false)
     const { id } = useParams()
+    const { t } = useTranslation()
 
     useEffect(() => {
         // @ts-ignore
@@ -36,7 +38,7 @@ export default function Header() {
             // api
             setLibInfo(form)
             setOpen(false)
-            message({ variant: 'success', description: '保存成功' })
+            message({ variant: 'success', description: t('saved') })
             localStorage.setItem('libname', form.name)
             localStorage.setItem('libdesc', form.desc)
         })

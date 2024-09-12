@@ -2,6 +2,7 @@ import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import AceEditor from "react-ace";
+import { useTranslation } from "react-i18next";
 import Vditor from 'vditor';
 import 'vditor/dist/index.css';
 
@@ -85,6 +86,7 @@ const AceEditorCom = ({ markdown, hidden, onChange }) => {
 export default forwardRef(function Markdown({ isUns, title, q, value }, ref) {
     const [val, setValue] = useState('')
     const [isAce, setIsAce] = useState(false)
+    const { t } = useTranslation('knowledge')
     useEffect(() => {
         setValue(value)
     }, [value])
@@ -111,14 +113,15 @@ export default forwardRef(function Markdown({ isUns, title, q, value }, ref) {
     {/* markdown */ }
     return <div >
         <div className="flex justify-between items-center mb-2 h-10">
-            <Label ><span className="text-red-500">*</span>#{q} 分段内容</Label>
+            <Label>
+                <span className="text-red-500">*</span>
+                #{q} {t('splitContent')}
+            </Label>
             {!isUns && <span>{title}</span>}
-            <div className="flex items-center gap-2"><Label>markdown预览</Label><Switch checked={!isAce} onCheckedChange={hangleCheckChagne} /></div>
-        </div>
-        <div className="border mb-2 h-[calc(100vh-104px)]">
-            {/* 编辑器 */}
-            <AceEditorCom hidden={!isAce} markdown={val} onChange={setValue} />
-            <VditorEditor ref={vditorRef} hidden={isAce} markdown={val} />
+            <div className="flex items-center gap-2">
+                <Label>{t('markdownPreview')}</Label>
+                <Switch checked={!isAce} onCheckedChange={hangleCheckChagne} />
+            </div>
         </div>
     </div >
 });

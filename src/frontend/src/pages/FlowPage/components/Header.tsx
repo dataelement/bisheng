@@ -135,8 +135,15 @@ export default function Header({ flow, onTabChange }) {
         </div>
         {/* api */}
         <div className="flex gap-4 items-center">
-            <div className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-border px-4 py-1 rounded-md cursor-pointer`} onClick={() => { setTabType('edit'); onTabChange('edit') }}>技能编排</div>
-            <div className={`${tabType === 'api' ? 'text-primary' : ''} hover:bg-border px-4 py-1 rounded-md cursor-pointer`} onClick={() => { setTabType('api'); onTabChange('api') }}>对外发布</div>
+            <div
+                className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-border px-4 py-1 rounded-md cursor-pointer`}
+                onClick={() => { setTabType('edit'); onTabChange('edit') }}
+            >{t('api.skillOrchestration')}</div>
+            <div
+                className={`${tabType === 'api' ? 'text-primary' : ''} hover:bg-border px-4 py-1 rounded-md cursor-pointer`}
+                onClick={() => { setTabType('api'); onTabChange('api') }}
+            >{t('api.externalPublishing')}
+            </div>
         </div>
         {
             version && <div className="flex gap-4">

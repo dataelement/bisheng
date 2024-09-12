@@ -7,7 +7,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function FileUploadStep1({ hidden, onNext, onChange }) {
-    const { t } = useTranslation()
+    const { t } = useTranslation('knowledge')
     const { appConfig } = useContext(locationContext)
     const uploadRef = useRef<any>(null)
     const { message } = useToast()
@@ -19,21 +19,29 @@ export default function FileUploadStep1({ hidden, onNext, onChange }) {
 
     const handleSaveFiles = () => {
         const [fileCount, files, failFiles] = uploadRef.current?.getUploadResult()
-        if (!files.length) return message({ variant: 'error', description: t('code.selectFileToUpload') })
+        if (!files.length) return message({ variant: 'error', description: t('code.selectFileToUpload', { ns: 'bs' }) })
         onNext({ fileCount, files, failFiles })
     }
 
     return <div className={`flex flex-col ${hidden ? 'hidden' : ''}`}>
         <div className="flex items-center gap-2 my-6 px-12 text-sm font-bold max-w-96">
-            <span className="text-primary">①上传文件</span>
+            <span className="text-primary">{t('step1UploadFile')}</span>
             <div className="h-[1px] flex-grow bg-gray-300"></div>
-            <span>②文档处理策略</span>
+            <span>{t('step2DocProcessing')}</span>
         </div>
-        <Upload ref={uploadRef} url='/api/v1/knowledge/upload' accept={appConfig.libAccepts} progressClassName='max-h-[374px]' onFileCountChange={setFileCount} />
+        <Upload
+            ref={uploadRef}
+            url='/api/v1/knowledge/upload'
+            accept={appConfig.libAccepts}
+            progressClassName='max-h-[374px]'
+            onFileCountChange={setFileCount}
+        />
         <div className="flex justify-end">
             <Button className="px-10 mt-4" disabled={!fileCount} onClick={handleSaveFiles}>
-                {fileCount ? <span>共{fileCount}个文件<span className="mx-1">|</span></span> : null}下一步
+                {fileCount ? <span>{t('totalFiles', { count: fileCount })}<span className="mx-1">|</span></span> : null}
+                {t('nextStep')}
             </Button>
         </div>
     </div>
+
 };

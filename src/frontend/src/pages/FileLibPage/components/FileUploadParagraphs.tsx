@@ -5,12 +5,14 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { InfoCircledIcon } from "@radix-ui/react-icons";
 import isEqual from "lodash-es/isEqual";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import ParagraphEdit from "./ParagraphEdit";
 import { ParagraphsItem } from "./Paragraphs";
 
 const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChange }: any, ref) {
     const { id } = useParams()
+    const { t } = useTranslation()
     const paramsRef = useRef<any>(null)
     const [loading, setLoading] = useState(false)
     const [paragraph, setParagraph] = useState<any>({
@@ -112,8 +114,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
             </SelectSearch>
             <div className={`${change ? '' : 'hidden'} flex items-center`}>
                 <InfoCircledIcon className='mr-1 text-red-500' />
-                <span className="text-red-500">检测到策略调整，</span>
-                <span className="text-primary cursor-pointer" onClick={handleReload}>重新生成预览</span>
+                <span className="text-red-500">{t('policyChangeDetected')}</span>
+                <span className="text-primary cursor-pointer" onClick={handleReload}>{t('regeneratePreview')}</span>
             </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-2 min-w-[770px]">

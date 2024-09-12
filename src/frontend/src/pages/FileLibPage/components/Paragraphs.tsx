@@ -14,17 +14,17 @@ import MultiSelect from "@/components/bs-ui/select/multi"
 import { delChunkApi, getKnowledgeChunkApi, readFileByLibDatabase } from "@/controllers/API"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useTable } from "@/util/hook"
+import { ReaderIcon } from "@radix-ui/react-icons"
 import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
 import ParagraphEdit from "./ParagraphEdit"
-import { ReaderIcon } from "@radix-ui/react-icons"
 
 export const ParagraphsItem = ({ data, disabled = false, onEdit, onDeled }) => {
-
+    const { t } = useTranslation('knowledge')
     const handleDel = () => {
         bsConfirm({
-            title: "提示",
-            desc: "确定删除分段吗？",
+            desc: t('confirmDeleteSegment'),
             onOk: () => {
                 onDeled(data)
             }
@@ -46,19 +46,21 @@ export const ParagraphsItem = ({ data, disabled = false, onEdit, onDeled }) => {
             <CardFooter className="flex justify-between items-center">
                 <div className="flex space-x-2">
                     <Button variant="link" disabled={disabled} className="p-0" onClick={handleDel}>
-                        删除
+                        {t('delete')}
                     </Button>
                     <Button variant="link" disabled={disabled} className="p-0" onClick={onEdit}>
-                        编辑
+                        {t('edit')}
                     </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">{data.text.length}个字符</p>
+                <p className="text-xs text-muted-foreground">{t('charCount', { count: data.text.length })}</p>
             </CardFooter>
         </Card>
     );
 };
 
+
 export default function Paragraphs({ fileId }) {
+    const { t } = useTranslation('knowledge')
     const { id } = useParams()
     const [value, setValue] = useState([])
     useEffect(() => {
@@ -102,7 +104,7 @@ export default function Paragraphs({ fileId }) {
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
         <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
-            <SearchInput placeholder='搜索相关分段' onChange={(e) => search(e.target.value)}></SearchInput>
+            <SearchInput placeholder={t('searchSegments')} onChange={(e) => search(e.target.value)}></SearchInput>
             <div className="min-w-72 max-w-[400px]">
                 <MultiSelect
                     close
@@ -111,7 +113,7 @@ export default function Paragraphs({ fileId }) {
                     scroll
                     value={value}
                     options={files}
-                    placeholder={'选择文件'}
+                    placeholder={t('selectFile')}
                     searchPlaceholder=''
                     onChange={(ids) => filterData({ file_ids: ids })}
                 ></MultiSelect>
@@ -120,20 +122,22 @@ export default function Paragraphs({ fileId }) {
         <div className="h-[calc(100vh-144px)] overflow-y-auto pb-20 bg-background-main">
             <div className="flex flex-wrap gap-2 p-2 items-start">
                 {
-                    datalist.length ? datalist.map((item, index) => <ParagraphsItem
-                        key={index}
-                        data={item}
-                        onEdit={() => setParagraph({
-                            fileId: item.metadata.file_id,
-                            chunkId: item.metadata.chunk_index,
-                            isUns: item.parse_type === 'uns',
-                            show: true
-                        })}
-                        onDeled={handleDeleteChunk}
-                    ></ParagraphsItem>) :
+                    datalist.length ? datalist.map((item, index) => (
+                        <ParagraphsItem
+                            key={index}
+                            data={item}
+                            onEdit={() => setParagraph({
+                                fileId: item.metadata.file_id,
+                                chunkId: item.metadata.chunk_index,
+                                isUns: item.parse_type === 'uns',
+                                show: true
+                            })}
+                            onDeled={handleDeleteChunk}
+                        ></ParagraphsItem>
+                    )) :
                         <div className="flex justify-center items-center flex-col size-full text-gray-400">
                             <ReaderIcon width={160} height={160} className="text-border" />
-                            请先完成文件上传
+                            {t('uploadPrompt')}
                         </div>
                 }
             </div>

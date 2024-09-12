@@ -247,7 +247,7 @@ export default function FileView({
                 const pageH = (key - 1) * (boxSize.width / 0.7 * scale)
                 if (x <= sx && y <= sy + pageH && x1 >= ex && y1 >= ey + pageH) {
                     console.log('item.id :>> ', item.id);
-                    selects.push({ id: item.id, active: true })
+                    selects.push({ id: item.id, active: !item.active })
                 }
             })
         })

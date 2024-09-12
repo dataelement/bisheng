@@ -1,11 +1,11 @@
 import { Alert, AlertDescription } from '@/components/bs-ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import Skeleton from '@/components/bs-ui/skeleton';
-import { QuestionTooltip } from '@/components/bs-ui/tooltip';
 import { copyText } from '@/utils';
 import { CrossCircledIcon, InfoCircledIcon } from '@radix-ui/react-icons';
 import { Check, Clipboard } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
@@ -61,6 +61,7 @@ const enum API_TYPE {
 
 const NoLoginLink = ({ type, noLogin = false }) => {
   const [isCopied, setIsCopied] = useState<Boolean>(false);
+  const { t } = useTranslation()
   const { id } = useParams()
 
   const copyToClipboard = (code: string) => {
@@ -104,18 +105,18 @@ const NoLoginLink = ({ type, noLogin = false }) => {
     <section className='pb-20 max-w-[1600px]'>
       <Alert className='mb-4'>
         <InfoCircledIcon className="h-4 w-4" />
-        {/* <AlertTitle>说明</AlertTitle> */}
         <AlertDescription className='mt-0.5'>
-          {noLogin ?
-            '免登录链接无需登录即可使用，仅在系统配置 enable_guest_access = True 时可访问免登录链接'
-            : '需登录链接需要在登录后使用'}
+          {noLogin
+            ? t('api.noLoginLinkDescription')
+            : t('api.loginLinkDescription')}
         </AlertDescription>
       </Alert>
-      <h3 className="text-lg font-bold mt-8 mb-2">发布为独立页面</h3>
+
+      <h3 className="text-lg font-bold mt-8 mb-2">{t('api.publishAsStandalonePage')}</h3>
       <Card className='mb-4'>
         <CardHeader className='pt-2 pb-0'>
           <CardTitle className='flex justify-between items-center'>
-            <p>复制链接到浏览器中打开</p>
+            <p>{t('api.copyLinkToBrowser')}</p>
             <div>
               <button
                 className="flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
@@ -137,11 +138,11 @@ const NoLoginLink = ({ type, noLogin = false }) => {
         </CardContent>
       </Card>
 
-      <h3 className="text-lg font-bold mt-8 mb-2">嵌入到网站中</h3>
+      <h3 className="text-lg font-bold mt-8 mb-2">{t('api.embedIntoWebsite')}</h3>
       <div className='flex gap-2 mb-4'>
         <Card className={`w-1/2 cursor-pointer border-2 ${embed ? '' : 'border-primary hover:border-primary'}`} onClick={() => setEmbed(false)}>
           <CardHeader className='pt-2 pb-0'>
-            <CardTitle>样式一</CardTitle>
+            <CardTitle>{t('api.styleOne')}</CardTitle>
           </CardHeader>
           <CardContent>
             <BorwserSkeleton />
@@ -149,7 +150,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
         </Card>
         <Card className={`w-1/2 cursor-pointer border-2 ${embed ? 'border-primary hover:border-primary' : ''}`} onClick={() => setEmbed(true)}>
           <CardHeader className='pt-2 pb-0'>
-            <CardTitle>样式二</CardTitle>
+            <CardTitle>{t('api.styleTwo')}</CardTitle>
           </CardHeader>
           <CardContent>
             <BorwserSkeleton size='small' />
@@ -160,7 +161,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
       <Card>
         <CardHeader className='pt-2 pb-0'>
           <CardTitle className='flex justify-between items-center'>
-            <p>将以下代码嵌入到网站中</p>
+            <p>{t('api.embedCodeDescription')}</p>
             <div>
               <button
                 className="flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ApiAccess from './ApiAccess';
 import ApiAccessFlow from './ApiAccessFlow';
 import ChatLink from './ChatLink';
@@ -10,6 +11,7 @@ const enum API_TYPE {
 
 const ApiMainPage = ({ type = API_TYPE.ASSISTANT }) => {
     const [activeMenu, setActiveMenu] = useState('api-access');
+    const { t } = useTranslation()
 
     const renderContent = () => {
         switch (activeMenu) {
@@ -32,29 +34,26 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }) => {
                     <ul className="space-y-4">
                         <li>
                             <button
-                                className={`w-full text-left ${activeMenu === 'api-access' ? 'bg-card' : ''
-                                    } p-2 pl-6 rounded`}
+                                className={`w-full text-left ${activeMenu === 'api-access' ? 'bg-card' : ''} p-2 pl-6 rounded`}
                                 onClick={() => setActiveMenu('api-access')}
                             >
-                                API 访问
+                                {t('api.apiAccess')}
                             </button>
                         </li>
                         <li>
                             <button
-                                className={`w-full text-left ${activeMenu === 'no-login-link' ? 'bg-card' : ''
-                                    } p-2 pl-6 rounded`}
+                                className={`w-full text-left ${activeMenu === 'no-login-link' ? 'bg-card' : ''} p-2 pl-6 rounded`}
                                 onClick={() => setActiveMenu('no-login-link')}
                             >
-                                免登录链接
+                                {t('api.noLoginLink')}
                             </button>
                         </li>
                         <li>
                             <button
-                                className={`w-full text-left ${activeMenu === 'login-link' ? 'bg-card' : ''
-                                    } p-2 pl-6 rounded`}
+                                className={`w-full text-left ${activeMenu === 'login-link' ? 'bg-card' : ''} p-2 pl-6 rounded`}
                                 onClick={() => setActiveMenu('login-link')}
                             >
-                                需登录链接
+                                {t('api.loginLink')}
                             </button>
                         </li>
                     </ul>

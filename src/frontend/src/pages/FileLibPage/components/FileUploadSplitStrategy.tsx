@@ -5,8 +5,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/bs-ui/radio';
 import { generateUUID } from '@/components/bs-ui/utils';
 import { useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { useTranslation } from 'react-i18next';
 
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
+    const { t } = useTranslation('knowledge')
     const [customRegex, setCustomRegex] = useState('');
     const [position, setPosition] = useState('after');
 
@@ -70,7 +72,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                                     ))
                                 }
                                 {provided.placeholder}
-                                <p className='text-xs text-gray-500'>切分优先级按展示顺序从高到低排序，可拖拽调整</p>
+                                <p className='text-xs text-gray-500'>{t('splitPriorityInfo')}</p>
                             </div>
                         )}
                     </Droppable>
@@ -88,15 +90,20 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
 
             <div className="mt-4 text-sm flex flex-wrap items-center gap-2">
                 <div className='flex items-center gap-1'>
-                    <span>在</span>
-                    <Input value={customRegex} onChange={(e) => setCustomRegex(e.target.value)} placeholder="请输入正则表达式" className='w-40 py-0 h-6' />
+                    <span>{t('in')}</span>
+                    <Input
+                        value={customRegex}
+                        onChange={(e) => setCustomRegex(e.target.value)}
+                        placeholder={t('enterRegex')}
+                        className='w-40 py-0 h-6'
+                    />
                     <RadioGroup value={position} onValueChange={setPosition} className="flex items-center">
-                        <RadioGroupItem className="" value="before" />前
-                        <RadioGroupItem className="" value="after" />后
+                        <RadioGroupItem className="" value="before" />{t('before')}
+                        <RadioGroupItem className="" value="after" />{t('after')}
                     </RadioGroup>
                 </div>
                 <Button onClick={handleAddCustomStrategy} className="h-6">
-                    添加自定义规则
+                    {t('addCustomRule')}
                 </Button>
             </div>
         </div>

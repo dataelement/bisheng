@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function KnowledgeBaseSettingsDialog({ initialName, initialDesc, onSave }) {
-    const { t } = useTranslation();
+    const { t } = useTranslation('knowledge');
 
     // State for form fields
     const [formData, setFormData] = useState({ name: '', desc: '' });
@@ -25,7 +25,7 @@ export default function KnowledgeBaseSettingsDialog({ initialName, initialDesc, 
     const validate = () => {
         const newErrors = {};
         if (!formData.name) {
-            newErrors.name = '知识库名称不可为空';
+            newErrors.name = t('nameRequired');
         }
         return newErrors;
     };
@@ -45,16 +45,18 @@ export default function KnowledgeBaseSettingsDialog({ initialName, initialDesc, 
     return (
         <DialogContent className="sm:max-w-[625px] bg-background-login">
             <DialogHeader>
-                <DialogTitle>知识库设置</DialogTitle>
+                <DialogTitle>{t('settings')}</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-8 py-6">
                 <div className="">
-                    <label htmlFor="name" className="bisheng-label">知识库名称<span className="bisheng-tip">*</span></label>
+                    <label htmlFor="name" className="bisheng-label">
+                        {t('name')}<span className="bisheng-tip">*</span>
+                    </label>
                     <div className="flex items-center mt-2">
                         <Input
                             id="name"
                             name="name"
-                            placeholder="请输入知识库名称"
+                            placeholder={t('namePlaceholder')}
                             maxLength={30}
                             className="flex-1"
                             value={formData.name}
@@ -64,12 +66,12 @@ export default function KnowledgeBaseSettingsDialog({ initialName, initialDesc, 
                     {errors.name && <p className="bisheng-tip mt-1 text-red-500">{errors.name}</p>}
                 </div>
                 <div className="">
-                    <label htmlFor="desc" className="bisheng-label">知识库描述</label>
+                    <label htmlFor="desc" className="bisheng-label">{t('desc')}</label>
                     <div className="flex items-center mt-2">
                         <Textarea
                             id="desc"
                             name="desc"
-                            placeholder="请输入知识库描述"
+                            placeholder={t('descPlaceholder')}
                             maxLength={200}
                             className="flex-1"
                             value={formData.desc}
@@ -80,9 +82,9 @@ export default function KnowledgeBaseSettingsDialog({ initialName, initialDesc, 
             </div>
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outline" className="px-11" type="button">取消</Button>
+                    <Button variant="outline" className="px-11" type="button">{t('cancel', {ns: 'bs'})}</Button>
                 </DialogClose>
-                <Button type="submit" className="px-11" onClick={handleSubmit}>确认</Button>
+                <Button type="submit" className="px-11" onClick={handleSubmit}>{t('confirm', {ns: 'bs'})}</Button>
             </DialogFooter>
         </DialogContent>
     );

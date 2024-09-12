@@ -9,11 +9,11 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { Filter, RotateCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "../../../components/bs-ui/select";
@@ -22,7 +22,7 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 
 export default function Files({ onPreview }) {
-    const { t } = useTranslation()
+    const { t } = useTranslation('knowledge')
     const { id } = useParams()
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
@@ -54,7 +54,7 @@ export default function Files({ onPreview }) {
     const handleDelete = (id) => {
         bsConfirm({
             title: t('prompt'),
-            desc: t('lib.confirmDeleteFile'),
+            desc: t('confirmDeleteFile'),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteFile(id).then(res => {
                     reload()
@@ -80,17 +80,16 @@ export default function Files({ onPreview }) {
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
         <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
-            <SearchInput placeholder={'搜索文件名称'} onChange={(e) => search(e.target.value)}></SearchInput>
-            {hasPermission && <Link to={`/filelib/upload/${id}`}><Button className="px-8" onClick={() => { }}>上传文件</Button></Link>}
+            <SearchInput placeholder={t('searchFileName')} onChange={(e) => search(e.target.value)}></SearchInput>
+            {hasPermission && <Link to={`/filelib/upload/${id}`}><Button className="px-8" onClick={() => { }}>{t('uploadFile')}</Button></Link>}
         </div>
         <div className="h-[calc(100vh-144px)] overflow-y-auto pb-20">
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[600px]">{t('lib.fileName')}</TableHead>
-                        {/* 状态 */}
-                        <TableHead className="flex items-center gap-4">{t('lib.status')}
-                            {/* Select component */}
+                        <TableHead className="w-[600px]">{t('fileName')}</TableHead>
+                        <TableHead className="flex items-center gap-4">
+                            {t('status')}
                             <Select onValueChange={selectChange}>
                                 <SelectTrigger className="border-none w-16">
                                     <Filter size={16} className={`cursor-pointer ${filter === 999 ? '' : 'text-gray-950'}`} />
@@ -98,14 +97,14 @@ export default function Files({ onPreview }) {
                                 <SelectContent className="w-fit">
                                     <SelectGroup>
                                         <SelectItem value={'999'}>{t('all')}</SelectItem>
-                                        <SelectItem value={'1'}>{t('lib.parsing')}</SelectItem>
-                                        <SelectItem value={'2'}>{t('lib.completed')}</SelectItem>
-                                        <SelectItem value={'3'}>{t('lib.parseFailed')}</SelectItem>
+                                        <SelectItem value={'1'}>{t('parsing')}</SelectItem>
+                                        <SelectItem value={'2'}>{t('completed')}</SelectItem>
+                                        <SelectItem value={'3'}>{t('parseFailed')}</SelectItem>
                                     </SelectGroup>
                                 </SelectContent>
                             </Select>
                         </TableHead>
-                        <TableHead>{t('lib.uploadTime')}</TableHead>
+                        <TableHead>{t('uploadTime')}</TableHead>
                         <TableHead className="text-right pr-6">{t('operations')}</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -118,7 +117,7 @@ export default function Files({ onPreview }) {
                                     <TooltipProvider delayDuration={100}>
                                         <Tooltip>
                                             <TooltipTrigger>
-                                                <span className='text-red-500'>{t('lib.parseFailed')}</span>
+                                                <span className='text-red-500'>{t('parseFailed')}</span>
                                             </TooltipTrigger>
                                             <TooltipContent>
                                                 <div className="max-w-96 text-left break-all whitespace-normal">{el.remark}</div>
@@ -127,14 +126,18 @@ export default function Files({ onPreview }) {
                                     </TooltipProvider>
                                     <Button variant="link"><RotateCw size={16} onClick={() => handleRetry([el])} /></Button>
                                 </div> :
-                                    <span className={el.status === 3 && 'text-red-500'}>{[t('lib.parseFailed'), t('lib.parsing'), t('lib.completed'), t('lib.parseFailed')][el.status]}</span>
+                                    <span className={el.status === 3 && 'text-red-500'}>
+                                        {[t('parseFailed'), t('parsing'), t('completed'), t('parseFailed')][el.status]}
+                                    </span>
                                 }
                             </TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
-                                <Button variant="link" disabled={el.status !== 2} className="px-2" onClick={() => onPreview(el.id)}>查看</Button>
-                                {hasPermission ? <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-2">{t('delete')}</Button> :
-                                    <Button variant="link" className="ml-4 text-gray-400">{t('delete')}</Button>}
+                                <Button variant="link" disabled={el.status !== 2} className="px-2" onClick={() => onPreview(el.id)}>{t('view')}</Button>
+                                {hasPermission ?
+                                    <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-2">{t('delete')}</Button> :
+                                    <Button variant="link" className="ml-4 text-gray-400">{t('delete')}</Button>
+                                }
                             </TableCell>
                         </TableRow>
                     ))}
@@ -152,6 +155,6 @@ export default function Files({ onPreview }) {
                 />
             </div>
         </div>
-        {/* <UploadModal id={id} accept={appConfig.libAccepts} open={open} setOpen={handleOpen} onResult={handleUploadResult}></UploadModal> */}
     </div>
+
 };

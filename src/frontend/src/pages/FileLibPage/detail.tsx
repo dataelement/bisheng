@@ -3,10 +3,12 @@ import { useState } from "react";
 import Files from "./components/Files";
 import Header from "./components/Header";
 import Paragraphs from "./components/Paragraphs";
+import { useTranslation } from "react-i18next";
 
 export default function FilesPage() {
     const [value, setValue] = useState('file')
     const [fileId, setFileId] = useState('')
+    const { t } = useTranslation('knowledge')
 
     const onPreview = (id: string) => {
         setFileId(id)
@@ -20,8 +22,12 @@ export default function FilesPage() {
                 {/* title */}
                 <Header />
                 <TabsList>
-                    <TabsTrigger value="file" className="roundedrounded-xl">文件管理</TabsTrigger>
-                    <TabsTrigger value="chunk">分段管理</TabsTrigger>
+                    <TabsTrigger value="file" className="rounded-xl">
+                        {t('fileManagement')}
+                    </TabsTrigger>
+                    <TabsTrigger value="chunk">
+                        {t('chunkManagement')}
+                    </TabsTrigger>
                 </TabsList>
             </div>
             <TabsContent value="file">
