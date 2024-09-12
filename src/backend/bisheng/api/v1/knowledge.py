@@ -143,7 +143,7 @@ def retry(data: dict, background_tasks: BackgroundTasks, login_user: UserPayload
     """失败重试"""
     db_file_retry = data.get('file_objs')
     if db_file_retry:
-        id2input = {file.get('id'): KnowledgeFile.validate(file) for file in db_file_retry}
+        id2input = {file.get('id'): file for file in db_file_retry}
     else:
         return resp_500('参数错误')
     file_ids = list(id2input.keys())
@@ -151,8 +151,8 @@ def retry(data: dict, background_tasks: BackgroundTasks, login_user: UserPayload
     for file in db_files:
         # file exist
         input_file = id2input.get(file.id)
-        if input_file.remark and '对应已存在文件' in input_file.remark:
-            file.file_name = input_file.remark.split(' 对应已存在文件 ')[0]
+        if input_file["remark"] and '对应已存在文件' in input_file["remark"]:
+            file.file_name = input_file["remark"].split(' 对应已存在文件 ')[0]
             file.remark = ''
         file.status = 1  # 解析中
         file = KnowledgeFileDao.update(file)

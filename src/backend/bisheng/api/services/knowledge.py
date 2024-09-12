@@ -325,7 +325,9 @@ class KnowledgeService(KnowledgeUtils):
                 preview_cache_keys.append(cache_key)
                 process_files.append(db_file)
             else:
-                failed_files.append(db_file)
+                failed_file_info = db_file.model_dump()
+                failed_file_info["file_path"] = one.file_path
+                failed_files.append(failed_file_info)
         return knowledge, failed_files, process_files, preview_cache_keys
 
     @classmethod

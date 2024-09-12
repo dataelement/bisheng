@@ -345,7 +345,7 @@ def parse_partitions(partitions: List[Any]) -> Dict:
         text = one["text"]
         for index, bbox in enumerate(bboxes):
             key = f"{pages[index]}-" + "-".join([str(int(one)) for one in bbox])
-            val = text[indexes[index][0]:indexes[index][1]+1]
+            val = text[indexes[index][0]:indexes[index][1] + 1]
             res[key] = {
                 "text": val,
                 "type": one["type"]
@@ -379,7 +379,7 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
             raise Exception('类型不支持')
-        loader = filetype_load_map[file_type](file_path=input_file)
+        loader = filetype_load_map[file_type](file_path=input_file, encoding='utf-8')
         partitions = []
         documents = loader.load()
     else:
@@ -496,9 +496,11 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
         for file in db_files:
             knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
             input_files = new_files.get(file.id)
-            file.object_name = input_files.object_name
+            file.object_name = input_files["object_name"]
+            file_preview_cache_key = KnowledgeUtils.get_preview_cache_key(file.knowledge_id, input_files["file_path"])
             process_file_task(knowledge, [file], fake_req.separator, fake_req.separator_rule,
-                              fake_req.chunk_size, fake_req.chunk_overlap, extra_metadata=file.extra_meta)
+                              fake_req.chunk_size, fake_req.chunk_overlap, extra_metadata=file.extra_meta,
+                              preview_cache_keys=[file_preview_cache_key])
 
 
 def delete_vector(collection_name: str, partition_key: str):
