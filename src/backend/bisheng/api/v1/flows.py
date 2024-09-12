@@ -3,6 +3,7 @@ from typing import Any
 from uuid import UUID
 
 from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.flow import FlowOnlineEditError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import build_flow_no_yield, get_L2_param_from_flow, remove_api_keys
@@ -172,10 +173,10 @@ async def update_flow(*,
                                       flow_id=flow_id)
         except Exception as exc:
             logger.exception(exc)
-            raise HTTPException(status_code=500, detail=f'Flow 编译不通过, {str(exc)}')
+            raise HTTPException(status_code=500, detail=f'Flow build error, {str(exc)}')
 
     if db_flow.status == 2 and ('status' not in flow_data or flow_data['status'] != 1):
-        raise HTTPException(status_code=500, detail='上线中技能，不支持修改')
+        raise FlowOnlineEditError.http_exception()
 
     if settings.remove_api_keys:
         flow_data = remove_api_keys(flow_data)

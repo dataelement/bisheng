@@ -1,19 +1,17 @@
 import urllib.parse
 from typing import List, Optional
 
-import urllib3.util
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Request, Path, Body, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Request, Body, Query
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import retry_files
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500, PreviewFileChunk, \
-    UpdatePreviewFileChunk, KnowledgeFileProcess, FileChunkMetadata
+    UpdatePreviewFileChunk, KnowledgeFileProcess
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeRead, KnowledgeUpdate
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import MinioClient
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
