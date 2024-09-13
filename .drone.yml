@@ -80,14 +80,9 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         path: /var/run/docker.sock
       - name: bisheng-cache
         path: /app/build/
-    environment:
-      http_proxy:
-        from_secret: PROXY
-      https_proxy:
-        from_secret: PROXY
-      no_proxy: 192.168.106.8
     settings:
       registry: http://192.168.106.8:6082
+      bip: true
       insecure: true
       purge: true
       repo: 192.168.106.8:6082/dataelement/bisheng-backend
