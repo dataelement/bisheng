@@ -219,12 +219,15 @@ export default function FileView({
     }, [scrollTo])
 
     const fileWidthRef = useRef(1)
+    const loadedRef = useRef(false)
     const handleLoadPage = (w: number) => {
         // 文档宽度变化时 初始化样式、宽度、定位等信息
-        if (Math.abs(fileWidthRef.current - w) < 1) return
+        if (loadedRef.current) return
+        // if (Math.abs(fileWidthRef.current - w) < 1) return
         const warpDom = document.getElementById('warp-pdf')
         warpDom.style.setProperty("--scale-factor", boxSize.width / w + '')
         fileWidthRef.current = w
+        loadedRef.current = true
         scrollToFunc()
     }
 
@@ -260,6 +263,17 @@ export default function FileView({
         // console.log('object :>> ', scrollOffset, boxSize.height, boxSize.width / 0.7);
     }
 
+    const itemRenderer = useCallback((props) => <Row
+        {...props}
+        key={props.index}
+        drawfont={drawfont}
+        pdf={pdf}
+        size={boxSize.width}
+        labels={labels[props.index + 1]}
+        onLoad={handleLoadPage}
+        onSelectLabel={val => select && onSelectLabel([val])}
+    ></Row>, [pdf, drawfont, select, labels, boxSize]);
+
     return <div ref={paneRef} className="flex-1 h-full bg-gray-100 rounded-md py-4 px-2 relative"
         onContextMenu={(e) => e.preventDefault()}
     >
@@ -280,15 +294,7 @@ export default function FileView({
                         height={boxSize.height}
                         onScroll={handleScroll}
                     >
-                        {(props) => <Row
-                            {...props}
-                            drawfont={drawfont}
-                            pdf={pdf}
-                            size={boxSize.width}
-                            labels={labels[props.index + 1]}
-                            onLoad={handleLoadPage}
-                            onSelectLabel={val => select && onSelectLabel([val])}
-                        ></Row>}
+                        {itemRenderer}
                     </List>
                 </div>
         }

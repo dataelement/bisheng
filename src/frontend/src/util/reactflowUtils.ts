@@ -232,6 +232,7 @@ export function updateIds(newFlow: ReactFlowJsonObject) {
 }
 
 export function buildTweaks(flow: FlowType) {
+  if (!flow.data) return {}
   return flow.data!.nodes.reduce((acc, node) => {
     acc[node.data.id] = {};
     return acc;
@@ -855,7 +856,7 @@ export function generateNodeFromFlow(
   const id = getNodeId(outputNode?.data.type!);
   // 检查是否有 fileinput
   const hasFileInput = flow.data.nodes.some((node) => node.data.type === "InputFileNode")
-  
+
   const newGroupNode: NodeType = {
     data: {
       id,

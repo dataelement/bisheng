@@ -36,7 +36,7 @@ export const ParagraphsItem = ({ data, disabled = false, onEdit, onDeled }) => {
             {/* 序号部分 */}
             <div className="absolute right-4 top-4 font-semibold">#{data.metadata.chunk_index + 1}</div>
             <CardHeader>
-                <CardTitle className="font-semibold pr-4">{data.metadata.source || ""}</CardTitle>
+                <CardTitle className="font-semibold pr-4 leading-6">{data.metadata.source || ""}</CardTitle>
             </CardHeader>
             <CardContent className="pb-2">
                 <p className="truncate-multiline text-sm text-muted-foreground h-[60px]">
@@ -160,6 +160,7 @@ export default function Paragraphs({ fileId }) {
                     chunkId={paragraph.chunkId}
                     isUns={paragraph.isUns}
                     onClose={() => setParagraph({ ...paragraph, show: false })}
+                    onChange={(value) => refreshData((item) => item.metadata.chunk_index === paragraph.chunkId, { text: value })}
                 />
             </DialogContent>
         </Dialog>

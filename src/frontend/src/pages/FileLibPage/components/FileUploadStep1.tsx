@@ -34,8 +34,10 @@ export default function FileUploadStep1({ hidden, onNext, onChange }) {
             url='/api/v1/knowledge/upload'
             accept={appConfig.libAccepts}
             progressClassName='max-h-[374px]'
-            onFileCountChange={(count, all) =>
+            onFileCountChange={(count, all) => {
+                console.log('count all :>> ', count, all);
                 setFileCount(count === all ? count : 0)
+            }
             }
             onBeforeUpload={() => setFileCount(0)}
         />

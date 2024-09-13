@@ -146,6 +146,9 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                     fileId={paragraph.fileId}
                     chunkId={paragraph.chunkId}
                     onClose={() => setParagraph({ ...paragraph, show: false })}
+                    onChange={(val) => setParagraphs(paragraphs.map(item =>
+                        item.metadata.chunk_index === paragraph.chunkId ? { ...item, text: val } : item))
+                    }
                 />
             </DialogContent>
         </Dialog>

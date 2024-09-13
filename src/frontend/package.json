@@ -71,7 +71,7 @@
     "react-syntax-highlighter": "^15.5.0",
     "react-tabs": "^6.0.2",
     "react-tooltip": "^5.21.1",
-    "react-window": "^1.8.9",
+    "react-window": "^1.8.10",
     "reactflow": "^11.9.2",
     "recharts": "^2.10.4",
     "rehype-mathjax": "^4.0.3",

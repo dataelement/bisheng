@@ -19,7 +19,8 @@ const ParagraphEdit = ({
     filePath = '',
     fileId,
     chunkId,
-    onClose
+    onClose,
+    onChange
 }) => {
     const { id } = useParams();
     const [value, setValue] = useState('');
@@ -100,6 +101,7 @@ const ParagraphEdit = ({
         await captureAndAlertRequestErrorHoc(promise.then(res => {
             message({ variant: 'success', description: t('editSuccess') })
             onClose()
+            onChange(_value)
         }))
         setLoading(false)
     }
@@ -129,19 +131,23 @@ const ParagraphEdit = ({
     const handleOvergap = () => {
         setLabelChange(false)
         let prevType = ''
+        let prevPartId = ''
         let str = ''
         // 标注块拼接段落
         data.forEach((item) => {
             if (typeof labelTexts[item.id] === 'string') return window.alter('文件已失效，传个新的在测试')
             if (item.active) {
-                const { text, type } = labelTexts[item.id]
+                const { text, type, part_id } = labelTexts[item.id]
                 if (str === '') {
                     // 第一个块, title类型，末尾加单换行
                     str += text + (type === 'Title' ? '\n' : '')
                 } else {
                     // 非第一个块
-                    // 上一个是表格 or 当前是表格 or 当前是title并上一个不是title
-                    if (prevType === 'Table' || type === 'Table' || (type === 'Title' && prevType !== type)) {
+                    if (prevPartId === part_id) {
+                        // 上一个和当前是同一段落
+                        str += text
+                    } else if (prevType === 'Table' || type === 'Table' || (type === 'Title' && prevType !== type)) {
+                        // 上一个是表格 or 当前是表格 or 当前是title并上一个不是title
                         str += '\n\n' + text
                     } else {
                         str += '\n' + text
@@ -149,6 +155,7 @@ const ParagraphEdit = ({
                 }
 
                 prevType = type
+                prevPartId = part_id
             }
         })
         console.log('JSON. :>> ', JSON.stringify(str));
