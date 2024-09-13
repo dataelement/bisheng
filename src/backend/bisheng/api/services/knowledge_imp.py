@@ -338,17 +338,18 @@ def parse_partitions(partitions: List[Any]) -> Dict:
     if not partitions:
         return {}
     res = {}
-    for one in partitions:
-        bboxes = one["metadata"]["extra_data"]["bboxes"]
-        indexes = one["metadata"]["extra_data"]["indexes"]
-        pages = one["metadata"]["extra_data"]["pages"]
-        text = one["text"]
+    for part_index, part in enumerate(partitions):
+        bboxes = part["metadata"]["extra_data"]["bboxes"]
+        indexes = part["metadata"]["extra_data"]["indexes"]
+        pages = part["metadata"]["extra_data"]["pages"]
+        text = part["text"]
         for index, bbox in enumerate(bboxes):
             key = f"{pages[index]}-" + "-".join([str(int(one)) for one in bbox])
             val = text[indexes[index][0]:indexes[index][1] + 1]
             res[key] = {
                 "text": val,
-                "type": one["type"]
+                "type": part["type"],
+                "part_id": part_index
             }
     return res
 
