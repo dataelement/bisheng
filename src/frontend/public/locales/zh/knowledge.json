@@ -65,5 +65,6 @@
     "modalTitle": "文件重复提示",
     "modalMessage": "以下文件在知识库中已存在，继续上传将会覆盖原有文件以及处理策略，是否覆盖？",
     "keepOriginal": "不覆盖，保留原文件",
-    "override": "覆盖"
+    "override": "覆盖",
+    "fileUploadResult": "共上传 {{total}} 份文件，有 {{failed}} 份文件上传失败"
 }

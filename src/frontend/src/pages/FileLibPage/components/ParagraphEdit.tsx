@@ -11,7 +11,16 @@ import { useParams } from "react-router-dom";
 import Markdown from './Markdown';
 
 // 上传预览时携带chunks
-const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePath = '', fileId, chunkId, onClose }) => {
+const ParagraphEdit = ({
+    chunks = null,
+    partitions = null,
+    oriFilePath = '',
+    isUns = true,
+    filePath = '',
+    fileId,
+    chunkId,
+    onClose
+}) => {
     const { id } = useParams();
     const [value, setValue] = useState('');
     const [data, setData] = useState([]);
@@ -19,7 +28,7 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
     const { t } = useTranslation('knowledge')
 
     const labelTexts = useLabelTexts(fileId, partitions)
-    const [fileUrl, setFileUrl] = useState('')
+    const [previewFileUrl, setFileUrl] = useState('')
     useEffect(() => {
         chunks ? setFileUrl(filePath) : getFilePathApi(fileId).then(setFileUrl)
     }, [fileId, filePath, chunks])
@@ -28,6 +37,7 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
     const initData = (res) => {
         let labelsData = []
         let value = ''
+
         res.data.forEach(chunk => {
             const { bbox, chunk_index } = chunk.metadata
             const labels = bbox && JSON.parse(bbox).chunk_bboxes || []
@@ -83,7 +93,7 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
         setLoading(true)
 
         const promise = chunks ? updatePreviewChunkApi({
-            knowledge_id: Number(id), file_path: filePath, chunk_index: chunkId, text: _value, bbox: JSON.stringify(bbox)
+            knowledge_id: Number(id), file_path: oriFilePath, chunk_index: chunkId, text: _value, bbox: JSON.stringify(bbox)
         }) : updateChunkApi({
             knowledge_id: Number(id), file_id: fileId, chunk_index: chunkId, text: _value, bbox: JSON.stringify(bbox)
         })
@@ -118,9 +128,30 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
 
     const handleOvergap = () => {
         setLabelChange(false)
-        const str = data.reduce((str, item) => {
-            return str + (item.active ? labelTexts[item.id] + '\n' : '')
-        }, '')
+        let prevType = ''
+        let str = ''
+        // 标注块拼接段落
+        data.forEach((item) => {
+            if (typeof labelTexts[item.id] === 'string') return window.alter('文件已失效，传个新的在测试')
+            if (item.active) {
+                const { text, type } = labelTexts[item.id]
+                if (str === '') {
+                    // 第一个块, title类型，末尾加单换行
+                    str += text + (type === 'Title' ? '\n' : '')
+                } else {
+                    // 非第一个块
+                    // 上一个是表格 or 当前是表格 or 当前是title并上一个不是title
+                    if (prevType === 'Table' || type === 'Table' || (type === 'Title' && prevType !== type)) {
+                        str += '\n\n' + text
+                    } else {
+                        str += '\n' + text
+                    }
+                }
+
+                prevType = type
+            }
+        })
+        console.log('JSON. :>> ', JSON.stringify(str));
         setValue(str)
         markDownRef.current.setValue(str) // fouceupdate
         prevOvergapData.current = data
@@ -150,8 +181,8 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
                 <Markdown ref={markDownRef} isUns={isUns} title={fileName} q={chunkId + 1} value={value} />
                 {!value && <p className="absolute left-0 text-red-500 text-xs mt-2">{t('inputNotEmpty')}</p>}
                 {!isUns && <div className="flex justify-end gap-4">
-                    <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel')}</Button>
-                    <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save')}</Button>
+                    <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel', { ns: 'bs' })}</Button>
+                    <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>
                 </div>}
             </div>
             {isUns && <>
@@ -173,17 +204,17 @@ const ParagraphEdit = ({ chunks = null, partitions = null, isUns = true, filePat
                             <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
                         </div>
                         <div className="flex justify-end gap-4">
-                            <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel')}</Button>
-                            <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save')}</Button>
+                            <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel', { ns: 'bs' })}</Button>
+                            <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>
                         </div>
                     </div>
                     {/* file view */}
                     <div className="bg-gray-100 relative">
-                        {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair2Icon className="mr-1" />{t('backToPosition')}</Button>}
+                        {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10 bg-background" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair2Icon className="mr-1" />{t('backToPosition')}</Button>}
                         <div className="h-[calc(100vh-104px)]">
-                            {fileUrl && <FileView
+                            {previewFileUrl && <FileView
                                 select
-                                fileUrl={fileUrl}
+                                fileUrl={previewFileUrl}
                                 labels={labels}
                                 scrollTo={postion}
                                 onSelectLabel={handleSelectLabels}

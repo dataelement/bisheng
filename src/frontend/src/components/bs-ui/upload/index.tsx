@@ -44,7 +44,15 @@ const uploadFileWithProgress = async ({ url, fileName, file, callback, cancel = 
 };
 
 let qid = 1
-const Upload = forwardRef(({ url, fileName = 'file', accept, size = 50, progressClassName = '', onFileCountChange = () => { } }: any, ref) => {
+const Upload = forwardRef(({
+    url,
+    fileName = 'file',
+    accept,
+    size = 50,
+    progressClassName = '',
+    onFileCountChange = () => { },
+    onBeforeUpload = (files) => { }
+}: any, ref) => {
     const { t } = useTranslation()
 
     const [progressList, setProgressList] = useState([])
@@ -77,6 +85,7 @@ const Upload = forwardRef(({ url, fileName = 'file', accept, size = 50, progress
         // if (acceptedFiles.length === 1 && acceptedFiles[0].type !== 'application/pdf') {
         //     return
         // }
+        onBeforeUpload(files)
         setProgressList((list) => {
             return [...list, ...files.map(file => {
                 return {
@@ -137,7 +146,7 @@ const Upload = forwardRef(({ url, fileName = 'file', accept, size = 50, progress
                     // console.log('filePathsRef.current.length, progressCountRef.current :>> ', filePathsRef.current.length, progressCountRef.current);
                     if (data) {
                         filePathsRef.current.push({ id: task.id, name: task.file.name, path: data.file_path })
-                        onFileCountChange(filePathsRef.current.length)
+                        onFileCountChange(filePathsRef.current.length, progressCountRef.current)
                     } else {
                         failFilesRef.current.push({ id: task.id, name: task.file.name })
                         setProgressList((oldState) => oldState.map(el => {
@@ -179,7 +188,7 @@ const Upload = forwardRef(({ url, fileName = 'file', accept, size = 50, progress
                             setProgressList((oldState) => oldState.filter(el => el.id !== pros.id));
                             filePathsRef.current = filePathsRef.current.filter(el => el.id !== pros.id)
                             failFilesRef.current = failFilesRef.current.filter(el => el.id !== pros.id)
-                            onFileCountChange(filePathsRef.current.length)
+                            onFileCountChange(filePathsRef.current.length, --progressCountRef.current)
                         }} />
                     </div>
                 </div>

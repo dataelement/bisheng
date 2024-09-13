@@ -27,7 +27,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
 
     const paramChangRef = useRef(false)
     const preveParamsRef = useRef(null)
-    console.log('load :>> ');
+
     useImperativeHandle(ref, () => ({
         load(data, files) {
             paramsRef.current = data
@@ -46,9 +46,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
         }
     }))
 
-
     const [paragraphs, setParagraphs] = useState<any>([])
-    const [fileUrl, setFileUrl] = useState('')
+    const [previewFileUrl, setFileUrl] = useState('')
     const [isUns, setIsUns] = useState(false)
     const [partitions, setPartitions] = useState<any>([])
     // 加载文件分段结果
@@ -59,8 +58,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
         previewFileSplitApi({ ...paramsRef.current, file_path: fileValue, cache: paramChangRef.current }).then(res => {
             setLoading(false)
             setParagraphs(res.chunks)
-            setFileUrl(fileValue)
-            // setFileUrl(res.file_url)
+            // setFileUrl(fileValue)
+            setFileUrl(res.file_url)
             setIsUns(res.parse_type === 'uns')
             setPartitions(res.partitions)
         })
@@ -114,8 +113,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
             </SelectSearch>
             <div className={`${change ? '' : 'hidden'} flex items-center`}>
                 <InfoCircledIcon className='mr-1 text-red-500' />
-                <span className="text-red-500">{t('policyChangeDetected')}</span>
-                <span className="text-primary cursor-pointer" onClick={handleReload}>{t('regeneratePreview')}</span>
+                <span className="text-red-500">{t('policyChangeDetected', { ns: 'knowledge' })}</span>
+                <span className="text-primary cursor-pointer" onClick={handleReload}>{t('regeneratePreview', { ns: 'knowledge' })}</span>
             </div>
         </div>
         <div className="mt-2 flex flex-wrap gap-2 min-w-[770px]">
@@ -142,7 +141,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                     chunks={paragraphs}
                     partitions={partitions}
                     isUns={isUns}
-                    filePath={fileUrl}
+                    oriFilePath={fileValue}
+                    filePath={previewFileUrl}
                     fileId={paragraph.fileId}
                     chunkId={paragraph.chunkId}
                     onClose={() => setParagraph({ ...paragraph, show: false })}

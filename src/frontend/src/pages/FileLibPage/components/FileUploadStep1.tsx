@@ -3,7 +3,7 @@ import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import Upload from "@/components/bs-ui/upload";
 import { locationContext } from "@/contexts/locationContext";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function FileUploadStep1({ hidden, onNext, onChange }) {
@@ -34,7 +34,10 @@ export default function FileUploadStep1({ hidden, onNext, onChange }) {
             url='/api/v1/knowledge/upload'
             accept={appConfig.libAccepts}
             progressClassName='max-h-[374px]'
-            onFileCountChange={setFileCount}
+            onFileCountChange={(count, all) =>
+                setFileCount(count === all ? count : 0)
+            }
+            onBeforeUpload={() => setFileCount(0)}
         />
         <div className="flex justify-end">
             <Button className="px-10 mt-4" disabled={!fileCount} onClick={handleSaveFiles}>

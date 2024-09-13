@@ -31,11 +31,11 @@
     "addCustomRule": "Add custom rule",
     "splitPriorityInfo": "Split priority is sorted from high to low according to the display order, and can be adjusted by dragging",
     "step1UploadFile": "①Upload File",
-    "step2DocProcessing": "②Document Processing Strategy",
+    "step2DocProcessing": "File Processing Strategy",
     "totalFiles": "Total {{count}} files",
     "nextStep": "Next Step",
     "addSuccess": "Add Success",
-    "docProcessingStrategy": "Document Processing Strategy",
+    "docProcessingStrategy": "File Processing Strategy",
     "defaultStrategy": "Default Strategy",
     "customStrategy": "Custom Strategy",
     "splitMethod": "Split Method",
@@ -65,5 +65,6 @@
     "modalTitle": "File Duplicate Prompt",
     "modalMessage": "The following files already exist in the knowledge base. Continuing the upload will overwrite the original files and processing strategy. Do you want to proceed with overwrite?",
     "keepOriginal": "Keep Original Files",
-    "override": "Override"
+    "override": "Override",
+    "fileUploadResult": "Out of the {{total}} files uploaded, {{failed}} failed to upload."
 }

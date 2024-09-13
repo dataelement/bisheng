@@ -325,18 +325,7 @@
     "libraryCollection": "Knowledge Base Collection",
     "createUser": "Create User",
     "details": "Details",
-    "confirmDeleteLibrary": "Confirm deletion of this Knowledge Base?",
-    "fileList": "File List",
-    "systemIntegration": "System Integration",
-    "upload": "Upload",
-    "fileName": "File Name",
-    "status": "Status",
-    "uploadTime": "Upload Time",
-    "parseFailed": "Parse Failed",
-    "parsing": "Parsing",
-    "completed": "Completed",
-    "fileUploadResult": "Out of the {{total}} files uploaded, {{failed}} failed to upload.",
-    "toolName": "ToolName"
+    "confirmDeleteLibrary": "Confirm deletion of this Knowledge Base?"
   },
   "evaluation": {
     "id": "Task ID",
@@ -573,7 +562,8 @@
     "path": "Path",
     "delete": "Delete",
     "cancel": "Cancel",
-    "save": "Save"
+    "save": "Save",
+    "toolName": "ToolName"
   },
   "test": {
     "test": "Test",

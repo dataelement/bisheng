@@ -28,7 +28,7 @@ interface IProps {
 
 export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange }: IProps) {
     const { id: kid } = useParams()
-    const { t } = useTranslation()
+    const { t } = useTranslation('knowledge')
 
     const chunkType = useRef('smart')
     // 切分
@@ -78,7 +78,7 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
             } else {
                 failFiles.length ? bsConfirm({
                     desc: <div>
-                        <p>{t('lib.fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
+                        <p>{t('fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
                         <div className="max-h-[160px] overflow-y-auto no-scrollbar">
                             {failFiles.map(el => <p className=" text-red-400" key={el.id}>{el.name}</p>)}
                         </div>

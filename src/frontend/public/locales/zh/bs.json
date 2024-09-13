@@ -321,18 +321,7 @@
     "libraryCollection": "知识库集合",
     "createUser": "创建用户",
     "details": "详情",
-    "confirmDeleteLibrary": "确认删除该知识库?",
-    "fileList": "文件列表",
-    "systemIntegration": "系统对接",
-    "upload": "上传",
-    "fileName": "文件名称",
-    "status": "状态",
-    "uploadTime": "上传时间",
-    "parseFailed": "解析失败",
-    "parsing": "解析中",
-    "completed": "完成",
-    "fileUploadResult": "共上传 {{total}} 份文件，有 {{failed}} 份文件上传失败",
-    "toolName": "工具名称"
+    "confirmDeleteLibrary": "确认删除该知识库?"
   },
   "evaluation": {
     "id": "任务ID",
@@ -569,7 +558,8 @@
     "path": "路径",
     "delete": "删除",
     "cancel": "取消",
-    "save": "保存"
+    "save": "保存",
+    "toolName": "工具名称"
   },
   "test": {
     "test": "测试",

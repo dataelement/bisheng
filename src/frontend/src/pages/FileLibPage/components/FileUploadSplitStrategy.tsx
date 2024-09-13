@@ -54,7 +54,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                                                     ref={provided.innerRef}
                                                     {...provided.draggableProps}
                                                     {...provided.dragHandleProps}
-                                                    className="my-1 border rounded bg-gray-100 text-sm"
+                                                    className="my-1 border rounded bg-accent text-sm"
                                                 >
                                                     <div className='relative group h-full py-1 '>
                                                         {strategy.position === 'before' ? (

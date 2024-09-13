@@ -315,7 +315,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>{t('lib.toolName')}</TableHead>
+                                <TableHead>{t('tools.toolName')}</TableHead>
                                 <TableHead>{t('system.creator')}</TableHead>
                                 <TableHead className="text-right w-[75px]">{t('system.usePermission')}</TableHead>
                             </TableRow>
