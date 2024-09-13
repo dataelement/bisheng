@@ -34,7 +34,10 @@ def merge_partitions(partitions):
             elif label == 'Table':
                 doc_content.append('\n\n' + text)
             else:
-                doc_content.append(text_elem_sep + text)
+                if last_label == 'Table':
+                    doc_content.append(text_elem_sep * 2 + text)
+                else:
+                    doc_content.append(text_elem_sep + text)
 
         last_label = label
         metadata['bboxes'].extend(list(map(lambda x: list(map(int, x)), extra_data['bboxes'])))
