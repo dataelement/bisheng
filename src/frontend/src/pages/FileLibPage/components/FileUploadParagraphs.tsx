@@ -3,8 +3,7 @@ import SelectSearch from "@/components/bs-ui/select/select";
 import { delChunkInPreviewApi, previewFileSplitApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { InfoCircledIcon } from "@radix-ui/react-icons";
-import isEqual from "lodash-es/isEqual";
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import ParagraphEdit from "./ParagraphEdit";
@@ -22,10 +21,18 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
     })
 
     const [fileValue, setFileValue] = useState('')
+    const fileValueRef = useRef('')
     const allFilesRef = useRef([])
     const [files, setFiles] = useState([])
 
     const fileCachesRef = useRef({})
+
+    useEffect(() => {
+        if (!open) {
+            fileValueRef.current = ''
+            fileCachesRef.current = {}
+        }
+    }, [open])
 
     useImperativeHandle(ref, () => ({
         load(data, files) {
@@ -37,7 +44,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                 value: el.path
             }))
             setFiles([...allFilesRef.current])
-            loadchunks(fileValue || files[0].path) // default first 
+            console.log('1234 :>> ', 1234);
+            loadchunks(fileValueRef.current || files[0].path) // default first 
         }
     }))
 
@@ -50,6 +58,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
         if (!fileValue) return
         setLoading(true)
         setFileValue(fileValue)
+        fileValueRef.current = fileValue
         previewFileSplitApi({ ...paramsRef.current, file_path: fileValue, cache: !!fileCachesRef.current[fileValue] }).then(res => {
             setLoading(false)
             setParagraphs(res.chunks)
@@ -75,7 +84,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
         onChange(false)
         fileCachesRef.current = {}
 
-        loadchunks(fileValue)
+        // loadchunks(fileValue)
     }
 
     const handleDeleteChunk = async (data) => {

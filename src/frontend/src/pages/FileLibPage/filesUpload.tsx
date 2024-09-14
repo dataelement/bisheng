@@ -27,6 +27,7 @@ export default function FilesUpload() {
     const handleStep1NextClick = (fileInfo) => {
         setFileInfo(fileInfo)
         setStepEnd(true)
+        setShowView(false)
     }
 
     return <div className="flex px-2 py-4 h-full gap-2">
@@ -52,7 +53,10 @@ export default function FilesUpload() {
         </div>
         {/* 段落 */}
         <div className="flex-1 bg-muted h-full relative overflow-x-auto">
-            <FileUploadParagraphs open={showView} ref={viewRef} change={change} onChange={setChange} />
+            <FileUploadParagraphs open={showView} ref={viewRef} change={change} onChange={(change) => {
+                setChange(change)
+                document.getElementById('preview-btn')?.click()
+            }} />
             {!showView && (
                 <div className="flex justify-center items-center flex-col h-full text-gray-400">
                     <ReaderIcon width={160} height={160} className="text-border" />

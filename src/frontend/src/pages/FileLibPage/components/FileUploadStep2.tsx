@@ -148,7 +148,7 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
             <Button disabled={loading} className="h-8" onClick={handleSubmit}>
                 {loading && <LoadIcon />} {t('submit')}
             </Button>
-            <Button className="h-8" onClick={handlePreview}>{t('previewResults')}</Button>
+            <Button className="h-8" id={'preview-btn'} onClick={handlePreview}>{t('previewResults')}</Button>
         </div>
 
         {/* 重复文件提醒 */}
