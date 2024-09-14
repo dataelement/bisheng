@@ -100,8 +100,8 @@ export default function HomePage({ onSelect }) {
                 {user.role === 'admin' && <SettingIcon onClick={() => setOpen(true)} className="h-[30px] w-[30px] cursor-pointer" />}
             </div>
         </div>
-        <div className="relative">
-            <div className="flex flex-wrap gap-2 px-12 overflow-y-auto scrollbar-hide h-[calc(100vh-308px)] pt-4 pb-20" >
+        <div className="relative overflow-y-auto h-[calc(100vh-308px)]">
+            <div className="flex flex-wrap gap-2 px-12 scrollbar-hide pt-4 pb-20" >
                 {
                     options.length ? options.map((flow, i) => (
                         <CardComponent key={i}

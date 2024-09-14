@@ -29,6 +29,9 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             }
         }, [value]);
 
+        const noEmptyProps =
+            value === undefined ? {} : { value: currentValue }
+
         return (
             <div className="relative w-full">
                 <input
@@ -37,10 +40,11 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                         "flex h-9 w-full rounded-md border border-input bg-search-input px-3 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
                         className
                     )}
-                    value={currentValue}
+                    defaultValue={defaultValue}
                     onChange={handleChange}
                     maxLength={maxLength}
                     ref={ref}
+                    {...noEmptyProps}
                     {...props}
                 />
                 {maxLength && (
@@ -115,7 +119,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps & { boxClas
         }, [value]);
 
         const noEmptyProps =
-            value === undefined && defaultValue === undefined ? {} : { value: currentValue }
+            value === undefined ? {} : { value: currentValue }
 
         return (
             <div className={cname('relative w-full', boxClassName)}>
@@ -125,6 +129,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps & { boxClas
                         className
                     )}
                     ref={ref}
+                    defaultValue={defaultValue}
                     maxLength={maxLength}
                     onChange={handleChange}
                     {...noEmptyProps}

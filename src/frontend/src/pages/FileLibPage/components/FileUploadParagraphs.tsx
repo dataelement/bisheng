@@ -25,24 +25,19 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
     const allFilesRef = useRef([])
     const [files, setFiles] = useState([])
 
-    const paramChangRef = useRef(false)
-    const preveParamsRef = useRef(null)
+    const fileCachesRef = useRef({})
 
     useImperativeHandle(ref, () => ({
         load(data, files) {
             paramsRef.current = data
-            // has change
-            if (!paramChangRef.current || !isEqual(data, preveParamsRef.current)) {
-                paramChangRef.current = false
-                preveParamsRef.current = data
-            }
+            fileCachesRef.current = {}
 
             allFilesRef.current = files.map(el => ({
                 label: el.name,
                 value: el.path
             }))
             setFiles([...allFilesRef.current])
-            loadchunks(files[0].path) // default first 
+            loadchunks(fileValue || files[0].path) // default first 
         }
     }))
 
@@ -55,13 +50,15 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
         if (!fileValue) return
         setLoading(true)
         setFileValue(fileValue)
-        previewFileSplitApi({ ...paramsRef.current, file_path: fileValue, cache: paramChangRef.current }).then(res => {
+        previewFileSplitApi({ ...paramsRef.current, file_path: fileValue, cache: !!fileCachesRef.current[fileValue] }).then(res => {
             setLoading(false)
             setParagraphs(res.chunks)
             // setFileUrl(fileValue)
             setFileUrl(res.file_url)
             setIsUns(res.parse_type === 'uns')
             setPartitions(res.partitions)
+
+            fileCachesRef.current[fileValue] = true // chace tag
         })
     }
 
@@ -76,6 +73,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
     const handleReload = () => {
         setLoading(true)
         onChange(false)
+        fileCachesRef.current = {}
 
         loadchunks(fileValue)
     }
@@ -107,7 +105,6 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                 selectClass="w-64"
                 onChange={handleSelectSearch}
                 onValueChange={(val) => {
-                    paramChangRef.current = true
                     loadchunks(val)
                 }}>
             </SelectSearch>

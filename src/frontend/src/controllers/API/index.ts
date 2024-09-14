@@ -367,6 +367,7 @@ export const getChatsApi = (page) => {
         if (intermediate_steps) return intermediate_steps;
         if (isJsonSerializable(message)) {
           const json = JSON.parse(message);
+          if (Array.isArray(json)) return message
           const chatKey = Object.keys(json)[0]
           return json[chatKey]
         }
