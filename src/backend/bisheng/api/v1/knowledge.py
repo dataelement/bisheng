@@ -9,7 +9,7 @@ from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500, PreviewFileChunk, \
     UpdatePreviewFileChunk, KnowledgeFileProcess
 from bisheng.cache.utils import save_uploaded_file
-from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeRead, KnowledgeUpdate
+from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeRead, KnowledgeUpdate, KnowledgeDao
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.utils.logger import logger
 
@@ -139,24 +139,11 @@ def get_filelist(*,
 
 
 @router.post('/retry', status_code=200)
-def retry(data: dict, background_tasks: BackgroundTasks, login_user: UserPayload = Depends(get_login_user)):
+def retry(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+          background_tasks: BackgroundTasks,
+          req_data: dict):
     """失败重试"""
-    db_file_retry = data.get('file_objs')
-    if db_file_retry:
-        id2input = {file.get('id'): file for file in db_file_retry}
-    else:
-        return resp_500('参数错误')
-    file_ids = list(id2input.keys())
-    db_files = KnowledgeFileDao.select_list(file_ids=file_ids)
-    for file in db_files:
-        # file exist
-        input_file = id2input.get(file.id)
-        if input_file["remark"] and '对应已存在文件' in input_file["remark"]:
-            file.file_name = input_file["remark"].split(' 对应已存在文件 ')[0]
-            file.remark = ''
-        file.status = 1  # 解析中
-        file = KnowledgeFileDao.update(file)
-    background_tasks.add_task(retry_files, db_files, id2input)
+    KnowledgeService.retry_files(request, login_user, background_tasks, req_data)
     return resp_200()
 
 

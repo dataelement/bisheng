@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Union
 
 from sqlmodel.sql.expression import Select, SelectOfScalar
 
@@ -10,7 +10,7 @@ from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
 from langchain.pydantic_v1 import BaseModel
-from sqlalchemy import Column, DateTime, and_, func, text, delete
+from sqlalchemy import Column, DateTime, func, text, delete, update
 from sqlmodel import Field, or_, select
 
 
@@ -67,6 +67,13 @@ class KnowledgeDao(KnowledgeBase):
             session.commit()
             session.refresh(data)
             return data
+
+    @classmethod
+    def update_knowledge_update_time(cls, knowledge: Knowledge):
+        statement = update(Knowledge).where(Knowledge.id == knowledge.id).values(update_time=text('NOW()'))
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
 
     @classmethod
     def query_by_id(cls, knowledge_id: int) -> Knowledge:

@@ -14,7 +14,7 @@ from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
 from bisheng.api.errcode.knowledge import KnowledgeExistError, KnowledgeNoEmbeddingError, KnowledgeChunkError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_text, process_file_task, KnowledgeUtils, \
-    delete_knowledge_file_vectors
+    delete_knowledge_file_vectors, retry_files
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import PreviewFileChunk, FileChunk, UpdatePreviewFileChunk, KnowledgeFileProcess, \
@@ -349,7 +349,8 @@ class KnowledgeService(KnowledgeUtils):
                                       callback_url=req_data.callback_url,
                                       extra_metadata=None,
                                       preview_cache_keys=preview_cache_keys)
-        cls.upload_knowledge_file_hook(request, login_user, req_data.knowledge_id, process_files)
+
+        cls.upload_knowledge_file_hook(request, login_user, knowledge, process_files)
         return failed_files + process_files
 
     @classmethod
@@ -366,18 +367,49 @@ class KnowledgeService(KnowledgeUtils):
 
             process_files = KnowledgeFileDao.select_list([f.id for f in process_files])
 
-        cls.upload_knowledge_file_hook(request, login_user, req_data.knowledge_id, process_files)
+        cls.upload_knowledge_file_hook(request, login_user, knowledge, process_files)
         return failed_files + process_files
 
     @classmethod
-    def upload_knowledge_file_hook(cls, request: Request, login_user: UserPayload, knowledge_id: int,
+    def retry_files(cls, request: Request, login_user: UserPayload, background_tasks: BackgroundTasks, req_data: dict):
+        db_file_retry = req_data.get('file_objs')
+        if not db_file_retry:
+            return []
+        id2input = {file.get('id'): file for file in db_file_retry}
+        file_ids = list(id2input.keys())
+        db_files = KnowledgeFileDao.select_list(file_ids=file_ids)
+        if not db_files:
+            return []
+        knowledge = KnowledgeDao.query_by_id(db_files[0].knowledge_id)
+        if not knowledge:
+            raise NotFoundError.http_exception()
+        if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE):
+            raise UnAuthorizedError.http_exception()
+        res = []
+        for file in db_files:
+            # file exist
+            input_file = id2input.get(file.id)
+            if input_file["remark"] and '对应已存在文件' in input_file["remark"]:
+                file.file_name = input_file["remark"].split(' 对应已存在文件 ')[0]
+                file.remark = ''
+            file.status = 1  # 解析中
+            file = KnowledgeFileDao.update(file)
+            res.append(file)
+        background_tasks.add_task(retry_files, res, id2input)
+        cls.upload_knowledge_file_hook(request, login_user, knowledge, res)
+        return []
+
+    @classmethod
+    def upload_knowledge_file_hook(cls, request: Request, login_user: UserPayload, knowledge: Knowledge,
                                    file_list: List[KnowledgeFile]):
-        logger.info(f'act=upload_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}')
+        logger.info(f'act=upload_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge.id}')
+        if file_list:
+            KnowledgeDao.update_knowledge_update_time(knowledge)
         # 记录审计日志
         file_name = ""
         for one in file_list:
             file_name += "\n\n" + one.file_name
-        AuditLogService.upload_knowledge_file(login_user, get_request_ip(request), knowledge_id, file_name)
+        AuditLogService.upload_knowledge_file(login_user, get_request_ip(request), knowledge.id, file_name)
 
     @classmethod
     def process_one_file(cls, login_user: UserPayload, knowledge: Knowledge,
