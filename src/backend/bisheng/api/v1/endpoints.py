@@ -4,10 +4,10 @@ from typing import Annotated, Optional, Union
 from uuid import UUID
 
 import yaml
-from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, Request, Query
 from sqlmodel import select
 
-from bisheng import settings
+from bisheng import settings, __version__
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, UploadFileResponse,
@@ -24,7 +24,7 @@ from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import bucket
+from bisheng.utils.minio_client import bucket, MinioClient
 from bisheng.api.services.knowledge_imp import filetype_load_map
 
 try:
@@ -68,6 +68,7 @@ def get_env():
     # add env dict from settings
     env.update(settings.settings.get_from_db('env') or {})
     env['pro'] = settings.settings.get_system_login_method().bisheng_pro
+    env['version'] = __version__
     return resp_200(env)
 
 
@@ -290,7 +291,7 @@ async def upload_icon(request: Request,
         if not isinstance(file_path, str):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(
-            file_path=file_path,  # minio可访问的链接
+            file_path=MinioClient.clear_minio_share_host(file_path),  # minio可访问的链接
             relative_path=file_name,  # minio中的object_name
         ))
     except Exception as exc:
@@ -319,6 +320,4 @@ async def create_upload_file(file: UploadFile, flow_id: str):
 # get endpoint to return version of bisheng
 @router.get('/version')
 def get_version():
-    from bisheng import __version__
-
     return resp_200({'version': __version__})

@@ -1,44 +1,20 @@
-import os
-import re
-import time
+import urllib.parse
 from typing import List, Optional
-from uuid import uuid4
 
-from bisheng.api.utils import get_request_ip
-from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
-                                                delete_knowledge_file_vectors, retry_files)
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Request, Body, Query
+
+from bisheng.api.services.knowledge import KnowledgeService
+from bisheng.api.services.knowledge_imp import retry_files
 from bisheng.api.services.user_service import UserPayload, get_login_user
-from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500
-from bisheng.cache.utils import file_download, save_uploaded_file
-from bisheng.database.base import session_getter
-from bisheng.database.models.group_resource import GroupResource, ResourceTypeEnum, GroupResourceDao
-from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
-                                               KnowledgeRead)
-from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
-                                                    KnowledgeFileRead)
-from bisheng.database.models.role_access import AccessType, RoleAccess
-from bisheng.database.models.user import User
-from bisheng.database.models.user_group import UserGroupDao
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.settings import settings
+from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500, PreviewFileChunk, \
+    UpdatePreviewFileChunk, KnowledgeFileProcess
+from bisheng.cache.utils import save_uploaded_file
+from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeRead, KnowledgeUpdate, KnowledgeDao
+from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import MinioClient
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Request
-from fastapi.encoders import jsonable_encoder
-from fastapi_jwt_auth import AuthJWT
-from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
-                                                  UnstructuredMarkdownLoader,
-                                                  UnstructuredPowerPointLoader,
-                                                  UnstructuredWordDocumentLoader)
-from pymilvus import Collection
-from sqlalchemy import delete, func, or_
-from sqlmodel import select
 
 # build router
-router = APIRouter(prefix='/knowledge', tags=['Skills'])
+router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
 
 
 @router.post('/upload', response_model=UnifiedResponseModel[UploadFileResponse], status_code=201)
@@ -51,365 +27,124 @@ async def upload_file(*, file: UploadFile = File(...)):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(file_path=file_path))
     except Exception as exc:
-        logger.error(f'Error saving file: {exc}')
+        logger.exception(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.get('/embedding_param', status_code=201)
-async def get_embedding(login_user: UserPayload = Depends(get_login_user)):
+@router.post('/preview')
+async def preview_file_chunk(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+                             req_data: PreviewFileChunk):
+    """ 获取某个文件的分块预览内容 """
     try:
-        # 获取本地配置的名字
-        model_list = settings.get_knowledge().get('embeddings')
-        if model_list:
-            models = list(model_list.keys())
-        else:
-            models = list()
-        return resp_200({'models': models})
-    except Exception as exc:
-        logger.error(f'Error saving file: {exc}')
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        parse_type, file_share_url, res, partitions = KnowledgeService.get_preview_file_chunk(request, login_user,
+                                                                                              req_data)
+        return resp_200(data={
+            "parse_type": parse_type,
+            "file_url": file_share_url,
+            "chunks": res,
+            "partitions": partitions
+        })
+    except Exception as e:
+        logger.exception('preview_file_chunk_error')
+        return resp_500(data=str(e))
 
 
-@router.post('/process',
-             response_model=UnifiedResponseModel[List[KnowledgeFileRead]],
-             status_code=201)
-async def process_knowledge(*,
-                            request: Request,
-                            data: dict,
-                            background_tasks: BackgroundTasks,
-                            login_user: UserPayload = Depends(get_login_user)):
-    """上传文件到知识库.
-    使用flowchain来处理embeding的流程
-        """
+@router.put('/preview')
+async def update_preview_file_chunk(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+                                    req_data: UpdatePreviewFileChunk):
+    """ 更新某个文件的分块预览内容 """
 
-    knowledge_id = data.get('knowledge_id')
-    chunk_size = data.get('chunck_size')
-    file_path = data.get('file_path')
-    auto_p = data.get('auto')
-    separator = data.get('separator')
-    chunk_overlap = data.get('chunk_overlap')
-    callback_url = data.get('callback_url')
-
-    if auto_p:
-        separator = ['\n\n']
-        chunk_size = 1000
-        chunk_overlap = 100
-
-    knowledge = KnowledgeDao.query_by_id(knowledge_id)
-    if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE):
-        return UnAuthorizedError.return_resp()
-
-    collection_name = knowledge.collection_name
-    files = []
-    file_paths = []
-    result = []
-
-    for path in file_path:
-        filepath, file_name = file_download(path)
-        md5_ = os.path.splitext(os.path.basename(filepath))[0].split('_')[0]
-        # 是否包含重复文件
-        content_repeat = KnowledgeFileDao.get_file_by_condition(md5_=md5_,
-                                                                knowledge_id=knowledge_id)
-        name_repeat = KnowledgeFileDao.get_file_by_condition(file_name=file_name,
-                                                             knowledge_id=knowledge_id)
-        if content_repeat or name_repeat:
-            db_file = content_repeat[0] if content_repeat else name_repeat[0]
-            old_name = db_file.file_name
-            file_type = file_name.rsplit('.', 1)[-1]
-            obj_name = f'tmp/{db_file.id}.{file_type}'
-            db_file.object_name = obj_name
-            db_file.remark = f'{file_name} 对应已存在文件 {old_name}'
-            with open(filepath, 'rb') as file:
-                MinioClient().upload_tmp(db_file.object_name, file.read())
-            db_file.status = 3
-        else:
-            status = 1
-            remark = ''
-            db_file = KnowledgeFile(knowledge_id=knowledge_id,
-                                    file_name=file_name,
-                                    status=status,
-                                    md5=md5_,
-                                    remark=remark,
-                                    user_id=login_user.user_id)
-            with session_getter() as session:
-                session.add(db_file)
-                session.commit()
-                session.refresh(db_file)
-            files.append(db_file.copy())
-            file_paths.append(filepath)
-
-        logger.info(f'col={collection_name} repeat={db_file} file_id={db_file.id}')
-        result.append(db_file.copy())
-
-    if files:
-        background_tasks.add_task(
-            addEmbedding,
-            collection_name=collection_name,
-            index_name=knowledge.index_name or knowledge.collection_name,
-            knowledge_id=knowledge_id,
-            model=knowledge.model,
-            chunk_size=chunk_size,
-            separator=separator,
-            chunk_overlap=chunk_overlap,
-            file_paths=file_paths,
-            knowledge_files=files,
-            callback=callback_url,
-        )
-
-    knowledge.update_time = db_file.create_time
-    with session_getter() as session:
-        session.add(knowledge)
-        session.commit()
-
-    upload_knowledge_file_hook(request, login_user, knowledge_id, files)
-    return resp_200(result)
+    res = KnowledgeService.update_preview_file_chunk(request, login_user, req_data)
+    return resp_200(res)
 
 
-def upload_knowledge_file_hook(request: Request, login_user: UserPayload, knowledge_id: int,
-                               file_list: List[KnowledgeFile]):
-    logger.info(f'act=upload_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}')
-    # 记录审计日志
-    file_name = ""
-    for one in file_list:
-        file_name += "\n\n" + one.file_name
-    AuditLogService.upload_knowledge_file(login_user, get_request_ip(request), knowledge_id, file_name)
+@router.delete('/preview')
+async def delete_preview_file_chunk(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+                                    req_data: UpdatePreviewFileChunk):
+    """ 删除某个文件的分块预览内容 """
+
+    res = KnowledgeService.delete_preview_file_chunk(request, login_user, req_data)
+    return resp_200(res)
+
+
+@router.post('/process')
+async def process_knowledge_file(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+                                 background_tasks: BackgroundTasks, req_data: KnowledgeFileProcess):
+    """ 上传文件到知识库内 """
+    res = KnowledgeService.process_knowledge_file(request, login_user, background_tasks, req_data)
+    return resp_200(res)
 
 
 @router.post('/create', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
 def create_knowledge(*,
                      request: Request,
-                     knowledge: KnowledgeCreate,
-                     login_user: UserPayload = Depends(get_login_user)):
+                     login_user: UserPayload = Depends(get_login_user),
+                     knowledge: KnowledgeCreate):
     """ 创建知识库. """
-    user_id = login_user.user_id
-    knowledge.is_partition = knowledge.is_partition or settings.get_knowledge().get(
-        'vectorstores', {}).get('Milvus', {}).get('is_partition', True)
-    db_knowldge = Knowledge.model_validate(knowledge)
-    with session_getter() as session:
-        know = session.exec(
-            select(Knowledge).where(Knowledge.name == knowledge.name,
-                                    knowledge.user_id == user_id)).all()
-    if know:
-        raise HTTPException(status_code=500, detail='知识库名称重复')
-    if not db_knowldge.collection_name:
-        if knowledge.is_partition:
-            embedding = re.sub(r'[^\w]', '_', knowledge.model)
-            suffix_id = settings.get_knowledge().get('vectorstores').get('Milvus', {}).get(
-                'partition_suffix', 1)
-            db_knowldge.collection_name = f'partition_{embedding}_knowledge_{suffix_id}'
-        else:
-            # 默认collectionName
-            db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
-    db_knowldge.index_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
-    db_knowldge.user_id = user_id
-    with session_getter() as session:
-        session.add(db_knowldge)
-        session.commit()
-        session.refresh(db_knowldge)
-    create_knowledge_hook(request, db_knowldge, login_user)
-    return resp_200(db_knowldge.copy())
-
-
-def create_knowledge_hook(request: Request, knowledge: Knowledge, login_user: UserPayload):
-    # 查询下用户所在的用户组
-    user_group = UserGroupDao.get_user_group(login_user.user_id)
-    if user_group:
-        # 批量将知识库资源插入到关联表里
-        batch_resource = []
-        for one in user_group:
-            batch_resource.append(GroupResource(
-                group_id=one.group_id,
-                third_id=knowledge.id,
-                type=ResourceTypeEnum.KNOWLEDGE.value))
-        GroupResourceDao.insert_group_batch(batch_resource)
-
-    # 记录审计日志
-    AuditLogService.create_knowledge(login_user, get_request_ip(request), knowledge.id)
-    return True
+    db_knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge)
+    return resp_200(db_knowledge)
 
 
 @router.get('/', status_code=200)
 def get_knowledge(*,
+                  request: Request,
+                  login_user: UserPayload = Depends(get_login_user),
                   name: str = None,
-                  page_size: Optional[int],
-                  page_num: Optional[str],
-                  login_user: UserPayload = Depends(get_login_user)):
+                  page_size: Optional[int] = 10,
+                  page_num: Optional[int] = 1):
     """ 读取所有知识库信息. """
+    res, total = KnowledgeService.get_knowledge(request, login_user, name, page_num, page_size)
+    return resp_200(data={
+        'data': res,
+        'total': total
+    })
 
-    try:
-        sql = select(Knowledge)
-        count_sql = select(func.count(Knowledge.id))
-        if not login_user.is_admin():
-            with session_getter() as session:
-                role_third_id = session.exec(
-                    select(RoleAccess).where(RoleAccess.role_id.in_(login_user.user_role))).all()
-            if role_third_id:
-                third_ids = [
-                    acess.third_id for acess in role_third_id
-                    if acess.type == AccessType.KNOWLEDGE.value
-                ]
-                sql = sql.where(
-                    or_(Knowledge.user_id == login_user.user_id, Knowledge.id.in_(third_ids)))
-                count_sql = count_sql.where(
-                    or_(Knowledge.user_id == login_user.user_id, Knowledge.id.in_(third_ids)))
-            else:
-                sql = sql.where(Knowledge.user_id == login_user.user_id)
-                count_sql = count_sql.where(Knowledge.user_id == login_user.user_id)
-        if name:
-            name = name.strip()
-            sql = sql.where(Knowledge.name.like(f'%{name}%'))
-            count_sql = count_sql.where(Knowledge.name.like(f'%{name}%'))
 
-        sql = sql.order_by(Knowledge.update_time.desc())
-        # get total count
-        with session_getter() as session:
-            total_count = session.scalar(count_sql)
+@router.put('/', status_code=200)
+async def update_knowledge(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+                           knowledge: KnowledgeUpdate):
+    res = KnowledgeService.update_knowledge(request, login_user, knowledge)
+    return resp_200(data=res)
 
-        if page_num and page_size and page_num != 'undefined':
-            page_num = int(page_num)
-            sql = sql.offset((page_num - 1) * page_size).limit(page_size)
 
-        # get flow id
-        with session_getter() as session:
-            knowledges = session.exec(sql).all()
-        res = [jsonable_encoder(flow) for flow in knowledges]
-        if knowledges:
-            db_user_ids = {flow.user_id for flow in knowledges}
-            with session_getter() as session:
-                db_user = session.exec(select(User).where(User.user_id.in_(db_user_ids))).all()
-            userMap = {user.user_id: user.user_name for user in db_user}
-            for r in res:
-                r['user_name'] = userMap[r['user_id']]
-        return resp_200({'data': res, 'total': total_count})
+@router.delete('/', status_code=200)
+def delete_knowledge(*,
+                     request: Request,
+                     login_user: UserPayload = Depends(get_login_user),
+                     knowledge_id: int = Body(..., embed=True)):
+    """ 删除知识库信息. """
 
-    except Exception as e:
-        logger.exception("get_knowledge error")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
+    return resp_200(message='删除成功')
 
 
 @router.get('/file_list/{knowledge_id}', status_code=200)
 def get_filelist(*,
+                 request: Request,
+                 login_user: UserPayload = Depends(get_login_user),
                  file_name: str = None,
-                 knowledge_id: int,
+                 knowledge_id: int = 0,
                  page_size: int = 10,
                  page_num: int = 1,
-                 status: Optional[int] = None,
-                 login_user: UserPayload = Depends(get_login_user)):
+                 status: Optional[int] = None):
     """ 获取知识库文件信息. """
+    data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id, file_name, status,
+                                                             page_num, page_size)
 
-    # 查询当前知识库，是否有写入权限
-    with session_getter() as session:
-        db_knowledge = session.get(Knowledge, knowledge_id)
-    if not db_knowledge:
-        raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
-    if not login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
-        return UnAuthorizedError.return_resp()
-
-    # 查找上传的文件信息
-    count_sql = select(func.count(
-        KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
-    list_sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
-
-    if file_name:
-        file_name = file_name.strip()
-        count_sql = count_sql.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
-        list_sql = list_sql.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
-
-    if status:
-        count_sql = count_sql.where(KnowledgeFile.status == status)
-        list_sql = list_sql.where(KnowledgeFile.status == status)
-
-    with session_getter() as session:
-        total_count = session.scalar(count_sql)
-        files = session.exec(
-            list_sql.order_by(KnowledgeFile.update_time.desc()).offset(
-                page_size * (page_num - 1)).limit(page_size)).all()
     return resp_200({
-        'data': [jsonable_encoder(knowledgefile) for knowledgefile in files],
-        'total': total_count,
-        'writeable': login_user.access_check(db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE)
+        'data': data,
+        'total': total,
+        'writeable': flag,
     })
 
 
 @router.post('/retry', status_code=200)
-def retry(data: dict, background_tasks: BackgroundTasks, login_user: UserPayload = Depends(get_login_user)):
+def retry(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+          background_tasks: BackgroundTasks,
+          req_data: dict):
     """失败重试"""
-    db_file_retry = data.get('file_objs')
-    if db_file_retry:
-        id2input = {file.get('id'): KnowledgeFile.validate(file) for file in db_file_retry}
-    else:
-        return resp_500('参数错误')
-    file_ids = list(id2input.keys())
-    db_files = KnowledgeFileDao.select_list(file_ids=file_ids)
-    for file in db_files:
-        # file exist
-        input_file = id2input.get(file.id)
-        if input_file.remark and '对应已存在文件' in input_file.remark:
-            file.file_name = input_file.remark.split(' 对应已存在文件 ')[0]
-            file.remark = ''
-        file.status = 1  # 解析中
-        file = KnowledgeFileDao.update(file)
-    background_tasks.add_task(retry_files, db_files, id2input)
+    KnowledgeService.retry_files(request, login_user, background_tasks, req_data)
     return resp_200()
-
-
-@router.delete('/{knowledge_id}', status_code=200)
-def delete_knowledge(*,
-                     request: Request,
-                     knowledge_id: int,
-                     login_user: UserPayload = Depends(get_login_user)):
-    """ 删除知识库信息. """
-
-    with session_getter() as session:
-        knowledge = session.get(Knowledge, knowledge_id)
-    if not knowledge:
-        raise HTTPException(status_code=404, detail='knowledge not found')
-    if not login_user.access_check(knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE):
-        raise HTTPException(status_code=404, detail='没有权限执行操作')
-
-    # 处理knowledgefile
-    with session_getter() as session:
-        session.exec(delete(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
-        session.commit()
-    # 处理vector
-    embeddings = FakeEmbedding()
-    vectore_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
-    if isinstance(vectore_client.col, Collection):
-        logger.info(f'delete_vectore col={knowledge.collection_name}')
-        if knowledge.collection_name.startswith('col'):
-            vectore_client.col.drop()
-        else:
-            pk = vectore_client.col.query(expr=f'knowledge_id=="{knowledge.id}"',
-                                          output_fields=['pk'])
-            vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
-            # 判断milvus 是否还有entity
-            if vectore_client.col.is_empty:
-                vectore_client.col.drop()
-
-    # 处理 es
-    # elastic
-    esvectore_client: 'ElasticKeywordsSearch' = decide_vectorstores(knowledge.index_name,
-                                                                    'ElasticKeywordsSearch',
-                                                                    embeddings)
-    if esvectore_client:
-        index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
-        res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
-        logger.info(f'act=delete_es index={index_name} res={res}')
-
-    with session_getter() as session:
-        session.delete(knowledge)
-        session.commit()
-    delete_knowledge_hook(request, knowledge, login_user)
-    return resp_200(message='删除成功')
-
-
-def delete_knowledge_hook(request: Request, knowledge: Knowledge, login_user: UserPayload):
-    logger.info(f'delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}')
-
-    # 删除知识库的审计日志
-    AuditLogService.delete_knowledge(login_user, get_request_ip(request), knowledge)
-
-    GroupResourceDao.delete_group_resource_by_third_id(str(knowledge.id), ResourceTypeEnum.KNOWLEDGE)
 
 
 @router.delete('/file/{file_id}', status_code=200)
@@ -419,29 +154,61 @@ def delete_knowledge_file(*,
                           login_user: UserPayload = Depends(get_login_user)):
     """ 删除知识文件信息 """
 
-    knowledge_file = KnowledgeFileDao.select_list([file_id])
-    if knowledge_file:
-        knowledge_file = knowledge_file[0]
-    knowledge = KnowledgeDao.query_by_id(knowledge_file.knowledge_id)
-    if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE):
-        raise HTTPException(status_code=404, detail='没有权限执行操作')
-
-    # 处理vectordb
-    delete_knowledge_file_vectors([file_id])
-    KnowledgeFileDao.delete_batch([file_id])
-
-    # 删除知识库文件的审计日志
-    delete_knowledge_file_hook(request, login_user, knowledge.id, [knowledge_file])
+    KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
 
     return resp_200(message='删除成功')
 
 
-def delete_knowledge_file_hook(request: Request, login_user: UserPayload, knowledge_id: int,
-                               file_list: List[KnowledgeFile]):
-    logger.info(f'act=delete_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}')
-    # 记录审计日志
-    # 记录审计日志
-    file_name = ""
-    for one in file_list:
-        file_name += "\n\n" + one.file_name
-    AuditLogService.delete_knowledge_file(login_user, get_request_ip(request), knowledge_id, file_name)
+@router.get('/chunk', status_code=200)
+async def get_knowledge_chunk(request: Request, login_user: UserPayload = Depends(get_login_user),
+                              knowledge_id: int = Query(..., description='知识库ID'),
+                              file_ids: List[int] = Query(default=[], description='文件ID'),
+                              keyword: str = Query(default='', description='关键字'),
+                              page: int = Query(default=1, description='页数'),
+                              limit: int = Query(default=10, description='每页条数条数')):
+    """ 获取知识库分块内容 """
+    # 为了解决keyword参数有时候没有进行urldecode的bug
+    if keyword.startswith("%"):
+        keyword = urllib.parse.unquote(keyword)
+    res, total = KnowledgeService.get_knowledge_chunks(request, login_user, knowledge_id, file_ids, keyword, page,
+                                                       limit)
+    return resp_200(data={
+        "data": res,
+        "total": total
+    })
+
+
+@router.put('/chunk', status_code=200)
+async def update_knowledge_chunk(request: Request, login_user: UserPayload = Depends(get_login_user),
+                                 knowledge_id: int = Body(..., embed=True, description='知识库ID'),
+                                 file_id: int = Body(..., embed=True, description='文件ID'),
+                                 chunk_index: int = Body(..., embed=True, description='分块索引号'),
+                                 text: str = Body(..., embed=True, description='分块内容'),
+                                 bbox: str = Body(default='', embed=True, description='分块框选位置')):
+    """ 更新知识库分块内容 """
+    KnowledgeService.update_knowledge_chunk(request, login_user, knowledge_id, file_id, chunk_index, text, bbox)
+    return resp_200()
+
+
+@router.delete('/chunk', status_code=200)
+async def delete_knowledge_chunk(request: Request, login_user: UserPayload = Depends(get_login_user),
+                                 knowledge_id: int = Body(..., embed=True, description='知识库ID'),
+                                 file_id: int = Body(..., embed=True, description='文件ID'),
+                                 chunk_index: int = Body(..., embed=True, description='分块索引号')):
+    """ 删除知识库分块内容 """
+    KnowledgeService.delete_knowledge_chunk(request, login_user, knowledge_id, file_id, chunk_index)
+    return resp_200()
+
+
+@router.get('/file_share')
+async def get_file_share_url(request: Request, login_user: UserPayload = Depends(get_login_user),
+                             file_id: int = Query(description='文件唯一ID')):
+    url = KnowledgeService.get_file_share_url(request, login_user, file_id)
+    return resp_200(data=url)
+
+
+@router.get('/file_bbox')
+async def get_file_bbox(request: Request, login_user: UserPayload = Depends(get_login_user),
+                        file_id: int = Query(description='文件唯一ID')):
+    res = KnowledgeService.get_file_bbox(request, login_user, file_id)
+    return resp_200(data=res)

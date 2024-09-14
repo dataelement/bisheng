@@ -1,5 +1,5 @@
 import pickle
-from typing import Dict
+from typing import Dict, Optional
 
 import redis
 from bisheng.settings import settings
@@ -82,10 +82,15 @@ class RedisClient:
         finally:
             self.close()
 
-    def hset(self, name, map: dict, expiration=3600):
+    def hset(self, name,
+             key: Optional[str] = None,
+             value: Optional[str] = None,
+             mapping: Optional[dict] = None,
+             items: Optional[list] = None,
+             expiration: int = 3600):
         try:
             self.cluster_nodes(name)
-            r = self.connection.hset(name, mapping=map)
+            r = self.connection.hset(name, key, value, mapping, items)
             if expiration:
                 self.connection.expire(name, expiration)
             return r
@@ -96,6 +101,20 @@ class RedisClient:
         try:
             self.cluster_nodes(name)
             return self.connection.hget(name, key)
+        finally:
+            self.close()
+
+    def hgetall(self, name):
+        try:
+            self.cluster_nodes(name)
+            return self.connection.hgetall(name)
+        finally:
+            self.close()
+
+    def hdel(self, name, *keys):
+        try:
+            self.cluster_nodes(name)
+            return self.connection.hdel(name, *keys)
         finally:
             self.close()
 

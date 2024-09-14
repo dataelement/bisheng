@@ -47,7 +47,7 @@ const modelProviders = {
             type: "password",
             placeholder: "",
             default: "",
-            required: true,
+            required: false,
             key: "openai_api_key",
         },
     ],

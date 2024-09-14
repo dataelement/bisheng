@@ -12,27 +12,15 @@ from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import OpenAIChatCompletionResp, OpenAIChatCompletionReq, UnifiedResponseModel, \
     AssistantInfo, OpenAIChoice
+from bisheng.api.v2.utils import get_default_operator
 from bisheng.chat.types import WorkType
-from bisheng.database.models.user import UserDao
 from bisheng.settings import settings
 
-router = APIRouter(prefix='/assistant', tags=['AssistantOpenApi'])
-
-
-def get_default_operator():
-    user_id = settings.get_from_db('default_operator').get('user')
-    if not user_id:
-        raise HTTPException(status_code=500, detail='未配置default_operator中user配置')
-    # 查找默认用户信息
-    login_user = UserDao.get_user(user_id)
-    if not login_user:
-        raise HTTPException(status_code=500, detail='未找到默认用户信息')
-    return login_user
+router = APIRouter(prefix='/assistant', tags=['OpenAPI', 'Assistant'])
 
 
 @router.post('/chat/completions', response_model=OpenAIChatCompletionResp)
@@ -45,14 +33,9 @@ async def assistant_chat_completions(request: Request,
     logger.info(f'act=assistant_chat_completions assistant_id={req_data.model}, ip={get_request_ip(request)}')
     try:
         # 获取系统配置里配置的默认用户信息
-        default_user = get_default_operator()
+        login_user = get_default_operator()
     except Exception as e:
         return ORJSONResponse(status_code=500, content=str(e), media_type='application/json')
-    login_user = UserPayload(**{
-        'user_id': default_user.user_id,
-        'user_name': default_user.user_name,
-        'role': ''
-    })
     # 查找助手信息
     res = AssistantService.get_assistant_info(UUID(req_data.model), login_user)
     if res.status_code != 200:
@@ -133,12 +116,10 @@ async def get_assistant_info(request: Request, assistant_id: UUID):
     获取助手信息, 用系统配置里的default_operator.user的用户信息来做权限校验
     """
     logger.info(f'act=get_default_operator assistant_id={assistant_id}, ip={get_request_ip(request)}')
-    default_user = get_default_operator()
-    login_user = UserPayload(**{
-        'user_id': default_user.user_id,
-        'user_name': default_user.user_name,
-        'role': ''
-    })
+    # 判断下配置是否打开
+    if not settings.get_from_db("default_operator").get("enable_guest_access"):
+        raise HTTPException(status_code=403, detail="无权限访问")
+    login_user = get_default_operator()
     return AssistantService.get_assistant_info(assistant_id, login_user)
 
 
@@ -151,12 +132,7 @@ async def chat(*,
     助手的ws免登录接口
     """
     logger.info(f'act=assistant_chat_ws assistant_id={assistant_id}, ip={get_request_ip(websocket)}')
-    default_user = get_default_operator()
-    login_user = UserPayload(**{
-        'user_id': default_user.user_id,
-        'user_name': default_user.user_name,
-        'role': ''
-    })
+    login_user = get_default_operator()
     try:
         request = websocket
         await chat_manager.dispatch_client(request, assistant_id, chat_id, login_user, WorkType.GPTS,

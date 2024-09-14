@@ -10,27 +10,59 @@ export interface InputProps
     extends React.InputHTMLAttributes<HTMLInputElement> { }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-    ({ className, type, ...props }, ref) => {
+    ({ className, type, maxLength, value, defaultValue, onChange, ...props }, ref) => {
+        // 用于存储当前的输入值
+        const [currentValue, setCurrentValue] = useState(value || defaultValue || '');
+
+        // 处理 onChange 事件，更新 currentValue
+        const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+            setCurrentValue(e.target.value);
+            if (onChange) {
+                onChange(e); // 如果外部有 onChange，依然需要调用它
+            }
+        };
+
+        // 当 value 或 defaultValue 改变时更新 currentValue
+        React.useEffect(() => {
+            if (value !== undefined) {
+                setCurrentValue(value);
+            }
+        }, [value]);
+
+        const noEmptyProps =
+            value === undefined ? {} : { value: currentValue }
+
         return (
-            <input
-                type={type}
-                className={cname(
-                    "flex h-9 w-full rounded-md border border-input bg-search-input px-3 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-                    className
+            <div className="relative w-full">
+                <input
+                    type={type}
+                    className={cname(
+                        "flex h-9 w-full rounded-md border border-input bg-search-input px-3 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                        className
+                    )}
+                    defaultValue={defaultValue}
+                    onChange={handleChange}
+                    maxLength={maxLength}
+                    ref={ref}
+                    {...noEmptyProps}
+                    {...props}
+                />
+                {maxLength && (
+                    <div className="absolute right-1 bottom-1 text-xs text-gray-400 dark:text-gray-500">
+                        {currentValue.length}/{maxLength}
+                    </div>
                 )}
-                ref={ref}
-                {...props}
-            />
-        )
+            </div>
+        );
     }
-)
+);
 Input.displayName = "Input"
 
 
 const SearchInput = React.forwardRef<HTMLInputElement, InputProps & { inputClassName?: string, iconClassName?: string }>(
     ({ className, inputClassName, iconClassName, ...props }, ref) => {
         return <div className={cname("relative", className)}>
-            <SearchIcon className={cname("h-5 w-5 absolute left-2 top-2 text-gray-950 dark:text-gray-500", iconClassName)} />
+            <SearchIcon className={cname("h-5 w-5 absolute left-2 top-2 text-gray-950 dark:text-gray-500 z-10", iconClassName)} />
             <Input type="text" ref={ref} className={cname("pl-8 bg-search-input", inputClassName)} {...props}></Input>
         </div>
     }
@@ -49,8 +81,8 @@ const PasswordInput = React.forwardRef<HTMLInputElement, InputProps & { inputCla
             <Input type={type} ref={ref} className={cname("pr-8 bg-search-input", inputClassName)} {...props}></Input>
             {
                 type === 'password'
-                ? <EyeNoneIcon onClick={handleShowPwd} className={cname("absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)}/>
-                : <EyeOpenIcon onClick={handleShowPwd} className={cname("absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)}/>
+                    ? <EyeNoneIcon onClick={handleShowPwd} className={cname("absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)} />
+                    : <EyeOpenIcon onClick={handleShowPwd} className={cname("absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)} />
             }
         </div>
     }
@@ -65,20 +97,53 @@ PasswordInput.displayName = 'PasswordInput'
 export interface TextareaProps
     extends React.TextareaHTMLAttributes<HTMLTextAreaElement> { }
 
-const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-    ({ className, ...props }, ref) => {
+const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps & { boxClassName?: string }>(
+    ({ className, boxClassName = '', maxLength, value, defaultValue, onChange, ...props }, ref) => {
+        // 用于存储当前的输入值
+        const [currentValue, setCurrentValue] = useState(value || defaultValue || '');
+
+        // 处理 onChange 事件，更新 currentValue
+        const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+            if (onChange) {
+                onChange(e);
+            }
+            if (value === undefined && defaultValue === undefined) return
+            setCurrentValue(e.target.value);
+        };
+
+        // 当 value 或 defaultValue 改变时更新 currentValue
+        React.useEffect(() => {
+            if (value !== undefined) {
+                setCurrentValue(value || '');
+            }
+        }, [value]);
+
+        const noEmptyProps =
+            value === undefined ? {} : { value: currentValue }
+
         return (
-            <textarea
-                className={cname(
-                    "flex min-h-[80px] w-full rounded-md border border-input bg-search-input px-3 py-2 text-sm text-[#111] dark:text-gray-50 shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-                    className
+            <div className={cname('relative w-full', boxClassName)}>
+                <textarea
+                    className={cname(
+                        "flex min-h-[80px] w-full rounded-md border border-input bg-search-input px-3 py-2 text-sm text-[#111] dark:text-gray-50 shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                        className
+                    )}
+                    ref={ref}
+                    defaultValue={defaultValue}
+                    maxLength={maxLength}
+                    onChange={handleChange}
+                    {...noEmptyProps}
+                    {...props}
+                />
+                {maxLength && (
+                    <div className="absolute right-1 bottom-1 text-xs text-gray-400 dark:text-gray-500">
+                        {currentValue.length}/{maxLength}
+                    </div>
                 )}
-                ref={ref}
-                {...props}
-            />
-        )
+            </div>
+        );
     }
-)
+);
 Textarea.displayName = "Textarea"
 
 

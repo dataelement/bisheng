@@ -91,17 +91,37 @@ export default function EditAssistantDialog({ logo, name, desc, onSave }) {
         <div className="flex flex-col gap-8 py-6">
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantAvatar')}<span className="bisheng-tip">*</span></label>
-                <Avator value={formData.logo} className="mt-2" onChange={uploadAvator}><AssistantIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
+                <Avator
+                    value={formData.logo}
+                    className="mt-2"
+                    onChange={uploadAvator}
+                ><AssistantIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
             </div>
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantName')}<span className="bisheng-tip">*</span></label>
-                <Input id="name" name="name" placeholder={t('build.enterName')} className="mt-2" value={formData.name} onChange={handleChange} />
+                <Input
+                    id="name"
+                    name="name"
+                    placeholder={t('build.enterName')}
+                    maxLength={50}
+                    className="mt-2"
+                    value={formData.name}
+                    onChange={handleChange}
+                />
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
             </div>
             <div className="">
                 <label htmlFor="desc" className="bisheng-label">{t('build.assistantDesc')}</label>
-                <Textarea id="desc" name="desc" placeholder={t('build.enterDesc')} maxLength={1200} className="mt-2" value={formData.desc} onChange={handleChange} />
+                <Textarea
+                    id="desc"
+                    name="desc"
+                    placeholder={t('build.enterDesc')}
+                    maxLength={1000}
+                    className="mt-2"
+                    value={formData.desc}
+                    onChange={handleChange}
+                />
                 {errors.desc && <p className="bisheng-tip mt-1">{errors.desc}</p>}
             </div>
         </div>

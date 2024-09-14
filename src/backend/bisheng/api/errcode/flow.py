@@ -1,7 +1,7 @@
 from bisheng.api.errcode.base import BaseErrorCode
 
 
-# RT服务相关的返回错误码，功能模块代码：105
+# 技能服务相关的返回错误码，功能模块代码：105
 class NotFoundVersionError(BaseErrorCode):
     Code: int = 10500
     Msg: str = '未找到技能版本信息'

@@ -109,7 +109,7 @@ ${t('build.exampleTwo')}
             </div>
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantName')}<span className="bisheng-tip">*</span></label>
-                <Input id="name" name="name" placeholder={t('build.giveAssistantName')} className="mt-2" value={formData.name} onChange={handleChange} />
+                <Input id="name" name="name" maxLength={50} placeholder={t('build.giveAssistantName')} className="mt-2" value={formData.name} onChange={handleChange} />
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
             </div>
             <div className="">

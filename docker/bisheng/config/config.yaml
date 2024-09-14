@@ -20,6 +20,29 @@ redis_url: "redis://redis:6379/1"
 #   sentinel_password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
 #   db: 1
 
+
+# 知识库的milvus和es配置  支持使用 !env ${PATH} 填写环境变量的值, 若环境变量不存在则会报错
+vector_stores:
+  milvus:
+    connection_args: !env ${BS_MILVUS_CONNECTION_ARGS}
+    is_partition: !env ${BS_MILVUS_IS_PARTITION}
+    partition_suffix: !env ${BS_MILVUS_PARTITION_SUFFIX}
+  elasticsearch:
+    url: !env ${BS_ELASTICSEARCH_URL}
+    ssl_verify: !env ${BS_ELASTICSEARCH_SSL_VERIFY}
+
+
+# 对象存储， 目前只支持minio
+object_storage:
+  type: minio
+  minio:
+    schema: !env ${BS_MINIO_SCHEMA}
+    cert_check: !env ${BS_MINIO_CERT_CHECK}
+    endpoint: !env ${BS_MINIO_ENDPOINT}
+    sharepoint: !env ${BS_MINIO_SHAREPOIN}
+    access_key: !env ${BS_MINIO_ACCESS_KEY}
+    secret_key: !env ${BS_MINIO_SECRET_KEY}
+
 environment:
   env: dev
   uns_support: ['png','jpg','jpeg','bmp','doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv', 'tiff']

@@ -998,6 +998,7 @@ export function buildInputs(tabsState, id) {
 }
 
 export function buildTweaks(flow) {
+  if (!flow.data) return {}
   return flow.data.nodes.reduce((acc, node) => {
     acc[node.data.id] = {};
     return acc;

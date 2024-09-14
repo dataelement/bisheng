@@ -26,7 +26,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import TipPng from "../../../assets/tip.jpg";
 
-export default function Header({ flow }) {
+export default function Header({ flow, onTabChange }) {
     const navgate = useNavigate()
     const { t } = useTranslation()
     const { message } = useToast()
@@ -61,7 +61,7 @@ export default function Header({ flow }) {
         // 更新版本列表
         await refrenshVersions()
         // 切换到最新版本
-        
+
         setVersionId(res.id)
     }
     // 
@@ -106,6 +106,7 @@ export default function Header({ flow }) {
         }))
     }
 
+    const [tabType, setTabType] = useState('edit')
     return <div className="flex justify-between items-center border-b px-4 bg-background-main">
         {
             loading && <div className=" fixed left-0 top-0 w-full h-screen bg-background/60 z-50 flex items-center justify-center">
@@ -125,12 +126,24 @@ export default function Header({ flow }) {
             <Button variant="outline" onClick={() => { openPopUp(<ExportModal />) }}>
                 <ArrowDownIcon className="h-4 w-4 mr-1" />{t('skills.export')}
             </Button>
-            <Button variant="outline" onClick={() => { openPopUp(<ApiModal flow={flow} />) }} >
+            {/* <Button variant="outline" onClick={() => { openPopUp(<ApiModal flow={flow} />) }} >
                 <CodeIcon className="h-4 w-4 mr-1" />{t('skills.code')}
-            </Button>
+            </Button> */}
             <Button variant="outline" onClick={() => setOpen(true)} >
                 <StackIcon className="h-4 w-4 mr-1" />{t('skills.simplify')}
             </Button>
+        </div>
+        {/* api */}
+        <div className="flex gap-4 items-center">
+            <div
+                className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-border px-4 py-1 rounded-md cursor-pointer`}
+                onClick={() => { setTabType('edit'); onTabChange('edit') }}
+            >{t('api.skillOrchestration')}</div>
+            <div
+                className={`${tabType === 'api' ? 'text-primary' : ''} hover:bg-border px-4 py-1 rounded-md cursor-pointer`}
+                onClick={() => { setTabType('api'); onTabChange('api') }}
+            >{t('api.externalPublishing')}
+            </div>
         </div>
         {
             version && <div className="flex gap-4">

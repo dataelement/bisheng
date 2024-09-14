@@ -9,7 +9,8 @@ from bisheng.api.v1.schemas import resp_200
 from bisheng.api.v2.assistant import get_default_operator
 from bisheng.database.models.flow import FlowDao
 from bisheng.settings import settings
-router = APIRouter(prefix='/flows', tags=['FlowV2'])
+
+router = APIRouter(prefix='/flows', tags=['OpenAPI', 'FlowV2'])
 
 
 @router.get("/{flow_id}", status_code=200)
@@ -19,7 +20,7 @@ def get_flow(request: Request, flow_id: UUID):
     """
     logger.info(f"public_get_flow  ip: {request.client.host} flow_id:{flow_id}")
     # 判断下配置是否打开
-    if settings.get_from_db("default_operator").get("api_need_login"):
+    if not settings.get_from_db("default_operator").get("enable_guest_access"):
         raise HTTPException(status_code=403, detail="无权限访问")
     default_user = get_default_operator()
     login_user = UserPayload(**{

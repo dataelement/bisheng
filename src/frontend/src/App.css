@@ -235,3 +235,13 @@
 .bs-table-row:hover .bs-table-td { background-color: #ebf0ff;}
 .dark .bs-table-row:hover .bs-table-td { background-color: #2a2b2e;}
 
+/* vditor编辑器 */
+.vditor-toolbar.vditor-toolbar--hide {
+	display: none !important;
+}
+.vditor-reset table td, .vditor-reset table th{
+	word-wrap: break-word !important;
+    white-space: normal !important;
+	font-size: 12px;
+	padding: 2px 4px !important;
+}

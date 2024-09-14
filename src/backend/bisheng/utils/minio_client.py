@@ -14,6 +14,9 @@ class MinioClient():
     minio_share: minio.Minio
     minio_client: minio.Minio
 
+    tmp_bucket = tmp_bucket
+    bucket = bucket
+
     def __init__(self) -> None:
         if 'minio' not in settings.get_knowledge(
         ) or not settings.get_knowledge().get('minio').get('MINIO_ENDPOINT'):
@@ -105,3 +108,12 @@ class MinioClient():
 
     def download_minio(self, object_name: str):
         return self.minio_client.get_object(bucket_name=bucket, object_name=object_name)
+
+    @classmethod
+    def clear_minio_share_host(cls, file_url: str):
+        """
+         TODO 合理方案是部署一个https的minio配合前端使用
+         抹去url中的minio share地址， 让前端通过nginx代理去访问资源
+        """
+        minio_share = settings.get_knowledge().get('minio', {}).get('MINIO_SHAREPOIN', '')
+        return file_url.replace(f"http://{minio_share}", "")

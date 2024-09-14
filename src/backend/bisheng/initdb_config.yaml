@@ -9,7 +9,7 @@ llm_request:
 default_operator:
 # 使用免登录链接的方式需要配置，因为免登录链接相当于不知道用户信息，我们系统会自动把这些行为记录到某个用户头上，这里用来配置该用户的id
   user: 1
-  api_need_login: false # 是否需要登录才能使用，默认为false，代表可以通过免登录链接的方式使用
+  enable_guest_access: true # 免登录链接是否可访问
 
 # 密码安全相关配置
 password_conf:

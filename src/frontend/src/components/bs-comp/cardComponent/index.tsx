@@ -1,6 +1,7 @@
 import { AssistantIcon } from "@/components/bs-icons/assistant";
 import { cname } from "@/components/bs-ui/utils";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AddToIcon } from "../../bs-icons/addTo";
 import { DelIcon } from "../../bs-icons/del";
 import { GoIcon } from "../../bs-icons/go";
@@ -10,8 +11,6 @@ import { SkillIcon } from "../../bs-icons/skill";
 import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { Switch } from "../../bs-ui/switch";
-import { useTranslation } from "react-i18next";
-import LabelShow from "./LabelShow";
 
 interface IProps<T> {
   data: T,
@@ -25,7 +24,7 @@ interface IProps<T> {
   checked?: boolean,
   user?: string,
   currentUser?: any,
-  allLabels?: any[],
+  labelPannel?: React.ReactNode,
   isAdmin?: boolean,
   headSelecter?: React.ReactNode,
   footer?: React.ReactNode,
@@ -80,8 +79,7 @@ export default function CardComponent<T>({
   icon: Icon = SkillIcon,
   edit = false,
   user,
-  currentUser,
-  allLabels,
+  labelPannel = null,
   title,
   checked,
   isAdmin,
@@ -105,17 +103,6 @@ export default function CardComponent<T>({
     if (res === false) return
     setChecked(bln)
   }
-
-  const isOperator = useMemo(() => {
-    if (data && currentUser) {
-      if (currentUser.role === 'admin') return true
-      data.group_ids.forEach(element => {
-        if (currentUser.admin_groups.includes(element)) return true
-      })
-      if (data.user_id === currentUser.user_id) return true
-    }
-    return false
-  }, [data, currentUser])
 
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
@@ -199,13 +186,7 @@ export default function CardComponent<T>({
       <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className="h-20 grid grid-rows-2">
-      <LabelShow
-        show={data.tags.length > 0}
-        isOperator={isOperator}
-        resource={{ id: data.id, type: type }}
-        labels={data.tags.map(d => ({ label: d.name, value: d.id, selected: true, edit: false }))}
-        all={allLabels.filter(a => a.value !== -1)}>
-      </LabelShow>
+      {labelPannel}
       <div className="flex justify-between items-center h-10">
         <div className="flex gap-1 items-center">
           <UserIcon />

@@ -29,6 +29,8 @@ interface Option {
 interface BaseProps<T> {
     /** 多选 */
     multiple?: boolean;
+    /** 高度不变，内部滚动 */
+    scroll?: boolean;
     disabled?: boolean;
     className?: string;
     options: Option[];
@@ -37,6 +39,7 @@ interface BaseProps<T> {
     searchPlaceholder?: string;
     /** 锁定不可修改的值 */
     lockedValues?: string[];
+    close?: boolean;
     onLoad?: () => void;
     onSearch?: (name: string) => void;
     onChange?: (value: T) => void;
@@ -62,6 +65,8 @@ const MultiSelect = ({
     multiple = false,
     className,
     value = [],
+    scroll = false,
+    close = false,
     defaultValue = [],
     options = [],
     children = null,
@@ -164,6 +169,11 @@ const MultiSelect = ({
         return () => observer.unobserve(footerRef.current);
     }, [created])
 
+    const handleClearClick = () => {
+        setValues([])
+        onChange?.([])
+    }
+
     return <Select
         {...props}
         required
@@ -175,13 +185,13 @@ const MultiSelect = ({
             }
         }}
     >
-        <SelectTrigger className="h-auto">
+        <SelectTrigger className={`group min-h-9 py-1 ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`}>
             {
                 !multiple && (values.length ? <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
             }
             {
                 multiple && (values.length ? (
-                    onScrollLoad ? <div className="flex flex-wrap">
+                    onScrollLoad ? <div className="flex flex-wrap w-full">
                         {
                             values.map(item =>
                                 <Badge onPointerDown={(e) => e.stopPropagation()} key={item.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
@@ -190,7 +200,7 @@ const MultiSelect = ({
                                 </Badge>
                             )
                         }
-                    </div> : <div className="flex flex-wrap">
+                    </div> : <div className="flex flex-wrap w-full">
                         {
                             options.filter(option => (values as string[]).includes(option.value)).map(option =>
                                 <Badge onPointerDown={(e) => e.stopPropagation()} key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all">
@@ -202,6 +212,13 @@ const MultiSelect = ({
                     </div>)
                     : placeholder)
             }
+            {close && values.length !== 0 && <Cross1Icon
+                className="group-hover:block hidden bg-border text-[#666] rounded-full p-0.5 min-w-[14px] mt-1"
+                width={14}
+                height={14}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={handleClearClick}
+            />}
         </SelectTrigger>
         <SelectContent
             className={className}

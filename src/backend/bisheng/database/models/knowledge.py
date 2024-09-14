@@ -1,19 +1,22 @@
 from datetime import datetime
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Union
+
+from sqlmodel.sql.expression import Select, SelectOfScalar
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
 from langchain.pydantic_v1 import BaseModel
-from sqlalchemy import Column, DateTime, and_, func, text
+from sqlalchemy import Column, DateTime, func, text, delete, update
 from sqlmodel import Field, or_, select
 
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(index=True)
-    name: str = Field(index=True)
+    name: str = Field(index=True, min_length=1, max_length=30, description="知识库名, 最少一个字符，最多30个字符")
     description: Optional[str] = Field(index=True)
     model: Optional[str] = Field(index=False)
     collection_name: Optional[str] = Field(index=False)
@@ -37,7 +40,7 @@ class KnowledgeRead(KnowledgeBase):
 
 
 class KnowledgeUpdate(BaseModel):
-    id: int
+    knowledge_id: int
     name: Optional[str]
     description: Optional[str]
 
@@ -50,9 +53,32 @@ class KnowledgeDao(KnowledgeBase):
     from bisheng.database.models.role_access import RoleAccess
 
     @classmethod
-    def query_by_id(cls, id: int) -> Knowledge:
+    def insert_one(cls, data: Knowledge) -> Knowledge:
         with session_getter() as session:
-            return session.get(Knowledge, id)
+            session.add(data)
+            session.commit()
+            session.refresh(data)
+            return data
+
+    @classmethod
+    def update_one(cls, data: Knowledge) -> Knowledge:
+        with session_getter() as session:
+            session.add(data)
+            session.commit()
+            session.refresh(data)
+            return data
+
+    @classmethod
+    def update_knowledge_update_time(cls, knowledge: Knowledge):
+        statement = update(Knowledge).where(Knowledge.id == knowledge.id).values(update_time=text('NOW()'))
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def query_by_id(cls, knowledge_id: int) -> Knowledge:
+        with session_getter() as session:
+            return session.get(Knowledge, knowledge_id)
 
     @classmethod
     def get_list_by_ids(cls, ids: List[int]):
@@ -60,26 +86,38 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
 
     @classmethod
-    def get_knowledge_by_access(role_id: int, name: str, page_size: int,
-                                page_num: int) -> List[Tuple[Knowledge, RoleAccess]]:
-        from bisheng.database.models.role_access import RoleAccess, AccessType
-        statment = select(Knowledge,
-                          RoleAccess).join(RoleAccess,
-                                           and_(RoleAccess.role_id == role_id,
-                                                RoleAccess.type == AccessType.KNOWLEDGE.value,
-                                                RoleAccess.third_id == Knowledge.id),
-                                           isouter=True)
+    def _user_knowledge_filters(cls, statement: Any, user_id: int, knowledge_id_extra: List[int] = None,
+                                name: str = None, page: int = 0, limit: int = 0) -> Union[Select, SelectOfScalar]:
+        if knowledge_id_extra:
+            statement = statement.where(or_(Knowledge.id.in_(knowledge_id_extra), Knowledge.user_id == user_id))
+        else:
+            statement = statement.where(Knowledge.user_id == user_id)
         if name:
-            statment = statment.where(Knowledge.name.like('%' + name + '%'))
-        if page_num and page_size and page_num != 'undefined':
-            page_num = int(page_num)
-            statment = statment.order_by(RoleAccess.type.desc()).order_by(
-                Knowledge.update_time.desc()).offset((page_num - 1) * page_size).limit(page_size)
-        with session_getter() as session:
-            return session.exec(statment).all()
+            statement = statement.where(Knowledge.name.like(f'%{name}%'))
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        return statement
 
     @classmethod
-    def get_count_by_filter(cls, filters: List[Any]) -> int:
+    def get_user_knowledge(cls, user_id: int, knowledge_id_extra: List[int] = None, name: str = None, page: int = 0,
+                           limit: int = 10) -> List[Knowledge]:
+        statement = select(Knowledge)
+
+        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra, name, page, limit)
+
+        statement = statement.order_by(Knowledge.update_time.desc())
+        with session_getter() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    def count_user_knowledge(cls, user_id: int, knowledge_id_extra: List[int] = None, name: str = None) -> int:
+        statement = select(func.count(Knowledge.id))
+        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra, name)
+        with session_getter() as session:
+            return session.scalar(statement)
+
+    @classmethod
+    def count_by_filter(cls, filters: List[Any]) -> int:
         with session_getter() as session:
             return session.scalar(select(Knowledge.id).where(*filters))
 
@@ -152,9 +190,23 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
-    def get_all_knowledge(cls) -> List[Knowledge]:
+    def get_all_knowledge(cls, name: str = None, page: int = 0, limit: int = 0) -> List[Knowledge]:
+        statement = select(Knowledge)
+        if name:
+            statement = statement.where(Knowledge.name.like(f'%{name}%'))
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(Knowledge.update_time.desc())
         with session_getter() as session:
-            return session.exec(select(Knowledge)).all()
+            return session.exec(statement).all()
+
+    @classmethod
+    def count_all_knowledge(cls, name: str = None) -> int:
+        statement = select(func.count(Knowledge.id))
+        if name:
+            statement = statement.where(Knowledge.name.like(f'%{name}%'))
+        with session_getter() as session:
+            return session.scalar(statement)
 
     @classmethod
     def update_knowledge_list(cls, knowledge_list: List[Knowledge]):
@@ -163,3 +215,24 @@ class KnowledgeDao(KnowledgeBase):
                 session.add(knowledge)
             session.commit()
 
+    @classmethod
+    def get_knowledge_by_name(cls, name: str, user_id: int = 0) -> Knowledge:
+        """ 通过知识库名称获取知识库详情 """
+        statement = select(Knowledge).where(Knowledge.name == name)
+        if user_id:
+            statement = statement.where(Knowledge.user_id == user_id)
+        with session_getter() as session:
+            return session.exec(statement).first()
+
+    @classmethod
+    def delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):
+        """
+        删除或者清空知识库
+        """
+        # 处理knowledge file
+        with session_getter() as session:
+            session.exec(delete(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
+            # 清空知识库时，不删除知识库记录
+            if not only_clear:
+                session.exec(delete(Knowledge).where(Knowledge.id == knowledge_id))
+            session.commit()

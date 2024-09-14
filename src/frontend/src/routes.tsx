@@ -4,13 +4,15 @@ import CrashErrorComponent from "./components/CrashErrorComponent";
 import MainLayout from "./layout/MainLayout";
 import SkillChatPage from "./pages/ChatAppPage";
 import ChatAssitantShare from "./pages/ChatAppPage/chatAssitantShare";
+import AssistantChat from "./pages/ChatAppPage/chatPage/AssistantChatPage";
+import SkillChat from "./pages/ChatAppPage/chatPage/SkillChatPage";
 import ChatShare from "./pages/ChatAppPage/chatShare";
 import ChatPro from "./pages/ChatAppPage/chatWebview";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
 import FileLibPage from "./pages/FileLibPage";
-import FilesPage from "./pages/FileLibPage/files";
+import FilesPage from "./pages/FileLibPage/detail";
 import FlowPage from "./pages/FlowPage";
 import LogPage from "./pages/LogPage";
 import { LoginPage } from "./pages/LoginPage/login";
@@ -27,13 +29,13 @@ import SkillsPage from "./pages/SkillPage/tabSkills";
 import SkillToolsPage from "./pages/SkillPage/tabTools";
 import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
+import FilesUpload from "./pages/FileLibPage/filesUpload";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
 // const FilesPage = lazy(() => import(/* webpackChunkName: "FilesPage" */ "./pages/FileLibPage/files"));
 // const SkillPage = lazy(() => import(/* webpackChunkName: "SkillPage" */ "./pages/SkillPage"));
 // const SkillChatPage = lazy(() => import(/* webpackChunkName: "SkillChatPage" */ "./pages/SkillChatPage"));
-// const FileViewPage = lazy(() => import(/* webpackChunkName: "FileViewPage" */ "./pages/FileViewPage"));
 
 const ErrorHoc = ({ Comp }) => {
   return (
@@ -60,6 +62,7 @@ const privateRouter = [
       { path: "", element: <SkillChatPage />, },
       { path: "filelib", element: <FileLibPage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
+      { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },
       { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
       { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore
@@ -97,7 +100,6 @@ const privateRouter = [
   { path: "/chat", element: <SkillChatPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
-  { path: "/chatpro/:id", element: <ChatPro /> }, // ⚠️废弃
   { path: "/report/:id/", element: <Report /> },
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
   { path: "/reset", element: <ResetPwdPage /> },
@@ -139,6 +141,7 @@ export const publicRouter = createBrowserRouter([
   { path: "/reset", element: <ResetPwdPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
+  { path: "/403", element: <Page403 /> },
   { path: "*", element: <LoginPage /> }
 ],
   baseConfig)

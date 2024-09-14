@@ -41,6 +41,7 @@ import { LayersIcon } from "@radix-ui/react-icons";
 import { Button } from "@/components/bs-ui/button";
 import { updateVersion } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import ApiMainPage from "@/components/bs-comp/apiComponent";
 
 const nodeTypes = {
   genericNode: GenericNode,
@@ -337,10 +338,11 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     return () => document.removeEventListener('idChange', handleChangeId)
   }, [flow.data]); // 修改 id后, 需要监听 data这一层
 
+  const [showApiPage, setShowApiPage] = useState(false)
   return (
     <div id="flow-page" className="flex flex-col h-full overflow-hidden">
-      <Header flow={flow}></Header>
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <Header flow={flow} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
+      <div className={`flex flex-1 min-h-0 overflow-hidden ${showApiPage ? 'hidden' : ''}`}>
         {Object.keys(data).length ? <ExtraSidebar flow={flow} /> : <></>}
         {/* Main area */}
         <main className="flex flex-1" ref={keyBoardPanneRef}>
@@ -453,6 +455,9 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
             </div>
           </div>
         </main>
+      </div>
+      <div className={`flex flex-1 min-h-0 overflow-hidden ${showApiPage ? '' : 'hidden'}`}>
+        <ApiMainPage type={'flow'} />
       </div>
       {/* 删除确认 */}
       <dialog className={`modal ${blocker.state === "blocked" && 'modal-open'}`}>

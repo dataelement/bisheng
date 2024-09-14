@@ -32,32 +32,22 @@ export default function l2Edit() {
 
     const [isL2, setIsL2] = useState(false)
     const [loading, setLoading] = useState(false)
-    const nameRef = useRef(null)
-    const descRef = useRef(null)
-    const guideRef = useRef(null)
+    const [name, setName] = useState('');
+    const [description, setDescription] = useState('');
+    const [guideWords, setGuideWords] = useState('');
 
     useEffect(() => {
-        // 无id不再请求
-        if (!id) return
-        // 已有flow 数据时，不再请求
-        // if (flow?.id === id) {
-        //     setIsL2(true)
-        //     nameRef.current.value = flow.name
-        //     descRef.current.value = flow.description
-        //     guideRef.current.value = flow.guide_word
-        //     return
-        // }
-        // 无flow从db获取
-        getFlowApi(id).then(_flow => { // 可以获取内容安全审查数据？
-            // 回填flow
-            setFlow('l2 flow init', _flow)
-            setIsL2(true)
-            nameRef.current.value = _flow.name
-            descRef.current.value = _flow.description
-            guideRef.current.value = _flow.guide_word
-            setLogo(_flow.logo)
-        })
-    }, [id])
+        if (!id) return;
+
+        getFlowApi(id).then(_flow => {
+            setFlow('l2 flow init', _flow);
+            setIsL2(true);
+            setName(_flow.name);
+            setDescription(_flow.description);
+            setGuideWords(_flow.guide_word);
+            setLogo(_flow.logo);
+        });
+    }, [id]);
 
 
     // 校验
@@ -88,9 +78,6 @@ export default function l2Edit() {
     const flowSettingSaveRef = useRef(null)
     // 创建新技能 
     const handleCreateNewSkill = async () => {
-        const name = nameRef.current.value
-        const guideWords = guideRef.current.value
-        const description = descRef.current.value
         if (isParamError(name, description, true)) return
         setLoading(true)
 
@@ -112,9 +99,6 @@ export default function l2Edit() {
 
     // 编辑回填参数
     const handleJumpFlow = async () => {
-        const name = nameRef.current.value
-        const description = descRef.current.value
-        const guideWords = guideRef.current.value
         // 上线技能直接跳转L3
         if (flow.status === 2) return navigate('/flow/' + id, { replace: true })
         // 高级配置信息有误直接跳转L3
@@ -129,9 +113,6 @@ export default function l2Edit() {
     }
 
     const handleSave = async () => {
-        const name = nameRef.current.value
-        const description = descRef.current.value
-        const guideWords = guideRef.current.value
         if (isParamError(name, description, true)) return
         setLoading(true)
         formRef.current?.save()
@@ -197,15 +178,15 @@ export default function l2Edit() {
                         </div>
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.skillName')}</Label>
-                            <Input ref={nameRef} placeholder={t('skills.skillName')} className={`mt-2 ${error.name && 'border-red-400'}`} />
+                            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('skills.skillName')} className={`mt-2 ${error.name && 'border-red-400'}`} />
                         </div>
                         <div className="mt-4">
                             <Label htmlFor="username">{t('skills.description')}</Label>
-                            <Textarea ref={descRef} id="name" placeholder={t('skills.description')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
+                            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} id="name" placeholder={t('skills.description')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
                         </div>
                         <div className="mt-4">
                             <Label htmlFor="username">{t('skills.guideWords')}</Label>
-                            <Textarea ref={guideRef} maxLength={1000} id="name" placeholder={t('skills.guideWords')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
+                            <Textarea value={guideWords} onChange={(e) => setGuideWords(e.target.value)} maxLength={1000} id="name" placeholder={t('skills.guideWords')} className={`mt-2 ${error.desc && 'border-red-400'}`} />
                         </div>
                     </div>
                     {

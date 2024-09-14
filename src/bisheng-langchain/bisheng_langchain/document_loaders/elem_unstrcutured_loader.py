@@ -34,7 +34,10 @@ def merge_partitions(partitions):
             elif label == 'Table':
                 doc_content.append('\n\n' + text)
             else:
-                doc_content.append(text_elem_sep + text)
+                if last_label == 'Table':
+                    doc_content.append(text_elem_sep * 2 + text)
+                else:
+                    doc_content.append(text_elem_sep + text)
 
         last_label = label
         metadata['bboxes'].extend(list(map(lambda x: list(map(int, x)), extra_data['bboxes'])))
@@ -73,6 +76,7 @@ class ElemUnstructuredLoader(BasePDFLoader):
         self.start = start
         self.n = n
         self.extra_kwargs = kwargs
+        self.partitions = None
         super().__init__(file_path)
 
     def load(self) -> List[Document]:
@@ -97,6 +101,7 @@ class ElemUnstructuredLoader(BasePDFLoader):
         partitions = resp['partitions']
         if partitions:
             logger.info(f'content_from_partitions')
+            self.partitions = partitions
             content, metadata = merge_partitions(partitions)
         elif resp.get('text'):
             logger.info(f'content_from_text')

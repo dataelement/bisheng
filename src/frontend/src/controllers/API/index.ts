@@ -110,7 +110,6 @@ export function updateTempApi(temp_id, data) {
 
 /**
  * 获取知识库列表
- *
  */
 export async function readFileLibDatabase(page = 1, pageSize = 40, name = '') {
   try {
@@ -125,7 +124,6 @@ export async function readFileLibDatabase(page = 1, pageSize = 40, name = '') {
 
 /**
  * 获取知识库下文件列表
- *
  */
 export async function readFileByLibDatabase({ id, page, pageSize = 40, name = '', status }) {
   const statusStr = status === 999 ? '' : `&status=${status}`;
@@ -156,29 +154,102 @@ export async function uploadLibFile(data, config, type: 'knowledge' | 'icon') {
  * 确定上传文件
  * file_path knowledge_id chunck_size
  */
-export async function subUploadLibFile(data) {
+type UploadFileFc = {
+  knowledge_id: number; // 必需
+  separator: string[]; // 必需，切分相关参数，如果不传，使用默认值
+  separator_rule: ('after' | 'before')[]; // 必需
+  chunk_size: number; // 必需
+  chunk_overlap: number; // 必需
+  file_list: { file_path: string }[]; // 必需
+}
+type DefaultUploadFileFc = {
+  knowledge_id: number; // 必需
+  file_list: { file_path: string }[]; // 必需
+};
+export async function subUploadLibFile(data: UploadFileFc): Promise<any>;
+export async function subUploadLibFile(data: DefaultUploadFileFc): Promise<any>;
+export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc) {
   return await axios.post(`/api/v1/knowledge/process`, data);
 }
 
 /**
+ * 查看文件切片
+ */
+export async function previewFileSplitApi(data) {
+  return await axios.post(`/api/v1/knowledge/preview`, data);
+}
+
+/**
+ * 获取知识库下的切分段落
+ */
+export async function getKnowledgeChunkApi(params): Promise<{ models: string[] }> {
+  let queryStr = ''
+  if (params.file_ids?.length) {
+    queryStr = params.file_ids.map(id => `file_ids=${id}`).join('&');
+  } else {
+    delete params.file_ids;
+  }
+  return await axios.get(`/api/v1/knowledge/chunk?${queryStr}`, { params });
+}
+
+/**
+ * 删除知识库分块内容
+ */
+export async function delChunkApi(data) {
+  return await axios.delete(`/api/v1/knowledge/chunk`, { data });
+}
+
+/**
+ * 删除知识库分块内容(预览时)
+ */
+export async function delChunkInPreviewApi(data) {
+  return await axios.delete(`/api/v1/knowledge/preview`, { data });
+}
+
+/**
+ * 删除知识库分块内容
+ */
+export async function updatePreviewChunkApi(data) {
+  return await axios.put(`/api/v1/knowledge/preview`, data);
+}
+
+/**
+ * 删除知识库分块内容
+ */
+type KnowledgePutRequest = {
+  knowledge_id: number;
+  file_id: number;
+  chunk_index: number;
+  text: string;
+  bbox: any
+}
+export async function updateChunkApi(data: KnowledgePutRequest) {
+  return await axios.put(`/api/v1/knowledge/chunk`, data);
+}
+
+/**
  * 创建支持库
- *
  */
 export async function createFileLib(data) {
   return await axios.post(`/api/v1/knowledge/create`, data);
 }
 
 /**
+ * 修改知识库
+ */
+export async function updateKnowledgeApi(data) {
+  return await axios.put(`/api/v1/knowledge/`, data);
+};
+
+/**
  * 删除支持库
- *
  */
 export async function deleteFileLib(id) {
-  return await axios.delete(`/api/v1/knowledge/${id}`);
+  return await axios.delete(`/api/v1/knowledge/`, { data: { knowledge_id: id } });
 }
 
 /**
  * 删除知识库下文件
- *
  */
 export async function deleteFile(id) {
   return await axios.delete(`/api/v1/knowledge/file/${id}`);
@@ -192,11 +263,26 @@ export async function getEmbeddingModel(): Promise<{ models: string[] }> {
 }
 
 /**
+ * 获取文件地址
+ */
+export async function getFilePathApi(file_id) {
+  return await axios.get(`/api/v1/knowledge/file_share`, { params: { file_id } });
+}
+
+/**
+ * 获取文件chunk对应的文本
+ */
+export async function getFileBboxApi(file_id) {
+  return await axios.get(`/api/v1/knowledge/file_bbox`, { params: { file_id } });
+}
+
+/**
  * 获取RT服务列表
  */
 export async function getServicesApi(): Promise<RTServer[]> {
   return await axios.get(`/api/v1/server/list_server`);
 }
+
 /**
  * 获取FT服务列表
  */
@@ -281,6 +367,7 @@ export const getChatsApi = (page) => {
         if (intermediate_steps) return intermediate_steps;
         if (isJsonSerializable(message)) {
           const json = JSON.parse(message);
+          if (Array.isArray(json)) return message
           const chatKey = Object.keys(json)[0]
           return json[chatKey]
         }

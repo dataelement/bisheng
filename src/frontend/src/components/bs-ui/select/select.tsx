@@ -4,18 +4,18 @@ import { SearchInput } from "../input";
 
 interface SelectSearchProps {
     value: any,
-    options: {label: string, value: string}[],
-    selectPlaceholder?:string,
-    inputPlaceholder?:string,
-    onOpenChange?: (open:boolean) => void,
+    options: { label: string, value: string }[],
+    selectPlaceholder?: string,
+    inputPlaceholder?: string,
+    onOpenChange?: (open: boolean) => void,
     onValueChange: (value: string) => void,
-    onChange: (e:ChangeEvent<HTMLInputElement>) => void,
+    onChange: (e: ChangeEvent<HTMLInputElement>) => void,
     selectClass?: string,
     contentClass?: string,
     children?: React.ReactNode
 }
 
-const SelectSearch: React.FC<SelectSearchProps> = ({
+const _SelectSearch: React.FC<SelectSearchProps> = ({
     value,
     options,
     selectPlaceholder = '',
@@ -29,11 +29,11 @@ const SelectSearch: React.FC<SelectSearchProps> = ({
 }) => {
     return <Select value={value} onOpenChange={(open) => onOpenChange?.(open)} onValueChange={(v) => onValueChange(v)}>
         <SelectTrigger className={selectClass}>
-            <SelectValue placeholder={selectPlaceholder}/>
+            <SelectValue placeholder={selectPlaceholder} />
         </SelectTrigger>
         <SelectContent className={contentClass}>
-            <SearchInput inputClassName="h-8 mb-2 dark:border-gray-700" placeholder={inputPlaceholder} 
-            onChange={(e) => onChange(e)} onKeyDown={e => e.stopPropagation()} iconClassName="w-4 h-4" />
+            <SearchInput inputClassName="h-8 mb-2 dark:border-gray-700" placeholder={inputPlaceholder}
+                onChange={(e) => onChange(e)} onKeyDown={e => e.stopPropagation()} iconClassName="w-4 h-4" />
             <SelectGroup>
                 {children}
                 {options.map(el => (
@@ -43,5 +43,5 @@ const SelectSearch: React.FC<SelectSearchProps> = ({
         </SelectContent>
     </Select>
 }
-
-export default React.memo(SelectSearch)
+const SelectSearch = React.memo(_SelectSearch)
+export default SelectSearch

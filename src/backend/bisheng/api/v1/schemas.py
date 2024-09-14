@@ -5,7 +5,7 @@ from uuid import UUID
 
 from langchain.docstore.document import Document
 from orjson import orjson
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, root_validator
 
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
@@ -410,3 +410,66 @@ class AssistantLLMConfig(BaseModel):
 
 class EvaluationLLMConfig(BaseModel):
     model_id: Optional[int] = Field(description="评测功能默认模型的ID")
+
+
+# 文件切分请求基础参数
+class FileProcessBase(BaseModel):
+    knowledge_id: int = Field(..., description="知识库ID")
+    separator: Optional[List[str]] = Field(default=['\n\n'], description="切分文本规则, 不传则为默认")
+    separator_rule: Optional[List[str]] = Field(default=['after'],
+                                                description="切分规则前还是后进行切分；before/after")
+    chunk_size: Optional[int] = Field(default=1000, description="切分文本长度，不传则为默认")
+    chunk_overlap: Optional[int] = Field(default=100, description="切分文本重叠长度，不传则为默认")
+
+    @root_validator
+    def check_separator_rule(cls, values):
+        if values['separator'] is None:
+            values['separator'] = ['\n\n']
+        if values['separator_rule'] is None:
+            values['separator_rule'] = ['after' for _ in values["separator"]]
+        if values['chunk_size'] is None:
+            values['chunk_size'] = 1000
+        if values['chunk_overlap'] is None:
+            values['chunk_overlap'] = 100
+        return values
+
+
+class FileChunkMetadata(BaseModel):
+    source: str = Field(default='', description="源文件名")
+    title: str = Field(default='', description="源文件内容总结的标题")
+    chunk_index: int = Field(default=0, description="文本块索引")
+    bbox: str = Field(default='', description="文本块bbox信息")
+    page: int = Field(default=0, description="文本块所在页码")
+    extra: str = Field(default='', description="文本块额外信息")
+    file_id: int = Field(default=0, description="文本块所属文件ID")
+
+
+# 文件分块数据格式
+class FileChunk(BaseModel):
+    text: str = Field(..., description="文本块内容")
+    parse_type: Optional[str] = Field(default=None, description="文本所属的文件解析类型")
+    metadata: FileChunkMetadata = Field(..., description="文本块元数据")
+
+
+# 预览文件分块内容请求参数
+class PreviewFileChunk(FileProcessBase):
+    file_path: str = Field(..., description="文件路径")
+    cache: bool = Field(default=True, description="是否从缓存获取")
+
+
+class UpdatePreviewFileChunk(BaseModel):
+    knowledge_id: int = Field(..., description="知识库ID")
+    file_path: str = Field(..., description="文件路径")
+    text: str = Field(..., description="文本块内容")
+    chunk_index: int = Field(..., description="文本块索引, 在metadata里")
+
+
+class KnowledgeFileOne(BaseModel):
+    file_path: str = Field(..., description="文件路径")
+
+
+# 知识库文件处理
+class KnowledgeFileProcess(FileProcessBase):
+    file_list: List[KnowledgeFileOne] = Field(..., description="文件列表")
+    callback_url: Optional[str] = Field(default=None, description="异步任务回调地址")
+    extra: Optional[str] = Field(default=None, description="附加信息")

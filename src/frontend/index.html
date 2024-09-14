@@ -10,12 +10,14 @@
     <title>BISHENG</title>
     <!-- style -->
     <script>
-        fetch('/api/v1/web/config').then(function (res) {
+        fetch('<%- baseUrl %>/api/v1/web/config').then(function (res) {
             return res.json()
         }).then(function (res) {
             console.log('res :>> ', res.data);
             var styleStr = res.data ? res.data.value : ''
-            var style = styleStr ? JSON.parse(styleStr) : {comp: {}}
+            var style = styleStr ? JSON.parse(styleStr) : {
+                comp: {}
+            }
             window.ThemeStyle = style
             Object.keys(style.comp).forEach(key => {
                 var hsl = style.comp[key]

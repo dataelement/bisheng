@@ -1,29 +1,10 @@
 import json
-import math
-import re
 import time
 from typing import Any, Dict, List
-from uuid import uuid4
 
 import requests
-
-from bisheng.api.services.llm import LLMService
-from bisheng.cache.utils import file_download
-from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeDao
-from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.interface.importing.utils import import_by_type, import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_llm, instantiate_vectorstore
-from bisheng.settings import settings
-from bisheng.utils import minio_client
-from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.minio_client import MinioClient
-from bisheng_langchain.document_loaders import ElemUnstructuredLoader
-from bisheng_langchain.rag.extract_info import extract_title
-from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch
-from fastapi import HTTPException
+from loguru import logger
+from pymilvus import Collection
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
@@ -32,10 +13,24 @@ from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, Tex
                                                   UnstructuredMarkdownLoader,
                                                   UnstructuredPowerPointLoader,
                                                   UnstructuredWordDocumentLoader)
-from loguru import logger
-from pymilvus import Collection
-from sqlalchemy import delete
-from sqlmodel import select
+
+from bisheng.api.services.llm import LLMService
+from bisheng.api.utils import md5_hash
+from bisheng.api.v1.schemas import FileProcessBase
+from bisheng.cache.redis import redis_client
+from bisheng.cache.utils import file_download
+from bisheng.database.base import session_getter
+from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, ParseType
+from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.interface.importing.utils import import_vectorstore
+from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.settings import settings
+from bisheng.utils.embedding import decide_embeddings
+from bisheng.utils.minio_client import MinioClient
+from bisheng_langchain.document_loaders import ElemUnstructuredLoader
+from bisheng_langchain.rag.extract_info import extract_title
+from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 
 filetype_load_map = {
     'txt': TextLoader,
@@ -47,90 +42,66 @@ filetype_load_map = {
 }
 
 
-def create_knowledge(knowledge: KnowledgeCreate, user_id: int):
-    """ 创建知识库. """
-    knowledge.is_partition = knowledge.is_partition or settings.get_knowledge().get(
-        'vectorstores', {}).get('Milvus', {}).get('is_partition', True)
-    db_knowldge = Knowledge.model_validate(knowledge)
-    with session_getter() as session:
-        know = session.exec(
-            select(Knowledge).where(Knowledge.name == knowledge.name,
-                                    knowledge.user_id == user_id)).all()
-    if know:
-        raise HTTPException(status_code=500, detail='知识库名称重复')
-    if not db_knowldge.collection_name:
-        if knowledge.is_partition:
-            embedding = re.sub(r'[^\w]', '_', knowledge.model)
-            suffix_id = settings.get_knowledge().get('vectorstores').get('Milvus', {}).get(
-                'partition_suffix', 1)
-            db_knowldge.collection_name = f'partition_{embedding}_knowledge_{suffix_id}'
+class KnowledgeUtils:
+
+    @classmethod
+    def get_preview_cache_key(cls, knowledge_id: int, file_path: str) -> str:
+        md5_value = md5_hash(file_path)
+        return f'preview_file_chunk:{knowledge_id}:{md5_value}'
+
+    @classmethod
+    def save_preview_cache(cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None):
+        if mapping:
+            for key, val in mapping.items():
+                mapping[key] = json.dumps(val)
+            redis_client.hset(cache_key, mapping=mapping)
         else:
-            # 默认collectionName
-            db_knowldge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
-    db_knowldge.index_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
-    db_knowldge.user_id = user_id
-    with session_getter() as session:
-        session.add(db_knowldge)
-        session.commit()
-        session.refresh(db_knowldge)
-        return db_knowldge.copy()
+            redis_client.hset(cache_key, key=chunk_index, value=json.dumps(value))
 
-
-def delete_knowledge_by(knowledge: Knowledge, only_clear: bool = False):
-    # 处理vector
-    knowledge_id = knowledge.id
-    embeddings = FakeEmbedding()
-    vectore_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
-    if isinstance(vectore_client.col, Collection):
-        logger.info(f'delete_vectore col={knowledge.collection_name}')
-        if knowledge.collection_name.startswith('col'):
-            vectore_client.col.drop()
+    @classmethod
+    def delete_preview_cache(cls, cache_key, chunk_index: int = None):
+        if chunk_index is None:
+            redis_client.delete(cache_key)
+            redis_client.delete(f'{cache_key}_parse_type')
+            redis_client.delete(f'{cache_key}_file_path')
+            redis_client.delete(f'{cache_key}_partitions')
         else:
-            pk = vectore_client.col.query(expr=f'knowledge_id=="{knowledge.id}"',
-                                          output_fields=['pk'])
-            vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
-            # 判断milvus 是否还有entity
-            if vectore_client.col.is_empty:
-                vectore_client.col.drop()
+            redis_client.hdel(cache_key, chunk_index)
 
-    # 处理 es
-    # elastic
-    esvectore_client: 'ElasticKeywordsSearch' = decide_vectorstores(knowledge.index_name,
-                                                                    'ElasticKeywordsSearch',
-                                                                    embeddings)
-    if esvectore_client:
-        index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
-        res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
-        logger.info(f'act=delete_es index={index_name} res={res}')
-
-    # 清理minio的数据
-    delete_knowledge_file_in_minio(knowledge_id)
-
-    # 处理knowledge file
-    with session_getter() as session:
-        session.exec(delete(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
-        # 清空知识库时，不删除知识库记录
-        if not only_clear:
-            session.delete(knowledge)
-        session.commit()
-    return True
+    @classmethod
+    def get_preview_cache(cls, cache_key, chunk_index: int = None) -> dict:
+        if chunk_index is None:
+            all_chunk_info = redis_client.hgetall(cache_key)
+            for key, value in all_chunk_info.items():
+                all_chunk_info[key] = json.loads(value)
+            return all_chunk_info
+        else:
+            chunk_info = redis_client.hget(cache_key, chunk_index)
+            if chunk_info:
+                chunk_info = json.loads(chunk_info)
+            return chunk_info
 
 
-def delete_knowledge_file_in_minio(knowledge_id: int):
-    # 每1000条记录去删除minio文件
-    count = KnowledgeFileDao.count_file_by_knowledge_id(knowledge_id)
-    if count == 0:
-        return
-    page_size = 1000
-    page_num = math.ceil(count / page_size)
-    minio_client = MinioClient()
-    for i in range(page_num):
-        file_list = KnowledgeFileDao.get_file_simple_by_knowledge_id(knowledge_id, i + 1,
-                                                                     page_size)
-        for file in file_list:
-            minio_client.delete_minio(str(file[0]))
-            if file[1]:
-                minio_client.delete_minio(file[1])
+def process_file_task(knowledge: Knowledge, db_files: List[KnowledgeFile],
+                      separator: List[str], separator_rule: List[str], chunk_size: int, chunk_overlap: int,
+                      callback_url: str = None, extra_metadata: str = None, preview_cache_keys: List[str] = None):
+    """ 处理知识文件任务 """
+    try:
+        index_name = knowledge.index_name or knowledge.collection_name
+        addEmbedding(knowledge.collection_name, index_name, knowledge.id, knowledge.model,
+                     separator, separator_rule, chunk_size, chunk_overlap, db_files,
+                     callback_url, extra_metadata, preview_cache_keys=preview_cache_keys)
+    except Exception as e:
+        logger.exception('process_file_task error')
+        new_files = KnowledgeFileDao.select_list([file.id for file in db_files])
+        new_files_map = {file.id: file for file in new_files}
+        for file in db_files:
+            if new_files_map[file.id].status == KnowledgeFileStatus.PROCESSING.value:
+                file.status = KnowledgeFileStatus.FAILED.value
+                file.remark = str(e)[:500]
+                KnowledgeFileDao.update(file)
+        logger.info('update files failed status over')
+        raise e
 
 
 def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True):
@@ -138,8 +109,7 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
     knowledge_files = KnowledgeFileDao.select_list(file_ids=file_ids)
 
     knowledge_ids = [file.knowledge_id for file in knowledge_files]
-    with session_getter() as session:
-        knowledges = session.exec(select(Knowledge).where(Knowledge.id.in_(knowledge_ids))).all()
+    knowledges = KnowledgeDao.get_list_by_ids(knowledge_ids)
     knowledgeid_dict = {knowledge.id: knowledge for knowledge in knowledges}
     embeddings = FakeEmbedding()
     collection_ = set([knowledge.collection_name for knowledge in knowledges])
@@ -227,214 +197,235 @@ def decide_knowledge_llm() -> Any:
     return LLMService.get_bisheng_llm(model_id=knowledge_llm.extract_title_model_id)
 
 
-def addEmbedding(collection_name,
-                 index_name,
+def addEmbedding(collection_name: str,
+                 index_name: str,
                  knowledge_id: int,
                  model: str,
+                 separator: List[str],
+                 separator_rule: List[str],
                  chunk_size: int,
-                 separator: str,
                  chunk_overlap: int,
-                 file_paths: List[str],
                  knowledge_files: List[KnowledgeFile],
-                 callback: str,
-                 extra_meta: str = None):
+                 callback: str = None,
+                 extra_meta: str = None,
+                 preview_cache_keys: List[str] = None):
+    """  将文件加入到向量和es库内  """
+
+    logger.info(f'start process files')
+    minio_client = MinioClient()
+    embeddings = decide_embeddings(model)
+
     logger.info('start init Milvus')
-    error_msg = ''
-    try:
-        vectore_client, es_client = None, None
-        minio_client = MinioClient()
-        embeddings = decide_embeddings(model)
-        vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-    except Exception as e:
-        error_msg = 'MilvusExcept:' + str(e)
-        logger.exception(e)
+    vector_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
 
     logger.info('start init ElasticKeywordsSearch')
-    try:
-        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
-    except Exception as e:
-        error_msg = error_msg + 'ESException:' + str(e)
-        logger.exception(e)
+    es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
 
-    callback_obj = {}
-    for index, path in enumerate(file_paths):
-        ts1 = time.time()
-        with session_getter() as session:
-            knowledge_file = session.get(KnowledgeFile, knowledge_files[index].id)
-        logger.info('process_file_begin knowledge_id={} file_name={} file_size={} ',
-                    knowledge_files[0].knowledge_id, knowledge_file.file_name, len(file_paths))
-        # 原始文件保存
-        file_type = knowledge_file.file_name.rsplit('.', 1)[-1]
-        knowledge_file.object_name = f'original/{knowledge_file.id}.{file_type}'
-        with session_getter() as session:
-            session.add(knowledge_file)
-            session.commit()
-            session.refresh(knowledge_file)
-        if not vectore_client and not es_client:
-            # 设置错误
-            logger.error(f'no_vector_db_found err={error_msg}')
-            with session_getter() as session:
-                db_file = session.get(KnowledgeFile, knowledge_file.id)
-                setattr(db_file, 'status', 3)
-                setattr(db_file, 'remark', error_msg[:500])
-                session.add(db_file)
-                callback_obj = db_file.copy()
-                session.commit()
+    for index, db_file in enumerate(knowledge_files):
+        # 尝试从缓存中获取文件的分块
+        preview_cache_key = None
+        if preview_cache_keys:
+            preview_cache_key = preview_cache_keys[index] if index < len(preview_cache_keys) else None
+        try:
+            logger.info(f'process_file_begin {db_file.id} file_name={db_file.file_name}')
+            add_file_embedding(vector_client, es_client, minio_client,
+                               db_file, separator, separator_rule, chunk_size, chunk_overlap,
+                               extra_meta=extra_meta, preview_cache_key=preview_cache_key)
+            db_file.status = KnowledgeFileStatus.SUCCESS.value
+        except Exception as e:
+            logger.exception(f'process_file_fail file_id={db_file.id} file_name={db_file.file_name}')
+            db_file.status = KnowledgeFileStatus.FAILED.value
+            db_file.remark = str(e)[:500]
+        finally:
+            KnowledgeFileDao.update(db_file)
             if callback:
                 inp = {
-                    'file_name': knowledge_file.file_name,
-                    'file_status': knowledge_file.status,
-                    'file_id': callback_obj.id,
-                    'error_msg': callback_obj.remark
+                    'file_name': db_file.file_name,
+                    'file_status': db_file.status,
+                    'file_id': db_file.id,
+                    'error_msg': db_file.remark
                 }
-                logger.error('add_fail callback={} file_name={} status={}', callback,
-                             callback_obj.file_name, callback_obj.status)
                 requests.post(url=callback, json=inp, timeout=3)
-            continue
-        try:
-            res = minio_client.upload_minio(knowledge_file.object_name, path)
-            logger.info('upload_original_file path={} res={}', knowledge_file.object_name, res)
-            texts, metadatas = read_chunk_text(path, knowledge_file.file_name, chunk_size,
-                                               chunk_overlap, separator)
 
-            if len(texts) == 0:
-                raise ValueError('文件解析为空')
-            # 溯源必须依赖minio, 后期替换更通用的oss
-            minio_client.upload_minio(str(knowledge_file.id), path)
 
-            logger.info(f'chunk_split file_name={knowledge_file.file_name} size={len(texts)}')
-            for metadata in metadatas:
-                metadata.update({
-                    'file_id': knowledge_file.id,
-                    'knowledge_id': f'{knowledge_id}',
-                    'extra': extra_meta or ''
-                })
+def add_file_embedding(vector_client, es_client, minio_client, db_file: KnowledgeFile, separator: List[str],
+                       separator_rule: List[str], chunk_size: int, chunk_overlap: int,
+                       extra_meta: str = None, preview_cache_key: str = None):
+    # download original file
+    logger.info(f'start download original file={db_file.id} file_name={db_file.file_name}')
+    if db_file.object_name.startswith('tmp'):
+        file_url = minio_client.get_share_link(db_file.object_name, minio_client.tmp_bucket)
+        filepath, _ = file_download(file_url)
 
-            if vectore_client:
-                vectore_client.add_texts(texts=texts, metadatas=metadatas)
+        # 如果是tmp开头的bucket需要重新保存原始文件到minio的正式bucket
+        file_type = db_file.file_name.rsplit('.', 1)[-1]
+        db_file.object_name = f'original/{db_file.id}.{file_type}'
+        res = minio_client.upload_minio(db_file.object_name, filepath)
+        logger.info(f'upload original file {db_file.id} file_name={db_file.file_name} res={res}')
+    # 如果是tmp开头的bucket需要重新保存原始文件到minio的正式bucket
+    else:
+        file_url = minio_client.get_share_link(db_file.object_name)
+        filepath, _ = file_download(file_url)
 
-            # 存储es
-            if es_client:
-                es_client.add_texts(texts=texts, metadatas=metadatas)
+    if not vector_client:
+        raise ValueError('vector db not found, please check your milvus config')
+    if not es_client:
+        raise ValueError('es not found, please check your es config')
 
-            # 存储 mysql
-            with session_getter() as session:
-                knowledge_file.status = 2
-                session.add(knowledge_file)
-                session.commit()
-                session.refresh(knowledge_file)
-            callback_obj = knowledge_file.copy()
-            logger.info('process_file_done file_name={} file_id={} time_cost={}',
-                        knowledge_file.file_name, knowledge_file.id,
-                        time.time() - ts1)
+    # extract text from file
+    texts, metadatas, parse_type, partitions = read_chunk_text(filepath, db_file.file_name, separator,
+                                                               separator_rule, chunk_size, chunk_overlap)
+    if len(texts) == 0:
+        raise ValueError('文件解析为空')
+    for one in texts:
+        if len(one) > 10000:
+            raise ValueError('分段结果超长，请尝试使用自定义策略进行切分')
 
-        except Exception as e:
-            logger.exception('add_vectordb {}', e)
-            with session_getter() as session:
-                db_file = session.get(KnowledgeFile, knowledge_file.id)
-                setattr(db_file, 'status', 3)
-                setattr(db_file, 'remark', str(e)[:500])
-                session.add(db_file)
-                callback_obj = db_file.copy()
-                session.commit()
+    db_file.parse_type = parse_type
+    # 存储ocr识别后的partitions结果
+    if partitions:
+        partition_data = json.dumps(partitions, ensure_ascii=False).encode('utf-8')
+        minio_client.upload_minio_data(f'partitions/{db_file.id}.json', partition_data, len(partition_data),
+                                       "application/json")
+        db_file.bbox_object_name = f'partitions/{db_file.id}.json'
 
-        if callback:
-            # asyn
-            inp = {
-                'file_name': callback_obj.file_name,
-                'file_status': callback_obj.status,
-                'file_id': callback_obj.id,
-                'error_msg': callback_obj.remark
+    # 缓存中有数据则用缓存中的数据去入库，因为是用户在界面编辑过的
+    if preview_cache_key:
+        all_chunk_info = KnowledgeUtils.get_preview_cache(preview_cache_key)
+        if all_chunk_info:
+            logger.info(f'get_preview_cache file={db_file.id} file_name={db_file.file_name}')
+            texts, metadatas = [], []
+            for key, val in all_chunk_info.items():
+                texts.append(val['text'])
+                metadatas.append(val['metadata'])
+
+    # 溯源必须依赖minio, 后期替换更通用的oss, 将转换为pdf的文件传到minio
+    minio_client.upload_minio(str(db_file.id), filepath)
+
+    logger.info(f'chunk_split file={db_file.id} file_name={db_file.file_name} size={len(texts)}')
+    for metadata in metadatas:
+        metadata.update({
+            'file_id': db_file.id,
+            'knowledge_id': f'{db_file.knowledge_id}',
+            'extra': extra_meta or ''
+        })
+
+    logger.info(f'add_vectordb file={db_file.id} file_name={db_file.file_name}')
+    # 存入milvus
+    vector_client.add_texts(texts=texts, metadatas=metadatas)
+
+    logger.info(f'add_es file={db_file.id} file_name={db_file.file_name}')
+    # 存入es
+    es_client.add_texts(texts=texts, metadatas=metadatas)
+
+    logger.info(f'add_complete file={db_file.id} file_name={db_file.file_name}')
+    if preview_cache_key:
+        KnowledgeUtils.delete_preview_cache(preview_cache_key)
+
+
+def add_text_into_vector(vector_client, es_client, db_file: KnowledgeFile, texts: List[str], metadatas: List[dict]):
+    logger.info(f'add_vectordb file={db_file.id} file_name={db_file.file_name}')
+    # 存入milvus
+    vector_client.add_texts(texts=texts, metadatas=metadatas)
+
+    logger.info(f'add_es file={db_file.id} file_name={db_file.file_name}')
+    # 存入es
+    es_client.add_texts(texts=texts, metadatas=metadatas)
+
+
+def parse_partitions(partitions: List[Any]) -> Dict:
+    """ 解析生成bbox和文本的对应关系 """
+    if not partitions:
+        return {}
+    res = {}
+    for part_index, part in enumerate(partitions):
+        bboxes = part["metadata"]["extra_data"]["bboxes"]
+        indexes = part["metadata"]["extra_data"]["indexes"]
+        pages = part["metadata"]["extra_data"]["pages"]
+        text = part["text"]
+        for index, bbox in enumerate(bboxes):
+            key = f"{pages[index]}-" + "-".join([str(int(one)) for one in bbox])
+            val = text[indexes[index][0]:indexes[index][1] + 1]
+            res[key] = {
+                "text": val,
+                "type": part["type"],
+                "part_id": part_index
             }
-            logger.info(
-                f'add_complete callback={callback} file_name={callback_obj.file_name} status={callback_obj.status}'
-            )
-            requests.post(url=callback, json=inp, timeout=3)
+    return res
 
 
-def read_chunk_text(input_file, file_name, size, chunk_overlap, separator):
-    # 按照新的规则对文档做标题提取
+def read_chunk_text(input_file, file_name, separator: List[str], separator_rule: List[str], chunk_size: int,
+                    chunk_overlap: int) -> (List[str], List[dict], str, Any):
+    """
+     0：chunks text
+     1：chunks metadata
+     2：parse_type: uns or local
+     3: ocr bbox data: maybe None
+    """
+    # 获取文档总结标题的llm
     try:
         llm = decide_knowledge_llm()
     except Exception as e:
         logger.exception('knowledge_llm_error:')
         raise Exception(f'知识库总结所需模型配置有误，初始化失败， {str(e)}')
+    text_splitter = ElemCharacterTextSplitter(separators=separator,
+                                              separator_rule=separator_rule,
+                                              chunk_size=chunk_size,
+                                              chunk_overlap=chunk_overlap,
+                                              is_separator_regex=True)
+    # 加载文档内容
+    logger.info(f'start_file_loader file_name={file_name}')
+    parse_type = ParseType.LOCAL.value
     if not settings.get_knowledge().get('unstructured_api_url'):
         file_type = file_name.split('.')[-1]
         if file_type not in filetype_load_map:
             raise Exception('类型不支持')
-        loader = filetype_load_map[file_type](file_path=input_file, encoding='utf-8')
-        separator = separator[0] if separator and isinstance(separator, list) else separator
-        text_splitter = CharacterTextSplitter(separator=separator,
-                                              chunk_size=size,
-                                              chunk_overlap=chunk_overlap,
-                                              add_start_index=True)
+        loader = filetype_load_map[file_type](file_path=input_file)
+        partitions = []
         documents = loader.load()
-        if llm:
-            t = time.time()
-            for one in documents:
-                # 配置了相关llm的话，就对文档做总结
-                title = extract_title(llm, one.page_content)
-                one.metadata['title'] = title
-            logger.info('file_extract_title=success timecost={}', time.time() - t)
-        texts = text_splitter.split_documents(documents)
-        raw_texts = [t.page_content for t in texts]
-        metadatas = [{
-            'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
-            'page': t.metadata.get('page') or 0,
-            'source': file_name,
-            'title': t.metadata.get('title', ''),
-            'chunk_index': t_index,
-            'extra': ''
-        } for t_index, t in enumerate(texts)]
     else:
-        t = time.time()
         loader = ElemUnstructuredLoader(
             file_name,
             input_file,
             unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
         documents = loader.load()
-        logger.info('file_loader=success timecost={}', time.time() - t)
+        parse_type = ParseType.UNS.value
+        partitions = loader.partitions
+        partitions = parse_partitions(partitions)
 
-        if llm:
-            t = time.time()
-            for one in documents:
-                # 配置了相关llm的话，就对文档做总结
-                title = extract_title(llm, one.page_content)
-                one.metadata['title'] = title
-            logger.info('file_extract_title=success timecost={}', time.time() - t)
+    logger.info(f'start_extract_title file_name={file_name}')
+    if llm:
+        t = time.time()
+        for one in documents:
+            # 配置了相关llm的话，就对文档做总结
+            title = extract_title(llm, one.page_content)
+            one.metadata['title'] = title
+        logger.info('file_extract_title=success timecost={}', time.time() - t)
 
-        text_splitter = ElemCharacterTextSplitter(separators=separator,
-                                                  chunk_size=size,
-                                                  chunk_overlap=chunk_overlap)
-        texts = text_splitter.split_documents(documents)
-        logger.info('file_split=success')
-
-        raw_texts = [
-            t.metadata.get('source', '') + '\n' + t.metadata.get('title', '') + '\n' +
-            t.page_content for t in texts
-        ]
-        metadatas = [{
-            'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
-            'page': t.metadata['chunk_bboxes'][0].get('page') if t.metadata.get('chunk_bboxes', None) else 0,
-            'source': t.metadata.get('source', ''),
-            'title': t.metadata.get('title', ''),
-            'chunk_index': t_index,
-            'extra': '',
-        } for t_index, t in enumerate(texts)]
-    return (raw_texts, metadatas)
+    logger.info(f'start_split_text file_name={file_name}')
+    texts = text_splitter.split_documents(documents)
+    raw_texts = [t.page_content for t in texts]
+    logger.info(f'start_process_metadata file_name={file_name}')
+    metadatas = [{
+        'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
+        'page': t.metadata['chunk_bboxes'][0].get('page') if t.metadata.get('chunk_bboxes', None) else t.metadata.get(
+            'page', 0),
+        'source': file_name,
+        'title': t.metadata.get('title', ''),
+        'chunk_index': t_index,
+        'extra': ''
+    } for t_index, t in enumerate(texts)]
+    logger.info(f'file_chunk_over file_name=={file_name}')
+    return raw_texts, metadatas, parse_type, partitions
 
 
 def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]):
     """使用text 导入knowledge"""
-    try:
-        embeddings = decide_embeddings(db_knowledge.model)
-        vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
-        logger.info('vector_init_conn_done milvus={}', db_knowledge.collection_name)
-        index_name = db_knowledge.index_name or db_knowledge.collection_name
-        es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
-    except Exception as e:
-        logger.exception(e)
+    embeddings = decide_embeddings(db_knowledge.model)
+    vectore_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
+    logger.info('vector_init_conn_done milvus={}', db_knowledge.collection_name)
+    index_name = db_knowledge.index_name or db_knowledge.collection_name
+    es_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
 
     separator = '\n\n'
     chunk_size = 1000
@@ -464,8 +455,10 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
             'page': doc.metadata.pop('page', 1),
             'source': doc.metadata.pop('source', ''),
             'bbox': doc.metadata.pop('bbox', ''),
-            'extra': json.dumps(doc.metadata)
-        } for doc in documents]
+            'extra': json.dumps(doc.metadata, ensure_ascii=False),
+            'title': '',
+            'chunk_index': index
+        } for index, doc in enumerate(documents)]
         vectore_client.add_texts(texts=[t.page_content for t in texts], metadatas=metadata)
 
         # 存储es
@@ -499,44 +492,16 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             KnowledgeFileDao.update(file)
         return
 
-    separator = ['\n\n']
-    chunk_size = 1000
-    chunk_overlap = 100
+    fake_req = FileProcessBase(knowledge_id=1)
     if db_files:
-        minio = MinioClient()
         for file in db_files:
-            # file exist
-            input_file = new_files.get(file.id)
-            db_knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
-
-            index_name = db_knowledge.index_name or db_knowledge.collection_name
-            original_file = input_file.object_name
-            file_url = minio.get_share_link(original_file,
-                                            minio_client.tmp_bucket) if original_file.startswith(
-                'tmp') else minio.get_share_link(original_file)
-
-            if file_url:
-                file_path, _ = file_download(file_url)
-            else:
-                file.status = 3
-                file.remark = '原始文件丢失'
-                KnowledgeFileDao.update(file)
-                continue
-
-            try:
-                addEmbedding(collection_name=db_knowledge.collection_name,
-                             index_name=index_name,
-                             knowledge_id=db_knowledge.id,
-                             model=db_knowledge.model,
-                             chunk_size=chunk_size,
-                             separator=separator,
-                             chunk_overlap=chunk_overlap,
-                             file_paths=[file_path],
-                             knowledge_files=[file],
-                             callback=None,
-                             extra_meta=file.extra_meta)
-            except Exception as e:
-                logger.error(e)
+            knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
+            input_files = new_files.get(file.id)
+            file.object_name = input_files["object_name"]
+            file_preview_cache_key = KnowledgeUtils.get_preview_cache_key(file.knowledge_id, input_files["file_path"])
+            process_file_task(knowledge, [file], fake_req.separator, fake_req.separator_rule,
+                              fake_req.chunk_size, fake_req.chunk_overlap, extra_metadata=file.extra_meta,
+                              preview_cache_keys=[file_preview_cache_key])
 
 
 def delete_vector(collection_name: str, partition_key: str):

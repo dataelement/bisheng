@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
 import { useTranslation } from "react-i18next";
 
-export default function Header({ onSave, onLine }) {
+export default function Header({ onSave, onLine, onTabChange }) {
     const { t } = useTranslation()
 
     const navigate = useNavigate()
@@ -31,6 +31,7 @@ export default function Header({ onSave, onLine }) {
         needSaveRef.current = true
     }
 
+    const [tabType, setTabType] = useState('edit')
     return <div className="flex justify-between bg-background-login items-center border-b px-4">
         <div className="flex items-center gap-2 py-4">
             <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ChevronLeftIcon className="h-4 w-4" /></Button>
@@ -53,6 +54,16 @@ export default function Header({ onSave, onLine }) {
                         onSave={handleEditSave}></EditAssistantDialog>
                 }
             </Dialog>
+        </div>
+        <div className="flex gap-4 items-center">
+            <div
+                className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-secondary px-4 py-1 rounded-md cursor-pointer`}
+                onClick={() => { setTabType('edit'); onTabChange('edit') }}
+            >{t('api.assistantOrchestration')}</div>
+            <div
+                className={`${tabType === 'api' ? 'text-primary' : ''} hover:bg-secondary px-4 py-1 rounded-md cursor-pointer`}
+                onClick={() => { setTabType('api'); onTabChange('api') }}
+            >{t('api.externalPublishing')}</div>
         </div>
         <div className="flex gap-4">
             <Button variant="outline" className="px-10" type="button" onClick={onSave}>{t('build.save')}</Button>

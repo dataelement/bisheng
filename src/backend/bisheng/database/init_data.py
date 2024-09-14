@@ -3,6 +3,7 @@ import json
 import os
 from typing import List
 
+from bisheng.database.models.template import Template
 from loguru import logger
 from sqlmodel import select, update, text
 
@@ -70,7 +71,7 @@ def init_default_data():
                 component_db = session.exec(select(Component).limit(1)).all()
                 if not component_db:
                     db_components = []
-                    json_items = json.loads(read_from_conf('component.json'))
+                    json_items = json.loads(read_from_conf('data/component.json'))
                     for item in json_items:
                         for k, v in item.items():
                             db_component = Component(name=k, user_id=1, user_name='admin', data=v)
@@ -78,11 +79,19 @@ def init_default_data():
                     session.add_all(db_components)
                     session.commit()
 
+                # 初始化预置技能模板
+                templates = session.exec(select(Template).limit(1)).all()
+                if not templates:
+                    json_items = json.loads(read_from_conf('data/template.json'))
+                    for item in json_items:
+                        session.add(Template(**item))
+                    session.commit()
+
                 # 初始化预置工具列表
                 preset_tools = session.exec(select(GptsTools).limit(1)).all()
                 if not preset_tools:
                     preset_tools = []
-                    json_items = json.loads(read_from_conf('t_gpts_tools.json'))
+                    json_items = json.loads(read_from_conf('data/t_gpts_tools.json'))
                     for item in json_items:
                         item['api_params'] = json.loads(item['api_params'])
                         preset_tool = GptsTools(**item)
@@ -93,7 +102,7 @@ def init_default_data():
                 preset_tools_type = session.exec(select(GptsToolsType).limit(1)).all()
                 if not preset_tools_type:
                     preset_tools_type = []
-                    json_items = json.loads(read_from_conf('t_gpts_tools_type.json'))
+                    json_items = json.loads(read_from_conf('data/t_gpts_tools_type.json'))
                     for item in json_items:
                         preset_tool_type = GptsToolsType(**item)
                         preset_tools_type.append(preset_tool_type)
@@ -115,7 +124,7 @@ def init_default_data():
                 preset_models = session.exec(select(SftModel).limit(1)).all()
                 if not preset_models:
                     preset_models = []
-                    json_items = json.loads(read_from_conf('sft_model.json'))
+                    json_items = json.loads(read_from_conf('data/sft_model.json'))
                     for item in json_items:
                         preset_model = SftModel(**item)
                         preset_models.append(preset_model)
@@ -150,11 +159,10 @@ def init_default_data():
 
 
 def read_from_conf(file_path: str) -> str:
-    if '/' not in file_path:
-        # Get current path
-        current_path = os.path.dirname(os.path.abspath(__file__))
+    # Get current path
+    current_path = os.path.dirname(os.path.abspath(__file__))
 
-        file_path = os.path.join(current_path, file_path)
+    file_path = os.path.join(current_path, file_path)
 
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()

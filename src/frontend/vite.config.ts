@@ -21,11 +21,12 @@ const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
 }, {});
 // 文件服务地址
 proxyTargets['/bisheng'] = {
-  target: "http://127.0.0.1:50061",
+  target: "http://192.168.106.116:9000",
   changeOrigin: true,
   withCredentials: true,
   secure: false
 }
+proxyTargets['/tmp-dir'] = proxyTargets['/bisheng']
 proxyTargets['/custom_base/api'] = {
   target,
   changeOrigin: true,
@@ -79,6 +80,7 @@ export default defineConfig(() => {
         inject: {
           data: {
             aceScriptSrc: `<script src="${process.env.NODE_ENV === 'production' ? app_env.BASE_URL : ''}/node_modules/ace-builds/src-min-noconflict/ace.js" type="text/javascript"></script>`,
+            baseUrl: app_env.BASE_URL
           },
         },
       }),

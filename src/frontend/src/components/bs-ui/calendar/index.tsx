@@ -1,11 +1,12 @@
 "use client"
 
-import * as React from "react"
-import { ChevronLeftIcon, ChevronRightIcon } from "@radix-ui/react-icons"
-import { DayPicker } from "react-day-picker"
-
-import { buttonVariants } from "@/components/bs-ui/button"
-import { cname } from "../utils"
+import { buttonVariants } from "@/components/bs-ui/button";
+import { ChevronLeftIcon, ChevronRightIcon } from "@radix-ui/react-icons";
+import { enUS, zhCN } from 'date-fns/locale';
+import i18next from "i18next";
+import * as React from "react";
+import { DayPicker } from "react-day-picker";
+import { cname } from "../utils";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>
 
@@ -17,6 +18,7 @@ function Calendar({
 }: CalendarProps) {
     return (
         <DayPicker
+            locale={i18next.language === 'zh' ? zhCN : enUS}
             showOutsideDays={showOutsideDays}
             className={cname("p-3", className)}
             classNames={{
@@ -69,4 +71,5 @@ function Calendar({
 }
 Calendar.displayName = "Calendar"
 
-export { Calendar }
+export { Calendar };
+

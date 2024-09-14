@@ -11,13 +11,25 @@ import "./style/applies.css";
 import "./style/classes.css";
 // @ts-ignore
 import "./style/markdown.css";
-
+import { QueryClient, QueryClientProvider } from "react-query";
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement
 );
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      retry: 0
+    }
+  }
+})
 root.render(
-  <ContextWrapper>
-    <App />
-  </ContextWrapper>
+  <QueryClientProvider client={queryClient}>
+    <ContextWrapper>
+      <App />
+    </ContextWrapper>
+  </QueryClientProvider>
 );
 reportWebVitals();

@@ -33,13 +33,12 @@ export default function Prompt() {
                 {open && <AutoPromptDialog onOpenChange={setOpen}></AutoPromptDialog>}
             </Dialog>
         </div>
-        <div className="h-[90%]">
-            <Textarea
-                className="border-none bg-transparent scrollbar-hide h-full focus-visible:ring-0 resize-none text-sm text-muted-foreground"
-                value={assistantState.prompt}
-                placeholder={t('prompt')}
-                onInput={(e => dispatchAssistant('setPrompt', { prompt: e.target.value }))}
-            ></Textarea>
-        </div>
+        <Textarea
+            boxClassName='h-[90%]'
+            className="h-full border-none bg-transparent scrollbar-hide focus-visible:ring-0 resize-none text-sm text-muted-foreground"
+            value={assistantState.prompt}
+            placeholder={t('prompt')}
+            onInput={(e => dispatchAssistant('setPrompt', { prompt: e.target.value }))}
+        ></Textarea>
     </div>
 };

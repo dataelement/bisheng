@@ -14,21 +14,24 @@ customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 200) {
         return response.data.data;
     }
+    const i18Msg = i18next.t(`errors.${response.data.status_code}`)
+    const errorMessage = i18Msg === `errors.${response.data.status_code}` ? response.data.status_message : i18Msg
+
     // 特殊状态码
     if ([10802, 10803].includes(response.data.status_code)) {
-        return { ...response.data.data, code: response.data.status_code, msg: response.data.status_message };
+        return { ...response.data.data, code: response.data.status_code, msg: errorMessage };
     }
     // 无权访问
     if (response.data.status_code === 403) {
         location.href = __APP_ENV__.BASE_URL + '/403'
-        return Promise.reject(response.data.status_message);
+        return Promise.reject(errorMessage);
     }
     // 异地登录
     if (response.data.status_code === 10604) {
         requestInterceptor.remoteLoginFuc(response.data.status_message)
-        return Promise.reject(response.data.status_message);
+        return Promise.reject(errorMessage);
     }
-    return Promise.reject(response.data.status_message);
+    return Promise.reject(errorMessage);
 }, function (error) {
     console.error('application error :>> ', error);
     if (error.response?.status === 401) {

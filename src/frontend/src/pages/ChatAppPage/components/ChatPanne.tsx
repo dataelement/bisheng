@@ -112,11 +112,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     // 应用链接
     const { appConfig } = useContext(locationContext)
     const token = localStorage.getItem("ws_token") || '';
-    let wsUrl = type === 'flow' ? `${appConfig.websocketHost}${__APP_ENV__.BASE_URL}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
+    const host = appConfig.websocketHost || ''
+    let wsUrl = type === 'flow' ? `${host}${__APP_ENV__.BASE_URL}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
         `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assistant?.id}?t=${token}`
 
     if (customWsHost) {
-        wsUrl = `${appConfig.websocketHost}${__APP_ENV__.BASE_URL}${customWsHost}&t=${token}`
+        wsUrl = `${host}${__APP_ENV__.BASE_URL}${customWsHost}&t=${token}`
     }
 
     // sendmsg user name

@@ -50,6 +50,38 @@ class SystemLoginMethod(BaseModel):
     allow_multi_login: bool = Field(default=True, description='是否允许多点登录')
 
 
+class MilvusConf(BaseModel):
+    connection_args: Optional[str] = Field(
+        default='{"host":"127.0.0.1","port":19530,"user":"","password":"","secure":false}',
+        description='milvus 配置')
+    is_partition: Optional[bool] = Field(default=False, description='是否是partition模式')
+    partition_suffix: Optional[str] = Field(default='1', description='partition后缀')
+
+
+class ElasticsearchConf(BaseModel):
+    url: Optional[str] = Field(default='http://127.0.0.1:9200', description='elasticsearch访问地址')
+    ssl_verify: Optional[str] = Field(default='{"basic_auth": ("elastic", "elastic")}', description='额外的参数')
+
+
+class VectorStores(BaseModel):
+    milvus: MilvusConf = Field(default_factory=MilvusConf, description='milvus 配置')
+    elasticsearch: ElasticsearchConf = Field(default_factory=ElasticsearchConf, description='elasticsearch 配置')
+
+
+class MinioConf(BaseModel):
+    minio_schema: Optional[bool] = Field(default=False, description="是否使用https", alias="schema")
+    cert_check: Optional[bool] = Field(default=False, description="是否校验证书")
+    endpoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 地址")
+    sharepoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 公开访问地址")
+    access_key: Optional[str] = Field(default="minioadmin", description="minio 用户名")
+    secret_key: Optional[str] = Field(default="minioadmin", description="minio 密码")
+
+
+class ObjectStore(BaseModel):
+    type: str = Field(default='minio', description="对象存储类型")
+    minio: MinioConf = Field(default_factory=MinioConf, description="minio 配置")
+
+
 class Settings(BaseSettings):
     chains: dict = {}
     agents: dict = {}
@@ -85,7 +117,9 @@ class Settings(BaseSettings):
     minio_conf = {}
     logger_conf: LoggerConf = LoggerConf()
     password_conf: PasswordConf = PasswordConf()
-    system_login_method: dict = {}
+    system_login_method: SystemLoginMethod = {}
+    vector_stores: VectorStores = {}
+    object_storage: ObjectStore = {}
 
     @validator('database_url', pre=True)
     def set_database_url(cls, value):
@@ -147,22 +181,22 @@ class Settings(BaseSettings):
         ret.update({
             "vectorstores": {
                 "Milvus": {
-                    "connection_args": json.loads(os.environ.get('BS_MILVUS_CONNECTION_ARGS', '{}')),
-                    "is_partition": os.environ.get('BS_MILVUS_IS_PARTITION', 'true') == 'true',
-                    "partition_suffix": os.environ.get('BS_MILVUS_PARTITION_SUFFIX', '1'),
+                    "connection_args": json.loads(self.vector_stores.milvus.connection_args),
+                    "is_partition": self.vector_stores.milvus.is_partition,
+                    "partition_suffix": self.vector_stores.milvus.partition_suffix,
                 },
                 "ElasticKeywordsSearch": {
-                    "elasticsearch_url": os.environ.get('BS_ELASTICSEARCH_URL'),
-                    "ssl_verify": os.environ.get('BS_ELASTICSEARCH_SSL_VERIFY'),
+                    "elasticsearch_url": self.vector_stores.elasticsearch.url,
+                    "ssl_verify": self.vector_stores.elasticsearch.ssl_verify,
                 }
             },
             "minio": {
-                "SCHEMA": os.environ.get('BS_MINIO_SCHEMA', 'false') == 'true',
-                "CERT_CHECK": os.environ.get('BS_MINIO_CERT_CHECK', 'false') == 'true',
-                "MINIO_ENDPOINT": os.environ.get('BS_MINIO_ENDPOINT'),
-                "MINIO_SHAREPOIN": os.environ.get('BS_MINIO_SHAREPOIN'),  # 确保和nginx的代理地址一致。同一个docker-compose启动可以直接使用默认值
-                "MINIO_ACCESS_KEY": os.environ.get('BS_MINIO_ACCESS_KEY'),
-                "MINIO_SECRET_KEY": os.environ.get('BS_MINIO_SECRET_KEY'),
+                "SCHEMA": self.object_storage.minio.minio_schema,
+                "CERT_CHECK": self.object_storage.minio.cert_check,
+                "MINIO_ENDPOINT": self.object_storage.minio.endpoint,
+                "MINIO_SHAREPOIN": self.object_storage.minio.sharepoint,  # 确保和nginx的代理地址一致。同一个docker-compose启动可以直接使用默认值
+                "MINIO_ACCESS_KEY": self.object_storage.minio.access_key,
+                "MINIO_SECRET_KEY": self.object_storage.minio.secret_key,
             }
         })
 
@@ -229,18 +263,33 @@ class Settings(BaseSettings):
         self.output_parsers = new_settings.output_parsers or {}
         self.input_output = new_settings.input_output or {}
         self.autogen_roles = new_settings.autogen_roles or {}
+
         self.admin = new_settings.admin or {}
         self.bisheng_rt = new_settings.bisheng_rt or {}
         self.default_llm = new_settings.default_llm or {}
         self.gpts = new_settings.gpts or {}
         self.openai_conf = new_settings.openai_conf
         self.minio_conf = new_settings.openai_conf
+        self.vector_stores = new_settings.vector_stores or {}
+        self.object_storage = new_settings.object_storage or {}
         self.dev = dev
 
     def update_settings(self, **kwargs):
         for key, value in kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+
+
+def env_var_constructor(loader, node):
+    value = loader.construct_scalar(node)  # PyYAML loader的固定方法，用于根据当前节点构造一个变量值
+    var_name = value.strip('${} ')  # 去除变量值（例如${PATH}）前后的特殊字符及空格
+    env_val = os.getenv(var_name)  # 尝试在环境变量中获取变量名（如USER）对应的值，获取不到则为空
+    if env_val is None:
+        raise ValueError(f'Environment variable {var_name} not found')
+    return env_val
+
+
+yaml.SafeLoader.add_constructor('!env', env_var_constructor)
 
 
 def save_settings_to_yaml(settings: Settings, file_path: str):

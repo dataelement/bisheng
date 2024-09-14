@@ -1,12 +1,14 @@
 services:
   bisheng-unstructured:
     container_name: bisheng-unstructured
-    image: dataelement/bisheng-unstructured:v0.0.3.9
+    image: dataelement/bisheng-unstructured:v0.0.3.10
     ports:
       - "10001:10001"
     environment:
-      # server_address: bisheng-rt:9001  # 填写ocr_sdk或rt服务的根地址
-      # server_type: ocr_sdk  # 这里填 ocr_sdk 或 rt
+      # 填写ocr_sdk或rt服务的根地址
+      server_address: bisheng-rt:9001
+      # 这里填 ocr_sdk 或 rt
+      server_type: ocr_sdk
       TZ: Asia/Shanghai
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng-uns/config.yaml:/opt/bisheng-unstructured/bisheng_unstructured/config/config.yaml

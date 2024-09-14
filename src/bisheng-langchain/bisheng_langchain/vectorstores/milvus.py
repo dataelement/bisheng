@@ -10,6 +10,7 @@ from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
 from langchain.vectorstores.utils import maximal_marginal_relevance
 from langchain_community.vectorstores.milvus import Milvus as MilvusLangchain
+from pymilvus.exceptions import ConnectionNotExistException
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +232,7 @@ class Milvus(MilvusLangchain):
         from pymilvus import connections
         connections.remove_connection(using)
 
-    def _create_connection_alias(self, connection_args: dict) -> str:
+    def _create_connection_alias(self, connection_args: dict, personal_alias: str = None) -> str:
         """Create the connection to the Milvus server."""
         from pymilvus import MilvusException, connections
 
@@ -269,7 +270,10 @@ class Milvus(MilvusLangchain):
                     return con[0]
 
         # Generate a new connection if one doesn't exist
-        alias = uuid4().hex
+        if personal_alias:
+            alias = personal_alias
+        else:
+            alias = uuid4().hex
         try:
             connections.connect(alias=alias, **connection_args)
             logger.debug('Created new connection using: %s', alias)
@@ -522,7 +526,14 @@ class Milvus(MilvusLangchain):
             insert_list = [insert_dict[x][i:end] for x in self.fields if x in insert_dict]
             # Insert into the collection.
             try:
-                res: Collection
+                res = self.col.insert(insert_list, timeout=timeout, **kwargs)
+                pks.extend(res.primary_keys)
+            except ConnectionNotExistException as e:
+                logger.warning("retrying connection to milvus")
+                # reconnect to milvus
+                self._create_connection_alias(self.connection_args, self.alias)
+
+                # insert data
                 res = self.col.insert(insert_list, timeout=timeout, **kwargs)
                 pks.extend(res.primary_keys)
             except MilvusException as e:

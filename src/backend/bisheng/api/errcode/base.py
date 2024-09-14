@@ -13,7 +13,7 @@ class BaseErrorCode:
         return UnifiedResponseModel(status_code=cls.Code, status_message=msg or cls.Msg, data=data)
 
     @classmethod
-    def http_exception(cls, msg: str = None) -> Exception:
+    def http_exception(cls, msg: str = None) -> HTTPException:
         return HTTPException(status_code=cls.Code, detail=msg or cls.Msg)
 
 
