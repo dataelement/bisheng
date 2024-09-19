@@ -66,5 +66,8 @@
     "modalMessage": "以下文件在知识库中已存在，继续上传将会覆盖原有文件以及处理策略，是否覆盖？",
     "keepOriginal": "不覆盖，保留原文件",
     "override": "覆盖",
-    "fileUploadResult": "共上传 {{total}} 份文件，有 {{failed}} 份文件上传失败"
+    "fileUploadResult": "共上传 {{total}} 份文件，有 {{failed}} 份文件上传失败",
+    "modifySelection": "通过调整原文件选中文本范围，可修改分段内容",
+    "cancel": "知道了",
+    "dontRemind": "不再提醒"
 }

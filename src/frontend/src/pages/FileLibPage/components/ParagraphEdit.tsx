@@ -8,6 +8,7 @@ import { Crosshair2Icon, InfoCircledIcon } from "@radix-ui/react-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
+import Guide from "./Guide";
 import Markdown from './Markdown';
 
 // 上传预览时携带chunks
@@ -237,6 +238,7 @@ const ParagraphEdit = ({
                     </div>
                 </div>
             </>}
+            <Guide />
         </div>
     );
 };

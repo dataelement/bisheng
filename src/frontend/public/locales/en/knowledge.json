@@ -66,5 +66,8 @@
     "modalMessage": "The following files already exist in the knowledge base. Continuing the upload will overwrite the original files and processing strategy. Do you want to proceed with overwrite?",
     "keepOriginal": "Keep Original Files",
     "override": "Override",
-    "fileUploadResult": "Out of the {{total}} files uploaded, {{failed}} failed to upload."
+    "fileUploadResult": "Out of the {{total}} files uploaded, {{failed}} failed to upload.",
+    "modifySelection": "Adjust the selected text range to modify the content",
+    "cancel": "Got it",
+    "dontRemind": "Don't remind again"
 }

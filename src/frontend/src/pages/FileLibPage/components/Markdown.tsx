@@ -12,10 +12,11 @@ const VditorEditor = forwardRef(({ markdown, hidden }, ref) => {
     const valurCacheRef = useRef('');
 
     useEffect(() => {
+        const processedMarkdown = markdown.replace(/^( {5,})/gm, '   ')
         if (!hidden && vditorRef.current && readyRef.current) {
-            vditorRef.current.setValue(markdown);
+            vditorRef.current.setValue(processedMarkdown);
         } else {
-            valurCacheRef.current = markdown;
+            valurCacheRef.current = processedMarkdown;
         }
     }, [markdown, hidden])
 
