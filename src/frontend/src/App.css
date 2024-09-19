@@ -151,6 +151,9 @@
 .textLayer br::selection {
 	background: transparent;
 }
+.highlightArea{
+	position: absolute;
+}
 
 .flag.active {
 	background: linear-gradient(to right, rgba(53, 126, 249, .60), transparent);

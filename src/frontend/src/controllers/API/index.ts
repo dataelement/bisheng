@@ -369,7 +369,7 @@ export const getChatsApi = (page) => {
           const json = JSON.parse(message);
           if (Array.isArray(json)) return message
           const chatKey = Object.keys(json)[0]
-          return json[chatKey]
+          return json[chatKey] || message
         }
         return message;
       }())

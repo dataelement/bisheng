@@ -39,20 +39,26 @@ const ParagraphEdit = ({
         let labelsData = []
         let value = ''
 
+        const seenIds = new Set()
         res.data.forEach(chunk => {
             const { bbox, chunk_index } = chunk.metadata
             const labels = bbox && JSON.parse(bbox).chunk_bboxes || []
 
             const active = chunk_index === chunkId
-            const resData = labels.map(label => {
-                return {
-                    id: [label.page, ...label.bbox].join('-'),
-                    page: label.page,
-                    label: label.bbox,
-                    active,
-                    txt: chunk.text
+            const resData = labels.reduce((acc, label) => {
+                const id = [label.page, ...label.bbox].join('-');
+                if (!seenIds.has(id)) {
+                    seenIds.add(id);
+                    acc.push({
+                        id: id,
+                        page: label.page,
+                        label: label.bbox,
+                        active: active,
+                        txt: chunk.text
+                    });
                 }
-            })
+                return acc;
+            }, []);
 
             labelsData = [...labelsData, ...resData]
 
