@@ -10,11 +10,21 @@ export default function ForcePrompt({ id }) {
     const { t } = useTranslation()
 
     // 检查是否已经提示过
-    const checkPrompted = (id) => {
+    const checkPrompted = (id: string): boolean => {
         const str = localStorage.getItem("force_chat_prompt");
         if (!str) return false;
-        const map = JSON.parse(str);
-        return !!map[id];
+
+        try {
+            // 尝试将字符串解析为对象
+            const map = JSON.parse(str);
+
+            // 检查 id 是否存在于 map 中
+            return !!map[id];
+        } catch (error) {
+            // 如果 JSON 解析失败，则返回 false
+            console.error("Error parsing JSON from localStorage:", error);
+            return false;
+        }
     };
 
     useEffect(() => {
@@ -22,11 +32,26 @@ export default function ForcePrompt({ id }) {
     }, [appConfig, id]);
 
     const handleOk = () => {
-        const str = localStorage.getItem("force_chat_prompt");
-        const map = str ? JSON.parse(str) : {};
-        map[id] = true;
-        localStorage.setItem("force_chat_prompt", JSON.stringify(map));
-        setIsPrompted(false); // 关闭提示
+      try {
+          const str = localStorage.getItem("force_chat_prompt");
+          let map;
+
+          if (str) {
+              map = JSON.parse(str);
+              // 验证 map 是否为对象
+              if (typeof map !== "object") {
+                  throw new Error("Invalid data format in local storage");
+              }
+          } else {
+              map = {};
+          }
+
+          map[id] = true;
+          localStorage.setItem("force_chat_prompt", JSON.stringify(map));
+          setIsPrompted(false); // 关闭提示
+      } catch (error) {
+          console.error("Error occurred while handling local storage:", error);
+      }
     };
 
     if (!isPrompted) return null;

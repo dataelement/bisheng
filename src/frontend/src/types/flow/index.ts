@@ -16,6 +16,7 @@ export type FlowType = {
   date_created?: string;
   updated_at?: string;
   last_tested_version?: string;
+  logo?: string;
 };
 export type NodeType = {
   id: string;

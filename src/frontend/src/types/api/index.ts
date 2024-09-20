@@ -95,3 +95,13 @@ export type Component = {
   data: Object;
   tags: [string];
 };
+
+export type RTServer = {
+  update_time: string;
+  endpoint: string;
+  sft_endpoint: string;
+  remark: string;
+  create_time: string;
+  server: string;
+  id: number;
+}
