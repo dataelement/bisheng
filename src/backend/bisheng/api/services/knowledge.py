@@ -292,6 +292,7 @@ class KnowledgeService(KnowledgeUtils):
         if not chunk_info:
             raise NotFoundError.http_exception()
         chunk_info['text'] = req_data.text
+        chunk_info['metadata']['bbox'] = req_data.bbox
         cls.save_preview_cache(cache_key, chunk_index=req_data.chunk_index, value=chunk_info)
 
     @classmethod

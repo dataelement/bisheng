@@ -462,6 +462,7 @@ class UpdatePreviewFileChunk(BaseModel):
     file_path: str = Field(..., description="文件路径")
     text: str = Field(..., description="文本块内容")
     chunk_index: int = Field(..., description="文本块索引, 在metadata里")
+    bbox: Optional[str] = Field(default='', description="文本块bbox信息")
 
 
 class KnowledgeFileOne(BaseModel):
