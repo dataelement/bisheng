@@ -39,9 +39,16 @@ const ParagraphEdit = ({
     const initData = (res) => {
         let labelsData = []
         let value = ''
-
+        // 优先遍历prioritizedItem（放数组前面）
+        const arrData = [...res.data]
+        const prioritizedItem = arrData.find(item => item.metadata.chunk_index === chunkId);
+        if (prioritizedItem) {
+            arrData.splice(arrData.indexOf(prioritizedItem), 1);
+            arrData.unshift(prioritizedItem);
+        }
+        
         const seenIds = new Set()
-        res.data.forEach(chunk => {
+        arrData.forEach(chunk => {
             const { bbox, chunk_index } = chunk.metadata
             const labels = bbox && JSON.parse(bbox).chunk_bboxes || []
 

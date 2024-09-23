@@ -44,7 +44,6 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                 value: el.path
             }))
             setFiles([...allFilesRef.current])
-            console.log('1234 :>> ', 1234);
             loadchunks(fileValueRef.current || files[0].path) // default first 
         }
     }))

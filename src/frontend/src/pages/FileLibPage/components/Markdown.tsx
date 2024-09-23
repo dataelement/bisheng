@@ -12,7 +12,8 @@ const VditorEditor = forwardRef(({ markdown, hidden }, ref) => {
     const valurCacheRef = useRef('');
 
     useEffect(() => {
-        const processedMarkdown = markdown.replace(/^( {5,})/gm, '   ')
+        // console.log('markdown :>> ', markdown);
+        const processedMarkdown = markdown.replace(/^( {4,})/gm, '   ')
         if (!hidden && vditorRef.current && readyRef.current) {
             vditorRef.current.setValue(processedMarkdown);
         } else {
@@ -28,6 +29,7 @@ const VditorEditor = forwardRef(({ markdown, hidden }, ref) => {
 
     useEffect(() => {
         vditorRef.current = new Vditor('vditor', {
+            cdn: location.origin + '/vditor',
             height: '100%',
             toolbarConfig: {
                 hide: true,
