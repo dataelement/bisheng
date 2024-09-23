@@ -227,7 +227,7 @@ def addEmbedding(collection_name: str,
         if preview_cache_keys:
             preview_cache_key = preview_cache_keys[index] if index < len(preview_cache_keys) else None
         try:
-            logger.info(f'process_file_begin {db_file.id} file_name={db_file.file_name}')
+            logger.info(f'process_file_begin file_id={db_file.id} file_name={db_file.file_name}')
             add_file_embedding(vector_client, es_client, minio_client,
                                db_file, separator, separator_rule, chunk_size, chunk_overlap,
                                extra_meta=extra_meta, preview_cache_key=preview_cache_key)
@@ -237,6 +237,7 @@ def addEmbedding(collection_name: str,
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.remark = str(e)[:500]
         finally:
+            logger.info(f'process_file_end file_id={db_file.id} file_name={db_file.file_name}')
             KnowledgeFileDao.update(db_file)
             if callback:
                 inp = {
@@ -482,6 +483,8 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: L
 
 
 def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
+    if not db_files:
+        return
     try:
         delete_knowledge_file_vectors(file_ids=list(new_files.keys()), clear_minio=False)
     except Exception as e:
@@ -491,17 +494,23 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             file.remark = str(e)[:500]
             KnowledgeFileDao.update(file)
         return
-
     fake_req = FileProcessBase(knowledge_id=1)
-    if db_files:
-        for file in db_files:
+
+    for file in db_files:
+        try:
             knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
             input_files = new_files.get(file.id)
-            file.object_name = input_files["object_name"]
-            file_preview_cache_key = KnowledgeUtils.get_preview_cache_key(file.knowledge_id, input_files["file_path"])
+            file.object_name = input_files.get("object_name", file.object_name)
+            file_preview_cache_key = KnowledgeUtils.get_preview_cache_key(file.knowledge_id,
+                                                                          input_files.get("file_path", ""))
             process_file_task(knowledge, [file], fake_req.separator, fake_req.separator_rule,
                               fake_req.chunk_size, fake_req.chunk_overlap, extra_metadata=file.extra_meta,
                               preview_cache_keys=[file_preview_cache_key])
+        except Exception as e:
+            logger.exception(f"retry_file_error file_id={file.id}")
+            file.status = 3
+            file.remark = str(e)[:500]
+            KnowledgeFileDao.update(file)
 
 
 def delete_vector(collection_name: str, partition_key: str):
