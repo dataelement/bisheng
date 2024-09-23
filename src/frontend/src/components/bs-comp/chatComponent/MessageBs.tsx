@@ -28,7 +28,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -73,6 +73,7 @@ export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }
 
     const messageRef = useRef<HTMLDivElement>(null)
     const handleCopyMessage = () => {
+        // api data.id
         copyText(messageRef.current)
     }
 
@@ -120,10 +121,12 @@ export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }
                             message: data.message || data.thought,
                         })} />
                     <MessageButtons
+                        mark={mark}
                         id={data.id}
                         data={data.liked}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
+                        onMarkClick={onMarkClick}
                     ></MessageButtons>
                 </div>
             }

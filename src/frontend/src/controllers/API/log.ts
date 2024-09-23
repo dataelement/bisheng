@@ -63,3 +63,16 @@ export async function getActionsByModuleApi(moduleId) {
         case 'system': return actions.filter(a => a.value.includes('user') || a.value.includes('role'))
     }
 }
+
+// 应用数据标记列表
+export async function getChatLabelsApi(params) {
+    const { page, pageSize, keyword } = params
+
+    return await axios.get('/api/v1/chat/app/list', {
+        params: {
+            page_num: page,
+            page_size: pageSize,
+            keyword
+        }
+    })
+}

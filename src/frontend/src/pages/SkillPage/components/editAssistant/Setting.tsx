@@ -119,6 +119,7 @@ export default function Setting() {
                 </TooltipProvider>
               </label>
               <InputList
+                className="mt-2"
                 rules={[{ maxLength: 50, message: t("build.maxCharacters50") }]}
                 value={assistantState.guide_question}
                 onChange={(list) => {

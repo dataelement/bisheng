@@ -57,6 +57,8 @@ export function useCopyText() {
 
 // 表格通用逻辑（分页展示、表格数据、关键词检索）
 export function useTable<T extends object>(param, apiFun) {
+    const unInitDataRef = useRef(!!param.unInitData);
+
     const cancelLoadingWhenReload = param.cancelLoadingWhenReload || false;
     const [page, setPage] = useState({
         page: 1,
@@ -66,6 +68,7 @@ export function useTable<T extends object>(param, apiFun) {
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState<T[]>([]);
+    const [loaded, setLoaded] = useState(false);
 
     const paramRef = useRef({});
 
@@ -82,12 +85,16 @@ export function useTable<T extends object>(param, apiFun) {
         }).catch(() => {
             setLoading(false);
         })
+
+        setLoaded(true);
     }
     const debounceLoad = useDebounce(loadData, 600, false)
 
     // 记录旧值
     const prevValueRef = useRef(page);
+
     useEffect(() => {
+        if (unInitDataRef.current) return;
         // 排除页码防抖
         prevValueRef.current.page === page.page ? debounceLoad() : loadData()
         prevValueRef.current = page
@@ -97,16 +104,19 @@ export function useTable<T extends object>(param, apiFun) {
         page: page.page,
         pageSize: page.pageSize,
         total,
+        loaded,
         loading,
         data,
         setPage: (p) => setPage({ ...page, page: p }),
         reload: debounceLoad,
         // 检索
         search: (keyword) => {
+            unInitDataRef.current = false;
             setPage({ ...page, page: 1, keyword });
         },
         // 数据过滤
         filterData: (p) => {
+            unInitDataRef.current = false;
             paramRef.current = { ...paramRef.current, ...p };
             page.page === 1 ? loadData() : setPage({ ...page, page: 1 });
         },
@@ -116,6 +126,18 @@ export function useTable<T extends object>(param, apiFun) {
             setData(list => {
                 return list.map(item => compareFn(item) ? { ...item, ...data } : item)
             })
+        },
+        clean: () => {
+            unInitDataRef.current = !!param.unInitData;
+            setPage({
+                page: 1,
+                pageSize: param.pageSize || 20,
+                keyword: "",
+            })
+            paramRef.current = {}
+            setTotal(0)
+            setData([])
+            setLoaded(false)
         }
     }
 }

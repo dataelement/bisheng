@@ -2,7 +2,7 @@ import { Button } from "@/components/bs-ui/button";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi } from "@/controllers/API/log";
+import { getActionsApi, getActionsByModuleApi, getLogsApi, getOperatorsApi } from "@/controllers/API/log";
 import { getUserGroupsApi } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
 import { formatDate } from "@/util/utils";
@@ -18,7 +18,6 @@ import {
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import { transformEvent, transformModule, transformObjectType } from "./utils";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -64,7 +63,7 @@ export default function index() {
     }, [])
 
     return <div className="relative">
-        <div className="h-[calc(100vh-98px)] overflow-y-auto px-2 py-4 pb-10">
+        <div className="h-[calc(100vh-66px)] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
                 <div className="w-[200px] relative">
                     <MultiSelect className="overflow-y-auto max-w-[200px]" multiple
