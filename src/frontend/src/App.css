@@ -250,4 +250,5 @@
     white-space: normal !important;
 	font-size: 12px;
 	padding: 2px 4px !important;
+	word-break: break-all !important;
 }
