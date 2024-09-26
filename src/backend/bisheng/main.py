@@ -21,12 +21,15 @@ from fastapi_jwt_auth.exceptions import AuthJWTException
 from loguru import logger
 
 
-def handle_http_exception(req: Request, exc: HTTPException) -> ORJSONResponse:
-    msg = {
-        'status_code': exc.status_code,
-        'status_message': exc.detail['error'] if isinstance(exc.detail, dict) else exc.detail
-    }
-    logger.error(f'{req.method} {req.url} {exc.status_code} {exc.detail}')
+def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
+    if isinstance(exc, HTTPException):
+        msg = {
+            'status_code': exc.status_code,
+            'status_message': exc.detail['error'] if isinstance(exc.detail, dict) else exc.detail
+        }
+    else:
+        msg = {'status_code': 500, 'status_message': str(exc)}
+    logger.error(f'{req.method} {req.url} {str(exc)}')
     return ORJSONResponse(content=msg)
 
 
@@ -38,7 +41,8 @@ def handle_request_validation_error(req: Request, exc: RequestValidationError) -
 
 _EXCEPTION_HANDLERS = {
     HTTPException: handle_http_exception,
-    RequestValidationError: handle_request_validation_error
+    RequestValidationError: handle_request_validation_error,
+    Exception: handle_http_exception
 }
 
 

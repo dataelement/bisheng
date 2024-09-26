@@ -20,7 +20,12 @@ from langchain.schema.messages import BaseMessage
 class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
     """Callback handler for streaming LLM responses."""
 
-    def __init__(self, websocket: WebSocket, flow_id: str, chat_id: str, user_id: int = None, **kwargs: Any):
+    def __init__(self,
+                 websocket: WebSocket,
+                 flow_id: str,
+                 chat_id: str,
+                 user_id: int = None,
+                 **kwargs: Any):
         self.websocket = websocket
         self.flow_id = flow_id
         self.chat_id = chat_id
@@ -108,7 +113,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         result = output
 
         # Create a formatted message.
-        intermediate_steps = f'{observation_prefix}{result}'
+        intermediate_steps = f'{observation_prefix}{result[:100]}'
 
         # Create a ChatResponse instance.
         resp = ChatResponse(type='stream',
@@ -242,7 +247,12 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
 class StreamingLLMCallbackHandler(BaseCallbackHandler):
     """Callback handler for streaming LLM responses."""
 
-    def __init__(self, websocket: WebSocket, flow_id: str, chat_id: str, user_id: int = None, **kwargs: Any):
+    def __init__(self,
+                 websocket: WebSocket,
+                 flow_id: str,
+                 chat_id: str,
+                 user_id: int = None,
+                 **kwargs: Any):
         self.websocket = websocket
         self.flow_id = flow_id
         self.chat_id = chat_id
@@ -538,7 +548,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                     is_bot=1,
                     message=json.dumps(output_info),
                     intermediate_steps=f'{input_info["steps"]}\n\nTool output:\n\n  Error: ' +
-                                       str(error),
+                    str(error),
                     category=tool_category,
                     type='end',
                     flow_id=self.flow_id,

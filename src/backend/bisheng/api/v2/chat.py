@@ -1,19 +1,20 @@
 import json
-from typing import Optional
-from uuid import uuid4
+from typing import List, Optional
+from uuid import UUID, uuid4
 
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.utils import set_flow_knowledge_id
 from bisheng.api.v1.schemas import ChatInput, resp_200
+from bisheng.api.v2.schema.message import SyncMessage
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
-from bisheng.database.models.message import ChatMessage
+from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.processing.process import process_tweaks
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, WebSocket, status
+from fastapi import APIRouter, Body, WebSocket, status
 
 router = APIRouter(prefix='/chat', tags=['OpenAPI', 'Chat'])
 chat_manager = ChatManager()
@@ -96,4 +97,27 @@ def solve_response(*, data: dict):
 @router.post('/comment', status_code=200)
 def comment(*, data: ChatInput):
     comment_answer(data.message_id, data.comment)
+    return resp_200()
+
+
+@router.post('/sync/messages', status_code=200)
+def sync_message(*,
+                 flow_id: UUID = Body(embed=True),
+                 message_list: List[SyncMessage] = Body(embed=True),
+                 user_id: int = Body(default=None, embed=True)):
+
+    user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
+
+    batch_message = [
+        ChatMessage(is_bot=message.is_send,
+                    source=0,
+                    message=message.message,
+                    extra=json.dumps(message.extra),
+                    type='answer',
+                    category='answer',
+                    flow_id=flow_id,
+                    user_id=user_id,
+                    chat_id=flow_id.hex) for message in message_list
+    ]
+    ChatMessageDao.insert_batch(batch_message)
     return resp_200()

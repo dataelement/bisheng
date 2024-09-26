@@ -1,4 +1,8 @@
 import urllib.parse
+import json
+import os
+import re
+import time
 from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Request, Body, Query
@@ -12,6 +16,36 @@ from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeRead, KnowledgeUpdate, KnowledgeDao
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.utils.logger import logger
+from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services import knowledge_imp
+from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.knowledge_imp import (add_qa, addEmbedding, decide_vectorstores,
+                                                delete_knowledge_file_vectors, retry_files)
+from bisheng.api.services.user_service import UserPayload, get_login_user
+from bisheng.api.utils import get_request_ip
+from bisheng.api.v1.schemas import UnifiedResponseModel, UploadFileResponse, resp_200, resp_500
+from bisheng.cache.utils import file_download, save_uploaded_file
+from bisheng.database.base import session_getter
+from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
+from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
+                                               KnowledgeRead, KnowledgeTypeEnum)
+from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
+                                                    KnowledgeFileRead, QAKnoweldgeDao,
+                                                    QAKnowledgeUpsert)
+from bisheng.database.models.role_access import AccessType, RoleAccess
+from bisheng.database.models.user import User, UserDao
+from bisheng.database.models.user_group import UserGroupDao
+from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.settings import settings
+from bisheng.utils.logger import logger
+from bisheng.utils.minio_client import MinioClient
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch
+from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Request,
+                     UploadFile)
+from fastapi.encoders import jsonable_encoder
+from pymilvus import Collection
+from sqlalchemy import delete, func, or_
+from sqlmodel import select
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
@@ -85,7 +119,7 @@ def create_knowledge(*,
     return resp_200(db_knowledge)
 
 
-@router.get('/', status_code=200)
+@router.get('', status_code=200)
 def get_knowledge(*,
                   request: Request,
                   login_user: UserPayload = Depends(get_login_user),
@@ -138,6 +172,56 @@ def get_filelist(*,
     })
 
 
+@router.get('/qa/list/{qa_knowledge_id}', status_code=200)
+def get_QA_list(*,
+                qa_knowledge_id: int,
+                page_size: int = 10,
+                page_num: int = 1,
+                question: Optional[str] = None,
+                answer: Optional[str] = None,
+                keyword: Optional[str] = None,
+                status: Optional[int] = None,
+                login_user: UserPayload = Depends(get_login_user)):
+    """ 获取知识库文件信息. """
+
+    # 查询当前知识库，是否有写入权限
+    with session_getter() as session:
+        db_knowledge: Knowledge = session.get(Knowledge, qa_knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
+    if not login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
+                                   AccessType.KNOWLEDGE):
+        return UnAuthorizedError.return_resp()
+
+    if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+        return HTTPException(status_code=500, detail='知识库为普通知识库')
+
+    if keyword:
+        question = keyword
+
+    qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
+                                                                 page_num, question, answer,
+                                                                 status)
+    user_list = UserDao.get_user_by_ids([qa.user_id for qa in qa_list])
+    user_map = {
+        user.user_id: user.user_name
+        for user in user_list
+    }
+    data = [jsonable_encoder(qa) for qa in qa_list]
+    for qa in data:
+        qa['questions'] = qa['questions'][0]
+        qa['answers'] = json.loads(qa['answers'])[0]
+        qa['user_name'] = user_map.get(qa['user_id'], qa['user_id'])
+
+    return resp_200({
+        'data': data,
+        'total': total_count,
+        'writeable':
+            login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
+                                    AccessType.KNOWLEDGE_WRITE)
+    })
+
+
 @router.post('/retry', status_code=200)
 def retry(*, request: Request, login_user: UserPayload = Depends(get_login_user),
           background_tasks: BackgroundTasks,
@@ -147,15 +231,74 @@ def retry(*, request: Request, login_user: UserPayload = Depends(get_login_user)
     return resp_200()
 
 
+@router.delete('/{knowledge_id}', status_code=200)
+def delete_knowledge(*,
+                     request: Request,
+                     knowledge_id: int,
+                     login_user: UserPayload = Depends(get_login_user)):
+    """ 删除知识库信息. """
+
+    with session_getter() as session:
+        knowledge = session.get(Knowledge, knowledge_id)
+    if not knowledge:
+        raise HTTPException(status_code=404, detail='knowledge not found')
+    if not login_user.access_check(knowledge.user_id, str(knowledge_id),
+                                   AccessType.KNOWLEDGE_WRITE):
+        raise HTTPException(status_code=404, detail='没有权限执行操作')
+
+    # 处理knowledgefile
+    with session_getter() as session:
+        session.exec(delete(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
+        session.commit()
+    # 处理vector
+    embeddings = FakeEmbedding()
+    vectore_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
+    if isinstance(vectore_client.col, Collection):
+        logger.info(f'delete_vectore col={knowledge.collection_name}')
+        if knowledge.collection_name.startswith('col'):
+            vectore_client.col.drop()
+        else:
+            pk = vectore_client.col.query(expr=f'knowledge_id=="{knowledge.id}"',
+                                          output_fields=['pk'])
+            vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
+            # 判断milvus 是否还有entity
+            if vectore_client.col.is_empty:
+                vectore_client.col.drop()
+
+    # 处理 es
+    # elastic
+    esvectore_client: 'ElasticKeywordsSearch' = decide_vectorstores(knowledge.index_name,
+                                                                    'ElasticKeywordsSearch',
+                                                                    embeddings)
+    if esvectore_client:
+        index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
+        res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
+        logger.info(f'act=delete_es index={index_name} res={res}')
+
+    with session_getter() as session:
+        session.delete(knowledge)
+        session.commit()
+    delete_knowledge_hook(request, knowledge, login_user)
+    return resp_200(message='删除成功')
+
+
+def delete_knowledge_hook(request: Request, knowledge: Knowledge, login_user: UserPayload):
+    logger.info(f'delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}')
+
+    # 删除知识库的审计日志
+    AuditLogService.delete_knowledge(login_user, get_request_ip(request), knowledge)
+
+    GroupResourceDao.delete_group_resource_by_third_id(str(knowledge.id),
+                                                       ResourceTypeEnum.KNOWLEDGE)
+
+
 @router.delete('/file/{file_id}', status_code=200)
 def delete_knowledge_file(*,
                           request: Request,
                           file_id: int,
                           login_user: UserPayload = Depends(get_login_user)):
     """ 删除知识文件信息 """
-
     KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
-
     return resp_200(message='删除成功')
 
 
@@ -212,3 +355,80 @@ async def get_file_bbox(request: Request, login_user: UserPayload = Depends(get_
                         file_id: int = Query(description='文件唯一ID')):
     res = KnowledgeService.get_file_bbox(request, login_user, file_id)
     return resp_200(data=res)
+
+
+@router.post('/qa/add', status_code=200)
+def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(get_login_user)):
+    """ 增加知识库信息. """
+    QACreate.user_id = login_user.user_id
+    db_knowledge = KnowledgeDao.query_by_id(QACreate.knowledge_id)
+    if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+        raise HTTPException(status_code=404, detail='知识库类型错误')
+
+    add_qa(db_knowledge=db_knowledge, data=QACreate)
+    return resp_200()
+
+
+@router.post('/qa/status_switch', status_code=200)
+def qa_status_switch(*,
+                     status: int = Body(embed=True),
+                     id: int = Body(embed=True),
+                     login_user: UserPayload = Depends(get_login_user)):
+    """ 修改知识库信息. """
+
+    return resp_200(knowledge_imp.qa_status_change(id, status))
+
+
+@router.get('/qa/detail', status_code=200)
+def qa_list(*, id: int, login_user: UserPayload = Depends(get_login_user)):
+    """ 增加知识库信息. """
+    qa_knowledge = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+    qa_knowledge.answers = json.loads(qa_knowledge.answers)[0]
+    return resp_200(data=qa_knowledge)
+
+
+@router.post('/qa/append', status_code=200)
+def qa_append(
+        *,
+        ids: list[int] = Body(..., embed=True),
+        question: str = Body(..., embed=True),
+        login_user: UserPayload = Depends(get_login_user),
+):
+    """ 增加知识库信息. """
+    QA_list = QAKnoweldgeDao.select_list(ids)
+    knowledge = KnowledgeDao.query_by_id(QA_list[0].knowledge_id)
+    for qa in QA_list:
+        qa.questions.append(question)
+        knowledge_imp.add_qa(knowledge, qa)
+    return resp_200()
+
+
+@router.delete('/qa/delete', status_code=200)
+def qa_delete(*,
+              ids: list[int] = Body(embed=True),
+              login_user: UserPayload = Depends(get_login_user)):
+    """ 删除知识文件信息 """
+    knowledge_dbs = QAKnoweldgeDao.select_list(ids)
+    knowledge = KnowledgeDao.query_by_id(knowledge_dbs[0].knowledge_id)
+    if not login_user.access_check(knowledge.user_id, str(knowledge.id),
+                                   AccessType.KNOWLEDGE_WRITE):
+        raise HTTPException(status_code=404, detail='没有权限执行操作')
+
+    if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+        return HTTPException(status_code=500, detail='知识库类型错误')
+
+    QAKnoweldgeDao.delete_batch(ids)
+    # knowledge_imp.delete_vector_data(knowledge.id, ids)
+    return resp_200()
+
+
+@router.post('/qa/auto_question')
+def qa_auto_question(
+        *,
+        number: int = Body(default=3, embed=True),
+        ori_question: str = Body(default='', embed=True),
+        answer: str = Body(default='', embed=True),
+):
+    """通过大模型自动生成问题"""
+    questions = knowledge_imp.recommend_question(ori_question, number=number, answer=answer)
+    return resp_200(data={'questions': questions})

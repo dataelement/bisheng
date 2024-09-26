@@ -32,18 +32,8 @@ def generator():
         unstructured_api_url='https://bisheng.dataelem.com/api/v1/etl4llm/predict',
     )
     documents = loader.load()
-    k = 5
-    chunk_size = 512
-    filter_lowquality_context = False
-    filter_lowquality_question = False
-    # qa_generator = QAGenerationChain.from_llm(documents, llm, k=k, chunk_size=chunk_size, filter_lowquality_context=filter_lowquality_context, filter_lowquality_question=filter_lowquality_question)
-    qa_generator = QAGenerationChainV2.from_llm(documents, 
-                                                llm, 
-                                                k=k, 
-                                                chunk_size=chunk_size, 
-                                                filter_lowquality_context=filter_lowquality_context, 
-                                                filter_lowquality_question=filter_lowquality_question
-    )
+    # qa_generator = QAGenerationChain.from_llm(documents, llm, k=5)
+    qa_generator = QAGenerationChainV2.from_llm(documents, llm)
     inputs = {'begin': '开始'}
     response = qa_generator(inputs)
     question_answers = response['questions']

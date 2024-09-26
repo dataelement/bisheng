@@ -2,8 +2,31 @@ import hashlib
 import json
 import os
 from typing import Dict, List, Optional
+from urllib.parse import unquote
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile, Request
+from bisheng.api.services import knowledge_imp
+from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, decide_vectorstores,
+                                                delete_es, delete_knowledge_by,
+                                                delete_knowledge_file_vectors, delete_vector,
+                                                text_knowledge)
+from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
+from bisheng.api.v2.schema.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
+from bisheng.cache.utils import save_download_file
+from bisheng.database.base import session_getter
+from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
+                                               KnowledgeRead, KnowledgeTypeEnum, KnowledgeUpdate)
+from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
+                                                    KnowledgeFileRead, QAKnoweldgeDao, QAKnowledge,
+                                                    QAKnowledgeUpsert)
+from bisheng.database.models.message import ChatMessageDao
+from bisheng.database.models.role_access import AccessType, RoleAccess
+from bisheng.database.models.user import User
+from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.settings import settings
+from bisheng.utils.logger import logger
+from bisheng.utils.minio_client import MinioClient
+from fastapi import APIRouter, BackgroundTasks, Body, File, Form, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func
 from sqlmodel import select
@@ -262,3 +285,120 @@ def dump_vector_knowledge(collection_name: str, expr: str = None, store: str = '
 def download_statistic_file(file_path: str):
     file_name = os.path.basename(file_path)
     return FileResponse(file_path, filename=file_name)
+
+
+@router.post('/add_qa')
+def add_qa(*,
+           knowledge_id: int = Body(embed=True),
+           data: List[APIAddQAParam] = Body(embed=True),
+           user_id: Optional[int] = Body(default=None, embed=True)):
+
+    user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
+    knowledge = KnowledgeDao.query_by_id(knowledge_id)
+    logger.info('add_qa_data knowledge_id={} size={}', knowledge_id, len(data))
+    res = []
+    for item in data:
+        qa_insert = QAKnowledgeUpsert(knowledge_id=knowledge_id,
+                                      questions=[item.question],
+                                      answers=item.answer,
+                                      user_id=user_id,
+                                      extra_meta=json.dumps(item.extra),
+                                      source=3)
+
+        res.append(knowledge_imp.add_qa(knowledge, qa_insert))
+
+    return resp_200(res)
+
+
+@router.post('/add_relative_qa', response_model=List[QAKnowledge])
+def append_qa(*,
+              knowledge_id: int = Body(embed=True),
+              data: APIAppendQAParam = Body(embed=True),
+              user_id: Optional[int] = Body(default=None, embed=True)):
+
+    user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
+    knowledge = KnowledgeDao.query_by_id(knowledge_id)
+    qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
+    if not qa_db:
+        return HTTPException(404, detail='qa 对没有找到')
+
+    qa_insert = QAKnowledgeUpsert.validate(knowledge)
+    qa_insert.questions.extend(data.relative_questions)
+
+    return resp_200(knowledge_imp.add_qa(knowledge, qa_insert))
+
+
+@router.delete('/qa/{qa_id}', status_code=200)
+def delete_qa_data(*, qa_id: int, question: Optional[str] = None):
+    """ 删除qa 问题对信息 """
+    qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
+
+    if not qa:
+        raise HTTPException(status_code=404, detail='qa 不存在')
+
+    if question:
+        qa.questions = [q for q in qa.questions if q != question]
+        QAKnoweldgeDao.update(qa)
+    else:
+        QAKnoweldgeDao.delete_batch([qa_id])
+    try:
+        knowledge = KnowledgeDao.query_by_id(qa.knowledge_id)
+        knowledge_imp.delete_vector_data(knowledge, file_ids=[qa_id])
+        if question:
+            knowledge_imp.QA_save_knowledge(knowledge, qa)
+        return resp_200()
+    except Exception as e:
+        return resp_500(message=f'error e={str(e)}')
+
+
+@router.post('/update_qa', status_code=200)
+def update_qa(
+        *,
+        id: int = Body(embed=True),
+        question: Optional[str] = Body(default=None, embed=True),
+        original_question: Optional[str] = Body(default=None, embed=True),
+        answer: Optional[List[str]] = Body(default=None, embed=True),
+):
+    """ 删除qa 问题对信息 """
+    qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+
+    if not qa:
+        raise HTTPException(status_code=404, detail='qa 不存在')
+
+    if original_question:
+        qa.questions = [q if q != question else question for q in qa.questions]
+    else:
+        qa.questions = [question]
+    if answer:
+        qa.answers = json.dumps(answer, ensure_ascii=False)
+    QAKnoweldgeDao.update(qa)
+
+    try:
+        knowledge = KnowledgeDao.query_by_id(qa.knowledge_id)
+        if question:
+            knowledge_imp.delete_vector_data(knowledge, file_ids=[id])
+            knowledge_imp.QA_save_knowledge(knowledge, qa)
+        return resp_200()
+    except Exception as e:
+        return resp_500(message=f'error e={str(e)}')
+
+
+@router.get('/detail_qa', status_code=200)
+def detail_qa(*, id: int):
+    """ 获取问题对信息 """
+    qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+    return resp_200(qa)
+
+
+@router.post('/query_qa', status_code=200)
+def query_qa(QueryQAParam: QueryQAParam):
+    """ 删除qa 问题对信息 """
+    sources = [1, 2]  # 3 是api倒入的
+    qa_list = QAKnoweldgeDao.query_by_condition_v1(source=sources,
+                                                   create_start=QueryQAParam.timeRange[0],
+                                                   create_end=QueryQAParam.timeRange[1])
+    if qa_list:
+        for q in qa_list:
+            q.answers = json.loads(q.answers)
+
+    return resp_200(qa_list)

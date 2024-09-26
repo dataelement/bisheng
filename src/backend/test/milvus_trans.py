@@ -154,18 +154,19 @@ import requests
 
 
 def milvus_clean():
-    milvus_cli = MilvusClient(uri='http://192.168.106.116:19530')
+    milvus_cli = MilvusClient(uri='http://192.168.106.109:19530')
 
     collection = milvus_cli.list_collections()
     for col in collection:
-        if col.startswith('rag'):
+        if col.startswith('tmp'):
             print(col)
-            collection_col = Collection(col, using=milvus_cli._using)
-            # milvus_cli.drop_collection(col)
-            try:
-                collection_col.release(timeout=1)
-            except Exception:
-                continue
+            # collection_col = Collection(col, using=milvus_cli._using)
+            milvus_cli.drop_collection(col)
+
+            # try:
+            #     collection_col.release(timeout=1)
+            # except Exception:
+            #     continue
 
 
 def elastic_clean():
@@ -184,6 +185,6 @@ def elastic_clean():
             print(x)
 
 
-# milvus_clean()
-elastic_clean()
+milvus_clean()
+# elastic_clean()
 # milvus_trans()

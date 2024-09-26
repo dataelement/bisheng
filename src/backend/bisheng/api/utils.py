@@ -5,17 +5,16 @@ from pathlib import Path
 from typing import Dict, List
 
 import aiohttp
-from fastapi import Request, WebSocket
-from fastapi_jwt_auth import AuthJWT
-from platformdirs import user_cache_dir
-from sqlalchemy import delete
-from sqlmodel import select
-
 from bisheng.api.v1.schemas import StreamData
 from bisheng.database.base import session_getter
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
+from fastapi import Request, WebSocket
+from fastapi_jwt_auth import AuthJWT
+from platformdirs import user_cache_dir
+from sqlalchemy import delete
+from sqlmodel import select
 
 API_WORDS = ['api', 'key', 'token']
 
@@ -97,7 +96,8 @@ async def build_flow(graph_data: dict,
             }
             yield str(StreamData(event='log', data=log_dict))
             # # 如果存在文件，当前不操作文件，避免重复操作
-            if not process_file and vertex.base_type == 'documentloaders':
+            if not process_file and (vertex.base_type == 'documentloaders'
+                                     or vertex.base_type == 'input_output'):
                 template_dict = {
                     key: value
                     for key, value in vertex.data['node']['template'].items()
@@ -175,7 +175,8 @@ async def build_flow_no_yield(graph_data: dict,
     for vertex in sorted_vertices:
         try:
             # 如果存在文件，当前不操作文件，避免重复操作
-            if not process_file and vertex.base_type == 'documentloaders':
+            if not process_file and (vertex.base_type == 'documentloaders'
+                                     or vertex.base_type == 'input_output'):
                 template_dict = {
                     key: value
                     for key, value in vertex.data['node']['template'].items()
@@ -192,15 +193,19 @@ async def build_flow_no_yield(graph_data: dict,
             if vertex.base_type == 'vectorstores':
                 # 注入user_name
                 vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
-                if vertex.vertex_type not in ["MilvusWithPermissionCheck", "ElasticsearchWithPermissionCheck"]:
+                if vertex.vertex_type not in [
+                        'MilvusWithPermissionCheck', 'ElasticsearchWithPermissionCheck'
+                ]:
                     # 知识库通过参数传参
                     if 'collection_name' in kwargs and 'collection_name' in vertex.params:
                         vertex.params['collection_name'] = kwargs['collection_name']
                     if 'collection_name' in kwargs and 'index_name' in vertex.params:
                         vertex.params['index_name'] = kwargs['collection_name']
 
-                    if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
-                        vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
+                    if 'collection_name' in vertex.params and not vertex.params.get(
+                            'collection_name'):
+                        vertex.params[
+                            'collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
                         logger.info(f"rename_vector_col col={vertex.params['collection_name']}")
                         if process_file:
                             # L1 清除Milvus历史记录
@@ -397,15 +402,15 @@ def parse_gpus(gpu_str: str) -> List[Dict]:
             'gpu_util')[0]
         res.append({
             'gpu_uuid':
-                gpu_uuid_elem.firstChild.data,
+            gpu_uuid_elem.firstChild.data,
             'gpu_id':
-                gpu_id_elem.firstChild.data,
+            gpu_id_elem.firstChild.data,
             'gpu_total_mem':
-                '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
+            '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
             'gpu_used_mem':
-                '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
+            '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
             'gpu_utility':
-                round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
+            round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
         })
     return res
 

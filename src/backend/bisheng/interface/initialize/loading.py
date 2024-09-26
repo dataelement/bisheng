@@ -25,6 +25,7 @@ from bisheng.interface.wrappers.base import wrapper_creator
 from bisheng.settings import settings
 from bisheng.utils import validate
 from bisheng.utils.constants import NODE_ID_DICT, PRESET_QUESTION
+from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.vectorstores import VectorStoreFilterRetriever
 from langchain.agents import agent as agent_module
 from langchain.agents.agent import AgentExecutor
@@ -38,8 +39,6 @@ from langchain_community.utils.openai import is_openai_v1
 from loguru import logger
 from pydantic import SecretStr, ValidationError, create_model
 from pydantic.fields import FieldInfo
-
-from bisheng.utils.embedding import decide_embeddings
 
 if TYPE_CHECKING:
     from bisheng import CustomComponent
@@ -211,6 +210,13 @@ def instantiate_input_output(node_type, class_object, params, id_dict):
             return [file_path, file_name2 if file_name2 else file_path[1]]
         else:
             return ''
+    if 'file_path' in params:
+        file_path = params['file_path']
+        if not file_path:
+            return ''
+        if isinstance(file_path, list):
+            params['file_path'] = file_path[0]
+
     return class_object(**params).text()
 
 
@@ -474,33 +480,35 @@ def instantiate_vectorstore(node_type: str, class_object: Type[VectorStore], par
 
     # 过滤掉用户没有权限的知识库
     # TODO zgq 后续统一技能执行流程后将和业务有关的逻辑都迁移到初始化技能对象之前
-    if node_type == "MilvusWithPermissionCheck" or node_type == "ElasticsearchWithPermissionCheck":
-        col_name = "collection_name"
-        if node_type == "ElasticsearchWithPermissionCheck":
-            col_name = "index_name"
+    if node_type == 'MilvusWithPermissionCheck' or node_type == 'ElasticsearchWithPermissionCheck':
+        col_name = 'collection_name'
+        if node_type == 'ElasticsearchWithPermissionCheck':
+            col_name = 'index_name'
 
         # 获取执行用户 有权限查看的知识库列表
-        knowledge_ids = [one["key"] for one in params[col_name]]
+        knowledge_ids = [one['key'] for one in params[col_name]]
         knowledge_list = KnowledgeDao.judge_knowledge_permission(user_name, knowledge_ids)
-        logger.debug(f"{node_type} after filter, get knowledge_list: {knowledge_list}")
+        logger.debug(f'{node_type} after filter, get knowledge_list: {knowledge_list}')
 
         if not knowledge_list:
-            logger.warning(f"{node_type}: after filter, get zero knowledge")
+            logger.warning(f'{node_type}: after filter, get zero knowledge')
 
         # 没有任何知识库的话，提供假的embedding和空的collection_name
-        if node_type == "MilvusWithPermissionCheck":
+        if node_type == 'MilvusWithPermissionCheck':
             params[col_name] = []
-            params["partition_keys"] = []
+            params['partition_keys'] = []
             for knowledge in knowledge_list:
                 params[col_name].append(knowledge.collection_name)
-                if knowledge.collection_name.startswith("partition"):
-                    params["partition_keys"].append(knowledge.id)
+                if knowledge.collection_name.startswith('partition'):
+                    params['partition_keys'].append(knowledge.id)
                 else:
-                    params["partition_keys"].append(None)
-            params["embedding"] = decide_embeddings(knowledge_list[0].model) if knowledge_list else FakeEmbedding()
+                    params['partition_keys'].append(None)
+            params['embedding'] = decide_embeddings(
+                knowledge_list[0].model) if knowledge_list else FakeEmbedding()
         else:
-            params[col_name] = [knowledge.index_name or knowledge.collection_name
-                                for knowledge in knowledge_list]
+            params[col_name] = [
+                knowledge.index_name or knowledge.collection_name for knowledge in knowledge_list
+            ]
 
     if initializer := vecstore_initializer.get(class_object.__name__):
         vecstore = initializer(class_object, params, search_kwargs)
@@ -565,8 +573,8 @@ def instantiate_documentloader(class_object: Type[BaseLoader], params: Dict):
 
 
 def instantiate_textsplitter(
-        class_object,
-        params: Dict,
+    class_object,
+    params: Dict,
 ):
     try:
         documents = params.pop('documents')
@@ -577,7 +585,7 @@ def instantiate_textsplitter(
                          'Try changing the chunk_size of the Text Splitter.') from exc
 
     if ('separator_type' in params
-        and params['separator_type'] == 'Text') or 'separator_type' not in params:
+            and params['separator_type'] == 'Text') or 'separator_type' not in params:
         params.pop('separator_type', None)
         # separators might come in as an escaped string like \\n
         # so we need to convert it to a string
@@ -608,7 +616,7 @@ def replace_zero_shot_prompt_with_prompt_template(nodes):
             # Build Prompt Template
             tools = [
                 tool for tool in nodes if tool['type'] != 'chatOutputNode'
-                                          and 'Tool' in tool['data']['node']['base_classes']
+                and 'Tool' in tool['data']['node']['base_classes']
             ]
             node['data'] = build_prompt_template(prompt=node['data'], tools=tools)
             break
