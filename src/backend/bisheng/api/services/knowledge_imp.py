@@ -278,6 +278,15 @@ def add_file_embedding(vector_client, es_client, minio_client, db_file: Knowledg
                                                                separator_rule, chunk_size, chunk_overlap)
     if len(texts) == 0:
         raise ValueError('文件解析为空')
+    # 缓存中有数据则用缓存中的数据去入库，因为是用户在界面编辑过的
+    if preview_cache_key:
+        all_chunk_info = KnowledgeUtils.get_preview_cache(preview_cache_key)
+        if all_chunk_info:
+            logger.info(f'get_preview_cache file={db_file.id} file_name={db_file.file_name}')
+            texts, metadatas = [], []
+            for key, val in all_chunk_info.items():
+                texts.append(val['text'])
+                metadatas.append(val['metadata'])
     for one in texts:
         if len(one) > 10000:
             raise ValueError('分段结果超长，请尝试使用自定义策略进行切分')
@@ -289,16 +298,6 @@ def add_file_embedding(vector_client, es_client, minio_client, db_file: Knowledg
         minio_client.upload_minio_data(f'partitions/{db_file.id}.json', partition_data, len(partition_data),
                                        "application/json")
         db_file.bbox_object_name = f'partitions/{db_file.id}.json'
-
-    # 缓存中有数据则用缓存中的数据去入库，因为是用户在界面编辑过的
-    if preview_cache_key:
-        all_chunk_info = KnowledgeUtils.get_preview_cache(preview_cache_key)
-        if all_chunk_info:
-            logger.info(f'get_preview_cache file={db_file.id} file_name={db_file.file_name}')
-            texts, metadatas = [], []
-            for key, val in all_chunk_info.items():
-                texts.append(val['text'])
-                metadatas.append(val['metadata'])
 
     # 溯源必须依赖minio, 后期替换更通用的oss, 将转换为pdf的文件传到minio
     minio_client.upload_minio(str(db_file.id), filepath)
