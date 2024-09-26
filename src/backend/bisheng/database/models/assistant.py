@@ -160,8 +160,8 @@ class AssistantDao(Assistant):
             return session.exec(statement).all()
 
     @classmethod
-    def get_all_assistants(cls, name: str, page: int, limit: int, assistant_ids: List[UUID] = None, status: int = None) \
-            -> (List[Assistant], int):
+    def get_all_assistants(cls, name: str, page: int, limit: int, assistant_ids: List[UUID] = None,
+                           status: int = None) -> (List[Assistant], int):
         with session_getter() as session:
             statement = select(Assistant).where(Assistant.is_delete == 0)
             count_statement = session.query(func.count(

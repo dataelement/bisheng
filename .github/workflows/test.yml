@@ -1,10 +1,10 @@
-name: release
+name: test_build
 
 on:
   push:
     # Sequence of patterns matched against refs/tags
-    tags:
-      - "v*"
+    branches:
+      - "develop/*"
 
 env:
   DOCKERHUB_REPO: project/
@@ -20,24 +20,21 @@ jobs:
     runs-on: ubuntu-latest
     #if: startsWith(github.event.ref, 'refs/tags')
     steps:
-      # deploy  
       - name: checkout
-        uses: actions/checkout@v2 
-
-
-      # 构建 bisheng-langchain
-      - name: Set python version 3.10
-        uses: actions/setup-python@v1
-        with:
-          python-version: "3.10"
+        uses: actions/checkout@v2
 
       - name: Get version
         id: get_version
         run: |
-          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
-      
-      - name: Set Environment Variable
-        run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/heads\/develop\//}
+          echo $GITHUB_REF
+          echo $VERSION
+
+      # 构建 bisheng-langchain
+      - name: Set python version 3.8
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.8
 
       # 发布到 私有仓库
       - name: set insecure registry
@@ -65,10 +62,7 @@ jobs:
         run: |
           cd ./src/backend
           poetry source add --priority=supplemental foo http://${{ secrets.NEXUS_PUBLIC }}:${{ secrets.NEXUS_PUBLIC_PASSWORD }}@${{ env.PY_NEXUS }}/repository/pypi-group/simple
-          # 安装 nltk
-          pip install nltk
-          python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('averaged_perceptron_tagger'); nltk.download('averaged_perceptron_tagger_eng'); "
-          mv /home/runner/nltk_data ./
+          poetry lock
           cd ../../
 
       # 构建 backend 并推送到 Docker hub
@@ -103,4 +97,4 @@ jobs:
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
             ${{ env.DOCKER_NEXUS }}/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
-
+      

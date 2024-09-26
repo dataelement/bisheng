@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from sqlalchemy import func
 from sqlmodel import Column, DateTime, Field, select, text
 
 
@@ -14,10 +15,13 @@ class PresetTrainBase(SQLModelSerializable):
     name: str = Field(default='', index=True, description='上传的文件名字')
     user_id: str = Field(default='', index=True, description='创建人ID')
     user_name: str = Field(default='', index=True, description='创建人姓名')
+    type: int = Field(default=0, index=True, description='0 文件 1 QA')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(
+        sa_column=Column(DateTime,
+                         nullable=False,
+                         server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class PresetTrain(PresetTrainBase, table=True):
@@ -54,3 +58,20 @@ class PresetTrainDao(PresetTrainBase):
         with session_getter() as session:
             statement = select(PresetTrain)
             return session.exec(statement).all()
+
+    @classmethod
+    def search_name(cls,
+                    keyword: str = None,
+                    page_size: int = None,
+                    page_num: int = None) -> Tuple[List[PresetTrain], int]:
+        with session_getter() as session:
+            statement = select(PresetTrain)
+            count = select(func.count(PresetTrain.id))
+            if keyword:
+                statement = statement.where(PresetTrain.name.like('%{}%'.format(keyword)))
+                count = count.where(PresetTrain.name.like('%{}%'.format(keyword)))
+            if page_num and page_size:
+                statement = statement.offset((page_num - 1) * page_size).limit(page_size)
+            statement = statement.order_by(PresetTrain.create_time.desc())
+
+            return session.exec(statement).all(), session.scalar(count)

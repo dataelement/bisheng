@@ -1,15 +1,14 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import validator
-from sqlalchemy import Column, DateTime, text, func
-from sqlmodel import Field, select
-
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from bisheng.database.models.role import DefaultRole, AdminRole
+from bisheng.database.models.role import AdminRole, DefaultRole
 from bisheng.database.models.user_group import UserGroup
 from bisheng.database.models.user_role import UserRole
+from pydantic import validator
+from sqlalchemy import Column, DateTime, func, text
+from sqlmodel import Field, select
 
 
 class UserBase(SQLModelSerializable):
@@ -38,10 +37,9 @@ class UserBase(SQLModelSerializable):
 class User(UserBase, table=True):
     user_id: Optional[int] = Field(default=None, primary_key=True)
     password: str = Field(index=False)
-    password_update_time: Optional[datetime] = Field(sa_column=Column(DateTime,
-                                                                      nullable=False,
-                                                                      server_default=text('CURRENT_TIMESTAMP')),
-                                                     description="密码最近的修改时间")
+    password_update_time: Optional[datetime] = Field(sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')),
+                                                     description='密码最近的修改时间')
 
 
 class UserRead(UserBase):
@@ -65,7 +63,7 @@ class UserLogin(UserBase):
 
 
 class UserCreate(UserBase):
-    password: Optional[str] = Field(default="")
+    password: Optional[str] = Field(default='')
     captcha_key: Optional[str]
     captcha: Optional[str]
 
@@ -104,7 +102,11 @@ class UserDao(UserBase):
             return user
 
     @classmethod
-    def filter_users(cls, user_ids: List[int], keyword: str = None, page: int = 0, limit: int = 0) -> (List[User], int):
+    def filter_users(cls,
+                     user_ids: List[int],
+                     keyword: str = None,
+                     page: int = 0,
+                     limit: int = 0) -> (List[User], int):
         statement = select(User)
         count_statement = select(func.count(User.user_id))
         if user_ids:
@@ -124,6 +126,12 @@ class UserDao(UserBase):
         with session_getter() as session:
             statement = select(User).where(User.user_name == user_name)
             return session.exec(statement).first()
+
+    @classmethod
+    def search_user_by_name(cls, user_name: str) -> List[User] | None:
+        with session_getter() as session:
+            statement = select(User).where(User.user_name.like('%{}%'.format(user_name)))
+            return session.exec(statement).all()
 
     @classmethod
     def create_user(cls, db_user: User) -> User:
@@ -164,7 +172,8 @@ class UserDao(UserBase):
             return user
 
     @classmethod
-    def add_user_with_groups_and_roles(cls, user: User, group_ids: List[int], role_ids: List[int]) -> User:
+    def add_user_with_groups_and_roles(cls, user: User, group_ids: List[int],
+                                       role_ids: List[int]) -> User:
         with session_getter() as session:
             session.add(user)
             session.flush()
