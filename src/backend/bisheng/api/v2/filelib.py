@@ -1,65 +1,32 @@
-import hashlib
 import json
 import os
 from typing import Dict, List, Optional
-from urllib.parse import unquote
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile, Request
 from bisheng.api.services import knowledge_imp
-from bisheng.api.services.knowledge_imp import (addEmbedding, create_knowledge, decide_vectorstores,
-                                                delete_es, delete_knowledge_by,
-                                                delete_knowledge_file_vectors, delete_vector,
+from bisheng.api.services.knowledge import KnowledgeService
+from bisheng.api.services.knowledge_imp import (decide_vectorstores, delete_es, delete_vector,
                                                 text_knowledge)
-from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500
+from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileProcess,
+                                    UnifiedResponseModel, resp_200, resp_500)
 from bisheng.api.v2.schema.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
+from bisheng.api.v2.utils import get_default_operator
 from bisheng.cache.utils import save_download_file
-from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
-                                               KnowledgeRead, KnowledgeTypeEnum, KnowledgeUpdate)
-from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
-                                                    KnowledgeFileRead, QAKnoweldgeDao, QAKnowledge,
+from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeUpdate
+from bisheng.database.models.knowledge_file import (KnowledgeFileRead, QAKnoweldgeDao, QAKnowledge,
                                                     QAKnowledgeUpsert)
 from bisheng.database.models.message import ChatMessageDao
-from bisheng.database.models.role_access import AccessType, RoleAccess
-from bisheng.database.models.user import User
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import MinioClient
-from fastapi import APIRouter, BackgroundTasks, Body, File, Form, HTTPException, UploadFile
-from fastapi.encoders import jsonable_encoder
-from sqlalchemy import func
-from sqlmodel import select
+from fastapi import APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Request, UploadFile
 from starlette.responses import FileResponse
-
-from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
-from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.knowledge_imp import (addEmbedding, decide_vectorstores,
-                                                delete_es,
-                                                delete_knowledge_file_vectors, delete_vector,
-                                                text_knowledge, process_file_task)
-from bisheng.api.v1.schemas import ChunkInput, UnifiedResponseModel, resp_200, resp_500, KnowledgeFileProcess, \
-    KnowledgeFileOne
-from bisheng.api.v2.utils import get_default_operator
-from bisheng.cache.utils import save_download_file
-from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeRead,
-                                               KnowledgeUpdate, KnowledgeDao)
-from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
-                                                    KnowledgeFileRead, KnowledgeFileStatus)
-from bisheng.database.models.message import ChatMessageDao
-from bisheng.database.models.role_access import AccessType
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import MinioClient
 
 # build router
 router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
 
 
 @router.post('/', status_code=201)
-def create(request: Request,
-           knowledge: KnowledgeCreate):
+def create(request: Request, knowledge: KnowledgeCreate):
     """创建知识库."""
     login_user = get_default_operator()
     db_knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge)
@@ -67,8 +34,7 @@ def create(request: Request,
 
 
 @router.put('/', status_code=201)
-def update_knowledge(*, request: Request,
-                     knowledge: KnowledgeUpdate):
+def update_knowledge(*, request: Request, knowledge: KnowledgeUpdate):
     """ 更新知识库."""
     login_user = get_default_operator()
     db_knowledge = KnowledgeService.update_knowledge(request, login_user, knowledge)
@@ -76,22 +42,19 @@ def update_knowledge(*, request: Request,
 
 
 @router.get('/', status_code=200)
-def get_knowledge(*, request: Request,
+def get_knowledge(*,
+                  request: Request,
                   name: str = None,
                   page_size: Optional[int] = 10,
                   page_num: Optional[int] = 1):
     """ 读取所有知识库信息. """
     login_user = get_default_operator()
     res, total = KnowledgeService.get_knowledge(request, login_user, name, page_num, page_size)
-    return resp_200(data={
-        'data': res,
-        'total': total
-    })
+    return resp_200(data={'data': res, 'total': total})
 
 
 @router.delete('/{knowledge_id}', status_code=200)
-def delete_knowledge_api(*, request: Request,
-                         knowledge_id: int):
+def delete_knowledge_api(*, request: Request, knowledge_id: int):
     """ 删除知识库信息. """
     login_user = get_default_operator()
     KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
@@ -100,8 +63,7 @@ def delete_knowledge_api(*, request: Request,
 
 # 清空知识库的所有文件内容
 @router.delete('/clear/{knowledge_id}', status_code=200)
-def clear_knowledge_files(*, request: Request,
-                          knowledge_id: int):
+def clear_knowledge_files(*, request: Request, knowledge_id: int):
     """ 清空知识库的内容. """
     login_user = get_default_operator()
     KnowledgeService.delete_knowledge(request, login_user, knowledge_id, only_clear=True)
@@ -113,12 +75,14 @@ def clear_knowledge_files(*, request: Request,
              status_code=200)
 async def upload_file(request: Request,
                       knowledge_id: int,
-                      separator: Optional[List[str]] = Form(default=None, description="切分文本规则, 不传则为默认"),
-                      separator_rule: Optional[List[str]] = Form(default=None,
-                                                                 description="切分规则前还是后进行切分；before/after"),
-                      chunk_size: Optional[int] = Form(default=None, description="切分文本长度，不传则为默认"),
-                      chunk_overlap: Optional[int] = Form(default=None, description="切分文本重叠长度，不传则为默认"),
-                      callback_url: Optional[str] = Form(default=None, description="回调地址"),
+                      separator: Optional[List[str]] = Form(default=None,
+                                                            description='切分文本规则, 不传则为默认'),
+                      separator_rule: Optional[List[str]] = Form(
+                          default=None, description='切分规则前还是后进行切分；before/after'),
+                      chunk_size: Optional[int] = Form(default=None, description='切分文本长度，不传则为默认'),
+                      chunk_overlap: Optional[int] = Form(default=None,
+                                                          description='切分文本重叠长度，不传则为默认'),
+                      callback_url: Optional[str] = Form(default=None, description='回调地址'),
                       file: UploadFile = File(...),
                       background_tasks: BackgroundTasks = None):
     file_name = file.filename
@@ -129,17 +93,17 @@ async def upload_file(request: Request,
     file_path = save_download_file(file_byte, 'bisheng', file_name)
 
     loging_user = get_default_operator()
-    req_data = KnowledgeFileProcess(
-        knowledge_id=knowledge_id,
-        separator=separator,
-        separator_rule=separator_rule,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        callback_url=callback_url,
-        file_list=[KnowledgeFileOne(file_path=file_path)]
-    )
-    res = KnowledgeService.process_knowledge_file(request=request, login_user=loging_user,
-                                                  background_tasks=background_tasks, req_data=req_data)
+    req_data = KnowledgeFileProcess(knowledge_id=knowledge_id,
+                                    separator=separator,
+                                    separator_rule=separator_rule,
+                                    chunk_size=chunk_size,
+                                    chunk_overlap=chunk_overlap,
+                                    callback_url=callback_url,
+                                    file_list=[KnowledgeFileOne(file_path=file_path)])
+    res = KnowledgeService.process_knowledge_file(request=request,
+                                                  login_user=loging_user,
+                                                  background_tasks=background_tasks,
+                                                  req_data=req_data)
     return resp_200(data=res[0])
 
 
@@ -168,13 +132,9 @@ def get_filelist(request: Request,
                  page_num: int = 1):
     """ 获取知识库文件信息. """
     login_user = get_default_operator()
-    data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id, keyword, status,
-                                                             page_num, page_size)
-    return resp_200(data={
-        'data': data,
-        'total': total,
-        'writeable': flag
-    })
+    data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
+                                                             keyword, status, page_num, page_size)
+    return resp_200(data={'data': data, 'total': total, 'writeable': flag})
 
 
 @router.post('/chunks', response_model=UnifiedResponseModel[KnowledgeFileRead], status_code=200)
@@ -195,15 +155,13 @@ async def post_chunks(request: Request,
 
     login_user = get_default_operator()
 
-    req_data = KnowledgeFileProcess(
-        knowledge_id=knowledge_id,
-        separator=separator,
-        separator_rule=separator_rule,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        file_list=[KnowledgeFileOne(file_path=file_path)],
-        extra=metadata
-    )
+    req_data = KnowledgeFileProcess(knowledge_id=knowledge_id,
+                                    separator=separator,
+                                    separator_rule=separator_rule,
+                                    chunk_size=chunk_size,
+                                    chunk_overlap=chunk_overlap,
+                                    file_list=[KnowledgeFileOne(file_path=file_path)],
+                                    extra=metadata)
 
     res = KnowledgeService.sync_process_knowledge_file(request, login_user, req_data)
     return resp_200(data=res[0])
@@ -223,16 +181,15 @@ async def post_string_chunks(request: Request, document: ChunkInput):
 
     login_user = get_default_operator()
 
-    req_data = KnowledgeFileProcess(
-        knowledge_id=document.knowledge_id,
-        separator=["\n\n"],
-        separator_rule=["after"],
-        file_list=[KnowledgeFileOne(file_path=file_path)],
-        extra=json.dumps(document.documents[0].metadata, ensure_ascii=False)
-    )
+    req_data = KnowledgeFileProcess(knowledge_id=document.knowledge_id,
+                                    separator=['\n\n'],
+                                    separator_rule=['after'],
+                                    file_list=[KnowledgeFileOne(file_path=file_path)],
+                                    extra=json.dumps(document.documents[0].metadata,
+                                                     ensure_ascii=False))
 
-    knowledge, failed_files, process_files, _ = KnowledgeService.save_knowledge_file(login_user,
-                                                                                     req_data)
+    knowledge, failed_files, process_files, _ = KnowledgeService.save_knowledge_file(
+        login_user, req_data)
     if failed_files:
         return resp_200(data=failed_files[0])
 

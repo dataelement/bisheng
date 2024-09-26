@@ -1,31 +1,28 @@
 import json
+import re
 import time
-from typing import Any, Dict, List
-
-import requests
-from loguru import logger
-from pymilvus import Collection
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 import requests
+from bisheng.api.services.llm import LLMService
+from bisheng.api.utils import md5_hash
+from bisheng.api.v1.schemas import FileProcessBase
+from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
 from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge, KnowledgeCreate, KnowledgeDao
-from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao, QAKnoweldgeDao,
+from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
+                                                    KnowledgeFileStatus, ParseType, QAKnoweldgeDao,
                                                     QAKnowledge, QAKnowledgeUpsert)
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_by_type, import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_llm, instantiate_vectorstore
 from bisheng.settings import settings
-from bisheng.utils import minio_client
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.document_loaders import ElemUnstructuredLoader
 from bisheng_langchain.rag.extract_info import extract_title
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch
-from fastapi import HTTPException
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
@@ -34,27 +31,9 @@ from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, Tex
                                                   UnstructuredMarkdownLoader,
                                                   UnstructuredPowerPointLoader,
                                                   UnstructuredWordDocumentLoader)
-
-from bisheng.api.services.llm import LLMService
-from bisheng.api.utils import md5_hash
-from bisheng.api.v1.schemas import FileProcessBase
-from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import file_download
-from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
-from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, ParseType
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
-from bisheng.settings import settings
-from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.minio_client import MinioClient
-from bisheng_langchain.document_loaders import ElemUnstructuredLoader
-from bisheng_langchain.rag.extract_info import extract_title
-from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from loguru import logger
 from pymilvus import Collection
-from sqlalchemy import delete, func, or_
+from sqlalchemy import func, or_
 from sqlmodel import select
 
 filetype_load_map = {
@@ -75,7 +54,11 @@ class KnowledgeUtils:
         return f'preview_file_chunk:{knowledge_id}:{md5_value}'
 
     @classmethod
-    def save_preview_cache(cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None):
+    def save_preview_cache(cls,
+                           cache_key,
+                           mapping: dict = None,
+                           chunk_index: int = 0,
+                           value: dict = None):
         if mapping:
             for key, val in mapping.items():
                 mapping[key] = json.dumps(val)
@@ -107,15 +90,30 @@ class KnowledgeUtils:
             return chunk_info
 
 
-def process_file_task(knowledge: Knowledge, db_files: List[KnowledgeFile],
-                      separator: List[str], separator_rule: List[str], chunk_size: int, chunk_overlap: int,
-                      callback_url: str = None, extra_metadata: str = None, preview_cache_keys: List[str] = None):
+def process_file_task(knowledge: Knowledge,
+                      db_files: List[KnowledgeFile],
+                      separator: List[str],
+                      separator_rule: List[str],
+                      chunk_size: int,
+                      chunk_overlap: int,
+                      callback_url: str = None,
+                      extra_metadata: str = None,
+                      preview_cache_keys: List[str] = None):
     """ 处理知识文件任务 """
     try:
         index_name = knowledge.index_name or knowledge.collection_name
-        addEmbedding(knowledge.collection_name, index_name, knowledge.id, knowledge.model,
-                     separator, separator_rule, chunk_size, chunk_overlap, db_files,
-                     callback_url, extra_metadata, preview_cache_keys=preview_cache_keys)
+        addEmbedding(knowledge.collection_name,
+                     index_name,
+                     knowledge.id,
+                     knowledge.model,
+                     separator,
+                     separator_rule,
+                     chunk_size,
+                     chunk_overlap,
+                     db_files,
+                     callback_url,
+                     extra_metadata,
+                     preview_cache_keys=preview_cache_keys)
     except Exception as e:
         logger.exception('process_file_task error')
         new_files = KnowledgeFileDao.select_list([file.id for file in db_files])
@@ -241,7 +239,7 @@ def addEmbedding(collection_name: str,
                  preview_cache_keys: List[str] = None):
     """  将文件加入到向量和es库内  """
 
-    logger.info(f'start process files')
+    logger.info('start process files')
     minio_client = MinioClient()
     embeddings = decide_embeddings(model)
 
@@ -255,15 +253,24 @@ def addEmbedding(collection_name: str,
         # 尝试从缓存中获取文件的分块
         preview_cache_key = None
         if preview_cache_keys:
-            preview_cache_key = preview_cache_keys[index] if index < len(preview_cache_keys) else None
+            preview_cache_key = preview_cache_keys[index] if index < len(
+                preview_cache_keys) else None
         try:
             logger.info(f'process_file_begin file_id={db_file.id} file_name={db_file.file_name}')
-            add_file_embedding(vector_client, es_client, minio_client,
-                               db_file, separator, separator_rule, chunk_size, chunk_overlap,
-                               extra_meta=extra_meta, preview_cache_key=preview_cache_key)
+            add_file_embedding(vector_client,
+                               es_client,
+                               minio_client,
+                               db_file,
+                               separator,
+                               separator_rule,
+                               chunk_size,
+                               chunk_overlap,
+                               extra_meta=extra_meta,
+                               preview_cache_key=preview_cache_key)
             db_file.status = KnowledgeFileStatus.SUCCESS.value
         except Exception as e:
-            logger.exception(f'process_file_fail file_id={db_file.id} file_name={db_file.file_name}')
+            logger.exception(
+                f'process_file_fail file_id={db_file.id} file_name={db_file.file_name}')
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.remark = str(e)[:500]
         finally:
@@ -279,9 +286,16 @@ def addEmbedding(collection_name: str,
                 requests.post(url=callback, json=inp, timeout=3)
 
 
-def add_file_embedding(vector_client, es_client, minio_client, db_file: KnowledgeFile, separator: List[str],
-                       separator_rule: List[str], chunk_size: int, chunk_overlap: int,
-                       extra_meta: str = None, preview_cache_key: str = None):
+def add_file_embedding(vector_client,
+                       es_client,
+                       minio_client,
+                       db_file: KnowledgeFile,
+                       separator: List[str],
+                       separator_rule: List[str],
+                       chunk_size: int,
+                       chunk_overlap: int,
+                       extra_meta: str = None,
+                       preview_cache_key: str = None):
     # download original file
     logger.info(f'start download original file={db_file.id} file_name={db_file.file_name}')
     if db_file.object_name.startswith('tmp'):
@@ -304,8 +318,9 @@ def add_file_embedding(vector_client, es_client, minio_client, db_file: Knowledg
         raise ValueError('es not found, please check your es config')
 
     # extract text from file
-    texts, metadatas, parse_type, partitions = read_chunk_text(filepath, db_file.file_name, separator,
-                                                               separator_rule, chunk_size, chunk_overlap)
+    texts, metadatas, parse_type, partitions = read_chunk_text(filepath, db_file.file_name,
+                                                               separator, separator_rule,
+                                                               chunk_size, chunk_overlap)
     if len(texts) == 0:
         raise ValueError('文件解析为空')
     for one in texts:
@@ -316,8 +331,8 @@ def add_file_embedding(vector_client, es_client, minio_client, db_file: Knowledg
     # 存储ocr识别后的partitions结果
     if partitions:
         partition_data = json.dumps(partitions, ensure_ascii=False).encode('utf-8')
-        minio_client.upload_minio_data(f'partitions/{db_file.id}.json', partition_data, len(partition_data),
-                                       "application/json")
+        minio_client.upload_minio_data(f'partitions/{db_file.id}.json', partition_data,
+                                       len(partition_data), 'application/json')
         db_file.bbox_object_name = f'partitions/{db_file.id}.json'
 
     # 缓存中有数据则用缓存中的数据去入库，因为是用户在界面编辑过的
@@ -354,7 +369,8 @@ def add_file_embedding(vector_client, es_client, minio_client, db_file: Knowledg
         KnowledgeUtils.delete_preview_cache(preview_cache_key)
 
 
-def add_text_into_vector(vector_client, es_client, db_file: KnowledgeFile, texts: List[str], metadatas: List[dict]):
+def add_text_into_vector(vector_client, es_client, db_file: KnowledgeFile, texts: List[str],
+                         metadatas: List[dict]):
     logger.info(f'add_vectordb file={db_file.id} file_name={db_file.file_name}')
     # 存入milvus
     vector_client.add_texts(texts=texts, metadatas=metadatas)
@@ -370,23 +386,19 @@ def parse_partitions(partitions: List[Any]) -> Dict:
         return {}
     res = {}
     for part_index, part in enumerate(partitions):
-        bboxes = part["metadata"]["extra_data"]["bboxes"]
-        indexes = part["metadata"]["extra_data"]["indexes"]
-        pages = part["metadata"]["extra_data"]["pages"]
-        text = part["text"]
+        bboxes = part['metadata']['extra_data']['bboxes']
+        indexes = part['metadata']['extra_data']['indexes']
+        pages = part['metadata']['extra_data']['pages']
+        text = part['text']
         for index, bbox in enumerate(bboxes):
-            key = f"{pages[index]}-" + "-".join([str(int(one)) for one in bbox])
+            key = f'{pages[index]}-' + '-'.join([str(int(one)) for one in bbox])
             val = text[indexes[index][0]:indexes[index][1] + 1]
-            res[key] = {
-                "text": val,
-                "type": part["type"],
-                "part_id": part_index
-            }
+            res[key] = {'text': val, 'type': part['type'], 'part_id': part_index}
     return res
 
 
-def read_chunk_text(input_file, file_name, separator: List[str], separator_rule: List[str], chunk_size: int,
-                    chunk_overlap: int) -> (List[str], List[dict], str, Any):
+def read_chunk_text(input_file, file_name, separator: List[str], separator_rule: List[str],
+                    chunk_size: int, chunk_overlap: int) -> (List[str], List[dict], str, Any):
     """
      0：chunks text
      1：chunks metadata
@@ -438,13 +450,19 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
     raw_texts = [t.page_content for t in texts]
     logger.info(f'start_process_metadata file_name={file_name}')
     metadatas = [{
-        'bbox': json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
-        'page': t.metadata['chunk_bboxes'][0].get('page') if t.metadata.get('chunk_bboxes', None) else t.metadata.get(
-            'page', 0),
-        'source': file_name,
-        'title': t.metadata.get('title', ''),
-        'chunk_index': t_index,
-        'extra': ''
+        'bbox':
+        json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
+        'page':
+        t.metadata['chunk_bboxes'][0].get('page')
+        if t.metadata.get('chunk_bboxes', None) else t.metadata.get('page', 0),
+        'source':
+        file_name,
+        'title':
+        t.metadata.get('title', ''),
+        'chunk_index':
+        t_index,
+        'extra':
+        ''
     } for t_index, t in enumerate(texts)]
     logger.info(f'file_chunk_over file_name=={file_name}')
     return raw_texts, metadatas, parse_type, partitions
@@ -530,14 +548,18 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
         try:
             knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
             input_files = new_files.get(file.id)
-            file.object_name = input_files.get("object_name", file.object_name)
-            file_preview_cache_key = KnowledgeUtils.get_preview_cache_key(file.knowledge_id,
-                                                                          input_files.get("file_path", ""))
-            process_file_task(knowledge, [file], fake_req.separator, fake_req.separator_rule,
-                              fake_req.chunk_size, fake_req.chunk_overlap, extra_metadata=file.extra_meta,
+            file.object_name = input_files.get('object_name', file.object_name)
+            file_preview_cache_key = KnowledgeUtils.get_preview_cache_key(
+                file.knowledge_id, input_files.get('file_path', ''))
+            process_file_task(knowledge, [file],
+                              fake_req.separator,
+                              fake_req.separator_rule,
+                              fake_req.chunk_size,
+                              fake_req.chunk_overlap,
+                              extra_metadata=file.extra_meta,
                               preview_cache_keys=[file_preview_cache_key])
         except Exception as e:
-            logger.exception(f"retry_file_error file_id={file.id}")
+            logger.exception(f'retry_file_error file_id={file.id}')
             file.status = 3
             file.remark = str(e)[:500]
             KnowledgeFileDao.update(file)
