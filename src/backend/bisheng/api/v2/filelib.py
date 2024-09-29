@@ -11,14 +11,14 @@ from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileP
 from bisheng.api.v2.schema.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
 from bisheng.api.v2.utils import get_default_operator
 from bisheng.cache.utils import save_download_file
-from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeUpdate
+from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeUpdate, KnowledgeTypeEnum
 from bisheng.database.models.knowledge_file import (KnowledgeFileRead, QAKnoweldgeDao, QAKnowledge,
                                                     QAKnowledgeUpsert)
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Request, UploadFile, Query
 from starlette.responses import FileResponse
 
 # build router
@@ -44,12 +44,14 @@ def update_knowledge(*, request: Request, knowledge: KnowledgeUpdate):
 @router.get('/', status_code=200)
 def get_knowledge(*,
                   request: Request,
+                  knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value, alias='type'),
                   name: str = None,
                   page_size: Optional[int] = 10,
                   page_num: Optional[int] = 1):
     """ 读取所有知识库信息. """
+    knowledge_type = KnowledgeTypeEnum(knowledge_type)
     login_user = get_default_operator()
-    res, total = KnowledgeService.get_knowledge(request, login_user, name, page_num, page_size)
+    res, total = KnowledgeService.get_knowledge(request, login_user, knowledge_type, name, page_num, page_size)
     return resp_200(data={'data': res, 'total': total})
 
 
@@ -249,7 +251,6 @@ def add_qa(*,
            knowledge_id: int = Body(embed=True),
            data: List[APIAddQAParam] = Body(embed=True),
            user_id: Optional[int] = Body(default=None, embed=True)):
-
     user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
     logger.info('add_qa_data knowledge_id={} size={}', knowledge_id, len(data))
@@ -272,7 +273,6 @@ def append_qa(*,
               knowledge_id: int = Body(embed=True),
               data: APIAppendQAParam = Body(embed=True),
               user_id: Optional[int] = Body(default=None, embed=True)):
-
     user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
     qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
