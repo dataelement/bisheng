@@ -46,7 +46,7 @@ const ParagraphEdit = ({
             arrData.splice(arrData.indexOf(prioritizedItem), 1);
             arrData.unshift(prioritizedItem);
         }
-        
+
         const seenIds = new Set()
         arrData.forEach(chunk => {
             const { bbox, chunk_index } = chunk.metadata
@@ -132,8 +132,23 @@ const ParagraphEdit = ({
     }, [data]);
 
     const handleSelectLabels = (lbs) => {
+        // 相同的partId同时被选中
+        const distinct = {}
+        const selectLabels = lbs.reduce((res, item) => {
+            const { id, active } = item
+            const partId = labelTexts[id].part_id
+            if (distinct[partId]) return res // same partId
+            distinct[partId] = true
+            Object.keys(labelTexts).forEach((key) => {
+                if (labelTexts[key].part_id === partId) {
+                    res.push({ id: key, active })
+                }
+            })
+            return res
+        }, [])
+
         let arr = data
-        lbs.forEach((item) => {
+        selectLabels.forEach((item) => {
             arr = arr.map(el => el.id === item.id ? { ...el, active: item.active } : el)
         })
         setData(arr)
