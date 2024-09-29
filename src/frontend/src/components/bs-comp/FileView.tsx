@@ -4,6 +4,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FixedSizeList as List, areEqual } from 'react-window';
 
+// A4 比例(itemSize：item的高度)
+// 595.32 * 841.92 采用宽高比0.70约束
+let pageScale = 0.7
+let pdfPageCache = {}
+
 interface RowProps {
     drawfont: boolean
     index: number
@@ -22,7 +27,8 @@ const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onS
     // 绘制
     const [scaleState, setScaleState] = useState(1)
     const draw = async () => {
-        const page = await pdf.getPage(index + 1); // TODO cache
+        const page = pdfPageCache[index + 1] || await pdf.getPage(index + 1); // TODO cache
+        pdfPageCache[index + 1] = page
         const viewport = page.getViewport({ scale: 1 });
         const scale = size / viewport.width;
         setScaleState(scale)
@@ -268,14 +274,21 @@ export default function FileView({
         // sass环境使用sass地址
         const pdfUrl = fileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL);  // '/doc.pdf';
         pdfjsLib.GlobalWorkerOptions.workerSrc = __APP_ENV__.BASE_URL + '/pdf.worker.min.js';
-        pdfjsLib.getDocument(pdfUrl).promise.then((pdfDocument) => {
-            setLoading(false)
+        pdfjsLib.getDocument(pdfUrl).promise.then(async (pdfDocument) => {
+            pdfPageCache = {}
+            const page = pdfPageCache[1] || await pdfDocument.getPage(1);
+            pdfPageCache[1] = page
+
+            const viewport = page.getViewport({ scale: 1 });
+            // 计算是否A4纸
+            pageScale = Math.min(pageScale, viewport.width / viewport.height)
             setPdf(pdfDocument)
+            setLoading(false)
         })
     }, [fileUrl])
 
     const scrollToFunc = (() => {
-        const pageY = (scrollTo[0] - 1) * (boxSize.width / 0.7)
+        const pageY = (scrollTo[0] - 1) * (boxSize.width / pageScale)
         const offsetY = scrollTo[1] * (boxSize.width / fileWidthRef.current) - 100
         listRef.current.scrollTo(pageY + offsetY);
     })
@@ -312,7 +325,7 @@ export default function FileView({
             const pagelabels = labels[key]
             pagelabels.forEach(item => {
                 const [sx, sy, ex, ey] = item.label
-                const pageH = (key - 1) * (boxSize.width / 0.7 * scale)
+                const pageH = (key - 1) * (boxSize.width / pageScale * scale)
                 if (x <= sx && y <= sy + pageH && x1 >= ex && y1 >= ey + pageH) {
                     console.log('item.id :>> ', item.id);
                     selects.push({ id: item.id, active: !item.active })
@@ -324,7 +337,7 @@ export default function FileView({
 
     const handleScroll = ({ scrollOffset }) => {
         scrollOffsetRef.current = scrollOffset
-        onPageChange?.(scrollOffset, boxSize.height, boxSize.width / 0.7, fileWidthRef.current / boxSize.width)
+        onPageChange?.(scrollOffset, boxSize.height, boxSize.width / pageScale, fileWidthRef.current / boxSize.width)
         // console.log('object :>> ', scrollOffset, boxSize.height, boxSize.width / 0.7);
     }
 
@@ -351,9 +364,7 @@ export default function FileView({
                     <List
                         ref={listRef}
                         itemCount={pdf?.numPages || 100}
-                        // A4 比例(itemSize：item的高度)
-                        // 595.32 * 841.92 采用宽高比0.70约束
-                        itemSize={boxSize.width / 0.7}
+                        itemSize={boxSize.width / pageScale}
                         // 滚动区盒子大小
                         width={boxSize.width}
                         height={boxSize.height}
