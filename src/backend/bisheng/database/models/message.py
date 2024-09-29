@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy import JSON, Column, DateTime, String, Text, func, text, update
+from sqlalchemy import JSON, Column, DateTime, String, Text, case, func, text, update
 from sqlmodel import Field, delete, select
 
 
@@ -22,6 +22,7 @@ class MessageBase(SQLModelSerializable):
     user_id: Optional[str] = Field(index=True, description='用户id')
     liked: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 喜欢/2 不喜欢')
     solved: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 解决/2 未解决')
+    copied: Optional[int] = Field(index=False, default=0, description='用户是否复制 0：未复制 1：已复制')
     sender: Optional[str] = Field(index=False, default='', description='autogen 的发送方')
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
     intermediate_steps: Optional[str] = Field(sa_column=Column(Text), description='过程日志')
@@ -74,6 +75,48 @@ class MessageDao(MessageBase):
         with session_getter() as session:
             return session.scalar(base_condition)
 
+    @classmethod
+    def app_list_group_by_chat_id(
+            cls,
+            page_size: int,
+            page_num: int,
+            flow_ids: Optional[list[str]],
+            user_ids: Optional[list[int]],
+    ) -> Tuple[List[Dict], int]:
+        with session_getter() as session:
+            count_stat = select(func.count(func.distinct(ChatMessage.chat_id)))
+            sql = select(ChatMessage.chat_id, ChatMessage.user_id, ChatMessage.flow_id,
+                         func.max(ChatMessage.create_time).label('create_time'),
+                         func.sum(case((ChatMessage.liked == 1, 1), else_=0)),
+                         func.sum(case((ChatMessage.liked == 2, 1), else_=0)),
+                         func.sum(case((ChatMessage.copied == 1, 1), else_=0)), )
+
+            if flow_ids:
+                count_stat = count_stat.where(ChatMessage.flow_id.in_(flow_ids))
+                sql = sql.where(ChatMessage.flow_id.in_(flow_ids))
+            if user_ids:
+                count_stat = count_stat.where(ChatMessage.user_id.in_(user_ids))
+                sql = sql.where(ChatMessage.user_id.in_(user_ids))
+            sql = sql.group_by(ChatMessage.chat_id, ChatMessage.user_id,
+                               ChatMessage.flow_id).order_by(
+                func.max(ChatMessage.create_time).desc()).offset(
+                page_size * (page_num - 1)).limit(page_size)
+
+            res_list = session.exec(sql).all()
+            total_count = session.scalar(count_stat)
+
+            dict_res = [{
+                'chat_id': chat_id,
+                'user_id': user_id,
+                'flow_id': flow_id,
+                'like_count': like_num,
+                'dislike_count': dislike_num,
+                'copied_count': copied_num,
+                'create_time': create_time
+            } for chat_id, user_id, flow_id, create_time, like_num, dislike_num, copied_num in res_list]
+            logger.info(res_list)
+            return dict_res, total_count
+
 
 class ChatMessageDao(MessageBase):
 
@@ -92,7 +135,8 @@ class ChatMessageDao(MessageBase):
         """
         获取每个会话最近的一次消息内容
         """
-        statement = select(ChatMessage.chat_id, func.max(ChatMessage.id)).where(ChatMessage.chat_id.in_(chat_ids))
+        statement = select(ChatMessage.chat_id,
+                           func.max(ChatMessage.id)).where(ChatMessage.chat_id.in_(chat_ids))
         if category:
             statement = statement.where(ChatMessage.category == category)
         statement = statement.group_by(ChatMessage.chat_id)
@@ -163,8 +207,7 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def update_message(cls, message_id: int, user_id: int, message: str):
         with session_getter() as session:
-            statement = update(ChatMessage).where(
-                ChatMessage.id == message_id).where(
+            statement = update(ChatMessage).where(ChatMessage.id == message_id).where(
                 ChatMessage.user_id == user_id).values(message=message)
             session.exec(statement)
             session.commit()
@@ -176,3 +219,10 @@ class ChatMessageDao(MessageBase):
             session.commit()
             session.refresh(message)
         return message
+
+    @classmethod
+    def update_message_copied(cls, message_id: int, copied: int):
+        with session_getter() as session:
+            statement = update(ChatMessage).where(ChatMessage.id == message_id).values(copied=copied)
+            session.exec(statement)
+            session.commit()

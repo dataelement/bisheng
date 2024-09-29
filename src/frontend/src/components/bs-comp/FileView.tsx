@@ -4,6 +4,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FixedSizeList as List, areEqual } from 'react-window';
 
+// A4 比例(itemSize：item的高度)
+// 595.32 * 841.92 采用宽高比0.70约束
+let pageScale = 0.7
+let pdfPageCache = {}
+
 interface RowProps {
     drawfont: boolean
     index: number
@@ -18,10 +23,12 @@ interface RowProps {
 const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onSelectLabel }: RowProps) => {
     const wrapRef = useRef(null);
     const txtRef = useRef(null);
+    const annotRef = useRef(null);
     // 绘制
     const [scaleState, setScaleState] = useState(1)
     const draw = async () => {
-        const page = await pdf.getPage(index + 1); // TODO cache
+        const page = pdfPageCache[index + 1] || await pdf.getPage(index + 1); // TODO cache
+        pdfPageCache[index + 1] = page
         const viewport = page.getViewport({ scale: 1 });
         const scale = size / viewport.width;
         setScaleState(scale)
@@ -39,13 +46,15 @@ const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onS
 
         onLoad?.(viewport.width)
 
+        // 渲染批注层
+        await renderAnnotations(page, scale);
         // 渲染页面
         page.render({
             canvasContext: context,
             viewport: page.getViewport({ scale }),
             // transform
         });
-
+        // 渲染文本层（如果需要）
         { drawfont && drawText(page, page.getViewport({ scale })) }
     }
 
@@ -60,10 +69,70 @@ const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onS
         })
     }
 
+    const renderAnnotations = async (page, scale) => {
+        // 创建注释层实例
+        // const annotationLayer = new pdfjsLib.AnnotationLayer({
+        //     div: annotRef.current,
+        //     accessibilityManager: null,
+        //     annotationCanvasMap: new Map(),
+        //     l10n: {
+        //         async translate(element: HTMLElement) {
+        //             return Promise.resolve();
+        //         },
+        //         async get(key: string, args?: any) {
+        //             return Promise.resolve(key);
+        //         }
+        //     },
+        //     page,
+        //     viewport
+        // });
+        // console.log('viewport :>> ', viewport);
+
+        page.getAnnotations().then((annotations) => {
+            const viewport = page.getViewport({ scale: 1 });
+            // 自定义方式处理批注
+            annotations.forEach(annotation => {
+                if (annotation.subtype === 'FreeText') {
+                    const { richText, rect } = annotation
+                    const rootHtml = createElementFromJSON(richText.html);
+                    rootHtml.style.position = 'absolute';
+                    rootHtml.style.left = `${rect[0] * scale}px`;
+                    rootHtml.style.top = `${(viewport.height - rect[3]) * scale - 4}px`;
+                    // rootHtml.style.width = `${rect[2] * scale}px`;
+                    // rootHtml.style.height = `${rect[3] * scale}px`;
+                    rootHtml.style.transform = `scale(${viewport.scale})`;
+                    annotRef.current.appendChild(rootHtml);
+                }
+            });
+            // annotationLayer.render({
+            //     viewport,
+            //     div: annotRef.current,
+            //     annotations,
+            //     page,
+            //     renderForms: true,
+            //     linkService: null,  // 根据需要提供链接服务
+            //     downloadManager: null,  // 下载管理
+            // }).then(() => {
+            //     console.log('Annotation layer rendered.', annotations);
+            // });
+        })
+    };
+
     useEffect(() => {
         draw()
         // return () => {};
     }, [])
+
+    // 去重
+    const bboxMap = {}
+    const areEqualFn = (bbox) => {
+        if (bboxMap[bbox.join('-')]) {
+            return true
+        } else {
+            bboxMap[bbox.join('-')] = true
+            return false
+        }
+    }
 
     return <div className="bg-[#fff] border-b-2 overflow-hidden" style={style}>
         {/* <span className="absolute">{index + 1}</span> */}
@@ -72,7 +141,7 @@ const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onS
         {/* label */}
         {labels && <svg className="absolute top-0 w-full h-full z-30">
             {labels.map(box =>
-                <rect
+                !areEqualFn(box.label) && <rect
                     key={box.id}
                     x={box.label[0] * scaleState}
                     y={box.label[1] * scaleState}
@@ -87,6 +156,8 @@ const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onS
         </svg>}
         {/* text  */}
         <div ref={txtRef} className="textLayer absolute inset-0 overflow-hidden opacity-25 origin-top-left z-20 leading-none"></div>
+        {/* annotaions */}
+        <div ref={annotRef} className='absolute inset-0 overflow-hidden origin-top-left z-20'></div>
     </div>
 }, areEqual)
 
@@ -203,14 +274,21 @@ export default function FileView({
         // sass环境使用sass地址
         const pdfUrl = fileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL);  // '/doc.pdf';
         pdfjsLib.GlobalWorkerOptions.workerSrc = __APP_ENV__.BASE_URL + '/pdf.worker.min.js';
-        pdfjsLib.getDocument(pdfUrl).promise.then((pdfDocument) => {
-            setLoading(false)
+        pdfjsLib.getDocument(pdfUrl).promise.then(async (pdfDocument) => {
+            pdfPageCache = {}
+            const page = pdfPageCache[1] || await pdfDocument.getPage(1);
+            pdfPageCache[1] = page
+
+            const viewport = page.getViewport({ scale: 1 });
+            // 计算是否A4纸
+            pageScale = Math.min(pageScale, viewport.width / viewport.height)
             setPdf(pdfDocument)
+            setLoading(false)
         })
     }, [fileUrl])
 
     const scrollToFunc = (() => {
-        const pageY = (scrollTo[0] - 1) * (boxSize.width / 0.7)
+        const pageY = (scrollTo[0] - 1) * (boxSize.width / pageScale)
         const offsetY = scrollTo[1] * (boxSize.width / fileWidthRef.current) - 100
         listRef.current.scrollTo(pageY + offsetY);
     })
@@ -247,7 +325,7 @@ export default function FileView({
             const pagelabels = labels[key]
             pagelabels.forEach(item => {
                 const [sx, sy, ex, ey] = item.label
-                const pageH = (key - 1) * (boxSize.width / 0.7 * scale)
+                const pageH = (key - 1) * (boxSize.width / pageScale * scale)
                 if (x <= sx && y <= sy + pageH && x1 >= ex && y1 >= ey + pageH) {
                     console.log('item.id :>> ', item.id);
                     selects.push({ id: item.id, active: !item.active })
@@ -259,7 +337,7 @@ export default function FileView({
 
     const handleScroll = ({ scrollOffset }) => {
         scrollOffsetRef.current = scrollOffset
-        onPageChange?.(scrollOffset, boxSize.height, boxSize.width / 0.7, fileWidthRef.current / boxSize.width)
+        onPageChange?.(scrollOffset, boxSize.height, boxSize.width / pageScale, fileWidthRef.current / boxSize.width)
         // console.log('object :>> ', scrollOffset, boxSize.height, boxSize.width / 0.7);
     }
 
@@ -286,9 +364,7 @@ export default function FileView({
                     <List
                         ref={listRef}
                         itemCount={pdf?.numPages || 100}
-                        // A4 比例(itemSize：item的高度)
-                        // 595.32 * 841.92 采用宽高比0.70约束
-                        itemSize={boxSize.width / 0.7}
+                        itemSize={boxSize.width / pageScale}
                         // 滚动区盒子大小
                         width={boxSize.width}
                         height={boxSize.height}
@@ -307,4 +383,54 @@ const SASS_HOST = 'https://bisheng.dataelem.com'
 export const checkSassUrl = (url: string) => {
     return url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)
     // location.origin === SASS_HOST ? url.replace(/https?:\/\/[^\/]+/, '') : url;
+}
+
+
+/**
+ * 根据给定的 JSON 结构创建 HTML 元素
+ * @param {Object} node - JSON 节点
+ * @returns {HTMLElement} - 创建的 HTML 元素
+ */
+function createElementFromJSON(node) {
+    if (!node || !node.name) return null;
+
+    // 创建元素
+    const element = document.createElement(node.name);
+
+    // 设置属性
+    if (node.attributes) {
+        for (const [attr, value] of Object.entries(node.attributes)) {
+            if (attr === 'style' && typeof value === 'object') {
+                for (const [styleName, styleValue] of Object.entries(value)) {
+                    // 将驼峰式属性名转换为CSS属性名
+                    const cssProperty = styleName.replace(/([A-Z])/g, '-$1').toLowerCase();
+                    element.style[cssProperty] = styleValue;
+                }
+            } else if (attr === 'class' && Array.isArray(value)) {
+                element.classList.add(...value);
+            } else if (attr !== 'value') { // 确保 'value' 不是一个属性
+                if (value !== undefined && value !== null) { // 避免设置 undefined 或 null
+                    element.setAttribute(attr, value);
+                }
+            }
+        }
+    }
+
+    // 添加子元素或文本内容
+    if (node.children && Array.isArray(node.children)) {
+        node.children.forEach(child => {
+            const childElement = createElementFromJSON(child);
+            if (childElement) {
+                element.appendChild(childElement);
+            }
+        });
+    }
+
+    // 如果存在文本值，将其作为文本节点添加
+    if (node.value && typeof node.value === 'string') {
+        const textNode = document.createTextNode(node.value);
+        element.appendChild(textNode);
+    }
+
+    return element;
 }

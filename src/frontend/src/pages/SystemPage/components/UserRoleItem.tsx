@@ -76,7 +76,7 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
         />
         <MultiSelect
             multiple
-            className="max-w-[260px] break-all"
+            contentClassName="max-w-[260px] break-all"
             value={selected}
             options={roles}
             placeholder={t('system.roleSelect')}

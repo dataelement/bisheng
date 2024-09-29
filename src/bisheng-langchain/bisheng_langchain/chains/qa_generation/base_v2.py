@@ -134,8 +134,6 @@ class TrainsetGenerator:
             chunk_size: int = 1024,
             seed: int = 42,
             prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
-            filter_lowquality_context: bool = False,
-            filter_lowquality_question: bool = False,
             answer_prompt: Optional[HumanMessagePromptTemplate] = ANSWER_FORMULATE,
     ) -> None:
         self.generator_llm = generator_llm
@@ -154,8 +152,6 @@ class TrainsetGenerator:
         self.threshold = 5.0
         self.rng = default_rng(seed)
         self.prompt = prompt
-        self.filter_lowquality_context = filter_lowquality_context
-        self.filter_lowquality_question = filter_lowquality_question
         if answer_prompt is None:
             answer_prompt = ANSWER_FORMULATE
         self.answer_prompt = answer_prompt
@@ -167,8 +163,6 @@ class TrainsetGenerator:
             chunk_size: int = 512,
             trainset_distribution: dict = DEFAULT_TRAIN_DISTRIBUTION,
             prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
-            filter_lowquality_context: bool = False,
-            filter_lowquality_question: bool = False,
             answer_prompt: Optional[PromptTemplate] = ANSWER_FORMULATE,
     ):
         generator_llm = llm
@@ -179,8 +173,6 @@ class TrainsetGenerator:
             chunk_size=chunk_size,
             trainset_distribution=trainset_distribution,
             prompt=prompt,
-            filter_lowquality_context=filter_lowquality_context,
-            filter_lowquality_question=filter_lowquality_question,
             answer_prompt=answer_prompt,
         )
 
@@ -324,17 +316,14 @@ class TrainsetGenerator:
             )
 
             text_chunk = " ".join([node.get_content() for node in nodes])
-            if self.filter_lowquality_context:
-                score = self._filter_context(text_chunk)
-                if not score:
-                    continue
+            score = self._filter_context(text_chunk)
+            if not score:
+                continue
             seed_question = self._seed_question(text_chunk)
 
             question = seed_question
-            if self.filter_lowquality_question:
-                is_valid_question = self._filter_question(question)
-            else:
-                is_valid_question = True
+            # is_valid_question = self._filter_question(question)
+            is_valid_question = True
             if is_valid_question:
                 context = [text_chunk] * len(question.split("\n"))
                 is_conv = len(context) > 1
@@ -372,8 +361,6 @@ class QAGenerationChainV2(Chain):
             llm: BaseLanguageModel,
             k: Optional[int] = None,
             chunk_size: int = 512,
-            filter_lowquality_context: bool = False,
-            filter_lowquality_question: bool = False,
             question_prompt: Optional[ChatPromptTemplate] = SEED_QUESTION_CHAT_PROMPT,
             answer_prompt: Optional[HumanMessagePromptTemplate] = ANSWER_FORMULATE,
             **kwargs: Any,
@@ -390,14 +377,8 @@ class QAGenerationChainV2(Chain):
         Returns:
             a QAGenerationChain class
         """
-        generator = TrainsetGenerator.from_default(
-            llm, 
-            chunk_size=chunk_size, 
-            prompt=question_prompt, 
-            answer_prompt=answer_prompt,
-            filter_lowquality_context=filter_lowquality_context, 
-            filter_lowquality_question=filter_lowquality_question
-        )
+        generator = TrainsetGenerator.from_default(llm, chunk_size=chunk_size, prompt=question_prompt,
+                                                   answer_prompt=answer_prompt)
         return cls(documents=documents, generator=generator, k=k, **kwargs)
 
     @property
@@ -424,14 +405,14 @@ class QAGenerationChainV2(Chain):
         dataset = self.generator.generate(documents=self.documents, train_size=self.k)
         df = dataset.to_pandas()
         qa_pairs = df.to_dict("records")
-        qa = []
+        qa = ''
         for pair in qa_pairs:
-            qa.append({
-                "question": pair["question"],
-                "answer": pair["ground_truth"][0],
-                "context": pair["ground_truth_context"][0],
-            })
-        qa = f'```json\n{json.dumps(qa, ensure_ascii=False, indent=4)}\n```'
+            qa += json.dumps(
+                {
+                    "question": pair["question"],
+                    "answer": pair["ground_truth"][0],
+                    "context": pair["ground_truth_context"][0],
+                }, ensure_ascii=False)
         return {self.output_key: qa}
 
     async def _acall(

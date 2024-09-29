@@ -34,6 +34,9 @@
 	background: hsl(var(--background));
 	border-radius: 8px;
 }
+.dark ::-webkit-scrollbar-track {
+	background: #111;
+}
 
 @media (prefers-reduced-motion: no-preference) {
 	.App-logo {
@@ -151,6 +154,9 @@
 .textLayer br::selection {
 	background: transparent;
 }
+.highlightArea{
+	position: absolute;
+}
 
 .flag.active {
 	background: linear-gradient(to right, rgba(53, 126, 249, .60), transparent);
@@ -244,4 +250,5 @@
     white-space: normal !important;
 	font-size: 12px;
 	padding: 2px 4px !important;
+	word-break: break-all !important;
 }

@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Any, List, Optional, Union
 
 from sqlmodel.sql.expression import Select, SelectOfScalar
+from enum import Enum
+from typing import Any, List, Optional, Tuple
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -14,9 +16,16 @@ from sqlalchemy import Column, DateTime, func, text, delete, update
 from sqlmodel import Field, or_, select
 
 
+class KnowledgeTypeEnum(Enum):
+    QA = 1
+    NORMAL = 0
+
+
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(index=True)
     name: str = Field(index=True, min_length=1, max_length=30, description="知识库名, 最少一个字符，最多30个字符")
+    name: str = Field(index=True)
+    type: str = Field(index=False, default=0, description='0 为普通知识库，1 为QA知识库')
     description: Optional[str] = Field(index=True)
     model: Optional[str] = Field(index=False)
     collection_name: Optional[str] = Field(index=False)
@@ -81,7 +90,7 @@ class KnowledgeDao(KnowledgeBase):
             return session.get(Knowledge, knowledge_id)
 
     @classmethod
-    def get_list_by_ids(cls, ids: List[int]):
+    def get_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
         with session_getter() as session:
             return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
 

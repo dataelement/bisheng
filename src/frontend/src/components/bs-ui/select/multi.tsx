@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "."
 import { Badge } from "../badge"
 import { SearchInput } from "../input"
-import { useDebounce } from "../utils"
+import { cname, useDebounce } from "../utils"
 
 const MultiItem: React.FC<
     { active: boolean; children: React.ReactNode; value: string; onClick: (value: string, label: string) => void }
@@ -28,15 +28,18 @@ interface Option {
 
 interface BaseProps<T> {
     /** 多选 */
+    id?: string;
     multiple?: boolean;
     /** 高度不变，内部滚动 */
     scroll?: boolean;
     disabled?: boolean;
     className?: string;
+    contentClassName?: string;
     options: Option[];
     children?: React.ReactNode;
     placeholder?: string;
     searchPlaceholder?: string;
+    tabs?: React.ReactNode;
     /** 锁定不可修改的值 */
     lockedValues?: string[];
     close?: boolean;
@@ -60,10 +63,11 @@ interface NonScrollLoadProps extends BaseProps<string[]> {
 
 type IProps = ScrollLoadProps | NonScrollLoadProps;
 
-// 临时用 andt 设计方案封装组件
 const MultiSelect = ({
+    id = `${Date.now()}`,
     multiple = false,
     className,
+    contentClassName,
     value = [],
     scroll = false,
     close = false,
@@ -73,6 +77,7 @@ const MultiSelect = ({
     placeholder = '',
     searchPlaceholder = '',
     lockedValues = [],
+    tabs = null,
     onSearch,
     onLoad,
     onScrollLoad,
@@ -104,6 +109,7 @@ const MultiSelect = ({
         onChange?.(newValues)
     }
     // add
+    const triggerRef = useRef(null)
     const handleSwitch = (value: string, label: string) => {
         if (lockedValues.includes(value)) {
             return
@@ -118,6 +124,18 @@ const MultiSelect = ({
         if (!multiple) {
             const newValues = onScrollLoad ? [{ label, value }] : [value]
             updateValues(newValues);
+            // 关闭弹窗
+            const element = triggerRef.current;
+            if (element) {
+                // 创建 PointerEvent
+                const event = new PointerEvent('pointerdown', {
+                    bubbles: true,
+                    cancelable: true,
+                    pointerId: 1,
+                    pointerType: 'mouse'
+                });
+                element.dispatchEvent(event);
+            }
             return
         }
 
@@ -185,7 +203,7 @@ const MultiSelect = ({
             }
         }}
     >
-        <SelectTrigger className={`group min-h-9 py-1 ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`}>
+        <SelectTrigger className={cname(`group min-h-9 py-1 ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`, className)} ref={triggerRef}>
             {
                 !multiple && (values.length ? <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
             }
@@ -221,10 +239,11 @@ const MultiSelect = ({
             />}
         </SelectTrigger>
         <SelectContent
-            className={className}
+            className={contentClassName}
             headNode={
                 <div className="p-2">
-                    <SearchInput ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />
+                    {tabs}
+                    <SearchInput id={id} ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />
                 </div>
             }
             footerNode={children}

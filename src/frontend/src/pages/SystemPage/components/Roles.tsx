@@ -138,7 +138,7 @@ export default function Roles() {
 
     return (
         <div className="relative">
-            <div className="h-[calc(100vh-136px)] overflow-y-auto pt-2 pb-10">
+            <div className="h-[calc(100vh-128px)] overflow-y-auto pt-2 pb-10">
                 <div className="flex justify-between">
                     <div className="flex items-center">
                         <Label>{t('system.currentGroup')}</Label>

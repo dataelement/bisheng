@@ -26,6 +26,11 @@ export async function getLogsApi({ page, pageSize, userIds, groupId = '', start,
 }
 
 // 系统模块
+export async function getModulesApi(): Promise<{ data: any[] }> {
+    return {
+        data: [{ name: '会话', value: 'chat' }, { name: '构建', value: 'build' }, { name: '知识库', value: 'knowledge' }, { name: '系统', value: 'system' }]
+    }
+}
 
 const actions = [
     { name: 'log.createChat', value: 'create_chat' },
@@ -62,4 +67,17 @@ export async function getActionsByModuleApi(moduleId) {
         case 'knowledge': return actions.filter(a => a.value.includes('knowledge') || a.value.includes('file'))
         case 'system': return actions.filter(a => a.value.includes('user') || a.value.includes('role'))
     }
+}
+
+// 应用数据标记列表
+export async function getChatLabelsApi(params) {
+    const { page, pageSize, keyword } = params
+
+    return await axios.get('/api/v1/chat/app/list', {
+        params: {
+            page_num: page,
+            page_size: pageSize,
+            keyword
+        }
+    })
 }

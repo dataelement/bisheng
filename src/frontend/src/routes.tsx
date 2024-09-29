@@ -4,17 +4,19 @@ import CrashErrorComponent from "./components/CrashErrorComponent";
 import MainLayout from "./layout/MainLayout";
 import SkillChatPage from "./pages/ChatAppPage";
 import ChatAssitantShare from "./pages/ChatAppPage/chatAssitantShare";
-import AssistantChat from "./pages/ChatAppPage/chatPage/AssistantChatPage";
-import SkillChat from "./pages/ChatAppPage/chatPage/SkillChatPage";
 import ChatShare from "./pages/ChatAppPage/chatShare";
 import ChatPro from "./pages/ChatAppPage/chatWebview";
+import DataSetPage from "./pages/DataSetPage";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
-import FileLibPage from "./pages/FileLibPage";
-import FilesPage from "./pages/FileLibPage/detail";
+import FilesPage from "./pages/KnowledgePage/detail";
+import FilesUpload from "./pages/KnowledgePage/filesUpload";
 import FlowPage from "./pages/FlowPage";
+import KnowledgePage from "./pages/KnowledgePage";
+import QasPage from "./pages/KnowledgePage/qas";
 import LogPage from "./pages/LogPage";
+import AppChatDetail from "./pages/LogPage/useAppLog/appChatDetail";
 import { LoginPage } from "./pages/LoginPage/login";
 import { ResetPwdPage } from "./pages/LoginPage/resetPwd";
 import Doc from "./pages/ModelPage/doc";
@@ -29,7 +31,6 @@ import SkillsPage from "./pages/SkillPage/tabSkills";
 import SkillToolsPage from "./pages/SkillPage/tabTools";
 import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
-import FilesUpload from "./pages/FileLibPage/filesUpload";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -60,9 +61,10 @@ const privateRouter = [
     element: <MainLayout />,
     children: [
       { path: "", element: <SkillChatPage />, },
-      { path: "filelib", element: <FileLibPage />, permission: 'knowledge', },
+      { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
       { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },
+      { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },
       { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
       { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore
@@ -76,9 +78,10 @@ const privateRouter = [
       { path: "model", element: <Navigate to="management" replace /> },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
+      { path: "log/chatlog/:fid/:cid", element: <AppChatDetail /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
-
+      { path: "dataset", element: <DataSetPage /> },
     ],
   },
   { path: "model/doc", element: <Doc /> },
