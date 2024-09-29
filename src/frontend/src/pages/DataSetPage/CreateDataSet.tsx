@@ -10,6 +10,7 @@ import { createDatasetApi } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { downloadFile } from "@/util/utils";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const DEFAULT_FORM = {
     dataSetName: '',
@@ -20,6 +21,7 @@ const DEFAULT_FORM = {
 };
 
 const CreateDataSet = forwardRef(({ onChange }, ref) => {
+    const { t } = useTranslation()
     const [open, setOpen] = useState(false);
     const [form, setForm] = useState({ ...DEFAULT_FORM });
     const [error, setError] = useState({
@@ -91,20 +93,19 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
             knowledgeLib: isKnowledgeLibEmpty
         });
 
-        const errors = []
-        if (isDataSetNameEmpty) errors.push('请填写数据集名称')
-        if (form.dataSetName.length > 30) errors.push('数据集名称最多 30 个字')
-        if (isFileUrlEmpty) errors.push('请上传文件')
-        if (isKnowledgeLibEmpty) errors.push('请填选择知识库')
+        const errors = [];
+        if (isDataSetNameEmpty) errors.push(t('dataset.enterDataSetName'));
+        if (form.dataSetName.length > 30) errors.push(t('dataset.maxDataSetNameLength'));
+        if (isFileUrlEmpty) errors.push(t('dataset.uploadFile'));
+        if (isKnowledgeLibEmpty) errors.push(t('dataset.selectKnowledgeLib'));
         if (errors.length > 0) {
             return message({
                 variant: 'warning',
                 description: errors
-            })
+            });
         }
         setOpen(false);
 
-        // console.log('form :>> ', form);
         captureAndAlertRequestErrorHoc(createDatasetApi({
             name: form.dataSetName,
             files: form.fileUrl,
@@ -112,22 +113,22 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
         }).then(res => {
             message({
                 variant: 'success',
-                description: '数据集创建成功'
+                description: t('dataset.creationSuccess')
             });
-            onChange()
-        }))
+            onChange();
+        }));
     };
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent className="sm:max-w-[625px]">
                 <DialogHeader>
-                    <DialogTitle>创建数据集</DialogTitle>
+                    <DialogTitle>{t('dataset.createDataset')}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2">
                     <div>
                         <label htmlFor="dataSetName" className="bisheng-label">
-                            <span className="text-red-500">*</span>数据集名称
+                            <span className="text-red-500">*</span>{t('dataset.name')}
                         </label>
                         <Input
                             name="dataSetName"
@@ -137,7 +138,7 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
                         />
                     </div>
                     <div>
-                        <label htmlFor="importMethod" className="bisheng-label">导入方式</label>
+                        <label htmlFor="importMethod" className="bisheng-label">{t('dataset.importMethod')}</label>
                         <RadioGroup
                             defaultValue="local"
                             className="flex gap-6 mt-2"
@@ -145,11 +146,11 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
                         >
                             <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="local" id="method-local" />
-                                <Label htmlFor="method-local">本地导入</Label>
+                                <Label htmlFor="method-local">{t('dataset.localImport')}</Label>
                             </div>
                             <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="qa" id="method-qa" />
-                                <Label htmlFor="method-qa">从QA知识库导入</Label>
+                                <Label htmlFor="method-qa">{t('dataset.importFromQa')}</Label>
                             </div>
                         </RadioGroup>
                     </div>
@@ -157,16 +158,17 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
                         <div>
                             <div className="flex justify-between items-center">
                                 <label htmlFor="fileUpload" className="bisheng-label">
-                                    <span className="text-red-500">*</span>上传文件
+                                    <span className="text-red-500">*</span>{t('dataset.uploadFile')}
                                 </label>
                                 <div className="flex gap-2 items-center">
-                                    <Label>示例文件：</Label>
-                                    {/* <Button variant="link" className="px-1" onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/dataset.csv", 'CSV格式示例.csv')}>CSV格式示例</Button> */}
-                                    <Button variant="link" className="px-1" onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/dataset.json", 'json格式示例.json')}>json格式示例</Button>
+                                    <Label>{t('dataset.sampleFile')}:</Label>
+                                    <Button variant="link" className="px-1" onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/dataset.json", t('dataset.jsonSample'))}>
+                                        {t('dataset.jsonSample')}
+                                    </Button>
                                 </div>
                             </div>
                             <SimpleUpload
-                                filekey='file'
+                                filekey="file"
                                 uploadUrl={__APP_ENV__.BASE_URL + '/api/v1/knowledge/upload'}
                                 accept={['json']}
                                 className={`${error.fileUrl ? 'border-red-400' : ''}`}
@@ -178,7 +180,7 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
                     {form.importMethod === 'qa' && (
                         <div>
                             <label htmlFor="knowledgeLib" className="bisheng-label">
-                                <span className="text-red-500">*</span>选择QA知识库
+                                <span className="text-red-500">*</span>{t('dataset.selectQaKnowledgeLib')}
                             </label>
                             <KnowledgeSelect
                                 type="qa"
@@ -192,9 +194,9 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
                 </div>
                 <DialogFooter>
                     <DialogClose>
-                        <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
+                        <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>{t('cancel')}</Button>
                     </DialogClose>
-                    <Button type="submit" className="px-11" onClick={handleSubmit}>确认</Button>
+                    <Button type="submit" className="px-11" onClick={handleSubmit}>{t('confirm')}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

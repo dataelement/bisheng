@@ -603,6 +603,8 @@
     "notEmpty": "新密码不能为空"
   },
   "log": {
+    "appUsage": "应用使用",
+    "systemOperations": "系统操作",
     "auditManagement": "审计管理",
     "searchButton": "查询",
     "resetButton": "重置",
@@ -667,7 +669,23 @@
     "file": "文件",
     "user_conf": "用户配置",
     "user_group_conf": "用户组配置",
-    "role_conf": "角色配置"
+    "role_conf": "角色配置",
+    "appName": "应用名称",
+    "userName": "用户名",
+    "userFeedback": "用户反馈",
+    "enterQuestion": "请先输入问题",
+    "qaLibQuestionAnswerRequired": "QA知识库、问题、答案不能为空",
+    "max100CharsForSimilarQuestions": "相似问最多100个字",
+    "max1000CharsForAnswer": "答案最多1000个字",
+    "saveSuccess": "存储成功",
+    "addNewQaToLib": "添加新的QA到QA知识库",
+    "qaKnowledgeLib": "QA知识库",
+    "question": "问题",
+    "similarQuestions": "相似问题",
+    "aiGenerate": "AI生成",
+    "answer": "答案",
+    "cancel": "取消",
+    "confirm": "确认"
   },
   "tag": {
     "labelMaxLength": "标签名不能超过10个字符",
@@ -736,6 +754,29 @@
     "styleOne": "样式一",
     "styleTwo": "样式二",
     "embedCodeDescription": "将以下代码嵌入到网站中"
+  },
+  "dataset": {
+    "confirmDelete": "确认删除数据集！",
+    "fileNotFound": "文件不存在",
+    "name": "数据集名称",
+    "create": "创建数据集",
+    "creationTime": "创建时间",
+    "updateTime": "更新时间",
+    "createUser": "创建者",
+    "download": "下载",
+    "collection": "数据集集合",
+    "enterDataSetName": "请填写数据集名称",
+    "maxDataSetNameLength": "数据集名称最多 30 个字",
+    "uploadFile": "请上传文件",
+    "selectKnowledgeLib": "请选择知识库",
+    "creationSuccess": "数据集创建成功",
+    "createDataset": "创建数据集",
+    "importMethod": "导入方式",
+    "localImport": "本地导入",
+    "importFromQa": "从QA知识库导入",
+    "sampleFile": "示例文件",
+    "jsonSample": "json格式示例",
+    "selectQaKnowledgeLib": "选择QA知识库"
   },
   "errors": {
     "10400": "助手不存在",

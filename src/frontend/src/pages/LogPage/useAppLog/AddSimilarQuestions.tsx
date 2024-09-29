@@ -37,7 +37,7 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
 
     const handleKnowledgeLibChange = (option) => {
         setKnowledgeLib(option);
-        filterData({ id: option[0].value, searchKey: '' })
+        filterData({ id: option[0].value, searchKey: '' });
     };
 
     const handleCheckboxChange = (id) => {
@@ -50,16 +50,16 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
 
     const { message } = useToast();
     const handleSubmit = async () => {
-        const errors = []
+        const errors = [];
         if (knowledgeLib.length === 0) {
-            errors.push('QA知识库不能为空');
+            errors.push(t('qaLibRequired'));
         }
         if (selectedItems.length === 0) {
-            errors.push('至少选一个相似问题');
+            errors.push(t('selectAtLeastOneQuestion'));
         }
         if (errors.length > 0) {
             setError(true);
-            return message({ variant: 'warning', description: errors })
+            return message({ variant: 'warning', description: errors });
         }
 
         captureAndAlertRequestErrorHoc(addSimilarQa({
@@ -68,10 +68,10 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
         }).then(res => {
             message({
                 variant: 'success',
-                description: '添加成功'
+                description: t('addSuccess')
             });
-            close()
-        }))
+            close();
+        }));
     };
 
     const close = () => {
@@ -80,28 +80,25 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
         setSelectedItems([]);
         setOpen(false);
         setError(false);
-        clean()
+        clean();
     };
 
     return (
         <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
             <DialogContent className="sm:max-w-[825px]">
                 <DialogHeader>
-                    <DialogTitle>添加相似问到QA知识库</DialogTitle>
+                    <DialogTitle>{t('addSimilarQuestionsToQaLib')}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2">
-                    <div className="flex items-center">
-                        <Label htmlFor="knowledgeLib" className="bisheng-label w-24">QA知识库</Label>
+                    <div className="flex items-center gap-4">
+                        <Label htmlFor="knowledgeLib" className="bisheng-label w-40">{t('qaKnowledgeLib')}</Label>
                         <KnowledgeSelect
                             type="qa"
                             value={knowledgeLib}
                             onChange={handleKnowledgeLibChange}
                             className={`${error && knowledgeLib.length === 0 ? 'border-red-400' : ''}`}
                         />
-                    </div>
-                    <div className="flex items-center">
-                        <Label htmlFor="knowledgeLib" className="bisheng-label w-24">搜索QA</Label>
-                        <Input placeholder='请输入' onChange={(e) => knowledgeLib.length && filterData({ id: knowledgeLib[0].value, searchKey: e.target.value })} />
+                        <Input placeholder={t('qaContent')} onChange={(e) => knowledgeLib.length && filterData({ id: knowledgeLib[0].value, searchKey: e.target.value })} />
                     </div>
                     <div className="relative">
                         {loading && (
@@ -114,8 +111,8 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-8"></TableHead>
-                                        <TableHead className="w-[300px]">问题</TableHead>
-                                        <TableHead className="w-[360px]">答案</TableHead>
+                                        <TableHead className="w-[300px]">{t('question')}</TableHead>
+                                        <TableHead className="w-[360px]">{t('answer')}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -133,11 +130,11 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
                                         </TableRow>
                                     ))}
                                     {loaded && datalist.length === 0 && <TableRow>
-                                        <TableCell colSpan={3} className="font-medium text-center">空空如也</TableCell>
+                                        <TableCell colSpan={3} className="font-medium text-center">{t('empty')}</TableCell>
                                     </TableRow>}
                                     {
                                         !loaded && <TableRow>
-                                            <TableCell colSpan={3} className="font-medium text-center">请选择知识库查找QA</TableCell>
+                                            <TableCell colSpan={3} className="font-medium text-center">{t('selectQaLib')}</TableCell>
                                         </TableRow>
                                     }
                                 </TableBody>
@@ -155,14 +152,15 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
                     </div>
                     <DialogFooter>
                         <DialogClose>
-                            <Button variant="outline" className="px-11" type="button" onClick={close}>取消</Button>
+                            <Button variant="outline" className="px-11" type="button" onClick={close}>{t('cancel')}</Button>
                         </DialogClose>
-                        <Button type="submit" className="px-11" onClick={handleSubmit}>确认</Button>
+                        <Button type="submit" className="px-11" onClick={handleSubmit}>{t('confirm')}</Button>
                     </DialogFooter>
                 </div>
             </DialogContent>
         </Dialog>
     );
 });
+
 
 export default AddSimilarQuestions;

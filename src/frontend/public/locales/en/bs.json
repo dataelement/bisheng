@@ -606,6 +606,8 @@
     "notEmpty": "The new password cannot be empty"
   },
   "log": {
+    "appUsage": "App Usage",
+    "systemOperations": "System Operations",
     "auditManagement": "Audit Management",
     "searchButton": "Search",
     "resetButton": "Reset",
@@ -670,7 +672,23 @@
     "file": "File",
     "user_conf": "User Configuration",
     "user_group_conf": "User Group Configuration",
-    "role_conf": "Role Configuration"
+    "role_conf": "Role Configuration",
+    "appName": "App Name",
+    "userName": "Username",
+    "userFeedback": "User Feedback",
+    "enterQuestion": "Please enter a question first",
+    "qaLibQuestionAnswerRequired": "QA Knowledge Library, Question, and Answer cannot be empty",
+    "max100CharsForSimilarQuestions": "Similar questions can have a maximum of 100 characters",
+    "max1000CharsForAnswer": "Answer can have a maximum of 1000 characters",
+    "saveSuccess": "Saved successfully",
+    "addNewQaToLib": "Add new QA to QA Knowledge Library",
+    "qaKnowledgeLib": "QA Knowledge Library",
+    "question": "Question",
+    "similarQuestions": "Similar Questions",
+    "aiGenerate": "AI Generate",
+    "answer": "Answer",
+    "cancel": "Cancel",
+    "confirm": "Confirm"
   },
   "tag": {
     "labelMaxLength": "Label name cannot exceed 10 characters",
@@ -739,6 +757,29 @@
     "styleOne": "Style One",
     "styleTwo": "Style Two",
     "embedCodeDescription": "Embed the following code into your website"
+  },
+  "dataset": {
+    "confirmDelete": "Confirm delete dataset!",
+    "fileNotFound": "File not found",
+    "name": "Dataset Name",
+    "create": "Create Dataset",
+    "creationTime": "Creation Time",
+    "updateTime": "Update Time",
+    "createUser": "Creator",
+    "download": "Download",
+    "collection": "Dataset Collection",
+    "enterDataSetName": "Please enter dataset name",
+    "maxDataSetNameLength": "Dataset name must be no more than 30 characters",
+    "uploadFile": "Please upload a file",
+    "selectKnowledgeLib": "Please select a knowledge library",
+    "creationSuccess": "Dataset created successfully",
+    "createDataset": "Create Dataset",
+    "importMethod": "Import Method",
+    "localImport": "Local Import",
+    "importFromQa": "Import from QA Knowledge Library",
+    "sampleFile": "Sample File",
+    "jsonSample": "JSON Sample",
+    "selectQaKnowledgeLib": "Select QA Knowledge Library"
   },
   "errors": {
     "10400": "Assistant does not exist",

@@ -1,5 +1,6 @@
 import { FlagIcon } from "@/components/bs-icons";
 import { ThunmbIcon } from "@/components/bs-icons/thumbs";
+import { Button } from "@/components/bs-ui/button";
 import { copyTrackingApi, likeChatApi } from "@/controllers/API";
 import { useState } from "react";
 
@@ -37,9 +38,10 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
     }
 
     return <div className="flex gap-1">
-        {mark && <div className="w-6 h-6 flex justify-center items-center" onClick={onMarkClick}>
-            <FlagIcon width={20} height={20} className="cursor-pointer text-gray-400 hover:text-gray-500" />
-        </div>}
+        {mark && <Button className="h-6 text-xs group-hover:opacity-100 opacity-0" onClick={onMarkClick}>
+            <FlagIcon width={12} height={12} className="cursor-pointer" />
+            <span>添加QA</span>
+        </Button>}
         <ThunmbIcon
             type='copy'
             className={`cursor-pointer ${copied && 'text-primary hover:text-primary'}`}

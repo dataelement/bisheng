@@ -5,12 +5,12 @@ import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { getChatLabelsApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
-import { t } from "i18next";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 export default function AppUseLog() {
-
+    const { t } = useTranslation()
     // 20条每页
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
         getChatLabelsApi(param).then(res => ({ ...res, data: res.list }))
@@ -36,15 +36,15 @@ export default function AppUseLog() {
         </div>}
         <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
             <div className="flex justify-end gap-4 items-center">
-                <SearchInput placeholder="搜索" onChange={(e) => search(e.target.value)} />
+                <SearchInput placeholder={t('log.appName')} onChange={(e) => search(e.target.value)} />
             </div>
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[200px]">应用名称</TableHead>
-                        <TableHead>用户名</TableHead>
+                        <TableHead className="w-[200px]">{t('log.appName')}</TableHead>
+                        <TableHead>{t('log.userName')}</TableHead>
                         <TableHead>{t('createTime')}</TableHead>
-                        <TableHead>用户反馈</TableHead>
+                        <TableHead>{t('log.userFeedback')}</TableHead>
                         <TableHead className="text-right">{t('operations')}</TableHead>
                     </TableRow>
                 </TableHeader>

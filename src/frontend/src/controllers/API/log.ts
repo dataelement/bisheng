@@ -26,6 +26,11 @@ export async function getLogsApi({ page, pageSize, userIds, groupId = '', start,
 }
 
 // 系统模块
+export async function getModulesApi(): Promise<{ data: any[] }> {
+    return {
+        data: [{ name: '会话', value: 'chat' }, { name: '构建', value: 'build' }, { name: '知识库', value: 'knowledge' }, { name: '系统', value: 'system' }]
+    }
+}
 
 const actions = [
     { name: 'log.createChat', value: 'create_chat' },

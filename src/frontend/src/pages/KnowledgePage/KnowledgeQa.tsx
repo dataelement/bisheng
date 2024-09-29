@@ -4,11 +4,12 @@ import { Button, LoadButton } from "@/components/bs-ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import Cascader from "@/components/bs-ui/select/cascader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
-import { createFileLib, deleteFileLib, getEmbeddingModel, readFileLibDatabase } from "@/controllers/API";
+import { createFileLib, deleteFileLib, readFileLibDatabase } from "@/controllers/API";
+import { getKnowledgeModelConfig, getModelListApi } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { t } from "i18next";
@@ -16,21 +17,40 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
-function CreateModal({ datalist, open, setOpen }) {
+function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
 
     const nameRef = useRef(null)
     const descRef = useRef(null)
-    const [modal, setModal] = useState('')
+    const [modal, setModal] = useState(null)
     const [options, setOptions] = useState([])
 
     // Fetch model data
     useEffect(() => {
-        getEmbeddingModel().then(res => {
-            const models = res.models || []
-            setOptions(models)
-            setModal(models[0] || '')
+        Promise.all([getKnowledgeModelConfig(), getModelListApi()]).then(([config, data]) => {
+            const { embedding_model_id } = config
+            let embeddings = []
+            let models = {}
+            let _model = []
+            data.forEach(server => {
+                const serverItem = { value: server.id, label: server.name, children: [] }
+                serverItem.children = server.models.reduce((res, model) => {
+                    if (model.model_type !== 'embedding' || !model.online) return res
+                    const modelItem = { value: model.id, label: model.model_name }
+                    models[model.id] = model.model_name
+                    // 找到默认值
+                    if (model.id === embedding_model_id) {
+                        _model = [serverItem, modelItem]
+                    }
+                    return [...res, modelItem]
+                }, [])
+                if (serverItem.children.length) embeddings.push(serverItem)
+            });
+            setOptions(embeddings)
+            setModal(_model)
+
+            onLoadEnd(models)
         })
     }, [])
 
@@ -93,18 +113,13 @@ function CreateModal({ datalist, open, setOpen }) {
                 </div>
                 <div className="">
                     <label htmlFor="roleAndTasks" className="bisheng-label">{t('lib.model')}</label>
-                    <Select value={modal} onValueChange={setModal}>
-                        <SelectTrigger className="">
-                            <SelectValue placeholder="选择Embedding模型" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {
-                                options.map(option => (
-                                    <SelectItem key={option} value={option}>{option} </SelectItem>
-                                ))
-                            }
-                        </SelectContent>
-                    </Select>
+                    {
+                        modal && <Cascader
+                            defaultValue={modal}
+                            options={options}
+                            onChange={(a, val) => setModal(val)}
+                        />
+                    }
                 </div>
             </div>
             <DialogFooter>
@@ -117,46 +132,11 @@ function CreateModal({ datalist, open, setOpen }) {
     </Dialog>
 }
 
-// const SelectData = ({ open, setOpen }) => {
-//     const [modal, setModal] = useState('')
-//     const options = ['1', '2', '3']
-
-//     return <Dialog open={open} onOpenChange={setOpen}>
-//         <DialogContent className="sm:max-w-[625px]">
-//             <DialogHeader>
-//                 <DialogTitle>设置数据集</DialogTitle>
-//             </DialogHeader>
-//             <div className="flex flex-col gap-4 py-2">
-//                 <div className="">
-//                     <label htmlFor="roleAndTasks" className="bisheng-label">数据集</label>
-//                     <Select value={modal} onValueChange={setModal}>
-//                         <SelectTrigger className="">
-//                             <SelectValue placeholder="选择数据集" />
-//                         </SelectTrigger>
-//                         <SelectContent>
-//                             {
-//                                 options.map(option => (
-//                                     <SelectItem key={option} value={option}>{option} </SelectItem>
-//                                 ))
-//                             }
-//                         </SelectContent>
-//                     </Select>
-//                 </div>
-//             </div>
-//             <DialogFooter>
-//                 <DialogClose>
-//                     <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
-//                 </DialogClose>
-//                 <Button type="submit" className="px-11" onClick={() => { }}>确认</Button>
-//             </DialogFooter>
-//         </DialogContent>
-//     </Dialog>
-// }
-
 export default function KnowledgeQa(params) {
     const [open, setOpen] = useState(false);
     const [openData, setOpenData] = useState(false);
     const { user } = useContext(userContext);
+    const [modelNameMap, setModelNameMap] = useState({})
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) => {
         return readFileLibDatabase({ ...param, name: param.keyword, type: 1 })
@@ -194,7 +174,7 @@ export default function KnowledgeQa(params) {
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
         <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
-            <div className="flex justify-end gap-4 items-center">
+            <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
                 <SearchInput placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)} />
                 <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
             </div>
@@ -218,7 +198,7 @@ export default function KnowledgeQa(params) {
                             <TableCell className="font-medium max-w-[200px]">
                                 <div className=" truncate-multiline">{el.name}</div>
                             </TableCell>
-                            <TableCell>{el.model || '--'}</TableCell>
+                            <TableCell>{modelNameMap[el.model] || '--'}</TableCell>
                             <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="max-w-[300px] break-all">
@@ -251,7 +231,7 @@ export default function KnowledgeQa(params) {
                 />
             </div>
         </div>
-        <CreateModal datalist={datalist} open={open} setOpen={setOpen}></CreateModal>
+        <CreateModal datalist={datalist} open={open} setOpen={setOpen} onLoadEnd={setModelNameMap}></CreateModal>
         {/* <SelectData open={openData} setOpen={setOpenData} /> */}
     </div>
 };

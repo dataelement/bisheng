@@ -1,12 +1,13 @@
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import { LoadIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
-import { DialogClose, DialogContent, DialogFooter, DialogHeader, Dialog, DialogTitle } from "@/components/bs-ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, InputList, Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { generateSimilarQa, updateQa } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const DEFAULT_FORM = {
     knowledgeLib: [],
@@ -16,6 +17,7 @@ const DEFAULT_FORM = {
 };
 
 const SaveQaLibForm = forwardRef(({ }, ref) => {
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [form, setForm] = useState({ ...DEFAULT_FORM });
     const [loading, setLoading] = useState(false);
@@ -64,11 +66,12 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
     };
 
     const handleModelGenerate = async () => {
-
-        if (!form.question) return message({
-            variant: 'warning',
-            description: '请先输入问题'
-        })
+        if (!form.question) {
+            return message({
+                variant: 'warning',
+                description: t('enterQuestion')
+            });
+        }
         setLoading(true);
         captureAndAlertRequestErrorHoc(generateSimilarQa(form.question, form.answer).then(res => {
             setForm((prevForm) => {
@@ -80,7 +83,7 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
                 };
             });
             setLoading(false);
-        }))
+        }));
     };
 
     const { message } = useToast();
@@ -98,19 +101,23 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
 
             return message({
                 variant: 'warning',
-                description: 'QA知识库、问题、答案不能为空'
+                description: t('qaLibQuestionAnswerRequired')
             });
         }
 
         const _similarQuestions = form.similarQuestions.filter((question) => question.trim() !== '');
-        if (_similarQuestions.some((q) => q.length > 100)) return message({
-            variant: 'warning',
-            description: '相似问最多100个字'
-        });
-        if (form.answer.length > 1000) return message({
-            variant: 'warning',
-            description: '答案最多1000个字'
-        });
+        if (_similarQuestions.some((q) => q.length > 100)) {
+            return message({
+                variant: 'warning',
+                description: t('max100CharsForSimilarQuestions')
+            });
+        }
+        if (form.answer.length > 1000) {
+            return message({
+                variant: 'warning',
+                description: t('max1000CharsForAnswer')
+            });
+        }
 
         captureAndAlertRequestErrorHoc(updateQa('', {
             questions: [form.question, ..._similarQuestions],
@@ -120,9 +127,9 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
         }).then(res => {
             message({
                 variant: 'success',
-                description: '存储成功'
+                description: t('saveSuccess')
             });
-        }))
+        }));
         close();
     };
 
@@ -141,11 +148,11 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
         <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
             <DialogContent className="sm:max-w-[625px]">
                 <DialogHeader>
-                    <DialogTitle>添加新的QA到QA知识库</DialogTitle>
+                    <DialogTitle>{t('addNewQaToLib')}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2">
                     <div>
-                        <label htmlFor="knowledgeLib" className="bisheng-label"><span className="text-red-500">*</span>QA知识库</label>
+                        <label htmlFor="knowledgeLib" className="bisheng-label"><span className="text-red-500">*</span>{t('qaKnowledgeLib')}</label>
                         <KnowledgeSelect
                             type="qa"
                             value={form.knowledgeLib}
@@ -154,11 +161,11 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
                         />
                     </div>
                     <div>
-                        <label htmlFor="question" className="bisheng-label"><span className="text-red-500">*</span>问题</label>
+                        <label htmlFor="question" className="bisheng-label"><span className="text-red-500">*</span>{t('question')}</label>
                         <Input name="question" className={`col-span-3 ${error.question && 'border-red-400'}`} value={form.question} onChange={handleInputChange} />
                     </div>
                     <div>
-                        <label htmlFor="similarQuestions" className="bisheng-label">相似问</label>
+                        <label htmlFor="similarQuestions" className="bisheng-label">{t('similarQuestions')}</label>
                         <div className="max-h-52 overflow-y-auto">
                             <InputList
                                 value={form.similarQuestions}
@@ -166,23 +173,24 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
                             />
                         </div>
                         <Button className="mt-2" size="sm" onClick={handleModelGenerate} disabled={loading}>
-                            {loading && <LoadIcon />}模型生成
+                            {loading && <LoadIcon />} {t('aiGenerate')}
                         </Button>
                     </div>
                     <div>
-                        <label htmlFor="answer" className="bisheng-label"><span className="text-red-500">*</span>答案</label>
+                        <label htmlFor="answer" className="bisheng-label"><span className="text-red-500">*</span>{t('answer')}</label>
                         <Textarea name="answer" className={`col-span-3 min-h-36 ${error.answer && 'border-red-400'}`} value={form.answer} onChange={handleInputChange} />
                     </div>
                 </div>
                 <DialogFooter>
                     <DialogClose>
-                        <Button variant="outline" className="px-11" type="button" onClick={close}>取消</Button>
+                        <Button variant="outline" className="px-11" type="button" onClick={close}>{t('cancel')}</Button>
                     </DialogClose>
-                    <Button type="submit" className="px-11" onClick={handleSubmit}>确认</Button>
+                    <Button type="submit" className="px-11" onClick={handleSubmit}>{t('confirm')}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
     );
 });
+
 
 export default SaveQaLibForm;
