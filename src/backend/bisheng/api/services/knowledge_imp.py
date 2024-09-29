@@ -47,6 +47,8 @@ filetype_load_map = {
 
 
 class KnowledgeUtils:
+    # 用来区分chunk和自动生产的总结内容  格式如：文件名\n文档总结\n--------\n chunk内容
+    chunk_split = "\n----------\n"
 
     @classmethod
     def get_preview_cache_key(cls, knowledge_id: int, file_path: str) -> str:
@@ -332,9 +334,11 @@ def add_file_embedding(vector_client,
             for key, val in all_chunk_info.items():
                 texts.append(val['text'])
                 metadatas.append(val['metadata'])
-    for one in texts:
+    for index, one in enumerate(texts):
         if len(one) > 10000:
             raise ValueError('分段结果超长，请尝试使用自定义策略进行切分')
+        # 入库时 拼接文件名和文档摘要
+        texts[index] = f"{metadatas[index]['source']}\n{metadatas[index]['title']}{KnowledgeUtils.chunk_split}{one}"
 
     db_file.parse_type = parse_type
     # 存储ocr识别后的partitions结果

@@ -22,7 +22,8 @@ from bisheng.api.v1.schemas import PreviewFileChunk, FileChunk, UpdatePreviewFil
 from bisheng.cache.utils import file_download
 from bisheng.cache.redis import redis_client
 from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
-from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, Knowledge, KnowledgeUpdate, KnowledgeRead
+from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, Knowledge, KnowledgeUpdate, KnowledgeRead, \
+    KnowledgeTypeEnum
 from bisheng.database.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus, ParseType
 from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
@@ -38,8 +39,8 @@ from bisheng.utils.embedding import decide_embeddings
 class KnowledgeService(KnowledgeUtils):
 
     @classmethod
-    def get_knowledge(cls, request: Request, login_user: UserPayload, name: str = None, page: int = 1,
-                      limit: int = 10) -> (List[KnowledgeRead], int):
+    def get_knowledge(cls, request: Request, login_user: UserPayload, knowledge_type: KnowledgeTypeEnum,
+                      name: str = None, page: int = 1, limit: int = 10) -> (List[KnowledgeRead], int):
         if not login_user.is_admin():
             knowledge_id_extra = []
             user_role = UserRoleDao.get_user_roles(login_user.user_id)
@@ -48,11 +49,13 @@ class KnowledgeService(KnowledgeUtils):
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.KNOWLEDGE)
                 if role_access:
                     knowledge_id_extra = [int(access.third_id) for access in role_access]
-            res = KnowledgeDao.get_user_knowledge(login_user.user_id, knowledge_id_extra, name, page, limit)
-            total = KnowledgeDao.count_user_knowledge(login_user.user_id, knowledge_id_extra, name)
+            res = KnowledgeDao.get_user_knowledge(login_user.user_id, knowledge_id_extra,
+                                                  knowledge_type, name, page, limit)
+            total = KnowledgeDao.count_user_knowledge(login_user.user_id, knowledge_id_extra,
+                                                      knowledge_type, name)
         else:
-            res = KnowledgeDao.get_all_knowledge(name, page, limit)
-            total = KnowledgeDao.count_all_knowledge(name)
+            res = KnowledgeDao.get_all_knowledge(name, knowledge_type, page=page, limit=limit)
+            total = KnowledgeDao.count_all_knowledge(name, knowledge_type)
 
         db_user_ids = {one.user_id for one in res}
         db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
@@ -540,7 +543,9 @@ class KnowledgeService(KnowledgeUtils):
         for one in res["hits"]["hits"]:
             file_id = one["_source"]["metadata"]["file_id"]
             file_info = file_map.get(file_id, None)
-            result.append(FileChunk(text=one["_source"]["text"], metadata=one["_source"]["metadata"],
+            # 过滤文件名和总结的文档摘要内容
+            result.append(FileChunk(text=one["_source"]["text"].split(KnowledgeUtils.chunk_split, 1)[1],
+                                    metadata=one["_source"]["metadata"],
                                     parse_type=file_info.parse_type if file_info else None))
         return result, res['hits']['total']['value']
 
@@ -576,6 +581,7 @@ class KnowledgeService(KnowledgeUtils):
             logger.info(f'act=add_vector')
             new_metadata = metadata[0]
             new_metadata['bbox'] = bbox
+            text = f"{new_metadata['source']}\n{new_metadata['title']}{KnowledgeUtils.chunk_split}{text}"
             res = vector_client.add_texts([text], [new_metadata], timeout=10)
         # delete data
         logger.info(f'act=delete_vector pk={pk}')

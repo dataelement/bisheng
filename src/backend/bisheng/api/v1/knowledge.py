@@ -108,10 +108,12 @@ def get_knowledge(*,
                   request: Request,
                   login_user: UserPayload = Depends(get_login_user),
                   name: str = None,
+                  knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value, alias='type'),
                   page_size: Optional[int] = 10,
                   page_num: Optional[int] = 1):
     """ 读取所有知识库信息. """
-    res, total = KnowledgeService.get_knowledge(request, login_user, name, page_num, page_size)
+    knowledge_type = KnowledgeTypeEnum(knowledge_type)
+    res, total = KnowledgeService.get_knowledge(request, login_user, knowledge_type, name, page_num, page_size)
     return resp_200(data={'data': res, 'total': total})
 
 
@@ -196,12 +198,12 @@ def get_QA_list(*,
 
     return resp_200({
         'data':
-        data,
+            data,
         'total':
-        total_count,
+            total_count,
         'writeable':
-        login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
-                                AccessType.KNOWLEDGE_WRITE)
+            login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
+                                    AccessType.KNOWLEDGE_WRITE)
     })
 
 
