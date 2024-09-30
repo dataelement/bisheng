@@ -79,7 +79,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
         captureAndAlertRequestErrorHoc(createFileLib({
             name,
             description: desc,
-            model: modal,
+            model: modal[1].value,
             type: 1
         }).then(res => {
             // @ts-ignore
