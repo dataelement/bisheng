@@ -4,6 +4,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 import requests
+from bisheng.api.errcode.knowledge import KnowledgeSimilarError
 from bisheng.api.services.llm import LLMService
 from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import FileProcessBase
@@ -819,31 +820,23 @@ def recommend_question(question: str, answer: str, number: int = 3) -> List[str]
 
         你生成的{number}个相似问题：
     """
-    keyword_conf = settings.get_default_llm() or {}
-    if keyword_conf:
-        keyword_conf['temperature'] = 0.7
-        keyword_conf['cache'] = False
-        node_type = keyword_conf.pop('type', 'HostQwenChat')  # 兼容旧配置
-        class_object = import_by_type(_type='llms', name=node_type)
-        llm = instantiate_llm(node_type, class_object, keyword_conf)
+    llm = LLMService.get_knowledge_similar_llm()
+    if not llm:
+        raise KnowledgeSimilarError.http_exception()
 
-        llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt))
-        gen_question = llm_chain.predict(question=question, answer=answer, number=number)
-
-        try:
-            code_ret = extract_code_blocks(gen_question)
-            if code_ret:
-                question_dict = json.loads(code_ret[0])
-                return question_dict['question']
-            else:
-                logger.info('md_code_extract_error {}', gen_question)
-            return []
-        except Exception as exc:
-            logger.error('recommend_question json.loads error:{}', gen_question)
-            raise ValueError(gen_question) from exc
-    else:
-        logger.info('llm_chain is None recommend_over')
-        return '默认大模型未配置'
+    llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt))
+    gen_question = llm_chain.predict(question=question, answer=answer, number=number)
+    try:
+        code_ret = extract_code_blocks(gen_question)
+        if code_ret:
+            question_dict = json.loads(code_ret[0])
+            return question_dict['question']
+        else:
+            logger.info('md_code_extract_error {}', gen_question)
+        return []
+    except Exception as exc:
+        logger.error('recommend_question json.loads error:{}', gen_question)
+        raise ValueError(gen_question) from exc
 
 
 def extract_code_blocks(markdown_code_block: str):
