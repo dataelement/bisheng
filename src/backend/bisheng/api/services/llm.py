@@ -236,6 +236,15 @@ class LLMService:
         return cls.get_bisheng_llm(model_id=knowledge_llm.source_model_id)
 
     @classmethod
+    def get_knowledge_similar_llm(cls) -> Optional[BaseChatModel]:
+        """ 获取知识库相似问的默认模型配置 """
+        knowledge_llm = cls.get_knowledge_llm()
+        # 没有配置模型，则用jieba
+        if not knowledge_llm.qa_similar_model_id:
+            return None
+        return cls.get_bisheng_llm(model_id=knowledge_llm.qa_similar_model_id)
+
+    @classmethod
     def update_knowledge_llm(cls, request: Request, login_user: UserPayload, data: KnowledgeLLMConfig) \
             -> KnowledgeLLMConfig:
         """ 更新知识库相关的默认模型配置 """

@@ -15,3 +15,8 @@ class KnowledgeNoEmbeddingError(BaseErrorCode):
 class KnowledgeChunkError(BaseErrorCode):
     Code: int = 10910
     Msg: str = '当前知识库版本不支持修改分段，请创建新知识库后进行分段修改'
+
+
+class KnowledgeSimilarError(BaseErrorCode):
+    Code: int = 10920
+    Msg: str = '未配置QA知识库相似问模型'
