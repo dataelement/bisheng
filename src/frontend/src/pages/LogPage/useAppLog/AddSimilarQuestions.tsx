@@ -87,18 +87,18 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
         <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
             <DialogContent className="sm:max-w-[825px]">
                 <DialogHeader>
-                    <DialogTitle>{t('addSimilarQuestionsToQaLib')}</DialogTitle>
+                    <DialogTitle>{t('log.addSimilarQuestionsToQaLib')}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2">
                     <div className="flex items-center gap-4">
-                        <Label htmlFor="knowledgeLib" className="bisheng-label w-40">{t('qaKnowledgeLib')}</Label>
+                        <Label htmlFor="knowledgeLib" className="bisheng-label w-40">{t('log.qaKnowledgeLib')}</Label>
                         <KnowledgeSelect
                             type="qa"
                             value={knowledgeLib}
                             onChange={handleKnowledgeLibChange}
                             className={`${error && knowledgeLib.length === 0 ? 'border-red-400' : ''}`}
                         />
-                        <Input placeholder={t('qaContent')} onChange={(e) => knowledgeLib.length && filterData({ id: knowledgeLib[0].value, searchKey: e.target.value })} />
+                        <Input placeholder={t('log.qaContent')} onChange={(e) => knowledgeLib.length && filterData({ id: knowledgeLib[0].value, searchKey: e.target.value })} />
                     </div>
                     <div className="relative">
                         {loading && (
@@ -111,8 +111,8 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-8"></TableHead>
-                                        <TableHead className="w-[300px]">{t('question')}</TableHead>
-                                        <TableHead className="w-[360px]">{t('answer')}</TableHead>
+                                        <TableHead className="w-[300px]">{t('log.question')}</TableHead>
+                                        <TableHead className="w-[360px]">{t('log.answer')}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -130,11 +130,11 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
                                         </TableRow>
                                     ))}
                                     {loaded && datalist.length === 0 && <TableRow>
-                                        <TableCell colSpan={3} className="font-medium text-center">{t('empty')}</TableCell>
+                                        <TableCell colSpan={3} className="font-medium text-center">{t('log.empty')}</TableCell>
                                     </TableRow>}
                                     {
                                         !loaded && <TableRow>
-                                            <TableCell colSpan={3} className="font-medium text-center">{t('selectQaLib')}</TableCell>
+                                            <TableCell colSpan={3} className="font-medium text-center">{t('log.selectQaLib')}</TableCell>
                                         </TableRow>
                                     }
                                 </TableBody>
@@ -152,9 +152,9 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
                     </div>
                     <DialogFooter>
                         <DialogClose>
-                            <Button variant="outline" className="px-11" type="button" onClick={close}>{t('cancel')}</Button>
+                            <Button variant="outline" className="px-11" type="button" onClick={close}>{t('log.cancel')}</Button>
                         </DialogClose>
-                        <Button type="submit" className="px-11" onClick={handleSubmit}>{t('confirm')}</Button>
+                        <Button type="submit" className="px-11" onClick={handleSubmit}>{t('log.confirm')}</Button>
                     </DialogFooter>
                 </div>
             </DialogContent>

@@ -685,7 +685,14 @@
     "aiGenerate": "AI生成",
     "answer": "答案",
     "cancel": "取消",
-    "confirm": "确认"
+    "confirm": "确认",
+    "qaLibRequired": "QA知识库不能为空",
+    "selectAtLeastOneQuestion": "至少选一个相似问题",
+    "addSuccess": "添加成功",
+    "addSimilarQuestionsToQaLib": "添加相似问题到QA知识库",
+    "qaContent": "QA 内容",
+    "empty": "空空如也",
+    "selectQaLib": "请选择 QA 知识库"
   },
   "tag": {
     "labelMaxLength": "标签名不能超过10个字符",
