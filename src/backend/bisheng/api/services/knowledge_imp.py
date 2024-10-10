@@ -623,8 +623,10 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             'page': doc.metadata.pop('page', 1),
             'source': doc.metadata.pop('source', ''),
             'bbox': doc.metadata.pop('bbox', ''),
+            'title': doc.metadata.pop('title', ''),
+            'chunk_index': index,
             'extra': json.dumps(doc.metadata, ensure_ascii=False)
-        } for doc in docs]
+        } for index, doc in enumerate(docs)]
 
         # 向量存储
         for vectore_client in vectore_client_list:
