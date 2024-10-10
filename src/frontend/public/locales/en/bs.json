@@ -688,7 +688,14 @@
     "aiGenerate": "AI Generate",
     "answer": "Answer",
     "cancel": "Cancel",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "qaLibRequired": "QA Knowledge Library cannot be empty",
+    "selectAtLeastOneQuestion": "Select at least one similar question",
+    "addSuccess": "Added successfully",
+    "addSimilarQuestionsToQaLib": "Add Similar Questions to QA Knowledge Library",
+    "qaContent": "QA Content",
+    "empty": "Nothing here",
+    "selectQaLib": "Please select a QA Knowledge Library"
   },
   "tag": {
     "labelMaxLength": "Label name cannot exceed 10 characters",

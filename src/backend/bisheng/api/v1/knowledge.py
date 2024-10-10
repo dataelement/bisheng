@@ -305,8 +305,13 @@ def qa_status_switch(*,
                      id: int = Body(embed=True),
                      login_user: UserPayload = Depends(get_login_user)):
     """ 修改知识库信息. """
-
-    return resp_200(knowledge_imp.qa_status_change(id, status))
+    new_qa_db = knowledge_imp.qa_status_change(id, status)
+    if not new_qa_db:
+        return resp_200()
+    if new_qa_db.status != status:
+        # 说明状态切换失败
+        return resp_500(message=f'状态切换失败: {new_qa_db.remark}')
+    return resp_200()
 
 
 @router.get('/qa/detail', status_code=200)
