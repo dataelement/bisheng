@@ -18,7 +18,7 @@ export const JsonItem = ({ name, type, desc, required = false, example = '', rem
             <div className='flex gap-x-4 gap-y-1 flex-wrap'>
                 <Badge variant='outline' className='bg-primary/15 text-primary'>{name}</Badge>
                 <div>{type}</div>
-                <div className='text-gray-500'>{t('api.' + desc)}</div>
+                <div className='text-gray-500'>{desc}</div>
             </div>
             {required ? <span className='text-red-500 min-w-12'>{t('api.required')}</span> : <span className='text-gray-500 min-w-12'>{t('api.optional')}</span>}
             {line && <div className='absolute bg-input w-6 h-[1px] -left-8 top-2.5'></div>}

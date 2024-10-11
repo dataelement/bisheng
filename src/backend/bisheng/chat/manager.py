@@ -4,12 +4,9 @@ import json
 import time
 import uuid
 from collections import defaultdict
+from queue import Queue
 from typing import Any, Dict, List
 from uuid import UUID
-from queue import Queue
-
-from loguru import logger
-from fastapi import WebSocket, WebSocketDisconnect, status, Request
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
@@ -25,10 +22,13 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.user import User, UserDao
+from bisheng.graph.utils import cut_graph_bynode, find_next_node
 from bisheng.processing.process import process_tweaks
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.input_output.output import Report
+from fastapi import Request, WebSocket, WebSocketDisconnect, status
+from loguru import logger
 
 
 class ChatHistory(Subject):
@@ -38,10 +38,10 @@ class ChatHistory(Subject):
         self.history: Dict[str, List[ChatMessage]] = defaultdict(list)
 
     def add_message(
-            self,
-            client_id: str,
-            chat_id: str,
-            message: ChatMessage,
+        self,
+        client_id: str,
+        chat_id: str,
+        message: ChatMessage,
     ):
         """Add a message to the chat history."""
         t1 = time.time()
@@ -187,14 +187,15 @@ class ChatManager:
                 if 'after sending' in str(exc):
                     logger.error(exc)
 
-    async def dispatch_client(self,
-                              request: Request,  # 原始请求体
-                              client_id: str,
-                              chat_id: str,
-                              login_user: UserPayload,
-                              work_type: WorkType,
-                              websocket: WebSocket,
-                              graph_data: dict = None):
+    async def dispatch_client(
+            self,
+            request: Request,  # 原始请求体
+            client_id: str,
+            chat_id: str,
+            login_user: UserPayload,
+            work_type: WorkType,
+            websocket: WebSocket,
+            graph_data: dict = None):
         client_key = uuid.uuid4().hex
         chat_client = ChatClient(request,
                                  client_key,
@@ -243,17 +244,17 @@ class ChatManager:
             self.clear_client(client_key)
 
     async def handle_websocket(
-            self,
-            flow_id: str,
-            chat_id: str,
-            websocket: WebSocket,
-            user_id: int,
-            gragh_data: dict = None,
+        self,
+        flow_id: str,
+        chat_id: str,
+        websocket: WebSocket,
+        user_id: int,
+        gragh_data: dict = None,
     ):
         # 建立连接，并存储映射，兼容不复用ws 场景
         key_list = set([get_cache_key(flow_id, chat_id)])
         await self.connect(flow_id, chat_id, websocket)
-        autogen_pool = ThreadPoolManager(max_workers=1, thread_name_prefix='autogen')
+        # autogen_pool = ThreadPoolManager(max_workers=1, thread_name_prefix='autogen')
         context_dict = {
             get_cache_key(flow_id, chat_id): {
                 'status': 'init',
@@ -407,10 +408,11 @@ class ChatManager:
                 if len(res) <= 1:  # 说明是新建会话
                     websocket = self.active_connections[key]
                     login_user = UserPayload(**{
-                        "user_id": user_id,
-                        "user_name": UserDao.get_user(user_id).user_name,
+                        'user_id': user_id,
+                        'user_name': UserDao.get_user(user_id).user_name,
                     })
-                    AuditLogService.create_chat_flow(login_user, get_request_ip(websocket), flow_id)
+                    AuditLogService.create_chat_flow(login_user, get_request_ip(websocket),
+                                                     flow_id)
         start_resp.type = 'start'
 
         # should input data
@@ -440,7 +442,7 @@ class ChatManager:
         if payload and self.in_memory_cache.get(langchain_obj_key):
             action, over = await self.preper_action(flow_id, chat_id, langchain_obj_key, payload,
                                                     start_resp, step_resp)
-            logger.info(
+            logger.debug(
                 f"processing_message message={payload.get('inputs')} action={action} over={over}")
             if not over:
                 # task_service: 'TaskService' = get_task_service()
@@ -461,9 +463,13 @@ class ChatManager:
                 if isinstance(self.in_memory_cache.get(langchain_obj_key), AutoGenChain):
                     # autogen chain
                     logger.info(f'autogen_submit {langchain_obj_key}')
-                    autogen_pool.submit(key, Handler(stream_queue=self.stream_queue[key]).dispatch_task, **params)
+                    autogen_pool.submit(key,
+                                        Handler(stream_queue=self.stream_queue[key]).dispatch_task,
+                                        **params)
                 else:
-                    thread_pool.submit(key, Handler(stream_queue=self.stream_queue[key]).dispatch_task, **params)
+                    thread_pool.submit(key,
+                                       Handler(stream_queue=self.stream_queue[key]).dispatch_task,
+                                       **params)
             status_ = 'init'
             context.update({'status': status_})
             context.update({'payload': {}})  # clean message
@@ -489,7 +495,33 @@ class ChatManager:
                                     or 'file_path' in payload['inputs']):
             node_data = payload['inputs'].get('data', '') or [payload['inputs']]
             graph_data = self.refresh_graph_data(graph_data, node_data)
-            self.set_cache(langchain_obj_key, None)  # rebuild object
+            # 上传文件就重新解压，有点粗, 只有document loader 需要
+            node_loader = False
+
+            for nod in node_data:
+                if any('Loader' in x['id'] for x in find_next_node(graph_data, nod['id'])):
+                    node_loader = True
+                    break
+            if node_loader:
+                self.set_cache(langchain_obj_key, None)  # rebuild object
+            else:
+                # 能力，只考虑一个file input的情况
+                node_id = find_next_node(graph_data, nod['id'])[0]['id']
+                nodes, edges = cut_graph_bynode(graph_data, node_id)
+                chat_history = payload.get('chatHistory') or [{
+                    'isSend': False,
+                    'message': '请问想买什么'
+                }]
+                last_msg = [m['message'] for m in chat_history if not m['isSend']][-1]
+                graph_data_input = {'edges': edges, 'nodes': nodes}
+                graph_data_input = process_tweaks(graph_data_input,
+                                                  tweaks={node_id: {
+                                                      'question': last_msg
+                                                  }})
+                obj = await build_flow_no_yield(graph_data_input, {}, process_file=True)
+                obj.abuild()
+                question = [await x.get_result() for x in obj.get_input_nodes()][-1]
+                self.set_cache(langchain_obj_key + '_question', [question])
             has_file = any(['InputFile' in nd.get('id', '') for nd in node_data])
             has_variable = any(['VariableNode' in nd.get('id', '') for nd in node_data])
         if has_file:
@@ -590,8 +622,12 @@ class ChatManager:
         logger.info(f'init_langchain build_end timecost={time.time() - start_time}')
         question = []
         for node in graph.vertices:
-            if node.vertex_type == 'InputNode':
-                question.extend(await node.get_result())
+            if node.vertex_type in {'InputNode', 'AudioInputNode', 'FileInputNode'}:
+                question_parse = await node.get_result()
+                if isinstance(question_parse, list):
+                    question.extend(question_parse)
+                else:
+                    question.append(question_parse)
 
         self.set_cache(key_node + '_question', question)
         input_nodes = graph.get_input_nodes()

@@ -111,10 +111,16 @@ export function updateTempApi(temp_id, data) {
 /**
  * 获取知识库列表
  */
-export async function readFileLibDatabase(page = 1, pageSize = 40, name = '') {
+export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', type = 0 }) {
   try {
-    const response: { data: any[], total: number } = await axios.get(`/api/v1/knowledge/?page_num=${page}&page_size=${pageSize}&name=${name}`);
-    // const { data, total } = response
+    const response: { data: any[], total: number } = await axios.get('/api/v1/knowledge', {
+      params: {
+        page_num: page,
+        page_size: pageSize,
+        name,
+        type,
+      },
+    });
     return response;
   } catch (error) {
     console.error(error);
@@ -125,7 +131,7 @@ export async function readFileLibDatabase(page = 1, pageSize = 40, name = '') {
 /**
  * 获取知识库下文件列表
  */
-export async function readFileByLibDatabase({ id, page, pageSize = 40, name = '', status }) {
+export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status }) {
   const statusStr = status === 999 ? '' : `&status=${status}`;
   const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}&file_name=${name}${statusStr}`);
   return response
@@ -256,6 +262,74 @@ export async function deleteFile(id) {
 }
 
 /**
+ * 获取Qa问题列表
+ */
+export async function getQaList(id, data: { page, pageSize, keyword }) {
+  return await axios.get(`/api/v1/knowledge/qa/list/${id}`, {
+    params: {
+      page_size: data.pageSize,
+      page_num: data.page,
+      keyword: data.keyword
+    },
+  });
+}
+
+/**
+ * 修改qa状态
+ */
+export async function updateQaStatus(id, status) {
+  return await axios.post(`/api/v1/knowledge/qa/status_switch`, {
+    id,
+    status
+  });
+}
+
+/**
+ * Qa问题新增/修改
+ */
+export async function updateQa(id, data: { questions, answers, knowledge_id, source }) {
+  if (id) {
+    data.id = id
+  }
+
+  return await axios.post(`/api/v1/knowledge/qa/add`, data);
+}
+
+/**
+ * 删除Qa问题
+ */
+export async function deleteQa(ids) {
+  return await axios.delete(`/api/v1/knowledge/qa/delete`, {
+    data: { ids }
+  });
+}
+
+/**
+ * 获取Qa问题详情
+ */
+export async function getQaDetail(id) {
+  return await axios.get(`/api/v1/knowledge/qa/detail?id=${id}`);
+}
+
+/**
+ * 添加相似问到问题
+ */
+export async function addSimilarQa(data: { ids: string[], question: string }) {
+  return await axios.post(`/api/v1/knowledge/qa/append`, data);
+}
+
+/**
+ * 生成相似问
+ */
+export async function generateSimilarQa(question, anwser) {
+  return await axios.post(`/api/v1/knowledge/qa/auto_question`, {
+    "ori_question": question,
+    "anwser": anwser,
+    "number": 3
+  });
+}
+
+/**
  * 获取模型列表
  */
 export async function getEmbeddingModel(): Promise<{ models: string[] }> {
@@ -369,7 +443,7 @@ export const getChatsApi = (page) => {
           const json = JSON.parse(message);
           if (Array.isArray(json)) return message
           const chatKey = Object.keys(json)[0]
-          return json[chatKey]
+          return json[chatKey] || message
         }
         return message;
       }())
@@ -445,6 +519,13 @@ export const likeChatApi = (chatId, liked) => {
 export const disLikeCommentApi = (message_id, comment) => {
   return axios.post(`/api/v1/chat/comment`, { message_id, comment });
 };
+
+/**
+ * 点击复制上报
+ * */
+export const copyTrackingApi = (msgId) => {
+  return axios.post(`/api/v1/chat/copied`, { message_id: msgId });
+}
 
 /**
  * Fetches the version of the API.

@@ -16,7 +16,7 @@ from langchain.text_splitter import TextSplitter
 
 
 class KeywordRetriever(BaseRetriever):
-    keyword_store: VectorStore
+    keyword_store: ElasticKeywordsSearch
     text_splitter: TextSplitter
     search_type: str = 'similarity'
     search_kwargs: dict = Field(default_factory=dict)

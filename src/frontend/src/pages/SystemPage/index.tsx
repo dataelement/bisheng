@@ -13,11 +13,11 @@ import Theme from "./theme";
 import UserGroups from "./components/UserGroup";
 import Users from "./components/Users";
 
-export default function FileLibPage() {
+export default function index() {
     const { user } = useContext(userContext);
 
     const { t } = useTranslation()
-    return <div className="w-full h-full px-2 py-4">
+    return <div className="w-full h-full px-2 pt-4">
 
         <Tabs defaultValue="user" className="w-full">
             <TabsList className="">

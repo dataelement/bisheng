@@ -1,0 +1,100 @@
+name: test_build
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    branches:
+      - "develop/*"
+
+env:
+  DOCKERHUB_REPO: project/
+  PY_NEXUS: 110.16.193.170:50083
+  DOCKER_NEXUS: 110.16.193.170:50080
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    #if: startsWith(github.event.ref, 'refs/tags')
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+
+      - name: Get version
+        id: get_version
+        run: |
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/heads\/develop\//}
+          echo $GITHUB_REF
+          echo $VERSION
+
+      # 构建 bisheng-langchain
+      - name: Set python version 3.8
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.8
+
+      # 发布到 私有仓库
+      - name: set insecure registry
+        run: |
+          echo "{ \"insecure-registries\": [\"http://${{ env.DOCKER_NEXUS }}\"] }" | sudo tee /etc/docker/daemon.json
+          sudo service docker restart
+
+      # - name: Set up QEMU
+      #   uses: docker/setup-qemu-action@v1
+
+      - name: Login Nexus Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: http://${{ env.DOCKER_NEXUS }}/
+          username: ${{ secrets.NEXUS_USER }}
+          password: ${{ secrets.NEXUS_PASSWORD }}
+
+      # 替换poetry编译为私有服务
+      - name: replace self-host repo
+        uses: snok/install-poetry@v1
+        with:
+          installer-parallel: true
+
+      - name: build lock
+        run: |
+          cd ./src/backend
+          poetry source add --priority=supplemental foo http://${{ secrets.NEXUS_PUBLIC }}:${{ secrets.NEXUS_PUBLIC_PASSWORD }}@${{ env.PY_NEXUS }}/repository/pypi-group/simple
+          poetry lock
+          cd ../../
+
+      # 构建 backend 并推送到 Docker hub
+      - name: Build backend and push
+        id: docker_build_backend
+        uses: docker/build-push-action@v2
+        with:
+          # backend 的context目录
+          context: "./src/backend/"
+          # 是否 docker push
+          push: true
+          # docker build arg, 注入 APP_NAME/APP_VERSION
+          build-args: |
+            APP_NAME="bisheng-backend"
+            APP_VERSION=${{ steps.get_version.outputs.VERSION }}
+          # 生成两个 docker tag: ${APP_VERSION} 和 latest
+          tags: |
+            ${{ env.DOCKER_NEXUS }}/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
+      # 构建 Docker frontend 并推送到 Docker hub
+      - name: Build frontend and push
+        id: docker_build_frontend
+        uses: docker/build-push-action@v2
+        with:
+          # frontend 的context目录
+          context: "./src/frontend/"
+          # 是否 docker push
+          push: true
+          # docker build arg, 注入 APP_NAME/APP_VERSION
+          build-args: |
+            APP_NAME="bisheng-frontend"
+            APP_VERSION=${{ steps.get_version.outputs.VERSION }}
+          # 生成两个 docker tag: ${APP_VERSION} 和 latest
+          tags: |
+            ${{ env.DOCKER_NEXUS }}/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+      

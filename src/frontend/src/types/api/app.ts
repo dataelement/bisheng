@@ -10,4 +10,6 @@ export type AppConfig = {
     application_usage_tips: boolean;
     show_github_and_help: boolean;
     version: string;
+    /** 注册入口 */
+    enable_registration: boolean;
 };

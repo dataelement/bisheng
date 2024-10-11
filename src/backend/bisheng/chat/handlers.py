@@ -3,6 +3,7 @@ import time
 from queue import Queue
 from typing import Dict
 
+from bisheng.api.utils import build_input_keys_response
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.utils import judge_source, process_graph, process_source_document
@@ -286,7 +287,6 @@ class Handler:
     async def process_file(self, session: ChatManager, client_id: str, chat_id: str, payload: dict,
                            user_id: int):
         file_name = payload['inputs']
-        file_name.pop('id', '')
         batch_question = payload['inputs']['questions']
         # 如果L3
         file = ChatMessage(is_bot=False, message=file_name, type='end', user_id=user_id)
@@ -305,12 +305,13 @@ class Handler:
             input_key = 'input'
             input_dict = {}
         else:
-            input_key = langchain_object.input_keys[0]
+            input_key = list(build_input_keys_response(langchain_object,
+                                                       {})['input_keys'].keys())[0]
             input_dict = {k: '' for k in langchain_object.input_keys}
 
         batch_question = ['start'] if not batch_question else batch_question  # 确保点击确定，会执行LLM
         report = ''
-        logger.info(f'process_file batch_question={batch_question}')
+        logger.info(f'process_file batch_question={batch_question} input_key={input_key}')
         for question in batch_question:
             if not question:
                 continue
@@ -332,13 +333,14 @@ class Handler:
             await session.send_json(client_id, chat_id, response_step)
             report = f"""{report}### {question} \n {result} \n """
 
-        start_resp.category = 'report'
-        await session.send_json(client_id, chat_id, start_resp)
-        response = ChatResponse(type='end',
-                                intermediate_steps=report,
-                                category='report',
-                                user_id=user_id)
-        await session.send_json(client_id, chat_id, response)
+        if len(batch_question) > 1:
+            start_resp.category = 'report'
+            await session.send_json(client_id, chat_id, start_resp)
+            response = ChatResponse(type='end',
+                                    intermediate_steps=report,
+                                    category='report',
+                                    user_id=user_id)
+            await session.send_json(client_id, chat_id, response)
         close_resp = ChatResponse(type='close', category='system', user_id=user_id)
         await session.send_json(client_id, chat_id, close_resp)
 

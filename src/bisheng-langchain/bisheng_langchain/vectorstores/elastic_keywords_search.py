@@ -13,6 +13,7 @@ from langchain.llms.base import BaseLLM
 from langchain.prompts.prompt import PromptTemplate
 from langchain.utils import get_from_dict_or_env
 from langchain.vectorstores.base import VectorStore
+from loguru import logger
 
 if TYPE_CHECKING:
     from elasticsearch import Elasticsearch  # noqa: F401
@@ -326,6 +327,49 @@ class ElasticKeywordsSearch(VectorStore, ABC):
             response = client.search(index=index_name, body={'query': script_query, 'size': size})
         return response
 
-    def delete(self, **kwargs: Any) -> None:
+    def delete_index(self, **kwargs: Any) -> None:
         # TODO: Check if this can be done in bulk
         self.client.indices.delete(index=self.index_name)
+
+    def delete(
+        self,
+        ids: Optional[List[str]] = None,
+        refresh_indices: Optional[bool] = True,
+        **kwargs: Any,
+    ) -> Optional[bool]:
+        """Delete documents from the Elasticsearch index.
+
+        Args:
+            ids: List of ids of documents to delete.
+            refresh_indices: Whether to refresh the index
+                            after deleting documents. Defaults to True.
+        """
+        try:
+            from elasticsearch.helpers import BulkIndexError, bulk
+        except ImportError:
+            raise ImportError('Could not import elasticsearch python package. '
+                              'Please install it with `pip install elasticsearch`.')
+
+        body = []
+
+        if ids is None:
+            raise ValueError('ids must be provided.')
+
+        for _id in ids:
+            body.append({'_op_type': 'delete', '_index': self.index_name, '_id': _id})
+
+        if len(body) > 0:
+            try:
+                bulk(self.client, body, refresh=refresh_indices, ignore_status=404)
+                logger.debug(f'Deleted {len(body)} texts from index')
+
+                return True
+            except BulkIndexError as e:
+                logger.error(f'Error deleting texts: {e}')
+                firstError = e.errors[0].get('index', {}).get('error', {})
+                logger.error(f"First error reason: {firstError.get('reason')}")
+                raise e
+
+        else:
+            logger.debug('No texts to delete from index')
+            return False

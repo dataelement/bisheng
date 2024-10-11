@@ -6,6 +6,7 @@ export { BookOpenIcon } from './bookOpen';
 export { ClearIcon } from './clear';
 export { DelIcon, TrashIcon } from './del';
 export { EnIcon } from './en';
+export { FlagIcon } from './flag'
 export { FilterIcon } from './filter';
 export { FormIcon } from './form';
 export { GithubIcon } from './github';
